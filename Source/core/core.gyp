@@ -723,6 +723,16 @@
       'msvs_disabled_warnings': [ 4267, 4334, ],
     },
     {
+      'target_name': 'webcore_eventracer',
+      'type': 'static_library',
+      'dependencies': [
+        'webcore_prerequisites',
+      ],
+      'sources': [
+        '<@(webcore_eventracer_files)',
+      ],
+    },
+    {
       'target_name': 'webcore',
       'type': 'none',
       'dependencies': [
@@ -731,6 +741,7 @@
         'webcore_remaining',
         'webcore_rendering',
         'webcore_svg',
+        'webcore_eventracer',
         # Exported.
         'webcore_generated',
         '../wtf/wtf.gyp:wtf',

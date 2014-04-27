@@ -46,6 +46,7 @@
 #include "core/dom/UserActionElementSet.h"
 #include "core/dom/ViewportDescription.h"
 #include "core/dom/custom/CustomElement.h"
+#include "core/eventracer/EventRacerLog.h"
 #include "core/html/CollectionType.h"
 #include "core/page/FocusType.h"
 #include "core/page/PageVisibilityState.h"
@@ -1081,6 +1082,8 @@ protected:
     bool importContainerNodeChildren(ContainerNode* oldContainerNode, PassRefPtr<ContainerNode> newContainerNode, ExceptionState&);
     void lockCompatibilityMode() { m_compatibilityModeLocked = true; }
 
+    PassRefPtr<EventRacerLog> getEventRacerLog() const { return m_eventRacerLog; }
+
 private:
     friend class Node;
     friend class IgnoreDestructiveWriteCountIncrementer;
@@ -1377,6 +1380,8 @@ private:
     bool m_hasViewportUnits;
 
     HashSet<DocumentVisibilityObserver*> m_visibilityObservers;
+
+    RefPtr<EventRacerLog> m_eventRacerLog;
 };
 
 inline void Document::notifyRemovePendingSheetIfNeeded()

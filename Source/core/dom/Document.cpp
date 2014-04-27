@@ -515,6 +515,22 @@ Document::Document(const DocumentInit& initializer, DocumentClassFlags documentC
     // CSSFontSelector, need to initialize m_styleEngine after initializing
     // m_fetcher.
     m_styleEngine = StyleEngine::create(*this);
+
+    // If the containing frame has a parent or an opener, then the EventRacer
+    // log is shared between the corresponding documents.
+    LocalFrame *upper = nullptr;
+    if (m_frame) {
+        upper = m_frame->tree().parent();
+        if (!upper)
+            upper = m_frame->loader().opener();
+    }
+
+    if (upper && upper->document())
+        m_eventRacerLog = upper->document()->getEventRacerLog();
+    else
+        m_eventRacerLog = EventRacerLog::create();
+
+    m_eventRacerLog->documentCreated(this);
 }
 
 Document::~Document()
@@ -524,6 +540,8 @@ Document::~Document()
     ASSERT(!parentTreeScope());
     ASSERT(!hasGuardRefCount());
     ASSERT(m_visibilityObservers.isEmpty());
+
+    m_eventRacerLog->documentDestroyed(this);
 
     if (m_templateDocument)
         m_templateDocument->m_templateDocumentHost = 0; // balanced in ensureTemplateDocument().

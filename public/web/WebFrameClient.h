@@ -485,6 +485,15 @@ public:
     // Send initial drawing parameters to a child frame that is being rendered out of process.
     virtual void initializeChildFrame(const WebRect& frameRect, float scaleFactor) { }
 
+    // EventRacer ------------------------------------------------------
+    virtual void didBeginEventRacerDocument() {}
+    virtual void didEndEventRacerDocument() {}
+
+    virtual void didStartEventRacerEvent(unsigned int id) {}
+    virtual void didEndEventRacerEvent() {}
+
+    virtual void didEventRacerOperation() {}
+
 protected:
     ~WebFrameClient() { }
 };

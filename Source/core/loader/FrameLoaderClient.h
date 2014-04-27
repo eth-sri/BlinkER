@@ -230,6 +230,15 @@ namespace WebCore {
         virtual void didStopAllLoaders() { }
 
         virtual bool isFrameLoaderClientImpl() const { return false; }
+
+        // EventRacer ------------------------------------------------------
+        virtual void dispatchDidBeginEventRacerDocument() = 0;
+        virtual void dispatchDidEndEventRacerDocument() = 0;
+
+        virtual void dispatchDidStartEventRacerEvent(unsigned int) = 0;
+        virtual void dispatchDidEndEventRacerEvent() = 0;
+
+        virtual void dispatchDidEventRacerOperation() = 0;
     };
 
 } // namespace WebCore

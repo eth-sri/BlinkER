@@ -3275,6 +3275,10 @@
             'svg/properties/SVGAnimatedProperty.cpp',
             'svg/properties/SVGPropertyTearOff.cpp',
         ],
+        'webcore_eventracer_files': [
+            'eventracer/EventRacerLog.h',
+            'eventracer/EventRacerLog.cpp'
+        ],
         'webcore_testing_idl_files': [
           'testing/GCObservation.idl',
           'testing/InternalProfilers.idl',

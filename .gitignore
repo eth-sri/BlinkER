@@ -27,6 +27,8 @@ Source/core/make_core_generated.xml
 # Ignore common tool auto-generated files.
 .gdb_history
 tags
+.tags
+.tags_sorted_by_file
 *~
 .*.sw[a-p]
 

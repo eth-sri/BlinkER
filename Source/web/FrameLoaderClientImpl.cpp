@@ -806,4 +806,34 @@ void FrameLoaderClientImpl::didStopAllLoaders()
         m_webFrame->client()->didAbortLoading(m_webFrame);
 }
 
+void FrameLoaderClientImpl::dispatchDidBeginEventRacerDocument()
+{
+    if (m_webFrame->client())
+        m_webFrame->client()->didBeginEventRacerDocument();
+}
+
+void FrameLoaderClientImpl::dispatchDidEndEventRacerDocument()
+{
+    if (m_webFrame->client())
+        m_webFrame->client()->didEndEventRacerDocument();
+}
+
+void FrameLoaderClientImpl::dispatchDidStartEventRacerEvent(unsigned int id)
+{
+    if (m_webFrame->client())
+        m_webFrame->client()->didStartEventRacerEvent(id);
+}
+
+void FrameLoaderClientImpl::dispatchDidEndEventRacerEvent()
+{
+    if (m_webFrame->client())
+        m_webFrame->client()->didEndEventRacerEvent();
+}
+
+void FrameLoaderClientImpl::dispatchDidEventRacerOperation()
+{
+    if (m_webFrame->client())
+        m_webFrame->client()->didEventRacerOperation();
+}
+
 } // namespace blink

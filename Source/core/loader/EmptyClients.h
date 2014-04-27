@@ -252,6 +252,14 @@ public:
 
     virtual PassOwnPtr<blink::WebServiceWorkerProvider> createServiceWorkerProvider() OVERRIDE;
     virtual PassOwnPtr<blink::WebApplicationCacheHost> createApplicationCacheHost(blink::WebApplicationCacheHostClient*) OVERRIDE;
+
+    virtual void dispatchDidBeginEventRacerDocument() OVERRIDE {}
+    virtual void dispatchDidEndEventRacerDocument() OVERRIDE {}
+
+    virtual void dispatchDidStartEventRacerEvent(unsigned int) OVERRIDE {}
+    virtual void dispatchDidEndEventRacerEvent() OVERRIDE {}
+
+    virtual void dispatchDidEventRacerOperation() OVERRIDE {}
 };
 
 class EmptyTextCheckerClient FINAL : public TextCheckerClient {
