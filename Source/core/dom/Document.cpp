@@ -518,7 +518,7 @@ Document::Document(const DocumentInit& initializer, DocumentClassFlags documentC
 
     // If the containing frame has a parent or an opener, then the EventRacer
     // log is shared between the corresponding documents.
-    LocalFrame *upper = nullptr;
+    LocalFrame *upper = NULL;
     if (m_frame) {
         upper = m_frame->tree().parent();
         if (!upper)
