@@ -12,8 +12,7 @@ class EventRacerLog : public WTF::RefCounted<EventRacerLog> {
 public:
     static WTF::PassRefPtr<EventRacerLog> create();
 
-    void documentCreated(Document *);
-    void documentDestroyed(Document *);
+    void startLog(Document *);
 
 private:
     EventRacerLog();

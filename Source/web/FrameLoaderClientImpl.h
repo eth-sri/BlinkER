@@ -159,8 +159,7 @@ public:
 
     virtual void didStopAllLoaders() OVERRIDE;
 
-    virtual void dispatchDidBeginEventRacerDocument() OVERRIDE;
-    virtual void dispatchDidEndEventRacerDocument() OVERRIDE;
+    virtual void dispatchDidStartEventRacerLog() OVERRIDE;
 
     virtual void dispatchDidStartEventRacerEvent(unsigned int) OVERRIDE;
     virtual void dispatchDidEndEventRacerEvent() OVERRIDE;

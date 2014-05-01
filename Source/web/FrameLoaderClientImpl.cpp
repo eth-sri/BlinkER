@@ -806,16 +806,10 @@ void FrameLoaderClientImpl::didStopAllLoaders()
         m_webFrame->client()->didAbortLoading(m_webFrame);
 }
 
-void FrameLoaderClientImpl::dispatchDidBeginEventRacerDocument()
+void FrameLoaderClientImpl::dispatchDidStartEventRacerLog()
 {
     if (m_webFrame->client())
-        m_webFrame->client()->didBeginEventRacerDocument();
-}
-
-void FrameLoaderClientImpl::dispatchDidEndEventRacerDocument()
-{
-    if (m_webFrame->client())
-        m_webFrame->client()->didEndEventRacerDocument();
+        m_webFrame->client()->didStartEventRacerLog();
 }
 
 void FrameLoaderClientImpl::dispatchDidStartEventRacerEvent(unsigned int id)

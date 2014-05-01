@@ -516,8 +516,11 @@ Document::Document(const DocumentInit& initializer, DocumentClassFlags documentC
     // m_fetcher.
     m_styleEngine = StyleEngine::create(*this);
 
-    // If the containing frame has a parent or an opener, then the EventRacer
-    // log is shared between the corresponding documents.
+    // Do not create an event log for documents iwith an empty URL.
+    if (m_url.isEmpty())
+        return;
+
+    // Check if the containing frame has a parent or an opener.
     LocalFrame *upper = NULL;
     if (m_frame) {
         upper = m_frame->tree().parent();
@@ -525,12 +528,15 @@ Document::Document(const DocumentInit& initializer, DocumentClassFlags documentC
             upper = m_frame->loader().opener();
     }
 
+    // If the containing frame has a parent or an opener, then the EventRacer
+    // log is shared between the corresponding documents, otherwise, create
+    // a new log for the "root" frame/document.
     if (upper && upper->document())
         m_eventRacerLog = upper->document()->getEventRacerLog();
-    else
-        m_eventRacerLog = EventRacerLog::create();
-
-    m_eventRacerLog->documentCreated(this);
+    else {
+       m_eventRacerLog = EventRacerLog::create();
+       m_eventRacerLog->startLog(this);
+    }
 }
 
 Document::~Document()
@@ -540,8 +546,6 @@ Document::~Document()
     ASSERT(!parentTreeScope());
     ASSERT(!hasGuardRefCount());
     ASSERT(m_visibilityObservers.isEmpty());
-
-    m_eventRacerLog->documentDestroyed(this);
 
     if (m_templateDocument)
         m_templateDocument->m_templateDocumentHost = 0; // balanced in ensureTemplateDocument().

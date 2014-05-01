@@ -15,18 +15,11 @@ EventRacerLog::EventRacerLog()
 {
 }
 
-void EventRacerLog::documentCreated(Document *doc)
+void EventRacerLog::startLog(Document *doc)
 {
     LocalFrame *frame = doc->frame();
     if (frame)
-        frame->loader().client()->dispatchDidBeginEventRacerDocument();
-}
-        
-void EventRacerLog::documentDestroyed(Document *doc)
-{
-    LocalFrame *frame = doc->frame();
-    if (frame)
-        frame->loader().client()->dispatchDidEndEventRacerDocument();
+        frame->loader().client()->dispatchDidStartEventRacerLog();
 }
 
 } // end namespace WebCore

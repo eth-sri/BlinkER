@@ -486,8 +486,7 @@ public:
     virtual void initializeChildFrame(const WebRect& frameRect, float scaleFactor) { }
 
     // EventRacer ------------------------------------------------------
-    virtual void didBeginEventRacerDocument() {}
-    virtual void didEndEventRacerDocument() {}
+    virtual void didStartEventRacerLog() {}
 
     virtual void didStartEventRacerEvent(unsigned int id) {}
     virtual void didEndEventRacerEvent() {}

@@ -232,8 +232,7 @@ namespace WebCore {
         virtual bool isFrameLoaderClientImpl() const { return false; }
 
         // EventRacer ------------------------------------------------------
-        virtual void dispatchDidBeginEventRacerDocument() = 0;
-        virtual void dispatchDidEndEventRacerDocument() = 0;
+        virtual void dispatchDidStartEventRacerLog() = 0;
 
         virtual void dispatchDidStartEventRacerEvent(unsigned int) = 0;
         virtual void dispatchDidEndEventRacerEvent() = 0;
