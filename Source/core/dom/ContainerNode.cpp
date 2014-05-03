@@ -93,7 +93,9 @@ void ContainerNode::parserTakeAllChildrenFrom(ContainerNode& oldParent)
 
 ContainerNode::~ContainerNode()
 {
+#if !ENABLE(OILPAN)
     willBeDeletedFromDocument();
+#endif
     removeDetachedChildren();
 }
 
@@ -814,9 +816,10 @@ void ContainerNode::focusStateChanged()
     if (!renderer())
         return;
 
-    if ((isElementNode() && toElement(this)->childrenAffectedByFocus())
-        || (renderStyle()->affectedByFocus() && renderStyle()->hasPseudoStyle(FIRST_LETTER)))
+    if (renderStyle()->affectedByFocus() && renderStyle()->hasPseudoStyle(FIRST_LETTER))
         setNeedsStyleRecalc(SubtreeStyleChange);
+    else if (isElementNode() && toElement(this)->childrenAffectedByFocus())
+        document().ensureStyleResolver().ensureUpdatedRuleFeatureSet().scheduleStyleInvalidationForPseudoChange(CSSSelector::PseudoFocus, *toElement(this));
     else if (renderStyle()->affectedByFocus())
         setNeedsStyleRecalc(LocalStyleChange);
 
@@ -838,7 +841,7 @@ void ContainerNode::setFocus(bool received)
 
     // If :focus sets display: none, we lose focus but still need to recalc our style.
     if (isElementNode() && toElement(this)->childrenAffectedByFocus())
-        setNeedsStyleRecalc(SubtreeStyleChange);
+        document().ensureStyleResolver().ensureUpdatedRuleFeatureSet().scheduleStyleInvalidationForPseudoChange(CSSSelector::PseudoFocus, *toElement(this));
     else
         setNeedsStyleRecalc(LocalStyleChange);
 }
@@ -852,9 +855,10 @@ void ContainerNode::setActive(bool down)
 
     // FIXME: Why does this not need to handle the display: none transition like :hover does?
     if (renderer()) {
-        if ((isElementNode() && toElement(this)->childrenAffectedByActive())
-            || (renderStyle()->affectedByActive() && renderStyle()->hasPseudoStyle(FIRST_LETTER)))
+        if (renderStyle()->affectedByActive() && renderStyle()->hasPseudoStyle(FIRST_LETTER))
             setNeedsStyleRecalc(SubtreeStyleChange);
+        else if (isElementNode() && toElement(this)->childrenAffectedByActive())
+            document().ensureStyleResolver().ensureUpdatedRuleFeatureSet().scheduleStyleInvalidationForPseudoChange(CSSSelector::PseudoActive, *toElement(this));
         else if (renderStyle()->affectedByActive())
             setNeedsStyleRecalc(LocalStyleChange);
 
@@ -875,15 +879,16 @@ void ContainerNode::setHovered(bool over)
         if (over)
             return;
         if (isElementNode() && toElement(this)->childrenAffectedByHover())
-            setNeedsStyleRecalc(SubtreeStyleChange);
+            document().ensureStyleResolver().ensureUpdatedRuleFeatureSet().scheduleStyleInvalidationForPseudoChange(CSSSelector::PseudoHover, *toElement(this));
         else
             setNeedsStyleRecalc(LocalStyleChange);
         return;
     }
 
-    if ((isElementNode() && toElement(this)->childrenAffectedByHover())
-        || (renderStyle()->affectedByHover() && renderStyle()->hasPseudoStyle(FIRST_LETTER)))
+    if (renderStyle()->affectedByHover() && renderStyle()->hasPseudoStyle(FIRST_LETTER))
         setNeedsStyleRecalc(SubtreeStyleChange);
+    else if (isElementNode() && toElement(this)->childrenAffectedByHover())
+        document().ensureStyleResolver().ensureUpdatedRuleFeatureSet().scheduleStyleInvalidationForPseudoChange(CSSSelector::PseudoHover, *toElement(this));
     else if (renderStyle()->affectedByHover())
         setNeedsStyleRecalc(LocalStyleChange);
 
@@ -1160,6 +1165,26 @@ PassRefPtr<RadioNodeList> ContainerNode::radioNodeList(const AtomicString& name,
     ASSERT(isHTMLFormElement(this) || isHTMLFieldSetElement(this));
     CollectionType type = onlyMatchImgElements ? RadioImgNodeListType : RadioNodeListType;
     return ensureRareData().ensureNodeLists().addCache<RadioNodeList>(*this, type, name);
+}
+
+Element* ContainerNode::getElementById(const AtomicString& id) const
+{
+    if (isInTreeScope()) {
+        // Fast path if we are in a tree scope: call getElementById() on tree scope
+        // and check if the matching element is in our subtree.
+        Element* element = treeScope().getElementById(id);
+        if (!element)
+            return 0;
+        if (element->isDescendantOf(this))
+            return element;
+    }
+
+    // Fall back to traversing our subtree. In case of duplicate ids, the first element found will be returned.
+    for (Element* element = ElementTraversal::firstWithin(*this); element; element = ElementTraversal::next(*element, this)) {
+        if (element->getIdAttribute() == id)
+            return element;
+    }
+    return 0;
 }
 
 #ifndef NDEBUG

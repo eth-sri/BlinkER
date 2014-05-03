@@ -47,10 +47,10 @@ class StickyPositionViewportConstraints;
 
 enum CompositingUpdateType {
     CompositingUpdateNone,
+    CompositingUpdateOnCompositedScroll,
     CompositingUpdateAfterStyleChange,
     CompositingUpdateAfterLayout,
     CompositingUpdateOnScroll,
-    CompositingUpdateOnCompositedScroll,
     CompositingUpdateAfterCanvasContextChange,
 };
 
@@ -114,8 +114,8 @@ public:
     // (At the moment, it also has some legacy compatibility hacks.)
     void updateLayerCompositingState(RenderLayer*, UpdateLayerCompositingStateOptions = Normal);
 
-    // Whether layer's compositedLayerMapping needs a GraphicsLayer to do clipping by an ancestor (non-stacking-context parent with overflow).
-    bool clippedByAncestor(const RenderLayer*) const;
+    // Returns whether this layer is clipped by another layer that is not an ancestor of the given layer in the stacking context hierarchy.
+    bool clippedByNonAncestorInStackingTree(const RenderLayer*) const;
     // Whether layer's compositedLayerMapping needs a GraphicsLayer to clip z-order children of the given RenderLayer.
     bool clipsCompositingDescendants(const RenderLayer*) const;
 
@@ -216,15 +216,15 @@ private:
             , nextSquashedLayerIndex(0)
             , totalAreaOfSquashedRects(0) { }
 
-        void updateSquashingStateForNewMapping(CompositedLayerMappingPtr, bool hasNewCompositedLayerMapping, LayoutPoint newOffsetFromAbsoluteForSquashingCLM);
+        void updateSquashingStateForNewMapping(CompositedLayerMappingPtr, bool hasNewCompositedLayerMapping, LayoutPoint newOffsetFromTransformedAncestorForSquashingCLM);
 
         // The most recent composited backing that the layer should squash onto if needed.
         CompositedLayerMappingPtr mostRecentMapping;
         bool hasMostRecentMapping;
 
-        // Absolute coordinates of the compositedLayerMapping's owning layer. This is used for computing the correct
+        // Coordinates of the compositedLayerMapping's owning layer in the space of the transformed ancestor. This is used for computing the correct
         // positions of renderlayers when they paint into the squashing layer.
-        LayoutPoint offsetFromAbsoluteForSquashingCLM;
+        LayoutPoint offsetFromTransformedAncestorForSquashingCLM;
 
         // Counter that tracks what index the next RenderLayer would be if it gets squashed to the current squashing layer.
         size_t nextSquashedLayerIndex;

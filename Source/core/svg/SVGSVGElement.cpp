@@ -96,11 +96,15 @@ SVGSVGElement::~SVGSVGElement()
     if (m_viewSpec)
         m_viewSpec->detachContextElement();
 
+#if !ENABLE(OILPAN)
     // There are cases where removedFromDocument() is not called.
     // see ContainerNode::removeAllChildren, called by its destructor.
+    // With Oilpan, either removedFrom is called or the document
+    // is dead as well and there is no reason to clear the extensions.
     document().accessSVGExtensions().removeTimeContainer(this);
 
     ASSERT(inDocument() || !accessDocumentSVGExtensions().isSVGRootWithRelativeLengthDescendents(this));
+#endif
 }
 
 PassRefPtr<SVGRectTearOff> SVGSVGElement::viewport() const
@@ -767,23 +771,6 @@ void SVGSVGElement::inheritViewAttributes(SVGViewElement* viewElement)
         view->setZoomAndPan(viewElement->zoomAndPan());
     else
         view->setZoomAndPan(zoomAndPan());
-}
-
-// getElementById on SVGSVGElement is restricted to only the child subtree defined by the <svg> element.
-// See http://www.w3.org/TR/SVG11/struct.html#InterfaceSVGSVGElement
-Element* SVGSVGElement::getElementById(const AtomicString& id) const
-{
-    Element* element = treeScope().getElementById(id);
-    if (element && element->isDescendantOf(this))
-        return element;
-
-    // Fall back to traversing our subtree. Duplicate ids are allowed, the first found will
-    // be returned.
-    for (Element* element = ElementTraversal::firstWithin(*this); element; element = ElementTraversal::next(*element, this)) {
-        if (element->getIdAttribute() == id)
-            return element;
-    }
-    return 0;
 }
 
 }

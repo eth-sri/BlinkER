@@ -48,14 +48,14 @@ const v8::PropertyCallbackInfo<v8::Value>& info
     {% if attribute.is_call_with_execution_context %}
     ExecutionContext* scriptContext = currentExecutionContext(info.GetIsolate());
     {% endif %}
-    {% if attribute.is_call_with_new_script_state %}
-    NewScriptState* state = NewScriptState::current(info.GetIsolate());
+    {% if attribute.is_call_with_script_state %}
+    ScriptState* state = ScriptState::current(info.GetIsolate());
     {% endif %}
     {% if attribute.is_check_security_for_node or
           attribute.is_getter_raises_exception %}
     ExceptionState exceptionState(ExceptionState::GetterContext, "{{attribute.name}}", "{{interface_name}}", holder, info.GetIsolate());
     {% endif %}
-    {% if attribute.is_nullable and not attribute.has_strict_type_checking %}
+    {% if attribute.is_nullable and not attribute.has_type_checking_nullable %}
     bool isNull = false;
     {% endif %}
     {# FIXME: consider always using a local variable for value #}
@@ -85,7 +85,7 @@ const v8::PropertyCallbackInfo<v8::Value>& info
       | indent}}
     {% endif %}
     {% if attribute.is_nullable %}
-    {% if attribute.has_strict_type_checking %}
+    {% if attribute.has_type_checking_nullable %}
     if (!{{attribute.cpp_value}}) {
     {% else %}
     if (isNull) {
@@ -225,7 +225,7 @@ v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info
     ExceptionState exceptionState(ExceptionState::SetterContext, "{{attribute.name}}", "{{interface_name}}", holder, info.GetIsolate());
     {% endif %}
     {# Type checking #}
-    {% if attribute.has_strict_type_checking %}
+    {% if attribute.has_type_checking_interface %}
     {# Type checking for interface types (if interface not implemented, throw
        TypeError), per http://www.w3.org/TR/WebIDL/#es-interface #}
     if ({% if attribute.is_nullable %}!isUndefinedOrNull(v8Value) && {% endif %}!V8{{attribute.idl_type}}::hasInstance(v8Value, info.GetIsolate())) {
@@ -257,8 +257,20 @@ v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info
     {% elif not is_node %}{# EventHandler hack #}
     moveEventListenerToNewWrapper(holder, {{attribute.event_handler_getter_expression}}, v8Value, {{v8_class}}::eventListenerCacheIndex, info.GetIsolate());
     {% endif %}
-    {% if attribute.enum_validation_expression %}
-    {# Setter ignores invalid enum values: http://www.w3.org/TR/WebIDL/#idl-enums #}
+    {# Type checking, possibly throw a TypeError, per:
+       http://www.w3.org/TR/WebIDL/#es-type-mapping #}
+    {% if attribute.has_type_checking_unrestricted %}
+    {# Non-finite floating point values (NaN, +Infinity or −Infinity), per:
+       http://heycam.github.io/webidl/#es-float
+       http://heycam.github.io/webidl/#es-double #}
+    if (!std::isfinite(cppValue)) {
+        exceptionState.throwTypeError("The provided {{attribute.idl_type}} value is non-finite.");
+        exceptionState.throwIfNeeded();
+        return;
+    }
+    {% elif attribute.enum_validation_expression %}
+    {# Setter ignores invalid enum values:
+       http://www.w3.org/TR/WebIDL/#idl-enums #}
     String string = cppValue;
     if (!({{attribute.enum_validation_expression}}))
         return;

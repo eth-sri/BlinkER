@@ -33,8 +33,8 @@
 
 #include "EventTargetNames.h"
 #include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/NewScriptState.h"
 #include "bindings/v8/ScriptPromiseResolverWithContext.h"
+#include "bindings/v8/ScriptState.h"
 #include "core/dom/MessagePort.h"
 #include "core/events/Event.h"
 #include "platform/NotImplemented.h"
@@ -84,18 +84,15 @@ void ServiceWorker::postMessage(PassRefPtr<SerializedScriptValue> message, const
     m_outerWorker->postMessage(messageString, webChannels.leakPtr());
 }
 
-void ServiceWorker::onStateChanged(blink::WebServiceWorkerState state)
+bool ServiceWorker::isReady()
 {
-    if (m_isPromisePending)
-        m_queuedStates.append(state);
-    else
-        changeState(state);
+    return !m_isPromisePending;
 }
 
-// FIXME: To be removed, this is just here as part of a three-sided patch.
 void ServiceWorker::dispatchStateChangeEvent()
 {
-    changeState(m_outerWorker->state());
+    ASSERT(isReady());
+    this->dispatchEvent(Event::create(EventTypeNames::statechange));
 }
 
 const AtomicString& ServiceWorker::state() const
@@ -133,7 +130,7 @@ const AtomicString& ServiceWorker::state() const
 
 PassRefPtr<ServiceWorker> ServiceWorker::from(ScriptPromiseResolverWithContext* resolver, WebType* worker)
 {
-    NewScriptState::Scope scope(resolver->scriptState());
+    ScriptState::Scope scope(resolver->scriptState());
     RefPtr<ServiceWorker> serviceWorker = create(resolver->scriptState()->executionContext(), adoptPtr(worker));
     serviceWorker->waitOnPromise(resolver->promise());
     return serviceWorker;
@@ -143,22 +140,15 @@ void ServiceWorker::onPromiseResolved()
 {
     ASSERT(m_isPromisePending);
     m_isPromisePending = false;
-    for (Vector<blink::WebServiceWorkerState>::iterator iterator = m_queuedStates.begin(); iterator != m_queuedStates.end(); ++iterator)
-        changeState(*iterator);
-    m_queuedStates.clear();
+    m_outerWorker->proxyReadyChanged();
 }
 
 void ServiceWorker::waitOnPromise(ScriptPromise promise)
 {
     ASSERT(!m_isPromisePending);
     m_isPromisePending = true;
+    m_outerWorker->proxyReadyChanged();
     promise.then(ThenFunction::create(this));
-}
-
-void ServiceWorker::changeState(blink::WebServiceWorkerState state)
-{
-    m_outerWorker->setState(state);
-    this->dispatchEvent(Event::create(EventTypeNames::statechange));
 }
 
 PassRefPtr<ServiceWorker> ServiceWorker::create(ExecutionContext* executionContext, PassOwnPtr<blink::WebServiceWorker> outerWorker)

@@ -47,35 +47,11 @@ namespace WebCore {
 
 RenderFlowThread::RenderFlowThread()
     : RenderBlockFlow(0)
-    , m_previousRegionCount(0)
     , m_regionsInvalidated(false)
     , m_regionsHaveUniformLogicalHeight(true)
     , m_pageLogicalSizeChanged(false)
 {
     setFlowThreadState(InsideOutOfFlowThread);
-}
-
-PassRefPtr<RenderStyle> RenderFlowThread::createFlowThreadStyle(RenderStyle* parentStyle)
-{
-    RefPtr<RenderStyle> newStyle(RenderStyle::create());
-    newStyle->inheritFrom(parentStyle);
-    newStyle->setDisplay(BLOCK);
-    newStyle->setPosition(AbsolutePosition);
-    newStyle->setZIndex(0);
-    newStyle->setLeft(Length(0, Fixed));
-    newStyle->setTop(Length(0, Fixed));
-    newStyle->setWidth(Length(100, Percent));
-    newStyle->setHeight(Length(100, Percent));
-    newStyle->font().update(nullptr);
-
-    return newStyle.release();
-}
-
-void RenderFlowThread::addRegionToThread(RenderRegion* renderRegion)
-{
-    ASSERT(renderRegion);
-    m_regionList.add(renderRegion);
-    renderRegion->setIsValid(true);
 }
 
 void RenderFlowThread::removeRegionFromThread(RenderRegion* renderRegion)
@@ -212,12 +188,9 @@ void RenderFlowThread::repaintRectangleInRegions(const LayoutRect& repaintRect) 
     }
 }
 
-RenderRegion* RenderFlowThread::regionAtBlockOffset(LayoutUnit offset, bool extendLastRegion, RegionAutoGenerationPolicy autoGenerationPolicy)
+RenderRegion* RenderFlowThread::regionAtBlockOffset(LayoutUnit offset) const
 {
     ASSERT(!m_regionsInvalidated);
-
-    if (autoGenerationPolicy == AllowRegionAutoGeneration)
-        autoGenerateRegionsToBlockOffset(offset);
 
     if (offset <= 0)
         return m_regionList.isEmpty() ? 0 : m_regionList.first();
@@ -226,7 +199,6 @@ RenderRegion* RenderFlowThread::regionAtBlockOffset(LayoutUnit offset, bool exte
     m_regionIntervalTree.allOverlapsWithAdapter<RegionSearchAdapter>(adapter);
 
     // If no region was found, the offset is in the flow thread overflow.
-    // The last region will contain the offset if extendLastRegion is set or if the last region is a set.
     if (!adapter.result() && !m_regionList.isEmpty())
         return m_regionList.last();
 
@@ -316,12 +288,6 @@ LayoutUnit RenderFlowThread::pageLogicalTopForOffset(LayoutUnit offset)
     return region ? region->pageLogicalTopForOffset(offset) : LayoutUnit();
 }
 
-LayoutUnit RenderFlowThread::pageLogicalWidthForOffset(LayoutUnit offset)
-{
-    RenderRegion* region = regionAtBlockOffset(offset, true);
-    return region ? region->pageLogicalWidth() : contentLogicalWidth();
-}
-
 LayoutUnit RenderFlowThread::pageLogicalHeightForOffset(LayoutUnit offset)
 {
     RenderRegion* region = regionAtBlockOffset(offset);
@@ -349,31 +315,6 @@ LayoutUnit RenderFlowThread::pageRemainingLogicalHeightForOffset(LayoutUnit offs
     return remainingHeight;
 }
 
-RenderRegion* RenderFlowThread::mapFromFlowToRegion(TransformState& transformState) const
-{
-    if (!hasValidRegionInfo())
-        return 0;
-
-    LayoutRect boxRect = transformState.mappedQuad().enclosingBoundingBox();
-    flipForWritingMode(boxRect);
-
-    // FIXME: We need to refactor RenderObject::absoluteQuads to be able to split the quads across regions,
-    // for now we just take the center of the mapped enclosing box and map it to a region.
-    // Note: Using the center in order to avoid rounding errors.
-
-    LayoutPoint center = boxRect.center();
-    RenderRegion* renderRegion = const_cast<RenderFlowThread*>(this)->regionAtBlockOffset(isHorizontalWritingMode() ? center.y() : center.x(), true, DisallowRegionAutoGeneration);
-    if (!renderRegion)
-        return 0;
-
-    LayoutRect flippedRegionRect(renderRegion->flowThreadPortionRect());
-    flipForWritingMode(flippedRegionRect);
-
-    transformState.move(renderRegion->contentBoxRect().location() - flippedRegionRect.location());
-
-    return renderRegion;
-}
-
 RenderRegion* RenderFlowThread::firstRegion() const
 {
     if (!hasValidRegionInfo())
@@ -394,8 +335,8 @@ void RenderFlowThread::setRegionRangeForBox(const RenderBox* box, LayoutUnit off
         return;
 
     // FIXME: Not right for differing writing-modes.
-    RenderRegion* startRegion = regionAtBlockOffset(offsetFromLogicalTopOfFirstPage, true);
-    RenderRegion* endRegion = regionAtBlockOffset(offsetFromLogicalTopOfFirstPage + box->logicalHeight(), true);
+    RenderRegion* startRegion = regionAtBlockOffset(offsetFromLogicalTopOfFirstPage);
+    RenderRegion* endRegion = regionAtBlockOffset(offsetFromLogicalTopOfFirstPage + box->logicalHeight());
     RenderRegionRangeMap::iterator it = m_regionRangeMap.find(box);
     if (it == m_regionRangeMap.end()) {
         m_regionRangeMap.set(box, RenderRegionRange(startRegion, endRegion));
@@ -590,17 +531,6 @@ void RenderFlowThread::RegionSearchAdapter::collectIfNeeded(const RegionInterval
         return;
     if (interval.low() <= m_offset && interval.high() > m_offset)
         m_result = interval.data();
-}
-
-void RenderFlowThread::mapLocalToContainer(const RenderLayerModelObject* repaintContainer, TransformState& transformState, MapCoordinatesFlags mode, bool* wasFixed) const
-{
-    if (this == repaintContainer)
-        return;
-
-    if (RenderRegion* region = mapFromFlowToRegion(transformState)) {
-        // FIXME: The cast below is probably not the best solution, we may need to find a better way.
-        static_cast<const RenderObject*>(region)->mapLocalToContainer(region->containerForRepaint(), transformState, mode, wasFixed);
-    }
 }
 
 CurrentRenderFlowThreadMaintainer::CurrentRenderFlowThreadMaintainer(RenderFlowThread* renderFlowThread)

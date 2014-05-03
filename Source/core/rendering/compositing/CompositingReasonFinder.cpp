@@ -43,16 +43,10 @@ void CompositingReasonFinder::updateTriggers()
     m_compositingTriggers = 0;
 
     Settings& settings = m_renderView.document().page()->settings();
-    if (settings.acceleratedCompositingFor3DTransformsEnabled())
-        m_compositingTriggers |= ThreeDTransformTrigger;
     if (settings.acceleratedCompositingForVideoEnabled())
         m_compositingTriggers |= VideoTrigger;
-    if (settings.acceleratedCompositingForPluginsEnabled())
-        m_compositingTriggers |= PluginTrigger;
     if (settings.acceleratedCompositingForCanvasEnabled())
         m_compositingTriggers |= CanvasTrigger;
-    if (settings.acceleratedCompositingForAnimationEnabled())
-        m_compositingTriggers |= AnimationTrigger;
     if (settings.compositedScrollingForFramesEnabled())
         m_compositingTriggers |= ScrollableInnerFrameTrigger;
     if (settings.acceleratedCompositingForFiltersEnabled())
@@ -69,16 +63,6 @@ void CompositingReasonFinder::updateTriggers()
     // Or the sticky and fixed position elements should be behind different flags.
     if (settings.acceleratedCompositingForFixedPositionEnabled())
         m_compositingTriggers |= ViewportConstrainedPositionedTrigger;
-}
-
-bool CompositingReasonFinder::has3DTransformTrigger() const
-{
-    return m_compositingTriggers & ThreeDTransformTrigger;
-}
-
-bool CompositingReasonFinder::hasAnimationTrigger() const
-{
-    return m_compositingTriggers & AnimationTrigger;
 }
 
 bool CompositingReasonFinder::hasOverflowScrollTrigger() const
@@ -163,9 +147,6 @@ CompositingReasons CompositingReasonFinder::styleDeterminedReasons(RenderObject*
 
 bool CompositingReasonFinder::requiresCompositingForTransform(RenderObject* renderer) const
 {
-    if (!(m_compositingTriggers & ThreeDTransformTrigger))
-        return false;
-
     // Note that we ask the renderer if it has a transform, because the style may have transforms,
     // but the renderer may be an inline that doesn't suppport them.
     return renderer->hasTransform() && renderer->style()->transform().has3DOperation();
@@ -173,9 +154,6 @@ bool CompositingReasonFinder::requiresCompositingForTransform(RenderObject* rend
 
 bool CompositingReasonFinder::requiresCompositingForBackfaceVisibilityHidden(RenderObject* renderer) const
 {
-    if (!(m_compositingTriggers & ThreeDTransformTrigger))
-        return false;
-
     return renderer->style()->backfaceVisibility() == BackfaceVisibilityHidden;
 }
 
@@ -230,9 +208,6 @@ CompositingReasons CompositingReasonFinder::nonStyleDeterminedDirectReasons(cons
 
 bool CompositingReasonFinder::requiresCompositingForAnimation(RenderObject* renderer) const
 {
-    if (!(m_compositingTriggers & AnimationTrigger))
-        return false;
-
     return renderer->style()->shouldCompositeForCurrentAnimations();
 }
 

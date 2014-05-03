@@ -37,7 +37,7 @@ using namespace WebCore;
 
 namespace {
 
-PassRefPtr<IDBKey> checkKeyFromValueAndKeyPathInternal(v8::Isolate* isolate, const ScriptValue& value, const String& keyPath)
+PassRefPtrWillBeRawPtr<IDBKey> checkKeyFromValueAndKeyPathInternal(v8::Isolate* isolate, const ScriptValue& value, const String& keyPath)
 {
     IDBKeyPath idbKeyPath(keyPath);
     EXPECT_TRUE(idbKeyPath.isValid());
@@ -47,11 +47,11 @@ PassRefPtr<IDBKey> checkKeyFromValueAndKeyPathInternal(v8::Isolate* isolate, con
 
 void checkKeyPathNullValue(v8::Isolate* isolate, const ScriptValue& value, const String& keyPath)
 {
-    RefPtr<IDBKey> idbKey = checkKeyFromValueAndKeyPathInternal(isolate, value, keyPath);
+    RefPtrWillBeRawPtr<IDBKey> idbKey = checkKeyFromValueAndKeyPathInternal(isolate, value, keyPath);
     ASSERT_FALSE(idbKey.get());
 }
 
-bool injectKey(NewScriptState* scriptState, PassRefPtr<IDBKey> key, ScriptValue& value, const String& keyPath)
+bool injectKey(ScriptState* scriptState, PassRefPtrWillBeRawPtr<IDBKey> key, ScriptValue& value, const String& keyPath)
 {
     IDBKeyPath idbKeyPath(keyPath);
     EXPECT_TRUE(idbKeyPath.isValid());
@@ -59,23 +59,23 @@ bool injectKey(NewScriptState* scriptState, PassRefPtr<IDBKey> key, ScriptValue&
     return injectV8KeyIntoV8Value(scriptState->isolate(), keyValue.v8Value(), value.v8Value(), idbKeyPath);
 }
 
-void checkInjection(NewScriptState* scriptState, PassRefPtr<IDBKey> prpKey, ScriptValue& value, const String& keyPath)
+void checkInjection(ScriptState* scriptState, PassRefPtrWillBeRawPtr<IDBKey> prpKey, ScriptValue& value, const String& keyPath)
 {
-    RefPtr<IDBKey> key = prpKey;
+    RefPtrWillBeRawPtr<IDBKey> key = prpKey;
     bool result = injectKey(scriptState, key, value, keyPath);
     ASSERT_TRUE(result);
-    RefPtr<IDBKey> extractedKey = checkKeyFromValueAndKeyPathInternal(scriptState->isolate(), value, keyPath);
+    RefPtrWillBeRawPtr<IDBKey> extractedKey = checkKeyFromValueAndKeyPathInternal(scriptState->isolate(), value, keyPath);
     EXPECT_TRUE(key->isEqual(extractedKey.get()));
 }
 
-void checkInjectionFails(NewScriptState* scriptState, PassRefPtr<IDBKey> key, ScriptValue& value, const String& keyPath)
+void checkInjectionFails(ScriptState* scriptState, PassRefPtrWillBeRawPtr<IDBKey> key, ScriptValue& value, const String& keyPath)
 {
     EXPECT_FALSE(injectKey(scriptState, key, value, keyPath));
 }
 
 void checkKeyPathStringValue(v8::Isolate* isolate, const ScriptValue& value, const String& keyPath, const String& expected)
 {
-    RefPtr<IDBKey> idbKey = checkKeyFromValueAndKeyPathInternal(isolate, value, keyPath);
+    RefPtrWillBeRawPtr<IDBKey> idbKey = checkKeyFromValueAndKeyPathInternal(isolate, value, keyPath);
     ASSERT_TRUE(idbKey.get());
     ASSERT_EQ(IDBKey::StringType, idbKey->type());
     ASSERT_TRUE(expected == idbKey->string());
@@ -83,7 +83,7 @@ void checkKeyPathStringValue(v8::Isolate* isolate, const ScriptValue& value, con
 
 void checkKeyPathNumberValue(v8::Isolate* isolate, const ScriptValue& value, const String& keyPath, int expected)
 {
-    RefPtr<IDBKey> idbKey = checkKeyFromValueAndKeyPathInternal(isolate, value, keyPath);
+    RefPtrWillBeRawPtr<IDBKey> idbKey = checkKeyFromValueAndKeyPathInternal(isolate, value, keyPath);
     ASSERT_TRUE(idbKey.get());
     ASSERT_EQ(IDBKey::NumberType, idbKey->type());
     ASSERT_TRUE(expected == idbKey->number());
@@ -143,7 +143,7 @@ class InjectIDBKeyTest : public IDBKeyFromValueAndKeyPathTest {
 TEST_F(InjectIDBKeyTest, TopLevelPropertyStringValue)
 {
     v8::Isolate* isolate = v8::Isolate::GetCurrent();
-    NewScriptState* scriptState = NewScriptState::current(isolate);
+    ScriptState* scriptState = ScriptState::current(isolate);
     v8::Local<v8::Object> object = v8::Object::New(isolate);
     object->Set(v8AtomicString(isolate, "foo"), v8AtomicString(isolate, "zoo"));
 
@@ -157,7 +157,7 @@ TEST_F(InjectIDBKeyTest, TopLevelPropertyStringValue)
 TEST_F(InjectIDBKeyTest, SubProperty)
 {
     v8::Isolate* isolate = v8::Isolate::GetCurrent();
-    NewScriptState* scriptState = NewScriptState::current(isolate);
+    ScriptState* scriptState = ScriptState::current(isolate);
     v8::Local<v8::Object> object = v8::Object::New(isolate);
     v8::Local<v8::Object> subProperty = v8::Object::New(isolate);
     subProperty->Set(v8AtomicString(isolate, "bar"), v8AtomicString(isolate, "zee"));

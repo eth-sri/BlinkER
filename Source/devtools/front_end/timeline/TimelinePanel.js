@@ -29,7 +29,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-importScript("../CPUProfileModel.js");
+importScript("../components/CPUProfileModel.js");
 importScript("CountersGraph.js");
 importScript("MemoryCountersGraph.js");
 importScript("TimelineModel.js");
@@ -72,6 +72,8 @@ WebInspector.TimelinePanel = function()
     this._model.addEventListener(WebInspector.TimelineModel.Events.RecordingProgress, this._onRecordingProgress, this);
     this._model.addEventListener(WebInspector.TimelineModel.Events.RecordFilterChanged, this._refreshViews, this);
     this._model.addEventListener(WebInspector.TimelineModel.Events.RecordAdded, this._onRecordAdded, this);
+
+    this._model.target().profilingLock.addEventListener(WebInspector.Lock.Events.StateChanged, this._onProfilingStateChanged, this);
 
     this._categoryFilter = new WebInspector.TimelineCategoryFilter();
     this._durationFilter = new WebInspector.TimelineIsLongFilter();
@@ -142,6 +144,8 @@ WebInspector.TimelinePanel.rowHeight = 18;
 WebInspector.TimelinePanel.headerHeight = 20;
 
 WebInspector.TimelinePanel.durationFilterPresetsMs = [0, 1, 15];
+
+WebInspector.TimelinePanel.defaultTracingCategoryFilter = "*,disabled-by-default-cc.debug,disabled-by-default-devtools.timeline";
 
 WebInspector.TimelinePanel.prototype = {
     /**
@@ -324,10 +328,11 @@ WebInspector.TimelinePanel.prototype = {
         var panelStatusBarElement = this.element.createChild("div", "panel-status-bar");
         this._statusBarButtons = /** @type {!Array.<!WebInspector.StatusBarItem>} */ ([]);
 
-        this.toggleTimelineButton = new WebInspector.StatusBarButton(WebInspector.UIString("Record"), "record-profile-status-bar-item");
+        this.toggleTimelineButton = new WebInspector.StatusBarButton("", "record-profile-status-bar-item");
         this.toggleTimelineButton.addEventListener("click", this._toggleTimelineButtonClicked, this);
         this._statusBarButtons.push(this.toggleTimelineButton);
         panelStatusBarElement.appendChild(this.toggleTimelineButton.element);
+        this._updateToggleTimelineButton(false);
 
         var clearButton = new WebInspector.StatusBarButton(WebInspector.UIString("Clear"), "clear-status-bar-item");
         clearButton.addEventListener("click", this._onClearButtonClick, this);
@@ -452,7 +457,7 @@ WebInspector.TimelinePanel.prototype = {
         if (this._operationInProgress)
             return null;
         if (this._recordingInProgress()) {
-            this.toggleTimelineButton.toggled = false;
+            this._updateToggleTimelineButton(false);
             this._stopRecording();
         }
         var progressIndicator = new WebInspector.ProgressIndicator();
@@ -579,6 +584,8 @@ WebInspector.TimelinePanel.prototype = {
 
     _onModeChanged: function()
     {
+        this._stackView.detach();
+
         var isFrameMode = this._overviewModeSetting.get() === WebInspector.TimelinePanel.OverviewMode.Frames;
         this._removeAllModeViews();
         this._overviewControls = [];
@@ -612,6 +619,8 @@ WebInspector.TimelinePanel.prototype = {
         this._overviewPane.setOverviewControls(this._overviewControls);
         this.doResize();
         this._updateSelectionDetails();
+
+        this._stackView.show(this._searchableView.element);
     },
 
     /**
@@ -622,7 +631,7 @@ WebInspector.TimelinePanel.prototype = {
         this._userInitiatedRecording = userInitiated;
         this._model.startRecording(this._captureStacksSetting.get(), this._captureMemorySetting.get());
         if (WebInspector.experimentsSettings.timelineTracingMode.isEnabled())
-            this._tracingModel().start(WebInspector.TimelineManager.defaultTracingCategories, "");
+            this._tracingModel().start(WebInspector.TimelinePanel.defaultTracingCategoryFilter, "");
         for (var i = 0; i < this._overviewControls.length; ++i)
             this._overviewControls[i].timelineStarted();
 
@@ -640,11 +649,32 @@ WebInspector.TimelinePanel.prototype = {
             this._overviewControls[i].timelineStopped();
     },
 
+    _onProfilingStateChanged: function()
+    {
+        this._updateToggleTimelineButton(this.toggleTimelineButton.toggled);
+    },
+
+    /**
+     * @param {boolean} toggled
+     */
+    _updateToggleTimelineButton: function(toggled)
+    {
+        var enable = toggled || !this._model.target().profilingLock.isAcquired();
+        this.toggleTimelineButton.setEnabled(enable);
+        this.toggleTimelineButton.toggled = toggled;
+        if (enable)
+            this.toggleTimelineButton.title = toggled ? WebInspector.UIString("Stop") : WebInspector.UIString("Record");
+        else
+            this.toggleTimelineButton.title = WebInspector.UIString("Another profiler is already active");
+    },
+
     /**
      * @return {boolean}
      */
     _toggleTimelineButtonClicked: function()
     {
+        if (!this.toggleTimelineButton.enabled())
+            return true;
         if (this._operationInProgress)
             return true;
         if (this._recordingInProgress())
@@ -679,8 +709,7 @@ WebInspector.TimelinePanel.prototype = {
 
     _onRecordingStarted: function()
     {
-        this.toggleTimelineButton.title = WebInspector.UIString("Stop");
-        this.toggleTimelineButton.toggled = true;
+        this._updateToggleTimelineButton(true);
         if (WebInspector.experimentsSettings.timelineNoLiveUpdate.isEnabled())
             this._updateProgress(WebInspector.UIString("%d events collected", 0));
     },
@@ -734,8 +763,7 @@ WebInspector.TimelinePanel.prototype = {
 
     _onRecordingStopped: function()
     {
-        this.toggleTimelineButton.title = WebInspector.UIString("Record");
-        this.toggleTimelineButton.toggled = false;
+        this._updateToggleTimelineButton(false);
         this._hideProgressPane();
     },
 
@@ -847,8 +875,8 @@ WebInspector.TimelinePanel.prototype = {
          */
         function processRecord(record)
         {
-            if (record.endTime < this._windowStartTime ||
-                record.startTime > this._windowEndTime)
+            if (record.endTime() < this._windowStartTime ||
+                record.startTime() > this._windowEndTime)
                 return;
             if (record.testContentMatching(searchRegExp))
                 matches.push(record);
@@ -911,7 +939,7 @@ WebInspector.TimelinePanel.prototype = {
          */
         function compareEndTime(value, task)
         {
-            return value < task.endTime ? -1 : 1;
+            return value < task.endTime() ? -1 : 1;
         }
 
         /**
@@ -919,20 +947,20 @@ WebInspector.TimelinePanel.prototype = {
          */
         function aggregateTimeForRecordWithinWindow(record)
         {
-            if (!record.endTime || record.endTime < startTime || record.startTime > endTime)
+            if (!record.endTime() || record.endTime() < startTime || record.startTime() > endTime)
                 return;
 
             var childrenTime = 0;
-            var children = record.children || [];
+            var children = record.children() || [];
             for (var i = 0; i < children.length; ++i) {
                 var child = children[i];
-                if (!child.endTime || child.endTime < startTime || child.startTime > endTime)
+                if (!child.endTime() || child.endTime() < startTime || child.startTime() > endTime)
                     continue;
-                childrenTime += Math.min(endTime, child.endTime) - Math.max(startTime, child.startTime);
+                childrenTime += Math.min(endTime, child.endTime()) - Math.max(startTime, child.startTime());
                 aggregateTimeForRecordWithinWindow(child);
             }
             var categoryName = WebInspector.TimelineUIUtils.categoryForRecord(record).name;
-            var ownTime = Math.min(endTime, record.endTime) - Math.max(startTime, record.startTime) - childrenTime;
+            var ownTime = Math.min(endTime, record.endTime()) - Math.max(startTime, record.startTime()) - childrenTime;
             aggregatedStats[categoryName] = (aggregatedStats[categoryName] || 0) + ownTime;
         }
 
@@ -940,7 +968,7 @@ WebInspector.TimelinePanel.prototype = {
         var taskIndex = insertionIndexForObjectInListSortedByFunction(startTime, mainThreadTasks, compareEndTime);
         for (; taskIndex < mainThreadTasks.length; ++taskIndex) {
             var task = mainThreadTasks[taskIndex];
-            if (task.startTime > endTime)
+            if (task.startTime() > endTime)
                 break;
             aggregateTimeForRecordWithinWindow(task);
         }
@@ -1147,7 +1175,7 @@ WebInspector.TimelineCategoryFilter.prototype = {
      */
     accept: function(record)
     {
-        return !record.category.hidden;
+        return !record.category().hidden;
     },
 
     __proto__: WebInspector.TimelineModel.Filter.prototype
@@ -1179,7 +1207,7 @@ WebInspector.TimelineIsLongFilter.prototype = {
      */
     accept: function(record)
     {
-        return this._minimumRecordDuration ? ((record.endTime - record.startTime) >= this._minimumRecordDuration) : true;
+        return this._minimumRecordDuration ? ((record.endTime() - record.startTime()) >= this._minimumRecordDuration) : true;
     },
 
     __proto__: WebInspector.TimelineModel.Filter.prototype
@@ -1219,20 +1247,7 @@ WebInspector.TimelineTextFilter.prototype = {
      */
     accept: function(record)
     {
-        if (!this._regex)
-            return true;
-
-        var accept = false;
-        /**
-         * @param {!WebInspector.TimelineModel.Record} record
-         * @return {boolean}
-         * @this {!WebInspector.TimelineTextFilter}
-         */
-        function processRecord(record)
-        {
-            return record.testContentMatching(this._regex);
-        }
-        return WebInspector.TimelineModel.forAllRecords([record], processRecord.bind(this));
+        return !this._regex || record.testContentMatching(this._regex);
     },
 
     __proto__: WebInspector.TimelineModel.Filter.prototype
@@ -1266,7 +1281,7 @@ WebInspector.TimelineHiddenFilter.prototype = {
      */
     accept: function(record)
     {
-        return !this._hiddenRecords[record.type];
+        return !this._hiddenRecords[record.type()];
     },
 
     __proto__: WebInspector.TimelineModel.Filter.prototype

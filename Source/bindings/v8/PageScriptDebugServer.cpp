@@ -44,6 +44,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/UseCounter.h"
 #include "core/inspector/InspectorInstrumentation.h"
+#include "core/inspector/InspectorTraceEvents.h"
 #include "core/inspector/ScriptDebugListener.h"
 #include "core/page/Page.h"
 #include "wtf/OwnPtr.h"
@@ -164,7 +165,7 @@ void PageScriptDebugServer::setClientMessageLoop(PassOwnPtr<ClientMessageLoop> c
     m_clientMessageLoop = clientMessageLoop;
 }
 
-void PageScriptDebugServer::compileScript(NewScriptState* scriptState, const String& expression, const String& sourceURL, String* scriptId, String* exceptionMessage)
+void PageScriptDebugServer::compileScript(ScriptState* scriptState, const String& expression, const String& sourceURL, String* scriptId, String* exceptionMessage)
 {
     ExecutionContext* executionContext = scriptState->executionContext();
     RefPtr<LocalFrame> protect = toDocument(executionContext)->frame();
@@ -179,12 +180,14 @@ void PageScriptDebugServer::clearCompiledScripts()
     m_compiledScriptURLs.clear();
 }
 
-void PageScriptDebugServer::runScript(NewScriptState* scriptState, const String& scriptId, ScriptValue* result, bool* wasThrown, String* exceptionMessage)
+void PageScriptDebugServer::runScript(ScriptState* scriptState, const String& scriptId, ScriptValue* result, bool* wasThrown, String* exceptionMessage)
 {
     String sourceURL = m_compiledScriptURLs.take(scriptId);
 
     ExecutionContext* executionContext = scriptState->executionContext();
     LocalFrame* frame = toDocument(executionContext)->frame();
+    TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "EvaluateScript", "data", InspectorEvaluateScriptEvent::data(frame, sourceURL, TextPosition::minimumPosition().m_line.oneBasedInt()));
+    // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentationCookie cookie;
     if (frame)
         cookie = InspectorInstrumentation::willEvaluateScript(frame, sourceURL, TextPosition::minimumPosition().m_line.oneBasedInt());

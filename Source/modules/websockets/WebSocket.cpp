@@ -51,6 +51,7 @@
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KnownPorts.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "public/platform/Platform.h"
 #include "wtf/ArrayBuffer.h"
 #include "wtf/ArrayBufferView.h"
 #include "wtf/HashSet.h"
@@ -125,9 +126,9 @@ void WebSocket::EventQueue::dispatchQueuedEvents()
     if (m_state != Active)
         return;
 
-    RefPtr<EventQueue> protect(this);
+    RefPtrWillBeRawPtr<EventQueue> protect(this);
 
-    Deque<RefPtrWillBePersistent<Event> > events;
+    WillBeHeapDeque<RefPtrWillBeMember<Event> > events;
     events.swap(m_events);
     while (!events.isEmpty()) {
         if (m_state == Stopped || m_state == Suspended)
@@ -149,6 +150,11 @@ void WebSocket::EventQueue::resumeTimerFired(Timer<EventQueue>*)
     ASSERT(m_state == Suspended);
     m_state = Active;
     dispatchQueuedEvents();
+}
+
+void WebSocket::EventQueue::trace(Visitor* visitor)
+{
+    visitor->trace(m_events);
 }
 
 const size_t maxReasonSizeInBytes = 123;
@@ -242,20 +248,20 @@ void WebSocket::logError(const String& message)
     executionContext()->addConsoleMessage(JSMessageSource, ErrorMessageLevel, message);
 }
 
-PassRefPtr<WebSocket> WebSocket::create(ExecutionContext* context, const String& url, ExceptionState& exceptionState)
+PassRefPtrWillBeRawPtr<WebSocket> WebSocket::create(ExecutionContext* context, const String& url, ExceptionState& exceptionState)
 {
     Vector<String> protocols;
     return create(context, url, protocols, exceptionState);
 }
 
-PassRefPtr<WebSocket> WebSocket::create(ExecutionContext* context, const String& url, const Vector<String>& protocols, ExceptionState& exceptionState)
+PassRefPtrWillBeRawPtr<WebSocket> WebSocket::create(ExecutionContext* context, const String& url, const Vector<String>& protocols, ExceptionState& exceptionState)
 {
     if (url.isNull()) {
         exceptionState.throwDOMException(SyntaxError, "Failed to create a WebSocket: the provided URL is invalid.");
         return nullptr;
     }
 
-    RefPtr<WebSocket> webSocket(adoptRef(new WebSocket(context)));
+    RefPtrWillBeRawPtr<WebSocket> webSocket(adoptRefWillBeRefCountedGarbageCollected(new WebSocket(context)));
     webSocket->suspendIfNeeded();
 
     webSocket->connect(url, protocols, exceptionState);
@@ -265,7 +271,7 @@ PassRefPtr<WebSocket> WebSocket::create(ExecutionContext* context, const String&
     return webSocket.release();
 }
 
-PassRefPtr<WebSocket> WebSocket::create(ExecutionContext* context, const String& url, const String& protocol, ExceptionState& exceptionState)
+PassRefPtrWillBeRawPtr<WebSocket> WebSocket::create(ExecutionContext* context, const String& url, const String& protocol, ExceptionState& exceptionState)
 {
     Vector<String> protocols;
     protocols.append(protocol);
@@ -300,11 +306,7 @@ void WebSocket::connect(const String& url, const Vector<String>& protocols, Exce
         exceptionState.throwDOMException(SyntaxError, "The URL's scheme must be either 'ws' or 'wss'. '" + m_url.protocol() + "' is not allowed.");
         return;
     }
-    if (MixedContentChecker::isMixedContent(executionContext()->securityOrigin(), m_url)) {
-        // FIXME: Throw an exception and close the connection.
-        String message = "Connecting to a non-secure WebSocket server from a secure origin is deprecated.";
-        executionContext()->addConsoleMessage(JSMessageSource, WarningMessageLevel, message);
-    }
+
     if (m_url.hasFragmentIdentifier()) {
         m_state = CLOSED;
         exceptionState.throwDOMException(SyntaxError, "The URL contains a fragment identifier ('" + m_url.fragmentIdentifier() + "'). Fragment identifiers are not allowed in WebSocket URLs.");
@@ -353,10 +355,15 @@ void WebSocket::connect(const String& url, const Vector<String>& protocols, Exce
     if (!protocols.isEmpty())
         protocolString = joinStrings(protocols, subProtocolSeperator());
 
-    m_channel->connect(m_url, protocolString);
+    if (!m_channel->connect(m_url, protocolString)) {
+        m_state = CLOSED;
+        exceptionState.throwSecurityError("An insecure WebSocket connection may not be initiated from a page loaded over HTTPS.");
+        releaseChannel();
+        return;
+    }
 }
 
-void WebSocket::handleSendResult(WebSocketChannel::SendResult result, ExceptionState& exceptionState)
+void WebSocket::handleSendResult(WebSocketChannel::SendResult result, ExceptionState& exceptionState, WebSocketSendType dataType)
 {
     switch (result) {
     case WebSocketChannel::InvalidMessage:
@@ -366,6 +373,7 @@ void WebSocket::handleSendResult(WebSocketChannel::SendResult result, ExceptionS
         logError("WebSocket send() failed.");
         return;
     case WebSocketChannel::SendSuccess:
+        blink::Platform::current()->histogramEnumeration("WebCore.WebSocket.SendType", dataType, WebSocketSendTypeMax);
         return;
     }
     ASSERT_NOT_REACHED();
@@ -399,7 +407,7 @@ void WebSocket::send(const String& message, ExceptionState& exceptionState)
         return;
     }
     ASSERT(m_channel);
-    handleSendResult(m_channel->send(message), exceptionState);
+    handleSendResult(m_channel->send(message), exceptionState, WebSocketSendTypeString);
 }
 
 void WebSocket::send(ArrayBuffer* binaryData, ExceptionState& exceptionState)
@@ -415,7 +423,7 @@ void WebSocket::send(ArrayBuffer* binaryData, ExceptionState& exceptionState)
         return;
     }
     ASSERT(m_channel);
-    handleSendResult(m_channel->send(*binaryData, 0, binaryData->byteLength()), exceptionState);
+    handleSendResult(m_channel->send(*binaryData, 0, binaryData->byteLength()), exceptionState, WebSocketSendTypeArrayBuffer);
 }
 
 void WebSocket::send(ArrayBufferView* arrayBufferView, ExceptionState& exceptionState)
@@ -432,7 +440,7 @@ void WebSocket::send(ArrayBufferView* arrayBufferView, ExceptionState& exception
     }
     ASSERT(m_channel);
     RefPtr<ArrayBuffer> arrayBuffer(arrayBufferView->buffer());
-    handleSendResult(m_channel->send(*arrayBuffer, arrayBufferView->byteOffset(), arrayBufferView->byteLength()), exceptionState);
+    handleSendResult(m_channel->send(*arrayBuffer, arrayBufferView->byteOffset(), arrayBufferView->byteLength()), exceptionState, WebSocketSendTypeArrayBufferView);
 }
 
 void WebSocket::send(Blob* binaryData, ExceptionState& exceptionState)
@@ -448,7 +456,7 @@ void WebSocket::send(Blob* binaryData, ExceptionState& exceptionState)
         return;
     }
     ASSERT(m_channel);
-    handleSendResult(m_channel->send(binaryData->blobDataHandle()), exceptionState);
+    handleSendResult(m_channel->send(binaryData->blobDataHandle()), exceptionState, WebSocketSendTypeBlob);
 }
 
 void WebSocket::close(unsigned short code, const String& reason, ExceptionState& exceptionState)
@@ -678,6 +686,11 @@ size_t WebSocket::getFramingOverhead(size_t payloadSize)
     else if (payloadSize >= minimumPayloadSizeWithTwoByteExtendedPayloadLength)
         overhead += 2;
     return overhead;
+}
+
+void WebSocket::trace(Visitor* visitor)
+{
+    visitor->trace(m_eventQueue);
 }
 
 } // namespace WebCore

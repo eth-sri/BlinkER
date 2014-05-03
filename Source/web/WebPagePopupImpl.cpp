@@ -31,8 +31,6 @@
 #include "config.h"
 #include "web/WebPagePopupImpl.h"
 
-#include "WebViewClient.h"
-#include "WebWidgetClient.h"
 #include "core/dom/ContextFeatures.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
@@ -46,6 +44,8 @@
 #include "core/page/Page.h"
 #include "core/page/PagePopupClient.h"
 #include "public/platform/WebCursorInfo.h"
+#include "public/web/WebViewClient.h"
+#include "public/web/WebWidgetClient.h"
 #include "web/WebInputEventConversion.h"
 #include "web/WebSettingsImpl.h"
 #include "web/WebViewImpl.h"
@@ -307,14 +307,6 @@ void WebPagePopupImpl::enterForceCompositingMode(bool enter)
             return;
         mainFrame->view()->updateCompositingLayersAfterStyleChange();
     }
-}
-
-void WebPagePopupImpl::didExitCompositingMode()
-{
-    setIsAcceleratedCompositingActive(false);
-    m_widgetClient->didInvalidateRect(IntRect(0, 0, size().width, size().height));
-    if (m_page)
-        m_page->mainFrame()->document()->setNeedsStyleRecalc(SubtreeStyleChange);
 }
 
 void WebPagePopupImpl::willCloseLayerTreeView()

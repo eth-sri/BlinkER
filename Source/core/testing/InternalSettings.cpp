@@ -71,9 +71,6 @@ InternalSettings::Backup::Backup(Settings* settings)
     , m_originalMockScrollbarsEnabled(settings->mockScrollbarsEnabled())
     , m_langAttributeAwareFormControlUIEnabled(RuntimeEnabledFeatures::langAttributeAwareFormControlUIEnabled())
     , m_imagesEnabled(settings->imagesEnabled())
-    , m_shouldDisplaySubtitles(settings->shouldDisplaySubtitles())
-    , m_shouldDisplayCaptions(settings->shouldDisplayCaptions())
-    , m_shouldDisplayTextDescriptions(settings->shouldDisplayTextDescriptions())
     , m_defaultVideoPosterURL(settings->defaultVideoPosterURL())
     , m_originalCompositorDrivenAcceleratedScrollEnabled(settings->compositorDrivenAcceleratedScrollingEnabled())
     , m_originalLayerSquashingEnabled(settings->layerSquashingEnabled())
@@ -96,9 +93,6 @@ void InternalSettings::Backup::restoreTo(Settings* settings)
     settings->setMockScrollbarsEnabled(m_originalMockScrollbarsEnabled);
     RuntimeEnabledFeatures::setLangAttributeAwareFormControlUIEnabled(m_langAttributeAwareFormControlUIEnabled);
     settings->setImagesEnabled(m_imagesEnabled);
-    settings->setShouldDisplaySubtitles(m_shouldDisplaySubtitles);
-    settings->setShouldDisplayCaptions(m_shouldDisplayCaptions);
-    settings->setShouldDisplayTextDescriptions(m_shouldDisplayTextDescriptions);
     settings->setDefaultVideoPosterURL(m_defaultVideoPosterURL);
     settings->setCompositorDrivenAcceleratedScrollingEnabled(m_originalCompositorDrivenAcceleratedScrollEnabled);
     settings->setLayerSquashingEnabled(m_originalLayerSquashingEnabled);
@@ -106,6 +100,14 @@ void InternalSettings::Backup::restoreTo(Settings* settings)
     settings->genericFontFamilySettings().reset();
 }
 
+#if ENABLE(OILPAN)
+InternalSettings* InternalSettings::from(Page& page)
+{
+    if (!HeapSupplement<Page>::from(page, supplementName()))
+        HeapSupplement<Page>::provideTo(page, supplementName(), new InternalSettings(page));
+    return static_cast<InternalSettings*>(HeapSupplement<Page>::from(page, supplementName()));
+}
+#else
 // We can't use RefCountedSupplement because that would try to make InternalSettings RefCounted
 // and InternalSettings is already RefCounted via its base class, InternalSettingsGenerated.
 // Instead, we manually make InternalSettings supplement Page.
@@ -122,19 +124,20 @@ public:
     virtual void trace(Visitor*) OVERRIDE { }
 
 private:
-    RefPtrWillBePersistent<InternalSettings> m_internalSettings;
+    RefPtr<InternalSettings> m_internalSettings;
 };
-
-const char* InternalSettings::supplementName()
-{
-    return "InternalSettings";
-}
 
 InternalSettings* InternalSettings::from(Page& page)
 {
     if (!Supplement<Page>::from(page, supplementName()))
         Supplement<Page>::provideTo(page, supplementName(), adoptPtr(new InternalSettingsWrapper(page)));
     return static_cast<InternalSettingsWrapper*>(Supplement<Page>::from(page, supplementName()))->internalSettings();
+}
+#endif
+
+const char* InternalSettings::supplementName()
+{
+    return "InternalSettings";
 }
 
 InternalSettings::~InternalSettings()
@@ -350,6 +353,12 @@ void InternalSettings::setPasswordGenerationDecorationEnabled(bool enabled, Exce
 {
     InternalSettingsGuardForSettings();
     settings()->setPasswordGenerationDecorationEnabled(enabled);
+}
+
+void InternalSettings::trace(Visitor* visitor)
+{
+    visitor->trace(m_page);
+    InternalSettingsGenerated::trace(visitor);
 }
 
 }

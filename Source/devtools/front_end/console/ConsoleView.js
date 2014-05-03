@@ -53,8 +53,11 @@ WebInspector.ConsoleView = function(hideContextSelector)
     this._clearConsoleButton.addEventListener("click", this._requestClearMessages, this);
 
     this._executionContextSelector = new WebInspector.StatusBarComboBox(this._executionContextChanged.bind(this), "console-context");
-    this._topLevelOptionByContextListId = {};
-    this._subOptionsByContextListId = {};
+
+    /**
+     * @type {!Map.<!WebInspector.ExecutionContext, !Element>}
+     */
+    this._optionByExecutionContext = new Map();
 
     this._filter = new WebInspector.ConsoleViewFilter(this);
     this._filter.addEventListener(WebInspector.ConsoleViewFilter.Events.FilterChanged, this._updateMessageList.bind(this));
@@ -87,9 +90,10 @@ WebInspector.ConsoleView = function(hideContextSelector)
     resetFiltersLink.textContent = WebInspector.UIString("Show all messages.");
     resetFiltersLink.addEventListener("click", this._filter.reset.bind(this._filter), true);
 
-    this._topGroup = new WebInspector.ConsoleGroup(null, null);
+    this._messagesContainer = this._messagesElement.createChild("div", "console-group");
+    this._messagesContainer.classList.add("console-group-messages");
+    this._topGroup = WebInspector.ConsoleGroup.createTopGroup();
     this._currentGroup = this._topGroup;
-    this._messagesElement.appendChild(this._topGroup.element);
 
     this._promptElement = this._messagesElement.createChild("div", "source-code");
     this._promptElement.id = "console-prompt";
@@ -109,9 +113,10 @@ WebInspector.ConsoleView = function(hideContextSelector)
     statusBarElement.appendChild(this._showAllMessagesCheckbox.element);
 
     this._registerShortcuts();
-    this.registerRequiredCSS("textPrompt.css");
+    this.registerRequiredCSS("suggestBox.css");
 
     this._messagesElement.addEventListener("contextmenu", this._handleContextMenuEvent.bind(this), false);
+    WebInspector.settings.monitoringXHREnabled.addChangeListener(this._monitoringXHREnabledSettingChanged, this);
 
     this._linkifier = new WebInspector.Linkifier();
 
@@ -119,7 +124,7 @@ WebInspector.ConsoleView = function(hideContextSelector)
     this._consoleMessages = [];
 
     this._prompt = new WebInspector.TextPromptWithHistory(WebInspector.ExecutionContextSelector.completionsForTextPromptInCurrentContext);
-    this._prompt.setSuggestBoxEnabled("generic-suggest");
+    this._prompt.setSuggestBoxEnabled(true);
     this._prompt.renderAsBlock();
     this._prompt.attach(this._promptElement);
     this._prompt.proxyElement.addEventListener("keydown", this._promptKeyDown.bind(this), false);
@@ -156,18 +161,9 @@ WebInspector.ConsoleView.prototype = {
         target.consoleModel.addEventListener(WebInspector.ConsoleModel.Events.CommandEvaluated, this._commandEvaluated, this);
         target.consoleModel.messages.forEach(appendMessage, this);
 
-        /**
-         * @param {!WebInspector.ExecutionContextList} contextList
-         * @this {WebInspector.ConsoleView}
-         */
-        function loadContextList(contextList)
-        {
-            this._addExecutionContextList(contextList);
-            this._contextListChanged(contextList);
-        }
-        target.runtimeModel.contextLists().forEach(loadContextList, this);
-        target.runtimeModel.addEventListener(WebInspector.RuntimeModel.Events.ExecutionContextListAdded, this._executionContextListAdded, this);
-        target.runtimeModel.addEventListener(WebInspector.RuntimeModel.Events.ExecutionContextListRemoved, this._executionContextListRemoved, this);
+        target.runtimeModel.executionContexts().forEach(this._executionContextCreated, this);
+        target.runtimeModel.addEventListener(WebInspector.RuntimeModel.Events.ExecutionContextCreated, this._onExecutionContextCreated, this);
+        target.runtimeModel.addEventListener(WebInspector.RuntimeModel.Events.ExecutionContextDestroyed, this._onExecutionContextDestroyed, this);
     },
 
     /**
@@ -178,8 +174,8 @@ WebInspector.ConsoleView.prototype = {
         target.consoleModel.removeEventListener(WebInspector.ConsoleModel.Events.MessageAdded, this._onConsoleMessageAdded, this);
         target.consoleModel.removeEventListener(WebInspector.ConsoleModel.Events.ConsoleCleared, this._consoleCleared, this);
         target.consoleModel.removeEventListener(WebInspector.ConsoleModel.Events.CommandEvaluated, this._commandEvaluated, this);
-        target.runtimeModel.removeEventListener(WebInspector.RuntimeModel.Events.ExecutionContextListAdded, this._executionContextListAdded, this);
-        target.runtimeModel.removeEventListener(WebInspector.RuntimeModel.Events.ExecutionContextListRemoved, this._executionContextListRemoved, this);
+        target.runtimeModel.removeEventListener(WebInspector.RuntimeModel.Events.ExecutionContextCreated, this._onExecutionContextCreated, this);
+        target.runtimeModel.removeEventListener(WebInspector.RuntimeModel.Events.ExecutionContextDestroyed, this._onExecutionContextDestroyed, this);
     },
 
     /**
@@ -209,58 +205,65 @@ WebInspector.ConsoleView.prototype = {
     },
 
     /**
-     * @param {!WebInspector.Event} event
+     * @param {!WebInspector.ExecutionContext} executionContext
+     * @return {string}
      */
-    _executionContextListAdded: function(event)
+    _titleFor: function(executionContext)
     {
-        var contextList = /** @type {!WebInspector.ExecutionContextList} */ (event.data);
-        this._addExecutionContextList(contextList);
-    },
-
-    /**
-     * @param {!WebInspector.ExecutionContextList} contextList
-     */
-    _addExecutionContextList: function(contextList)
-    {
-        var maxLength = 50;
-        var topLevelOption = this._executionContextSelector.createOption(contextList.displayName().trimMiddle(maxLength), contextList.url());
-        topLevelOption._executionContext = null;
-        this._topLevelOptionByContextListId[contextList.id()] = topLevelOption;
-        this._subOptionsByContextListId[contextList.id()] = [];
-
-        contextList.addEventListener(WebInspector.ExecutionContextList.EventTypes.Reset, this._contextListReset, this);
-        contextList.addEventListener(WebInspector.ExecutionContextList.EventTypes.ContextAdded, this._contextListChanged.bind(this, contextList));
-    },
-
-    /**
-     * @param {!WebInspector.Event} event
-     */
-    _executionContextListRemoved: function(event)
-    {
-        var contextList = /** @type {!WebInspector.ExecutionContextList} */ (event.data);
-
-        this._removeSubOptions(contextList.id());
-        var topLevelOption = this._topLevelOptionByContextListId[contextList.id()];
-        this._executionContextSelector.removeOption(topLevelOption);
-        delete this._topLevelOptionByContextListId[contextList.id()];
-        delete this._subOptionsByContextListId[contextList.id()];
-        this._executionContextChanged();
-    },
-
-    /**
-     * @param {string} contextListId
-     * @return {boolean}
-     */
-    _removeSubOptions: function(contextListId)
-    {
-        var selectedOptionRemoved = false;
-        var subOptions = this._subOptionsByContextListId[contextListId];
-        for (var i = 0; i < subOptions.length; ++i) {
-            selectedOptionRemoved |= this._executionContextSelector.selectedOption() === subOptions[i];
-            this._executionContextSelector.removeOption(subOptions[i]);
+        var result = executionContext.name;
+        if (executionContext.isMainWorldContext && executionContext.frameId) {
+            var frame = executionContext.target().resourceTreeModel.frameForId(executionContext.frameId);
+            result =  frame ? frame.displayName() : result;
         }
-        this._subOptionsByContextListId[contextListId] = [];
-        return selectedOptionRemoved;
+
+        if (!executionContext.isMainWorldContext)
+            result = "\u00a0\u00a0\u00a0\u00a0" + result;
+
+        var maxLength = 50;
+        return result.trimMiddle(maxLength);
+    },
+
+    /**
+     * @param {!WebInspector.Event} event
+     */
+    _onExecutionContextCreated: function(event)
+    {
+        var executionContext = /** @type {!WebInspector.ExecutionContext} */ (event.data);
+        this._executionContextCreated(executionContext);
+    },
+
+    /**
+     * @param {!WebInspector.ExecutionContext} executionContext
+     */
+    _executionContextCreated: function(executionContext)
+    {
+        var newOption = document.createElement("option");
+        newOption.__executionContext = executionContext;
+        newOption.text = this._titleFor(executionContext);
+        this._optionByExecutionContext.put(executionContext, newOption);
+        var sameGroupExists = false;
+        var options = this._executionContextSelector.selectElement().options;
+        var insertBeforeOption = null;
+        for (var i = 0; i < options.length; ++i) {
+            var optionContext = options[i].__executionContext;
+            var isSameGroup = executionContext.target() === optionContext.target() && executionContext.frameId === optionContext.frameId;
+            sameGroupExists |= isSameGroup;
+            if ((isSameGroup && WebInspector.ExecutionContext.comparator(optionContext, executionContext) > 0) || (sameGroupExists && !isSameGroup)) {
+                insertBeforeOption = options[i];
+                break;
+            }
+        }
+        this._executionContextSelector.selectElement().insertBefore(newOption, insertBeforeOption);
+    },
+
+    /**
+     * @param {!WebInspector.Event} event
+     */
+    _onExecutionContextDestroyed: function(event)
+    {
+        var executionContext = /** @type {!WebInspector.ExecutionContext} */ (event.data);
+        var option = this._optionByExecutionContext.remove(executionContext);
+        option.remove();
     },
 
     _executionContextChanged: function()
@@ -278,61 +281,7 @@ WebInspector.ConsoleView.prototype = {
     _currentExecutionContext: function()
     {
         var option = this._executionContextSelector.selectedOption();
-        return option ? option._executionContext : null;
-    },
-
-    /**
-     * @param {!WebInspector.Event} event
-     */
-    _contextListReset: function(event)
-    {
-        var contextList = /** @type {!WebInspector.ExecutionContextList} */ (event.data);
-        var option = this._topLevelOptionByContextListId[contextList.id()];
-        var maxLength = 50;
-        option.text = contextList.displayName().trimMiddle(maxLength);
-        option.title = contextList.url();
-
-        var selectedRemoved = this._removeSubOptions(contextList.id());
-
-        if (selectedRemoved) {
-            this._executionContextSelector.select(option);
-            this._executionContextChanged();
-        }
-    },
-
-    /**
-     * @param {!WebInspector.ExecutionContextList} contextList
-     */
-    _contextListChanged: function(contextList)
-    {
-        var currentExecutionContext = WebInspector.context.flavor(WebInspector.ExecutionContext);
-        var shouldSelectOption = this._removeSubOptions(contextList.id());
-
-        var topLevelOption = this._topLevelOptionByContextListId[contextList.id()];
-        var nextTopLevelOption = topLevelOption.nextSibling;
-        var subOptions = this._subOptionsByContextListId[contextList.id()];
-        var executionContexts = contextList.executionContexts();
-        for (var i = 0; i < executionContexts.length; ++i) {
-            if (executionContexts[i].isMainWorldContext) {
-                topLevelOption._executionContext = executionContexts[i];
-                continue;
-            }
-            var subOption = document.createElement("option");
-            subOption.text = "\u00a0\u00a0\u00a0\u00a0" + executionContexts[i].name;
-            subOption._executionContext = executionContexts[i];
-            this._executionContextSelector.selectElement().insertBefore(subOption, nextTopLevelOption);
-            subOptions.push(subOption);
-
-            if (shouldSelectOption && executionContexts[i] === currentExecutionContext) {
-                this._executionContextSelector.select(subOption);
-                shouldSelectOption = false;
-            }
-        }
-
-        if (shouldSelectOption)
-            this._executionContextSelector.select(topLevelOption);
-
-        this._executionContextChanged();
+        return option ? option.__executionContext : null;
     },
 
     willHide: function()
@@ -466,26 +415,35 @@ WebInspector.ConsoleView.prototype = {
      */
     _showConsoleMessage: function(viewMessage)
     {
-        var message = viewMessage.consoleMessage();
-
-        // this._messagesElement.isScrolledToBottom() is forcing style recalculation.
-        // We just skip it if the scroll action has been scheduled.
-        if (!this._isScrollIntoViewScheduled() && ((viewMessage instanceof WebInspector.ConsoleCommandResult) || this._messagesElement.isScrolledToBottom()))
-            this._scheduleScrollIntoView();
-
-        this._visibleViewMessages.push(viewMessage);
-
-        if (message.type === WebInspector.ConsoleMessage.MessageType.EndGroup)
-            this._currentGroup = this._currentGroup.parentGroup() || this._currentGroup;
-        else if (WebInspector.ConsoleGroup.isGroupStartMessage(viewMessage))
-            this._currentGroup = this._currentGroup.createChildGroup(viewMessage);
-        else
-            this._currentGroup.addMessage(viewMessage);
-
-        if (this._searchRegex && viewMessage.matchesRegex(this._searchRegex)) {
-            this._searchResults.push(viewMessage);
-            this._searchableView.updateSearchMatchesCount(this._searchResults.length);
+        var lastMessage = this._visibleViewMessages.peekLast();
+        if (viewMessage.consoleMessage().type === WebInspector.ConsoleMessage.MessageType.EndGroup) {
+            if (lastMessage && !this._currentGroup.messagesHidden())
+                lastMessage.incrementCloseGroupDecorationCount();
+            this._currentGroup = this._currentGroup.parentGroup();
+            return;
         }
+        if (!this._currentGroup.messagesHidden()) {
+            // this._messagesElement.isScrolledToBottom() is forcing style recalculation.
+            // We just skip it if the scroll action has been scheduled.
+            if (!this._isScrollIntoViewScheduled() && ((viewMessage instanceof WebInspector.ConsoleCommandResult) || this._messagesElement.isScrolledToBottom()))
+                this._scheduleScrollIntoView();
+
+            var originatingMessage = viewMessage.consoleMessage().originatingMessage();
+            if (lastMessage && originatingMessage && lastMessage.consoleMessage() === originatingMessage)
+                lastMessage.toMessageElement().classList.add("console-adjacent-user-command-result");
+
+            this._messagesContainer.appendChild(viewMessage.toMessageElement());
+            viewMessage.wasShown();
+            this._visibleViewMessages.push(viewMessage);
+
+            if (this._searchRegex && viewMessage.matchesRegex(this._searchRegex)) {
+                this._searchResults.push(viewMessage);
+                this._searchableView.updateSearchMatchesCount(this._searchResults.length);
+            }
+        }
+
+        if (viewMessage.consoleMessage().isGroupStartMessage())
+            this._currentGroup = new WebInspector.ConsoleGroup(this._currentGroup, viewMessage);
     },
 
     /**
@@ -494,34 +452,29 @@ WebInspector.ConsoleView.prototype = {
      */
     _createViewMessage: function(message)
     {
+        var nestingLevel = this._currentGroup.nestingLevel();
         switch (message.type) {
         case WebInspector.ConsoleMessage.MessageType.Command:
-            return new WebInspector.ConsoleCommand(message);
+            return new WebInspector.ConsoleCommand(message, nestingLevel);
         case WebInspector.ConsoleMessage.MessageType.Result:
-            return new WebInspector.ConsoleCommandResult(message, this._linkifier);
+            return new WebInspector.ConsoleCommandResult(message, this._linkifier, nestingLevel);
+        case WebInspector.ConsoleMessage.MessageType.StartGroupCollapsed:
+        case WebInspector.ConsoleMessage.MessageType.StartGroup:
+            return new WebInspector.ConsoleGroupViewMessage(message, this._linkifier, nestingLevel);
         default:
-            return new WebInspector.ConsoleViewMessage(message, this._linkifier);
+            return new WebInspector.ConsoleViewMessage(message, this._linkifier, nestingLevel);
         }
     },
 
     _consoleCleared: function()
     {
-        this._scrolledToBottom = true;
         this._clearCurrentSearchResultHighlight();
-        this._updateFilterStatus();
-
-        for (var i = 0; i < this._visibleViewMessages.length; ++i)
-            this._visibleViewMessages[i].willHide();
-
-        this._visibleViewMessages = [];
-        this._searchResults = [];
         this._consoleMessages = [];
+        this._scrolledToBottom = true;
+        this._updateMessageList();
 
         if (this._searchRegex)
             this._searchableView.updateSearchMatchesCount(0);
-
-        this._currentGroup = this._topGroup;
-        this._topGroup._messagesElement.removeChildren();
 
         this._linkifier.reset();
     },
@@ -545,7 +498,7 @@ WebInspector.ConsoleView.prototype = {
         }
         contextMenu.appendCheckboxItem(WebInspector.UIString(WebInspector.useLowerCaseMenuTitles() ? "Preserve log upon navigation" : "Preserve Log upon Navigation"), preserveLogItemAction, WebInspector.settings.preserveConsoleLog.get());
 
-        var sourceElement = event.target.enclosingNodeOrSelfWithClass("console-message");
+        var sourceElement = event.target.enclosingNodeOrSelfWithClass("console-message-wrapper");
 
         var filterSubMenu = contextMenu.appendSubMenuItem(WebInspector.UIString("Filter"));
 
@@ -597,82 +550,56 @@ WebInspector.ConsoleView.prototype = {
 
     _updateMessageList: function()
     {
-        var currentGroup = this._topGroup;
-        var newVisibleMessages = [];
-        /**
-         * @param {!WebInspector.ConsoleViewMessage} consoleMessage
-         * @param {?WebInspector.ConsoleViewMessage} beforeVisibleMessage
-         * @this {WebInspector.ConsoleView}
-         */
-        function insertConsoleMessage(consoleMessage, beforeVisibleMessage)
-        {
-            if (!this._filter.shouldBeVisible(consoleMessage)) {
-                this._hiddenByFilterCount++;
-                return;
-            }
-            if (this._tryToCollapseMessages(consoleMessage, newVisibleMessages.peekLast()))
-                return;
-            currentGroup.addMessage(consoleMessage, beforeVisibleMessage);
-            newVisibleMessages.push(consoleMessage);
-            consoleMessage.resetIncrementRepeatCount();
-        }
-
+        this._topGroup = WebInspector.ConsoleGroup.createTopGroup();
+        this._currentGroup = this._topGroup;
+        this._searchResults = [];
         this._hiddenByFilterCount = 0;
-        var consoleMessageIndex = 0;
         for (var i = 0; i < this._visibleViewMessages.length; ++i) {
             var visibleMessage = this._visibleViewMessages[i];
-            for (; visibleMessage !== this._consoleMessages[consoleMessageIndex]; ++consoleMessageIndex)
-                insertConsoleMessage.call(this, this._consoleMessages[consoleMessageIndex], visibleMessage)
-
-            ++consoleMessageIndex;
-            if (!this._filter.shouldBeVisible(visibleMessage)) {
-                currentGroup.removeMessage(visibleMessage);
-                this._hiddenByFilterCount++;
-                continue;
-            }
-            if (this._tryToCollapseMessages(visibleMessage, newVisibleMessages.peekLast())) {
-                currentGroup.removeMessage(visibleMessage);
-                continue;
-            }
-
-            newVisibleMessages.push(visibleMessage);
+            visibleMessage.willHide();
+            visibleMessage.toMessageElement().remove();
+            visibleMessage.resetCloseGroupDecorationCount();
             visibleMessage.resetIncrementRepeatCount();
-            if (visibleMessage.consoleMessage().type === WebInspector.ConsoleMessage.MessageType.EndGroup)
-                currentGroup = currentGroup.parentGroup() || currentGroup;
-            else if (WebInspector.ConsoleGroup.isGroupStartMessage(visibleMessage))
-                currentGroup = visibleMessage._group;
-        }
-        for (; consoleMessageIndex < this._consoleMessages.length; ++consoleMessageIndex)
-            insertConsoleMessage.call(this, this._consoleMessages[consoleMessageIndex], null);
-
-        if (this._searchRegex) {
-            this._searchResults = [];
-            for (var i = 0; i < newVisibleMessages.length; ++i) {
-                var viewMessage = newVisibleMessages[i];
-                if (viewMessage.matchesRegex(this._searchRegex))
-                    this._searchResults.push(viewMessage);
-            }
-            this._searchableView.updateSearchMatchesCount(this._searchResults.length);
         }
 
-        this._visibleViewMessages = newVisibleMessages;
+        this._visibleViewMessages = [];
+        for (var i = 0; i < this._consoleMessages.length; ++i) {
+            var viewMessage = this._consoleMessages[i];
+            if (this._tryToCollapseMessages(viewMessage, this._visibleViewMessages.peekLast()))
+                continue;
+            if (this._filter.shouldBeVisible(viewMessage))
+                this._showConsoleMessage(viewMessage);
+            else
+                this._hiddenByFilterCount++;
+        }
         this._updateFilterStatus();
     },
 
     /**
-     * @param {!WebInspector.Target} target
      * @param {!WebInspector.Event} event
      */
-    _monitoringXHREnabledSettingChanged: function(target, event)
+    _monitoringXHREnabledSettingChanged: function(event)
     {
         var enabled = /** @type {boolean} */ (event.data);
         WebInspector.targetManager.targets().forEach(function(target) {target.consoleAgent().setMonitoringXHREnabled(enabled);});
     },
 
-    _messagesClicked: function()
+    /**
+     * @param {?Event} event
+     */
+    _messagesClicked: function(event)
     {
         if (!this._prompt.isCaretInsidePrompt() && window.getSelection().isCollapsed)
             this._prompt.moveCaretToEndOfPrompt();
+        var groupMessage = event.target.enclosingNodeOrSelfWithClass("console-group-title");
+        if (!groupMessage)
+            return;
+        var consoleGroupViewMessage = groupMessage.parentElement.message;
+        consoleGroupViewMessage.setCollapsed(!consoleGroupViewMessage.collapsed());
+        var originalScrollPosition = this._messagesElement.scrollTop;
+        this._updateMessageList();
+        this._cancelScheduledScrollIntoView();
+        this._messagesElement.scrollTop = originalScrollPosition;
     },
 
     _registerShortcuts: function()
@@ -899,7 +826,7 @@ WebInspector.ConsoleView.prototype = {
 
     _jumpToSearchResult: function(index)
     {
-        index %= this._searchResults.length;
+        index = mod(index, this._searchResults.length);
         this._clearCurrentSearchResultHighlight();
         this._currentSearchResultIndex = index;
         this._searchableView.updateCurrentMatchIndex(this._currentSearchResultIndex);
@@ -1009,7 +936,7 @@ WebInspector.ConsoleViewFilter.prototype = {
         if (!this._view._showAllMessagesCheckbox.checked() && executionContext && (message.target() !== executionContext.target() || message.executionContextId !== executionContext.id))
             return false;
 
-        if (WebInspector.ConsoleGroup.isGroupStartMessage(viewMessage) || message.type === WebInspector.ConsoleMessage.MessageType.EndGroup)
+        if (viewMessage.consoleMessage().isGroupMessage())
             return true;
 
         if (message.type === WebInspector.ConsoleMessage.MessageType.Result || message.type === WebInspector.ConsoleMessage.MessageType.Command)
@@ -1048,10 +975,11 @@ WebInspector.ConsoleViewFilter.prototype = {
  * @constructor
  * @extends {WebInspector.ConsoleViewMessage}
  * @param {!WebInspector.ConsoleMessage} message
+ * @param {number} nestingLevel
  */
-WebInspector.ConsoleCommand = function(message)
+WebInspector.ConsoleCommand = function(message, nestingLevel)
 {
-    WebInspector.ConsoleViewMessage.call(this, message, null);
+    WebInspector.ConsoleViewMessage.call(this, message, null, nestingLevel);
 }
 
 WebInspector.ConsoleCommand.prototype = {
@@ -1100,7 +1028,7 @@ WebInspector.ConsoleCommand.prototype = {
     /**
      * @return {!Element}
      */
-    toMessageElement: function()
+    contentElement: function()
     {
         if (!this._element) {
             this._element = document.createElement("div");
@@ -1128,10 +1056,11 @@ WebInspector.ConsoleCommand.prototype = {
  * @extends {WebInspector.ConsoleViewMessage}
  * @param {!WebInspector.ConsoleMessage} message
  * @param {!WebInspector.Linkifier} linkifier
+ * @param {number} nestingLevel
  */
-WebInspector.ConsoleCommandResult = function(message, linkifier)
+WebInspector.ConsoleCommandResult = function(message, linkifier, nestingLevel)
 {
-    WebInspector.ConsoleViewMessage.call(this, message, linkifier);
+    WebInspector.ConsoleViewMessage.call(this, message, linkifier, nestingLevel);
 }
 
 WebInspector.ConsoleCommandResult.prototype = {
@@ -1148,9 +1077,9 @@ WebInspector.ConsoleCommandResult.prototype = {
     /**
      * @return {!Element}
      */
-    toMessageElement: function()
+    contentElement: function()
     {
-        var element = WebInspector.ConsoleViewMessage.prototype.toMessageElement.call(this);
+        var element = WebInspector.ConsoleViewMessage.prototype.contentElement.call(this);
         element.classList.add("console-user-command-result");
         return element;
     },
@@ -1166,43 +1095,33 @@ WebInspector.ConsoleCommandResult.prototype = {
 WebInspector.ConsoleGroup = function(parentGroup, groupMessage)
 {
     this._parentGroup = parentGroup;
-    this.element = document.createElement("div");
-    this.element.className = "console-group";
-    this.element.group = this;
-
-    if (groupMessage) {
-        this.element.createChild("div", "console-group-bracket");
-        groupMessage._group = this;
-        this._titleElement = groupMessage.toMessageElement();
-        this.element.appendChild(this._titleElement);
-        this._titleElement.addEventListener("click", this._titleClicked.bind(this), false);
-        if (groupMessage.consoleMessage().type === WebInspector.ConsoleMessage.MessageType.StartGroupCollapsed)
-            this.element.classList.add("collapsed");
-    }
-
-    this._messagesElement = this.element.createChild("div", "console-group-messages");
+    this._nestingLevel = parentGroup ? parentGroup.nestingLevel() + 1 : 0;
+    this._messagesHidden = groupMessage && groupMessage.collapsed() || this._parentGroup && this._parentGroup.messagesHidden();
 }
 
 /**
- * @param {!WebInspector.ConsoleViewMessage} viewMessage
- * @return {boolean}
+ * @return {!WebInspector.ConsoleGroup}
  */
-WebInspector.ConsoleGroup.isGroupStartMessage = function(viewMessage)
+WebInspector.ConsoleGroup.createTopGroup = function()
 {
-    var messageType = viewMessage.consoleMessage().type;
-    return messageType === WebInspector.ConsoleMessage.MessageType.StartGroup || messageType === WebInspector.ConsoleMessage.MessageType.StartGroupCollapsed;
+    return new WebInspector.ConsoleGroup(null, null);
 }
 
 WebInspector.ConsoleGroup.prototype = {
     /**
-     * @param {!WebInspector.ConsoleViewMessage} viewMessage
-     * @return {!WebInspector.ConsoleGroup}
+     * @return {boolean}
      */
-    createChildGroup: function(viewMessage)
+    messagesHidden: function()
     {
-        var group = new WebInspector.ConsoleGroup(this, viewMessage);
-        this._messagesElement.appendChild(group.element);
-        return group;
+        return this._messagesHidden;
+    },
+
+    /**
+     * @return {number}
+     */
+    nestingLevel: function()
+    {
+        return this._nestingLevel;
     },
 
     /**
@@ -1210,61 +1129,8 @@ WebInspector.ConsoleGroup.prototype = {
      */
     parentGroup: function()
     {
-        return this._parentGroup;
+        return this._parentGroup || this;
     },
-
-    /**
-     * @param {!WebInspector.ConsoleViewMessage} viewMessage
-     * @param {!WebInspector.ConsoleViewMessage=} insertBefore
-     */
-    addMessage: function(viewMessage, insertBefore)
-    {
-        var message = viewMessage.consoleMessage();
-        var element = viewMessage.toMessageElement();
-        var anchor = null;
-        if (insertBefore && insertBefore.consoleMessage().type !== WebInspector.ConsoleMessage.MessageType.EndGroup)
-            anchor = insertBefore._group ? insertBefore._group.element : insertBefore.toMessageElement();
-        this._messagesElement.insertBefore(element, anchor);
-        viewMessage.wasShown();
-
-        var originatingMessage = viewMessage.consoleMessage().originatingMessage();
-        if (element.previousSibling && originatingMessage && element.previousSibling.message && element.previousSibling.message.consoleMessage() === originatingMessage)
-            element.previousSibling.classList.add("console-adjacent-user-command-result");
-    },
-
-    /**
-     * @param {!WebInspector.ConsoleViewMessage} visibleViewMessage
-     */
-    removeMessage: function(visibleViewMessage)
-    {
-        visibleViewMessage.willHide();
-        visibleViewMessage.toMessageElement().remove();
-    },
-
-    /**
-     * @param {?Event} event
-     */
-    _titleClicked: function(event)
-    {
-        if (!this.element.classList.toggle("collapsed"))
-            this.wasShown();
-        this._titleElement.scrollIntoViewIfNeeded(true);
-        event.consume(true);
-    },
-
-    wasShown: function()
-    {
-        if (this.element.classList.contains("collapsed"))
-            return;
-        var node = this._messagesElement.firstChild;
-        while (node) {
-            if (node.classList.contains("console-message") && node.message)
-                node.message.wasShown();
-            if (node.classList.contains("console-group") && node.group)
-                node.group.wasShown();
-            node = node.nextSibling;
-        }
-    }
 }
 
 /**

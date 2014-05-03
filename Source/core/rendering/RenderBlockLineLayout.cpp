@@ -530,7 +530,7 @@ static inline void computeExpansionForJustifiedText(BidiRun* firstRun, BidiRun* 
     }
 }
 
-void RenderBlockFlow::updateLogicalWidthForAlignment(const ETextAlign& textAlign, const RootInlineBox* rootInlineBox, BidiRun* trailingSpaceRun, float& logicalLeft, float& totalLogicalWidth, float& availableLogicalWidth, int expansionOpportunityCount)
+void RenderBlockFlow::updateLogicalWidthForAlignment(const ETextAlign& textAlign, const RootInlineBox* rootInlineBox, BidiRun* trailingSpaceRun, float& logicalLeft, float& totalLogicalWidth, float& availableLogicalWidth, unsigned expansionOpportunityCount)
 {
     TextDirection direction;
     if (rootInlineBox && rootInlineBox->renderer().style()->unicodeBidi() == Plaintext)
@@ -709,9 +709,6 @@ void RenderBlockFlow::computeBlockDirectionPositionsForLine(RootInlineBox* lineB
         else if (r->m_object->isBox())
             toRenderBox(r->m_object)->positionLineBox(r->m_box);
     }
-    // Positioned objects and zero-length text nodes destroy their boxes in
-    // position(), which unnecessarily dirties the line.
-    lineBox->markDirty(false);
 }
 
 void RenderBlockFlow::appendFloatingObjectToLastLine(FloatingObject* floatingObject)

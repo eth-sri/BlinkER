@@ -41,6 +41,7 @@
 
 namespace blink {
 
+class WebCompositeAndReadbackAsyncCallback;
 class WebInputEvent;
 class WebLayerTreeView;
 class WebMouseEvent;
@@ -97,12 +98,6 @@ public:
     // should be called before paint.
     virtual void enterForceCompositingMode(bool enter) { }
 
-    // Called to notify the WebWidget that the widget has exited compositing
-    // mode and cannot reenter.
-    // FIXME: Now that GTK Linux is gone, this should be dead code.
-    // Remove it once the content side calling code is deleted.
-    virtual void didExitCompositingMode() { }
-
     enum PaintOptions {
         // Attempt to fulfill the painting request by reading back from the
         // compositor, assuming we're using a compositor to render.
@@ -126,6 +121,10 @@ public:
     // processed, it should be assumed that another call to layout is
     // warranted before painting again).
     virtual void paint(WebCanvas*, const WebRect& viewPort, PaintOptions = ReadbackFromCompositorIfAvailable) { }
+
+    // The caller is responsible for keeping the WebCompositeAndReadbackAsyncCallback
+    // object alive until it is called.
+    virtual bool compositeAndReadbackAsync(WebCompositeAndReadbackAsyncCallback*) { return false; }
 
     // Returns true if we've started tracking repaint rectangles.
     virtual bool isTrackingRepaints() const { return false; }

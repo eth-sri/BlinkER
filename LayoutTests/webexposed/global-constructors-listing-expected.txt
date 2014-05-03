@@ -61,6 +61,7 @@ CompositionEvent
 ConvolverNode
 Counter
 CustomEvent
+DOMError
 DOMException
 DOMImplementation
 DOMParser
@@ -291,7 +292,6 @@ SVGDescElement
 SVGDiscardElement
 SVGElement
 SVGElementInstance
-SVGElementInstanceList
 SVGEllipseElement
 SVGFEBlendElement
 SVGFEColorMatrixElement
@@ -451,6 +451,8 @@ VTTRegionList
 ValidityState
 VideoPlaybackQuality
 WaveShaperNode
+WeakMap
+WeakSet
 WebGLActiveInfo
 WebGLBuffer
 WebGLContextEvent
@@ -484,6 +486,7 @@ XPathEvaluator
 XPathExpression
 XPathResult
 XSLTProcessor
+webkitAudioContext
 webkitIDBCursor
 webkitIDBDatabase
 webkitIDBFactory
@@ -493,6 +496,7 @@ webkitIDBObjectStore
 webkitIDBRequest
 webkitIDBTransaction
 webkitMediaStream
+webkitOfflineAudioContext
 webkitRTCPeerConnection
 webkitSpeechGrammar
 webkitSpeechGrammarList

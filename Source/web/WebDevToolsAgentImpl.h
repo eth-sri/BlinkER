@@ -34,9 +34,9 @@
 #include "core/inspector/InspectorClient.h"
 #include "core/inspector/InspectorFrontendChannel.h"
 
-#include "WebPageOverlay.h"
 #include "public/platform/WebSize.h"
 #include "public/platform/WebThread.h"
+#include "public/web/WebPageOverlay.h"
 #include "web/WebDevToolsAgentPrivate.h"
 #include "wtf/Forward.h"
 #include "wtf/OwnPtr.h"
@@ -104,9 +104,6 @@ public:
     virtual void updateInspectorStateCookie(const WTF::String&) OVERRIDE;
     virtual void sendMessageToFrontend(PassRefPtr<WebCore::JSONObject> message) OVERRIDE;
     virtual void flush() OVERRIDE;
-
-    virtual void clearBrowserCache() OVERRIDE;
-    virtual void clearBrowserCookies() OVERRIDE;
 
     virtual void overrideDeviceMetrics(int width, int height, float deviceScaleFactor, bool emulateViewport, bool fitWindow) OVERRIDE;
     virtual void setTouchEventEmulationEnabled(bool) OVERRIDE;

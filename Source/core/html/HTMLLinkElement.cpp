@@ -149,8 +149,10 @@ HTMLLinkElement::~HTMLLinkElement()
 {
     m_link.clear();
 
+#if !ENABLE(OILPAN)
     if (inDocument())
         document().styleEngine()->removeStyleSheetCandidateNode(this);
+#endif
 
     linkLoadEventSender().cancelEvent(this);
 }
@@ -554,7 +556,7 @@ void LinkStyle::removePendingSheet(RemovePendingSheetNotificationType notificati
         // Document::removePendingSheet() triggers the style selector recalc for blocking sheets.
         // FIXME: We don't have enough knowledge at this point to know if we're adding or removing a sheet
         // so we can't call addedStyleSheet() or removedStyleSheet().
-        m_owner->document().styleResolverChanged(RecalcStyleImmediately);
+        m_owner->document().styleResolverChanged(RecalcStyleDeferred);
         return;
     }
 

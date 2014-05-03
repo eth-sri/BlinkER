@@ -78,7 +78,7 @@
 
 #if ENABLE(WEB_AUDIO)
 #include "platform/audio/AudioSourceProvider.h"
-#include "modules/webaudio/MediaElementAudioSourceNode.h"
+#include "platform/audio/AudioSourceProviderClient.h"
 #endif
 
 using namespace std;
@@ -122,17 +122,23 @@ static const char mediaSourceBlobProtocol[] = "blob";
 using namespace HTMLNames;
 using namespace std;
 
-typedef HashMap<Document*, HashSet<HTMLMediaElement*> > DocumentElementSetMap;
+typedef WillBeHeapHashSet<RawPtrWillBeWeakMember<HTMLMediaElement> > WeakMediaElementSet;
+typedef WillBeHeapHashMap<RawPtrWillBeWeakMember<Document>, WeakMediaElementSet> DocumentElementSetMap;
 static DocumentElementSetMap& documentToElementSetMap()
 {
+#if ENABLE(OILPAN)
+    DEFINE_STATIC_LOCAL(Persistent<DocumentElementSetMap>, map, (new DocumentElementSetMap()));
+    return *map;
+#else
     DEFINE_STATIC_LOCAL(DocumentElementSetMap, map, ());
     return map;
+#endif
 }
 
 static void addElementToDocumentMap(HTMLMediaElement* element, Document* document)
 {
     DocumentElementSetMap& map = documentToElementSetMap();
-    HashSet<HTMLMediaElement*> set = map.take(document);
+    WeakMediaElementSet set = map.take(document);
     set.add(element);
     map.add(document, set);
 }
@@ -140,7 +146,7 @@ static void addElementToDocumentMap(HTMLMediaElement* element, Document* documen
 static void removeElementFromDocumentMap(HTMLMediaElement* element, Document* document)
 {
     DocumentElementSetMap& map = documentToElementSetMap();
-    HashSet<HTMLMediaElement*> set = map.take(document);
+    WeakMediaElementSet set = map.take(document);
     set.remove(element);
     if (!set.isEmpty())
         map.add(document, set);
@@ -318,7 +324,9 @@ HTMLMediaElement::~HTMLMediaElement()
 
     closeMediaSource();
 
+#if !ENABLE(OILPAN)
     removeElementFromDocumentMap(this, &document());
+#endif
 
     // Destroying the player may cause a resource load to be canceled,
     // which could result in userCancelledLoad() being called back.
@@ -327,6 +335,10 @@ HTMLMediaElement::~HTMLMediaElement()
     // See http://crbug.com/233654 for more details.
     m_completelyLoaded = true;
 
+    // With Oilpan load events on the Document are always delayed during
+    // sweeping so we don't need to explicitly increment and decrement
+    // load event delay counts.
+#if !ENABLE(OILPAN)
     // Destroying the player may cause a resource load to be canceled,
     // which could result in Document::dispatchWindowLoadEvent() being
     // called via ResourceFetch::didLoadResource() then
@@ -334,10 +346,13 @@ HTMLMediaElement::~HTMLMediaElement()
     // object destruction, we use Document::incrementLoadEventDelayCount().
     // See http://crbug.com/275223 for more details.
     document().incrementLoadEventDelayCount();
+#endif
 
     clearMediaPlayerAndAudioSourceProviderClient();
 
+#if !ENABLE(OILPAN)
     document().decrementLoadEventDelayCount();
+#endif
 }
 
 void HTMLMediaElement::didMoveToNewDocument(Document& oldDocument)
@@ -417,7 +432,7 @@ void HTMLMediaElement::parseAttribute(const QualifiedName& name, const AtomicStr
         if (!autoplay() && m_player)
             setPlayerPreload();
 
-    } else if (name == mediagroupAttr) {
+    } else if (name == mediagroupAttr && RuntimeEnabledFeatures::mediaControllerEnabled()) {
         setMediaGroup(value);
     } else {
         HTMLElement::parseAttribute(name, value);
@@ -2209,7 +2224,6 @@ bool HTMLMediaElement::togglePlayStateWillPlay() const
 
 void HTMLMediaElement::togglePlayState()
 {
-    // The activation behavior of a media element that is exposing a user interface to the user
     if (m_mediaController) {
         if (m_mediaController->isRestrained())
             m_mediaController->play();
@@ -2401,27 +2415,15 @@ static int textTrackLanguageSelectionScore(const TextTrack& track)
     if (languageMatchIndex >= languages.size())
         return 0;
 
-    // Matching a track language is more important than matching track type, so this multiplier must be
-    // greater than the maximum value returned by textTrackSelectionScore.
-    return (languages.size() - languageMatchIndex) * 10;
+    return languages.size() - languageMatchIndex;
 }
 
-static int textTrackSelectionScore(const TextTrack& track, Settings* settings)
+static int textTrackSelectionScore(const TextTrack& track)
 {
-    int trackScore = 0;
-
-    if (!settings)
-        return trackScore;
-
     if (track.kind() != TextTrack::captionsKeyword() && track.kind() != TextTrack::subtitlesKeyword())
-        return trackScore;
+        return 0;
 
-    if (track.kind() == TextTrack::subtitlesKeyword() && settings->shouldDisplaySubtitles())
-        trackScore = 1;
-    else if (track.kind() == TextTrack::captionsKeyword() && settings->shouldDisplayCaptions())
-        trackScore = 1;
-
-    return trackScore + textTrackLanguageSelectionScore(track);
+    return textTrackLanguageSelectionScore(track);
 }
 
 void HTMLMediaElement::configureTextTrackGroup(const TrackGroup& group)
@@ -2429,8 +2431,6 @@ void HTMLMediaElement::configureTextTrackGroup(const TrackGroup& group)
     ASSERT(group.tracks.size());
 
     WTF_LOG(Media, "HTMLMediaElement::configureTextTrackGroup(%d)", group.kind);
-
-    Settings* settings = document().settings();
 
     // First, find the track in the group that should be enabled (if any).
     WillBeHeapVector<RefPtrWillBeMember<TextTrack> > currentlyEnabledTracks;
@@ -2444,7 +2444,7 @@ void HTMLMediaElement::configureTextTrackGroup(const TrackGroup& group)
         if (m_processingPreferenceChange && textTrack->mode() == TextTrack::showingKeyword())
             currentlyEnabledTracks.append(textTrack);
 
-        int trackScore = textTrackSelectionScore(*textTrack, settings);
+        int trackScore = textTrackSelectionScore(*textTrack);
         if (trackScore) {
             // * If the text track kind is { [subtitles or captions] [descriptions] } and the user has indicated an interest in having a
             // track with this text track kind, text track language, and text track label enabled, and there is no
@@ -3405,27 +3405,12 @@ void HTMLMediaElement::markCaptionAndSubtitleTracksAsUnconfigured()
     configureTextTracks();
 }
 
-bool HTMLMediaElement::willRespondToMouseClickEvents()
-{
-    return controls();
-}
-
 void* HTMLMediaElement::preDispatchEventHandler(Event* event)
 {
     if (event && event->type() == EventTypeNames::webkitfullscreenchange)
         configureMediaControls();
 
     return 0;
-}
-
-void HTMLMediaElement::defaultEventHandler(Event* event)
-{
-    if (event->type() == EventTypeNames::click && willRespondToMouseClickEvents()) {
-        togglePlayState();
-        event->setDefaultHandled();
-        return;
-    }
-    HTMLElement::defaultEventHandler(event);
 }
 
 void HTMLMediaElement::createMediaPlayer()
@@ -3442,7 +3427,7 @@ void HTMLMediaElement::createMediaPlayer()
 
 #if ENABLE(WEB_AUDIO)
     if (m_audioSourceNode) {
-        // When creating the player, make sure its AudioSourceProvider knows about the MediaElementAudioSourceNode.
+        // When creating the player, make sure its AudioSourceProvider knows about the client.
         if (audioSourceProvider())
             audioSourceProvider()->setClient(m_audioSourceNode);
 
@@ -3452,7 +3437,7 @@ void HTMLMediaElement::createMediaPlayer()
 }
 
 #if ENABLE(WEB_AUDIO)
-void HTMLMediaElement::setAudioSourceNode(MediaElementAudioSourceNode* sourceNode)
+void HTMLMediaElement::setAudioSourceNode(AudioSourceProviderClient* sourceNode)
 {
     m_audioSourceNode = sourceNode;
 
@@ -3494,8 +3479,8 @@ void HTMLMediaElement::setMediaGroup(const AtomicString& group)
 
     // 4. If there is another media element whose Document is the same as m's Document (even if one or both
     // of these elements are not actually in the Document),
-    HashSet<HTMLMediaElement*> elements = documentToElementSetMap().get(&document());
-    for (HashSet<HTMLMediaElement*>::iterator i = elements.begin(); i != elements.end(); ++i) {
+    WeakMediaElementSet elements = documentToElementSetMap().get(&document());
+    for (WeakMediaElementSet::iterator i = elements.begin(); i != elements.end(); ++i) {
         if (*i == this)
             continue;
 
@@ -3533,10 +3518,8 @@ void HTMLMediaElement::setControllerInternal(PassRefPtr<MediaController> control
 
     m_mediaController = controller;
 
-    if (m_mediaController) {
-        UseCounter::count(document(), UseCounter::HTMLMediaElementControllerNotNull);
+    if (m_mediaController)
         m_mediaController->addMediaElement(this);
-    }
 }
 
 void HTMLMediaElement::updateMediaController()

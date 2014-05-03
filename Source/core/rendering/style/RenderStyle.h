@@ -1782,25 +1782,28 @@ private:
     void appendContent(PassOwnPtr<ContentData>);
 
     bool diffNeedsFullLayout(const RenderStyle& other) const;
-    bool diffNeedsRepaintLayerOnly(const RenderStyle& other) const;
-    bool diffNeedsRepaintObjectOnly(const RenderStyle& other) const;
-    bool diffNeedsRecompositeLayerOnly(const RenderStyle& other) const;
+    bool diffNeedsRepaintLayer(const RenderStyle& other) const;
+    bool diffNeedsRepaintObject(const RenderStyle& other) const;
+    bool diffNeedsRecompositeLayer(const RenderStyle& other) const;
     unsigned computeChangedContextSensitiveProperties(const RenderStyle& other, StyleDifference) const;
 };
 
+// FIXME: Reduce/remove the dependency on zoom adjusted int values.
+// The float or LayoutUnit versions of layout values should be used.
 inline int adjustForAbsoluteZoom(int value, float zoomFactor)
 {
     if (zoomFactor == 1)
         return value;
     // Needed because computeLengthInt truncates (rather than rounds) when scaling up.
+    float fvalue = value;
     if (zoomFactor > 1) {
         if (value < 0)
-            value--;
+            fvalue -= 0.5f;
         else
-            value++;
+            fvalue += 0.5f;
     }
 
-    return roundForImpreciseConversion<int>(value / zoomFactor);
+    return roundForImpreciseConversion<int>(fvalue / zoomFactor);
 }
 
 inline int adjustForAbsoluteZoom(int value, const RenderStyle* style)

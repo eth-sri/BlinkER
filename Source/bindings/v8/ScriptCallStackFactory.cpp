@@ -31,7 +31,6 @@
 #include "config.h"
 #include "bindings/v8/ScriptCallStackFactory.h"
 
-#include "bindings/v8/ScriptScope.h"
 #include "bindings/v8/ScriptValue.h"
 #include "bindings/v8/V8Binding.h"
 #include "core/inspector/InspectorInstrumentation.h"
@@ -124,7 +123,7 @@ PassRefPtr<ScriptArguments> createScriptArguments(const v8::FunctionCallbackInfo
 {
     v8::Isolate* isolate = v8arguments.GetIsolate();
     v8::HandleScope scope(isolate);
-    NewScriptState* scriptState = NewScriptState::current(isolate);
+    ScriptState* scriptState = ScriptState::current(isolate);
 
     Vector<ScriptValue> arguments;
     for (int i = skipArgumentCount; i < v8arguments.Length(); ++i)

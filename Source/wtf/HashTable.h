@@ -299,7 +299,7 @@ namespace WTF {
         typedef Value ValueType;
         typedef Extractor ExtractorType;
         typedef KeyTraits KeyTraitsType;
-        typedef typename Traits::PeekInType ValuePeekInType;
+        typedef typename Traits::PassInType ValuePassInType;
         typedef IdentityHashTranslator<HashFunctions> IdentityTranslatorType;
         typedef HashTableAddResult<HashTable, ValueType> AddResult;
 
@@ -374,7 +374,7 @@ namespace WTF {
         unsigned capacity() const { return m_tableSize; }
         bool isEmpty() const { return !m_keyCount; }
 
-        AddResult add(ValuePeekInType value)
+        AddResult add(ValuePassInType value)
         {
             return add<IdentityTranslatorType>(Extractor::extract(value), value);
         }
@@ -1275,6 +1275,17 @@ namespace WTF {
     inline bool operator!=(const HashTableIteratorAdapter<T, U>& a, const HashTableConstIteratorAdapter<T, U>& b)
     {
         return a.m_impl != b.m_impl;
+    }
+
+    template<typename Collection1, typename Collection2>
+    inline void removeAll(Collection1& collection, const Collection2& toBeRemoved)
+    {
+        if (collection.isEmpty() || toBeRemoved.isEmpty())
+            return;
+        typedef typename Collection2::const_iterator CollectionIterator;
+        CollectionIterator end(toBeRemoved.end());
+        for (CollectionIterator it(toBeRemoved.begin()); it != end; ++it)
+            collection.remove(*it);
     }
 
 } // namespace WTF

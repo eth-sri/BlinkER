@@ -1106,7 +1106,8 @@ bool RenderThemeChromiumMac::paintProgressBar(RenderObject* renderObject, const 
         paintInfo.context->scale(FloatSize(-1, 1));
     }
 
-    paintInfo.context->drawImageBuffer(imageBuffer.get(), inflatedRect.location());
+    paintInfo.context->drawImageBuffer(imageBuffer.get(),
+        FloatRect(inflatedRect.location(), imageBuffer->size()));
     return false;
 }
 
@@ -1831,6 +1832,11 @@ void RenderThemeChromiumMac::adjustMediaSliderThumbSize(RenderStyle* style) cons
 bool RenderThemeChromiumMac::paintMediaPlayButton(RenderObject* object, const PaintInfo& paintInfo, const IntRect& rect)
 {
     return RenderMediaControls::paintMediaControlsPart(MediaPlayButton, object, paintInfo, rect);
+}
+
+bool RenderThemeChromiumMac::paintMediaOverlayPlayButton(RenderObject* object, const PaintInfo& paintInfo, const IntRect& rect)
+{
+    return RenderMediaControls::paintMediaControlsPart(MediaOverlayPlayButton, object, paintInfo, rect);
 }
 
 bool RenderThemeChromiumMac::paintMediaMuteButton(RenderObject* object, const PaintInfo& paintInfo, const IntRect& rect)

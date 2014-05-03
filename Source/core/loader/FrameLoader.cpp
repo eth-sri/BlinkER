@@ -257,10 +257,15 @@ void FrameLoader::setHistoryItemStateForCommit(HistoryCommitType historyCommitTy
 {
     if (m_provisionalItem)
         m_currentItem = m_provisionalItem.release();
-    if (!m_currentItem || historyCommitType == StandardCommit)
+
+    if (!m_currentItem || historyCommitType == StandardCommit) {
         m_currentItem = HistoryItem::create();
-    else if (!isPushOrReplaceState && m_documentLoader->url() != m_currentItem->url())
-        m_currentItem->generateNewSequenceNumbers();
+    } else if (!isPushOrReplaceState && m_documentLoader->url() != m_currentItem->url()) {
+        m_currentItem->generateNewItemSequenceNumber();
+        if (!equalIgnoringFragmentIdentifier(m_documentLoader->url(), m_currentItem->url()))
+            m_currentItem->generateNewDocumentSequenceNumber();
+    }
+
     m_currentItem->setURL(m_documentLoader->urlForHistory());
     m_currentItem->setDocumentState(m_frame->document()->formElementsState());
     m_currentItem->setTarget(m_frame->tree().uniqueName());
@@ -956,6 +961,7 @@ bool FrameLoader::checkLoadCompleteForThisFrame()
         return true;
 
     m_progressTracker->progressCompleted();
+    m_frame->domWindow()->finishedLoading();
 
     const ResourceError& error = m_documentLoader->mainDocumentError();
     if (!error.isNull())
@@ -1023,13 +1029,6 @@ void FrameLoader::checkLoadComplete()
     ASSERT(m_client->hasWebView());
     if (Page* page = m_frame->page())
         page->mainFrame()->loader().checkLoadCompleteForThisFrame();
-}
-
-void FrameLoader::checkLoadComplete(DocumentLoader* documentLoader)
-{
-    if (documentLoader)
-        documentLoader->checkLoadComplete();
-    checkLoadComplete();
 }
 
 String FrameLoader::userAgent(const KURL& url) const

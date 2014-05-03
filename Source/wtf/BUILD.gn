@@ -4,7 +4,7 @@
 
 # The list of files is kept in the .gypi.
 gypi_values = exec_script("//build/gypi_to_gn.py",
-                          [ rebase_path("wtf.gypi") ]
+                          [ rebase_path("wtf.gypi") ],
                           "scope",
                           [ "wtf.gypi" ])
 
@@ -47,10 +47,21 @@ component("wtf") {
     "..:features",
   ]
 
+  # TODO(brettw) bug 366814: This should just pull dependent configs from "icu",
+  # but that currently doesn't work for groups. Instead, manually expand the
+  # "icu" group's dependents here until a GN build is pushed with the fix.
+  #deps = [
+  #  "//third_party/icu",
+  #]
+  #forward_dependent_configs_from = [ "//third_party/icu" ]
   deps = [
-    "//third_party/icu",
+    "//third_party/icu:icui18n",
+    "//third_party/icu:icuuc",
   ]
-  forward_dependent_configs_from = [ "//third_party/icu" ]
+  forward_dependent_configs_from = [
+    "//third_party/icu:icui18n",
+    "//third_party/icu:icuuc",
+  ]
 
   if (is_win) {
     sources -= [

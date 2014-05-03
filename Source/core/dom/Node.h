@@ -86,7 +86,7 @@ class Text;
 class TouchEvent;
 class WeakNodeMap;
 
-const int nodeStyleChangeShift = 14;
+const int nodeStyleChangeShift = 19;
 
 enum StyleChangeType {
     NoStyleChange = 0,
@@ -222,7 +222,7 @@ public:
     bool isAfterPseudoElement() const { return pseudoId() == AFTER; }
     PseudoId pseudoId() const { return (isElementNode() && hasCustomStyleCallbacks()) ? customPseudoId() : NOPSEUDO; }
 
-    bool isCustomElement() const { return getFlag(CustomElement); }
+    bool isCustomElement() const { return getFlag(CustomElementFlag); }
     enum CustomElementState {
         NotCustomElement  = 0,
         WaitingForUpgrade = 1 << 0,
@@ -231,7 +231,7 @@ public:
     CustomElementState customElementState() const
     {
         return isCustomElement()
-            ? (getFlag(CustomElementUpgraded) ? Upgraded : WaitingForUpgrade)
+            ? (getFlag(CustomElementUpgradedFlag) ? Upgraded : WaitingForUpgrade)
             : NotCustomElement;
     }
     void setCustomElementState(CustomElementState newState);
@@ -335,8 +335,8 @@ public:
     bool hasID() const;
     bool hasClass() const;
 
-    bool isUserActionElement() const { return getFlag(IsUserActionElement); }
-    void setUserActionElement(bool flag) { setFlag(flag, IsUserActionElement); }
+    bool isUserActionElement() const { return getFlag(IsUserActionElementFlag); }
+    void setUserActionElement(bool flag) { setFlag(flag, IsUserActionElementFlag); }
 
     bool active() const { return isUserActionElement() && isUserActionElementActive(); }
     bool inActiveChain() const { return isUserActionElement() && isUserActionElementInActiveChain(); }
@@ -357,17 +357,17 @@ public:
     void setNeedsStyleRecalc(StyleChangeType);
     void clearNeedsStyleRecalc();
 
-    bool childNeedsDistributionRecalc() const { return getFlag(ChildNeedsDistributionRecalc); }
-    void setChildNeedsDistributionRecalc()  { setFlag(ChildNeedsDistributionRecalc); }
-    void clearChildNeedsDistributionRecalc()  { clearFlag(ChildNeedsDistributionRecalc); }
+    bool childNeedsDistributionRecalc() const { return getFlag(ChildNeedsDistributionRecalcFlag); }
+    void setChildNeedsDistributionRecalc()  { setFlag(ChildNeedsDistributionRecalcFlag); }
+    void clearChildNeedsDistributionRecalc()  { clearFlag(ChildNeedsDistributionRecalcFlag); }
     void markAncestorsWithChildNeedsDistributionRecalc();
 
-    bool childNeedsStyleInvalidation() const { return getFlag(ChildNeedsStyleInvalidation); }
-    void setChildNeedsStyleInvalidation()  { setFlag(ChildNeedsStyleInvalidation); }
-    void clearChildNeedsStyleInvalidation()  { clearFlag(ChildNeedsStyleInvalidation); }
+    bool childNeedsStyleInvalidation() const { return getFlag(ChildNeedsStyleInvalidationFlag); }
+    void setChildNeedsStyleInvalidation()  { setFlag(ChildNeedsStyleInvalidationFlag); }
+    void clearChildNeedsStyleInvalidation()  { clearFlag(ChildNeedsStyleInvalidationFlag); }
     void markAncestorsWithChildNeedsStyleInvalidation();
-    bool needsStyleInvalidation() const { return getFlag(NeedsStyleInvalidation); }
-    void clearNeedsStyleInvalidation() { clearFlag(NeedsStyleInvalidation); }
+    bool needsStyleInvalidation() const { return getFlag(NeedsStyleInvalidationFlag); }
+    void clearNeedsStyleInvalidation() { clearFlag(NeedsStyleInvalidationFlag); }
     void setNeedsStyleInvalidation();
 
     void recalcDistribution();
@@ -673,58 +673,65 @@ public:
 
     bool isFinishedParsingChildren() const { return getFlag(IsFinishedParsingChildrenFlag); }
 
-    virtual void trace(Visitor*) { }
+    virtual void trace(Visitor*);
 
 private:
     enum NodeFlags {
-        IsTextFlag = 1,
-        IsContainerFlag = 1 << 1,
-        IsElementFlag = 1 << 2,
-        IsHTMLFlag = 1 << 3,
-        IsSVGFlag = 1 << 4,
+        HasRareDataFlag = 1,
 
-        ChildNeedsDistributionRecalc = 1 << 5,
-        ChildNeedsStyleRecalcFlag = 1 << 6,
-        InDocumentFlag = 1 << 7,
+        // Node type flags. These never change once created.
+        IsTextFlag = 1 << 1,
+        IsContainerFlag = 1 << 2,
+        IsElementFlag = 1 << 3,
+        IsHTMLFlag = 1 << 4,
+        IsSVGFlag = 1 << 5,
+        IsDocumentFragmentFlag = 1 << 6,
+        IsInsertionPointFlag = 1 << 7,
+
+        // Changes based on if the element should be treated like a link,
+        // ex. When setting the href attribute on an <a>.
         IsLinkFlag = 1 << 8,
-        IsUserActionElement = 1 << 9,
-        HasRareDataFlag = 1 << 10,
-        IsDocumentFragmentFlag = 1 << 11,
 
-        // These bits are used by derived classes, pulled up here so they can
-        // be stored in the same memory word as the Node bits above.
-        IsFinishedParsingChildrenFlag = 1 << 12, // Element
+        // Changes based on :hover, :active and :focus state.
+        IsUserActionElementFlag = 1 << 9,
 
-        AlreadySpellCheckedFlag = 1 << 13,
+        // Tree state flags. These change when the element is added/removed
+        // from a DOM tree.
+        InDocumentFlag = 1 << 10,
+        IsInShadowTreeFlag = 1 << 11,
 
+        // Set by the parser when the children are done parsing.
+        IsFinishedParsingChildrenFlag = 1 << 12,
+
+        // Flags related to recalcStyle.
+        NeedsLayerUpdateFlag = 1 << 13,
+        HasCustomStyleCallbacksFlag = 1 << 14,
+        ChildNeedsStyleInvalidationFlag = 1 << 15,
+        NeedsStyleInvalidationFlag = 1 << 16,
+        ChildNeedsDistributionRecalcFlag = 1 << 17,
+        ChildNeedsStyleRecalcFlag = 1 << 18,
         StyleChangeMask = 1 << nodeStyleChangeShift | 1 << (nodeStyleChangeShift + 1),
 
-        SelfOrAncestorHasDirAutoFlag = 1 << 16,
+        CustomElementFlag = 1 << 21,
+        CustomElementUpgradedFlag = 1 << 22,
 
-        HasNameOrIsEditingTextFlag = 1 << 17,
+        HasNameOrIsEditingTextFlag = 1 << 23,
+        HasWeakReferencesFlag = 1 << 24,
+        V8CollectableDuringMinorGCFlag = 1 << 25,
+        HasSyntheticAttrChildNodesFlag = 1 << 26,
+        HasEventTargetDataFlag = 1 << 27,
+        AlreadySpellCheckedFlag = 1 << 28,
 
-        HasWeakReferences = 1 << 18,
+        // HTML dir=auto.
+        SelfOrAncestorHasDirAutoFlag = 1 << 29,
 
-        HasSyntheticAttrChildNodesFlag = 1 << 19,
-        HasCustomStyleCallbacksFlag = 1 << 20,
-        HasScopedHTMLStyleChildFlag = 1 << 21,
-        HasEventTargetDataFlag = 1 << 22,
-        V8CollectableDuringMinorGCFlag = 1 << 23,
-        IsInsertionPointFlag = 1 << 24,
-        IsInShadowTreeFlag = 1 << 25,
-
-        NeedsLayerUpdateFlag = 1 << 26,
-
-        CustomElement = 1 << 27,
-        CustomElementUpgraded = 1 << 28,
-
-        ChildNeedsStyleInvalidation = 1 << 29,
-        NeedsStyleInvalidation = 1 << 30,
+        // FIXME: Remove <style scoped> support.
+        HasScopedHTMLStyleChildFlag = 1 << 30,
 
         DefaultNodeFlags = IsFinishedParsingChildrenFlag | ChildNeedsStyleRecalcFlag | NeedsReattachStyleChange
     };
 
-    // 3 bits remaining.
+    // 1 bits remaining.
 
     bool getFlag(NodeFlags mask) const { return m_nodeFlags & mask; }
     void setFlag(bool f, NodeFlags mask) const { m_nodeFlags = (m_nodeFlags & ~mask) | (-(int32_t)f & mask); }
@@ -755,8 +762,10 @@ protected:
     {
         ASSERT(m_treeScope || type == CreateDocument || type == CreateShadowRoot);
         ScriptWrappable::init(this);
+#if !ENABLE(OILPAN)
         if (m_treeScope)
             m_treeScope->guardRef();
+#endif
 
 #if !defined(NDEBUG) || (defined(DUMP_NODE_STATISTICS) && DUMP_NODE_STATISTICS)
         trackForDebugging();
@@ -768,7 +777,9 @@ protected:
 
     static void reattachWhitespaceSiblings(Text* start);
 
+#if !ENABLE(OILPAN)
     void willBeDeletedFromDocument();
+#endif
 
     bool hasRareData() const { return getFlag(HasRareDataFlag); }
 
@@ -776,7 +787,9 @@ protected:
     NodeRareData& ensureRareData();
     void clearRareData();
 
+#if !ENABLE(OILPAN)
     void clearEventTargetData();
+#endif
 
     void setHasCustomStyleCallbacks() { setFlag(true, HasCustomStyleCallbacksFlag); }
 
@@ -828,7 +841,7 @@ private:
 
     mutable uint32_t m_nodeFlags;
     ContainerNode* m_parentOrShadowHostNode;
-    TreeScope* m_treeScope;
+    RawPtrWillBeMember<TreeScope> m_treeScope;
     Node* m_previous;
     Node* m_next;
     // When a node has rare data we move the renderer into the rare data.

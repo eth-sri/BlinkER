@@ -29,13 +29,13 @@
 #include "config.h"
 #include "web/IndexedDBClientImpl.h"
 
-#include "WebKit.h"
-#include "WebPermissionClient.h"
-#include "WebSecurityOrigin.h"
 #include "bindings/v8/WorkerScriptController.h"
 #include "core/dom/Document.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "public/web/WebKit.h"
+#include "public/web/WebPermissionClient.h"
+#include "public/web/WebSecurityOrigin.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/WorkerPermissionClient.h"
 
@@ -44,9 +44,9 @@ using namespace WebCore;
 
 namespace blink {
 
-PassRefPtr<IndexedDBClient> IndexedDBClientImpl::create()
+PassRefPtrWillBeRawPtr<IndexedDBClient> IndexedDBClientImpl::create()
 {
-    return adoptRef(new IndexedDBClientImpl());
+    return adoptRefWillBeNoop(new IndexedDBClientImpl());
 }
 
 bool IndexedDBClientImpl::allowIndexedDB(ExecutionContext* context, const String& name)

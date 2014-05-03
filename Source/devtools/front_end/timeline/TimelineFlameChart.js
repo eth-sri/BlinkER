@@ -39,7 +39,7 @@ WebInspector.TimelineFlameChartDataProvider = function(model, frameModel)
     WebInspector.FlameChartDataProvider.call(this);
     this._model = model;
     this._frameModel = frameModel;
-    this._font = "bold 12px " + WebInspector.fontFamily();
+    this._font = "12px " + WebInspector.fontFamily();
     this._linkifier = new WebInspector.Linkifier();
 }
 
@@ -143,53 +143,61 @@ WebInspector.TimelineFlameChartDataProvider.prototype = {
 
         this._records = [];
         this._entryThreadDepths = {};
-        this._zeroTime = this._model.minimumRecordTime();
+        this._zeroTime = Math.max(0, this._model.minimumRecordTime());
 
         var cpuThreadRecordPayload = { type: WebInspector.TimelineModel.RecordType.Program };
         this._cpuThreadRecord = new WebInspector.TimelineModel.Record(this._model, /** @type {!TimelineAgent.TimelineEvent} */ (cpuThreadRecordPayload), null);
         this._pushRecord(this._cpuThreadRecord, 0, this.zeroTime(), Math.max(this._model.maximumRecordTime(), this.totalTime() + this.zeroTime()));
 
-        var gpuThreadRecordPayload = { type: WebInspector.TimelineModel.RecordType.Program };
-        this._gpuThreadRecord = new WebInspector.TimelineModel.Record(this._model, /** @type {!TimelineAgent.TimelineEvent} */ (gpuThreadRecordPayload), null);
-        this._pushRecord(this._gpuThreadRecord, 0, this.zeroTime(), Math.max(this._model.maximumRecordTime(), this.totalTime() + this.zeroTime()));
+        this._gpuThreadRecord = null;
 
         var records = this._model.records();
         for (var i = 0; i < records.length; ++i) {
             var record = records[i];
-            var thread = record.thread;
+            var thread = record.thread();
             if (thread === "gpu")
                 continue;
             if (!thread) {
-                for (var j = 0; j < record.children.length; ++j)
-                    this._appendRecord(record.children[j], 1);
+                for (var j = 0; j < record.children().length; ++j)
+                    this._appendRecord(record.children()[j], 1);
             } else {
-                this._appendRecord(records[i], 1);
+                var visible = this._appendRecord(records[i], 1);
+                if (visible && !this._gpuThreadRecord) {
+                    var gpuThreadRecordPayload = { type: WebInspector.TimelineModel.RecordType.Program };
+                    this._gpuThreadRecord = new WebInspector.TimelineModel.Record(this._model, /** @type {!TimelineAgent.TimelineEvent} */ (gpuThreadRecordPayload), null);
+                    this._pushRecord(this._gpuThreadRecord, 0, this.zeroTime(), Math.max(this._model.maximumRecordTime(), this.totalTime() + this.zeroTime()));
+                }
             }
         }
 
         var cpuStackDepth = Math.max(4, this._entryThreadDepths[undefined]);
         delete this._entryThreadDepths[undefined];
+        this._maxStackDepth = cpuStackDepth;
 
-        var threadBaselines = {};
-        var threadBaseline = cpuStackDepth + 2;
+        if (this._gpuThreadRecord) {
+            // We have multiple threads, update levels.
+            var threadBaselines = {};
+            var threadBaseline = cpuStackDepth + 2;
 
-        for (var thread in this._entryThreadDepths) {
-            threadBaselines[thread] = threadBaseline;
-            threadBaseline += this._entryThreadDepths[thread];
+            for (var thread in this._entryThreadDepths) {
+                threadBaselines[thread] = threadBaseline;
+                threadBaseline += this._entryThreadDepths[thread];
+            }
+            this._maxStackDepth = threadBaseline;
+
+            for (var i = 0; i < this._records.length; ++i) {
+                var record = this._records[i];
+                var level = this._timelineData.entryLevels[i];
+                if (record === this._cpuThreadRecord)
+                    level = 0;
+                else if (record === this._gpuThreadRecord)
+                    level = cpuStackDepth + 2;
+                else if (record.thread())
+                    level += threadBaselines[record.thread()];
+                this._timelineData.entryLevels[i] = level;
+            }
         }
-        this._maxStackDepth = threadBaseline;
 
-        for (var i = 0; i < this._records.length; ++i) {
-            var record = this._records[i];
-            var level = this._timelineData.entryLevels[i];
-            if (record === this._cpuThreadRecord)
-                level = 0;
-            else if (record === this._gpuThreadRecord)
-                level = cpuStackDepth + 2;
-            else if (record.thread)
-                level += threadBaselines[record.thread];
-            this._timelineData.entryLevels[i] = level;
-        }
         return this._timelineData;
     },
 
@@ -220,18 +228,21 @@ WebInspector.TimelineFlameChartDataProvider.prototype = {
     /**
      * @param {!WebInspector.TimelineModel.Record} record
      * @param {number} level
+     * @return {boolean}
      */
     _appendRecord: function(record, level)
     {
+        var result = false;
         if (!this._model.isVisible(record)) {
-            for (var i = 0; i < record.children.length; ++i)
-                this._appendRecord(record.children[i], level);
-            return;
+            for (var i = 0; i < record.children().length; ++i)
+                result = this._appendRecord(record.children()[i], level) || result;
+            return result;
         }
 
-        this._pushRecord(record, level, record.startTime, record.endTime);
-        for (var i = 0; i < record.children.length; ++i)
-            this._appendRecord(record.children[i], level + 1);
+        this._pushRecord(record, level, record.startTime(), record.endTime());
+        for (var i = 0; i < record.children().length; ++i)
+            this._appendRecord(record.children()[i], level + 1);
+        return true;
     },
 
     /**
@@ -248,7 +259,7 @@ WebInspector.TimelineFlameChartDataProvider.prototype = {
         this._timelineData.entryOffsets[index] = startTime - this._zeroTime;
         this._timelineData.entryLevels[index] = level;
         this._timelineData.entryTotalTimes[index] = endTime - startTime;
-        this._entryThreadDepths[record.thread] = Math.max(level, this._entryThreadDepths[record.thread] || 0);
+        this._entryThreadDepths[record.thread()] = Math.max(level, this._entryThreadDepths[record.thread()] || 0);
         return index;
     },
 
@@ -280,8 +291,8 @@ WebInspector.TimelineFlameChartDataProvider.prototype = {
         if (record === this._cpuThreadRecord || record === this._gpuThreadRecord)
             return "#555";
 
-        if (record.type === WebInspector.TimelineModel.RecordType.JSFrame)
-            return WebInspector.TimelineFlameChartDataProvider.jsFrameColorGenerator().colorForID(record.data["functionName"]);
+        if (record.type() === WebInspector.TimelineModel.RecordType.JSFrame)
+            return WebInspector.TimelineFlameChartDataProvider.jsFrameColorGenerator().colorForID(record.data()["functionName"]);
 
         var category = WebInspector.TimelineUIUtils.categoryForRecord(record);
         return category.fillColorStop1;
@@ -307,17 +318,22 @@ WebInspector.TimelineFlameChartDataProvider.prototype = {
         var record = this._records[entryIndex];
         var timelineData = this._timelineData;
 
-        if (record.children.length) {
-            var category = WebInspector.TimelineUIUtils.categoryForRecord(record);
-            // Paint text using white color on dark background.
-            if (text) {
-                context.fillStyle = "white";
-                context.font = this._font;
-                context.fillText(text, barX + this.textPadding(), barY + barHeight - this.textBaseline());
-            }
+        var category = WebInspector.TimelineUIUtils.categoryForRecord(record);
+        // Paint text using white color on dark background.
+        if (text) {
+            context.save();
+            context.fillStyle = "white";
+            context.shadowColor = "rgba(0, 0, 0, 0.1)";
+            context.shadowOffsetX = 1;
+            context.shadowOffsetY = 1;
+            context.font = this._font;
+            context.fillText(text, barX + this.textPadding(), barY + barHeight - this.textBaseline());
+            context.restore();
+        }
 
+        if (record.children().length) {
             var entryOffset = timelineData.entryOffsets[entryIndex];
-            var barSelf = offsetToPosition(entryOffset + record.selfTime)
+            var barSelf = offsetToPosition(entryOffset + record.selfTime())
 
             context.beginPath();
             context.fillStyle = category.backgroundColor;
@@ -329,6 +345,9 @@ WebInspector.TimelineFlameChartDataProvider.prototype = {
                 context.save();
                 context.clip();
                 context.fillStyle = category.borderColor;
+                context.shadowColor = "rgba(0, 0, 0, 0.1)";
+                context.shadowOffsetX = 1;
+                context.shadowOffsetY = 1;
                 context.fillText(text, barX + this.textPadding(), barY + barHeight - this.textBaseline());
                 context.restore();
             }
@@ -350,7 +369,7 @@ WebInspector.TimelineFlameChartDataProvider.prototype = {
             context.restore();
         }
 
-        return record.children.length;
+        return true;
     },
 
     /**
@@ -373,8 +392,8 @@ WebInspector.TimelineFlameChartDataProvider.prototype = {
         if (record === this._cpuThreadRecord || record === this._gpuThreadRecord)
             return null;
         return {
-            startTimeOffset: record.startTime - this._zeroTime,
-            endTimeOffset: record.endTime - this._zeroTime
+            startTimeOffset: record.startTime() - this._zeroTime,
+            endTimeOffset: record.endTime() - this._zeroTime
         };
     },
 
@@ -405,7 +424,7 @@ WebInspector.TimelineFlameChartDataProvider.jsFrameColorGenerator = function()
     if (!WebInspector.TimelineFlameChartDataProvider._jsFrameColorGenerator) {
         var hueSpace = { min: 30, max: 55, count: 5 };
         var satSpace = { min: 70, max: 100, count: 6 };
-        var colorGenerator = new WebInspector.FlameChart.ColorGenerator(hueSpace, satSpace, 60);
+        var colorGenerator = new WebInspector.FlameChart.ColorGenerator(hueSpace, satSpace, 50);
         colorGenerator.setColorForID("(idle)", "hsl(0, 0%, 60%)");
         colorGenerator.setColorForID("(program)", "hsl(0, 0%, 60%)");
         colorGenerator.setColorForID("(garbage collector)", "hsl(0, 0%, 60%)");
@@ -497,7 +516,7 @@ WebInspector.TimelineFlameChart.prototype = {
         this._dataProvider.reset();
         if (this._automaticallySizeWindow) {
             var minimumRecordTime = this._model.minimumRecordTime();
-            if (record.startTime > (minimumRecordTime + 1000)) {
+            if (record.startTime() > (minimumRecordTime + 1000)) {
                 this._automaticallySizeWindow = false;
                 this._delegate.requestWindowTimes(minimumRecordTime, minimumRecordTime + 1000);
             }

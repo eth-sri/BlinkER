@@ -1562,8 +1562,7 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValu
     if (updateLayout) {
         Document& document = styledNode->document();
 
-        // A timing update may be required if a compositor animation is running or animations
-        // have been updated via the api.
+        // A timing update may be required if a compositor animation is running.
         DocumentAnimations::updateAnimationTimingForGetComputedStyle(*styledNode, propertyID);
 
         document.updateRenderTreeForNodeIfNeeded(styledNode);
@@ -2656,7 +2655,7 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValu
         case CSSPropertyWebkitWrapFlow:
             return cssValuePool().createValue(style->wrapFlow());
         case CSSPropertyShapeMargin:
-            return cssValuePool().createValue(style->shapeMargin());
+            return cssValuePool().createValue(style->shapeMargin(), *style);
         case CSSPropertyShapeImageThreshold:
             return cssValuePool().createValue(style->shapeImageThreshold(), CSSPrimitiveValue::CSS_NUMBER);
         case CSSPropertyShapeOutside:

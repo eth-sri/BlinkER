@@ -28,7 +28,6 @@
 #include "web/LinkHighlight.h"
 
 #include "SkMatrix44.h"
-#include "WebKit.h"
 #include "core/dom/Node.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
@@ -46,6 +45,7 @@
 #include "public/platform/WebFloatPoint.h"
 #include "public/platform/WebRect.h"
 #include "public/platform/WebSize.h"
+#include "public/web/WebKit.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebViewImpl.h"
 #include "wtf/CurrentTime.h"
@@ -113,20 +113,15 @@ RenderLayer* LinkHighlight::computeEnclosingCompositingLayer()
     // Find the nearest enclosing composited layer and attach to it. We may need to cross frame boundaries
     // to find a suitable layer.
     RenderObject* renderer = m_node->renderer();
-    RenderLayerModelObject* repaintContainer;
+    RenderLayer* renderLayer;
     do {
-        repaintContainer = renderer->containerForRepaint();
-        // FIXME: Repaint container should never be null. crbug.com/363699
-        if (!repaintContainer) {
+        renderLayer = renderer->enclosingLayer()->enclosingCompositingLayerForRepaint();
+        if (!renderLayer) {
             renderer = renderer->frame()->ownerRenderer();
             if (!renderer)
                 return 0;
         }
-    } while (!repaintContainer);
-    RenderLayer* renderLayer = repaintContainer->layer();
-
-    if (!renderLayer || renderLayer->compositingState() == NotComposited)
-        return 0;
+    } while (!renderLayer);
 
     CompositedLayerMappingPtr compositedLayerMapping = renderLayer->compositingState() == PaintsIntoGroupedBacking ? renderLayer->groupedMapping() : renderLayer->compositedLayerMapping();
     GraphicsLayer* newGraphicsLayer = renderLayer->compositingState() == PaintsIntoGroupedBacking ? compositedLayerMapping->squashingLayer() : compositedLayerMapping->mainGraphicsLayer();

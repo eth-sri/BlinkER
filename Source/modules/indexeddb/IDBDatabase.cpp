@@ -100,6 +100,19 @@ int64_t IDBDatabase::nextTransactionId()
     return atomicIncrement(&currentTransactionId);
 }
 
+void IDBDatabase::ackReceivedBlobs(const Vector<blink::WebBlobInfo>* blobInfo)
+{
+    ASSERT(blobInfo);
+    if (!blobInfo->size() || !m_backend)
+        return;
+    Vector<blink::WebBlobInfo>::const_iterator iter;
+    Vector<String> uuids;
+    uuids.reserveCapacity(blobInfo->size());
+    for (iter = blobInfo->begin(); iter != blobInfo->end(); ++iter)
+        uuids.append(iter->uuid());
+    m_backend->ackReceivedBlobs(uuids);
+}
+
 void IDBDatabase::indexCreated(int64_t objectStoreId, const IDBIndexMetadata& metadata)
 {
     IDBDatabaseMetadata::ObjectStoreMap::iterator it = m_metadata.objectStores.find(objectStoreId);
@@ -163,7 +176,7 @@ PassRefPtr<DOMStringList> IDBDatabase::objectStoreNames() const
     return objectStoreNames.release();
 }
 
-ScriptValue IDBDatabase::version(NewScriptState* scriptState) const
+ScriptValue IDBDatabase::version(ScriptState* scriptState) const
 {
     int64_t intVersion = m_metadata.intVersion;
     if (intVersion == IDBDatabaseMetadata::NoIntVersion)
@@ -272,7 +285,7 @@ void IDBDatabase::deleteObjectStore(const String& name, ExceptionState& exceptio
     m_metadata.objectStores.remove(objectStoreId);
 }
 
-PassRefPtr<IDBTransaction> IDBDatabase::transaction(ExecutionContext* context, const Vector<String>& scope, const String& modeString, ExceptionState& exceptionState)
+PassRefPtrWillBeRawPtr<IDBTransaction> IDBDatabase::transaction(ExecutionContext* context, const Vector<String>& scope, const String& modeString, ExceptionState& exceptionState)
 {
     IDB_TRACE("IDBDatabase::transaction");
     blink::Platform::current()->histogramEnumeration("WebCore.IndexedDB.FrontEndAPICalls", IDBTransactionCall, IDBMethodsMax);
@@ -313,11 +326,10 @@ PassRefPtr<IDBTransaction> IDBDatabase::transaction(ExecutionContext* context, c
     int64_t transactionId = nextTransactionId();
     m_backend->createTransaction(transactionId, WebIDBDatabaseCallbacksImpl::create(m_databaseCallbacks).leakPtr(), objectStoreIds, mode);
 
-    RefPtr<IDBTransaction> transaction = IDBTransaction::create(context, transactionId, scope, mode, this);
-    return transaction.release();
+    return IDBTransaction::create(context, transactionId, scope, mode, this);
 }
 
-PassRefPtr<IDBTransaction> IDBDatabase::transaction(ExecutionContext* context, const String& storeName, const String& mode, ExceptionState& exceptionState)
+PassRefPtrWillBeRawPtr<IDBTransaction> IDBDatabase::transaction(ExecutionContext* context, const String& storeName, const String& mode, ExceptionState& exceptionState)
 {
     RefPtr<DOMStringList> storeNames = DOMStringList::create();
     storeNames->append(storeName);

@@ -7,6 +7,7 @@
 
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/dom/Document.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/imports/HTMLImportsController.h"
 #include "core/rendering/RenderObject.h"
 
@@ -31,7 +32,9 @@ PassRefPtr<MediaValues> MediaValuesCached::create(Document& document)
 
 PassRefPtr<MediaValues> MediaValuesCached::create(LocalFrame* frame)
 {
-    if (!frame)
+    // FIXME - Added an assert here so we can better understand when a frame is present without its view().
+    ASSERT(!frame || frame->view());
+    if (!frame || !frame->view())
         return adoptRef(new MediaValuesCached());
     return adoptRef(new MediaValuesCached(frame));
 }
@@ -72,7 +75,12 @@ PassRefPtr<MediaValues> MediaValuesCached::copy() const
     return adoptRef(new MediaValuesCached(m_data));
 }
 
-bool MediaValuesCached::computeLength(double value, unsigned short type, int& result) const
+bool MediaValuesCached::computeLength(double value, CSSPrimitiveValue::UnitTypes type, int& result) const
+{
+    return MediaValues::computeLength(value, type, m_data.defaultFontSize, m_data.viewportWidth, m_data.viewportHeight, result);
+}
+
+bool MediaValuesCached::computeLength(double value, CSSPrimitiveValue::UnitTypes type, double& result) const
 {
     return MediaValues::computeLength(value, type, m_data.defaultFontSize, m_data.viewportWidth, m_data.viewportHeight, result);
 }

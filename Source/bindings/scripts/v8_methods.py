@@ -64,9 +64,6 @@ def generate_method(interface, method):
     is_call_with_script_state = has_extended_attribute_value(method, 'CallWith', 'ScriptState')
     if is_call_with_script_state:
         includes.add('bindings/v8/ScriptState.h')
-    is_call_with_new_script_state = has_extended_attribute_value(method, 'CallWith', 'NewScriptState')
-    if is_call_with_new_script_state:
-        includes.add('bindings/v8/NewScriptState.h')
     is_check_security_for_node = 'CheckSecurity' in extended_attributes
     if is_check_security_for_node:
         includes.add('bindings/v8/BindingSecurity.h')
@@ -107,7 +104,6 @@ def generate_method(interface, method):
         'is_call_with_execution_context': has_extended_attribute_value(method, 'CallWith', 'ExecutionContext'),
         'is_call_with_script_arguments': is_call_with_script_arguments,
         'is_call_with_script_state': is_call_with_script_state,
-        'is_call_with_new_script_state': is_call_with_new_script_state,
         'is_check_security_for_frame': is_check_security_for_frame,
         'is_check_security_for_node': is_check_security_for_node,
         'is_custom': 'Custom' in extended_attributes,
@@ -120,9 +116,6 @@ def generate_method(interface, method):
         'is_raises_exception': is_raises_exception,
         'is_read_only': 'ReadOnly' in extended_attributes,
         'is_static': is_static,
-        'is_strict_type_checking':
-            'StrictTypeChecking' in extended_attributes or
-            'StrictTypeChecking' in interface.extended_attributes,
         'is_variadic': arguments and arguments[-1].is_variadic,
         'measure_as': v8_utilities.measure_as(method),  # [MeasureAs]
         'name': name,
@@ -149,6 +142,7 @@ def generate_argument(interface, method, argument, index):
     idl_type = argument.idl_type
     this_cpp_value = cpp_value(interface, method, index)
     is_variadic_wrapper_type = argument.is_variadic and idl_type.is_wrapper_type
+
     return {
         'cpp_type': idl_type.cpp_type_args(used_in_cpp_sequence=is_variadic_wrapper_type),
         'cpp_value': this_cpp_value,
@@ -157,6 +151,16 @@ def generate_argument(interface, method, argument, index):
         'has_event_listener_argument': any(
             argument_so_far for argument_so_far in method.arguments[:index]
             if argument_so_far.idl_type.name == 'EventListener'),
+        'has_legacy_overload_string':  # [LegacyOverloadString]
+            'LegacyOverloadString' in extended_attributes,
+        'has_type_checking_interface':
+            (has_extended_attribute_value(interface, 'TypeChecking', 'Interface') or
+             has_extended_attribute_value(method, 'TypeChecking', 'Interface')) and
+            idl_type.is_wrapper_type,
+        'has_type_checking_unrestricted':
+            (has_extended_attribute_value(interface, 'TypeChecking', 'Unrestricted') or
+             has_extended_attribute_value(method, 'TypeChecking', 'Unrestricted')) and
+            idl_type.name in ('Float', 'Double'),
         # Dictionary is special-cased, but arrays and sequences shouldn't be
         'idl_type': not idl_type.array_or_sequence_type and idl_type.base_type,
         'idl_type_object': idl_type,
@@ -165,7 +169,6 @@ def generate_argument(interface, method, argument, index):
         'is_callback_interface': idl_type.is_callback_interface,
         'is_nullable': idl_type.is_nullable,
         'is_optional': argument.is_optional,
-        'is_strict_type_checking': 'StrictTypeChecking' in extended_attributes,
         'is_variadic_wrapper_type': is_variadic_wrapper_type,
         'vector_type': v8_types.cpp_ptr_type('Vector', 'HeapVector', idl_type.gc_type),
         'is_wrapper_type': idl_type.is_wrapper_type,
@@ -231,9 +234,8 @@ def v8_set_return_value(interface_name, method, cpp_value, for_main_world=False)
         return None
 
     release = False
-    # [CallWith=ScriptState|NewScriptState], [RaisesException]
+    # [CallWith=ScriptState], [RaisesException]
     if (has_extended_attribute_value(method, 'CallWith', 'ScriptState') or
-        has_extended_attribute_value(method, 'CallWith', 'NewScriptState') or
         'RaisesException' in extended_attributes or
         idl_type.is_union_type):
         cpp_value = 'result'  # use local variable for value

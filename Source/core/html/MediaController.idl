@@ -26,12 +26,12 @@
 [
     Constructor,
     ConstructorCallWith=ExecutionContext,
-    RuntimeEnabled=Media,
+    RuntimeEnabled=MediaController,
 ] interface MediaController : EventTarget {
     readonly attribute TimeRanges buffered;
     readonly attribute TimeRanges seekable;
 
-    readonly attribute double duration;
+    readonly attribute unrestricted double duration;
     // FIXME: generated bindings should check isfinite: http://crbug.com/354298
     [RaisesException=Setter] attribute double currentTime;
 

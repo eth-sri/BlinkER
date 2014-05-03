@@ -70,6 +70,7 @@
 #include "core/frame/Settings.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/inspector/InspectorInstrumentation.h"
+#include "core/inspector/InspectorTraceEvents.h"
 #include "core/inspector/ScriptCallStack.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoadRequest.h"
@@ -323,6 +324,9 @@ bool DOMWindow::canShowModalDialogNow(const LocalFrame* frame)
 DOMWindow::DOMWindow(LocalFrame& frame)
     : FrameDestructionObserver(&frame)
     , m_shouldPrintWhenFinishedLoading(false)
+#if ASSERT_ENABLED
+    , m_hasBeenReset(false)
+#endif
 {
     ScriptWrappable::init(this);
 }
@@ -477,23 +481,7 @@ void DOMWindow::statePopped(PassRefPtr<SerializedScriptValue> stateObject)
 
 DOMWindow::~DOMWindow()
 {
-    ASSERT(!m_screen);
-    ASSERT(!m_history);
-    ASSERT(!m_locationbar);
-    ASSERT(!m_menubar);
-    ASSERT(!m_personalbar);
-    ASSERT(!m_scrollbars);
-    ASSERT(!m_statusbar);
-    ASSERT(!m_toolbar);
-    ASSERT(!m_console);
-    ASSERT(!m_navigator);
-    ASSERT(!m_performance);
-    ASSERT(!m_location);
-    ASSERT(!m_media);
-    ASSERT(!m_sessionStorage);
-    ASSERT(!m_localStorage);
-    ASSERT(!m_applicationCache);
-
+    ASSERT(m_hasBeenReset);
     reset();
 
     removeAllEventListeners();
@@ -594,6 +582,9 @@ void DOMWindow::resetDOMWindowProperties()
     m_sessionStorage = nullptr;
     m_localStorage = nullptr;
     m_applicationCache = nullptr;
+#if ASSERT_ENABLED
+    m_hasBeenReset = true;
+#endif
 }
 
 bool DOMWindow::isCurrentlyDisplayedInFrame() const
@@ -604,8 +595,6 @@ bool DOMWindow::isCurrentlyDisplayedInFrame() const
 int DOMWindow::orientation() const
 {
     ASSERT(RuntimeEnabledFeatures::orientationEventEnabled());
-
-    UseCounter::count(document(), UseCounter::WindowOrientation);
 
     if (!m_frame)
         return 0;
@@ -629,7 +618,6 @@ History& DOMWindow::history() const
 
 BarProp& DOMWindow::locationbar() const
 {
-    UseCounter::count(document(), UseCounter::BarPropLocationbar);
     if (!m_locationbar)
         m_locationbar = BarProp::create(m_frame, BarProp::Locationbar);
     return *m_locationbar;
@@ -637,7 +625,6 @@ BarProp& DOMWindow::locationbar() const
 
 BarProp& DOMWindow::menubar() const
 {
-    UseCounter::count(document(), UseCounter::BarPropMenubar);
     if (!m_menubar)
         m_menubar = BarProp::create(m_frame, BarProp::Menubar);
     return *m_menubar;
@@ -645,7 +632,6 @@ BarProp& DOMWindow::menubar() const
 
 BarProp& DOMWindow::personalbar() const
 {
-    UseCounter::count(document(), UseCounter::BarPropPersonalbar);
     if (!m_personalbar)
         m_personalbar = BarProp::create(m_frame, BarProp::Personalbar);
     return *m_personalbar;
@@ -653,7 +639,6 @@ BarProp& DOMWindow::personalbar() const
 
 BarProp& DOMWindow::scrollbars() const
 {
-    UseCounter::count(document(), UseCounter::BarPropScrollbars);
     if (!m_scrollbars)
         m_scrollbars = BarProp::create(m_frame, BarProp::Scrollbars);
     return *m_scrollbars;
@@ -661,7 +646,6 @@ BarProp& DOMWindow::scrollbars() const
 
 BarProp& DOMWindow::statusbar() const
 {
-    UseCounter::count(document(), UseCounter::BarPropStatusbar);
     if (!m_statusbar)
         m_statusbar = BarProp::create(m_frame, BarProp::Statusbar);
     return *m_statusbar;
@@ -669,7 +653,6 @@ BarProp& DOMWindow::statusbar() const
 
 BarProp& DOMWindow::toolbar() const
 {
-    UseCounter::count(document(), UseCounter::BarPropToolbar);
     if (!m_toolbar)
         m_toolbar = BarProp::create(m_frame, BarProp::Toolbar);
     return *m_toolbar;
@@ -864,7 +847,10 @@ void DOMWindow::postMessageTimerFired(PassOwnPtr<PostMessageTimer> t)
     if (m_frame->loader().client()->willCheckAndDispatchMessageEvent(timer->targetOrigin(), event.get()))
         return;
 
-    UserGestureIndicator gestureIndicator(timer->userGestureToken());
+    UserGestureToken* token = timer->userGestureToken();
+    if (token)
+        token->setForwarded();
+    UserGestureIndicator gestureIndicator(token);
 
     event->entangleMessagePorts(document());
     dispatchMessageEventWithOriginCheck(timer->targetOrigin(), event, timer->stackTrace());
@@ -1295,7 +1281,6 @@ PassRefPtr<CSSStyleDeclaration> DOMWindow::getComputedStyle(Element* elt, const 
 
 PassRefPtrWillBeRawPtr<CSSRuleList> DOMWindow::getMatchedCSSRules(Element* element, const String& pseudoElement) const
 {
-    UseCounter::count(document(), UseCounter::GetMatchedCSSRules);
     if (!element)
         return nullptr;
 
@@ -1580,6 +1565,8 @@ void DOMWindow::dispatchLoadEvent()
     if (ownerElement)
         ownerElement->dispatchEvent(Event::create(EventTypeNames::load));
 
+    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "MarkLoad", "data", InspectorMarkLoadEvent::data(frame()));
+    // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentation::loadEventFired(frame());
 }
 

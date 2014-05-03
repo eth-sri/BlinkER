@@ -31,7 +31,6 @@
 #include "config.h"
 #include "web/InspectorClientImpl.h"
 
-#include "WebViewClient.h"
 #include "core/frame/DOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
@@ -42,6 +41,7 @@
 #include "public/platform/WebRect.h"
 #include "public/platform/WebURL.h"
 #include "public/platform/WebURLRequest.h"
+#include "public/web/WebViewClient.h"
 #include "web/WebDevToolsAgentImpl.h"
 #include "web/WebViewImpl.h"
 #include "wtf/Vector.h"
@@ -88,18 +88,6 @@ void InspectorClientImpl::updateInspectorStateCookie(const WTF::String& inspecto
 {
     if (WebDevToolsAgentImpl* agent = devToolsAgent())
         agent->updateInspectorStateCookie(inspectorState);
-}
-
-void InspectorClientImpl::clearBrowserCache()
-{
-    if (WebDevToolsAgentImpl* agent = devToolsAgent())
-        agent->clearBrowserCache();
-}
-
-void InspectorClientImpl::clearBrowserCookies()
-{
-    if (WebDevToolsAgentImpl* agent = devToolsAgent())
-        agent->clearBrowserCookies();
 }
 
 void InspectorClientImpl::overrideDeviceMetrics(int width, int height, float deviceScaleFactor, bool emulateViewport, bool fitWindow)

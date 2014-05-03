@@ -34,6 +34,7 @@
 
 #include "RuntimeEnabledFeatures.h"
 #include "hb.h"
+#include "platform/LayoutUnit.h"
 #include "platform/fonts/Character.h"
 #include "platform/fonts/Font.h"
 #include "platform/fonts/harfbuzz/HarfBuzzFace.h"
@@ -1110,10 +1111,15 @@ FloatRect HarfBuzzShaper::selectionRect(const FloatPoint& point, int height, int
     if (!foundToX)
         toX = m_run.rtl() ? 0 : m_totalWidth;
 
-    // Using floorf() and roundf() as the same as mac port.
-    if (fromX < toX)
-        return FloatRect(floorf(point.x() + fromX), point.y(), roundf(toX - fromX), height);
-    return FloatRect(floorf(point.x() + toX), point.y(), roundf(fromX - toX), height);
+    if (fromX < toX) {
+        return Font::pixelSnappedSelectionRect(
+            point.x() + fromX, point.x() + toX,
+            point.y(), height);
+    }
+
+    return Font::pixelSnappedSelectionRect(
+        point.x() + toX, point.x() + fromX,
+        point.y(), height);
 }
 
 } // namespace WebCore

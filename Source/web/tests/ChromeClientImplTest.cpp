@@ -30,13 +30,14 @@
 
 #include "config.h"
 
-#include "WebFrameClient.h"
-#include "WebInputEvent.h"
-#include "WebLocalFrame.h"
-#include "WebView.h"
-#include "WebViewClient.h"
 #include "core/page/Chrome.h"
+#include "public/web/WebFrameClient.h"
+#include "public/web/WebInputEvent.h"
+#include "public/web/WebLocalFrame.h"
+#include "public/web/WebView.h"
+#include "public/web/WebViewClient.h"
 #include "web/WebViewImpl.h"
+#include "web/tests/FrameTestHelpers.h"
 #include <gtest/gtest.h>
 
 using namespace blink;
@@ -52,12 +53,7 @@ void setCurrentInputEventForTest(const WebInputEvent* event)
 
 namespace {
 
-class TestWebWidgetClient : public WebWidgetClient {
-public:
-    ~TestWebWidgetClient() { }
-};
-
-class TestWebViewClient : public WebViewClient {
+class TestWebViewClient : public FrameTestHelpers::TestWebViewClient {
 public:
     explicit TestWebViewClient(WebNavigationPolicy* target) : m_target(target) { }
     ~TestWebViewClient() { }

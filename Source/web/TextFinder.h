@@ -31,13 +31,13 @@
 #ifndef TextFinder_h
 #define TextFinder_h
 
-#include "WebFindOptions.h"
 #include "core/editing/FindOptions.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/heap/Handle.h"
 #include "public/platform/WebFloatPoint.h"
 #include "public/platform/WebFloatRect.h"
 #include "public/platform/WebRect.h"
+#include "public/web/WebFindOptions.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/Vector.h"
@@ -204,6 +204,9 @@ private:
 
     // The scoping effort can time out and we need to keep track of where we
     // ended our last search so we can continue from where we left of.
+    //
+    // This range is collapsed to the start position of the last successful
+    // search; the new search should start from the next adjacent position.
     RefPtrWillBePersistent<WebCore::Range> m_resumeScopingFromRange;
 
     // Keeps track of the last string this frame searched for. This is used for

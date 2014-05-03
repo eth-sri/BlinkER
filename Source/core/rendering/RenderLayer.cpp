@@ -81,6 +81,7 @@
 #include "platform/TraceEvent.h"
 #include "platform/geometry/FloatPoint3D.h"
 #include "platform/geometry/FloatRect.h"
+#include "platform/geometry/TransformState.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
 #include "platform/graphics/filters/ReferenceFilter.h"
 #include "platform/graphics/filters/SourceGraphic.h"
@@ -145,9 +146,9 @@ RenderLayer::RenderLayer(RenderLayerModelObject* renderer, LayerType type)
     , m_styleDeterminedCompositingReasons(CompositingReasonNone)
     , m_compositingReasons(CompositingReasonNone)
     , m_groupedMapping(0)
-    , m_repainter(renderer)
-    , m_clipper(renderer)
-    , m_blendInfo(renderer)
+    , m_repainter(*renderer)
+    , m_clipper(*renderer)
+    , m_blendInfo(*renderer)
 {
     updateStackingNode();
 
@@ -980,13 +981,10 @@ bool RenderLayer::updateLayerPosition()
         if (hasCompositedLayerMapping()) {
             // FIXME: Composited layers ignore pagination, so about the best we can do is make sure they're offset into the appropriate column.
             // They won't split across columns properly.
-            LayoutSize columnOffset;
             if (!parent()->renderer()->hasColumns() && parent()->renderer()->isDocumentElement() && renderer()->view()->hasColumns())
-                renderer()->view()->adjustForColumns(columnOffset, localPoint);
+                localPoint += renderer()->view()->columnOffset(localPoint);
             else
-                parent()->renderer()->adjustForColumns(columnOffset, localPoint);
-
-            localPoint += columnOffset;
+                localPoint += parent()->renderer()->columnOffset(localPoint);
         }
 
         if (parent()->renderer()->hasOverflowClip()) {
@@ -1075,6 +1073,17 @@ RenderLayer* RenderLayer::enclosingTransformedAncestor() const
         curr = curr->parent();
 
     return curr;
+}
+
+LayoutPoint RenderLayer::computeOffsetFromTransformedAncestor() const
+{
+    const AncestorDependentProperties& properties = ancestorDependentProperties();
+
+    TransformState transformState(TransformState::ApplyTransformDirection, FloatPoint());
+    // FIXME: add a test that checks flipped writing mode and ApplyContainerFlip are correct.
+    renderer()->mapLocalToContainer(properties.transformAncestor ? properties.transformAncestor->renderer() : 0, transformState, ApplyContainerFlip);
+    transformState.flatten();
+    return LayoutPoint(transformState.lastPlanarPoint());
 }
 
 const RenderLayer* RenderLayer::compositingContainer() const
@@ -1709,7 +1718,7 @@ RenderLayer* RenderLayer::scrollParent() const
 
 RenderLayer* RenderLayer::clipParent() const
 {
-    if (compositingReasons() & CompositingReasonOutOfFlowClipping && !compositor()->clippedByAncestor(this)) {
+    if (compositingReasons() & CompositingReasonOutOfFlowClipping && !compositor()->clippedByNonAncestorInStackingTree(this)) {
         if (RenderObject* containingBlock = renderer()->containingBlock())
             return containingBlock->enclosingLayer()->enclosingCompositingLayer();
     }
@@ -1737,7 +1746,7 @@ void RenderLayer::updateReflectionInfo(const RenderStyle* oldStyle)
     ASSERT(!oldStyle || !renderer()->style()->reflectionDataEquivalent(oldStyle));
     if (renderer()->hasReflection()) {
         if (!m_reflectionInfo)
-            m_reflectionInfo = adoptPtr(new RenderLayerReflectionInfo(toRenderBox(renderer())));
+            m_reflectionInfo = adoptPtr(new RenderLayerReflectionInfo(*renderBox()));
         m_reflectionInfo->updateAfterStyleChange(oldStyle);
     } else if (m_reflectionInfo) {
         m_reflectionInfo = nullptr;
@@ -1755,7 +1764,7 @@ void RenderLayer::updateStackingNode()
 void RenderLayer::updateScrollableArea()
 {
     if (requiresScrollableArea())
-        m_scrollableArea = adoptPtr(new RenderLayerScrollableArea(renderBox()));
+        m_scrollableArea = adoptPtr(new RenderLayerScrollableArea(*renderBox()));
     else
         m_scrollableArea = nullptr;
 }
@@ -1854,8 +1863,7 @@ static void performOverlapTests(OverlapTestRequestMap& overlapTestRequests, cons
         it->key->setIsOverlapped(true);
         overlappedRequestClients.append(it->key);
     }
-    for (size_t i = 0; i < overlappedRequestClients.size(); ++i)
-        overlapTestRequests.remove(overlappedRequestClients[i]);
+    overlapTestRequests.removeAll(overlappedRequestClients);
 }
 
 static bool shouldDoSoftwarePaint(const RenderLayer* layer, bool paintingReflection)

@@ -115,8 +115,10 @@ void CanvasRenderingContext2D::unwindStateStack()
 
 CanvasRenderingContext2D::~CanvasRenderingContext2D()
 {
+#if !ENABLE(OILPAN)
 #if !ASSERT_DISABLED
     unwindStateStack();
+#endif
 #endif
 }
 
@@ -158,6 +160,15 @@ void CanvasRenderingContext2D::restoreContext()
             m_isContextLost = false;
         }
     }
+}
+
+void CanvasRenderingContext2D::trace(Visitor* visitor)
+{
+#if ENABLE(OILPAN)
+    visitor->trace(m_stateStack);
+    visitor->trace(m_fetchedFonts);
+#endif
+    CanvasRenderingContext::trace(visitor);
 }
 
 void CanvasRenderingContext2D::dispatchContextLostEvent(Timer<CanvasRenderingContext2D>*)
@@ -923,18 +934,6 @@ void CanvasRenderingContext2D::beginPath()
     m_path.clear();
 }
 
-PassRefPtr<Path2D> CanvasRenderingContext2D::currentPath()
-{
-    return Path2D::create(m_path);
-}
-
-void CanvasRenderingContext2D::setCurrentPath(Path2D* path)
-{
-    if (!path)
-        return;
-    m_path = path->path();
-}
-
 static bool validateRectForCanvas(float& x, float& y, float& width, float& height)
 {
     if (!std::isfinite(x) | !std::isfinite(y) | !std::isfinite(width) | !std::isfinite(height))
@@ -1646,43 +1645,18 @@ template<class T> void CanvasRenderingContext2D::fullCanvasCompositedStroke(cons
     c->endLayer();
 }
 
-PassRefPtr<CanvasGradient> CanvasRenderingContext2D::createLinearGradient(float x0, float y0, float x1, float y1, ExceptionState& exceptionState)
+PassRefPtr<CanvasGradient> CanvasRenderingContext2D::createLinearGradient(float x0, float y0, float x1, float y1)
 {
-    if (!std::isfinite(x0))
-        exceptionState.throwDOMException(NotSupportedError, ExceptionMessages::notAFiniteNumber(x0, "x0"));
-    else if (!std::isfinite(y0))
-        exceptionState.throwDOMException(NotSupportedError, ExceptionMessages::notAFiniteNumber(y0, "y0"));
-    else if (!std::isfinite(x1))
-        exceptionState.throwDOMException(NotSupportedError, ExceptionMessages::notAFiniteNumber(x1, "x1"));
-    else if (!std::isfinite(y1))
-        exceptionState.throwDOMException(NotSupportedError, ExceptionMessages::notAFiniteNumber(y1, "y1"));
-
-    if (exceptionState.hadException())
-        return nullptr;
-
     RefPtr<CanvasGradient> gradient = CanvasGradient::create(FloatPoint(x0, y0), FloatPoint(x1, y1));
     return gradient.release();
 }
 
 PassRefPtr<CanvasGradient> CanvasRenderingContext2D::createRadialGradient(float x0, float y0, float r0, float x1, float y1, float r1, ExceptionState& exceptionState)
 {
-    if (!std::isfinite(x0))
-        exceptionState.throwDOMException(NotSupportedError, ExceptionMessages::notAFiniteNumber(x0, "x0"));
-    else if (!std::isfinite(y0))
-        exceptionState.throwDOMException(NotSupportedError, ExceptionMessages::notAFiniteNumber(y0, "y0"));
-    else if (!std::isfinite(r0))
-        exceptionState.throwDOMException(NotSupportedError, ExceptionMessages::notAFiniteNumber(r0, "r0"));
-    else if (!std::isfinite(x1))
-        exceptionState.throwDOMException(NotSupportedError, ExceptionMessages::notAFiniteNumber(x1, "x1"));
-    else if (!std::isfinite(y1))
-        exceptionState.throwDOMException(NotSupportedError, ExceptionMessages::notAFiniteNumber(y1, "y1"));
-    else if (!std::isfinite(r1))
-        exceptionState.throwDOMException(NotSupportedError, ExceptionMessages::notAFiniteNumber(r1, "r1"));
-    else if (r0 < 0 || r1 < 0)
+    if (r0 < 0 || r1 < 0) {
         exceptionState.throwDOMException(IndexSizeError, String::format("The %s provided is less than 0.", r0 < 0 ? "r0" : "r1"));
-
-    if (exceptionState.hadException())
         return nullptr;
+    }
 
     RefPtr<CanvasGradient> gradient = CanvasGradient::create(FloatPoint(x0, y0), r0, FloatPoint(x1, y1), r1);
     return gradient.release();
@@ -1795,15 +1769,10 @@ PassRefPtrWillBeRawPtr<ImageData> CanvasRenderingContext2D::createImageData(Pass
 
 PassRefPtrWillBeRawPtr<ImageData> CanvasRenderingContext2D::createImageData(float sw, float sh, ExceptionState& exceptionState) const
 {
-    if (!sw || !sh)
+    if (!sw || !sh) {
         exceptionState.throwDOMException(IndexSizeError, String::format("The source %s is 0.", sw ? "height" : "width"));
-    else if (!std::isfinite(sw))
-        exceptionState.throwDOMException(NotSupportedError, ExceptionMessages::notAFiniteNumber(sw, "source width"));
-    else if (!std::isfinite(sh))
-        exceptionState.throwDOMException(NotSupportedError, ExceptionMessages::notAFiniteNumber(sh, "source height"));
-
-    if (exceptionState.hadException())
         return nullptr;
+    }
 
     FloatSize logicalSize(fabs(sw), fabs(sh));
     if (!logicalSize.isExpressibleAsIntSize())
@@ -1824,14 +1793,6 @@ PassRefPtrWillBeRawPtr<ImageData> CanvasRenderingContext2D::getImageData(float s
         exceptionState.throwSecurityError("The canvas has been tainted by cross-origin data.");
     else if (!sw || !sh)
         exceptionState.throwDOMException(IndexSizeError, String::format("The source %s is 0.", sw ? "height" : "width"));
-    else if (!std::isfinite(sx))
-        exceptionState.throwDOMException(NotSupportedError, ExceptionMessages::notAFiniteNumber(sx, "source X"));
-    else if (!std::isfinite(sy))
-        exceptionState.throwDOMException(NotSupportedError, ExceptionMessages::notAFiniteNumber(sy, "source Y"));
-    else if (!std::isfinite(sw))
-        exceptionState.throwDOMException(NotSupportedError, ExceptionMessages::notAFiniteNumber(sw, "source width"));
-    else if (!std::isfinite(sh))
-        exceptionState.throwDOMException(NotSupportedError, ExceptionMessages::notAFiniteNumber(sh, "source height"));
 
     if (exceptionState.hadException())
         return nullptr;
@@ -1865,30 +1826,13 @@ PassRefPtrWillBeRawPtr<ImageData> CanvasRenderingContext2D::getImageData(float s
     return ImageData::create(imageDataRect.size(), byteArray.release());
 }
 
-void CanvasRenderingContext2D::putImageData(ImageData* data, float dx, float dy, ExceptionState& exceptionState)
+void CanvasRenderingContext2D::putImageData(ImageData* data, float dx, float dy)
 {
-    putImageData(data, dx, dy, 0, 0, data->width(), data->height(), exceptionState);
+    putImageData(data, dx, dy, 0, 0, data->width(), data->height());
 }
 
-void CanvasRenderingContext2D::putImageData(ImageData* data, float dx, float dy, float dirtyX, float dirtyY,
-    float dirtyWidth, float dirtyHeight, ExceptionState& exceptionState)
+void CanvasRenderingContext2D::putImageData(ImageData* data, float dx, float dy, float dirtyX, float dirtyY, float dirtyWidth, float dirtyHeight)
 {
-    if (!std::isfinite(dx))
-        exceptionState.throwDOMException(NotSupportedError, ExceptionMessages::notAFiniteNumber(dx, "dx"));
-    else if (!std::isfinite(dy))
-        exceptionState.throwDOMException(NotSupportedError, ExceptionMessages::notAFiniteNumber(dy, "dy"));
-    else if (!std::isfinite(dirtyX))
-        exceptionState.throwDOMException(NotSupportedError, ExceptionMessages::notAFiniteNumber(dirtyX, "dirtyX"));
-    else if (!std::isfinite(dirtyY))
-        exceptionState.throwDOMException(NotSupportedError, ExceptionMessages::notAFiniteNumber(dirtyY, "dirtyY"));
-    else if (!std::isfinite(dirtyWidth))
-        exceptionState.throwDOMException(NotSupportedError, ExceptionMessages::notAFiniteNumber(dirtyWidth, "dirtyWidth"));
-    else if (!std::isfinite(dirtyHeight))
-        exceptionState.throwDOMException(NotSupportedError, ExceptionMessages::notAFiniteNumber(dirtyHeight, "dirtyHeight"));
-
-    if (exceptionState.hadException())
-        return;
-
     ImageBuffer* buffer = canvas()->buffer();
     if (!buffer)
         return;

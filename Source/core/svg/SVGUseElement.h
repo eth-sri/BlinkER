@@ -60,8 +60,6 @@ private:
 
     virtual bool isStructurallyExternal() const OVERRIDE { return !hrefString().isNull() && isExternalURIReference(hrefString(), document()); }
 
-    virtual bool supportsFocus() const OVERRIDE { return hasFocusEventListeners(); }
-
     virtual InsertionNotificationRequest insertedInto(ContainerNode*) OVERRIDE;
     virtual void removedFrom(ContainerNode*) OVERRIDE;
 
@@ -74,7 +72,6 @@ private:
 
     void clearResourceReferences();
     void buildShadowAndInstanceTree(SVGElement* target);
-    void detachInstance();
 
     void scheduleShadowTreeRecreation();
     virtual bool haveLoadedRequiredResources() OVERRIDE { return !isStructurallyExternal() || m_haveFiredLoadEvent; }

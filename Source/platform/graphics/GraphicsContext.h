@@ -230,7 +230,6 @@ public:
     // stroke color).
     void drawRect(const IntRect&);
     void drawLine(const IntPoint&, const IntPoint&);
-    void drawEllipse(const IntRect&);
     void drawConvexPolygon(size_t numPoints, const FloatPoint*, bool shouldAntialias = false);
 
     void fillPath(const Path&);
@@ -268,12 +267,7 @@ public:
         const FloatSize& tileScaleFactor, Image::TileRule hRule = Image::StretchTile, Image::TileRule vRule = Image::StretchTile,
         CompositeOperator = CompositeSourceOver);
 
-    void drawImageBuffer(ImageBuffer*, const IntPoint&, CompositeOperator = CompositeSourceOver, blink::WebBlendMode = blink::WebBlendModeNormal);
-    void drawImageBuffer(ImageBuffer*, const IntRect&, CompositeOperator = CompositeSourceOver, blink::WebBlendMode = blink::WebBlendModeNormal);
-    void drawImageBuffer(ImageBuffer*, const IntPoint& destPoint, const IntRect& srcRect, CompositeOperator = CompositeSourceOver, blink::WebBlendMode = blink::WebBlendModeNormal);
-    void drawImageBuffer(ImageBuffer*, const IntRect& destRect, const IntRect& srcRect, CompositeOperator = CompositeSourceOver, blink::WebBlendMode = blink::WebBlendModeNormal);
-    void drawImageBuffer(ImageBuffer*, const FloatRect& destRect);
-    void drawImageBuffer(ImageBuffer*, const FloatRect& destRect, const FloatRect& srcRect, CompositeOperator = CompositeSourceOver, blink::WebBlendMode = blink::WebBlendModeNormal);
+    void drawImageBuffer(ImageBuffer*, const FloatRect& destRect, const FloatRect* srcRect = 0, CompositeOperator = CompositeSourceOver);
 
     // These methods write to the canvas and modify the opaque region, if tracked.
     // Also drawLine(const IntPoint& point1, const IntPoint& point2) and fillRoundedRect

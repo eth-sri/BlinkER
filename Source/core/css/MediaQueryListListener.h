@@ -39,16 +39,17 @@ public:
             return nullptr;
         return adoptRefWillBeNoop(new MediaQueryListListener(value));
     }
-    void queryChanged(ScriptState*, MediaQueryList*);
+    void queryChanged(MediaQueryList*);
 
-    bool operator==(const MediaQueryListListener& other) const { return m_value == other.m_value; }
+    bool operator==(const MediaQueryListListener& other) const { return m_function == other.m_function; }
 
     void trace(Visitor*) { }
 
 private:
-    explicit MediaQueryListListener(const ScriptValue& value) : m_value(value) { }
+    explicit MediaQueryListListener(const ScriptValue&);
 
-    ScriptValue m_value;
+    RefPtr<ScriptState> m_scriptState;
+    ScriptValue m_function;
 };
 
 }

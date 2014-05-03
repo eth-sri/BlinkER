@@ -31,7 +31,6 @@
 #include "bindings/v8/BindingSecurity.h"
 #include "bindings/v8/Dictionary.h"
 #include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/NewScriptState.h"
 #include "bindings/v8/ScriptCallStackFactory.h"
 #include "bindings/v8/ScriptPromise.h"
 #include "bindings/v8/ScriptState.h"
@@ -454,6 +453,64 @@ static void shortAttributeAttributeSetterCallback(v8::Local<v8::String>, v8::Loc
 {
     TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMSetter");
     TestObjectV8Internal::shortAttributeAttributeSetter(v8Value, info);
+    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
+}
+
+static void unrestrictedDoubleAttributeAttributeGetter(const v8::PropertyCallbackInfo<v8::Value>& info)
+{
+    v8::Handle<v8::Object> holder = info.Holder();
+    TestObject* impl = V8TestObject::toNative(holder);
+    v8SetReturnValue(info, impl->unrestrictedDoubleAttribute());
+}
+
+static void unrestrictedDoubleAttributeAttributeGetterCallback(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value>& info)
+{
+    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMGetter");
+    TestObjectV8Internal::unrestrictedDoubleAttributeAttributeGetter(info);
+    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
+}
+
+static void unrestrictedDoubleAttributeAttributeSetter(v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
+{
+    v8::Handle<v8::Object> holder = info.Holder();
+    TestObject* impl = V8TestObject::toNative(holder);
+    TONATIVE_VOID(double, cppValue, static_cast<double>(v8Value->NumberValue()));
+    impl->setUnrestrictedDoubleAttribute(cppValue);
+}
+
+static void unrestrictedDoubleAttributeAttributeSetterCallback(v8::Local<v8::String>, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
+{
+    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMSetter");
+    TestObjectV8Internal::unrestrictedDoubleAttributeAttributeSetter(v8Value, info);
+    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
+}
+
+static void unrestrictedFloatAttributeAttributeGetter(const v8::PropertyCallbackInfo<v8::Value>& info)
+{
+    v8::Handle<v8::Object> holder = info.Holder();
+    TestObject* impl = V8TestObject::toNative(holder);
+    v8SetReturnValue(info, impl->unrestrictedFloatAttribute());
+}
+
+static void unrestrictedFloatAttributeAttributeGetterCallback(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value>& info)
+{
+    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMGetter");
+    TestObjectV8Internal::unrestrictedFloatAttributeAttributeGetter(info);
+    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
+}
+
+static void unrestrictedFloatAttributeAttributeSetter(v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
+{
+    v8::Handle<v8::Object> holder = info.Holder();
+    TestObject* impl = V8TestObject::toNative(holder);
+    TONATIVE_VOID(float, cppValue, static_cast<float>(v8Value->NumberValue()));
+    impl->setUnrestrictedFloatAttribute(cppValue);
+}
+
+static void unrestrictedFloatAttributeAttributeSetterCallback(v8::Local<v8::String>, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
+{
+    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMSetter");
+    TestObjectV8Internal::unrestrictedFloatAttributeAttributeSetter(v8Value, info);
     TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
 }
 
@@ -1762,65 +1819,65 @@ static void callWithExecutionContextAnyAttributeAttributeSetterCallback(v8::Loca
     TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
 }
 
-static void callWithNewScriptStateAnyAttributeAttributeGetter(const v8::PropertyCallbackInfo<v8::Value>& info)
+static void callWithScriptStateAnyAttributeAttributeGetter(const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     v8::Handle<v8::Object> holder = info.Holder();
     TestObject* impl = V8TestObject::toNative(holder);
-    NewScriptState* state = NewScriptState::current(info.GetIsolate());
-    v8SetReturnValue(info, impl->callWithNewScriptStateAnyAttribute(state).v8Value());
+    ScriptState* state = ScriptState::current(info.GetIsolate());
+    v8SetReturnValue(info, impl->callWithScriptStateAnyAttribute(state).v8Value());
 }
 
-static void callWithNewScriptStateAnyAttributeAttributeGetterCallback(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value>& info)
+static void callWithScriptStateAnyAttributeAttributeGetterCallback(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMGetter");
-    TestObjectV8Internal::callWithNewScriptStateAnyAttributeAttributeGetter(info);
+    TestObjectV8Internal::callWithScriptStateAnyAttributeAttributeGetter(info);
     TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
 }
 
-static void callWithNewScriptStateAnyAttributeAttributeSetter(v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
+static void callWithScriptStateAnyAttributeAttributeSetter(v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
 {
     v8::Handle<v8::Object> holder = info.Holder();
     TestObject* impl = V8TestObject::toNative(holder);
     TONATIVE_VOID(ScriptValue, cppValue, ScriptValue(v8Value, info.GetIsolate()));
-    impl->setCallWithNewScriptStateAnyAttribute(state, cppValue);
+    impl->setCallWithScriptStateAnyAttribute(state, cppValue);
 }
 
-static void callWithNewScriptStateAnyAttributeAttributeSetterCallback(v8::Local<v8::String>, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
+static void callWithScriptStateAnyAttributeAttributeSetterCallback(v8::Local<v8::String>, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
 {
     TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMSetter");
-    TestObjectV8Internal::callWithNewScriptStateAnyAttributeAttributeSetter(v8Value, info);
+    TestObjectV8Internal::callWithScriptStateAnyAttributeAttributeSetter(v8Value, info);
     TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
 }
 
-static void callWithExecutionContextAndNewScriptStateAnyAttributeAttributeGetter(const v8::PropertyCallbackInfo<v8::Value>& info)
+static void callWithExecutionContextAndScriptStateAnyAttributeAttributeGetter(const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     v8::Handle<v8::Object> holder = info.Holder();
     TestObject* impl = V8TestObject::toNative(holder);
     ExecutionContext* scriptContext = currentExecutionContext(info.GetIsolate());
-    NewScriptState* state = NewScriptState::current(info.GetIsolate());
-    v8SetReturnValue(info, impl->callWithExecutionContextAndNewScriptStateAnyAttribute(state, scriptContext).v8Value());
+    ScriptState* state = ScriptState::current(info.GetIsolate());
+    v8SetReturnValue(info, impl->callWithExecutionContextAndScriptStateAnyAttribute(state, scriptContext).v8Value());
 }
 
-static void callWithExecutionContextAndNewScriptStateAnyAttributeAttributeGetterCallback(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value>& info)
+static void callWithExecutionContextAndScriptStateAnyAttributeAttributeGetterCallback(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMGetter");
-    TestObjectV8Internal::callWithExecutionContextAndNewScriptStateAnyAttributeAttributeGetter(info);
+    TestObjectV8Internal::callWithExecutionContextAndScriptStateAnyAttributeAttributeGetter(info);
     TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
 }
 
-static void callWithExecutionContextAndNewScriptStateAnyAttributeAttributeSetter(v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
+static void callWithExecutionContextAndScriptStateAnyAttributeAttributeSetter(v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
 {
     v8::Handle<v8::Object> holder = info.Holder();
     TestObject* impl = V8TestObject::toNative(holder);
     TONATIVE_VOID(ScriptValue, cppValue, ScriptValue(v8Value, info.GetIsolate()));
     ExecutionContext* scriptContext = currentExecutionContext(info.GetIsolate());
-    impl->setCallWithExecutionContextAndNewScriptStateAnyAttribute(state, scriptContext, cppValue);
+    impl->setCallWithExecutionContextAndScriptStateAnyAttribute(state, scriptContext, cppValue);
 }
 
-static void callWithExecutionContextAndNewScriptStateAnyAttributeAttributeSetterCallback(v8::Local<v8::String>, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
+static void callWithExecutionContextAndScriptStateAnyAttributeAttributeSetterCallback(v8::Local<v8::String>, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
 {
     TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMSetter");
-    TestObjectV8Internal::callWithExecutionContextAndNewScriptStateAnyAttributeAttributeSetter(v8Value, info);
+    TestObjectV8Internal::callWithExecutionContextAndScriptStateAnyAttributeAttributeSetter(v8Value, info);
     TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
 }
 
@@ -2325,94 +2382,6 @@ static void perContextEnabledLongAttributeAttributeSetterCallback(v8::Local<v8::
 {
     TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMSetter");
     TestObjectV8Internal::perContextEnabledLongAttributeAttributeSetter(v8Value, info);
-    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
-}
-
-static void perWorldBindingsLongAttributeAttributeGetter(const v8::PropertyCallbackInfo<v8::Value>& info)
-{
-    v8::Handle<v8::Object> holder = info.Holder();
-    TestObject* impl = V8TestObject::toNative(holder);
-    v8SetReturnValueInt(info, impl->perWorldBindingsLongAttribute());
-}
-
-static void perWorldBindingsLongAttributeAttributeGetterCallback(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value>& info)
-{
-    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMGetter");
-    TestObjectV8Internal::perWorldBindingsLongAttributeAttributeGetter(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
-}
-
-static void perWorldBindingsLongAttributeAttributeSetter(v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
-{
-    v8::Handle<v8::Object> holder = info.Holder();
-    ExceptionState exceptionState(ExceptionState::SetterContext, "perWorldBindingsLongAttribute", "TestObject", holder, info.GetIsolate());
-    TestObject* impl = V8TestObject::toNative(holder);
-    TONATIVE_VOID_EXCEPTIONSTATE(int, cppValue, toInt32(v8Value, exceptionState), exceptionState);
-    impl->setPerWorldBindingsLongAttribute(cppValue);
-}
-
-static void perWorldBindingsLongAttributeAttributeSetterCallback(v8::Local<v8::String>, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
-{
-    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMSetter");
-    TestObjectV8Internal::perWorldBindingsLongAttributeAttributeSetter(v8Value, info);
-    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
-}
-
-static void perWorldBindingsLongAttributeAttributeGetterForMainWorld(const v8::PropertyCallbackInfo<v8::Value>& info)
-{
-    v8::Handle<v8::Object> holder = info.Holder();
-    TestObject* impl = V8TestObject::toNative(holder);
-    v8SetReturnValueInt(info, impl->perWorldBindingsLongAttribute());
-}
-
-static void perWorldBindingsLongAttributeAttributeGetterCallbackForMainWorld(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value>& info)
-{
-    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMGetter");
-    TestObjectV8Internal::perWorldBindingsLongAttributeAttributeGetterForMainWorld(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
-}
-
-static void perWorldBindingsLongAttributeAttributeSetterForMainWorld(v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
-{
-    v8::Handle<v8::Object> holder = info.Holder();
-    ExceptionState exceptionState(ExceptionState::SetterContext, "perWorldBindingsLongAttribute", "TestObject", holder, info.GetIsolate());
-    TestObject* impl = V8TestObject::toNative(holder);
-    TONATIVE_VOID_EXCEPTIONSTATE(int, cppValue, toInt32(v8Value, exceptionState), exceptionState);
-    impl->setPerWorldBindingsLongAttribute(cppValue);
-}
-
-static void perWorldBindingsLongAttributeAttributeSetterCallbackForMainWorld(v8::Local<v8::String>, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
-{
-    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMSetter");
-    TestObjectV8Internal::perWorldBindingsLongAttributeAttributeSetterForMainWorld(v8Value, info);
-    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
-}
-
-static void perWorldBindingsReadonlyLongAttributeAttributeGetter(const v8::PropertyCallbackInfo<v8::Value>& info)
-{
-    v8::Handle<v8::Object> holder = info.Holder();
-    TestObject* impl = V8TestObject::toNative(holder);
-    v8SetReturnValueInt(info, impl->perWorldBindingsReadonlyLongAttribute());
-}
-
-static void perWorldBindingsReadonlyLongAttributeAttributeGetterCallback(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value>& info)
-{
-    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMGetter");
-    TestObjectV8Internal::perWorldBindingsReadonlyLongAttributeAttributeGetter(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
-}
-
-static void perWorldBindingsReadonlyLongAttributeAttributeGetterForMainWorld(const v8::PropertyCallbackInfo<v8::Value>& info)
-{
-    v8::Handle<v8::Object> holder = info.Holder();
-    TestObject* impl = V8TestObject::toNative(holder);
-    v8SetReturnValueInt(info, impl->perWorldBindingsReadonlyLongAttribute());
-}
-
-static void perWorldBindingsReadonlyLongAttributeAttributeGetterCallbackForMainWorld(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value>& info)
-{
-    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMGetter");
-    TestObjectV8Internal::perWorldBindingsReadonlyLongAttributeAttributeGetterForMainWorld(info);
     TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
 }
 
@@ -3990,110 +3959,6 @@ static void setterCallWithExecutionContextStringAttributeAttributeSetterCallback
     TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
 }
 
-static void strictTypeCheckingFloatAttributeAttributeGetter(const v8::PropertyCallbackInfo<v8::Value>& info)
-{
-    v8::Handle<v8::Object> holder = info.Holder();
-    TestObject* impl = V8TestObject::toNative(holder);
-    v8SetReturnValue(info, impl->strictTypeCheckingFloatAttribute());
-}
-
-static void strictTypeCheckingFloatAttributeAttributeGetterCallback(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value>& info)
-{
-    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMGetter");
-    TestObjectV8Internal::strictTypeCheckingFloatAttributeAttributeGetter(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
-}
-
-static void strictTypeCheckingFloatAttributeAttributeSetter(v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
-{
-    v8::Handle<v8::Object> holder = info.Holder();
-    TestObject* impl = V8TestObject::toNative(holder);
-    TONATIVE_VOID(float, cppValue, static_cast<float>(v8Value->NumberValue()));
-    impl->setStrictTypeCheckingFloatAttribute(cppValue);
-}
-
-static void strictTypeCheckingFloatAttributeAttributeSetterCallback(v8::Local<v8::String>, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
-{
-    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMSetter");
-    TestObjectV8Internal::strictTypeCheckingFloatAttributeAttributeSetter(v8Value, info);
-    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
-}
-
-static void strictTypeCheckingTestInterfaceAttributeAttributeGetter(const v8::PropertyCallbackInfo<v8::Value>& info)
-{
-    v8::Handle<v8::Object> holder = info.Holder();
-    TestObject* impl = V8TestObject::toNative(holder);
-    v8SetReturnValueFast(info, WTF::getPtr(impl->strictTypeCheckingTestInterfaceAttribute()), impl);
-}
-
-static void strictTypeCheckingTestInterfaceAttributeAttributeGetterCallback(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value>& info)
-{
-    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMGetter");
-    TestObjectV8Internal::strictTypeCheckingTestInterfaceAttributeAttributeGetter(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
-}
-
-static void strictTypeCheckingTestInterfaceAttributeAttributeSetter(v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
-{
-    v8::Handle<v8::Object> holder = info.Holder();
-    ExceptionState exceptionState(ExceptionState::SetterContext, "strictTypeCheckingTestInterfaceAttribute", "TestObject", holder, info.GetIsolate());
-    if (!V8TestInterface::hasInstance(v8Value, info.GetIsolate())) {
-        exceptionState.throwTypeError("The provided value is not of type 'TestInterface'.");
-        exceptionState.throwIfNeeded();
-        return;
-    }
-    TestObject* impl = V8TestObject::toNative(holder);
-    TONATIVE_VOID(TestInterfaceImplementation*, cppValue, V8TestInterface::toNativeWithTypeCheck(info.GetIsolate(), v8Value));
-    impl->setStrictTypeCheckingTestInterfaceAttribute(WTF::getPtr(cppValue));
-}
-
-static void strictTypeCheckingTestInterfaceAttributeAttributeSetterCallback(v8::Local<v8::String>, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
-{
-    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMSetter");
-    TestObjectV8Internal::strictTypeCheckingTestInterfaceAttributeAttributeSetter(v8Value, info);
-    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
-}
-
-static void strictTypeCheckingNullableTestInterfaceAttributeAttributeGetter(const v8::PropertyCallbackInfo<v8::Value>& info)
-{
-    v8::Handle<v8::Object> holder = info.Holder();
-    TestObject* impl = V8TestObject::toNative(holder);
-    RefPtr<TestInterfaceImplementation> v8Value = impl->strictTypeCheckingNullableTestInterfaceAttribute();
-    if (!v8Value) {
-        v8SetReturnValueNull(info);
-        return;
-    }
-    v8SetReturnValueFast(info, WTF::getPtr(v8Value.release()), impl);
-}
-
-static void strictTypeCheckingNullableTestInterfaceAttributeAttributeGetterCallback(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value>& info)
-{
-    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMGetter");
-    TestObjectV8Internal::strictTypeCheckingNullableTestInterfaceAttributeAttributeGetter(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
-}
-
-static void strictTypeCheckingNullableTestInterfaceAttributeAttributeSetter(v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
-{
-    v8::Handle<v8::Object> holder = info.Holder();
-    ExceptionState exceptionState(ExceptionState::SetterContext, "strictTypeCheckingNullableTestInterfaceAttribute", "TestObject", holder, info.GetIsolate());
-    if (!isUndefinedOrNull(v8Value) && !V8TestInterface::hasInstance(v8Value, info.GetIsolate())) {
-        exceptionState.throwTypeError("The provided value is not of type 'TestInterface'.");
-        exceptionState.throwIfNeeded();
-        return;
-    }
-    TestObject* impl = V8TestObject::toNative(holder);
-    TONATIVE_VOID(TestInterfaceImplementation*, cppValue, V8TestInterface::toNativeWithTypeCheck(info.GetIsolate(), v8Value));
-    impl->setStrictTypeCheckingNullableTestInterfaceAttribute(WTF::getPtr(cppValue));
-}
-
-static void strictTypeCheckingNullableTestInterfaceAttributeAttributeSetterCallback(v8::Local<v8::String>, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
-{
-    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMSetter");
-    TestObjectV8Internal::strictTypeCheckingNullableTestInterfaceAttributeAttributeSetter(v8Value, info);
-    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
-}
-
 static void treatNullAsNullStringStringAttributeAttributeGetter(const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     v8::Handle<v8::Object> holder = info.Holder();
@@ -4178,6 +4043,145 @@ static void treatReturnedNullStringAsUndefinedStringAttributeAttributeSetterCall
 {
     TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMSetter");
     TestObjectV8Internal::treatReturnedNullStringAsUndefinedStringAttributeAttributeSetter(v8Value, info);
+    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
+}
+
+static void typeCheckingInterfaceNullableStringFloatAttributeAttributeGetter(const v8::PropertyCallbackInfo<v8::Value>& info)
+{
+    v8::Handle<v8::Object> holder = info.Holder();
+    TestObject* impl = V8TestObject::toNative(holder);
+    v8SetReturnValue(info, impl->typeCheckingInterfaceNullableStringFloatAttribute());
+}
+
+static void typeCheckingInterfaceNullableStringFloatAttributeAttributeGetterCallback(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value>& info)
+{
+    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMGetter");
+    TestObjectV8Internal::typeCheckingInterfaceNullableStringFloatAttributeAttributeGetter(info);
+    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
+}
+
+static void typeCheckingInterfaceNullableStringFloatAttributeAttributeSetter(v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
+{
+    v8::Handle<v8::Object> holder = info.Holder();
+    TestObject* impl = V8TestObject::toNative(holder);
+    TONATIVE_VOID(float, cppValue, static_cast<float>(v8Value->NumberValue()));
+    impl->setTypeCheckingInterfaceNullableStringFloatAttribute(cppValue);
+}
+
+static void typeCheckingInterfaceNullableStringFloatAttributeAttributeSetterCallback(v8::Local<v8::String>, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
+{
+    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMSetter");
+    TestObjectV8Internal::typeCheckingInterfaceNullableStringFloatAttributeAttributeSetter(v8Value, info);
+    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
+}
+
+static void typeCheckingInterfaceTestInterfaceAttributeAttributeGetter(const v8::PropertyCallbackInfo<v8::Value>& info)
+{
+    v8::Handle<v8::Object> holder = info.Holder();
+    TestObject* impl = V8TestObject::toNative(holder);
+    v8SetReturnValueFast(info, WTF::getPtr(impl->typeCheckingInterfaceTestInterfaceAttribute()), impl);
+}
+
+static void typeCheckingInterfaceTestInterfaceAttributeAttributeGetterCallback(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value>& info)
+{
+    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMGetter");
+    TestObjectV8Internal::typeCheckingInterfaceTestInterfaceAttributeAttributeGetter(info);
+    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
+}
+
+static void typeCheckingInterfaceTestInterfaceAttributeAttributeSetter(v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
+{
+    v8::Handle<v8::Object> holder = info.Holder();
+    ExceptionState exceptionState(ExceptionState::SetterContext, "typeCheckingInterfaceTestInterfaceAttribute", "TestObject", holder, info.GetIsolate());
+    if (!V8TestInterface::hasInstance(v8Value, info.GetIsolate())) {
+        exceptionState.throwTypeError("The provided value is not of type 'TestInterface'.");
+        exceptionState.throwIfNeeded();
+        return;
+    }
+    TestObject* impl = V8TestObject::toNative(holder);
+    TONATIVE_VOID(TestInterfaceImplementation*, cppValue, V8TestInterface::toNativeWithTypeCheck(info.GetIsolate(), v8Value));
+    impl->setTypeCheckingInterfaceTestInterfaceAttribute(WTF::getPtr(cppValue));
+}
+
+static void typeCheckingInterfaceTestInterfaceAttributeAttributeSetterCallback(v8::Local<v8::String>, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
+{
+    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMSetter");
+    TestObjectV8Internal::typeCheckingInterfaceTestInterfaceAttributeAttributeSetter(v8Value, info);
+    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
+}
+
+static void typeCheckingNullableTestInterfaceOrNullAttributeAttributeGetter(const v8::PropertyCallbackInfo<v8::Value>& info)
+{
+    v8::Handle<v8::Object> holder = info.Holder();
+    TestObject* impl = V8TestObject::toNative(holder);
+    RefPtr<TestInterfaceImplementation> v8Value = impl->typeCheckingNullableTestInterfaceOrNullAttribute();
+    if (!v8Value) {
+        v8SetReturnValueNull(info);
+        return;
+    }
+    v8SetReturnValueFast(info, WTF::getPtr(v8Value.release()), impl);
+}
+
+static void typeCheckingNullableTestInterfaceOrNullAttributeAttributeGetterCallback(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value>& info)
+{
+    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMGetter");
+    TestObjectV8Internal::typeCheckingNullableTestInterfaceOrNullAttributeAttributeGetter(info);
+    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
+}
+
+static void typeCheckingNullableTestInterfaceOrNullAttributeAttributeSetter(v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
+{
+    v8::Handle<v8::Object> holder = info.Holder();
+    ExceptionState exceptionState(ExceptionState::SetterContext, "typeCheckingNullableTestInterfaceOrNullAttribute", "TestObject", holder, info.GetIsolate());
+    TestObject* impl = V8TestObject::toNative(holder);
+    TONATIVE_VOID(TestInterfaceImplementation*, cppValue, V8TestInterface::toNativeWithTypeCheck(info.GetIsolate(), v8Value));
+    impl->setTypeCheckingNullableTestInterfaceOrNullAttribute(WTF::getPtr(cppValue));
+}
+
+static void typeCheckingNullableTestInterfaceOrNullAttributeAttributeSetterCallback(v8::Local<v8::String>, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
+{
+    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMSetter");
+    TestObjectV8Internal::typeCheckingNullableTestInterfaceOrNullAttributeAttributeSetter(v8Value, info);
+    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
+}
+
+static void typeCheckingInterfaceNullableTestInterfaceOrNullAttributeAttributeGetter(const v8::PropertyCallbackInfo<v8::Value>& info)
+{
+    v8::Handle<v8::Object> holder = info.Holder();
+    TestObject* impl = V8TestObject::toNative(holder);
+    RefPtr<TestInterfaceImplementation> v8Value = impl->typeCheckingInterfaceNullableTestInterfaceOrNullAttribute();
+    if (!v8Value) {
+        v8SetReturnValueNull(info);
+        return;
+    }
+    v8SetReturnValueFast(info, WTF::getPtr(v8Value.release()), impl);
+}
+
+static void typeCheckingInterfaceNullableTestInterfaceOrNullAttributeAttributeGetterCallback(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value>& info)
+{
+    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMGetter");
+    TestObjectV8Internal::typeCheckingInterfaceNullableTestInterfaceOrNullAttributeAttributeGetter(info);
+    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
+}
+
+static void typeCheckingInterfaceNullableTestInterfaceOrNullAttributeAttributeSetter(v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
+{
+    v8::Handle<v8::Object> holder = info.Holder();
+    ExceptionState exceptionState(ExceptionState::SetterContext, "typeCheckingInterfaceNullableTestInterfaceOrNullAttribute", "TestObject", holder, info.GetIsolate());
+    if (!isUndefinedOrNull(v8Value) && !V8TestInterface::hasInstance(v8Value, info.GetIsolate())) {
+        exceptionState.throwTypeError("The provided value is not of type 'TestInterface'.");
+        exceptionState.throwIfNeeded();
+        return;
+    }
+    TestObject* impl = V8TestObject::toNative(holder);
+    TONATIVE_VOID(TestInterfaceImplementation*, cppValue, V8TestInterface::toNativeWithTypeCheck(info.GetIsolate(), v8Value));
+    impl->setTypeCheckingInterfaceNullableTestInterfaceOrNullAttribute(WTF::getPtr(cppValue));
+}
+
+static void typeCheckingInterfaceNullableTestInterfaceOrNullAttributeAttributeSetterCallback(v8::Local<v8::String>, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
+{
+    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMSetter");
+    TestObjectV8Internal::typeCheckingInterfaceNullableTestInterfaceOrNullAttributeAttributeSetter(v8Value, info);
     TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
 }
 
@@ -6568,8 +6572,8 @@ static void overloadedMethodF2Method(const v8::FunctionCallbackInfo<v8::Value>& 
         return;
     }
     TestObject* impl = V8TestObject::toNative(info.Holder());
-    TONATIVE_VOID(TestInterfaceEmpty*, testInterfaceEmptyNullableArg, V8TestInterfaceEmpty::toNativeWithTypeCheck(info.GetIsolate(), info[0]));
-    impl->overloadedMethodF(testInterfaceEmptyNullableArg);
+    TONATIVE_VOID(TestInterfaceEmpty*, testInterfaceEmptyOrNullArg, V8TestInterfaceEmpty::toNativeWithTypeCheck(info.GetIsolate(), info[0]));
+    impl->overloadedMethodF(testInterfaceEmptyOrNullArg);
 }
 
 static void overloadedMethodFMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -6611,8 +6615,8 @@ static void overloadedMethodG2Method(const v8::FunctionCallbackInfo<v8::Value>& 
         return;
     }
     TestObject* impl = V8TestObject::toNative(info.Holder());
-    TOSTRING_VOID(V8StringResource<>, strictTypeCheckingStringArg, info[0]);
-    impl->overloadedMethodG(strictTypeCheckingStringArg);
+    TOSTRING_VOID(V8StringResource<>, legacyOverloadStringStringArg, info[0]);
+    impl->overloadedMethodG(legacyOverloadStringStringArg);
 }
 
 static void overloadedMethodGMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -6747,8 +6751,8 @@ static void overloadedMethodJ2Method(const v8::FunctionCallbackInfo<v8::Value>& 
         return;
     }
     TestObject* impl = V8TestObject::toNative(info.Holder());
-    TONATIVE_VOID(TestInterfaceEmpty*, testInterfaceEmptyNullableArg, V8TestInterfaceEmpty::toNativeWithTypeCheck(info.GetIsolate(), info[0]));
-    impl->overloadedMethodJ(testInterfaceEmptyNullableArg);
+    TONATIVE_VOID(TestInterfaceEmpty*, testInterfaceEmptyOrNullArg, V8TestInterfaceEmpty::toNativeWithTypeCheck(info.GetIsolate(), info[0]));
+    impl->overloadedMethodJ(testInterfaceEmptyOrNullArg);
 }
 
 static void overloadedMethodJMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -7076,39 +7080,6 @@ static void activityLoggingAccessForAllWorldsMethodMethodCallback(const v8::Func
     TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
 }
 
-static void callWithScriptStateVoidMethodMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
-    TestObject* impl = V8TestObject::toNative(info.Holder());
-    ScriptState* state = ScriptState::current();
-    if (!state)
-        return;
-    impl->callWithScriptStateVoidMethod(state);
-}
-
-static void callWithScriptStateVoidMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
-    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMMethod");
-    TestObjectV8Internal::callWithScriptStateVoidMethodMethod(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
-}
-
-static void callWithScriptStateLongMethodMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
-    TestObject* impl = V8TestObject::toNative(info.Holder());
-    ScriptState* state = ScriptState::current();
-    if (!state)
-        return;
-    int result = impl->callWithScriptStateLongMethod(state);
-    v8SetReturnValueInt(info, result);
-}
-
-static void callWithScriptStateLongMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
-    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMMethod");
-    TestObjectV8Internal::callWithScriptStateLongMethodMethod(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
-}
-
 static void callWithExecutionContextVoidMethodMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     TestObject* impl = V8TestObject::toNative(info.Holder());
@@ -7123,12 +7094,39 @@ static void callWithExecutionContextVoidMethodMethodCallback(const v8::FunctionC
     TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
 }
 
+static void callWithScriptStateVoidMethodMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    TestObject* impl = V8TestObject::toNative(info.Holder());
+    ScriptState* state = ScriptState::current(info.GetIsolate());
+    impl->callWithScriptStateVoidMethod(state);
+}
+
+static void callWithScriptStateVoidMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMMethod");
+    TestObjectV8Internal::callWithScriptStateVoidMethodMethod(info);
+    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
+}
+
+static void callWithScriptStateLongMethodMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    TestObject* impl = V8TestObject::toNative(info.Holder());
+    ScriptState* state = ScriptState::current(info.GetIsolate());
+    int result = impl->callWithScriptStateLongMethod(state);
+    v8SetReturnValueInt(info, result);
+}
+
+static void callWithScriptStateLongMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMMethod");
+    TestObjectV8Internal::callWithScriptStateLongMethodMethod(info);
+    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
+}
+
 static void callWithScriptStateExecutionContextVoidMethodMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     TestObject* impl = V8TestObject::toNative(info.Holder());
-    ScriptState* state = ScriptState::current();
-    if (!state)
-        return;
+    ScriptState* state = ScriptState::current(info.GetIsolate());
     ExecutionContext* scriptContext = currentExecutionContext(info.GetIsolate());
     impl->callWithScriptStateExecutionContextVoidMethod(state, scriptContext);
 }
@@ -7143,9 +7141,7 @@ static void callWithScriptStateExecutionContextVoidMethodMethodCallback(const v8
 static void callWithScriptStateScriptArgumentsVoidMethodMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     TestObject* impl = V8TestObject::toNative(info.Holder());
-    ScriptState* state = ScriptState::current();
-    if (!state)
-        return;
+    ScriptState* state = ScriptState::current(info.GetIsolate());
     RefPtr<ScriptArguments> scriptArguments(createScriptArguments(info, 0));
     impl->callWithScriptStateScriptArgumentsVoidMethod(state, scriptArguments.release());
 }
@@ -7161,17 +7157,13 @@ static void callWithScriptStateScriptArgumentsVoidMethodOptionalBooleanArgMethod
 {
     TestObject* impl = V8TestObject::toNative(info.Holder());
     if (UNLIKELY(info.Length() <= 0)) {
-        ScriptState* state = ScriptState::current();
-        if (!state)
-            return;
+        ScriptState* state = ScriptState::current(info.GetIsolate());
         RefPtr<ScriptArguments> scriptArguments(createScriptArguments(info, 1));
         impl->callWithScriptStateScriptArgumentsVoidMethodOptionalBooleanArg(state, scriptArguments.release());
         return;
     }
     TONATIVE_VOID(bool, optionalBooleanArg, info[0]->BooleanValue());
-    ScriptState* state = ScriptState::current();
-    if (!state)
-        return;
+    ScriptState* state = ScriptState::current(info.GetIsolate());
     RefPtr<ScriptArguments> scriptArguments(createScriptArguments(info, 1));
     impl->callWithScriptStateScriptArgumentsVoidMethodOptionalBooleanArg(state, scriptArguments.release(), optionalBooleanArg);
 }
@@ -7180,87 +7172,6 @@ static void callWithScriptStateScriptArgumentsVoidMethodOptionalBooleanArgMethod
 {
     TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMMethod");
     TestObjectV8Internal::callWithScriptStateScriptArgumentsVoidMethodOptionalBooleanArgMethod(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
-}
-
-static void callWithNewScriptStateVoidMethodMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
-    TestObject* impl = V8TestObject::toNative(info.Holder());
-    NewScriptState* state = NewScriptState::current(info.GetIsolate());
-    impl->callWithNewScriptStateVoidMethod(state);
-}
-
-static void callWithNewScriptStateVoidMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
-    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMMethod");
-    TestObjectV8Internal::callWithNewScriptStateVoidMethodMethod(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
-}
-
-static void callWithNewScriptStateLongMethodMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
-    TestObject* impl = V8TestObject::toNative(info.Holder());
-    NewScriptState* state = NewScriptState::current(info.GetIsolate());
-    int result = impl->callWithNewScriptStateLongMethod(state);
-    v8SetReturnValueInt(info, result);
-}
-
-static void callWithNewScriptStateLongMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
-    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMMethod");
-    TestObjectV8Internal::callWithNewScriptStateLongMethodMethod(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
-}
-
-static void callWithNewScriptStateExecutionContextVoidMethodMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
-    TestObject* impl = V8TestObject::toNative(info.Holder());
-    NewScriptState* state = NewScriptState::current(info.GetIsolate());
-    ExecutionContext* scriptContext = currentExecutionContext(info.GetIsolate());
-    impl->callWithNewScriptStateExecutionContextVoidMethod(state, scriptContext);
-}
-
-static void callWithNewScriptStateExecutionContextVoidMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
-    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMMethod");
-    TestObjectV8Internal::callWithNewScriptStateExecutionContextVoidMethodMethod(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
-}
-
-static void callWithNewScriptStateScriptArgumentsVoidMethodMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
-    TestObject* impl = V8TestObject::toNative(info.Holder());
-    NewScriptState* state = NewScriptState::current(info.GetIsolate());
-    RefPtr<ScriptArguments> scriptArguments(createScriptArguments(info, 0));
-    impl->callWithNewScriptStateScriptArgumentsVoidMethod(state, scriptArguments.release());
-}
-
-static void callWithNewScriptStateScriptArgumentsVoidMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
-    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMMethod");
-    TestObjectV8Internal::callWithNewScriptStateScriptArgumentsVoidMethodMethod(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
-}
-
-static void callWithNewScriptStateScriptArgumentsVoidMethodOptionalBooleanArgMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
-    TestObject* impl = V8TestObject::toNative(info.Holder());
-    if (UNLIKELY(info.Length() <= 0)) {
-        NewScriptState* state = NewScriptState::current(info.GetIsolate());
-        RefPtr<ScriptArguments> scriptArguments(createScriptArguments(info, 1));
-        impl->callWithNewScriptStateScriptArgumentsVoidMethodOptionalBooleanArg(state, scriptArguments.release());
-        return;
-    }
-    TONATIVE_VOID(bool, optionalBooleanArg, info[0]->BooleanValue());
-    NewScriptState* state = NewScriptState::current(info.GetIsolate());
-    RefPtr<ScriptArguments> scriptArguments(createScriptArguments(info, 1));
-    impl->callWithNewScriptStateScriptArgumentsVoidMethodOptionalBooleanArg(state, scriptArguments.release(), optionalBooleanArg);
-}
-
-static void callWithNewScriptStateScriptArgumentsVoidMethodOptionalBooleanArgMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
-    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMMethod");
-    TestObjectV8Internal::callWithNewScriptStateScriptArgumentsVoidMethodOptionalBooleanArgMethod(info);
     TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
 }
 
@@ -7808,50 +7719,6 @@ static void perWorldBindingsRuntimeEnabledVoidMethodMethodCallbackForMainWorld(c
     TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
 }
 
-static void strictTypeCheckingVoidMethodTestInterfaceEmptyArgMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
-    if (UNLIKELY(info.Length() < 1)) {
-        throwArityTypeErrorForMethod("strictTypeCheckingVoidMethodTestInterfaceEmptyArg", "TestObject", 1, info.Length(), info.GetIsolate());
-        return;
-    }
-    TestObject* impl = V8TestObject::toNative(info.Holder());
-    if (info.Length() > 0 && !V8TestInterfaceEmpty::hasInstance(info[0], info.GetIsolate())) {
-        throwTypeError(ExceptionMessages::failedToExecute("strictTypeCheckingVoidMethodTestInterfaceEmptyArg", "TestObject", "parameter 1 is not of type 'TestInterfaceEmpty'."), info.GetIsolate());
-        return;
-    }
-    TONATIVE_VOID(TestInterfaceEmpty*, testInterfaceEmptyArg, V8TestInterfaceEmpty::toNativeWithTypeCheck(info.GetIsolate(), info[0]));
-    impl->strictTypeCheckingVoidMethodTestInterfaceEmptyArg(testInterfaceEmptyArg);
-}
-
-static void strictTypeCheckingVoidMethodTestInterfaceEmptyArgMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
-    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMMethod");
-    TestObjectV8Internal::strictTypeCheckingVoidMethodTestInterfaceEmptyArgMethod(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
-}
-
-static void strictTypeCheckingVoidMethodTestInterfaceEmptyOrNullArgMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
-    if (UNLIKELY(info.Length() < 1)) {
-        throwArityTypeErrorForMethod("strictTypeCheckingVoidMethodTestInterfaceEmptyOrNullArg", "TestObject", 1, info.Length(), info.GetIsolate());
-        return;
-    }
-    TestObject* impl = V8TestObject::toNative(info.Holder());
-    if (info.Length() > 0 && !isUndefinedOrNull(info[0]) && !V8TestInterfaceEmpty::hasInstance(info[0], info.GetIsolate())) {
-        throwTypeError(ExceptionMessages::failedToExecute("strictTypeCheckingVoidMethodTestInterfaceEmptyOrNullArg", "TestObject", "parameter 1 is not of type 'TestInterfaceEmpty'."), info.GetIsolate());
-        return;
-    }
-    TONATIVE_VOID(TestInterfaceEmpty*, testInterfaceEmptyArg, V8TestInterfaceEmpty::toNativeWithTypeCheck(info.GetIsolate(), info[0]));
-    impl->strictTypeCheckingVoidMethodTestInterfaceEmptyOrNullArg(testInterfaceEmptyArg);
-}
-
-static void strictTypeCheckingVoidMethodTestInterfaceEmptyOrNullArgMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
-    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMMethod");
-    TestObjectV8Internal::strictTypeCheckingVoidMethodTestInterfaceEmptyOrNullArgMethod(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
-}
-
 static void treatReturnedNullStringAsNullStringMethodMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     TestObject* impl = V8TestObject::toNative(info.Holder());
@@ -7875,6 +7742,95 @@ static void treatReturnedNullStringAsUndefinedStringMethodMethodCallback(const v
 {
     TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMMethod");
     TestObjectV8Internal::treatReturnedNullStringAsUndefinedStringMethodMethod(info);
+    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
+}
+
+static void typeCheckingInterfaceVoidMethodTestInterfaceEmptyArgMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    if (UNLIKELY(info.Length() < 1)) {
+        throwArityTypeErrorForMethod("typeCheckingInterfaceVoidMethodTestInterfaceEmptyArg", "TestObject", 1, info.Length(), info.GetIsolate());
+        return;
+    }
+    TestObject* impl = V8TestObject::toNative(info.Holder());
+    if (info.Length() > 0 && !V8TestInterfaceEmpty::hasInstance(info[0], info.GetIsolate())) {
+        throwTypeError(ExceptionMessages::failedToExecute("typeCheckingInterfaceVoidMethodTestInterfaceEmptyArg", "TestObject", "parameter 1 is not of type 'TestInterfaceEmpty'."), info.GetIsolate());
+        return;
+    }
+    TONATIVE_VOID(TestInterfaceEmpty*, testInterfaceEmptyArg, V8TestInterfaceEmpty::toNativeWithTypeCheck(info.GetIsolate(), info[0]));
+    impl->typeCheckingInterfaceVoidMethodTestInterfaceEmptyArg(testInterfaceEmptyArg);
+}
+
+static void typeCheckingInterfaceVoidMethodTestInterfaceEmptyArgMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMMethod");
+    TestObjectV8Internal::typeCheckingInterfaceVoidMethodTestInterfaceEmptyArgMethod(info);
+    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
+}
+
+static void typeCheckingNullableVoidMethodTestInterfaceEmptyOrNullArgMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    if (UNLIKELY(info.Length() < 1)) {
+        throwArityTypeErrorForMethod("typeCheckingNullableVoidMethodTestInterfaceEmptyOrNullArg", "TestObject", 1, info.Length(), info.GetIsolate());
+        return;
+    }
+    TestObject* impl = V8TestObject::toNative(info.Holder());
+    TONATIVE_VOID(TestInterfaceEmpty*, testInterfaceEmptyOrNullArg, V8TestInterfaceEmpty::toNativeWithTypeCheck(info.GetIsolate(), info[0]));
+    impl->typeCheckingNullableVoidMethodTestInterfaceEmptyOrNullArg(testInterfaceEmptyOrNullArg);
+}
+
+static void typeCheckingNullableVoidMethodTestInterfaceEmptyOrNullArgMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMMethod");
+    TestObjectV8Internal::typeCheckingNullableVoidMethodTestInterfaceEmptyOrNullArgMethod(info);
+    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
+}
+
+static void typeCheckingInterfaceNullableVoidMethodTestInterfaceEmptyOrNullArgMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    if (UNLIKELY(info.Length() < 1)) {
+        throwArityTypeErrorForMethod("typeCheckingInterfaceNullableVoidMethodTestInterfaceEmptyOrNullArg", "TestObject", 1, info.Length(), info.GetIsolate());
+        return;
+    }
+    TestObject* impl = V8TestObject::toNative(info.Holder());
+    if (info.Length() > 0 && !isUndefinedOrNull(info[0]) && !V8TestInterfaceEmpty::hasInstance(info[0], info.GetIsolate())) {
+        throwTypeError(ExceptionMessages::failedToExecute("typeCheckingInterfaceNullableVoidMethodTestInterfaceEmptyOrNullArg", "TestObject", "parameter 1 is not of type 'TestInterfaceEmpty'."), info.GetIsolate());
+        return;
+    }
+    TONATIVE_VOID(TestInterfaceEmpty*, testInterfaceEmptyOrNullArg, V8TestInterfaceEmpty::toNativeWithTypeCheck(info.GetIsolate(), info[0]));
+    impl->typeCheckingInterfaceNullableVoidMethodTestInterfaceEmptyOrNullArg(testInterfaceEmptyOrNullArg);
+}
+
+static void typeCheckingInterfaceNullableVoidMethodTestInterfaceEmptyOrNullArgMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMMethod");
+    TestObjectV8Internal::typeCheckingInterfaceNullableVoidMethodTestInterfaceEmptyOrNullArgMethod(info);
+    TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
+}
+
+static void typeCheckingUnrestrictedVoidMethodFloatArgDoubleArgMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    if (UNLIKELY(info.Length() < 2)) {
+        throwArityTypeErrorForMethod("typeCheckingUnrestrictedVoidMethodFloatArgDoubleArg", "TestObject", 2, info.Length(), info.GetIsolate());
+        return;
+    }
+    TestObject* impl = V8TestObject::toNative(info.Holder());
+    TONATIVE_VOID(float, floatArg, static_cast<float>(info[0]->NumberValue()));
+    if (!std::isfinite(floatArg)) {
+        throwTypeError(ExceptionMessages::failedToExecute("typeCheckingUnrestrictedVoidMethodFloatArgDoubleArg", "TestObject", "float parameter 1 is non-finite."), info.GetIsolate());
+        return;
+    }
+    TONATIVE_VOID(double, doubleArg, static_cast<double>(info[1]->NumberValue()));
+    if (!std::isfinite(doubleArg)) {
+        throwTypeError(ExceptionMessages::failedToExecute("typeCheckingUnrestrictedVoidMethodFloatArgDoubleArg", "TestObject", "double parameter 2 is non-finite."), info.GetIsolate());
+        return;
+    }
+    impl->typeCheckingUnrestrictedVoidMethodFloatArgDoubleArg(floatArg, doubleArg);
+}
+
+static void typeCheckingUnrestrictedVoidMethodFloatArgDoubleArgMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    TRACE_EVENT_SET_SAMPLING_STATE("Blink", "DOMMethod");
+    TestObjectV8Internal::typeCheckingUnrestrictedVoidMethodFloatArgDoubleArgMethod(info);
     TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8Execution");
 }
 
@@ -7980,6 +7936,8 @@ static const V8DOMConfiguration::AttributeConfiguration V8TestObjectAttributes[]
     {"longLongAttribute", TestObjectV8Internal::longLongAttributeAttributeGetterCallback, TestObjectV8Internal::longLongAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
     {"octetAttribute", TestObjectV8Internal::octetAttributeAttributeGetterCallback, TestObjectV8Internal::octetAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
     {"shortAttribute", TestObjectV8Internal::shortAttributeAttributeGetterCallback, TestObjectV8Internal::shortAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
+    {"unrestrictedDoubleAttribute", TestObjectV8Internal::unrestrictedDoubleAttributeAttributeGetterCallback, TestObjectV8Internal::unrestrictedDoubleAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
+    {"unrestrictedFloatAttribute", TestObjectV8Internal::unrestrictedFloatAttributeAttributeGetterCallback, TestObjectV8Internal::unrestrictedFloatAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
     {"unsignedLongAttribute", TestObjectV8Internal::unsignedLongAttributeAttributeGetterCallback, TestObjectV8Internal::unsignedLongAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
     {"unsignedLongLongAttribute", TestObjectV8Internal::unsignedLongLongAttributeAttributeGetterCallback, TestObjectV8Internal::unsignedLongLongAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
     {"unsignedShortAttribute", TestObjectV8Internal::unsignedShortAttributeAttributeGetterCallback, TestObjectV8Internal::unsignedShortAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
@@ -8024,8 +7982,8 @@ static const V8DOMConfiguration::AttributeConfiguration V8TestObjectAttributes[]
     {"activityLoggingSetterForAllWorldsLongAttribute", TestObjectV8Internal::activityLoggingSetterForAllWorldsLongAttributeAttributeGetterCallback, TestObjectV8Internal::activityLoggingSetterForAllWorldsLongAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
     {"cachedAttributeAnyAttribute", TestObjectV8Internal::cachedAttributeAnyAttributeAttributeGetterCallback, TestObjectV8Internal::cachedAttributeAnyAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
     {"callWithExecutionContextAnyAttribute", TestObjectV8Internal::callWithExecutionContextAnyAttributeAttributeGetterCallback, TestObjectV8Internal::callWithExecutionContextAnyAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
-    {"callWithNewScriptStateAnyAttribute", TestObjectV8Internal::callWithNewScriptStateAnyAttributeAttributeGetterCallback, TestObjectV8Internal::callWithNewScriptStateAnyAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
-    {"callWithExecutionContextAndNewScriptStateAnyAttribute", TestObjectV8Internal::callWithExecutionContextAndNewScriptStateAnyAttributeAttributeGetterCallback, TestObjectV8Internal::callWithExecutionContextAndNewScriptStateAnyAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
+    {"callWithScriptStateAnyAttribute", TestObjectV8Internal::callWithScriptStateAnyAttributeAttributeGetterCallback, TestObjectV8Internal::callWithScriptStateAnyAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
+    {"callWithExecutionContextAndScriptStateAnyAttribute", TestObjectV8Internal::callWithExecutionContextAndScriptStateAnyAttributeAttributeGetterCallback, TestObjectV8Internal::callWithExecutionContextAndScriptStateAnyAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
     {"checkSecurityForNodeReadonlyDocumentAttribute", TestObjectV8Internal::checkSecurityForNodeReadonlyDocumentAttributeAttributeGetterCallback, 0, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
 #if ENABLE(CONDITION)
     {"conditionalLongAttribute", TestObjectV8Internal::conditionalLongAttributeAttributeGetterCallback, TestObjectV8Internal::conditionalLongAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
@@ -8055,8 +8013,6 @@ static const V8DOMConfiguration::AttributeConfiguration V8TestObjectAttributes[]
     {"customSetterImplementedAsLongAttribute", TestObjectV8Internal::customSetterImplementedAsLongAttributeAttributeGetterCallback, TestObjectV8Internal::customSetterImplementedAsLongAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
     {"measureAsLongAttribute", TestObjectV8Internal::measureAsLongAttributeAttributeGetterCallback, TestObjectV8Internal::measureAsLongAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
     {"notEnumerableLongAttribute", TestObjectV8Internal::notEnumerableLongAttributeAttributeGetterCallback, TestObjectV8Internal::notEnumerableLongAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::DontEnum), 0 /* on instance */},
-    {"perWorldBindingsLongAttribute", TestObjectV8Internal::perWorldBindingsLongAttributeAttributeGetterCallback, TestObjectV8Internal::perWorldBindingsLongAttributeAttributeSetterCallback, TestObjectV8Internal::perWorldBindingsLongAttributeAttributeGetterCallbackForMainWorld, TestObjectV8Internal::perWorldBindingsLongAttributeAttributeSetterCallbackForMainWorld, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
-    {"perWorldBindingsReadonlyLongAttribute", TestObjectV8Internal::perWorldBindingsReadonlyLongAttributeAttributeGetterCallback, 0, TestObjectV8Internal::perWorldBindingsReadonlyLongAttributeAttributeGetterCallbackForMainWorld, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
     {"perWorldBindingsReadonlyTestInterfaceEmptyAttribute", TestObjectV8Internal::perWorldBindingsReadonlyTestInterfaceEmptyAttributeAttributeGetterCallback, 0, TestObjectV8Internal::perWorldBindingsReadonlyTestInterfaceEmptyAttributeAttributeGetterCallbackForMainWorld, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
     {"activityLoggingAccessPerWorldBindingsLongAttribute", TestObjectV8Internal::activityLoggingAccessPerWorldBindingsLongAttributeAttributeGetterCallback, TestObjectV8Internal::activityLoggingAccessPerWorldBindingsLongAttributeAttributeSetterCallback, TestObjectV8Internal::activityLoggingAccessPerWorldBindingsLongAttributeAttributeGetterCallbackForMainWorld, TestObjectV8Internal::activityLoggingAccessPerWorldBindingsLongAttributeAttributeSetterCallbackForMainWorld, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
     {"activityLoggingAccessForIsolatedWorldsPerWorldBindingsLongAttribute", TestObjectV8Internal::activityLoggingAccessForIsolatedWorldsPerWorldBindingsLongAttributeAttributeGetterCallback, TestObjectV8Internal::activityLoggingAccessForIsolatedWorldsPerWorldBindingsLongAttributeAttributeSetterCallback, TestObjectV8Internal::activityLoggingAccessForIsolatedWorldsPerWorldBindingsLongAttributeAttributeGetterCallbackForMainWorld, TestObjectV8Internal::activityLoggingAccessForIsolatedWorldsPerWorldBindingsLongAttributeAttributeSetterCallbackForMainWorld, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
@@ -8096,12 +8052,13 @@ static const V8DOMConfiguration::AttributeConfiguration V8TestObjectAttributes[]
     {"locationReplaceable", TestObjectV8Internal::locationReplaceableAttributeGetterCallback, TestObjectV8Internal::locationReplaceableAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
     {"setterCallWithActiveWindowAndFirstWindowStringAttribute", TestObjectV8Internal::setterCallWithActiveWindowAndFirstWindowStringAttributeAttributeGetterCallback, TestObjectV8Internal::setterCallWithActiveWindowAndFirstWindowStringAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
     {"setterCallWithExecutionContextStringAttribute", TestObjectV8Internal::setterCallWithExecutionContextStringAttributeAttributeGetterCallback, TestObjectV8Internal::setterCallWithExecutionContextStringAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
-    {"strictTypeCheckingFloatAttribute", TestObjectV8Internal::strictTypeCheckingFloatAttributeAttributeGetterCallback, TestObjectV8Internal::strictTypeCheckingFloatAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
-    {"strictTypeCheckingTestInterfaceAttribute", TestObjectV8Internal::strictTypeCheckingTestInterfaceAttributeAttributeGetterCallback, TestObjectV8Internal::strictTypeCheckingTestInterfaceAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
-    {"strictTypeCheckingNullableTestInterfaceAttribute", TestObjectV8Internal::strictTypeCheckingNullableTestInterfaceAttributeAttributeGetterCallback, TestObjectV8Internal::strictTypeCheckingNullableTestInterfaceAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
     {"treatNullAsNullStringStringAttribute", TestObjectV8Internal::treatNullAsNullStringStringAttributeAttributeGetterCallback, TestObjectV8Internal::treatNullAsNullStringStringAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
     {"treatReturnedNullStringAsNullStringAttribute", TestObjectV8Internal::treatReturnedNullStringAsNullStringAttributeAttributeGetterCallback, TestObjectV8Internal::treatReturnedNullStringAsNullStringAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
     {"treatReturnedNullStringAsUndefinedStringAttribute", TestObjectV8Internal::treatReturnedNullStringAsUndefinedStringAttributeAttributeGetterCallback, TestObjectV8Internal::treatReturnedNullStringAsUndefinedStringAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
+    {"typeCheckingInterfaceNullableStringFloatAttribute", TestObjectV8Internal::typeCheckingInterfaceNullableStringFloatAttributeAttributeGetterCallback, TestObjectV8Internal::typeCheckingInterfaceNullableStringFloatAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
+    {"typeCheckingInterfaceTestInterfaceAttribute", TestObjectV8Internal::typeCheckingInterfaceTestInterfaceAttributeAttributeGetterCallback, TestObjectV8Internal::typeCheckingInterfaceTestInterfaceAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
+    {"typeCheckingNullableTestInterfaceOrNullAttribute", TestObjectV8Internal::typeCheckingNullableTestInterfaceOrNullAttributeAttributeGetterCallback, TestObjectV8Internal::typeCheckingNullableTestInterfaceOrNullAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
+    {"typeCheckingInterfaceNullableTestInterfaceOrNullAttribute", TestObjectV8Internal::typeCheckingInterfaceNullableTestInterfaceOrNullAttributeAttributeGetterCallback, TestObjectV8Internal::typeCheckingInterfaceNullableTestInterfaceOrNullAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
     {"urlStringAttribute", TestObjectV8Internal::urlStringAttributeAttributeGetterCallback, TestObjectV8Internal::urlStringAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
     {"urlStringAttribute", TestObjectV8Internal::urlStringAttributeAttributeGetterCallback, TestObjectV8Internal::urlStringAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
     {"unforgeableLongAttribute", TestObjectV8Internal::unforgeableLongAttributeAttributeGetterCallback, TestObjectV8Internal::unforgeableLongAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::PROHIBITS_OVERWRITING), static_cast<v8::PropertyAttribute>(v8::DontDelete), 0 /* on instance */},
@@ -8244,17 +8201,12 @@ static const V8DOMConfiguration::MethodConfiguration V8TestObjectMethods[] = {
     {"voidMethodTreatNullAsNullStringStringArg", TestObjectV8Internal::voidMethodTreatNullAsNullStringStringArgMethodCallback, 0, 1},
     {"voidMethodTreatNullAsNullStringTreatUndefinedAsNullStringStringArg", TestObjectV8Internal::voidMethodTreatNullAsNullStringTreatUndefinedAsNullStringStringArgMethodCallback, 0, 1},
     {"activityLoggingAccessForAllWorldsMethod", TestObjectV8Internal::activityLoggingAccessForAllWorldsMethodMethodCallback, 0, 0},
+    {"callWithExecutionContextVoidMethod", TestObjectV8Internal::callWithExecutionContextVoidMethodMethodCallback, 0, 0},
     {"callWithScriptStateVoidMethod", TestObjectV8Internal::callWithScriptStateVoidMethodMethodCallback, 0, 0},
     {"callWithScriptStateLongMethod", TestObjectV8Internal::callWithScriptStateLongMethodMethodCallback, 0, 0},
-    {"callWithExecutionContextVoidMethod", TestObjectV8Internal::callWithExecutionContextVoidMethodMethodCallback, 0, 0},
     {"callWithScriptStateExecutionContextVoidMethod", TestObjectV8Internal::callWithScriptStateExecutionContextVoidMethodMethodCallback, 0, 0},
     {"callWithScriptStateScriptArgumentsVoidMethod", TestObjectV8Internal::callWithScriptStateScriptArgumentsVoidMethodMethodCallback, 0, 0},
     {"callWithScriptStateScriptArgumentsVoidMethodOptionalBooleanArg", TestObjectV8Internal::callWithScriptStateScriptArgumentsVoidMethodOptionalBooleanArgMethodCallback, 0, 0},
-    {"callWithNewScriptStateVoidMethod", TestObjectV8Internal::callWithNewScriptStateVoidMethodMethodCallback, 0, 0},
-    {"callWithNewScriptStateLongMethod", TestObjectV8Internal::callWithNewScriptStateLongMethodMethodCallback, 0, 0},
-    {"callWithNewScriptStateExecutionContextVoidMethod", TestObjectV8Internal::callWithNewScriptStateExecutionContextVoidMethodMethodCallback, 0, 0},
-    {"callWithNewScriptStateScriptArgumentsVoidMethod", TestObjectV8Internal::callWithNewScriptStateScriptArgumentsVoidMethodMethodCallback, 0, 0},
-    {"callWithNewScriptStateScriptArgumentsVoidMethodOptionalBooleanArg", TestObjectV8Internal::callWithNewScriptStateScriptArgumentsVoidMethodOptionalBooleanArgMethodCallback, 0, 0},
     {"callWithActiveWindow", TestObjectV8Internal::callWithActiveWindowMethodCallback, 0, 0},
     {"callWithActiveWindowScriptWindow", TestObjectV8Internal::callWithActiveWindowScriptWindowMethodCallback, 0, 0},
     {"checkSecurityForNodeVoidMethod", TestObjectV8Internal::checkSecurityForNodeVoidMethodMethodCallback, 0, 0},
@@ -8283,10 +8235,12 @@ static const V8DOMConfiguration::MethodConfiguration V8TestObjectMethods[] = {
     {"raisesExceptionVoidMethodOptionalTestCallbackInterfaceArg", TestObjectV8Internal::raisesExceptionVoidMethodOptionalTestCallbackInterfaceArgMethodCallback, 0, 0},
     {"raisesExceptionTestInterfaceEmptyVoidMethod", TestObjectV8Internal::raisesExceptionTestInterfaceEmptyVoidMethodMethodCallback, 0, 0},
     {"callWithExecutionContextRaisesExceptionVoidMethodLongArg", TestObjectV8Internal::callWithExecutionContextRaisesExceptionVoidMethodLongArgMethodCallback, 0, 1},
-    {"strictTypeCheckingVoidMethodTestInterfaceEmptyArg", TestObjectV8Internal::strictTypeCheckingVoidMethodTestInterfaceEmptyArgMethodCallback, 0, 1},
-    {"strictTypeCheckingVoidMethodTestInterfaceEmptyOrNullArg", TestObjectV8Internal::strictTypeCheckingVoidMethodTestInterfaceEmptyOrNullArgMethodCallback, 0, 1},
     {"treatReturnedNullStringAsNullStringMethod", TestObjectV8Internal::treatReturnedNullStringAsNullStringMethodMethodCallback, 0, 0},
     {"treatReturnedNullStringAsUndefinedStringMethod", TestObjectV8Internal::treatReturnedNullStringAsUndefinedStringMethodMethodCallback, 0, 0},
+    {"typeCheckingInterfaceVoidMethodTestInterfaceEmptyArg", TestObjectV8Internal::typeCheckingInterfaceVoidMethodTestInterfaceEmptyArgMethodCallback, 0, 1},
+    {"typeCheckingNullableVoidMethodTestInterfaceEmptyOrNullArg", TestObjectV8Internal::typeCheckingNullableVoidMethodTestInterfaceEmptyOrNullArgMethodCallback, 0, 1},
+    {"typeCheckingInterfaceNullableVoidMethodTestInterfaceEmptyOrNullArg", TestObjectV8Internal::typeCheckingInterfaceNullableVoidMethodTestInterfaceEmptyOrNullArgMethodCallback, 0, 1},
+    {"typeCheckingUnrestrictedVoidMethodFloatArgDoubleArg", TestObjectV8Internal::typeCheckingUnrestrictedVoidMethodFloatArgDoubleArgMethodCallback, 0, 2},
     {"voidMethodTestInterfaceGarbageCollectedSequenceArg", TestObjectV8Internal::voidMethodTestInterfaceGarbageCollectedSequenceArgMethodCallback, 0, 1},
     {"voidMethodTestInterfaceGarbageCollectedArrayArg", TestObjectV8Internal::voidMethodTestInterfaceGarbageCollectedArrayArgMethodCallback, 0, 1},
     {"voidMethodTestInterfaceWillBeGarbageCollectedSequenceArg", TestObjectV8Internal::voidMethodTestInterfaceWillBeGarbageCollectedSequenceArgMethodCallback, 0, 1},
@@ -8303,8 +8257,8 @@ static void configureV8TestObjectTemplate(v8::Handle<v8::FunctionTemplate> funct
         V8TestObjectAccessors, WTF_ARRAY_LENGTH(V8TestObjectAccessors),
         V8TestObjectMethods, WTF_ARRAY_LENGTH(V8TestObjectMethods),
         isolate);
-    v8::Local<v8::ObjectTemplate> ALLOW_UNUSED instanceTemplate = functionTemplate->InstanceTemplate();
-    v8::Local<v8::ObjectTemplate> ALLOW_UNUSED prototypeTemplate = functionTemplate->PrototypeTemplate();
+    v8::Local<v8::ObjectTemplate> instanceTemplate ALLOW_UNUSED = functionTemplate->InstanceTemplate();
+    v8::Local<v8::ObjectTemplate> prototypeTemplate ALLOW_UNUSED = functionTemplate->PrototypeTemplate();
     if (RuntimeEnabledFeatures::featureNameEnabled()) {
         static const V8DOMConfiguration::AttributeConfiguration attributeConfiguration =\
         {"runtimeEnabledLongAttribute", TestObjectV8Internal::runtimeEnabledLongAttributeAttributeGetterCallback, TestObjectV8Internal::runtimeEnabledLongAttributeAttributeSetterCallback, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */};

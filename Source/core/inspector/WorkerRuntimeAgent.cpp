@@ -32,7 +32,7 @@
 
 #include "core/inspector/WorkerRuntimeAgent.h"
 
-#include "bindings/v8/NewScriptState.h"
+#include "bindings/v8/ScriptState.h"
 #include "core/inspector/InjectedScript.h"
 #include "core/inspector/InstrumentingAgents.h"
 #include "core/inspector/WorkerDebuggerAgent.h"
@@ -70,11 +70,13 @@ void WorkerRuntimeAgent::enable(ErrorString* errorString)
 
 InjectedScript WorkerRuntimeAgent::injectedScriptForEval(ErrorString* error, const int* executionContextId)
 {
-    if (executionContextId) {
-        *error = "Execution context id is not supported for workers as there is only one execution context.";
-        return InjectedScript();
-    }
-    return injectedScriptManager()->injectedScriptFor(m_workerGlobalScope->script()->scriptState());
+    if (!executionContextId)
+        return injectedScriptManager()->injectedScriptFor(m_workerGlobalScope->script()->scriptState());
+
+    InjectedScript injectedScript = injectedScriptManager()->injectedScriptForId(*executionContextId);
+    if (injectedScript.isEmpty())
+        *error = "Execution context with given id not found.";
+    return injectedScript;
 }
 
 void WorkerRuntimeAgent::muteConsole()

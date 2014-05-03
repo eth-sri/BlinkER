@@ -30,6 +30,7 @@
 #include "platform/Supplementable.h"
 #include "platform/geometry/LayoutRect.h"
 #include "platform/geometry/Region.h"
+#include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
 #include "wtf/HashSet.h"
 #include "wtf/Noncopyable.h"
@@ -52,12 +53,9 @@ class EditorClient;
 class FocusController;
 class LocalFrame;
 class FrameHost;
-class FrameSelection;
-class HaltablePlugin;
 class HistoryItem;
 class InspectorClient;
 class InspectorController;
-class Node;
 class PageLifecycleNotifier;
 class PlatformMouseEvent;
 class PluginData;
@@ -80,7 +78,8 @@ typedef uint64_t LinkHash;
 
 float deviceScaleFactor(LocalFrame*);
 
-class Page FINAL : public NoBaseWillBeGarbageCollectedFinalized<Page>, public Supplementable<Page>, public LifecycleContext<Page>, public SettingsDelegate {
+class Page FINAL : public NoBaseWillBeGarbageCollectedFinalized<Page>, public WillBeHeapSupplementable<Page>, public LifecycleContext<Page>, public SettingsDelegate {
+    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(Page);
     WTF_MAKE_NONCOPYABLE(Page);
     friend class Settings;
 public:
@@ -204,7 +203,7 @@ public:
 
     double timerAlignmentInterval() const;
 
-    class MultisamplingChangedObserver {
+    class MultisamplingChangedObserver : public WillBeGarbageCollectedMixin {
     public:
         virtual void multisamplingChanged(bool) = 0;
     };
@@ -218,7 +217,7 @@ public:
     PassOwnPtr<LifecycleNotifier<Page> > createLifecycleNotifier();
 
     void trace(Visitor*);
-
+    void clearWeakMembers(Visitor*);
     void willBeDestroyed();
 
 protected:
@@ -284,7 +283,7 @@ private:
     bool m_isPainting;
 #endif
 
-    HashSet<MultisamplingChangedObserver*> m_multisamplingChangedObservers;
+    WillBeHeapHashSet<RawPtrWillBeWeakMember<MultisamplingChangedObserver> > m_multisamplingChangedObservers;
 
     // A pointer to all the interfaces provided to in-process Frames for this Page.
     // FIXME: Most of the members of Page should move onto FrameHost.

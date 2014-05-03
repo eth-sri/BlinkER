@@ -58,6 +58,7 @@
 #include "core/inspector/InspectorResourceAgent.h"
 #include "core/inspector/InspectorState.h"
 #include "core/inspector/InspectorTimelineAgent.h"
+#include "core/inspector/InspectorTracingAgent.h"
 #include "core/inspector/InspectorWorkerAgent.h"
 #include "core/inspector/InstrumentingAgents.h"
 #include "core/inspector/PageConsoleAgent.h"
@@ -98,6 +99,10 @@ InspectorController::InspectorController(Page* page, InspectorClient* inspectorC
     OwnPtr<InspectorLayerTreeAgent> layerTreeAgentPtr(InspectorLayerTreeAgent::create(m_domAgent, m_page));
     m_layerTreeAgent = layerTreeAgentPtr.get();
     m_agents.append(layerTreeAgentPtr.release());
+
+    OwnPtr<InspectorTracingAgent> tracingAgentPtr = InspectorTracingAgent::create();
+    m_tracingAgent = tracingAgentPtr.get();
+    m_agents.append(tracingAgentPtr.release());
 
     OwnPtr<InspectorTimelineAgent> timelineAgentPtr(InspectorTimelineAgent::create(m_pageAgent, m_domAgent, m_layerTreeAgent,
         overlay, InspectorTimelineAgent::PageInspector, inspectorClient));
@@ -144,7 +149,7 @@ void InspectorController::initializeDeferredAgents()
     InjectedScriptManager* injectedScriptManager = m_injectedScriptManager.get();
     InspectorOverlay* overlay = m_overlay.get();
 
-    OwnPtr<InspectorResourceAgent> resourceAgentPtr(InspectorResourceAgent::create(m_pageAgent, m_inspectorClient));
+    OwnPtr<InspectorResourceAgent> resourceAgentPtr(InspectorResourceAgent::create(m_pageAgent));
     InspectorResourceAgent* resourceAgent = resourceAgentPtr.get();
     m_agents.append(resourceAgentPtr.release());
 
@@ -269,6 +274,7 @@ void InspectorController::setProcessId(long processId)
 void InspectorController::setLayerTreeId(int id)
 {
     m_timelineAgent->setLayerTreeId(id);
+    m_tracingAgent->setLayerTreeId(id);
 }
 
 void InspectorController::webViewResized(const IntSize& size)
@@ -294,11 +300,6 @@ void InspectorController::drawHighlight(GraphicsContext& context) const
     m_overlay->paint(context);
 }
 
-void InspectorController::getHighlight(Highlight* highlight) const
-{
-    m_overlay->getHighlight(highlight);
-}
-
 void InspectorController::inspect(Node* node)
 {
     if (!node)
@@ -313,7 +314,7 @@ void InspectorController::inspect(Node* node)
     if (node->nodeType() != Node::ELEMENT_NODE && node->nodeType() != Node::DOCUMENT_NODE)
         node = node->parentNode();
 
-    InjectedScript injectedScript = m_injectedScriptManager->injectedScriptFor(NewScriptState::forMainWorld(frame));
+    InjectedScript injectedScript = m_injectedScriptManager->injectedScriptFor(ScriptState::forMainWorld(frame));
     if (injectedScript.isEmpty())
         return;
     injectedScript.inspectNode(node);
@@ -329,16 +330,6 @@ void InspectorController::dispatchMessageFromFrontend(const String& message)
 {
     if (m_inspectorBackendDispatcher)
         m_inspectorBackendDispatcher->dispatch(message);
-}
-
-void InspectorController::hideHighlight()
-{
-    m_overlay->hideHighlight();
-}
-
-Node* InspectorController::highlightedNode() const
-{
-    return m_overlay->highlightedNode();
 }
 
 bool InspectorController::handleGestureEvent(LocalFrame* frame, const PlatformGestureEvent& event)

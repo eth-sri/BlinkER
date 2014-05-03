@@ -120,13 +120,6 @@ void SVGDocumentExtensions::pauseAnimations()
         (*itr)->pauseAnimations();
 }
 
-void SVGDocumentExtensions::unpauseAnimations()
-{
-    HashSet<SVGSVGElement*>::iterator end = m_timeContainers.end();
-    for (HashSet<SVGSVGElement*>::iterator itr = m_timeContainers.begin(); itr != end; ++itr)
-        (*itr)->unpauseAnimations();
-}
-
 void SVGDocumentExtensions::dispatchSVGLoadEventToOutermostSVGElements()
 {
     Vector<RefPtr<SVGSVGElement> > timeContainers;
@@ -350,9 +343,7 @@ void SVGDocumentExtensions::removeAllTargetReferencesForElement(SVGElement* refe
             toBeRemoved.append(referencedElement);
     }
 
-    Vector<SVGElement*>::iterator vectorEnd = toBeRemoved.end();
-    for (Vector<SVGElement*>::iterator it = toBeRemoved.begin(); it != vectorEnd; ++it)
-        m_elementDependencies.remove(*it);
+    m_elementDependencies.removeAll(toBeRemoved);
 }
 
 void SVGDocumentExtensions::rebuildAllElementReferencesForTarget(SVGElement* referencedElement)

@@ -73,24 +73,6 @@
 #include "web/WebLocalFrameImpl.h"
 
 #include "HTMLNames.h"
-#include "WebConsoleMessage.h"
-#include "WebDOMEvent.h"
-#include "WebDOMEventListener.h"
-#include "WebDocument.h"
-#include "WebFindOptions.h"
-#include "WebFormElement.h"
-#include "WebFrameClient.h"
-#include "WebHistoryItem.h"
-#include "WebIconURL.h"
-#include "WebInputElement.h"
-#include "WebNode.h"
-#include "WebPerformance.h"
-#include "WebPlugin.h"
-#include "WebPrintParams.h"
-#include "WebRange.h"
-#include "WebScriptSource.h"
-#include "WebSecurityOrigin.h"
-#include "WebSerializedScriptValue.h"
 #include "bindings/v8/DOMWrapperWorld.h"
 #include "bindings/v8/ExceptionState.h"
 #include "bindings/v8/ExceptionStatePlaceholder.h"
@@ -174,6 +156,24 @@
 #include "public/platform/WebSize.h"
 #include "public/platform/WebURLError.h"
 #include "public/platform/WebVector.h"
+#include "public/web/WebConsoleMessage.h"
+#include "public/web/WebDOMEvent.h"
+#include "public/web/WebDOMEventListener.h"
+#include "public/web/WebDocument.h"
+#include "public/web/WebFindOptions.h"
+#include "public/web/WebFormElement.h"
+#include "public/web/WebFrameClient.h"
+#include "public/web/WebHistoryItem.h"
+#include "public/web/WebIconURL.h"
+#include "public/web/WebInputElement.h"
+#include "public/web/WebNode.h"
+#include "public/web/WebPerformance.h"
+#include "public/web/WebPlugin.h"
+#include "public/web/WebPrintParams.h"
+#include "public/web/WebRange.h"
+#include "public/web/WebScriptSource.h"
+#include "public/web/WebSecurityOrigin.h"
+#include "public/web/WebSerializedScriptValue.h"
 #include "web/AssociatedURLLoader.h"
 #include "web/CompositionUnderlineVectorBuilder.h"
 #include "web/EventListenerWrapper.h"
@@ -1652,6 +1652,7 @@ WebLocalFrameImpl::WebLocalFrameImpl(WebFrameClient* client)
     , m_client(client)
     , m_permissionClient(0)
     , m_inputEventsScaleFactorForEmulation(1)
+    , m_userMediaClientImpl(this)
 {
     blink::Platform::current()->incrementStatsCounter(webFrameActiveCount);
     frameCount++;
@@ -1674,8 +1675,10 @@ void WebLocalFrameImpl::setWebCoreFrame(PassRefPtr<WebCore::LocalFrame> frame)
     m_frame = frame;
 
     // FIXME: we shouldn't add overhead to every frame by registering these objects when they're not used.
-    if (m_frame)
+    if (m_frame) {
         provideNotification(*m_frame, notificationPresenterImpl());
+        provideUserMediaTo(*m_frame, &m_userMediaClientImpl);
+    }
 }
 
 void WebLocalFrameImpl::initializeAsMainFrame(WebCore::Page* page)

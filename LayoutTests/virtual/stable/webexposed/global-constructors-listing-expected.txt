@@ -57,6 +57,7 @@ CompositionEvent
 ConvolverNode
 Counter
 CustomEvent
+DOMError
 DOMException
 DOMImplementation
 DOMParser
@@ -191,7 +192,6 @@ Int32Array
 Int8Array
 KeyboardEvent
 Location
-MediaController
 MediaElementAudioSourceNode
 MediaError
 MediaKeyError
@@ -280,7 +280,6 @@ SVGDescElement
 SVGDiscardElement
 SVGElement
 SVGElementInstance
-SVGElementInstanceList
 SVGEllipseElement
 SVGFEBlendElement
 SVGFEColorMatrixElement
@@ -428,6 +427,8 @@ Uint8ClampedArray
 VTTCue
 ValidityState
 WaveShaperNode
+WeakMap
+WeakSet
 WebGLActiveInfo
 WebGLBuffer
 WebGLContextEvent
@@ -461,6 +462,7 @@ XPathEvaluator
 XPathExpression
 XPathResult
 XSLTProcessor
+webkitAudioContext
 webkitIDBCursor
 webkitIDBDatabase
 webkitIDBFactory
@@ -470,6 +472,7 @@ webkitIDBObjectStore
 webkitIDBRequest
 webkitIDBTransaction
 webkitMediaStream
+webkitOfflineAudioContext
 webkitRTCPeerConnection
 webkitSpeechGrammar
 webkitSpeechGrammarList

@@ -29,7 +29,7 @@
  */
 
 #include "config.h"
-#include "WebUserGestureToken.h"
+#include "public/web/WebUserGestureToken.h"
 
 #include "platform/UserGestureIndicator.h"
 
@@ -48,6 +48,16 @@ void WebUserGestureToken::setOutOfProcess()
 void WebUserGestureToken::setJavascriptPrompt()
 {
     m_token->setJavascriptPrompt();
+}
+
+bool WebUserGestureToken::wasForwarded() const
+{
+    return m_token->wasForwarded();
+}
+
+void WebUserGestureToken::setForwarded()
+{
+    m_token->setForwarded();
 }
 
 WebUserGestureToken::WebUserGestureToken(PassRefPtr<WebCore::UserGestureToken> token)

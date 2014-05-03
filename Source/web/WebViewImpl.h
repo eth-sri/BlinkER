@@ -31,9 +31,6 @@
 #ifndef WebViewImpl_h
 #define WebViewImpl_h
 
-#include "WebInputEvent.h"
-#include "WebNavigationPolicy.h"
-#include "WebView.h"
 #include "core/page/PagePopupDriver.h"
 #include "platform/geometry/IntPoint.h"
 #include "platform/geometry/IntRect.h"
@@ -44,6 +41,9 @@
 #include "public/platform/WebRect.h"
 #include "public/platform/WebSize.h"
 #include "public/platform/WebString.h"
+#include "public/web/WebInputEvent.h"
+#include "public/web/WebNavigationPolicy.h"
+#include "public/web/WebView.h"
 #include "web/BackForwardClientImpl.h"
 #include "web/ChromeClientImpl.h"
 #include "web/ContextMenuClientImpl.h"
@@ -56,7 +56,6 @@
 #include "web/PageWidgetDelegate.h"
 #include "web/SpellCheckerClientImpl.h"
 #include "web/StorageClientImpl.h"
-#include "web/UserMediaClientImpl.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
@@ -72,7 +71,6 @@ namespace blink {
 class GeolocationClientProxy;
 class LinkHighlight;
 class PopupContainer;
-class UserMediaClientImpl;
 class WebActiveGestureAnimation;
 class WebDevToolsAgentPrivate;
 class WebLocalFrameImpl;
@@ -105,6 +103,7 @@ public:
     virtual void layout() OVERRIDE;
     virtual void enterForceCompositingMode(bool enable) OVERRIDE;
     virtual void paint(WebCanvas*, const WebRect&, PaintOptions = ReadbackFromCompositorIfAvailable) OVERRIDE;
+    virtual bool compositeAndReadbackAsync(WebCompositeAndReadbackAsyncCallback*) OVERRIDE;
     virtual bool isTrackingRepaints() const OVERRIDE;
     virtual void themeChanged() OVERRIDE;
     virtual bool handleInputEvent(const WebInputEvent&) OVERRIDE;
@@ -138,7 +137,6 @@ public:
     virtual void didNotAcquirePointerLock() OVERRIDE;
     virtual void didLosePointerLock() OVERRIDE;
     virtual void didChangeWindowResizerRect() OVERRIDE;
-    virtual void didExitCompositingMode() OVERRIDE;
 
     // WebView methods:
     virtual void setMainFrame(WebFrame*) OVERRIDE;
@@ -487,6 +485,8 @@ public:
 
     WebLayerTreeView* layerTreeView() const { return m_layerTreeView; }
 
+    bool matchesHeuristicsForGpuRasterizationForTesting() const { return m_matchesHeuristicsForGpuRasterization; }
+
 private:
     // TODO(bokan): Remains for legacy pinch. Remove once it's gone. Made private to
     // prevent external usage
@@ -545,7 +545,6 @@ private:
 
     void configureAutoResizeMode();
 
-    void setCompositorCreationFailed();
     void setIsAcceleratedCompositingActive(bool);
     void doComposite();
     void doPixelReadbackToCanvas(WebCanvas*, const WebCore::IntRect&);
@@ -700,13 +699,13 @@ private:
     OwnPtr<WebCore::GraphicsLayerFactory> m_graphicsLayerFactory;
     bool m_isAcceleratedCompositingActive;
     bool m_layerTreeViewCommitsDeferred;
+    bool m_matchesHeuristicsForGpuRasterization;
     // If true, the graphics context is being restored.
     bool m_recreatingGraphicsContext;
     static const WebInputEvent* m_currentInputEvent;
 
     OwnPtr<GeolocationClientProxy> m_geolocationClientProxy;
 
-    UserMediaClientImpl m_userMediaClientImpl;
     MediaKeysClientImpl m_mediaKeysClientImpl;
     OwnPtr<WebActiveGestureAnimation> m_gestureAnimation;
     WebPoint m_positionOnFlingStart;

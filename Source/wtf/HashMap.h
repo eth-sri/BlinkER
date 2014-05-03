@@ -48,7 +48,7 @@ namespace WTF {
         typename MappedTraitsArg = HashTraits<MappedArg>,
         typename Allocator = DefaultAllocator>
     class HashMap {
-        WTF_USE_ALLOCATOR(HashMap);
+        WTF_USE_ALLOCATOR(HashMap, Allocator);
     private:
         typedef KeyTraitsArg KeyTraits;
         typedef MappedTraitsArg MappedTraits;
@@ -126,6 +126,8 @@ namespace WTF {
         void remove(KeyPeekInType);
         void remove(iterator);
         void clear();
+        template<typename Collection>
+        void removeAll(const Collection& toBeRemoved) { WTF::removeAll(*this, toBeRemoved); }
 
         MappedPassOutType take(KeyPeekInType); // efficient combination of get with remove
 
@@ -148,10 +150,7 @@ namespace WTF {
 
         static bool isValidKey(KeyPeekInType);
 
-        void trace(typename Allocator::Visitor* visitor)
-        {
-            m_impl.trace(visitor);
-        }
+        void trace(typename Allocator::Visitor* visitor) { m_impl.trace(visitor); }
 
     private:
         AddResult inlineAdd(KeyPeekInType, MappedPassInReferenceType);

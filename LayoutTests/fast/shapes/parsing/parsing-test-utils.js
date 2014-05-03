@@ -40,6 +40,7 @@ var validShapeValues = [
     "inset(10px round 0px / 10px)",
 
     ["inset(calc(25%*3 - 10in) 0 0 0)", "inset(calc(75% - 10in) 0px 0px)", "inset(calc(-960px + 75%) 0px 0px)"],
+    ["inset(10px 10px 10px 10px round calc(25%*3 - 10in))", "inset(10px round calc(75% - 10in))", "inset(10px round calc(-960px + 75%))"],
 
     ["circle()", "circle(at 50% 50%)", "circle(closest-side at 50% 50%)"],
     ["circle(farthest-side)", "circle(farthest-side at 50% 50%)"],
@@ -93,7 +94,10 @@ var validShapeValues = [
     ["content-box polygon(nonzero, 10px 10px, 20px 20px, 30px 30px)", "content-box polygon(10px 10px, 20px 20px, 30px 30px)", "polygon(10px 10px, 20px 20px, 30px 30px) content-box"],
     ["padding-box polygon(nonzero, 10px 10px, 20px 20px, 30px 30px)", "padding-box polygon(10px 10px, 20px 20px, 30px 30px)", "polygon(10px 10px, 20px 20px, 30px 30px) padding-box"],
     ["border-box polygon(nonzero, 10px 10px, 20px 20px, 30px 30px)", "border-box polygon(10px 10px, 20px 20px, 30px 30px)", "polygon(10px 10px, 20px 20px, 30px 30px) border-box"],
-    ["margin-box polygon(nonzero, 10px 10px, 20px 20px, 30px 30px)", "margin-box polygon(10px 10px, 20px 20px, 30px 30px)", "polygon(10px 10px, 20px 20px, 30px 30px) margin-box"]
+    ["margin-box polygon(nonzero, 10px 10px, 20px 20px, 30px 30px)", "margin-box polygon(10px 10px, 20px 20px, 30px 30px)", "polygon(10px 10px, 20px 20px, 30px 30px) margin-box"],
+
+     "linear-gradient(to right, red, blue)",
+     "radial-gradient(at 10px 20px, red 0%, blue 50%, green 95%)"
 ];
 
 // Invalid values for both shape-inside and shape-outside. When an invalid shape value is specified, the

@@ -220,7 +220,6 @@ private:
     void cursorUpdateTimerFired(Timer<EventHandler>*);
     void activeIntervalTimerFired(Timer<EventHandler>*);
 
-    bool shouldTurnVerticalTicksIntoHorizontal(const HitTestResult&, const PlatformWheelEvent&) const;
     bool mouseDownMayStartSelect() const { return m_mouseDownMayStartSelect; }
 
     void fakeMouseMoveEventTimerFired(Timer<EventHandler>*);
@@ -334,7 +333,6 @@ private:
     Timer<EventHandler> m_fakeMouseMoveEventTimer;
 
     bool m_svgPan;
-    RefPtr<SVGElementInstance> m_instanceUnderMouse;
     RefPtr<SVGElementInstance> m_lastInstanceUnderMouse;
 
     RenderLayerScrollableArea* m_resizeScrollableArea;

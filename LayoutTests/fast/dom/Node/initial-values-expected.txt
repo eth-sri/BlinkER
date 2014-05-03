@@ -9,7 +9,6 @@ PASS attr.name is 'foo'
 FAIL attr.localName should be null (of type object). Was foo (of type string).
 PASS attr.namespaceURI is null
 PASS attr.prefix is null
-PASS attr.nodeValue is ''
 PASS attr.value is ''
 Attribute creation using createElement on an XHTML doc:
 PASS attr.nodeName is 'foo'
@@ -17,7 +16,6 @@ PASS attr.name is 'foo'
 FAIL attr.localName should be null (of type object). Was foo (of type string).
 PASS attr.namespaceURI is null
 PASS attr.prefix is null
-PASS attr.nodeValue is ''
 PASS attr.value is ''
 PASS comment.nodeName is '#comment'
 PASS comment.localName is null
@@ -51,7 +49,7 @@ PASS element.prefix is null
 PASS element.nodeValue is null
 PASS element.attributes.toString() is '[object NamedNodeMap]'
 Prefixed element creation using createElementNS on an HTML doc:
-PASS element.nodeName is 'html:pre'
+PASS element.nodeName is 'HTML:PRE'
 PASS element.localName is 'pre'
 PASS element.namespaceURI is 'http://www.w3.org/1999/xhtml'
 PASS element.prefix is 'html'

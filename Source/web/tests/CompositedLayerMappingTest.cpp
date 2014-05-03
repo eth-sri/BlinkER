@@ -27,15 +27,15 @@
 
 #include "core/rendering/compositing/CompositedLayerMapping.h"
 
-#include "WebDocument.h"
-#include "WebElement.h"
-#include "WebFrameClient.h"
-#include "WebSettings.h"
-#include "WebViewClient.h"
 #include "core/dom/Document.h"
 #include "core/frame/FrameView.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebUnitTestSupport.h"
+#include "public/web/WebDocument.h"
+#include "public/web/WebElement.h"
+#include "public/web/WebFrameClient.h"
+#include "public/web/WebSettings.h"
+#include "public/web/WebViewClient.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebViewImpl.h"
 #include "web/tests/FrameTestHelpers.h"
@@ -48,23 +48,6 @@ using namespace blink;
 namespace WebCore {
 
 namespace {
-
-class MockWebViewClient : public WebViewClient {
-public:
-    virtual void initializeLayerTreeView()
-    {
-        m_layerTreeView = adoptPtr(Platform::current()->unitTestSupport()->createLayerTreeViewForTesting(WebUnitTestSupport::TestViewTypeUnitTest));
-        ASSERT(m_layerTreeView);
-    }
-
-    virtual WebLayerTreeView* layerTreeView()
-    {
-        return m_layerTreeView.get();
-    }
-
-private:
-    OwnPtr<WebLayerTreeView> m_layerTreeView;
-};
 
 class MockWebFrameClient : public WebFrameClient {
 };
@@ -108,7 +91,7 @@ public:
 protected:
     std::string m_baseURL;
     MockWebFrameClient m_mockWebFrameClient;
-    MockWebViewClient m_mockWebViewClient;
+    FrameTestHelpers::TestWebViewClient m_mockWebViewClient;
     WebViewImpl* m_webViewImpl;
     WebFrame* m_mainFrame;
 };

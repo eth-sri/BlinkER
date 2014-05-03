@@ -87,23 +87,25 @@ WebInspector.TimelineEventOverview.prototype = {
          */
         function appendRecord(record)
         {
-            if (record.type === WebInspector.TimelineModel.RecordType.BeginFrame)
+            if (record.type() === WebInspector.TimelineModel.RecordType.BeginFrame)
                 return;
-            var recordStart = Math.floor((record.startTime - timeOffset) * scale);
-            var recordEnd = Math.ceil((record.endTime - timeOffset) * scale);
+            var recordStart = Math.floor((record.startTime() - timeOffset) * scale);
+            var recordEnd = Math.ceil((record.endTime() - timeOffset) * scale);
             var category = WebInspector.TimelineUIUtils.categoryForRecord(record);
             if (category.overviewStripGroupIndex < 0)
                 return;
             var bar = lastBarByGroup[category.overviewStripGroupIndex];
             // This bar may be merged with previous -- so just adjust the previous bar.
-            const barsMergeThreshold = 0;
-            if (bar && bar.category === category && bar.end + barsMergeThreshold >= recordStart) {
-                if (recordEnd > bar.end)
+            if (bar) {
+                // If record fits entirely into previous bar just absorb it ignoring the category match.
+                if (recordEnd <= bar.end)
+                    return;
+                if (bar.category === category && recordStart <= bar.end) {
                     bar.end = recordEnd;
-                return;
-            }
-            if (bar)
+                    return;
+                }
                 this._renderBar(bar.start, bar.end, stripHeight, bar.category);
+            }
             lastBarByGroup[category.overviewStripGroupIndex] = { start: recordStart, end: recordEnd, category: category };
         }
         this._model.forAllRecords(appendRecord.bind(this));

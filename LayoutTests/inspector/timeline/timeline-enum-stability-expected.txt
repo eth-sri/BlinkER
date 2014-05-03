@@ -4,7 +4,6 @@ Applications outside of WebKit depend on the stability of the mapping of these t
 
 {
     ActivateLayerTree : "ActivateLayerTree"
-    AutosizeText : "AutosizeText"
     BeginFrame : "BeginFrame"
     CancelAnimationFrame : "CancelAnimationFrame"
     CompositeLayers : "CompositeLayers"
@@ -38,7 +37,6 @@ Applications outside of WebKit depend on the stability of the mapping of these t
     ResourceReceivedData : "ResourceReceivedData"
     ResourceSendRequest : "ResourceSendRequest"
     Root : "Root"
-    ScheduleResourceRequest : "ScheduleResourceRequest"
     ScheduleStyleRecalculation : "ScheduleStyleRecalculation"
     ScrollLayer : "ScrollLayer"
     TimeStamp : "TimeStamp"

@@ -33,6 +33,7 @@
 #include "core/css/FontFaceSet.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/DocumentMarkerController.h"
+#include "core/dom/ScriptForbiddenScope.h"
 #include "core/editing/FrameSelection.h"
 #include "core/events/OverflowEvent.h"
 #include "core/fetch/ResourceFetcher.h"
@@ -44,6 +45,7 @@
 #include "core/html/HTMLPlugInElement.h"
 #include "core/html/parser/TextResourceDecoder.h"
 #include "core/inspector/InspectorInstrumentation.h"
+#include "core/inspector/InspectorTraceEvents.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/FrameLoaderClient.h"
 #include "core/page/Chrome.h"
@@ -614,6 +616,19 @@ void FrameView::updateAcceleratedCompositingSettings()
         renderView->compositor()->updateAcceleratedCompositingSettings();
 }
 
+void FrameView::recalcOverflowAfterStyleChange()
+{
+    RenderView* renderView = this->renderView();
+    ASSERT(renderView);
+    if (!renderView->needsOverflowRecalcAfterStyleChange())
+        return;
+
+    renderView->recalcOverflowAfterStyleChange();
+
+    // FIXME: We should adjust frame scrollbar here, but that will make many
+    // tests flake in debug build.
+}
+
 void FrameView::updateCompositingLayersAfterStyleChange()
 {
     RenderView* renderView = this->renderView();
@@ -673,6 +688,7 @@ GraphicsLayer* FrameView::layerForScrollCorner() const
 
 bool FrameView::hasCompositedContent() const
 {
+    // FIXME: change to inCompositingMode. Fails fast/repaint/iframe-scroll-repaint.html.
     if (RenderView* renderView = this->renderView())
         return renderView->compositor()->staleInCompositingMode();
     return false;
@@ -680,8 +696,11 @@ bool FrameView::hasCompositedContent() const
 
 bool FrameView::isEnclosedInCompositingLayer() const
 {
+    // FIXME: It's a bug that compositing state isn't always up to date when this is called. crbug.com/366314
+    DisableCompositingQueryAsserts disabler;
+
     RenderObject* frameOwnerRenderer = m_frame->ownerRenderer();
-    if (frameOwnerRenderer && frameOwnerRenderer->containerForRepaint())
+    if (frameOwnerRenderer && frameOwnerRenderer->enclosingLayer()->enclosingCompositingLayerForRepaint())
         return true;
 
     if (FrameView* parentView = parentFrameView())
@@ -767,6 +786,8 @@ void FrameView::performLayout(RenderObject* rootForThisLayout, bool inSubtreeLay
 {
     TRACE_EVENT0("webkit", "FrameView::performLayout");
 
+    ScriptForbiddenScope forbidScript;
+
     ASSERT(!isInPerformLayout());
     lifecycle().advanceTo(DocumentLifecycle::InPerformLayout);
 
@@ -849,6 +870,8 @@ void FrameView::layout(bool allowSubtree)
 
     RELEASE_ASSERT(!isPainting());
 
+    TRACE_EVENT_BEGIN1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "Layout", "beginData", InspectorLayoutEvent::beginData(this));
+    // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentationCookie cookie = InspectorInstrumentation::willLayout(m_frame.get());
 
     if (!allowSubtree && isSubtreeLayout()) {
@@ -962,8 +985,11 @@ void FrameView::layout(bool allowSubtree)
 
     m_layoutCount++;
 
-    if (AXObjectCache* cache = rootForThisLayout->document().axObjectCache())
-        cache->handleLayoutComplete(rootForThisLayout);
+    if (AXObjectCache* cache = rootForThisLayout->document().axObjectCache()) {
+        const KURL& url = rootForThisLayout->document().url();
+        if (url.isValid() && !url.isAboutBlankURL())
+            cache->handleLayoutComplete(rootForThisLayout);
+    }
     updateAnnotatedRegions();
 
     ASSERT(!rootForThisLayout->needsLayout());
@@ -973,6 +999,8 @@ void FrameView::layout(bool allowSubtree)
 
     scheduleOrPerformPostLayoutTasks();
 
+    TRACE_EVENT_END1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "Layout", "endData", InspectorLayoutEvent::endData(rootForThisLayout));
+    // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentation::didLayout(cookie, rootForThisLayout);
 
     m_nestedLayoutCount--;
@@ -981,7 +1009,6 @@ void FrameView::layout(bool allowSubtree)
 
     if (RuntimeEnabledFeatures::repaintAfterLayoutEnabled()) {
         repaintTree(rootForThisLayout);
-
     } else if (m_doFullRepaint) {
         // FIXME: This isn't really right, since the RenderView doesn't fully encompass
         // the visibleContentRect(). It just happens to work out most of the time,
@@ -1777,6 +1804,8 @@ void FrameView::scheduleRelayout()
         return;
     if (!m_frame->document()->shouldScheduleLayout())
         return;
+    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "InvalidateLayout", "frame", m_frame.get());
+    // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentation::didInvalidateLayout(m_frame.get());
 
     if (m_hasPendingLayout)
@@ -1822,25 +1851,25 @@ void FrameView::scheduleRelayoutOfSubtree(RenderObject* relayoutRoot)
                 m_layoutSubtreeRoot->markContainingBlocksForLayout(false, relayoutRoot);
                 m_layoutSubtreeRoot = relayoutRoot;
                 ASSERT(!m_layoutSubtreeRoot->container() || !m_layoutSubtreeRoot->container()->needsLayout());
-                InspectorInstrumentation::didInvalidateLayout(m_frame.get());
             } else {
                 // Just do a full relayout
                 if (isSubtreeLayout())
                     m_layoutSubtreeRoot->markContainingBlocksForLayout(false);
                 m_layoutSubtreeRoot = 0;
                 relayoutRoot->markContainingBlocksForLayout(false);
-                InspectorInstrumentation::didInvalidateLayout(m_frame.get());
             }
         }
     } else if (m_layoutSchedulingEnabled) {
         m_layoutSubtreeRoot = relayoutRoot;
         ASSERT(!m_layoutSubtreeRoot->container() || !m_layoutSubtreeRoot->container()->needsLayout());
-        InspectorInstrumentation::didInvalidateLayout(m_frame.get());
         m_hasPendingLayout = true;
 
         page()->animator().scheduleVisualUpdate();
         lifecycle().ensureStateAtMost(DocumentLifecycle::StyleClean);
     }
+    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "InvalidateLayout", "frame", m_frame.get());
+    // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
+    InspectorInstrumentation::didInvalidateLayout(m_frame.get());
 }
 
 bool FrameView::layoutPending() const
@@ -2674,6 +2703,8 @@ void FrameView::paintContents(GraphicsContext* p, const IntRect& rect)
     if (needsLayout())
         return;
 
+    TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "Paint", "data", InspectorPaintEvent::data(renderView, rect, 0));
+    // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentation::willPaint(renderView, 0);
 
     bool isTopLevelPainter = !s_inPaintContents;
@@ -2922,9 +2953,9 @@ void FrameView::forceLayoutForPagination(const FloatSize& pageSize, const FloatS
     adjustViewSize();
 }
 
-IntRect FrameView::convertFromRenderer(const RenderObject* renderer, const IntRect& rendererRect) const
+IntRect FrameView::convertFromRenderer(const RenderObject& renderer, const IntRect& rendererRect) const
 {
-    IntRect rect = pixelSnappedIntRect(enclosingLayoutRect(renderer->localToAbsoluteQuad(FloatRect(rendererRect)).boundingBox()));
+    IntRect rect = pixelSnappedIntRect(enclosingLayoutRect(renderer.localToAbsoluteQuad(FloatRect(rendererRect)).boundingBox()));
 
     // Convert from page ("absolute") to FrameView coordinates.
     rect.moveBy(-scrollPosition());
@@ -2932,7 +2963,7 @@ IntRect FrameView::convertFromRenderer(const RenderObject* renderer, const IntRe
     return rect;
 }
 
-IntRect FrameView::convertToRenderer(const RenderObject* renderer, const IntRect& viewRect) const
+IntRect FrameView::convertToRenderer(const RenderObject& renderer, const IntRect& viewRect) const
 {
     IntRect rect = viewRect;
 
@@ -2941,27 +2972,27 @@ IntRect FrameView::convertToRenderer(const RenderObject* renderer, const IntRect
 
     // FIXME: we don't have a way to map an absolute rect down to a local quad, so just
     // move the rect for now.
-    rect.setLocation(roundedIntPoint(renderer->absoluteToLocal(rect.location(), UseTransforms)));
+    rect.setLocation(roundedIntPoint(renderer.absoluteToLocal(rect.location(), UseTransforms)));
     return rect;
 }
 
-IntPoint FrameView::convertFromRenderer(const RenderObject* renderer, const IntPoint& rendererPoint) const
+IntPoint FrameView::convertFromRenderer(const RenderObject& renderer, const IntPoint& rendererPoint) const
 {
-    IntPoint point = roundedIntPoint(renderer->localToAbsolute(rendererPoint, UseTransforms));
+    IntPoint point = roundedIntPoint(renderer.localToAbsolute(rendererPoint, UseTransforms));
 
     // Convert from page ("absolute") to FrameView coordinates.
     point.moveBy(-scrollPosition());
     return point;
 }
 
-IntPoint FrameView::convertToRenderer(const RenderObject* renderer, const IntPoint& viewPoint) const
+IntPoint FrameView::convertToRenderer(const RenderObject& renderer, const IntPoint& viewPoint) const
 {
     IntPoint point = viewPoint;
 
     // Convert from FrameView coords into page ("absolute") coordinates.
     point += IntSize(scrollX(), scrollY());
 
-    return roundedIntPoint(renderer->absoluteToLocal(point, UseTransforms));
+    return roundedIntPoint(renderer.absoluteToLocal(point, UseTransforms));
 }
 
 IntRect FrameView::convertToContainingView(const IntRect& localRect) const
@@ -2978,7 +3009,7 @@ IntRect FrameView::convertToContainingView(const IntRect& localRect) const
             // Add borders and padding??
             rect.move(renderer->borderLeft() + renderer->paddingLeft(),
                 renderer->borderTop() + renderer->paddingTop());
-            return parentView->convertFromRenderer(renderer, rect);
+            return parentView->convertFromRenderer(*renderer, rect);
         }
 
         return Widget::convertToContainingView(localRect);
@@ -2998,7 +3029,7 @@ IntRect FrameView::convertFromContainingView(const IntRect& parentRect) const
             if (!renderer)
                 return parentRect;
 
-            IntRect rect = parentView->convertToRenderer(renderer, parentRect);
+            IntRect rect = parentView->convertToRenderer(*renderer, parentRect);
             // Subtract borders and padding
             rect.move(-renderer->borderLeft() - renderer->paddingLeft(),
                       -renderer->borderTop() - renderer->paddingTop());
@@ -3027,7 +3058,7 @@ IntPoint FrameView::convertToContainingView(const IntPoint& localPoint) const
             // Add borders and padding
             point.move(renderer->borderLeft() + renderer->paddingLeft(),
                        renderer->borderTop() + renderer->paddingTop());
-            return parentView->convertFromRenderer(renderer, point);
+            return parentView->convertFromRenderer(*renderer, point);
         }
 
         return Widget::convertToContainingView(localPoint);
@@ -3047,7 +3078,7 @@ IntPoint FrameView::convertFromContainingView(const IntPoint& parentPoint) const
             if (!renderer)
                 return parentPoint;
 
-            IntPoint point = parentView->convertToRenderer(renderer, parentPoint);
+            IntPoint point = parentView->convertToRenderer(*renderer, parentPoint);
             // Subtract borders and padding
             point.move(-renderer->borderLeft() - renderer->paddingLeft(),
                        -renderer->borderTop() - renderer->paddingTop());
@@ -3096,19 +3127,19 @@ String FrameView::trackedRepaintRectsAsText() const
     return ts.release();
 }
 
-void FrameView::addResizerArea(RenderBox* resizerBox)
+void FrameView::addResizerArea(RenderBox& resizerBox)
 {
     if (!m_resizerAreas)
         m_resizerAreas = adoptPtr(new ResizerAreaSet);
-    m_resizerAreas->add(resizerBox);
+    m_resizerAreas->add(&resizerBox);
 }
 
-void FrameView::removeResizerArea(RenderBox* resizerBox)
+void FrameView::removeResizerArea(RenderBox& resizerBox)
 {
     if (!m_resizerAreas)
         return;
 
-    ResizerAreaSet::iterator it = m_resizerAreas->find(resizerBox);
+    ResizerAreaSet::iterator it = m_resizerAreas->find(&resizerBox);
     if (it != m_resizerAreas->end())
         m_resizerAreas->remove(it);
 }

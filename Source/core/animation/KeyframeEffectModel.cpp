@@ -37,11 +37,6 @@
 
 namespace WebCore {
 
-bool Keyframe::compareOffsets(const RefPtrWillBeMember<Keyframe>& a, const RefPtrWillBeMember<Keyframe>& b)
-{
-    return a->offset() < b->offset();
-}
-
 PropertySet KeyframeEffectModelBase::properties() const
 {
     PropertySet result;
@@ -153,7 +148,6 @@ void KeyframeEffectModelBase::ensureKeyframeGroups() const
             else
                 group = groupIter->value.get();
 
-            ASSERT(keyframe->composite() == AnimationEffect::CompositeReplace);
             group->appendKeyframe(keyframe->createPropertySpecificKeyframe(property));
         }
     }

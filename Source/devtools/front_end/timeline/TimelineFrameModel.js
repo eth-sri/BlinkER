@@ -70,10 +70,20 @@ WebInspector.TimelineFrameModel.prototype = {
      */
     filteredFrames: function(startTime, endTime)
     {
+        /**
+         * @param {number} value
+         * @param {!WebInspector.TimelineFrame} object
+         * @return {number}
+         */
         function compareStartTime(value, object)
         {
             return value - object.startTime;
         }
+        /**
+         * @param {number} value
+         * @param {!WebInspector.TimelineFrame} object
+         * @return {number}
+         */
         function compareEndTime(value, object)
         {
             return value - object.endTime;
@@ -102,21 +112,21 @@ WebInspector.TimelineFrameModel.prototype = {
     addRecord: function(record)
     {
         var recordTypes = WebInspector.TimelineModel.RecordType;
-        var programRecord = record.type === recordTypes.Program ? record : null;
+        var programRecord = record.type() === recordTypes.Program ? record : null;
 
         // Start collecting main frame
         if (programRecord) {
             if (!this._aggregatedMainThreadWork && this._findRecordRecursively(WebInspector.TimelineFrameModel._mainFrameMarkers, programRecord))
                 this._aggregatedMainThreadWork = {};
         }
-
-        var records;
+        /** type {Array.<!WebInspector.TimelineModel.Record>} */
+        var records = [];
         if (this._model.bufferEvents())
             records = [record];
         else
-            records = this._mergingBuffer.process(record.thread, programRecord ? record.children || [] : [record]);
+            records = this._mergingBuffer.process(record.thread(), /** type {Array.<!WebInspector.TimelineModel.Record>} */(programRecord ? record.children() || [] : [record]));
         for (var i = 0; i < records.length; ++i) {
-            if (records[i].thread)
+            if (records[i].thread())
                 this._addBackgroundRecord(records[i]);
             else
                 this._addMainThreadRecord(programRecord, records[i]);
@@ -172,13 +182,13 @@ WebInspector.TimelineFrameModel.prototype = {
     _addBackgroundRecord: function(record)
     {
         var recordTypes = WebInspector.TimelineModel.RecordType;
-        if (record.type === recordTypes.BeginFrame)
-            this.handleBeginFrame(record.startTime);
-        else if (record.type === recordTypes.DrawFrame)
-            this.handleDrawFrame(record.startTime);
-        else if (record.type === recordTypes.RequestMainThreadFrame)
+        if (record.type() === recordTypes.BeginFrame)
+            this.handleBeginFrame(record.startTime());
+        else if (record.type() === recordTypes.DrawFrame)
+            this.handleDrawFrame(record.startTime());
+        else if (record.type() === recordTypes.RequestMainThreadFrame)
             this.handleRequestMainThreadFrame();
-        else if (record.type === recordTypes.ActivateLayerTree)
+        else if (record.type() === recordTypes.ActivateLayerTree)
             this.handleActivateLayerTree();
 
         if (this._lastFrame)
@@ -192,11 +202,11 @@ WebInspector.TimelineFrameModel.prototype = {
     _addMainThreadRecord: function(programRecord, record)
     {
         var recordTypes = WebInspector.TimelineModel.RecordType;
-        if (record.type === recordTypes.UpdateLayerTree)
-            this._lastLayerTree = record.data["layerTree"] || null;
+        if (record.type() === recordTypes.UpdateLayerTree)
+            this._lastLayerTree = record.data()["layerTree"] || null;
         if (!this._hasThreadedCompositing) {
-            if (record.type === recordTypes.BeginFrame)
-                this._startMainThreadFrame(record.startTime);
+            if (record.type() === recordTypes.BeginFrame)
+                this._startMainThreadFrame(record.startTime());
 
             if (!this._lastFrame)
                 return;
@@ -204,7 +214,7 @@ WebInspector.TimelineFrameModel.prototype = {
             this._lastFrame._addTimeFromRecord(record);
 
             // Account for "other" time at the same time as the first child.
-            if (programRecord.children[0] === record) {
+            if (programRecord.children()[0] === record) {
                 this._deriveOtherTime(programRecord, this._lastFrame.timeByCategory);
                 this._lastFrame._updateCpuTime();
             }
@@ -215,10 +225,10 @@ WebInspector.TimelineFrameModel.prototype = {
             return;
 
         WebInspector.TimelineUIUtils.aggregateTimeForRecord(this._aggregatedMainThreadWork, record);
-        if (programRecord.children[0] === record)
+        if (programRecord.children()[0] === record)
             this._deriveOtherTime(programRecord, this._aggregatedMainThreadWork);
 
-        if (record.type === recordTypes.CompositeLayers) {
+        if (record.type() === recordTypes.CompositeLayers) {
             this._aggregatedMainThreadWorkToAttachToBackgroundFrame = this._aggregatedMainThreadWork;
             this._aggregatedMainThreadWork = null;
         }
@@ -231,9 +241,9 @@ WebInspector.TimelineFrameModel.prototype = {
     _deriveOtherTime: function(programRecord, timeByCategory)
     {
         var accounted = 0;
-        for (var i = 0; i < programRecord.children.length; ++i)
-            accounted += programRecord.children[i].endTime - programRecord.children[i].startTime;
-        var otherTime = programRecord.endTime - programRecord.startTime - accounted;
+        for (var i = 0; i < programRecord.children().length; ++i)
+            accounted += programRecord.children()[i].endTime() - programRecord.children()[i].startTime();
+        var otherTime = programRecord.endTime() - programRecord.startTime() - accounted;
         timeByCategory["other"] = (timeByCategory["other"] || 0) + otherTime;
     },
 
@@ -281,12 +291,12 @@ WebInspector.TimelineFrameModel.prototype = {
      */
     _findRecordRecursively: function(types, record)
     {
-        if (types.indexOf(record.type) >= 0)
+        if (types.indexOf(record.type()) >= 0)
             return record;
-        if (!record.children)
+        if (!record.children())
             return null;
-        for (var i = 0; i < record.children.length; ++i) {
-            var result = this._findRecordRecursively(types, record.children[i]);
+        for (var i = 0; i < record.children().length; ++i) {
+            var result = this._findRecordRecursively(types, record.children()[i]);
             if (result)
                 return result;
         }
@@ -365,7 +375,7 @@ WebInspector.TimelineFrame.prototype = {
      */
     _addTimeFromRecord: function(record)
     {
-        if (!record.endTime)
+        if (!record.endTime())
             return;
         WebInspector.TimelineUIUtils.aggregateTimeForRecord(this.timeByCategory, record);
         this._updateCpuTime();

@@ -260,7 +260,6 @@ void EventHandler::clear()
     m_resizeScrollableArea = 0;
     m_nodeUnderMouse = nullptr;
     m_lastNodeUnderMouse = nullptr;
-    m_instanceUnderMouse = nullptr;
     m_lastInstanceUnderMouse = nullptr;
     m_lastMouseMoveEventSubframe = nullptr;
     m_lastScrollbarUnderMouse = nullptr;
@@ -1199,7 +1198,7 @@ bool EventHandler::handleMousePressEvent(const PlatformMouseEvent& mouseEvent)
     RefPtr<FrameView> protector(m_frame->view());
 
     UserGestureIndicator gestureIndicator(DefinitelyProcessingUserGesture);
-    m_frame->tree().top()->eventHandler().m_lastMouseDownUserGestureToken = gestureIndicator.currentToken();
+    m_frame->localFrameRoot()->eventHandler().m_lastMouseDownUserGestureToken = gestureIndicator.currentToken();
 
     cancelFakeMouseMoveEvent();
     if (m_eventHandlerWillResetCapturingMouseEventsNode)
@@ -1515,7 +1514,7 @@ bool EventHandler::handleMouseReleaseEvent(const PlatformMouseEvent& mouseEvent)
 
     OwnPtr<UserGestureIndicator> gestureIndicator;
 
-    if (m_frame->tree().top()->eventHandler().m_lastMouseDownUserGestureToken)
+    if (m_frame->localFrameRoot()->eventHandler().m_lastMouseDownUserGestureToken)
         gestureIndicator = adoptPtr(new UserGestureIndicator(m_frame->tree().top()->eventHandler().m_lastMouseDownUserGestureToken.release()));
     else
         gestureIndicator = adoptPtr(new UserGestureIndicator(DefinitelyProcessingUserGesture));
@@ -1834,7 +1833,6 @@ void EventHandler::updateMouseEventTargetNode(Node* targetNode, const PlatformMo
             result = NodeRenderingTraversal::parent(result);
     }
     m_nodeUnderMouse = result;
-    m_instanceUnderMouse = instanceAssociatedWithShadowTreeElement(result);
 
     // <use> shadow tree elements may have been recloned, update node under mouse in any case
     if (m_lastInstanceUnderMouse) {
@@ -1994,19 +1992,7 @@ bool EventHandler::isInsideScrollbar(const IntPoint& windowPoint) const
     return false;
 }
 
-bool EventHandler::shouldTurnVerticalTicksIntoHorizontal(const HitTestResult& result, const PlatformWheelEvent& event) const
-{
-#if OS(ANDROID) || OS(MACOSX) || OS(WIN)
-    return false;
-#else
-    // GTK+ must scroll horizontally if the mouse pointer is on top of the
-    // horizontal scrollbar while scrolling with the wheel.
-    // This code comes from gtk/EventHandlerGtk.cpp.
-    return !event.hasPreciseScrollingDeltas() && result.scrollbar() && result.scrollbar()->orientation() == HorizontalScrollbar;
-#endif
-}
-
-bool EventHandler::handleWheelEvent(const PlatformWheelEvent& e)
+bool EventHandler::handleWheelEvent(const PlatformWheelEvent& event)
 {
 #define RETURN_WHEEL_EVENT_HANDLED() \
     { \
@@ -2025,7 +2011,7 @@ bool EventHandler::handleWheelEvent(const PlatformWheelEvent& e)
     if (!view)
         return false;
 
-    LayoutPoint vPoint = view->windowToContents(e.position());
+    LayoutPoint vPoint = view->windowToContents(event.position());
 
     HitTestRequest request(HitTestRequest::ReadOnly | HitTestRequest::ConfusingAndOftenMisusedDisallowShadowContent);
     HitTestResult result(vPoint);
@@ -2037,7 +2023,7 @@ bool EventHandler::handleWheelEvent(const PlatformWheelEvent& e)
         node = NodeRenderingTraversal::parent(node);
 
     bool isOverWidget;
-    if (e.useLatchedEventNode()) {
+    if (event.useLatchedEventNode()) {
         if (!m_latchedWheelEventNode) {
             m_latchedWheelEventNode = node;
             m_widgetIsLatched = result.isOverWidget();
@@ -2054,20 +2040,13 @@ bool EventHandler::handleWheelEvent(const PlatformWheelEvent& e)
         isOverWidget = result.isOverWidget();
     }
 
-    // FIXME: It should not be necessary to do this mutation here.
-    // Instead, the handlers should know convert vertical scrolls
-    // appropriately.
-    PlatformWheelEvent event = e;
-    if (m_baseEventType == PlatformEvent::NoType && shouldTurnVerticalTicksIntoHorizontal(result, e))
-        event = event.copyTurningVerticalTicksIntoHorizontalTicks();
-
     if (node) {
         // Figure out which view to send the event to.
         RenderObject* target = node->renderer();
 
         if (isOverWidget && target && target->isWidget()) {
             Widget* widget = toRenderWidget(target)->widget();
-            if (widget && passWheelEventToWidget(e, widget))
+            if (widget && passWheelEventToWidget(event, widget))
                 RETURN_WHEEL_EVENT_HANDLED();
         }
 

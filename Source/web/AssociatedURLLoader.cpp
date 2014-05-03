@@ -31,7 +31,6 @@
 #include "config.h"
 #include "web/AssociatedURLLoader.h"
 
-#include "WebDataSource.h"
 #include "core/fetch/CrossOriginAccessControl.h"
 #include "core/loader/DocumentThreadableLoader.h"
 #include "core/loader/DocumentThreadableLoaderClient.h"
@@ -46,6 +45,7 @@
 #include "public/platform/WebURLError.h"
 #include "public/platform/WebURLLoaderClient.h"
 #include "public/platform/WebURLRequest.h"
+#include "public/web/WebDataSource.h"
 #include "web/WebLocalFrameImpl.h"
 #include "wtf/HashSet.h"
 #include "wtf/text/WTFString.h"
@@ -111,9 +111,7 @@ const HTTPHeaderSet& HTTPResponseHeaderValidator::blockedHeaders()
         m_exposedHeaders.remove("set-cookie2");
         // Block Access-Control-Expose-Header itself. It could be exposed later.
         m_blockedHeaders.add("access-control-expose-headers");
-        HTTPHeaderSet::const_iterator end = m_exposedHeaders.end();
-        for (HTTPHeaderSet::const_iterator it = m_exposedHeaders.begin(); it != end; ++it)
-            m_blockedHeaders.remove(*it);
+        m_blockedHeaders.removeAll(m_exposedHeaders);
     }
 
     return m_blockedHeaders;

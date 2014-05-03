@@ -35,7 +35,7 @@
 
 ActiveDOMObject
 CachedAttribute=*
-CallWith=ExecutionContext|ScriptState|NewScriptState|ScriptArguments|ActiveWindow|FirstWindow|ThisValue
+CallWith=ExecutionContext|ScriptState|ScriptArguments|ActiveWindow|FirstWindow|ThisValue
 CheckSecurity=Frame|Node
 Clamp
 Conditional=*
@@ -61,6 +61,7 @@ Immutable
 ImplementedAs=*
 InitializedByEventConstructor
 LegacyTreatAsPartialInterface
+LegacyOverloadString
 LogActivity=|GetterOnly|SetterOnly
 LogAllWorlds
 MeasureAs=*
@@ -87,12 +88,12 @@ Replaceable
 RuntimeEnabled=*
 SetWrapperReferenceFrom=*
 SetWrapperReferenceTo=*
-SetterCallWith=ExecutionContext|ScriptState|ScriptArguments|ActiveWindow|FirstWindow
+SetterCallWith=ExecutionContext|ScriptArguments|ActiveWindow|FirstWindow
 SpecialWrapFor=*
-StrictTypeChecking
 TreatNullAs=NullString
 TreatReturnedNullStringAs=Null|Undefined
 TreatUndefinedAs=NullString
+TypeChecking=Interface|Nullable|Unrestricted
 URL
 Unforgeable
 WillBeGarbageCollected

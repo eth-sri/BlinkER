@@ -33,10 +33,12 @@
 #include "modules/indexeddb/IDBKeyRange.h"
 #include "modules/indexeddb/IDBOpenDBRequest.h"
 #include "platform/SharedBuffer.h"
+#include "public/platform/WebBlobInfo.h"
 #include "public/platform/WebIDBDatabase.h"
 #include "wtf/PassOwnPtr.h"
 #include <gtest/gtest.h>
 
+using blink::WebBlobInfo;
 using namespace WebCore;
 
 namespace {
@@ -90,26 +92,26 @@ private:
 TEST_F(IDBRequestTest, EventsAfterStopping)
 {
     IDBTransaction* transaction = 0;
-    RefPtr<IDBRequest> request = IDBRequest::create(executionContext(), IDBAny::createUndefined(), transaction);
+    RefPtrWillBeRawPtr<IDBRequest> request = IDBRequest::create(executionContext(), IDBAny::createUndefined(), transaction);
     EXPECT_EQ(request->readyState(), "pending");
     executionContext()->stopActiveDOMObjects();
 
     // Ensure none of the following raise assertions in stopped state:
     request->onError(DOMError::create(AbortError, "Description goes here."));
     request->onSuccess(Vector<String>());
-    request->onSuccess(nullptr, IDBKey::createInvalid(), IDBKey::createInvalid(), nullptr);
+    request->onSuccess(nullptr, IDBKey::createInvalid(), IDBKey::createInvalid(), nullptr, adoptPtr(new Vector<WebBlobInfo>()));
     request->onSuccess(IDBKey::createInvalid());
-    request->onSuccess(PassRefPtr<SharedBuffer>(nullptr));
-    request->onSuccess(PassRefPtr<SharedBuffer>(nullptr), IDBKey::createInvalid(), IDBKeyPath());
+    request->onSuccess(PassRefPtr<SharedBuffer>(nullptr), adoptPtr(new Vector<WebBlobInfo>()));
+    request->onSuccess(PassRefPtr<SharedBuffer>(nullptr), adoptPtr(new Vector<WebBlobInfo>()), IDBKey::createInvalid(), IDBKeyPath());
     request->onSuccess(0LL);
     request->onSuccess();
-    request->onSuccess(IDBKey::createInvalid(), IDBKey::createInvalid(), nullptr);
+    request->onSuccess(IDBKey::createInvalid(), IDBKey::createInvalid(), nullptr, adoptPtr(new Vector<WebBlobInfo>()));
 }
 
 TEST_F(IDBRequestTest, AbortErrorAfterAbort)
 {
     IDBTransaction* transaction = 0;
-    RefPtr<IDBRequest> request = IDBRequest::create(executionContext(), IDBAny::createUndefined(), transaction);
+    RefPtrWillBeRawPtr<IDBRequest> request = IDBRequest::create(executionContext(), IDBAny::createUndefined(), transaction);
     EXPECT_EQ(request->readyState(), "pending");
 
     // Simulate the IDBTransaction having received onAbort from back end and aborting the request:
@@ -156,7 +158,7 @@ TEST_F(IDBRequestTest, ConnectionsAfterStopping)
 
     {
         OwnPtr<MockWebIDBDatabase> backend = MockWebIDBDatabase::create();
-        RefPtr<IDBOpenDBRequest> request = IDBOpenDBRequest::create(executionContext(), callbacks, transactionId, version);
+        RefPtrWillBeRawPtr<IDBOpenDBRequest> request = IDBOpenDBRequest::create(executionContext(), callbacks, transactionId, version);
         EXPECT_EQ(request->readyState(), "pending");
 
         executionContext()->stopActiveDOMObjects();
@@ -165,7 +167,7 @@ TEST_F(IDBRequestTest, ConnectionsAfterStopping)
 
     {
         OwnPtr<MockWebIDBDatabase> backend = MockWebIDBDatabase::create();
-        RefPtr<IDBOpenDBRequest> request = IDBOpenDBRequest::create(executionContext(), callbacks, transactionId, version);
+        RefPtrWillBeRawPtr<IDBOpenDBRequest> request = IDBOpenDBRequest::create(executionContext(), callbacks, transactionId, version);
         EXPECT_EQ(request->readyState(), "pending");
 
         executionContext()->stopActiveDOMObjects();

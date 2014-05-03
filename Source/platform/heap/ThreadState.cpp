@@ -243,7 +243,7 @@ ThreadState::ThreadState()
     , m_inGC(false)
     , m_heapContainsCache(adoptPtr(new HeapContainsCache()))
     , m_isCleaningUp(false)
-#if defined(ADDRESS_SANITIZER) && !OS(WIN)
+#if defined(ADDRESS_SANITIZER)
     , m_asanFakeStack(__asan_get_current_fake_stack())
 #endif
 {
@@ -397,7 +397,7 @@ void ThreadState::visitRoots(Visitor* visitor)
 NO_SANITIZE_ADDRESS
 void ThreadState::visitAsanFakeStackForPointer(Visitor* visitor, Address ptr)
 {
-#if defined(ADDRESS_SANITIZER) && !OS(WIN)
+#if defined(ADDRESS_SANITIZER)
     Address* start = reinterpret_cast<Address*>(m_startOfStack);
     Address* end = reinterpret_cast<Address*>(m_endOfStack);
     Address* fakeFrameStart = 0;
@@ -780,7 +780,7 @@ void ThreadState::copyStackUntilSafePointScope()
     Address* to = reinterpret_cast<Address*>(m_safePointScopeMarker);
     Address* from = reinterpret_cast<Address*>(m_endOfStack);
     RELEASE_ASSERT(from < to);
-    RELEASE_ASSERT(to < reinterpret_cast<Address*>(m_startOfStack));
+    RELEASE_ASSERT(to <= reinterpret_cast<Address*>(m_startOfStack));
     size_t slotCount = static_cast<size_t>(to - from);
     ASSERT(slotCount < 1024); // Catch potential performance issues.
 

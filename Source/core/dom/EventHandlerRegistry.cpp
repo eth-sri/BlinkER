@@ -44,7 +44,7 @@ EventHandlerRegistry* EventHandlerRegistry::from(Document& document)
     EventHandlerRegistry* registry = static_cast<EventHandlerRegistry*>(DocumentSupplement::from(document, supplementName()));
     if (!registry) {
         registry = new EventHandlerRegistry(document);
-        DocumentSupplement::provideTo(document, supplementName(), adoptPtr(registry));
+        DocumentSupplement::provideTo(document, supplementName(), adoptPtrWillBeNoop(registry));
     }
     return registry;
 }
@@ -197,6 +197,34 @@ void EventHandlerRegistry::notifyHasHandlersChanged(EventHandlerClass handlerCla
         ASSERT_NOT_REACHED();
         break;
     }
+}
+
+void EventHandlerRegistry::trace(Visitor* visitor)
+{
+    visitor->registerWeakMembers<EventHandlerRegistry, &EventHandlerRegistry::clearWeakMembers>(this);
+}
+
+void EventHandlerRegistry::clearWeakMembers(Visitor* visitor)
+{
+    // FIXME: Oilpan: This is pretty funky. The current code disables all modifications of the
+    // EventHandlerRegistry when the document becomes inactive. To keep that behavior we only
+    // perform weak processing of the registry when the document is active.
+    if (!m_document.isActive())
+        return;
+    Vector<EventTarget*> deadNodeTargets;
+    for (size_t i = 0; i < EventHandlerClassCount; ++i) {
+        EventHandlerClass handlerClass = static_cast<EventHandlerClass>(i);
+        const EventTargetSet* targets = eventHandlerTargets(handlerClass);
+        if (!targets)
+            continue;
+        for (EventTargetSet::const_iterator it = targets->begin(); it != targets->end(); ++it) {
+            Node* node = it->key->toNode();
+            if (node && !visitor->isAlive(node))
+                deadNodeTargets.append(node);
+        }
+    }
+    for (size_t i = 0; i < deadNodeTargets.size(); ++i)
+        didRemoveAllEventHandlers(*deadNodeTargets[i]);
 }
 
 } // namespace WebCore

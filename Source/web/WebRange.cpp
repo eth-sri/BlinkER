@@ -29,10 +29,8 @@
  */
 
 #include "config.h"
-#include "WebRange.h"
+#include "public/web/WebRange.h"
 
-#include "WebExceptionCode.h"
-#include "WebNode.h"
 #include "bindings/v8/ExceptionState.h"
 #include "bindings/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/Document.h"
@@ -45,6 +43,8 @@
 #include "core/frame/LocalFrame.h"
 #include "public/platform/WebFloatQuad.h"
 #include "public/platform/WebString.h"
+#include "public/web/WebExceptionCode.h"
+#include "public/web/WebNode.h"
 #include "web/WebLocalFrameImpl.h"
 #include "wtf/PassRefPtr.h"
 
@@ -75,18 +75,16 @@ int WebRange::endOffset() const
 WebNode WebRange::startContainer(WebExceptionCode& exceptionCode) const
 {
     // FIXME: Create a wrapper class that just sets the internal int.
-    TrackExceptionState exceptionState;
-    RefPtr<Node> node(m_private->startContainer(exceptionState));
-    exceptionCode = exceptionState.code();
+    RefPtr<Node> node(m_private->startContainer());
+    exceptionCode = 0;
     return node.release();
 }
 
 WebNode WebRange::endContainer(WebExceptionCode& exceptionCode) const
 {
     // FIXME: Create a wrapper class that just sets the internal int.
-    TrackExceptionState exceptionState;
-    RefPtr<Node> node(m_private->endContainer(exceptionState));
-    exceptionCode = exceptionState.code();
+    RefPtr<Node> node(m_private->endContainer());
+    exceptionCode = 0;
     return node.release();
 }
 

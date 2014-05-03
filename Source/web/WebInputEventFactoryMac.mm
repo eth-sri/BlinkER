@@ -25,14 +25,14 @@
  */
 
 #include "config.h"
-#include "WebInputEventFactory.h"
+#include "public/web/mac/WebInputEventFactory.h"
 
 #include <ApplicationServices/ApplicationServices.h>
 #import <AvailabilityMacros.h>
 #import <Cocoa/Cocoa.h>
 
-#include "WebInputEvent.h"
 #include "platform/WindowsKeyboardCodes.h"
+#include "public/web/WebInputEvent.h"
 #include "wtf/ASCIICType.h"
 
 #if __MAC_OS_X_VERSION_MAX_ALLOWED == 1060
@@ -1141,7 +1141,7 @@ WebGestureEvent WebInputEventFactory::gestureEvent(NSEvent *event, NSView *view)
     switch ([event type]) {
     case NSEventTypeMagnify:
         result.type = WebInputEvent::GesturePinchUpdate;
-        result.data.pinchUpdate.scale = [event magnification];
+        result.data.pinchUpdate.scale = [event magnification] + 1.0;
         break;
     default:
         ASSERT_NOT_REACHED();

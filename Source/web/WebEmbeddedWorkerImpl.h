@@ -31,10 +31,10 @@
 #ifndef WebEmbeddedWorkerImpl_h
 #define WebEmbeddedWorkerImpl_h
 
-#include "WebContentSecurityPolicy.h"
-#include "WebEmbeddedWorker.h"
-#include "WebEmbeddedWorkerStartData.h"
-#include "WebFrameClient.h"
+#include "public/web/WebContentSecurityPolicy.h"
+#include "public/web/WebEmbeddedWorker.h"
+#include "public/web/WebEmbeddedWorkerStartData.h"
+#include "public/web/WebFrameClient.h"
 
 namespace WebCore {
 class WorkerScriptLoader;
@@ -60,6 +60,12 @@ public:
     // WebEmbeddedWorker overrides.
     virtual void startWorkerContext(const WebEmbeddedWorkerStartData&) OVERRIDE;
     virtual void terminateWorkerContext() OVERRIDE;
+    virtual void resumeWorkerContext() OVERRIDE;
+    virtual void attachDevTools() OVERRIDE;
+    virtual void reattachDevTools(const WebString& savedState) OVERRIDE;
+    virtual void detachDevTools() OVERRIDE;
+    virtual void dispatchDevToolsMessage(const WebString&) OVERRIDE;
+
 
 private:
     class Loader;

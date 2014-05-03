@@ -32,9 +32,6 @@
 #include "config.h"
 #include "web/TextFinder.h"
 
-#include "WebFindOptions.h"
-#include "WebFrameClient.h"
-#include "WebViewClient.h"
 #include "core/dom/DocumentMarker.h"
 #include "core/dom/DocumentMarkerController.h"
 #include "core/dom/Range.h"
@@ -45,6 +42,9 @@
 #include "core/frame/FrameView.h"
 #include "platform/Timer.h"
 #include "public/platform/WebVector.h"
+#include "public/web/WebFindOptions.h"
+#include "public/web/WebFrameClient.h"
+#include "public/web/WebViewClient.h"
 #include "web/FindInPageCoordinates.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebViewImpl.h"
@@ -233,21 +233,17 @@ void TextFinder::scopeStringMatches(int identifier, const WebString& searchText,
     }
 
     WebLocalFrameImpl* mainFrameImpl = m_ownerFrame.viewImpl()->mainFrameImpl();
-    RefPtrWillBeRawPtr<Range> searchRange(rangeOfContents(m_ownerFrame.frame()->document()));
+    Position searchStart = firstPositionInNode(m_ownerFrame.frame()->document());
+    Position searchEnd = lastPositionInNode(m_ownerFrame.frame()->document());
+    ASSERT(searchStart.document() == searchEnd.document());
 
-    Node* originalEndContainer = searchRange->endContainer();
-    int originalEndOffset = searchRange->endOffset();
-
-    TrackExceptionState exceptionState, exceptionState2;
     if (m_resumeScopingFromRange) {
         // This is a continuation of a scoping operation that timed out and didn't
         // complete last time around, so we should start from where we left off.
-        searchRange->setStart(m_resumeScopingFromRange->startContainer(), m_resumeScopingFromRange->startOffset(exceptionState2) + 1, exceptionState);
-        if (exceptionState.hadException() || exceptionState2.hadException()) {
-            if (exceptionState2.hadException()) // A non-zero |exceptionState| happens when navigating during search.
-                ASSERT_NOT_REACHED();
+        ASSERT(m_resumeScopingFromRange->collapsed());
+        searchStart = m_resumeScopingFromRange->startPosition().next();
+        if (searchStart.document() != searchEnd.document())
             return;
-        }
     }
 
     // This timeout controls how long we scope before releasing control. This
@@ -260,19 +256,23 @@ void TextFinder::scopeStringMatches(int identifier, const WebString& searchText,
     double startTime = currentTime();
     do {
         // Find next occurrence of the search string.
-        // FIXME: (http://b/1088245) This WebKit operation may run for longer
+        // FIXME: (http://crbug.com/6818) This WebKit operation may run for longer
         // than the timeout value, and is not interruptible as it is currently
         // written. We may need to rewrite it with interruptibility in mind, or
         // find an alternative.
-        RefPtrWillBeRawPtr<Range> resultRange(findPlainText(
-            searchRange.get(), searchText, options.matchCase ? 0 : CaseInsensitive));
-        if (resultRange->collapsed(exceptionState)) {
-            if (!resultRange->startContainer()->isInShadowTree())
-                break;
+        Position resultStart;
+        Position resultEnd;
+        findPlainText(searchStart, searchEnd, searchText, options.matchCase ? 0 : CaseInsensitive, resultStart, resultEnd);
+        if (resultStart == resultEnd) {
+            // Not found.
+            break;
+        }
 
-            searchRange->setStartAfter(
-                resultRange->startContainer()->deprecatedShadowAncestorNode(), exceptionState);
-            searchRange->setEnd(originalEndContainer, originalEndOffset, exceptionState);
+        RefPtrWillBeRawPtr<Range> resultRange = Range::create(*resultStart.document(), resultStart, resultEnd);
+        if (resultRange->collapsed()) {
+            // resultRange will be collapsed if the matched text spans over multiple TreeScopes.
+            // FIXME: Show such matches to users.
+            searchStart = resultStart.next();
             continue;
         }
 
@@ -317,13 +317,9 @@ void TextFinder::scopeStringMatches(int identifier, const WebString& searchText,
         // result range. There is no need to use a VisiblePosition here,
         // since findPlainText will use a TextIterator to go over the visible
         // text nodes.
-        searchRange->setStart(resultRange->endContainer(exceptionState), resultRange->endOffset(exceptionState), exceptionState);
+        searchStart = resultStart.next();
 
-        Node* shadowTreeRoot = searchRange->shadowRoot();
-        if (searchRange->collapsed(exceptionState) && shadowTreeRoot)
-            searchRange->setEnd(shadowTreeRoot, shadowTreeRoot->countChildren(), exceptionState);
-
-        m_resumeScopingFromRange = resultRange;
+        m_resumeScopingFromRange = Range::create(*resultStart.document(), resultStart, resultStart);
         timedOut = (currentTime() - startTime) >= maxScopingDuration;
     } while (!timedOut);
 
@@ -633,7 +629,7 @@ void TextFinder::addMarker(Range* range, bool activeMatch)
 
 void TextFinder::setMarkerActive(Range* range, bool active)
 {
-    if (!range || range->collapsed(IGNORE_EXCEPTION))
+    if (!range || range->collapsed())
         return;
     m_ownerFrame.frame()->document()->markers().setMarkersActive(range, active);
 }

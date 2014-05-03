@@ -184,7 +184,7 @@ static void indexedPropertySetter(uint32_t index, v8::Local<v8::Value> v8Value, 
     {% if setter.has_exception_state %}
     ExceptionState exceptionState(ExceptionState::IndexedSetterContext, "{{interface_name}}", info.Holder(), info.GetIsolate());
     {% endif %}
-    {% if setter.has_strict_type_checking %}
+    {% if setter.has_type_checking_interface %}
     {# Type checking for interface types (if interface not implemented, throw
        TypeError), per http://www.w3.org/TR/WebIDL/#es-interface #}
     if (!isUndefinedOrNull(v8Value) && !V8{{setter.idl_type}}::hasInstance(v8Value, info.GetIsolate())) {
@@ -540,7 +540,7 @@ static void {{cpp_class}}OriginSafeMethodSetter(v8::Local<v8::String> name, v8::
     }
 
     {# The findInstanceInPrototypeChain() call above only returns a non-empty handle if info.This() is an Object. #}
-    V8HiddenValue::setHiddenValue(isolate, v8::Handle<v8::Object>(info.This()), name, v8Value);
+    V8HiddenValue::setHiddenValue(isolate, v8::Handle<v8::Object>::Cast(info.This()), name, v8Value);
 }
 
 static void {{cpp_class}}OriginSafeMethodSetterCallback(v8::Local<v8::String> name, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
@@ -900,8 +900,8 @@ static void configure{{v8_class}}Template(v8::Handle<v8::FunctionTemplate> funct
     functionTemplate->SetCallHandler({{v8_class}}::constructorCallback);
     functionTemplate->SetLength({{interface_length}});
     {% endif %}
-    v8::Local<v8::ObjectTemplate> ALLOW_UNUSED instanceTemplate = functionTemplate->InstanceTemplate();
-    v8::Local<v8::ObjectTemplate> ALLOW_UNUSED prototypeTemplate = functionTemplate->PrototypeTemplate();
+    v8::Local<v8::ObjectTemplate> instanceTemplate ALLOW_UNUSED = functionTemplate->InstanceTemplate();
+    v8::Local<v8::ObjectTemplate> prototypeTemplate ALLOW_UNUSED = functionTemplate->PrototypeTemplate();
     {% if is_check_security and interface_name != 'Window' %}
     instanceTemplate->SetAccessCheckCallbacks({{cpp_class}}V8Internal::namedSecurityCheck, {{cpp_class}}V8Internal::indexedSecurityCheck, v8::External::New(isolate, const_cast<WrapperTypeInfo*>(&{{v8_class}}::wrapperTypeInfo)));
     {% endif %}

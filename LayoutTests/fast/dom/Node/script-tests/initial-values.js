@@ -11,7 +11,6 @@ shouldBe("attr.name", "'foo'");
 shouldBe("attr.localName", "null");
 shouldBe("attr.namespaceURI", "null");
 shouldBe("attr.prefix", "null");
-shouldBe("attr.nodeValue", "''");
 shouldBe("attr.value", "''");
 
 debug("Attribute creation using createElement on an XHTML doc:")
@@ -23,7 +22,6 @@ shouldBe("attr.name", "'foo'");
 shouldBe("attr.localName", "null");
 shouldBe("attr.namespaceURI", "null");
 shouldBe("attr.prefix", "null");
-shouldBe("attr.nodeValue", "''");
 shouldBe("attr.value", "''");
 
 var comment = document.createComment("foo");
@@ -76,7 +74,7 @@ shouldBe("element.attributes.toString()", "'[object NamedNodeMap]'");
 
 debug("Prefixed element creation using createElementNS on an HTML doc:")
 element = document.createElementNS("http://www.w3.org/1999/xhtml", "html:pre");
-shouldBe("element.nodeName", "'html:pre'");
+shouldBe("element.nodeName", "'HTML:PRE'");
 shouldBe("element.localName", "'pre'");
 shouldBe("element.namespaceURI", "'http://www.w3.org/1999/xhtml'");
 shouldBe("element.prefix", "'html'");

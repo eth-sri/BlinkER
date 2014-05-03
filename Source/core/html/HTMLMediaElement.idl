@@ -29,7 +29,7 @@
 ] interface HTMLMediaElement : HTMLElement {
 
     // error state
-    [StrictTypeChecking] readonly attribute MediaError? error;
+    [TypeChecking=Interface|Nullable] readonly attribute MediaError? error;
 
     // network state
     [Reflect, URL, PerWorldBindings, LogActivity=SetterOnly] attribute DOMString src;
@@ -59,7 +59,7 @@
     // playback state
     // FIXME: generated bindings should check isfinite: http://crbug.com/354298
     [RaisesException=Setter] attribute double currentTime;
-    readonly attribute double duration;
+    readonly attribute unrestricted double duration;
     readonly attribute boolean paused;
     [RaisesException=Setter] attribute double defaultPlaybackRate;
     [RaisesException=Setter] attribute double playbackRate;
@@ -72,8 +72,8 @@
     void pause();
 
     // media controller
-    [Reflect] attribute DOMString mediaGroup;
-    [StrictTypeChecking] attribute MediaController? controller;
+    [RuntimeEnabled=MediaController, Reflect] attribute DOMString mediaGroup;
+    [RuntimeEnabled=MediaController, TypeChecking=Interface|Nullable] attribute MediaController? controller;
 
     // controls
     attribute boolean controls;

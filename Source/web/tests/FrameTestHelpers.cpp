@@ -31,14 +31,14 @@
 #include "config.h"
 #include "web/tests/FrameTestHelpers.h"
 
-#include "WebSettings.h"
-#include "WebViewClient.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebThread.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/WebURLResponse.h"
 #include "public/platform/WebUnitTestSupport.h"
+#include "public/web/WebSettings.h"
+#include "public/web/WebViewClient.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/tests/URLTestHelpers.h"
 #include "wtf/StdLibExtras.h"
@@ -73,7 +73,7 @@ WebFrameClient* defaultWebFrameClient()
 
 WebViewClient* defaultWebViewClient()
 {
-    DEFINE_STATIC_LOCAL(WebViewClient,  client, ());
+    DEFINE_STATIC_LOCAL(TestWebViewClient,  client, ());
     return &client;
 }
 
@@ -159,6 +159,11 @@ void TestWebFrameClient::frameDetached(WebFrame* frame)
     frame->close();
 }
 
+void TestWebViewClient::initializeLayerTreeView()
+{
+    m_layerTreeView = adoptPtr(Platform::current()->unitTestSupport()->createLayerTreeViewForTesting(WebUnitTestSupport::TestViewTypeUnitTest));
+    ASSERT(m_layerTreeView);
+}
 
 } // namespace FrameTestHelpers
 } // namespace blink

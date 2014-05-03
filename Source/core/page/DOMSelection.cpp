@@ -68,7 +68,7 @@ DOMSelection::DOMSelection(const TreeScope* treeScope)
 
 void DOMSelection::clearTreeScope()
 {
-    m_treeScope = 0;
+    m_treeScope = nullptr;
 }
 
 const VisibleSelection& DOMSelection::visibleSelection() const
@@ -447,16 +447,13 @@ void DOMSelection::deleteFromDocument()
     if (selection.isNone())
         return;
 
-    if (isCollapsed())
-        selection.modify(FrameSelection::AlterationExtend, DirectionBackward, CharacterGranularity);
-
     RefPtrWillBeRawPtr<Range> selectedRange = selection.selection().toNormalizedRange();
     if (!selectedRange)
         return;
 
     selectedRange->deleteContents(ASSERT_NO_EXCEPTION);
 
-    setBaseAndExtent(selectedRange->startContainer(ASSERT_NO_EXCEPTION), selectedRange->startOffset(), selectedRange->startContainer(), selectedRange->startOffset(), ASSERT_NO_EXCEPTION);
+    setBaseAndExtent(selectedRange->startContainer(), selectedRange->startOffset(), selectedRange->startContainer(), selectedRange->startOffset(), ASSERT_NO_EXCEPTION);
 }
 
 bool DOMSelection::containsNode(const Node* n, bool allowPartial) const

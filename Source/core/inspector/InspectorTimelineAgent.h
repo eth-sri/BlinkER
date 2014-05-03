@@ -72,7 +72,7 @@ class InspectorPageAgent;
 class InspectorLayerTreeAgent;
 class InstrumentingAgents;
 class KURL;
-class NewScriptState;
+class ScriptState;
 class Node;
 class RenderImage;
 class RenderObject;
@@ -127,7 +127,7 @@ public:
     virtual void clearFrontend() OVERRIDE;
     virtual void restore() OVERRIDE;
 
-    virtual void enable(ErrorString*, const String* traceEventCategoryFilter) OVERRIDE;
+    virtual void enable(ErrorString*) OVERRIDE;
     virtual void disable(ErrorString*) OVERRIDE;
     virtual void start(ErrorString*, const int* maxCallStackDepth, const bool* bufferEvents, const String* liveEvents, const bool* includeCounters, const bool* includeGPUEvents) OVERRIDE;
     virtual void stop(ErrorString*, RefPtr<TypeBuilder::Array<TypeBuilder::Timeline::TimelineEvent> >& events) OVERRIDE;
@@ -157,13 +157,9 @@ public:
     void layerTreeDidChange();
     void didUpdateLayerTree();
 
-    void willAutosizeText(RenderObject*);
-    void didAutosizeText(RenderObject*);
-
     void didScheduleStyleRecalculation(Document*);
     bool willRecalculateStyle(Document*);
-    void didRecalculateStyle();
-    void didRecalculateStyleForElement();
+    void didRecalculateStyle(int elementCount);
 
     void willPaint(RenderObject*, const GraphicsLayer*);
     void didPaint(RenderObject*, const GraphicsLayer*, GraphicsContext*, const LayoutRect&);
@@ -198,11 +194,10 @@ public:
     void loadEventFired(LocalFrame*);
 
     void consoleTime(ExecutionContext*, const String&);
-    void consoleTimeEnd(ExecutionContext*, const String&, NewScriptState*);
-    void consoleTimeline(ExecutionContext*, const String& title, NewScriptState*);
-    void consoleTimelineEnd(ExecutionContext*, const String& title, NewScriptState*);
+    void consoleTimeEnd(ExecutionContext*, const String&, ScriptState*);
+    void consoleTimeline(ExecutionContext*, const String& title, ScriptState*);
+    void consoleTimelineEnd(ExecutionContext*, const String& title, ScriptState*);
 
-    void didScheduleResourceRequest(Document*, const String& url);
     void willSendRequest(unsigned long, DocumentLoader*, const ResourceRequest&, const ResourceResponse&, const FetchInitiatorInfo&);
     void didReceiveResourceResponse(LocalFrame*, unsigned long, DocumentLoader*, const ResourceResponse&, ResourceLoader*);
     void didFinishLoading(unsigned long, DocumentLoader*, double monotonicFinishTime, int64_t);
@@ -321,13 +316,11 @@ private:
     double m_paintSetupEnd;
     RefPtr<JSONObject> m_gpuTask;
     RefPtr<JSONValue> m_pendingLayerTreeData;
-    unsigned m_styleRecalcElementCounter;
     typedef HashMap<ThreadIdentifier, TimelineThreadState> ThreadStateMap;
     ThreadStateMap m_threadStates;
     bool m_mayEmitFirstPaint;
     HashSet<String> m_liveEvents;
     double m_lastProgressTimestamp;
-    bool m_disableTracingOnStop;
 };
 
 } // namespace WebCore

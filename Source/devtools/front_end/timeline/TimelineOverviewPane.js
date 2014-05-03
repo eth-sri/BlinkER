@@ -110,7 +110,7 @@ WebInspector.TimelineOverviewPane.prototype = {
             var dividerPosition = Math.round(positions.start * 10);
             if (dividers[dividerPosition])
                 continue;
-            var divider = WebInspector.TimelineUIUtils.createEventDivider(record.type);
+            var divider = WebInspector.TimelineUIUtils.createEventDivider(record.type());
             divider.style.left = positions.start + "%";
             dividers[dividerPosition] = divider;
         }
@@ -228,8 +228,8 @@ WebInspector.TimelineOverviewCalculator.prototype = {
      */
     computeBarGraphPercentages: function(record)
     {
-        var start = (record.startTime - this._minimumBoundary) / this.boundarySpan() * 100;
-        var end = (record.endTime - this._minimumBoundary) / this.boundarySpan() * 100;
+        var start = (record.startTime() - this._minimumBoundary) / this.boundarySpan() * 100;
+        var end = (record.endTime() - this._minimumBoundary) / this.boundarySpan() * 100;
         return {start: start, end: end};
     },
 

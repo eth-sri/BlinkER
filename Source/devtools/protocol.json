@@ -1133,7 +1133,8 @@
             },
             {
                 "name": "clearBrowserCache",
-                "description": "Clears browser cache."
+                "description": "Clears browser cache.",
+                "handlers": ["browser"]
             },
             {
                 "name": "canClearBrowserCookies",
@@ -1144,7 +1145,17 @@
             },
             {
                 "name": "clearBrowserCookies",
-                "description": "Clears browser cookies."
+                "description": "Clears browser cookies.",
+                "handlers": ["browser"]
+            },
+            {
+                "name": "emulateNetworkConditions",
+                "description": "Activates emulation of network conditions.",
+                "parameters": [
+                    { "name": "offline", "type": "boolean", "optional": true, "description": "True to emulate internet disconnection." }
+                ],
+                "hidden": true,
+                "handlers": ["browser"]
             },
             {
                 "name": "setCacheDisabled",
@@ -2762,10 +2773,7 @@
         "commands": [
             {
                 "name": "enable",
-                "description": "Enables timeline. After this call, timeline can be started from within the page (for example upon console.timeline).",
-                "parameters": [
-                    { "name": "traceEventCategoryFilter", "optional": true, "type": "string", "description": "If set, the timeline agent will automatically start tracing with the specified category filter when timeline is started." }
-                ]
+                "description": "Enables timeline. After this call, timeline can be started from within the page (for example upon console.timeline)."
             },
             {
                 "name": "disable",
@@ -3335,7 +3343,7 @@
                     { "name": "callUID", "type": "number", "description": "Call UID." },
                     { "name": "children", "type": "array", "items": { "$ref": "CPUProfileNode" }, "description": "Child nodes." },
                     { "name": "deoptReason", "type": "string", "description": "The reason of being not optimized. The function may be deoptimized or marked as don't optimize."},
-                    { "name": "id", "optional": true, "type": "integer", "description": "Unique id of the node." }
+                    { "name": "id", "type": "integer", "description": "Unique id of the node." }
                 ]
             },
             {
@@ -3346,7 +3354,8 @@
                     { "name": "head", "$ref": "CPUProfileNode" },
                     { "name": "startTime", "type": "number", "description": "Profiling start time in seconds." },
                     { "name": "endTime", "type": "number", "description": "Profiling end time in seconds." },
-                    { "name": "samples", "optional": true, "type": "array", "items": { "type": "integer" }, "description": "Ids of samples top nodes." }
+                    { "name": "samples", "optional": true, "type": "array", "items": { "type": "integer" }, "description": "Ids of samples top nodes." },
+                    { "name": "timestamps", "optional": true, "type": "array", "items": { "type": "number" }, "description": "Timestamps of the samples in microseconds." }
                 ]
             }
         ],
@@ -4021,13 +4030,15 @@
             {
                 "name": "start",
                 "description": "Start trace events collection.",
-                "async": true,
                 "parameters": [
                     { "name": "categories", "type": "string", "description": "Category/tag filter" },
                     { "name": "options", "type": "string", "description": "Tracing options" },
                     { "name": "bufferUsageReportingInterval", "type": "number", "optional": true, "description": "If set, the agent will issue bufferUsage events at this interval, specified in milliseconds" }
                 ],
-                "handlers": ["browser", "frontend"]
+                "returns": [
+                    { "name": "sessionId", "type": "string", "description": "A system-unique identifier of the tracing session that allows associating of some of the trace events with the inspected page" }
+                ],
+                "handlers": ["browser", "renderer", "frontend"]
             },
             {
                 "name": "end",
@@ -4041,10 +4052,12 @@
                 "parameters": [
                     { "name": "value", "type": "array", "items": { "type": "object" } }
                 ],
+                "description": "Contains an bucket of collected trace events.",
                 "handlers": ["browser", "frontend"]
             },
             {
                 "name": "tracingComplete",
+                "description": "Signals that tracing is stopped and there is no trace buffers pending flush, all data were delivered via dataCollected events.",
                 "handlers": ["browser", "frontend"]
             },
             {

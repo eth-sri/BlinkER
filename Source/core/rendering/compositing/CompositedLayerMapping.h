@@ -200,6 +200,11 @@ public:
 
     LayoutSize contentOffsetInCompositingLayer() const;
 
+    LayoutPoint squashingOffsetFromTransformedAncestor()
+    {
+        return m_squashingLayerOffsetFromTransformedAncestor;
+    }
+
 private:
     void createPrimaryGraphicsLayer();
     void destroyGraphicsLayers();
@@ -267,8 +272,6 @@ private:
 
     bool hasVisibleNonCompositingDescendantLayers() const;
 
-    bool shouldClipCompositedBounds() const;
-
     void paintsIntoCompositedAncestorChanged();
 
     void doPaintTask(GraphicsLayerPaintInfo&, GraphicsContext*, const IntRect& clip);
@@ -280,7 +283,7 @@ private:
     //  + m_ancestorClippingLayer [OPTIONAL]
     //     + m_graphicsLayer
     //        + m_childContainmentLayer [OPTIONAL] <-OR-> m_scrollingLayer [OPTIONAL] <-OR-> m_childTransformLayer
-    //                                                     + m_scrollingContentsLayer [OPTIONAL]
+    //                                                     + m_scrollingContentsLayer [Present iff m_scrollingLayer is present]
     //
     // We need an ancestor clipping layer if our clipping ancestor is not our ancestor in the
     // clipping tree. Here's what that might look like.
@@ -346,7 +349,7 @@ private:
 
     // A squashing CLM has two possible squashing-related structures.
     //
-    // If m_clippingAncestorLayer is present:
+    // If m_ancestorClippingLayer is present:
     //
     // m_ancestorClippingLayer
     //   + m_graphicsLayer
@@ -360,6 +363,7 @@ private:
     OwnPtr<GraphicsLayer> m_squashingContainmentLayer; // Only used if any squashed layers exist and m_squashingContainmentLayer is not present, to contain the squashed layers as siblings to the rest of the GraphicsLayer tree chunk.
     OwnPtr<GraphicsLayer> m_squashingLayer; // Only used if any squashed layers exist, this is the backing that squashed layers paint into.
     Vector<GraphicsLayerPaintInfo> m_squashedLayers;
+    LayoutPoint m_squashingLayerOffsetFromTransformedAncestor;
 
     LayoutRect m_compositedBounds;
 

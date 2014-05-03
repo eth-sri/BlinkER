@@ -38,8 +38,10 @@
 #include "core/fileapi/FileReaderLoader.h"
 #include "core/frame/LocalFrame.h"
 #include "core/inspector/InspectorInstrumentation.h"
+#include "core/inspector/InspectorTraceEvents.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/FrameLoaderClient.h"
+#include "core/loader/MixedContentChecker.h"
 #include "core/loader/UniqueIdentifier.h"
 #include "core/page/Page.h"
 #include "modules/websockets/WebSocketChannelClient.h"
@@ -87,19 +89,31 @@ MainThreadWebSocketChannel::~MainThreadWebSocketChannel()
 {
 }
 
-void MainThreadWebSocketChannel::connect(const KURL& url, const String& protocol)
+bool MainThreadWebSocketChannel::connect(const KURL& url, const String& protocol)
 {
     WTF_LOG(Network, "MainThreadWebSocketChannel %p connect()", this);
     ASSERT(!m_handle);
     ASSERT(!m_suspended);
+
+    if (m_document->frame() && !m_document->frame()->loader().mixedContentChecker()->canConnectInsecureWebSocket(m_document->securityOrigin(), url))
+        return false;
+    if (MixedContentChecker::isMixedContent(m_document->securityOrigin(), url)) {
+        String message = "Connecting to a non-secure WebSocket server from a secure origin is deprecated.";
+        m_document->addConsoleMessage(JSMessageSource, WarningMessageLevel, message);
+    }
+
     m_handshake = adoptPtr(new WebSocketHandshake(url, protocol, m_document));
     m_handshake->reset();
     m_handshake->addExtensionProcessor(m_perMessageDeflate.createExtensionProcessor());
     m_handshake->addExtensionProcessor(m_deflateFramer.createExtensionProcessor());
-    if (m_identifier)
+    if (m_identifier) {
+        TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "WebSocketCreate", "data", InspectorWebSocketCreateEvent::data(m_document, m_identifier, url, protocol));
+        // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
         InspectorInstrumentation::didCreateWebSocket(m_document, m_identifier, url, protocol);
+    }
     ref();
     m_handle = SocketStreamHandle::create(m_handshake->url(), this);
+    return true;
 }
 
 String MainThreadWebSocketChannel::subprotocol()
@@ -230,8 +244,11 @@ void MainThreadWebSocketChannel::fail(const String& reason, MessageLevel level, 
 void MainThreadWebSocketChannel::disconnect()
 {
     WTF_LOG(Network, "MainThreadWebSocketChannel %p disconnect()", this);
-    if (m_identifier && m_document)
+    if (m_identifier && m_document) {
+        TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "WebSocketDestroy", "data", InspectorWebSocketEvent::data(m_document, m_identifier));
+        // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
         InspectorInstrumentation::didCloseWebSocket(m_document, m_identifier);
+    }
 
     clearDocument();
 
@@ -265,8 +282,11 @@ void MainThreadWebSocketChannel::didOpenSocketStream(SocketStreamHandle* handle)
     ASSERT(handle == m_handle);
     if (!m_document)
         return;
-    if (m_identifier)
+    if (m_identifier) {
+        TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "WebSocketSendHandshakeRequest", "data", InspectorWebSocketEvent::data(m_document, m_identifier));
+        // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
         InspectorInstrumentation::willSendWebSocketHandshakeRequest(m_document, m_identifier, m_handshake->clientHandshakeRequest().get());
+    }
     CString handshakeMessage = m_handshake->clientHandshakeMessage();
     if (!handle->send(handshakeMessage.data(), handshakeMessage.length()))
         failAsError("Failed to send WebSocket handshake.");
@@ -275,8 +295,11 @@ void MainThreadWebSocketChannel::didOpenSocketStream(SocketStreamHandle* handle)
 void MainThreadWebSocketChannel::didCloseSocketStream(SocketStreamHandle* handle)
 {
     WTF_LOG(Network, "MainThreadWebSocketChannel %p didCloseSocketStream()", this);
-    if (m_identifier && m_document)
+    if (m_identifier && m_document) {
+        TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "WebSocketDestroy", "data", InspectorWebSocketEvent::data(m_document, m_identifier));
+        // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
         InspectorInstrumentation::didCloseWebSocket(m_document, m_identifier);
+    }
     ASSERT_UNUSED(handle, handle == m_handle || !m_handle);
 
     // Show error message on JS console if this is unexpected connection close
@@ -445,8 +468,11 @@ bool MainThreadWebSocketChannel::processOneItemFromBuffer()
         if (headerLength <= 0)
             return false;
         if (m_handshake->mode() == WebSocketHandshake::Connected) {
-            if (m_identifier)
+            if (m_identifier) {
+                TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "WebSocketReceiveHandshakeResponseWebSocketSendHandshakeRequest", "data", InspectorWebSocketEvent::data(m_document, m_identifier));
+                // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
                 InspectorInstrumentation::didReceiveWebSocketHandshakeResponse(m_document, m_identifier, 0, &m_handshake->serverHandshakeResponse());
+            }
 
             if (m_deflateFramer.enabled() && m_document) {
                 const String message = "WebSocket extension \"x-webkit-deflate-frame\" is deprecated";

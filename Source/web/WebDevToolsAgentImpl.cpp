@@ -34,12 +34,6 @@
 #include "InspectorBackendDispatcher.h"
 #include "InspectorFrontend.h"
 #include "RuntimeEnabledFeatures.h"
-#include "WebDataSource.h"
-#include "WebDevToolsAgentClient.h"
-#include "WebDeviceEmulationParams.h"
-#include "WebMemoryUsageInfo.h"
-#include "WebSettings.h"
-#include "WebViewClient.h"
 #include "bindings/v8/PageScriptDebugServer.h"
 #include "bindings/v8/ScriptController.h"
 #include "bindings/v8/V8Binding.h"
@@ -64,6 +58,12 @@
 #include "public/platform/WebURLError.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/WebURLResponse.h"
+#include "public/web/WebDataSource.h"
+#include "public/web/WebDevToolsAgentClient.h"
+#include "public/web/WebDeviceEmulationParams.h"
+#include "public/web/WebMemoryUsageInfo.h"
+#include "public/web/WebSettings.h"
+#include "public/web/WebViewClient.h"
 #include "web/WebInputEventConversion.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebViewImpl.h"
@@ -246,7 +246,6 @@ void WebDevToolsAgentImpl::detach()
     // Prevent controller from sending messages to the frontend.
     InspectorController* ic = inspectorController();
     ic->disconnectFrontend();
-    ic->hideHighlight();
     m_attached = false;
 }
 
@@ -269,12 +268,14 @@ void WebDevToolsAgentImpl::didCancelFrame()
 
 void WebDevToolsAgentImpl::willComposite()
 {
+    TRACE_EVENT_BEGIN1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "CompositeLayers", "mainFrame", mainFrame());
     if (InspectorController* ic = inspectorController())
         ic->willComposite();
 }
 
 void WebDevToolsAgentImpl::didComposite()
 {
+    TRACE_EVENT_END1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "CompositeLayers", "mainFrame", mainFrame());
     if (InspectorController* ic = inspectorController())
         ic->didComposite();
 }
@@ -632,16 +633,6 @@ void WebDevToolsAgentImpl::updateInspectorStateCookie(const String& state)
     m_client->saveAgentRuntimeState(state);
 }
 
-void WebDevToolsAgentImpl::clearBrowserCache()
-{
-    m_client->clearBrowserCache();
-}
-
-void WebDevToolsAgentImpl::clearBrowserCookies()
-{
-    m_client->clearBrowserCookies();
-}
-
 void WebDevToolsAgentImpl::setProcessId(long processId)
 {
     inspectorController()->setProcessId(processId);
@@ -674,6 +665,7 @@ void WebDevToolsAgentImpl::willProcessTask()
         return;
     if (InspectorController* ic = inspectorController())
         ic->willProcessTask();
+    TRACE_EVENT_BEGIN0(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "Program");
 }
 
 void WebDevToolsAgentImpl::didProcessTask()
@@ -682,6 +674,7 @@ void WebDevToolsAgentImpl::didProcessTask()
         return;
     if (InspectorController* ic = inspectorController())
         ic->didProcessTask();
+    TRACE_EVENT_END0(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "Program");
     flushPendingFrontendMessages();
 }
 

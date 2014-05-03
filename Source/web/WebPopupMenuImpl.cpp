@@ -31,10 +31,6 @@
 #include "config.h"
 #include "web/WebPopupMenuImpl.h"
 
-#include "WebInputEvent.h"
-#include "WebRange.h"
-#include "WebViewClient.h"
-#include "WebWidgetClient.h"
 #include "core/frame/FrameView.h"
 #include "platform/Cursor.h"
 #include "platform/NotImplemented.h"
@@ -52,6 +48,10 @@
 #include "public/platform/WebFloatRect.h"
 #include "public/platform/WebLayerTreeView.h"
 #include "public/platform/WebRect.h"
+#include "public/web/WebInputEvent.h"
+#include "public/web/WebRange.h"
+#include "public/web/WebViewClient.h"
+#include "public/web/WebWidgetClient.h"
 #include "web/PopupContainer.h"
 #include "web/PopupMenuChromium.h"
 #include "web/WebInputEventConversion.h"
@@ -233,12 +233,6 @@ void WebPopupMenuImpl::enterForceCompositingMode(bool enter)
             m_client->didDeactivateCompositor();
         }
     }
-}
-
-void WebPopupMenuImpl::didExitCompositingMode()
-{
-    enterForceCompositingMode(false);
-    m_client->didInvalidateRect(IntRect(0, 0, m_size.width, m_size.height));
 }
 
 void WebPopupMenuImpl::paintContents(WebCanvas* canvas, const WebRect& rect, bool, WebFloatRect&)

@@ -26,6 +26,7 @@
 #ifndef RenderObject_h
 #define RenderObject_h
 
+#include "core/dom/DocumentLifecycle.h"
 #include "core/dom/Element.h"
 #include "core/dom/Position.h"
 #include "core/dom/StyleEngine.h"
@@ -225,8 +226,6 @@ public:
             return 0;
         return locateFlowThreadContainingBlock();
     }
-
-    virtual bool isEmpty() const { return firstChild() == 0; }
 
 #ifndef NDEBUG
     void setHasAXObject(bool flag) { m_hasAXObject = flag; }
@@ -565,6 +564,10 @@ public:
 
     bool preferredLogicalWidthsDirty() const { return m_bitfields.preferredLogicalWidthsDirty(); }
 
+    bool needsOverflowRecalcAfterStyleChange() const { return m_bitfields.selfNeedsOverflowRecalcAfterStyleChange() || m_bitfields.childNeedsOverflowRecalcAfterStyleChange(); }
+    bool selfNeedsOverflowRecalcAfterStyleChange() const { return m_bitfields.selfNeedsOverflowRecalcAfterStyleChange(); }
+    bool childNeedsOverflowRecalcAfterStyleChange() const { return m_bitfields.childNeedsOverflowRecalcAfterStyleChange(); }
+
     bool isSelectionBorder() const;
 
     bool hasClip() const { return isOutOfFlowPositioned() && style()->hasClip(); }
@@ -634,7 +637,6 @@ public:
     void clearNeedsLayout();
     void setChildNeedsLayout(MarkingBehavior = MarkContainingBlockChain, SubtreeLayoutScope* = 0);
     void setNeedsPositionedMovementLayout();
-    void setNeedsSimplifiedNormalFlowLayout();
     void setPreferredLogicalWidthsDirty(MarkingBehavior = MarkContainingBlockChain);
     void clearPreferredLogicalWidthsDirty();
     void invalidateContainerPreferredLogicalWidths();
@@ -757,9 +759,9 @@ public:
 
     virtual void absoluteRects(Vector<IntRect>&, const LayoutPoint&) const { }
 
-    // FIXME: useTransforms should go away eventually
-    IntRect absoluteBoundingBoxRect(bool useTransform = true) const;
-    IntRect absoluteBoundingBoxRectIgnoringTransforms() const { return absoluteBoundingBoxRect(false); }
+    IntRect absoluteBoundingBoxRect() const;
+    // FIXME: This function should go away eventually
+    IntRect absoluteBoundingBoxRectIgnoringTransforms() const;
 
     // Build an array of quads in absolute coords for line boxes
     virtual void absoluteQuads(Vector<FloatQuad>&, bool* /*wasFixed*/ = 0) const { }
@@ -850,15 +852,9 @@ public:
     virtual void computeRectForRepaint(const RenderLayerModelObject* repaintContainer, LayoutRect&, bool fixed = false) const;
     virtual void computeFloatRectForRepaint(const RenderLayerModelObject* repaintContainer, FloatRect& repaintRect, bool fixed = false) const;
 
-    // If multiple-column layout results in applying an offset to the given point, add the same
-    // offset to the given size.
-    virtual void adjustForColumns(LayoutSize&, const LayoutPoint&) const { }
-    LayoutSize offsetForColumns(const LayoutPoint& point) const
-    {
-        LayoutSize offset;
-        adjustForColumns(offset, point);
-        return offset;
-    }
+    // Return the offset to the column in which the specified point (in flow-thread coordinates)
+    // lives. This is used to convert a flow-thread point to a visual point.
+    virtual LayoutSize columnOffset(const LayoutPoint&) const { return LayoutSize(); }
 
     virtual unsigned length() const { return 1; }
 
@@ -1011,6 +1007,9 @@ public:
 
     bool shouldDisableLayoutState() const { return hasColumns() || hasTransform() || hasReflection() || style()->isFlippedBlocksWritingMode(); }
 
+    void setNeedsOverflowRecalcAfterStyleChange();
+    void markContainingBlocksForOverflowRecalc();
+
 protected:
     inline bool layerCreationAllowedForSubtree() const;
 
@@ -1128,6 +1127,8 @@ private:
             , m_needsSimplifiedNormalFlowLayout(false)
             , m_preferredLogicalWidthsDirty(false)
             , m_floating(false)
+            , m_selfNeedsOverflowRecalcAfterStyleChange(false)
+            , m_childNeedsOverflowRecalcAfterStyleChange(false)
             , m_isAnonymous(!node)
             , m_isText(false)
             , m_isBox(false)
@@ -1165,6 +1166,8 @@ private:
         ADD_BOOLEAN_BITFIELD(needsSimplifiedNormalFlowLayout, NeedsSimplifiedNormalFlowLayout);
         ADD_BOOLEAN_BITFIELD(preferredLogicalWidthsDirty, PreferredLogicalWidthsDirty);
         ADD_BOOLEAN_BITFIELD(floating, Floating);
+        ADD_BOOLEAN_BITFIELD(selfNeedsOverflowRecalcAfterStyleChange, SelfNeedsOverflowRecalcAfterStyleChange);
+        ADD_BOOLEAN_BITFIELD(childNeedsOverflowRecalcAfterStyleChange, ChildNeedsOverflowRecalcAfterStyleChange);
 
         ADD_BOOLEAN_BITFIELD(isAnonymous, IsAnonymous);
         ADD_BOOLEAN_BITFIELD(isText, IsText);
@@ -1233,6 +1236,8 @@ private:
     void setIsDragging(bool b) { m_bitfields.setIsDragging(b); }
     void setEverHadLayout(bool b) { m_bitfields.setEverHadLayout(b); }
     void setShouldRepaintOverflow(bool b) { m_bitfields.setShouldRepaintOverflow(b); }
+    void setSelfNeedsOverflowRecalcAfterStyleChange(bool b) { m_bitfields.setSelfNeedsOverflowRecalcAfterStyleChange(b); }
+    void setChildNeedsOverflowRecalcAfterStyleChange(bool b) { m_bitfields.setChildNeedsOverflowRecalcAfterStyleChange(b); }
 
 private:
     // Store state between styleWillChange and styleDidChange
@@ -1252,7 +1257,7 @@ inline bool operator!=(const RenderObject* a, const RenderObject& b) { return !(
 
 inline bool RenderObject::documentBeingDestroyed() const
 {
-    return !document().renderer();
+    return document().lifecycle().state() >= DocumentLifecycle::Stopping;
 }
 
 inline bool RenderObject::isBeforeContent() const
@@ -1331,18 +1336,6 @@ inline void RenderObject::setNeedsPositionedMovementLayout()
         markContainingBlocksForLayout();
         if (hasLayer())
             setLayerNeedsFullRepaintForPositionedMovementLayout();
-    }
-}
-
-inline void RenderObject::setNeedsSimplifiedNormalFlowLayout()
-{
-    bool alreadyNeededLayout = needsSimplifiedNormalFlowLayout();
-    setNeedsSimplifiedNormalFlowLayout(true);
-    ASSERT(!isSetNeedsLayoutForbidden());
-    if (!alreadyNeededLayout) {
-        markContainingBlocksForLayout();
-        if (hasLayer())
-            setLayerNeedsFullRepaint();
     }
 }
 

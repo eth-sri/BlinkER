@@ -42,7 +42,6 @@ class BidiContext;
 class LayoutStateMaintainer;
 class LineLayoutState;
 class RenderInline;
-class RenderRegion;
 class RenderText;
 
 struct BidiRun;
@@ -182,7 +181,7 @@ public:
     void clearTruncation();
 
     void adjustRectForColumns(LayoutRect&) const;
-    virtual void adjustForColumns(LayoutSize&, const LayoutPoint&) const OVERRIDE FINAL;
+    virtual LayoutSize columnOffset(const LayoutPoint&) const OVERRIDE;
     void adjustForColumnRect(LayoutSize& offset, const LayoutPoint& locationInContainer) const;
 
     void addContinuationWithOutline(RenderInline*);
@@ -263,6 +262,10 @@ public:
     // (grid items, flex items) require this behavior as well, and this function exists as a helper for them.
     // It is expected that the caller will call this function independent of the value of paintInfo.phase.
     static void paintAsInlineBlock(RenderObject*, PaintInfo&, const LayoutPoint&);
+
+    bool recalcChildOverflowAfterStyleChange();
+    bool recalcOverflowAfterStyleChange();
+
 protected:
     virtual void willBeDestroyed() OVERRIDE;
 
@@ -290,7 +293,7 @@ protected:
     void paintChild(RenderBox*, PaintInfo&, const LayoutPoint&);
     void paintChildAsInlineBlock(RenderBox*, PaintInfo&, const LayoutPoint&);
 
-    virtual void adjustInlineDirectionLineBounds(int /* expansionOpportunityCount */, float& /* logicalLeft */, float& /* logicalWidth */) const { }
+    virtual void adjustInlineDirectionLineBounds(unsigned /* expansionOpportunityCount */, float& /* logicalLeft */, float& /* logicalWidth */) const { }
 
     virtual bool nodeAtPoint(const HitTestRequest&, HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction) OVERRIDE;
 
@@ -349,6 +352,8 @@ private:
     virtual const char* renderName() const OVERRIDE;
 
     virtual bool isRenderBlock() const OVERRIDE FINAL { return true; }
+
+    virtual void repaintTreeAfterLayout() OVERRIDE;
 
     void makeChildrenNonInline(RenderObject* insertionPoint = 0);
     virtual void removeLeftoverAnonymousBlock(RenderBlock* child);
@@ -496,7 +501,6 @@ protected:
 
 public:
     virtual LayoutUnit offsetFromLogicalTopOfFirstPage() const OVERRIDE FINAL;
-    RenderRegion* regionAtBlockOffset(LayoutUnit) const;
 
     void invalidateLineHeight() { m_lineHeight = -1; }
 

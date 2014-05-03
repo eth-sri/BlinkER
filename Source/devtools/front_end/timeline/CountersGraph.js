@@ -185,12 +185,12 @@ WebInspector.CountersGraph.prototype = {
         {
             if (!this._model.isVisible(record))
                 return false;
-            if (record.startTime <= time && time <= record.endTime) {
+            if (record.startTime() <= time && time <= record.endTime()) {
                 recordToReveal = record;
                 return true;
             }
             // If there is no record containing the time than use the latest one before that time.
-            if (!recordToReveal || record.endTime < time && recordToReveal.endTime < record.endTime)
+            if (!recordToReveal || record.endTime() < time && recordToReveal.endTime() < record.endTime())
                 recordToReveal = record;
             return false;
         }
@@ -453,6 +453,10 @@ WebInspector.CountersGraph.CounterUI.prototype = {
         var ctx = canvas.getContext("2d");
         var width = canvas.width;
         var height = canvas.height - 2 * this._verticalPadding;
+        if (height <= 0) {
+            this.graphYValues = [];
+            return;
+        }
         var originY = this._verticalPadding;
         var counter = this.counter;
         var values = counter.values;

@@ -49,8 +49,6 @@ public:
     using SVGGraphicsElement::ref;
     using SVGGraphicsElement::deref;
 
-    virtual bool supportsFocus() const OVERRIDE { return hasFocusEventListeners(); }
-
     // 'SVGSVGElement' functions
     PassRefPtr<SVGRectTearOff> viewport() const;
 
@@ -107,8 +105,6 @@ public:
     AffineTransform viewBoxToViewTransform(float viewWidth, float viewHeight) const;
 
     void setupInitialView(const String& fragmentIdentifier, Element* anchorNode);
-
-    Element* getElementById(const AtomicString&) const;
 
     bool hasIntrinsicWidth() const;
     bool hasIntrinsicHeight() const;

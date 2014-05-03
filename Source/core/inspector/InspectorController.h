@@ -55,6 +55,7 @@ class InspectorFrontendClient;
 class InspectorLayerTreeAgent;
 class InspectorPageAgent;
 class InspectorTimelineAgent;
+class InspectorTracingAgent;
 class InspectorOverlay;
 class InspectorState;
 class InstrumentingAgents;
@@ -66,8 +67,6 @@ class PlatformKeyboardEvent;
 class PlatformMouseEvent;
 class PlatformTouchEvent;
 class Node;
-
-struct Highlight;
 
 class InspectorController {
     WTF_MAKE_NONCOPYABLE(InspectorController);
@@ -100,9 +99,6 @@ public:
 
     void inspect(Node*);
     void drawHighlight(GraphicsContext&) const;
-    void getHighlight(Highlight*) const;
-    void hideHighlight();
-    Node* highlightedNode() const;
 
     bool handleGestureEvent(LocalFrame*, const PlatformGestureEvent&);
     bool handleMouseEvent(LocalFrame*, const PlatformMouseEvent&);
@@ -152,6 +148,7 @@ private:
     InspectorPageAgent* m_pageAgent;
     InspectorTimelineAgent* m_timelineAgent;
     InspectorLayerTreeAgent* m_layerTreeAgent;
+    InspectorTracingAgent* m_tracingAgent;
 
     RefPtr<InspectorBackendDispatcher> m_inspectorBackendDispatcher;
     OwnPtr<InspectorFrontendClient> m_inspectorFrontendClient;

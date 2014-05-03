@@ -31,8 +31,8 @@
 #ifndef WebPagePopupImpl_h
 #define WebPagePopupImpl_h
 
-#include "WebPagePopup.h"
 #include "core/page/PagePopup.h"
+#include "public/web/WebPagePopup.h"
 #include "web/PageWidgetDelegate.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/RefCounted.h"
@@ -73,7 +73,6 @@ private:
     virtual void animate(double) OVERRIDE;
     virtual void layout() OVERRIDE;
     virtual void enterForceCompositingMode(bool enter) OVERRIDE;
-    virtual void didExitCompositingMode() OVERRIDE;
     virtual void willCloseLayerTreeView() OVERRIDE;
     virtual void paint(WebCanvas*, const WebRect&, PaintOptions = ReadbackFromCompositorIfAvailable) OVERRIDE;
     virtual void resize(const WebSize&) OVERRIDE;

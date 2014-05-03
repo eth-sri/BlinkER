@@ -192,7 +192,7 @@ Length HTMLMetaElement::parseViewportValueAsLength(const String& keyString, cons
     return Length(clampLengthValue(value), Fixed);
 }
 
-float HTMLMetaElement::parseViewportValueAsZoom(const String& keyString, const String& valueString)
+float HTMLMetaElement::parseViewportValueAsZoom(const String& keyString, const String& valueString, bool& computedValueMatchesParsedValue)
 {
     // 1) Non-negative number values are translated to <number> values.
     // 2) Negative number values are translated to auto.
@@ -200,6 +200,7 @@ float HTMLMetaElement::parseViewportValueAsZoom(const String& keyString, const S
     // 4) device-width and device-height are translated to 10.0.
     // 5) no and unknown values are translated to 0.0
 
+    computedValueMatchesParsedValue = false;
     unsigned length = valueString.length();
     DEFINE_ARRAY_FOR_MATCHING(characters, valueString, 13);
     SWITCH(characters, length) {
@@ -228,37 +229,44 @@ float HTMLMetaElement::parseViewportValueAsZoom(const String& keyString, const S
     if (!value && document().settings() && document().settings()->viewportMetaZeroValuesQuirk())
         return ViewportDescription::ValueAuto;
 
-    return clampScaleValue(value);
+    float clampedValue = clampScaleValue(value);
+    if (clampedValue == value)
+        computedValueMatchesParsedValue = true;
+
+    return clampedValue;
 }
 
-float HTMLMetaElement::parseViewportValueAsUserZoom(const String& keyString, const String& valueString)
+bool HTMLMetaElement::parseViewportValueAsUserZoom(const String& keyString, const String& valueString, bool& computedValueMatchesParsedValue)
 {
     // yes and no are used as keywords.
     // Numbers >= 1, numbers <= -1, device-width and device-height are mapped to yes.
     // Numbers in the range <-1, 1>, and unknown values, are mapped to no.
 
+    computedValueMatchesParsedValue = false;
     unsigned length = valueString.length();
     DEFINE_ARRAY_FOR_MATCHING(characters, valueString, 13);
     SWITCH(characters, length) {
         CASE("yes") {
-            return 1;
+            computedValueMatchesParsedValue = true;
+            return true;
         }
         CASE("no") {
-            return 0;
+            computedValueMatchesParsedValue = true;
+            return false;
         }
         CASE("device-width") {
-            return 1;
+            return true;
         }
         CASE("device-height") {
-            return 1;
+            return true;
         }
     }
 
     float value = parsePositiveNumber(keyString, valueString);
     if (fabs(value) < 1)
-        return 0;
+        return false;
 
-    return 1;
+    return true;
 }
 
 float HTMLMetaElement::parseViewportValueAsDPI(const String& keyString, const String& valueString)
@@ -313,19 +321,19 @@ void HTMLMetaElement::processViewportKeyValuePair(const String& keyString, const
             return;
         }
         CASE("initial-scale") {
-            description->zoom = parseViewportValueAsZoom(keyString, valueString);
+            description->zoom = parseViewportValueAsZoom(keyString, valueString, description->zoomIsExplicit);
             return;
         }
         CASE("minimum-scale") {
-            description->minZoom = parseViewportValueAsZoom(keyString, valueString);
+            description->minZoom = parseViewportValueAsZoom(keyString, valueString, description->minZoomIsExplicit);
             return;
         }
         CASE("maximum-scale") {
-            description->maxZoom = parseViewportValueAsZoom(keyString, valueString);
+            description->maxZoom = parseViewportValueAsZoom(keyString, valueString, description->maxZoomIsExplicit);
             return;
         }
         CASE("user-scalable") {
-            description->userZoom = parseViewportValueAsUserZoom(keyString, valueString);
+            description->userZoom = parseViewportValueAsUserZoom(keyString, valueString, description->userZoomIsExplicit);
             return;
         }
         CASE("target-densitydpi") {

@@ -4,7 +4,6 @@
  *           (C) 2007 David Smith (catfish.man@gmail.com)
  * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011 Apple Inc. All rights reserved.
  * Copyright (C) Research In Motion Limited 2010. All rights reserved.
- * Copyright (C) 2014 Samsung Electronics. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -359,6 +358,19 @@ void RenderBlock::styleDidChange(StyleDifference diff, const RenderStyle* oldSty
         ResourceLoadPriorityOptimizer::resourceLoadPriorityOptimizer()->removeRenderObject(this);
     else
         ResourceLoadPriorityOptimizer::resourceLoadPriorityOptimizer()->addRenderObject(this);
+}
+
+void RenderBlock::repaintTreeAfterLayout()
+{
+    RenderBox::repaintTreeAfterLayout();
+
+    // Take care of positioned objects. This is required as LayoutState keeps a single clip rect.
+    if (TrackedRendererListHashSet* positionedObjects = this->positionedObjects()) {
+        TrackedRendererListHashSet::iterator end = positionedObjects->end();
+        LayoutStateMaintainer statePusher(*this, isTableRow() ? LayoutSize() : locationOffset());
+        for (TrackedRendererListHashSet::iterator it = positionedObjects->begin(); it != end; ++it)
+            (*it)->repaintTreeAfterLayout();
+    }
 }
 
 RenderBlock* RenderBlock::continuationBefore(RenderObject* beforeChild)
@@ -1178,11 +1190,6 @@ void RenderBlock::removeChild(RenderObject* oldChild)
 
 bool RenderBlock::isSelfCollapsingBlock() const
 {
-    // Placeholder elements are not laid out until the dimensions of their parent text control are known, so they
-    // don't get layout until their parent has had layout - this is unique in the layout tree and means
-    // when we call isSelfCollapsingBlock on them we find that they still need layout.
-    ASSERT(!needsLayout() || (node() && node()->isElementNode() && toElement(node())->shadowPseudoId() == "-webkit-input-placeholder"));
-
     // We are not self-collapsing if we
     // (a) have a non-zero height according to layout (an optimization to avoid wasting time)
     // (b) are a table,
@@ -1191,8 +1198,17 @@ bool RenderBlock::isSelfCollapsingBlock() const
     // (e) have specified that one of our margins can't collapse using a CSS extension
     // (f) establish a new block formatting context.
 
+    // The early exit must be done before we check for clean layout.
+    // We should be able to give a quick answer if the box is a relayout boundary.
+    // Being a relayout boundary implies a block formatting context, and also
+    // our internal layout shouldn't affect our container in any way.
     if (createsBlockFormattingContext())
         return false;
+
+    // Placeholder elements are not laid out until the dimensions of their parent text control are known, so they
+    // don't get layout until their parent has had layout - this is unique in the layout tree and means
+    // when we call isSelfCollapsingBlock on them we find that they still need layout.
+    ASSERT(!needsLayout() || (node() && node()->isElementNode() && toElement(node())->shadowPseudoId() == "-webkit-input-placeholder"));
 
     if (logicalHeight() > 0
         || isTable() || borderAndPaddingLogicalHeight()
@@ -1443,7 +1459,7 @@ void RenderBlock::addVisualOverflowFromTheme()
 
 bool RenderBlock::createsBlockFormattingContext() const
 {
-    return isInlineBlockOrInlineTable() || isFloatingOrOutOfFlowPositioned() || hasOverflowClip() || (parent() && parent()->isFlexibleBoxIncludingDeprecated())
+    return isInlineBlockOrInlineTable() || isFloatingOrOutOfFlowPositioned() || hasOverflowClip() || isFlexItemIncludingDeprecated()
         || style()->specifiesColumns() || isRenderFlowThread() || isTableCell() || isTableCaption() || isFieldset() || isWritingModeRoot() || isDocumentElement() || style()->columnSpan();
 }
 
@@ -2735,6 +2751,21 @@ bool RenderBlock::nodeAtPoint(const HitTestRequest& request, HitTestResult& resu
            return true;
     }
 
+    if (style()->clipPath()) {
+        switch (style()->clipPath()->type()) {
+        case ClipPathOperation::SHAPE: {
+            ShapeClipPathOperation* clipPath = toShapeClipPathOperation(style()->clipPath());
+            // FIXME: handle marginBox etc.
+            if (!clipPath->path(borderBoxRect()).contains(locationInContainer.point() - localOffset, clipPath->windRule()))
+                return false;
+            break;
+        }
+        case ClipPathOperation::REFERENCE:
+            // FIXME: handle REFERENCE
+            break;
+        }
+    }
+
     // If we have clipping, then we can't have any spillout.
     bool useOverflowClip = hasOverflowClip() && !hasSelfPaintingLayer();
     bool useClip = (hasControlClip() || useOverflowClip);
@@ -3427,10 +3458,10 @@ void RenderBlock::adjustStartEdgeForWritingModeIncludingColumns(LayoutRect& rect
         rect.setX(expandedLogicalHeight - rect.maxX());
 }
 
-void RenderBlock::adjustForColumns(LayoutSize& offset, const LayoutPoint& point) const
+LayoutSize RenderBlock::columnOffset(const LayoutPoint& point) const
 {
     if (!hasColumns())
-        return;
+        return LayoutSize();
 
     ColumnInfo* colInfo = columnInfo();
 
@@ -3451,21 +3482,19 @@ void RenderBlock::adjustForColumns(LayoutSize& offset, const LayoutPoint& point)
         if (isHorizontalWritingMode()) {
             if (point.y() >= sliceRect.y() && point.y() < sliceRect.maxY()) {
                 if (colInfo->progressionAxis() == ColumnInfo::InlineAxis)
-                    offset.expand(columnRectAt(colInfo, i).x() - logicalLeft, -logicalOffset);
-                else
-                    offset.expand(0, columnRectAt(colInfo, i).y() - logicalOffset - borderBefore() - paddingBefore());
-                return;
+                    return LayoutSize(columnRectAt(colInfo, i).x() - logicalLeft, -logicalOffset);
+                return LayoutSize(0, columnRectAt(colInfo, i).y() - logicalOffset - borderBefore() - paddingBefore());
             }
         } else {
             if (point.x() >= sliceRect.x() && point.x() < sliceRect.maxX()) {
                 if (colInfo->progressionAxis() == ColumnInfo::InlineAxis)
-                    offset.expand(-logicalOffset, columnRectAt(colInfo, i).y() - logicalLeft);
-                else
-                    offset.expand(columnRectAt(colInfo, i).x() - logicalOffset - borderBefore() - paddingBefore(), 0);
-                return;
+                    return LayoutSize(-logicalOffset, columnRectAt(colInfo, i).y() - logicalLeft);
+                return LayoutSize(columnRectAt(colInfo, i).x() - logicalOffset - borderBefore() - paddingBefore(), 0);
             }
         }
     }
+
+    return LayoutSize();
 }
 
 void RenderBlock::computeIntrinsicLogicalWidths(LayoutUnit& minLogicalWidth, LayoutUnit& maxLogicalWidth) const
@@ -3867,6 +3896,24 @@ static RenderStyle* styleForFirstLetter(RenderObject* firstLetterBlock, RenderOb
     return pseudoStyle;
 }
 
+// CSS 2.1 http://www.w3.org/TR/CSS21/selector.html#first-letter
+// "Punctuation (i.e, characters defined in Unicode [UNICODE] in the "open" (Ps), "close" (Pe),
+// "initial" (Pi). "final" (Pf) and "other" (Po) punctuation classes), that precedes or follows the first letter should be included"
+static inline bool isPunctuationForFirstLetter(UChar c)
+{
+    CharCategory charCategory = category(c);
+    return charCategory == Punctuation_Open
+        || charCategory == Punctuation_Close
+        || charCategory == Punctuation_InitialQuote
+        || charCategory == Punctuation_FinalQuote
+        || charCategory == Punctuation_Other;
+}
+
+static inline bool isSpaceForFirstLetter(UChar c)
+{
+    return isSpaceOrNewline(c) || c == noBreakSpace;
+}
+
 static inline RenderObject* findFirstLetterBlock(RenderBlock* start)
 {
     RenderObject* firstLetterBlock = start;
@@ -3940,6 +3987,40 @@ void RenderBlock::updateFirstLetterStyle(RenderObject* firstLetterBlock, RenderO
     }
 }
 
+static inline unsigned firstLetterLength(const String& text)
+{
+    unsigned length = 0;
+    unsigned textLength = text.length();
+
+    // Account for leading spaces first.
+    while (length < textLength && isSpaceForFirstLetter(text[length]))
+        length++;
+
+    // Now account for leading punctuation.
+    while (length < textLength && isPunctuationForFirstLetter(text[length]))
+        length++;
+
+    // Bail if we didn't find a letter before the end of the text or before a space.
+    if (isSpaceForFirstLetter(text[length]) || (textLength && length == textLength))
+        return 0;
+
+    // Account the next character for first letter.
+    length++;
+
+    // Keep looking allowed punctuation for the :first-letter.
+    for (unsigned scanLength = length; scanLength < textLength; ++scanLength) {
+        UChar c = text[scanLength];
+
+        if (!isPunctuationForFirstLetter(c))
+            break;
+
+        length = scanLength + 1;
+    }
+
+    // FIXME: If textLength is 0, length may still be 1!
+    return length;
+}
+
 void RenderBlock::createFirstLetterRenderer(RenderObject* firstLetterBlock, RenderObject* currentChild, unsigned length)
 {
     ASSERT(length && currentChild->isText());
@@ -3984,208 +4065,11 @@ void RenderBlock::createFirstLetterRenderer(RenderObject* firstLetterBlock, Rend
     textObj->destroy();
 }
 
-static bool isRendererAllowedForFirstLetter(RenderObject* renderer)
-{
-    // FIXME: This black-list of disallowed RenderText subclasses is fragile.
-    // Should counter be on this list? What about RenderTextFragment?
-    return renderer->isText() && !renderer->isBR() && !toRenderText(renderer)->isWordBreak();
-}
-
-typedef Vector<std::pair<RenderObject*, unsigned> > FirstLetterRenderersList;
-
-enum FirstLetterSearchState {
-    SearchLeadingSpaces,
-    SearchLeadingPunctuation,
-    SearchFirstLetterCharacter,
-    SearchTrailingPunctuation
-};
-
-class FirstLetterFinder {
-    WTF_MAKE_NONCOPYABLE(FirstLetterFinder);
-public:
-    FirstLetterFinder(RenderObject* block)
-        : m_containerBlock(block)
-        , m_renderers()
-        , m_searchState(SearchLeadingSpaces)
-        , m_firstLetterFound(false)
-    {
-        // The purpose of this class is to find the renderers that would be part
-        // of the first-letter pseudo element, so go find them right now.
-        findTextRenderers();
-    }
-
-    FirstLetterRenderersList& renderers() { return m_renderers; }
-    RenderObject* containerBlock() { return m_containerBlock; }
-
-private:
-    void findTextRenderers()
-    {
-        // Drill into inlines looking for the render objects to be transformed into first-letter pseudoelements.
-        RenderObject* currentChild = m_containerBlock->firstChild();
-        unsigned currentLength = 0;
-
-        while (currentChild) {
-            if (currentChild->isText()) {
-                // Process the renderer and store it in the list if valid text was found.
-                currentLength = processTextRenderer(currentChild);
-                if (currentLength)
-                    m_renderers.append(std::make_pair(currentChild, currentLength));
-
-                // No need to keep looking if we haven't found anything with the
-                // current renderer or if we already made a decision.
-                String text = rendererTextForFirstLetter(currentChild);
-                if (!currentLength || currentLength < text.length())
-                    break;
-
-                // We need to look the next object traversing the tree in preorder as if the current renderer
-                // was a leaf node (which probably is anyway) but without leaving the scope of the parent block.
-                currentChild = currentChild->nextInPreOrderAfterChildren(m_containerBlock);
-            } else if (currentChild->isListMarker()) {
-                currentChild = currentChild->nextSibling();
-            } else if (currentChild->isFloatingOrOutOfFlowPositioned()) {
-                if (currentChild->style()->styleType() == FIRST_LETTER) {
-                    currentChild = currentChild->firstChild();
-                    if (currentChild) {
-                        // If found a floating/out-of-flow element with the first-letter
-                        // style already applied, it means it has been previously identified
-                        // and so we should discard whatever we found so far and use that.
-                        m_firstLetterFound = true;
-                        m_renderers.append(std::make_pair(currentChild, rendererTextForFirstLetter(currentChild).length()));
-                    }
-                    break;
-                }
-                currentChild = currentChild->nextSibling();
-            } else if (currentChild->isReplaced() || currentChild->isRenderButton() || currentChild->isMenuList()) {
-                break;
-            } else if (currentChild->style()->hasPseudoStyle(FIRST_LETTER) && currentChild->canHaveGeneratedChildren())  {
-                // We found a lower-level node with first-letter, which supersedes the higher-level style,
-                // so we replace the block originally considered as the container and empty the list of
-                // renderers we might have detected so far, as we no longer need to consider those.
-                m_containerBlock = currentChild;
-                currentChild = currentChild->firstChild();
-                m_renderers.clear();
-            } else {
-                currentChild = currentChild->firstChild();
-            }
-        }
-
-        if (!m_firstLetterFound) {
-            // Empty the list of renderers if we did not find a correct set of them
-            // to further generate new elements to apply the first-letter style over.
-            m_renderers.clear();
-        }
-    }
-
-    String rendererTextForFirstLetter(RenderObject* renderer) const
-    {
-        ASSERT(renderer->isText());
-        RenderText* textRenderer = toRenderText(renderer);
-
-        String result = textRenderer->originalText();
-        if (!result.isNull())
-            return result;
-
-        if (isRendererAllowedForFirstLetter(renderer))
-            return textRenderer->text();
-
-        return String();
-    }
-
-    unsigned processTextRenderer(RenderObject* renderer)
-    {
-        ASSERT(renderer->isText());
-        String text = rendererTextForFirstLetter(renderer);
-
-        // Early return in case we encounter the wrong characters at the beginning.
-        if (text.isEmpty()
-            || (m_searchState == SearchLeadingPunctuation && isSpaceForFirstLetter(text[0]))
-            || (m_firstLetterFound && !isPunctuationForFirstLetter(text[0])))
-            return 0;
-
-        // Now start looking for valid characters for the first-letter pseudo element.
-        bool doneSearching = false;
-        unsigned textLength = text.length();
-        unsigned length = 0;
-
-        while (!doneSearching && length < textLength) {
-            switch (m_searchState) {
-            case SearchLeadingSpaces:
-                advancePositionWhile<isSpaceForFirstLetter>(text, length);
-                if (length < textLength)
-                    m_searchState = SearchLeadingPunctuation;
-                break;
-
-            case SearchLeadingPunctuation:
-                advancePositionWhile<isPunctuationForFirstLetter>(text, length);
-                if (length < textLength)
-                    m_searchState = SearchFirstLetterCharacter;
-                break;
-
-            case SearchFirstLetterCharacter:
-                // Now spaces are allowed between leading punctuation and the letter.
-                if (isSpaceForFirstLetter(text[length]))
-                    return 0;
-
-                m_firstLetterFound = true;
-                m_searchState = SearchTrailingPunctuation;
-                length++;
-                break;
-
-            case SearchTrailingPunctuation:
-                for (unsigned scanLength = length; scanLength < textLength; ++scanLength) {
-                    UChar c = text[scanLength];
-                    if (!isPunctuationForFirstLetter(c)) {
-                        doneSearching = true;
-                        break;
-                    }
-                    length = scanLength + 1;
-                }
-                break;
-            }
-        }
-
-        ASSERT(length <= textLength);
-        return length;
-    }
-
-    template<bool characterPredicate(UChar)>
-    void advancePositionWhile(const String& text, unsigned& position)
-    {
-        unsigned textLength = text.length();
-        while (position < textLength && characterPredicate(text[position]))
-            position++;
-    }
-
-    // CSS 2.1 http://www.w3.org/TR/CSS21/selector.html#first-letter
-    // "Punctuation (i.e, characters defined in Unicode [UNICODE] in the "open" (Ps), "close" (Pe),
-    // "initial" (Pi). "final" (Pf) and "other" (Po) punctuation classes), that precedes or follows the first letter should be included"
-    static inline bool isPunctuationForFirstLetter(UChar c)
-    {
-        CharCategory charCategory = category(c);
-        return charCategory == Punctuation_Open
-            || charCategory == Punctuation_Close
-            || charCategory == Punctuation_InitialQuote
-            || charCategory == Punctuation_FinalQuote
-            || charCategory == Punctuation_Other;
-    }
-
-    static inline bool isSpaceForFirstLetter(UChar c)
-    {
-        return isSpaceOrNewline(c) || c == noBreakSpace;
-    }
-
-    RenderObject* m_containerBlock;
-    FirstLetterRenderersList m_renderers;
-    FirstLetterSearchState m_searchState;
-    bool m_firstLetterFound;
-};
-
 void RenderBlock::updateFirstLetter()
 {
     if (!document().styleEngine()->usesFirstLetterRules())
         return;
-
-    // Early return if the renderer is already known to be part of a first-letter pseudo element.
+    // Don't recur
     if (style()->styleType() == FIRST_LETTER)
         return;
 
@@ -4195,40 +4079,55 @@ void RenderBlock::updateFirstLetter()
     if (!firstLetterBlock)
         return;
 
-    // Find the renderers to apply the first-letter style over.
-    FirstLetterFinder firstLetterFinder(firstLetterBlock);
-    FirstLetterRenderersList& renderers = firstLetterFinder.renderers();
-    if (renderers.isEmpty())
+    // Drill into inlines looking for our first text child.
+    RenderObject* currChild = firstLetterBlock->firstChild();
+    unsigned length = 0;
+    while (currChild) {
+        if (currChild->isText()) {
+            // FIXME: If there is leading punctuation in a different RenderText than
+            // the first letter, we'll not apply the correct style to it.
+            length = firstLetterLength(toRenderText(currChild)->originalText());
+            if (length)
+                break;
+            currChild = currChild->nextSibling();
+        } else if (currChild->isListMarker()) {
+            currChild = currChild->nextSibling();
+        } else if (currChild->isFloatingOrOutOfFlowPositioned()) {
+            if (currChild->style()->styleType() == FIRST_LETTER) {
+                currChild = currChild->firstChild();
+                break;
+            }
+            currChild = currChild->nextSibling();
+        } else if (currChild->isReplaced() || currChild->isRenderButton() || currChild->isMenuList())
+            break;
+        else if (currChild->style()->hasPseudoStyle(FIRST_LETTER) && currChild->canHaveGeneratedChildren())  {
+            // We found a lower-level node with first-letter, which supersedes the higher-level style
+            firstLetterBlock = currChild;
+            currChild = currChild->firstChild();
+        } else
+            currChild = currChild->firstChild();
+    }
+
+    if (!currChild)
         return;
 
-    // The FindLetterFinder might change what considers to be the container block
-    // for the render objects that form the first-letter pseudo element from the one
-    // originally passed to the constructor so we need to update the pointer now.
-    firstLetterBlock = firstLetterFinder.containerBlock();
-
-    // Create the new renderers for the first-letter pseudo elements.
-    for (FirstLetterRenderersList::const_iterator it = renderers.begin(); it != renderers.end(); ++it) {
-        RenderObject* currentRenderer = it->first;
-        ASSERT(currentRenderer->isText());
-
-        // If the child already has style, then it has already been created, so we just want
-        // to update it.
-        if (currentRenderer->parent()->style()->styleType() == FIRST_LETTER) {
-            updateFirstLetterStyle(firstLetterBlock, currentRenderer);
-            continue;
-        }
-
-        if (!isRendererAllowedForFirstLetter(currentRenderer))
-            continue;
-
-        // Our layout state is not valid for the repaints we are going to trigger by
-        // adding and removing children of firstLetterContainer.
-        LayoutStateDisabler layoutStateDisabler(*this);
-
-        unsigned lengthForRenderer = it->second;
-        if (lengthForRenderer)
-            createFirstLetterRenderer(firstLetterBlock, currentRenderer, lengthForRenderer);
+    // If the child already has style, then it has already been created, so we just want
+    // to update it.
+    if (currChild->parent()->style()->styleType() == FIRST_LETTER) {
+        updateFirstLetterStyle(firstLetterBlock, currChild);
+        return;
     }
+
+    // FIXME: This black-list of disallowed RenderText subclasses is fragile.
+    // Should counter be on this list? What about RenderTextFragment?
+    if (!currChild->isText() || currChild->isBR() || toRenderText(currChild)->isWordBreak())
+        return;
+
+    // Our layout state is not valid for the repaints we are going to trigger by
+    // adding and removing children of firstLetterContainer.
+    LayoutStateDisabler layoutStateDisabler(*this);
+
+    createFirstLetterRenderer(firstLetterBlock, currChild, length);
 }
 
 // Helper methods for obtaining the last line, computing line counts and heights for line counts
@@ -4834,15 +4733,6 @@ LayoutUnit RenderBlock::offsetFromLogicalTopOfFirstPage() const
     return 0;
 }
 
-RenderRegion* RenderBlock::regionAtBlockOffset(LayoutUnit blockOffset) const
-{
-    RenderFlowThread* flowThread = flowThreadContainingBlock();
-    if (!flowThread || !flowThread->hasValidRegionInfo())
-        return 0;
-
-    return flowThread->regionAtBlockOffset(offsetFromLogicalTopOfFirstPage() + blockOffset, true);
-}
-
 LayoutUnit RenderBlock::collapsedMarginBeforeForChild(const RenderBox* child) const
 {
     // If the child has the same directionality as we do, then we can just return its
@@ -4978,6 +4868,91 @@ RenderBlockFlow* RenderBlock::createAnonymousColumnSpanWithParentRenderer(const 
     RenderBlockFlow* newBox = RenderBlockFlow::createAnonymous(&parent->document());
     newBox->setStyle(newStyle.release());
     return newBox;
+}
+
+static bool recalcNormalFlowChildOverflowIfNeeded(RenderObject* renderer)
+{
+    if (renderer->isOutOfFlowPositioned() || !renderer->needsOverflowRecalcAfterStyleChange())
+        return false;
+
+    ASSERT(renderer->isRenderBlock());
+    return toRenderBlock(renderer)->recalcOverflowAfterStyleChange();
+}
+
+bool RenderBlock::recalcChildOverflowAfterStyleChange()
+{
+    ASSERT(childNeedsOverflowRecalcAfterStyleChange());
+    setChildNeedsOverflowRecalcAfterStyleChange(false);
+
+    bool childrenOverflowChanged = false;
+
+    if (childrenInline()) {
+        ListHashSet<RootInlineBox*> lineBoxes;
+        for (InlineWalker walker(this); !walker.atEnd(); walker.advance()) {
+            RenderObject* renderer = walker.current();
+            if (recalcNormalFlowChildOverflowIfNeeded(renderer)) {
+                childrenOverflowChanged = true;
+                if (InlineBox* inlineBoxWrapper = toRenderBlock(renderer)->inlineBoxWrapper())
+                    lineBoxes.add(&inlineBoxWrapper->root());
+            }
+        }
+
+        // FIXME: Glyph overflow will get lost in this case, but not really a big deal.
+        GlyphOverflowAndFallbackFontsMap textBoxDataMap;
+        for (ListHashSet<RootInlineBox*>::const_iterator it = lineBoxes.begin(); it != lineBoxes.end(); ++it) {
+            RootInlineBox* box = *it;
+            box->computeOverflow(box->lineTop(), box->lineBottom(), textBoxDataMap);
+        }
+    } else {
+        for (RenderBox* box = firstChildBox(); box; box = box->nextSiblingBox()) {
+            if (recalcNormalFlowChildOverflowIfNeeded(box))
+                childrenOverflowChanged = true;
+        }
+    }
+
+    TrackedRendererListHashSet* positionedDescendants = positionedObjects();
+    if (!positionedDescendants)
+        return childrenOverflowChanged;
+
+    TrackedRendererListHashSet::iterator end = positionedDescendants->end();
+    for (TrackedRendererListHashSet::iterator it = positionedDescendants->begin(); it != end; ++it) {
+        RenderBox* box = *it;
+
+        if (!box->needsOverflowRecalcAfterStyleChange())
+            continue;
+        RenderBlock* block = toRenderBlock(box);
+        if (!block->recalcOverflowAfterStyleChange() || box->style()->position() == FixedPosition)
+            continue;
+
+        childrenOverflowChanged = true;
+    }
+    return childrenOverflowChanged;
+}
+
+bool RenderBlock::recalcOverflowAfterStyleChange()
+{
+    ASSERT(needsOverflowRecalcAfterStyleChange());
+
+    bool childrenOverflowChanged = false;
+    if (childNeedsOverflowRecalcAfterStyleChange())
+        childrenOverflowChanged = recalcChildOverflowAfterStyleChange();
+
+    if (!selfNeedsOverflowRecalcAfterStyleChange() && !childrenOverflowChanged)
+        return false;
+
+    setSelfNeedsOverflowRecalcAfterStyleChange(false);
+    // If the current block needs layout, overflow will be recalculated during
+    // layout time anyway. We can safely exit here.
+    if (needsLayout())
+        return false;
+
+    LayoutUnit oldClientAfterEdge = hasRenderOverflow() ? m_overflow->layoutClientAfterEdge() : clientLogicalBottom();
+    computeOverflow(oldClientAfterEdge, true);
+
+    if (hasOverflowClip())
+        layer()->scrollableArea()->updateAfterOverflowRecalc();
+
+    return !hasOverflowClip();
 }
 
 #ifndef NDEBUG

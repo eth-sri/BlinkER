@@ -246,10 +246,11 @@
         'svg',
       ],
       'sources': [
+        '<@(bindings_files)',
         # These files include all the .cpp files generated from the .idl files
         # in webcore_files.
-        '<@(aggregate_generated_bindings_files)',
-        '<@(bindings_files)',
+        '<@(bindings_core_generated_aggregate_files)',
+        '<@(bindings_modules_generated_aggregate_files)',
 
         # Additional .cpp files for HashTools.h
         '<(SHARED_INTERMEDIATE_DIR)/blink/CSSPropertyNames.cpp',
@@ -273,6 +274,7 @@
         '<(SHARED_INTERMEDIATE_DIR)/blink/HTMLElementLookupTrie.cpp',
         '<(SHARED_INTERMEDIATE_DIR)/blink/HTMLElementLookupTrie.h',
         '<(SHARED_INTERMEDIATE_DIR)/blink/HTMLNames.cpp',
+        '<(SHARED_INTERMEDIATE_DIR)/blink/HTMLTokenizerNames.cpp',
         '<(SHARED_INTERMEDIATE_DIR)/blink/InputTypeNames.cpp',
         '<(SHARED_INTERMEDIATE_DIR)/blink/MathMLNames.cpp',
         '<(SHARED_INTERMEDIATE_DIR)/blink/SVGNames.cpp',

@@ -59,6 +59,7 @@
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLPlugInElement.h"
 #include "core/inspector/InspectorInstrumentation.h"
+#include "core/inspector/InspectorTraceEvents.h"
 #include "core/inspector/ScriptCallStack.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
@@ -178,7 +179,9 @@ v8::Local<v8::Value> ScriptController::executeScriptAndReturnValue(v8::Handle<v8
 {
     v8::Context::Scope scope(context);
 
-    InspectorInstrumentationCookie cookie = InspectorInstrumentation::willEvaluateScript(m_frame, source.url().isNull() ? String() : source.url().string(), source.startLine());
+    TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "EvaluateScript", "data", InspectorEvaluateScriptEvent::data(m_frame, source.url().string(), source.startLine()));
+    // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
+    InspectorInstrumentationCookie cookie = InspectorInstrumentation::willEvaluateScript(m_frame, source.url().string(), source.startLine());
 
     v8::Local<v8::Value> result;
     {
@@ -440,7 +443,7 @@ void ScriptController::setCaptureCallStackForUncaughtExceptions(bool value)
     v8::V8::SetCaptureStackTraceForUncaughtExceptions(value, ScriptCallStack::maxCallStackSizeToCapture, stackTraceOptions);
 }
 
-void ScriptController::collectIsolatedContexts(Vector<std::pair<NewScriptState*, SecurityOrigin*> >& result)
+void ScriptController::collectIsolatedContexts(Vector<std::pair<ScriptState*, SecurityOrigin*> >& result)
 {
     v8::HandleScope handleScope(m_isolate);
     for (IsolatedWorldMap::iterator it = m_isolatedWorlds.begin(); it != m_isolatedWorlds.end(); ++it) {
@@ -451,8 +454,8 @@ void ScriptController::collectIsolatedContexts(Vector<std::pair<NewScriptState*,
         v8::Local<v8::Context> v8Context = isolatedWorldShell->context();
         if (v8Context.IsEmpty())
             continue;
-        NewScriptState* scriptState = NewScriptState::from(v8Context);
-        result.append(std::pair<NewScriptState*, SecurityOrigin*>(scriptState, origin));
+        ScriptState* scriptState = ScriptState::from(v8Context);
+        result.append(std::pair<ScriptState*, SecurityOrigin*>(scriptState, origin));
     }
 }
 

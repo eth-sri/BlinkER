@@ -31,6 +31,7 @@
 #ifndef ScriptValue_h
 #define ScriptValue_h
 
+#include "bindings/v8/ScriptState.h"
 #include "bindings/v8/SharedPersistent.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"
@@ -40,7 +41,6 @@
 namespace WebCore {
 
 class JSONValue;
-class ScriptState;
 
 class ScriptValue {
 public:

@@ -54,7 +54,8 @@ WebInspector.CanvasProfileView = function(profile)
     replayImageContainerView.setMinimumSize(50, 28);
     replayImageContainerView.show(this._imageSplitView.mainElement());
 
-    var replayImageContainer = replayImageContainerView.element;
+    // NOTE: The replayImageContainer can NOT be a flex div (e.g. VBox or SplitView elements)!
+    var replayImageContainer = replayImageContainerView.element.createChild("div");
     replayImageContainer.id = "canvas-replay-image-container";
     this._replayImageElement = replayImageContainer.createChild("img", "canvas-replay-image");
     this._debugInfoElement = replayImageContainer.createChild("div", "canvas-debug-info hidden");
@@ -686,19 +687,24 @@ WebInspector.CanvasProfileType.prototype = {
     _runSingleFrameCapturing: function()
     {
         var frameId = this._selectedFrameId();
+        this._target.profilingLock.acquire();
         CanvasAgent.captureFrame(frameId, this._didStartCapturingFrame.bind(this, frameId));
+        this._target.profilingLock.release();
     },
 
     _startFrameCapturing: function()
     {
         var frameId = this._selectedFrameId();
+        this._target.profilingLock.acquire();
         CanvasAgent.startCapturing(frameId, this._didStartCapturingFrame.bind(this, frameId));
     },
 
     _stopFrameCapturing: function()
     {
-        if (!this._lastProfileHeader)
+        if (!this._lastProfileHeader) {
+            this._target.profilingLock.release();
             return;
+        }
         var profileHeader = this._lastProfileHeader;
         var traceLogId = profileHeader.traceLogId();
         this._lastProfileHeader = null;
@@ -707,6 +713,7 @@ WebInspector.CanvasProfileType.prototype = {
             profileHeader._updateCapturingStatus();
         }
         CanvasAgent.stopCapturing(traceLogId, didStopCapturing);
+        this._target.profilingLock.release();
     },
 
     /**

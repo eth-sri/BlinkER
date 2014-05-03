@@ -45,7 +45,7 @@
 
 namespace WebCore {
 
-class NewScriptState;
+class ScriptState;
 class ScriptController;
 class ScriptDebugListener;
 class ScriptObject;
@@ -77,7 +77,7 @@ public:
     void stepOverStatement(const ScriptValue& frame);
     void stepOutOfFunction(const ScriptValue& frame);
 
-    bool setScriptSource(const String& sourceID, const String& newContent, bool preview, String* error, RefPtr<TypeBuilder::Debugger::SetScriptSourceError>&, ScriptValue* newCallFrames, ScriptObject* result);
+    bool setScriptSource(const String& sourceID, const String& newContent, bool preview, String* error, RefPtr<TypeBuilder::Debugger::SetScriptSourceError>&, ScriptValue* newCallFrames, RefPtr<JSONObject>* result);
     ScriptValue currentCallFrames();
     ScriptValue currentCallFramesForAsyncStack();
 
@@ -97,9 +97,9 @@ public:
     v8::Handle<v8::Value> setFunctionVariableValue(v8::Handle<v8::Value> functionValue, int scopeNumber, const String& variableName, v8::Handle<v8::Value> newValue);
     v8::Local<v8::Value> callDebuggerMethod(const char* functionName, int argc, v8::Handle<v8::Value> argv[]);
 
-    virtual void compileScript(NewScriptState*, const String& expression, const String& sourceURL, String* scriptId, String* exceptionMessage);
+    virtual void compileScript(ScriptState*, const String& expression, const String& sourceURL, String* scriptId, String* exceptionMessage);
     virtual void clearCompiledScripts();
-    virtual void runScript(NewScriptState*, const String& scriptId, ScriptValue* result, bool* wasThrown, String* exceptionMessage);
+    virtual void runScript(ScriptState*, const String& scriptId, ScriptValue* result, bool* wasThrown, String* exceptionMessage);
     virtual void setPreprocessorSource(const String&) { }
     virtual void preprocessBeforeCompile(const v8::Debug::EventDetails&) { }
     virtual PassOwnPtr<ScriptSourceCode> preprocess(LocalFrame*, const ScriptSourceCode&);

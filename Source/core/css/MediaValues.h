@@ -5,7 +5,7 @@
 #ifndef MediaValues_h
 #define MediaValues_h
 
-#include "core/frame/LocalFrame.h"
+#include "core/css/CSSPrimitiveValue.h"
 #include "wtf/RefCounted.h"
 #include "wtf/RefPtr.h"
 
@@ -13,6 +13,7 @@ namespace WebCore {
 
 class Document;
 class CSSPrimitiveValue;
+class LocalFrame;
 
 class MediaValues : public RefCounted<MediaValues> {
 public:
@@ -34,8 +35,19 @@ public:
     static PassRefPtr<MediaValues> createDynamicIfFrameExists(LocalFrame*);
     virtual PassRefPtr<MediaValues> copy() const = 0;
     virtual bool isSafeToSendToAnotherThread() const = 0;
-    static bool computeLength(double value, unsigned short type, unsigned defaultFontSize, unsigned viewportWidth, unsigned viewportHeight, int& result);
-    virtual bool computeLength(double value, unsigned short type, int& result) const = 0;
+
+    static bool computeLengthImpl(double value, CSSPrimitiveValue::UnitTypes, unsigned defaultFontSize, unsigned viewportWidth, unsigned viewportHeight, double& result);
+    template<typename T>
+    static bool computeLength(double value, CSSPrimitiveValue::UnitTypes type, unsigned defaultFontSize, unsigned viewportWidth, unsigned viewportHeight, T& result)
+    {
+        double tempResult;
+        if (!computeLengthImpl(value, type, defaultFontSize, viewportWidth, viewportHeight, tempResult))
+            return false;
+        result = roundForImpreciseConversion<T>(tempResult);
+        return true;
+    }
+    virtual bool computeLength(double value, CSSPrimitiveValue::UnitTypes, int& result) const = 0;
+    virtual bool computeLength(double value, CSSPrimitiveValue::UnitTypes, double& result) const = 0;
 
     virtual int viewportWidth() const = 0;
     virtual int viewportHeight() const = 0;

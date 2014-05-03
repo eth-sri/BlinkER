@@ -24,9 +24,10 @@
  */
 
 [
+    WillBeGarbageCollected
 ] interface IDBKeyRange {
-    [ImplementedAs=lowerValue, CallWith=NewScriptState] readonly attribute any lower;
-    [ImplementedAs=upperValue, CallWith=NewScriptState] readonly attribute any upper;
+    [ImplementedAs=lowerValue, CallWith=ScriptState] readonly attribute any lower;
+    [ImplementedAs=upperValue, CallWith=ScriptState] readonly attribute any upper;
     readonly attribute boolean lowerOpen;
     readonly attribute boolean upperOpen;
 

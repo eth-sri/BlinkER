@@ -28,8 +28,8 @@
 
 #include "RuntimeEnabledFeatures.h"
 #include "bindings/v8/Dictionary.h"
-#include "bindings/v8/NewScriptState.h"
 #include "bindings/v8/ScriptPromiseResolverWithContext.h"
+#include "bindings/v8/ScriptState.h"
 #include "core/css/CSSFontFaceLoadEvent.h"
 #include "core/css/CSSFontSelector.h"
 #include "core/css/parser/BisonCSSParser.h"
@@ -65,12 +65,12 @@ private:
     LoadFontPromiseResolver(FontFaceArray faces, ExecutionContext* context)
         : m_numLoading(faces.size())
         , m_errorOccured(false)
-        , m_resolver(ScriptPromiseResolverWithContext::create(NewScriptState::current(toIsolate(context))))
+        , m_resolver(ScriptPromiseResolverWithContext::create(ScriptState::current(toIsolate(context))))
     {
         m_fontFaces.swap(faces);
     }
 
-    FontFaceArray m_fontFaces;
+    WillBePersistentHeapVector<RefPtrWillBeMember<FontFace> > m_fontFaces;
     int m_numLoading;
     bool m_errorOccured;
     RefPtr<ScriptPromiseResolverWithContext> m_resolver;
@@ -121,7 +121,7 @@ public:
 
 private:
     FontsReadyPromiseResolver(ExecutionContext* context)
-        : m_resolver(ScriptPromiseResolverWithContext::create(NewScriptState::current(toIsolate(context))))
+        : m_resolver(ScriptPromiseResolverWithContext::create(ScriptState::current(toIsolate(context))))
     {
     }
 
@@ -153,7 +153,7 @@ bool FontFaceSet::inActiveDocumentContext() const
 
 void FontFaceSet::addFontFacesToFontFaceCache(FontFaceCache* fontFaceCache, CSSFontSelector* fontSelector)
 {
-    for (ListHashSet<RefPtr<FontFace> >::iterator it = m_nonCSSConnectedFaces.begin(); it != m_nonCSSConnectedFaces.end(); ++it)
+    for (ListHashSet<RefPtrWillBeMember<FontFace> >::iterator it = m_nonCSSConnectedFaces.begin(); it != m_nonCSSConnectedFaces.end(); ++it)
         fontFaceCache->addFontFace(fontSelector, *it, false);
 }
 
@@ -243,7 +243,7 @@ void FontFaceSet::loadError(FontFace* fontFace)
     removeFromLoadingFonts(fontFace);
 }
 
-void FontFaceSet::addToLoadingFonts(PassRefPtr<FontFace> fontFace)
+void FontFaceSet::addToLoadingFonts(PassRefPtrWillBeRawPtr<FontFace> fontFace)
 {
     if (RuntimeEnabledFeatures::fontLoadEventsEnabled() && m_loadingFonts.isEmpty() && !hasLoadedFonts()) {
         m_shouldFireLoadingEvent = true;
@@ -252,7 +252,7 @@ void FontFaceSet::addToLoadingFonts(PassRefPtr<FontFace> fontFace)
     m_loadingFonts.add(fontFace);
 }
 
-void FontFaceSet::removeFromLoadingFonts(PassRefPtr<FontFace> fontFace)
+void FontFaceSet::removeFromLoadingFonts(PassRefPtrWillBeRawPtr<FontFace> fontFace)
 {
     m_loadingFonts.remove(fontFace);
     if (RuntimeEnabledFeatures::fontLoadEventsEnabled() && m_loadingFonts.isEmpty())
@@ -296,7 +296,7 @@ void FontFaceSet::clear()
     if (!inActiveDocumentContext())
         return;
     FontFaceCache* fontFaceCache = document()->styleEngine()->fontSelector()->fontFaceCache();
-    for (ListHashSet<RefPtr<FontFace> >::iterator it = m_nonCSSConnectedFaces.begin(); it != m_nonCSSConnectedFaces.end(); ++it) {
+    for (ListHashSet<RefPtrWillBeMember<FontFace> >::iterator it = m_nonCSSConnectedFaces.begin(); it != m_nonCSSConnectedFaces.end(); ++it) {
         fontFaceCache->removeFontFace(it->get(), false);
         if ((*it)->loadStatus() == FontFace::Loading)
             removeFromLoadingFonts(*it);
@@ -312,7 +312,7 @@ bool FontFaceSet::remove(FontFace* fontFace, ExceptionState& exceptionState)
         exceptionState.throwTypeError("The argument is not a FontFace.");
         return false;
     }
-    ListHashSet<RefPtr<FontFace> >::iterator it = m_nonCSSConnectedFaces.find(fontFace);
+    ListHashSet<RefPtrWillBeMember<FontFace> >::iterator it = m_nonCSSConnectedFaces.find(fontFace);
     if (it != m_nonCSSConnectedFaces.end()) {
         m_nonCSSConnectedFaces.remove(it);
         document()->styleEngine()->fontSelector()->fontFaceCache()->removeFontFace(fontFace, false);
@@ -336,7 +336,7 @@ bool FontFaceSet::has(FontFace* fontFace, ExceptionState& exceptionState) const
     return m_nonCSSConnectedFaces.contains(fontFace) || isCSSConnectedFontFace(fontFace);
 }
 
-const ListHashSet<RefPtr<FontFace> >& FontFaceSet::cssConnectedFontFaceList() const
+const ListHashSet<RefPtrWillBeMember<FontFace> >& FontFaceSet::cssConnectedFontFaceList() const
 {
     Document* d = document();
     d->ensureStyleResolver(); // Flush pending style changes.
@@ -362,12 +362,12 @@ void FontFaceSet::forEachInternal(PassOwnPtr<FontFaceSetForEachCallback> callbac
 {
     if (!inActiveDocumentContext())
         return;
-    const ListHashSet<RefPtr<FontFace> >& cssConnectedFaces = cssConnectedFontFaceList();
-    Vector<RefPtr<FontFace> > fontFaces;
+    const ListHashSet<RefPtrWillBeMember<FontFace> >& cssConnectedFaces = cssConnectedFontFaceList();
+    WillBeHeapVector<RefPtrWillBeMember<FontFace> > fontFaces;
     fontFaces.reserveInitialCapacity(cssConnectedFaces.size() + m_nonCSSConnectedFaces.size());
-    for (ListHashSet<RefPtr<FontFace> >::const_iterator it = cssConnectedFaces.begin(); it != cssConnectedFaces.end(); ++it)
+    for (ListHashSet<RefPtrWillBeMember<FontFace> >::const_iterator it = cssConnectedFaces.begin(); it != cssConnectedFaces.end(); ++it)
         fontFaces.append(*it);
-    for (ListHashSet<RefPtr<FontFace> >::const_iterator it = m_nonCSSConnectedFaces.begin(); it != m_nonCSSConnectedFaces.end(); ++it)
+    for (ListHashSet<RefPtrWillBeMember<FontFace> >::const_iterator it = m_nonCSSConnectedFaces.begin(); it != m_nonCSSConnectedFaces.end(); ++it)
         fontFaces.append(*it);
 
     for (size_t i = 0; i < fontFaces.size(); ++i) {
@@ -568,6 +568,10 @@ void FontFaceSet::didLayout(Document& document)
 #if ENABLE(OILPAN)
 void FontFaceSet::trace(Visitor* visitor)
 {
+    visitor->trace(m_loadingFonts);
+    visitor->trace(m_loadedFonts);
+    visitor->trace(m_failedFonts);
+    visitor->trace(m_nonCSSConnectedFaces);
 }
 #endif
 

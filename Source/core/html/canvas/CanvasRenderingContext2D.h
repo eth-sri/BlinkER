@@ -63,13 +63,13 @@ class ImageBitmap;
 class ImageData;
 class TextMetrics;
 
-typedef WillBePersistentHeapHashMap<String, RefPtrWillBeMember<MutableStylePropertySet> > MutableStylePropertyMap;
+typedef WillBeHeapHashMap<String, RefPtrWillBeMember<MutableStylePropertySet> > MutableStylePropertyMap;
 
-class CanvasRenderingContext2D FINAL: public ScriptWrappable, public CanvasRenderingContext, public CanvasPathMethods {
+class CanvasRenderingContext2D FINAL: public CanvasRenderingContext, public ScriptWrappable, public CanvasPathMethods {
 public:
-    static PassOwnPtr<CanvasRenderingContext2D> create(HTMLCanvasElement* canvas, const Canvas2DContextAttributes* attrs, bool usesCSSCompatibilityParseMode)
+    static PassOwnPtrWillBeRawPtr<CanvasRenderingContext2D> create(HTMLCanvasElement* canvas, const Canvas2DContextAttributes* attrs, bool usesCSSCompatibilityParseMode)
     {
-        return adoptPtr(new CanvasRenderingContext2D(canvas, attrs, usesCSSCompatibilityParseMode));
+        return adoptPtrWillBeNoop(new CanvasRenderingContext2D(canvas, attrs, usesCSSCompatibilityParseMode));
     }
     virtual ~CanvasRenderingContext2D();
 
@@ -149,8 +149,6 @@ public:
 
     void beginPath();
 
-    PassRefPtr<Path2D> currentPath();
-    void setCurrentPath(Path2D*);
     void fill(const String& winding = "nonzero");
     void fill(Path2D*, const String& winding = "nonzero");
     void stroke();
@@ -191,15 +189,15 @@ public:
 
     void setCompositeOperation(const String&);
 
-    PassRefPtr<CanvasGradient> createLinearGradient(float x0, float y0, float x1, float y1, ExceptionState&);
+    PassRefPtr<CanvasGradient> createLinearGradient(float x0, float y0, float x1, float y1);
     PassRefPtr<CanvasGradient> createRadialGradient(float x0, float y0, float r0, float x1, float y1, float r1, ExceptionState&);
     PassRefPtr<CanvasPattern> createPattern(CanvasImageSource*, const String& repetitionType, ExceptionState&);
 
     PassRefPtrWillBeRawPtr<ImageData> createImageData(PassRefPtrWillBeRawPtr<ImageData>) const;
     PassRefPtrWillBeRawPtr<ImageData> createImageData(float width, float height, ExceptionState&) const;
     PassRefPtrWillBeRawPtr<ImageData> getImageData(float sx, float sy, float sw, float sh, ExceptionState&) const;
-    void putImageData(ImageData*, float dx, float dy, ExceptionState&);
-    void putImageData(ImageData*, float dx, float dy, float dirtyX, float dirtyY, float dirtyWidth, float dirtyHeight, ExceptionState&);
+    void putImageData(ImageData*, float dx, float dy);
+    void putImageData(ImageData*, float dx, float dy, float dirtyX, float dirtyY, float dirtyWidth, float dirtyHeight);
 
     void reset();
 
@@ -232,6 +230,8 @@ public:
 
     void loseContext();
     void restoreContext();
+
+    virtual void trace(Visitor*) OVERRIDE;
 
 private:
     class State FINAL : public CSSFontSelectorClient {
@@ -343,9 +343,7 @@ private:
 
     virtual blink::WebLayer* platformLayer() const OVERRIDE;
 
-    // FIXME: Oilpan: Make this a vector of embedded State objects rather than pointers
-    // once we support having vectors with objects using a vtable in oilpan.
-    WillBePersistentHeapVector<OwnPtrWillBeMember<State> > m_stateStack;
+    WillBeHeapVector<OwnPtrWillBeMember<State> > m_stateStack;
     bool m_usesCSSCompatibilityParseMode;
     bool m_hasAlpha;
     bool m_isContextLost;

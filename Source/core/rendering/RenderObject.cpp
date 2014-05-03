@@ -1244,22 +1244,23 @@ void RenderObject::paintOutline(PaintInfo& paintInfo, const LayoutRect& paintRec
         graphicsContext->endLayer();
 }
 
-IntRect RenderObject::absoluteBoundingBoxRect(bool useTransforms) const
+IntRect RenderObject::absoluteBoundingBoxRect() const
 {
-    if (useTransforms) {
-        Vector<FloatQuad> quads;
-        absoluteQuads(quads);
+    Vector<FloatQuad> quads;
+    absoluteQuads(quads);
 
-        size_t n = quads.size();
-        if (!n)
-            return IntRect();
+    size_t n = quads.size();
+    if (!n)
+        return IntRect();
 
-        IntRect result = quads[0].enclosingBoundingBox();
-        for (size_t i = 1; i < n; ++i)
-            result.unite(quads[i].enclosingBoundingBox());
-        return result;
-    }
+    IntRect result = quads[0].enclosingBoundingBox();
+    for (size_t i = 1; i < n; ++i)
+        result.unite(quads[i].enclosingBoundingBox());
+    return result;
+}
 
+IntRect RenderObject::absoluteBoundingBoxRectIgnoringTransforms() const
+{
     FloatPoint absPos = localToAbsolute();
     Vector<IntRect> rects;
     absoluteRects(rects, flooredLayoutPoint(absPos));
@@ -1334,11 +1335,10 @@ RenderLayerModelObject* RenderObject::containerForRepaint() const
     if (!isRooted())
         return 0;
 
-    // FIXME: Repaint container should never be null when we're rooted. crbug.com/363699
     RenderLayerModelObject* repaintContainer = 0;
 
-    RenderView* v = view();
-    if (v->usesCompositing()) {
+    RenderView* renderView = view();
+    if (renderView->usesCompositing()) {
         // FIXME: CompositingState is not necessarily up to date for many callers of this function.
         DisableCompositingQueryAsserts disabler;
 
@@ -1360,7 +1360,7 @@ RenderLayerModelObject* RenderObject::containerForRepaint() const
         if (!repaintContainer || repaintContainer->flowThreadContainingBlock() != parentRenderFlowThread)
             repaintContainer = parentRenderFlowThread;
     }
-    return repaintContainer;
+    return repaintContainer ? repaintContainer : renderView;
 }
 
 template<typename T> PassRefPtr<JSONValue> jsonObjectForRect(const T& rect)
@@ -1386,15 +1386,14 @@ void RenderObject::repaintUsingContainer(const RenderLayerModelObject* repaintCo
     if (r.isEmpty())
         return;
 
+    // FIXME: This should be an assert, but editing/selection can trigger this case to invalidate
+    // the selection. crbug.com/368140
+    if (!isRooted())
+        return;
+
     TRACE_EVENT2(TRACE_DISABLED_BY_DEFAULT("blink.invalidation"), "RenderObject::repaintUsingContainer()",
         "object", this->debugName().ascii(),
         "info", TracedValue::fromJSONValue(jsonObjectForRepaintInfo(r, invalidationReasonToString(invalidationReason))));
-
-    // FIXME: Repaint container should never be null. crbug.com/363699
-    if (!repaintContainer) {
-        view()->repaintViewRectangle(r);
-        return;
-    }
 
     // FIXME: Don't read compositing state here since we do this in the middle of recalc/layout.
     DisableCompositingQueryAsserts disabler;
@@ -1406,25 +1405,6 @@ void RenderObject::repaintUsingContainer(const RenderLayerModelObject* repaintCo
         // then it's ok to just exit here, since the squashing layer will get repainted when it is newly created.
         if (!repaintContainer->groupedMapping()->squashingLayer())
             return;
-
-
-        IntRect offsetRect(r);
-
-        // First, convert the repaint rect into the space of the repaintContainer
-        TransformState transformState(TransformState::ApplyTransformDirection, FloatQuad(FloatRect(r)));
-        mapLocalToContainer(repaintContainer, transformState, ApplyContainerFlip);
-        transformState.flatten();
-        offsetRect = transformState.lastPlanarQuad().enclosingBoundingBox();
-
-        // FIXME: the repaint rect computed below could be tighter in uncommon nested transform cases, if we passed the quad
-        // directly to the next chunk of code.
-
-        // Then, convert the repaint rect from repaintConainer space into the squashing GraphicsLayer's coordinates.
-        if (repaintContainer->hasTransform() && repaintContainer->layer()->transform())
-            offsetRect = repaintContainer->layer()->transform()->mapRect(r);
-        offsetRect.move(-repaintContainer->layer()->offsetFromSquashingLayerOrigin());
-        repaintContainer->groupedMapping()->squashingLayer()->setNeedsDisplayInRect(offsetRect);
-        return;
     }
 
     if (repaintContainer->isRenderFlowThread()) {
@@ -1448,7 +1428,7 @@ void RenderObject::repaintUsingContainer(const RenderLayerModelObject* repaintCo
     }
 
     if (v->usesCompositing()) {
-        ASSERT(repaintContainer->hasLayer() && repaintContainer->layer()->compositingState() == PaintsIntoOwnBacking);
+        ASSERT(repaintContainer->hasLayer() && (repaintContainer->layer()->compositingState() == PaintsIntoOwnBacking || repaintContainer->layer()->compositingState() == PaintsIntoGroupedBacking));
         repaintContainer->layer()->repainter().setBackingNeedsRepaintInRect(r);
     }
 }
@@ -1465,7 +1445,7 @@ void RenderObject::repaint() const
     // Until those states are fully fledged, I'll just disable the ASSERTS.
     DisableCompositingQueryAsserts disabler;
     RenderLayerModelObject* repaintContainer = containerForRepaint();
-    repaintUsingContainer(repaintContainer ? repaintContainer : view(), pixelSnappedIntRect(clippedOverflowRectForRepaint(repaintContainer)), InvalidationRepaint);
+    repaintUsingContainer(repaintContainer, pixelSnappedIntRect(clippedOverflowRectForRepaint(repaintContainer)), InvalidationRepaint);
 }
 
 void RenderObject::repaintRectangle(const LayoutRect& r) const
@@ -1486,7 +1466,7 @@ void RenderObject::repaintRectangle(const LayoutRect& r) const
 
     RenderLayerModelObject* repaintContainer = containerForRepaint();
     computeRectForRepaint(repaintContainer, dirtyRect);
-    repaintUsingContainer(repaintContainer ? repaintContainer : view(), pixelSnappedIntRect(dirtyRect), InvalidationRepaintRectangle);
+    repaintUsingContainer(repaintContainer, pixelSnappedIntRect(dirtyRect), InvalidationRepaintRectangle);
 }
 
 IntRect RenderObject::pixelSnappedAbsoluteClippedOverflowRect() const
@@ -1528,8 +1508,10 @@ void RenderObject::repaintTreeAfterLayout()
 {
     clearRepaintState();
 
-    for (RenderObject* child = firstChild(); child; child = child->nextSibling())
-        child->repaintTreeAfterLayout();
+    for (RenderObject* child = firstChild(); child; child = child->nextSibling()) {
+        if (!child->isOutOfFlowPositioned())
+            child->repaintTreeAfterLayout();
+    }
 }
 
 static PassRefPtr<JSONValue> jsonObjectForOldAndNewRects(const LayoutRect& oldRect, const LayoutRect& newRect)
@@ -1593,9 +1575,7 @@ bool RenderObject::repaintAfterLayoutIfNeeded(const RenderLayerModelObject* repa
     if (invalidationReason == InvalidationIncremental && (oldBounds.size().isZero() || newBounds.size().isZero()))
         invalidationReason = InvalidationBoundsChange;
 
-    // FIXME: Repaint container should never be null. crbug.com/363699
-    if (!repaintContainer)
-        repaintContainer = v;
+    ASSERT(repaintContainer);
 
     if (invalidationReason != InvalidationIncremental) {
         repaintUsingContainer(repaintContainer, pixelSnappedIntRect(oldBounds), invalidationReason);
@@ -1886,29 +1866,23 @@ StyleDifference RenderObject::adjustStyleDifference(StyleDifference diff, unsign
 {
     // FIXME: The calls to hasDirectReasonsForCompositing are using state that may not be up to date.
     DisableCompositingQueryAsserts disabler;
-    // If transform changed, and the layer does not paint into its own separate backing, then we need to do a layout.
-    // FIXME: The comment above is what the code does, but it is technically not following spec. This means we will
-    // not to layout for 3d transforms, but we should be invoking a simplified relayout. Is it possible we are avoiding
-    // doing this for some performance reason at this time?
-    if (contextSensitiveProperties & ContextSensitivePropertyTransform) {
+
+    if (contextSensitiveProperties & ContextSensitivePropertyTransform && isSVG())
+        diff.setNeedsFullLayout();
+
+    // If transform changed, and the layer does not paint into its own separate backing, then we need to repaint.
+    if (contextSensitiveProperties & ContextSensitivePropertyTransform  && !diff.needsLayout()) {
         // Text nodes share style with their parents but transforms don't apply to them,
         // hence the !isText() check.
-        // FIXME: when transforms are taken into account for overflow, we will need to do a layout.
-        if (!isText() && (!hasLayer() || !toRenderLayerModelObject(this)->layer()->hasDirectReasonsForCompositing())) {
-            // We need to set at least SimplifiedLayout, but if PositionedMovementOnly is already set
-            // then we actually need SimplifiedLayoutAndPositionedMovement.
-            if (!hasLayer())
-                diff.setNeedsFullLayout(); // FIXME: Do this for now since SimplifiedLayout cannot handle updating floating objects lists.
-            else
-                diff.setNeedsSimplifiedLayout();
-        } else {
+        if (!isText() && (!hasLayer() || !toRenderLayerModelObject(this)->layer()->hasDirectReasonsForCompositing()))
+            diff.setNeedsRepaintLayer();
+        else
             diff.setNeedsRecompositeLayer();
-        }
     }
 
     // If opacity or zIndex changed, and the layer does not paint into its own separate backing, then we need to repaint (also
     // ignoring text nodes)
-    if ((contextSensitiveProperties & (ContextSensitivePropertyOpacity | ContextSensitivePropertyZIndex)) && !diff.needsLayout()) {
+    if (contextSensitiveProperties & (ContextSensitivePropertyOpacity | ContextSensitivePropertyZIndex)) {
         if (!isText() && (!hasLayer() || !toRenderLayerModelObject(this)->layer()->hasDirectReasonsForCompositing()))
             diff.setNeedsRepaintLayer();
         else
@@ -1916,7 +1890,7 @@ StyleDifference RenderObject::adjustStyleDifference(StyleDifference diff, unsign
     }
 
     // If filter changed, and the layer does not paint into its own separate backing or it paints with filters, then we need to repaint.
-    if ((contextSensitiveProperties & ContextSensitivePropertyFilter) && hasLayer() && !diff.needsLayout()) {
+    if ((contextSensitiveProperties & ContextSensitivePropertyFilter) && hasLayer()) {
         RenderLayer* layer = toRenderLayerModelObject(this)->layer();
         if (!layer->hasDirectReasonsForCompositing() || layer->paintsWithFilters())
             diff.setNeedsRepaintLayer();
@@ -1924,14 +1898,14 @@ StyleDifference RenderObject::adjustStyleDifference(StyleDifference diff, unsign
             diff.setNeedsRecompositeLayer();
     }
 
-    if ((contextSensitiveProperties & ContextSensitivePropertyTextOrColor) && !diff.needsRepaint() && !diff.needsLayout()
+    if ((contextSensitiveProperties & ContextSensitivePropertyTextOrColor) && !diff.needsRepaint()
         && hasImmediateNonWhitespaceTextChildOrPropertiesDependentOnColor())
         diff.setNeedsRepaintObject();
 
     // The answer to layerTypeRequired() for plugins, iframes, and canvas can change without the actual
     // style changing, since it depends on whether we decide to composite these elements. When the
     // layer status of one of these elements changes, we need to force a layout.
-    if (diff.hasNoChange() && style() && isLayerModelObject()) {
+    if (!diff.needsFullLayout() && style() && isLayerModelObject()) {
         bool requiresLayer = toRenderLayerModelObject(this)->layerTypeRequired() != NoLayer;
         if (hasLayer() != requiresLayer)
             diff.setNeedsFullLayout();
@@ -1982,6 +1956,20 @@ inline bool RenderObject::hasImmediateNonWhitespaceTextChildOrPropertiesDependen
     return false;
 }
 
+void RenderObject::markContainingBlocksForOverflowRecalc()
+{
+    for (RenderBlock* container = containingBlock(); container && !container->childNeedsOverflowRecalcAfterStyleChange(); container = container->containingBlock())
+        container->setChildNeedsOverflowRecalcAfterStyleChange(true);
+}
+
+void RenderObject::setNeedsOverflowRecalcAfterStyleChange()
+{
+    bool neededRecalc = needsOverflowRecalcAfterStyleChange();
+    setSelfNeedsOverflowRecalcAfterStyleChange(true);
+    if (!neededRecalc)
+        markContainingBlocksForOverflowRecalc();
+}
+
 void RenderObject::setStyle(PassRefPtr<RenderStyle> style)
 {
     ASSERT(style);
@@ -2029,17 +2017,24 @@ void RenderObject::setStyle(PassRefPtr<RenderStyle> style)
     StyleDifference updatedDiff = adjustStyleDifference(diff, contextSensitiveProperties);
 
     if (!diff.needsFullLayout()) {
-        if (updatedDiff.needsFullLayout()) {
+        if (updatedDiff.needsFullLayout())
             setNeedsLayoutAndPrefWidthsRecalc();
-        } else {
-            if (updatedDiff.needsPositionedMovementLayout())
-                setNeedsPositionedMovementLayout();
-            if (updatedDiff.needsSimplifiedLayout())
-                setNeedsSimplifiedNormalFlowLayout();
-        }
+        else if (updatedDiff.needsPositionedMovementLayout())
+            setNeedsPositionedMovementLayout();
     }
 
-    if (updatedDiff.needsRepaint()) {
+    if (contextSensitiveProperties & ContextSensitivePropertyTransform && !needsLayout()) {
+        if (RenderBlock* container = containingBlock())
+            container->setNeedsOverflowRecalcAfterStyleChange();
+        if (isBox())
+            toRenderBox(this)->updateLayerTransform();
+    }
+
+    // FIXME: The !needsFullLayout() check is temporary to keep the original StyleDifference
+    // behavior that we did't repaint here on StyleDifferenceLayout.
+    // In the next steps we will not always repaint on selfNeedsLayout(), and should force
+    // repaint here if needsRepaint is set.
+    if (updatedDiff.needsRepaint() && !updatedDiff.needsFullLayout()) {
         // Do a repaint with the new style now, e.g., for example if we go from
         // not having an outline to having an outline.
         repaint();
@@ -2079,8 +2074,13 @@ void RenderObject::styleWillChange(StyleDifference diff, const RenderStyle& newS
             }
         }
 
-        if (m_parent && diff.needsRepaintObjectOnly())
+        // FIXME: The !needsFullLayout() check is temporary to keep the original StyleDifference
+        // behavior that we did't repaint here on StyleDifferenceLayout.
+        // In the next steps we will not always repaint on selfNeedsLayout(), and should force
+        // repaint here if needsRepaintObject is set.
+        if (m_parent && diff.needsRepaintObject() && !diff.needsFullLayout())
             repaint();
+
         if (isFloating() && (m_style->floating() != newStyle.floating()))
             // For changes in float styles, we need to conceivably remove ourselves
             // from the floating objects list.
@@ -2096,7 +2096,7 @@ void RenderObject::styleWillChange(StyleDifference diff, const RenderStyle& newS
 
         // Clearing these bits is required to avoid leaving stale renderers.
         // FIXME: We shouldn't need that hack if our logic was totally correct.
-        if (diff.needsFullLayout() || diff.needsPositionedMovementLayout()) {
+        if (diff.needsLayout()) {
             setFloating(false);
             clearPositionedState();
         }
@@ -2170,7 +2170,7 @@ void RenderObject::styleDidChange(StyleDifference diff, const RenderStyle* oldSt
     if (!m_parent)
         return;
 
-    if (diff.needsFullLayout() || diff.needsSimplifiedLayout()) {
+    if (diff.needsFullLayout()) {
         RenderCounter::rendererStyleChanged(*this, oldStyle, m_style.get());
 
         // If the object already needs layout, then setNeedsLayout won't do
@@ -2181,12 +2181,13 @@ void RenderObject::styleDidChange(StyleDifference diff, const RenderStyle* oldSt
         if (needsLayout() && oldStyle->position() != m_style->position())
             markContainingBlocksForLayout();
 
+        // Ditto.
+        if (needsOverflowRecalcAfterStyleChange() && oldStyle->position() != m_style->position())
+            markContainingBlocksForOverflowRecalc();
+
         if (diff.needsFullLayout())
             setNeedsLayoutAndPrefWidthsRecalc();
-        else
-            setNeedsSimplifiedNormalFlowLayout();
-    }
-    if (diff.needsPositionedMovementLayout())
+    } else if (diff.needsPositionedMovementLayout())
         setNeedsPositionedMovementLayout();
 
     // Don't check for repaint here; we need to wait until the layer has been
@@ -2310,10 +2311,7 @@ void RenderObject::mapLocalToContainer(const RenderLayerModelObject* repaintCont
         mode &= ~ApplyContainerFlip;
     }
 
-    LayoutSize columnOffset;
-    o->adjustForColumns(columnOffset, roundedLayoutPoint(transformState.mappedPoint()));
-    if (!columnOffset.isZero())
-        transformState.move(columnOffset);
+    transformState.move(o->columnOffset(roundedLayoutPoint(transformState.mappedPoint())));
 
     if (o->hasOverflowClip())
         transformState.move(-toRenderBox(o)->scrolledContentOffset());
@@ -2402,9 +2400,7 @@ LayoutSize RenderObject::offsetFromContainer(RenderObject* o, const LayoutPoint&
 {
     ASSERT(o == container());
 
-    LayoutSize offset;
-
-    o->adjustForColumns(offset, point);
+    LayoutSize offset = o->columnOffset(point);
 
     if (o->hasOverflowClip())
         offset -= toRenderBox(o)->scrolledContentOffset();

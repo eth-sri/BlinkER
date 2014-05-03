@@ -76,6 +76,7 @@
 #include "core/events/FocusEvent.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/ClassList.h"
@@ -178,10 +179,17 @@ Element::~Element()
     if (hasSyntheticAttrChildNodes())
         detachAllAttrNodesFromElement();
 
+#if !ENABLE(OILPAN)
+    // With Oilpan, either the Element has been removed from the Document
+    // or the Document is dead as well. If the Element has been removed from
+    // the Document the element has already been removed from the pending
+    // resources. If the document is also dead, there is no need to remove
+    // the element from the pending resources.
     if (hasPendingResources()) {
         document().accessSVGExtensions().removeElementFromPendingResources(this);
         ASSERT(!hasPendingResources());
     }
+#endif
 }
 
 inline ElementRareData* Element::elementRareData() const
@@ -223,6 +231,11 @@ void Element::clearTabIndexExplicitlyIfNeeded()
 void Element::setTabIndexExplicitly(short tabIndex)
 {
     ensureElementRareData().setTabIndexExplicitly(tabIndex);
+}
+
+void Element::setTabIndex(int value)
+{
+    setIntegralAttribute(tabindexAttr, value);
 }
 
 short Element::tabIndex() const
@@ -1404,7 +1417,7 @@ void Element::attach(const AttachContext& context)
         }
     }
 
-    InspectorInstrumentation::didRecalculateStyleForElement(this);
+    document().didRecalculateStyleForElement();
 }
 
 void Element::detach(const AttachContext& context)
@@ -1577,7 +1590,7 @@ StyleRecalcChange Element::recalcOwnStyle(StyleRecalcChange change)
 
     ASSERT(oldStyle);
 
-    InspectorInstrumentation::didRecalculateStyleForElement(this);
+    document().didRecalculateStyleForElement();
 
     if (localChange != NoChange)
         updateCallbackSelectors(oldStyle.get(), newStyle.get());
@@ -1693,6 +1706,8 @@ void Element::didAffectSelector(AffectedSelectorMask mask)
 
 void Element::setAnimationStyleChange(bool animationStyleChange)
 {
+    if (animationStyleChange && document().inStyleRecalc())
+        return;
     if (ActiveAnimations* activeAnimations = elementRareData()->activeAnimations())
         activeAnimations->setAnimationStyleChange(animationStyleChange);
 }
@@ -1917,6 +1932,24 @@ PassRefPtr<Attr> Element::removeAttributeNode(Attr* attr, ExceptionState& except
     return guard.release();
 }
 
+void Element::parseAttribute(const QualifiedName& name, const AtomicString& value)
+{
+    if (name == tabindexAttr) {
+        int tabindex = 0;
+        if (value.isEmpty()) {
+            clearTabIndexExplicitlyIfNeeded();
+            if (treeScope().adjustedFocusedElement() == this) {
+                // We might want to call blur(), but it's dangerous to dispatch
+                // events here.
+                document().setNeedsFocusedElementCheck();
+            }
+        } else if (parseHTMLInteger(value, tabindex)) {
+            // Clamp tabindex to the range of 'short' to match Firefox's behavior.
+            setTabIndexExplicitly(max(static_cast<int>(std::numeric_limits<short>::min()), std::min(tabindex, static_cast<int>(std::numeric_limits<short>::max()))));
+        }
+    }
+}
+
 bool Element::parseAttributeName(QualifiedName& out, const AtomicString& namespaceURI, const AtomicString& qualifiedName, ExceptionState& exceptionState)
 {
     AtomicString prefix, localName;
@@ -2109,6 +2142,33 @@ void Element::blur()
         else
             doc.setFocusedElement(nullptr);
     }
+}
+
+bool Element::supportsFocus() const
+{
+    // FIXME: supportsFocus() can be called when layout is not up to date.
+    // Logic that deals with the renderer should be moved to rendererIsFocusable().
+    // But supportsFocus must return true when the element is editable, or else
+    // it won't be focusable. Furthermore, supportsFocus cannot just return true
+    // always or else tabIndex() will change for all HTML elements.
+    return hasElementFlag(TabIndexWasSetExplicitly) || (rendererIsEditable() && parentNode() && !parentNode()->rendererIsEditable())
+        || supportsSpatialNavigationFocus();
+}
+
+bool Element::supportsSpatialNavigationFocus() const
+{
+    // This function checks whether the element satisfies the extended criteria
+    // for the element to be focusable, introduced by spatial navigation feature,
+    // i.e. checks if click or keyboard event handler is specified.
+    // This is the way to make it possible to navigate to (focus) elements
+    // which web designer meant for being active (made them respond to click events).
+
+    if (!document().settings() || !document().settings()->spatialNavigationEnabled())
+        return false;
+    return hasEventListeners(EventTypeNames::click)
+        || hasEventListeners(EventTypeNames::keydown)
+        || hasEventListeners(EventTypeNames::keypress)
+        || hasEventListeners(EventTypeNames::keyup);
 }
 
 bool Element::isFocusable() const

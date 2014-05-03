@@ -96,6 +96,8 @@ interface TestObject {
     attribute long long longLongAttribute;
     attribute octet octetAttribute;
     attribute short shortAttribute;
+    attribute unrestricted double unrestrictedDoubleAttribute;
+    attribute unrestricted float unrestrictedFloatAttribute;
     attribute unsigned long unsignedLongAttribute;
     attribute unsigned long long unsignedLongLongAttribute;
     attribute unsigned short unsignedShortAttribute;
@@ -158,8 +160,8 @@ interface TestObject {
     [LogActivity=SetterOnly, LogAllWorlds] attribute long activityLoggingSetterForAllWorldsLongAttribute;
     [CachedAttribute=isValueDirty] attribute any cachedAttributeAnyAttribute;
     [CallWith=ExecutionContext] attribute any callWithExecutionContextAnyAttribute;
-    [CallWith=NewScriptState] attribute any callWithNewScriptStateAnyAttribute;
-    [CallWith=ExecutionContext|NewScriptState] attribute any callWithExecutionContextAndNewScriptStateAnyAttribute;
+    [CallWith=ScriptState] attribute any callWithScriptStateAnyAttribute;
+    [CallWith=ExecutionContext|ScriptState] attribute any callWithExecutionContextAndScriptStateAnyAttribute;
     [CheckSecurity=Node] readonly attribute Document checkSecurityForNodeReadonlyDocumentAttribute; // All uses are read only
     [Conditional=CONDITION] attribute long conditionalLongAttribute;
     [Conditional=CONDITION_1&CONDITION_2] attribute long conditionalAndLongAttribute;
@@ -184,8 +186,6 @@ interface TestObject {
     [MeasureAs=TestFeature] attribute long measureAsLongAttribute;
     [NotEnumerable] attribute long notEnumerableLongAttribute;
     [PerContextEnabled=FeatureName] attribute long perContextEnabledLongAttribute;
-    [PerWorldBindings] attribute long perWorldBindingsLongAttribute;
-    [PerWorldBindings] readonly attribute long perWorldBindingsReadonlyLongAttribute; // Separate read only attribute to check attribute configuration
     [PerWorldBindings] readonly attribute TestInterfaceEmpty perWorldBindingsReadonlyTestInterfaceEmptyAttribute;
     [LogActivity, LogAllWorlds, PerWorldBindings] attribute long activityLoggingAccessPerWorldBindingsLongAttribute;
     [LogActivity, PerWorldBindings] attribute long activityLoggingAccessForIsolatedWorldsPerWorldBindingsLongAttribute;
@@ -233,12 +233,13 @@ interface TestObject {
     [Conditional=CONDITION, RuntimeEnabled=FeatureName] attribute long conditionalRuntimeEnabledLongAttribute;
     [SetterCallWith=ActiveWindow&FirstWindow] attribute DOMString setterCallWithActiveWindowAndFirstWindowStringAttribute;
     [SetterCallWith=ExecutionContext] attribute DOMString setterCallWithExecutionContextStringAttribute;
-    [StrictTypeChecking] attribute float strictTypeCheckingFloatAttribute; // nop for non-interface types
-    [StrictTypeChecking] attribute TestInterface strictTypeCheckingTestInterfaceAttribute;
-    [StrictTypeChecking] attribute TestInterface? strictTypeCheckingNullableTestInterfaceAttribute;
     [TreatNullAs=NullString] attribute DOMString treatNullAsNullStringStringAttribute;
     [TreatReturnedNullStringAs=Null] attribute DOMString treatReturnedNullStringAsNullStringAttribute;
     [TreatReturnedNullStringAs=Undefined] attribute DOMString treatReturnedNullStringAsUndefinedStringAttribute;
+    [TypeChecking=Interface|Nullable] attribute float typeCheckingInterfaceNullableStringFloatAttribute; // nop for non-interface types
+    [TypeChecking=Interface] attribute TestInterface typeCheckingInterfaceTestInterfaceAttribute;
+    [TypeChecking=Nullable] attribute TestInterface? typeCheckingNullableTestInterfaceOrNullAttribute;
+    [TypeChecking=Interface|Nullable] attribute TestInterface? typeCheckingInterfaceNullableTestInterfaceOrNullAttribute;
     [Reflect, URL] attribute DOMString urlStringAttribute;
     [Reflect=reflectUrlAttribute, URL] attribute DOMString urlStringAttribute;
     [Unforgeable] attribute long unforgeableLongAttribute;
@@ -392,9 +393,9 @@ interface TestObject {
     void overloadedMethodE(long longArg);
     void overloadedMethodE(long[] longArrayArg);
     void overloadedMethodF(long longArg);
-    void overloadedMethodF(TestInterfaceEmpty? testInterfaceEmptyNullableArg);
+    void overloadedMethodF(TestInterfaceEmpty? testInterfaceEmptyOrNullArg);
     void overloadedMethodG();
-    void overloadedMethodG([StrictTypeChecking] DOMString strictTypeCheckingStringArg);
+    void overloadedMethodG([LegacyOverloadString] DOMString legacyOverloadStringStringArg);
     void overloadedMethodH();
     void overloadedMethodH(TestCallbackInterface testCallbackInterfaceArg);
     // FIXME: Should be in order double, Dictionary, but Blink implementation of
@@ -402,7 +403,7 @@ interface TestObject {
     void overloadedMethodI(Dictionary dictionaryArg); // Non-wrapper type
     void overloadedMethodI(double doubleArg);
     void overloadedMethodJ(long longArg);
-    void overloadedMethodJ([Default=Null] TestInterfaceEmpty? testInterfaceEmptyNullableArg);
+    void overloadedMethodJ([Default=Null] TestInterfaceEmpty? testInterfaceEmptyOrNullArg);
 
 
     [PerWorldBindings] void overloadedPerWorldBindingsMethod();
@@ -428,17 +429,12 @@ interface TestObject {
 
     // Extended attributes for methods
     [LogActivity, LogAllWorlds] void activityLoggingAccessForAllWorldsMethod();
+    [CallWith=ExecutionContext] void callWithExecutionContextVoidMethod();
     [CallWith=ScriptState] void callWithScriptStateVoidMethod();
     [CallWith=ScriptState] long callWithScriptStateLongMethod();
-    [CallWith=ExecutionContext] void callWithExecutionContextVoidMethod();
     [CallWith=ScriptState&ExecutionContext] void callWithScriptStateExecutionContextVoidMethod();
     [CallWith=ScriptState&ScriptArguments] void callWithScriptStateScriptArgumentsVoidMethod();
     [CallWith=ScriptState&ScriptArguments] void callWithScriptStateScriptArgumentsVoidMethodOptionalBooleanArg(optional boolean optionalBooleanArg);
-    [CallWith=NewScriptState] void callWithNewScriptStateVoidMethod();
-    [CallWith=NewScriptState] long callWithNewScriptStateLongMethod();
-    [CallWith=NewScriptState&ExecutionContext] void callWithNewScriptStateExecutionContextVoidMethod();
-    [CallWith=NewScriptState&ScriptArguments] void callWithNewScriptStateScriptArgumentsVoidMethod();
-    [CallWith=NewScriptState&ScriptArguments] void callWithNewScriptStateScriptArgumentsVoidMethodOptionalBooleanArg(optional boolean optionalBooleanArg);
     [CallWith=ActiveWindow] void callWithActiveWindow();
     [CallWith=ActiveWindow&FirstWindow] void callWithActiveWindowScriptWindow();
     [CheckSecurity=Node] void checkSecurityForNodeVoidMethod();
@@ -469,10 +465,12 @@ interface TestObject {
     [NotEnumerable, ReadOnly] void notEnumerableReadOnlyVoidMethod();
     [RuntimeEnabled=FeatureName] void runtimeEnabledVoidMethod();
     [PerWorldBindings, RuntimeEnabled=FeatureName] void perWorldBindingsRuntimeEnabledVoidMethod();
-    [StrictTypeChecking] void strictTypeCheckingVoidMethodTestInterfaceEmptyArg(TestInterfaceEmpty testInterfaceEmptyArg);
-    [StrictTypeChecking] void strictTypeCheckingVoidMethodTestInterfaceEmptyOrNullArg(TestInterfaceEmpty? testInterfaceEmptyArg);
     [TreatReturnedNullStringAs=Null] DOMString treatReturnedNullStringAsNullStringMethod();
     [TreatReturnedNullStringAs=Undefined] DOMString treatReturnedNullStringAsUndefinedStringMethod();
+    [TypeChecking=Interface] void typeCheckingInterfaceVoidMethodTestInterfaceEmptyArg(TestInterfaceEmpty testInterfaceEmptyArg);
+    [TypeChecking=Nullable] void typeCheckingNullableVoidMethodTestInterfaceEmptyOrNullArg(TestInterfaceEmpty? testInterfaceEmptyOrNullArg);
+    [TypeChecking=Interface|Nullable] void typeCheckingInterfaceNullableVoidMethodTestInterfaceEmptyOrNullArg(TestInterfaceEmpty? testInterfaceEmptyOrNullArg);
+    [TypeChecking=Unrestricted] void typeCheckingUnrestrictedVoidMethodFloatArgDoubleArg(float floatArg, double doubleArg);
     [Unforgeable] void unforgeableVoidMethod();
     void voidMethodTestInterfaceGarbageCollectedSequenceArg(sequence<TestInterfaceGarbageCollected> testInterfaceGarbageCollectedSequenceArg);
     void voidMethodTestInterfaceGarbageCollectedArrayArg(TestInterfaceGarbageCollected[] testInterfaceGarbageCollectedArrayArg);

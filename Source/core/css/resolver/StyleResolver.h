@@ -79,13 +79,9 @@ enum StyleSharingBehavior {
     DisallowStyleSharing,
 };
 
-// MatchOnlyUserAgentRules is used in media queries, where relative units
-// are interpreted according to the document root element style, and styled only
-// from the User Agent Stylesheet rules.
 enum RuleMatchingBehavior {
     MatchAllRules,
-    MatchAllRulesExcludingSMIL,
-    MatchOnlyUserAgentRules,
+    MatchAllRulesExcludingSMIL
 };
 
 const unsigned styleSharingListSize = 40;
@@ -138,7 +134,7 @@ public:
 
     // FIXME: It could be better to call appendAuthorStyleSheets() directly after we factor StyleResolver further.
     // https://bugs.webkit.org/show_bug.cgi?id=108890
-    void appendAuthorStyleSheets(unsigned firstNew, const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet> >&);
+    void appendAuthorStyleSheets(const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet> >&);
     void resetAuthorStyle(const ContainerNode*);
     void finishAppendAuthorStyleSheets();
 

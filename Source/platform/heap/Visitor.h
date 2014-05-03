@@ -36,6 +36,7 @@
 #include "wtf/Assertions.h"
 #include "wtf/Deque.h"
 #include "wtf/Forward.h"
+#include "wtf/HashCountedSet.h"
 #include "wtf/HashMap.h"
 #include "wtf/HashSet.h"
 #include "wtf/HashTraits.h"
@@ -237,6 +238,7 @@ public:
     template<typename T>
     void trace(const Member<T>& t)
     {
+        t.verifyTypeIsGarbageCollected();
         mark(t.get());
     }
 
@@ -295,6 +297,12 @@ public:
     void trace(const Deque<T, N>& deque)
     {
         OffHeapCollectionTraceTrait<Deque<T, N> >::trace(this, deque);
+    }
+
+    template<typename T, typename U, typename V>
+    void trace(const HashCountedSet<T, U, V>& set)
+    {
+        OffHeapCollectionTraceTrait<HashCountedSet<T, U, V> >::trace(this, set);
     }
 
     template<typename T, typename U, typename V, typename W, typename X>
@@ -411,6 +419,10 @@ public:
     template<typename T> inline bool isAlive(const Member<T>& member)
     {
         return isAlive(member.get());
+    }
+    template<typename T> inline bool isAlive(RawPtr<T> ptr)
+    {
+        return isAlive(ptr.get());
     }
 
 #ifndef NDEBUG
@@ -545,6 +557,19 @@ struct OffHeapCollectionTraceTrait<WTF::Deque<T, N> > {
     }
 };
 
+template<typename T, typename U, typename V>
+struct OffHeapCollectionTraceTrait<WTF::HashCountedSet<T, U, V> > {
+    typedef WTF::HashCountedSet<T, U, V> Set;
+
+    static void trace(Visitor* visitor, const Set& set)
+    {
+        if (set.isEmpty())
+            return;
+        for (typename Set::const_iterator it = set.begin(), end = set.end(); it != end; ++it)
+            TraceTrait<T>::trace(visitor, const_cast<T*>(&(it->key)));
+    }
+};
+
 template<typename T, typename Traits = WTF::VectorTraits<T> >
 class HeapVectorBacking;
 
@@ -641,13 +666,13 @@ public:
 
 #define USING_GARBAGE_COLLECTED_MIXIN(TYPE) \
 public: \
-    virtual void adjustAndMark(Visitor* visitor) const OVERRIDE \
+    virtual void adjustAndMark(WebCore::Visitor* visitor) const OVERRIDE    \
     { \
         typedef WTF::IsSubclassOfTemplate<TYPE, WebCore::GarbageCollected> IsSubclassOfGarbageCollected; \
         COMPILE_ASSERT(IsSubclassOfGarbageCollected::value, OnlyGarbageCollectedObjectsCanHaveGarbageCollectedMixins); \
-        visitor->mark(this, &TraceTrait<TYPE>::trace);\
+        visitor->mark(this, &WebCore::TraceTrait<TYPE>::trace); \
     } \
-    virtual bool isAlive(Visitor* visitor) const OVERRIDE \
+    virtual bool isAlive(WebCore::Visitor* visitor) const OVERRIDE  \
     { \
         return visitor->isAlive(this); \
     }

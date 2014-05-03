@@ -51,6 +51,9 @@ class SVGElement : public Element {
 public:
     virtual ~SVGElement();
 
+    virtual short tabIndex() const OVERRIDE;
+    virtual bool supportsFocus() const OVERRIDE { return false; }
+
     bool isOutermostSVGSVGElement() const;
 
     virtual String title() const OVERRIDE;
@@ -195,15 +198,13 @@ private:
     RenderStyle* computedStyle(PseudoId = NOPSEUDO);
     virtual RenderStyle* virtualComputedStyle(PseudoId pseudoElementSpecifier = NOPSEUDO) OVERRIDE FINAL { return computedStyle(pseudoElementSpecifier); }
     virtual void willRecalcStyle(StyleRecalcChange) OVERRIDE;
-    virtual bool isKeyboardFocusable() const OVERRIDE;
 
     void buildPendingResourcesIfNeeded();
 
     void mapInstanceToElement(SVGElementInstance*);
     void removeInstanceMapping(SVGElementInstance*);
 
-    void cleanupAnimatedProperties();
-    friend class CleanUpAnimatedPropertiesCaller;
+    bool supportsSpatialNavigationFocus() const;
 
     HashSet<SVGElement*> m_elementsWithRelativeLengths;
 

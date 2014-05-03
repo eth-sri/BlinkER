@@ -21,7 +21,7 @@ BatteryStatus status=experimental
 
 // This feature is deprecated and we are evangalizing affected sites.
 // See https://crbug.com/346236 for current status.
-PrefixedVideoFullscreen status=stable
+PrefixedVideoFullscreen status=test
 
 // Enable bleeding-edge code to make Blink draw content faster.
 // The changes enabled behind this flag are very likely to break lots of content.
@@ -60,7 +60,7 @@ FileAPIBlobClose status=experimental
 FileConstructor status=experimental
 FileSystem status=stable
 FontLoadEvents status=stable
-FastTextAutosizing
+FastTextAutosizing status=stable
 Gamepad status=stable
 HTMLImports status=stable
 HighResolutionTimeInWorkers status=stable
@@ -69,10 +69,11 @@ ImageDataConstructor status=experimental
 IndexedDBExperimental status=experimental
 InputModeAttribute status=experimental
 LangAttributeAwareFormControlUI
-LayerSquashing status=test
+LayerSquashing status=stable
 PrefixedEncryptedMedia status=stable
 LocalStorage status=stable
 Media status=stable
+MediaController depends_on=Media, status=experimental
 MediaQueryParser status=test
 MediaSource status=stable
 MediaSourceExperimental depends_on=MediaSource, status=experimental
@@ -96,7 +97,7 @@ RegionBasedColumns status=experimental
 
 // This is implementation flag for the re-write of the layout/paint system to
 // do painting after we have completed layout, instead of piecemeal during layout.
-RepaintAfterLayout
+RepaintAfterLayout status=stable
 
 RequestAutocomplete status=test
 ScreenOrientation status=experimental
@@ -125,7 +126,7 @@ SVGPaintOrder status=stable
 
 // Enable optimizations to recalculate style on the fewest possible number of
 // elements when updating classes, ids or attributes of DOM elements.
-TargetedStyleRecalc status=stable
+TargetedStyleRecalc status=experimental
 
 // Many websites disable mouse support when touch APIs are available.  We'd
 // like to enable this always but can't until more websites fix this bug.
@@ -135,7 +136,7 @@ Touch status=stable
 
 TouchIconLoading
 UserSelectAll status=experimental
-ScriptPromiseOnV8Promise
+ScriptPromiseOnV8Promise status=stable
 WebAnimationsSVG
 WebAnimationsElementAnimate status=stable
 WebAnimationsAPI status=experimental, depends_on=WebAnimationsElementAnimate

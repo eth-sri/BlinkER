@@ -628,6 +628,23 @@ bool ResourceFetcher::resourceNeedsLoad(Resource* resource, const FetchRequest& 
     return request.options().synchronousPolicy == RequestSynchronously && resource->isLoading();
 }
 
+void ResourceFetcher::requestLoadStarted(Resource* resource, const FetchRequest& request, ResourceLoadStartType type)
+{
+    if (request.resourceRequest().url().protocolIsData() || (m_documentLoader && m_documentLoader->substituteData().isValid()))
+        return;
+
+    if (type == ResourceLoadingFromCache && !m_validatedURLs.contains(request.resourceRequest().url())) {
+        // Resources loaded from memory cache should be reported the first time they're used.
+        RefPtr<ResourceTimingInfo> info = ResourceTimingInfo::create(request.options().initiatorInfo.name, monotonicallyIncreasingTime());
+        populateResourceTiming(info.get(), resource, true);
+        m_scheduledResourceTimingReports.add(info, resource->type() == Resource::MainResource);
+        if (!m_resourceTimingReportTimer.isActive())
+            m_resourceTimingReportTimer.startOneShot(0, FROM_HERE);
+    }
+
+    m_validatedURLs.add(request.resourceRequest().url());
+}
+
 ResourcePtr<Resource> ResourceFetcher::requestResource(Resource::Type type, FetchRequest& request)
 {
     ASSERT(request.options().synchronousPolicy == RequestAsynchronously || type == Resource::Raw);
@@ -725,18 +742,7 @@ ResourcePtr<Resource> ResourceFetcher::requestResource(Resource::Type type, Fetc
             return 0;
     }
 
-    if (!request.resourceRequest().url().protocolIsData() && (!m_documentLoader || !m_documentLoader->substituteData().isValid())) {
-        if (policy == Use && !m_validatedURLs.contains(request.resourceRequest().url())) {
-            // Resources loaded from memory cache should be reported the first time they're used.
-            RefPtr<ResourceTimingInfo> info = ResourceTimingInfo::create(request.options().initiatorInfo.name, monotonicallyIncreasingTime());
-            populateResourceTiming(info.get(), resource.get(), true);
-            m_scheduledResourceTimingReports.add(info, resource->type() == Resource::MainResource);
-            if (!m_resourceTimingReportTimer.isActive())
-                m_resourceTimingReportTimer.startOneShot(0, FROM_HERE);
-        }
-
-        m_validatedURLs.add(request.resourceRequest().url());
-    }
+    requestLoadStarted(resource.get(), request, policy == Use ? ResourceLoadingFromCache : ResourceLoadingFromNetwork);
 
     ASSERT(resource->url() == url.string());
     m_documentResources.set(resource->url(), resource);
@@ -1111,8 +1117,7 @@ void ResourceFetcher::garbageCollectDocumentResources()
             resourcesToDelete.append(it->key);
     }
 
-    for (StringVector::const_iterator it = resourcesToDelete.begin(); it != resourcesToDelete.end(); ++it)
-        m_documentResources.remove(*it);
+    m_documentResources.removeAll(resourcesToDelete);
 }
 
 void ResourceFetcher::notifyLoadedFromMemoryCache(Resource* resource)
@@ -1255,7 +1260,7 @@ void ResourceFetcher::subresourceLoaderFinishedLoadingOnePart(ResourceLoader* lo
     m_multipartLoaders->add(loader);
     m_loaders->remove(loader);
     if (LocalFrame* frame = this->frame())
-        return frame->loader().checkLoadComplete(m_documentLoader);
+        return frame->loader().checkLoadComplete();
 }
 
 void ResourceFetcher::didInitializeResourceLoader(ResourceLoader* loader)
@@ -1275,7 +1280,7 @@ void ResourceFetcher::willTerminateResourceLoader(ResourceLoader* loader)
     if (m_multipartLoaders && m_multipartLoaders->contains(loader))
         m_multipartLoaders->remove(loader);
     if (LocalFrame* frame = this->frame())
-        frame->loader().checkLoadComplete(m_documentLoader);
+        frame->loader().checkLoadComplete();
 }
 
 void ResourceFetcher::willStartLoadingResource(Resource* resource, ResourceRequest& request)

@@ -31,14 +31,6 @@
 #include "config.h"
 
 #include "RuntimeEnabledFeatures.h"
-#include "WebDocument.h"
-#include "WebElement.h"
-#include "WebFrame.h"
-#include "WebFrameClient.h"
-#include "WebInputEvent.h"
-#include "WebSettings.h"
-#include "WebView.h"
-#include "WebViewClient.h"
 #include "core/dom/Element.h"
 #include "core/frame/FrameView.h"
 #include "core/html/HTMLSelectElement.h"
@@ -55,6 +47,14 @@
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/WebURLResponse.h"
 #include "public/platform/WebUnitTestSupport.h"
+#include "public/web/WebDocument.h"
+#include "public/web/WebElement.h"
+#include "public/web/WebFrame.h"
+#include "public/web/WebFrameClient.h"
+#include "public/web/WebInputEvent.h"
+#include "public/web/WebSettings.h"
+#include "public/web/WebView.h"
+#include "public/web/WebViewClient.h"
 #include "v8.h"
 #include "web/PopupContainer.h"
 #include "web/PopupMenuChromium.h"
@@ -152,10 +152,10 @@ private:
     TestWebPopupMenuImpl(WebWidgetClient* client) : WebPopupMenuImpl(client) { }
 };
 
-class TestWebViewClient : public WebViewClient {
+class PopupTestWebViewClient : public FrameTestHelpers::TestWebViewClient {
 public:
-    TestWebViewClient() : m_webPopupMenu(TestWebPopupMenuImpl::create(&m_webWidgetClient)) { }
-    ~TestWebViewClient() { }
+    PopupTestWebViewClient() : m_webPopupMenu(TestWebPopupMenuImpl::create(&m_webWidgetClient)) { }
+    ~PopupTestWebViewClient() { }
 
     virtual WebWidget* createPopupMenu(WebPopupType) { return m_webPopupMenu.get(); }
 
@@ -267,7 +267,7 @@ protected:
     WebLocalFrameImpl* mainFrame() const { return m_helper.webViewImpl()->mainFrameImpl(); }
 
 protected:
-    TestWebViewClient m_webviewClient;
+    PopupTestWebViewClient m_webviewClient;
     TestPopupMenuClient m_popupMenuClient;
     RefPtr<PopupMenu> m_popupMenu;
     std::string baseURL;

@@ -144,7 +144,7 @@ TreeScopeStyleSheetCollection* StyleEngine::ensureStyleSheetCollectionFor(TreeSc
     if (treeScope == m_document)
         return &m_documentStyleSheetCollection;
 
-    WillBeHeapHashMap<TreeScope*, OwnPtrWillBeMember<ShadowTreeStyleSheetCollection> >::AddResult result = m_styleSheetCollectionMap.add(&treeScope, nullptr);
+    StyleSheetCollectionMap::AddResult result = m_styleSheetCollectionMap.add(&treeScope, nullptr);
     if (result.isNewEntry)
         result.storedValue->value = adoptPtrWillBeNoop(new ShadowTreeStyleSheetCollection(toShadowRoot(treeScope)));
     return result.storedValue->value.get();
@@ -155,7 +155,7 @@ TreeScopeStyleSheetCollection* StyleEngine::styleSheetCollectionFor(TreeScope& t
     if (treeScope == m_document)
         return &m_documentStyleSheetCollection;
 
-    WillBeHeapHashMap<TreeScope*, OwnPtrWillBeMember<ShadowTreeStyleSheetCollection> >::iterator it = m_styleSheetCollectionMap.find(&treeScope);
+    StyleSheetCollectionMap::iterator it = m_styleSheetCollectionMap.find(&treeScope);
     if (it == m_styleSheetCollectionMap.end())
         return 0;
     return it->value.get();
@@ -380,9 +380,7 @@ bool StyleEngine::updateActiveStyleSheets(StyleResolverUpdateMode updateMode)
             if (!collection->hasStyleSheetCandidateNodes())
                 treeScopesRemoved.add(treeScope);
         }
-        if (!treeScopesRemoved.isEmpty())
-            for (HashSet<TreeScope*>::iterator it = treeScopesRemoved.begin(); it != treeScopesRemoved.end(); ++it)
-                m_activeTreeScopes.remove(*it);
+        m_activeTreeScopes.removeAll(treeScopesRemoved);
     }
 
     InspectorInstrumentation::activeStyleSheetsUpdated(&m_document);
@@ -426,14 +424,14 @@ void StyleEngine::appendActiveAuthorStyleSheets()
     ASSERT(isMaster());
 
     m_resolver->setBuildScopedStyleTreeInDocumentOrder(true);
-    m_resolver->appendAuthorStyleSheets(0, m_documentStyleSheetCollection.activeAuthorStyleSheets());
+    m_resolver->appendAuthorStyleSheets(m_documentStyleSheetCollection.activeAuthorStyleSheets());
 
     TreeScopeSet::iterator begin = m_activeTreeScopes.begin();
     TreeScopeSet::iterator end = m_activeTreeScopes.end();
     for (TreeScopeSet::iterator it = begin; it != end; ++it) {
         if (TreeScopeStyleSheetCollection* collection = m_styleSheetCollectionMap.get(*it)) {
             m_resolver->setBuildScopedStyleTreeInDocumentOrder(!collection->scopingNodesForStyleScoped());
-            m_resolver->appendAuthorStyleSheets(0, collection->activeAuthorStyleSheets());
+            m_resolver->appendAuthorStyleSheets(collection->activeAuthorStyleSheets());
         }
     }
     m_resolver->finishAppendAuthorStyleSheets();

@@ -29,6 +29,8 @@
 
 #include "core/dom/ExecutionContext.h"
 #include "core/inspector/InspectorInstrumentation.h"
+#include "core/inspector/InspectorTraceEvents.h"
+#include "platform/TraceEvent.h"
 #include "wtf/CurrentTime.h"
 
 using namespace std;
@@ -51,7 +53,8 @@ static inline bool shouldForwardUserGesture(int interval, int nestingLevel)
 {
     return UserGestureIndicator::processingUserGesture()
         && interval <= maxIntervalForUserGestureForwarding
-        && nestingLevel == 1; // Gestures should not be forwarded to nested timers.
+        && nestingLevel == 1
+        && !UserGestureIndicator::currentToken()->wasForwarded();
 }
 
 double DOMTimer::hiddenPageAlignmentInterval()
@@ -70,6 +73,8 @@ double DOMTimer::visiblePageAlignmentInterval()
 int DOMTimer::install(ExecutionContext* context, PassOwnPtr<ScheduledAction> action, int timeout, bool singleShot)
 {
     int timeoutID = context->installNewTimeout(action, timeout, singleShot);
+    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "TimerInstall", "data", InspectorTimerInstallEvent::data(context, timeoutID, timeout, singleShot));
+    // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentation::didInstallTimer(context, timeoutID, timeout, singleShot);
     return timeoutID;
 }
@@ -77,6 +82,8 @@ int DOMTimer::install(ExecutionContext* context, PassOwnPtr<ScheduledAction> act
 void DOMTimer::removeByID(ExecutionContext* context, int timeoutID)
 {
     context->removeTimeoutByID(timeoutID);
+    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "TimerRemove", "data", InspectorTimerRemoveEvent::data(context, timeoutID));
+    // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentation::didRemoveTimer(context, timeoutID);
 }
 
@@ -114,8 +121,12 @@ void DOMTimer::fired()
     timerNestingLevel = m_nestingLevel;
     ASSERT(!context->activeDOMObjectsAreSuspended());
     // Only the first execution of a multi-shot timer should get an affirmative user gesture indicator.
+    if (m_userGestureToken)
+        m_userGestureToken->setForwarded();
     UserGestureIndicator gestureIndicator(m_userGestureToken.release());
 
+    TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "TimerFire", "data", InspectorTimerFireEvent::data(context, m_timeoutID));
+    // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentationCookie cookie = InspectorInstrumentation::willFireTimer(context, m_timeoutID);
 
     // Simple case for non-one-shot timers.

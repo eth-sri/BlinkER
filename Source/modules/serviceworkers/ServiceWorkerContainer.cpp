@@ -32,8 +32,10 @@
 
 #include "RuntimeEnabledFeatures.h"
 #include "bindings/v8/CallbackPromiseAdapter.h"
-#include "bindings/v8/NewScriptState.h"
 #include "bindings/v8/ScriptPromiseResolverWithContext.h"
+#include "bindings/v8/ScriptState.h"
+#include "core/dom/DOMException.h"
+#include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "modules/serviceworkers/RegistrationOptionList.h"
 #include "modules/serviceworkers/ServiceWorker.h"
@@ -71,24 +73,24 @@ ScriptPromise ServiceWorkerContainer::registerServiceWorker(ExecutionContext* ex
 {
     RegistrationOptionList options(dictionary);
     ASSERT(RuntimeEnabledFeatures::serviceWorkerEnabled());
-    RefPtr<ScriptPromiseResolverWithContext> resolver = ScriptPromiseResolverWithContext::create(NewScriptState::current(toIsolate(executionContext)));
+    RefPtr<ScriptPromiseResolverWithContext> resolver = ScriptPromiseResolverWithContext::create(ScriptState::current(toIsolate(executionContext)));
     ScriptPromise promise = resolver->promise();
 
     if (!m_provider) {
-        resolver->reject(DOMError::create(InvalidStateError, "No associated provider is available"));
+        resolver->reject(DOMException::create(InvalidStateError, "No associated provider is available"));
         return promise;
     }
 
     RefPtr<SecurityOrigin> documentOrigin = executionContext->securityOrigin();
     KURL patternURL = executionContext->completeURL(options.scope);
     if (!documentOrigin->canRequest(patternURL)) {
-        resolver->reject(DOMError::create(SecurityError, "Can only register for patterns in the document's origin."));
+        resolver->reject(DOMException::create(SecurityError, "Can only register for patterns in the document's origin."));
         return promise;
     }
 
     KURL scriptURL = executionContext->completeURL(url);
     if (!documentOrigin->canRequest(scriptURL)) {
-        resolver->reject(DOMError::create(SecurityError, "Script must be in document's origin."));
+        resolver->reject(DOMException::create(SecurityError, "Script must be in document's origin."));
         return promise;
     }
 
@@ -112,18 +114,18 @@ private:
 ScriptPromise ServiceWorkerContainer::unregisterServiceWorker(ExecutionContext* executionContext, const String& pattern)
 {
     ASSERT(RuntimeEnabledFeatures::serviceWorkerEnabled());
-    RefPtr<ScriptPromiseResolverWithContext> resolver = ScriptPromiseResolverWithContext::create(NewScriptState::current(toIsolate(executionContext)));
+    RefPtr<ScriptPromiseResolverWithContext> resolver = ScriptPromiseResolverWithContext::create(ScriptState::current(toIsolate(executionContext)));
     ScriptPromise promise = resolver->promise();
 
     if (!m_provider) {
-        resolver->reject(DOMError::create(InvalidStateError, "No associated provider is available"));
+        resolver->reject(DOMException::create(InvalidStateError, "No associated provider is available"));
         return promise;
     }
 
     RefPtr<SecurityOrigin> documentOrigin = executionContext->securityOrigin();
     KURL patternURL = executionContext->completeURL(pattern);
     if (!pattern.isEmpty() && !documentOrigin->canRequest(patternURL)) {
-        resolver->reject(DOMError::create(SecurityError, "Can only unregister for patterns in the document's origin."));
+        resolver->reject(DOMException::create(SecurityError, "Can only unregister for patterns in the document's origin."));
         return promise;
     }
 

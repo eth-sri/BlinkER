@@ -44,16 +44,41 @@ namespace WebCore {
 
 template<typename T> class HeapTerminatedArray;
 
+// Template to determine if a class is a GarbageCollectedMixin by checking if it
+// has adjustAndMark and isAlive. We can't check directly if the class is a
+// GarbageCollectedMixin because casting to it is potentially ambiguous.
+template<typename T>
+struct IsGarbageCollectedMixin {
+    typedef char TrueType;
+    struct FalseType {
+        char dummy[2];
+    };
+
+#if COMPILER(MSVC)
+    template<typename U> static TrueType hasAdjustAndMark(char[&U::adjustAndMark != 0]);
+    template<typename U> static TrueType hasIsAlive(char[&U::isAlive != 0]);
+#else
+    template<size_t> struct F;
+    template<typename U> static TrueType hasAdjustAndMark(F<sizeof(&U::adjustAndMark)>*);
+    template<typename U> static TrueType hasIsAlive(F<sizeof(&U::isAlive)>*);
+#endif
+    template<typename U> static FalseType hasIsAlive(...);
+    template<typename U> static FalseType hasAdjustAndMark(...);
+
+    static bool const value = (sizeof(TrueType) == sizeof(hasAdjustAndMark<T>(0))) && (sizeof(TrueType) == sizeof(hasIsAlive<T>(0)));
+};
+
 #define COMPILE_ASSERT_IS_GARBAGE_COLLECTED(T, ErrorMessage)                                              \
     do {                                                                                                  \
         typedef typename WTF::RemoveConst<T>::Type NonConstType;                                          \
         typedef WTF::IsSubclassOfTemplate<NonConstType, GarbageCollected> GarbageCollectedSubclass;       \
-        typedef WTF::IsSubclass<NonConstType, GarbageCollectedMixin> GarbageCollectedMixinSubclass;       \
+        typedef IsGarbageCollectedMixin<NonConstType> GarbageCollectedMixinSubclass;                      \
         typedef WTF::IsSubclassOfTemplate3<NonConstType, HeapHashSet> HeapHashSetSubclass;                \
         typedef WTF::IsSubclassOfTemplate3<NonConstType, HeapLinkedHashSet> HeapLinkedHashSetSubclass;    \
         typedef WTF::IsSubclassOfTemplate5<NonConstType, HeapHashMap> HeapHashMapSubclass;                \
         typedef WTF::IsSubclassOfTemplateTypenameSize<NonConstType, HeapVector> HeapVectorSubclass;       \
         typedef WTF::IsSubclassOfTemplateTypenameSize<NonConstType, HeapDeque> HeapDequeSubclass;         \
+        typedef WTF::IsSubclassOfTemplate3<NonConstType, HeapHashCountedSet> HeapHashCountedSetSubclass;  \
         typedef WTF::IsSubclassOfTemplate<NonConstType, HeapTerminatedArray> HeapTerminatedArraySubclass; \
         COMPILE_ASSERT(GarbageCollectedSubclass::value ||                                                 \
             GarbageCollectedMixinSubclass::value ||                                                       \
@@ -62,6 +87,7 @@ template<typename T> class HeapTerminatedArray;
             HeapHashMapSubclass::value ||                                                                 \
             HeapVectorSubclass::value ||                                                                  \
             HeapDequeSubclass::value ||                                                                   \
+            HeapHashCountedSetSubclass::value ||                                                          \
             HeapTerminatedArraySubclass::value,                                                           \
             ErrorMessage);                                                                                \
     } while (0)
@@ -255,32 +281,21 @@ class Persistent : public PersistentBase<RootsAccessor, Persistent<T, RootsAcces
     WTF_DISALLOW_CONSTRUCTION_FROM_ZERO(Persistent);
     WTF_DISALLOW_ZERO_ASSIGNMENT(Persistent);
 public:
-    Persistent() : m_raw(0)
-    {
-        COMPILE_ASSERT_IS_GARBAGE_COLLECTED(T, NonGarbageCollectedObjectInPersistent);
-    }
+    Persistent() : m_raw(0) { }
 
-    Persistent(std::nullptr_t) : m_raw(0)
-    {
-        COMPILE_ASSERT_IS_GARBAGE_COLLECTED(T, NonGarbageCollectedObjectInPersistent);
-    }
+    Persistent(std::nullptr_t) : m_raw(0) { }
 
     Persistent(T* raw) : m_raw(raw)
     {
-        COMPILE_ASSERT_IS_GARBAGE_COLLECTED(T, NonGarbageCollectedObjectInPersistent);
         ASSERT_IS_VALID_PERSISTENT_POINTER(m_raw);
     }
 
     explicit Persistent(T& raw) : m_raw(&raw)
     {
-        COMPILE_ASSERT_IS_GARBAGE_COLLECTED(T, NonGarbageCollectedObjectInPersistent);
         ASSERT_IS_VALID_PERSISTENT_POINTER(m_raw);
     }
 
-    Persistent(const Persistent& other) : m_raw(other)
-    {
-        COMPILE_ASSERT_IS_GARBAGE_COLLECTED(T, NonGarbageCollectedObjectInPersistent);
-    }
+    Persistent(const Persistent& other) : m_raw(other) { }
 
     template<typename U>
     Persistent(const Persistent<U, RootsAccessor>& other) : m_raw(other) { }
@@ -319,6 +334,7 @@ public:
 
     void trace(Visitor* visitor)
     {
+        COMPILE_ASSERT_IS_GARBAGE_COLLECTED(T, NonGarbageCollectedObjectInPersistent);
 #if ENABLE(GC_TRACING)
         visitor->setHostInfo(this, "Persistent");
 #endif
@@ -393,8 +409,10 @@ template<typename Collection, ThreadAffinity Affinity = AnyThread>
 class PersistentHeapCollectionBase
     : public Collection
     , public PersistentBase<ThreadLocalPersistents<Affinity>, PersistentHeapCollectionBase<Collection, Affinity> > {
-    // Never allocate these objects with new. Use Persistent<Collection> instead.
-    DISALLOW_ALLOCATION();
+    // We overload the various new and delete operators with using the WTF DefaultAllocator to ensure persistent
+    // heap collections are always allocated off-heap. This allows persistent collections to be used in
+    // DEFINE_STATIC_LOCAL et. al.
+    WTF_USE_ALLOCATOR(PersistentHeapCollectionBase, WTF::DefaultAllocator);
 public:
     PersistentHeapCollectionBase() { }
 
@@ -423,6 +441,9 @@ template<
     typename HashArg = typename DefaultHash<ValueArg>::Hash,
     typename TraitsArg = HashTraits<ValueArg> >
 class PersistentHeapLinkedHashSet : public PersistentHeapCollectionBase<HeapLinkedHashSet<ValueArg, HashArg, TraitsArg> > { };
+
+template<typename T, typename U, typename V>
+class PersistentHeapHashCountedSet : public PersistentHeapCollectionBase<HeapHashCountedSet<T, U, V> > { };
 
 template<typename T, size_t inlineCapacity = 0>
 class PersistentHeapVector : public PersistentHeapCollectionBase<HeapVector<T, inlineCapacity> > {
@@ -460,34 +481,27 @@ class Member {
 public:
     Member() : m_raw(0)
     {
-        COMPILE_ASSERT_IS_GARBAGE_COLLECTED(T, NonGarbageCollectedObjectInMember);
     }
 
     Member(std::nullptr_t) : m_raw(0)
     {
-        COMPILE_ASSERT_IS_GARBAGE_COLLECTED(T, NonGarbageCollectedObjectInMember);
     }
 
     Member(T* raw) : m_raw(raw)
     {
-        COMPILE_ASSERT_IS_GARBAGE_COLLECTED(T, NonGarbageCollectedObjectInMember);
     }
 
     explicit Member(T& raw) : m_raw(&raw)
     {
-        COMPILE_ASSERT_IS_GARBAGE_COLLECTED(T, NonGarbageCollectedObjectInMember);
     }
 
     template<typename U>
     Member(const RawPtr<U>& other) : m_raw(other.get())
     {
-        COMPILE_ASSERT_IS_GARBAGE_COLLECTED(T, NonGarbageCollectedObjectInMember);
-        COMPILE_ASSERT_IS_GARBAGE_COLLECTED(U, NonGarbageCollectedObjectInMember);
     }
 
     Member(WTF::HashTableDeletedValueType) : m_raw(reinterpret_cast<T*>(-1))
     {
-        COMPILE_ASSERT_IS_GARBAGE_COLLECTED(T, NonGarbageCollectedObjectInMember);
     }
 
     bool isHashTableDeletedValue() const { return m_raw == reinterpret_cast<T*>(-1); }
@@ -562,9 +576,15 @@ public:
     void clear() { m_raw = 0; }
 
 protected:
+    void verifyTypeIsGarbageCollected() const
+    {
+        COMPILE_ASSERT_IS_GARBAGE_COLLECTED(T, NonGarbageCollectedObjectInMember);
+    }
+
     T* m_raw;
 
     template<bool x, bool y, ShouldWeakPointersBeMarkedStrongly z, typename U, typename V> friend struct CollectionBackingTraceTrait;
+    friend class Visitor;
 };
 
 template<typename T>
@@ -638,25 +658,13 @@ class WeakMember : public Member<T> {
     WTF_DISALLOW_CONSTRUCTION_FROM_ZERO(WeakMember);
     WTF_DISALLOW_ZERO_ASSIGNMENT(WeakMember);
 public:
-    WeakMember() : Member<T>()
-    {
-        COMPILE_ASSERT_IS_GARBAGE_COLLECTED(T, NonGarbageCollectedObjectInWeakMember);
-    }
+    WeakMember() : Member<T>() { }
 
-    WeakMember(std::nullptr_t) : Member<T>(nullptr)
-    {
-        COMPILE_ASSERT_IS_GARBAGE_COLLECTED(T, NonGarbageCollectedObjectInWeakMember);
-    }
+    WeakMember(std::nullptr_t) : Member<T>(nullptr) { }
 
-    WeakMember(T* raw) : Member<T>(raw)
-    {
-        COMPILE_ASSERT_IS_GARBAGE_COLLECTED(T, NonGarbageCollectedObjectInWeakMember);
-    }
+    WeakMember(T* raw) : Member<T>(raw) { }
 
-    WeakMember(WTF::HashTableDeletedValueType x) : Member<T>(x)
-    {
-        COMPILE_ASSERT_IS_GARBAGE_COLLECTED(T, NonGarbageCollectedObjectInWeakMember);
-    }
+    WeakMember(WTF::HashTableDeletedValueType x) : Member<T>(x) { }
 
     template<typename U>
     WeakMember(const Persistent<U>& other) : Member<T>(other) { }
@@ -736,7 +744,6 @@ template<typename T, typename U> inline bool operator!=(const Persistent<T>& a, 
 #define RefCountedWillBeGarbageCollected WebCore::GarbageCollected
 #define RefCountedWillBeGarbageCollectedFinalized WebCore::GarbageCollectedFinalized
 #define RefCountedWillBeRefCountedGarbageCollected WebCore::RefCountedGarbageCollected
-#define RefCountedSupplementWillBeRefCountedGarbageCollectedSupplement WebCore::RefCountedGarbageCollectedSupplement
 #define ThreadSafeRefCountedWillBeGarbageCollected WebCore::GarbageCollected
 #define ThreadSafeRefCountedWillBeGarbageCollectedFinalized WebCore::GarbageCollectedFinalized
 #define PersistentWillBeMember WebCore::Member
@@ -764,6 +771,8 @@ template<typename T, typename U> inline bool operator!=(const Persistent<T>& a, 
 #define WillBePersistentHeapVector WebCore::PersistentHeapVector
 #define WillBeHeapDeque WebCore::HeapDeque
 #define WillBePersistentHeapDeque WebCore::PersistentHeapDeque
+#define WillBeHeapHashCountedSet WebCore::HeapHashCountedSet
+#define WillBePersistentHeapHashCountedSet WebCore::PersistentHeapHashCountedSet
 #define WillBeGarbageCollectedMixin WebCore::GarbageCollectedMixin
 #define WillBeHeapSupplement WebCore::HeapSupplement
 #define WillBeHeapSupplementable WebCore::HeapSupplementable
@@ -814,7 +823,6 @@ public:
 #define RefCountedWillBeGarbageCollected WTF::RefCounted
 #define RefCountedWillBeGarbageCollectedFinalized WTF::RefCounted
 #define RefCountedWillBeRefCountedGarbageCollected WTF::RefCounted
-#define RefCountedSupplementWillBeRefCountedGarbageCollectedSupplement WebCore::RefCountedSupplement
 #define ThreadSafeRefCountedWillBeGarbageCollected WTF::ThreadSafeRefCounted
 #define ThreadSafeRefCountedWillBeGarbageCollectedFinalized WTF::ThreadSafeRefCounted
 #define PersistentWillBeMember WebCore::Persistent
@@ -842,6 +850,8 @@ public:
 #define WillBePersistentHeapVector WTF::Vector
 #define WillBeHeapDeque WTF::Deque
 #define WillBePersistentHeapDeque WTF::Deque
+#define WillBeHeapHeapCountedSet WTF::HeapCountedSet
+#define WillBePersistentHeapHeapCountedSet WTF::HeapCountedSet
 #define WillBeGarbageCollectedMixin WebCore::DummyBase<void>
 #define WillBeHeapSupplement WebCore::Supplement
 #define WillBeHeapSupplementable WebCore::Supplementable
@@ -1035,6 +1045,11 @@ struct NeedsTracing<Vector<T, N> > {
 
 template<typename T, size_t N>
 struct NeedsTracing<Deque<T, N> > {
+    static const bool value = false;
+};
+
+template<typename T, typename U, typename V>
+struct NeedsTracing<HashCountedSet<T, U, V> > {
     static const bool value = false;
 };
 

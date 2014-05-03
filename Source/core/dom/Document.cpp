@@ -71,6 +71,7 @@
 #include "core/dom/Element.h"
 #include "core/dom/ElementDataCache.h"
 #include "core/dom/ElementTraversal.h"
+#include "core/dom/EventHandlerRegistry.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContextTask.h"
 #include "core/dom/MainThreadTaskRunner.h"
@@ -85,6 +86,7 @@
 #include "core/dom/NodeWithIndex.h"
 #include "core/dom/ProcessingInstruction.h"
 #include "core/dom/RequestAnimationFrameCallback.h"
+#include "core/dom/ScriptForbiddenScope.h"
 #include "core/dom/ScriptRunner.h"
 #include "core/dom/ScriptedAnimationController.h"
 #include "core/dom/SelectorQuery.h"
@@ -148,6 +150,7 @@
 #include "core/html/parser/TextResourceDecoder.h"
 #include "core/inspector/InspectorCounters.h"
 #include "core/inspector/InspectorInstrumentation.h"
+#include "core/inspector/InspectorTraceEvents.h"
 #include "core/inspector/ScriptCallStack.h"
 #include "core/loader/CookieJar.h"
 #include "core/loader/DocumentLoader.h"
@@ -378,7 +381,9 @@ DocumentVisibilityObserver::DocumentVisibilityObserver(Document& document)
 
 DocumentVisibilityObserver::~DocumentVisibilityObserver()
 {
+#if !ENABLE(OILPAN)
     unregisterObserver();
+#endif
 }
 
 void DocumentVisibilityObserver::unregisterObserver()
@@ -478,6 +483,7 @@ Document::Document(const DocumentInit& initializer, DocumentClassFlags documentC
     , m_templateDocumentHost(0)
     , m_didAssociateFormControlsTimer(this, &Document::didAssociateFormControlsTimerFired)
     , m_hasViewportUnits(false)
+    , m_styleRecalcElementCounter(0)
 {
     setClient(this);
     ScriptWrappable::init(this);
@@ -544,8 +550,14 @@ Document::~Document()
     ASSERT(!renderView());
     ASSERT(m_ranges.isEmpty());
     ASSERT(!parentTreeScope());
+#if !ENABLE(OILPAN)
     ASSERT(!hasGuardRefCount());
+    // With Oilpan, either the document outlives the visibility observers
+    // or the visibility observers and the document die in the same GC round.
+    // When they die in the same GC round, the list of visibility observers
+    // will not be empty on Document destruction.
     ASSERT(m_visibilityObservers.isEmpty());
+#endif
 
     if (m_templateDocument)
         m_templateDocument->m_templateDocumentHost = 0; // balanced in ensureTemplateDocument().
@@ -566,8 +578,10 @@ Document::~Document()
     if (this == topDocument())
         clearAXObjectCache();
 
+#if !ENABLE(OILPAN)
     if (m_styleSheetList)
         m_styleSheetList->detachFromDocument();
+#endif
 
     if (m_importsController) {
         m_importsController->wasDetachedFrom(*this);
@@ -581,8 +595,10 @@ Document::~Document()
     if (m_styleEngine)
         m_styleEngine->detachFromDocument();
 
+#if !ENABLE(OILPAN)
     if (m_elemSheet)
         m_elemSheet->clearOwnerNode();
+#endif
 
     // It's possible for multiple Documents to end up referencing the same ResourceFetcher (e.g., SVGImages
     // load the initial empty document and the SVGDocument with the same DocumentLoader).
@@ -807,12 +823,12 @@ PassRefPtr<Element> Document::createElementNS(const AtomicString& namespaceURI, 
     return element;
 }
 
-ScriptValue Document::registerElement(WebCore::NewScriptState* scriptState, const AtomicString& name, ExceptionState& exceptionState)
+ScriptValue Document::registerElement(WebCore::ScriptState* scriptState, const AtomicString& name, ExceptionState& exceptionState)
 {
     return registerElement(scriptState, name, Dictionary(), exceptionState);
 }
 
-ScriptValue Document::registerElement(WebCore::NewScriptState* scriptState, const AtomicString& name, const Dictionary& options, ExceptionState& exceptionState, CustomElement::NameSet validNames)
+ScriptValue Document::registerElement(WebCore::ScriptState* scriptState, const AtomicString& name, const Dictionary& options, ExceptionState& exceptionState, CustomElement::NameSet validNames)
 {
     if (!registrationContext()) {
         exceptionState.throwDOMException(NotSupportedError, "No element registration context is available.");
@@ -919,6 +935,12 @@ bool Document::importContainerNodeChildren(ContainerNode* oldContainerNode, Pass
     }
 
     return true;
+}
+
+PassRefPtr<Node> Document::importNode(Node* importedNode, ExceptionState& ec)
+{
+    UseCounter::countDeprecation(this, UseCounter::DocumentImportNodeOptionalArgument);
+    return importNode(importedNode, true, ec);
 }
 
 PassRefPtr<Node> Document::importNode(Node* importedNode, bool deep, ExceptionState& exceptionState)
@@ -1176,11 +1198,6 @@ void Document::setContentLanguage(const AtomicString& language)
 
 void Document::setXMLVersion(const String& version, ExceptionState& exceptionState)
 {
-    if (!implementation().hasFeature("XML", String())) {
-        exceptionState.throwDOMException(NotSupportedError, "This document does not support XML.");
-        return;
-    }
-
     if (!XMLDocumentParser::supportsXMLVersion(version)) {
         exceptionState.throwDOMException(NotSupportedError, "This document does not support the XML version '" + version + "'.");
         return;
@@ -1191,11 +1208,6 @@ void Document::setXMLVersion(const String& version, ExceptionState& exceptionSta
 
 void Document::setXMLStandalone(bool standalone, ExceptionState& exceptionState)
 {
-    if (!implementation().hasFeature("XML", String())) {
-        exceptionState.throwDOMException(NotSupportedError, "This document does not support XML.");
-        return;
-    }
-
     m_xmlStandalone = standalone ? Standalone : NotStandalone;
 }
 
@@ -1457,8 +1469,8 @@ void Document::didChangeVisibilityState()
     dispatchEvent(Event::create(EventTypeNames::webkitvisibilitychange));
 
     PageVisibilityState state = pageVisibilityState();
-    HashSet<DocumentVisibilityObserver*>::const_iterator observerEnd = m_visibilityObservers.end();
-    for (HashSet<DocumentVisibilityObserver*>::const_iterator it = m_visibilityObservers.begin(); it != observerEnd; ++it)
+    DocumentVisibilityObserverSet::const_iterator observerEnd = m_visibilityObservers.end();
+    for (DocumentVisibilityObserverSet::const_iterator it = m_visibilityObservers.begin(); it != observerEnd; ++it)
         (*it)->didChangeVisibilityState(state);
 }
 
@@ -1619,6 +1631,8 @@ bool Document::needsFullRenderTreeUpdate() const
     // FIXME: The childNeedsDistributionRecalc bit means either self or children, we should fix that.
     if (childNeedsDistributionRecalc())
         return true;
+    if (DocumentAnimations::needsOutdatedAnimationPlayerUpdate(*this))
+        return true;
     return false;
 }
 
@@ -1645,6 +1659,8 @@ void Document::scheduleRenderTreeUpdate()
     page()->animator().scheduleVisualUpdate();
     m_lifecycle.ensureStateAtMost(DocumentLifecycle::VisualUpdatePending);
 
+    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "ScheduleStyleRecalculation", "frame", frame());
+    // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentation::didScheduleStyleRecalculation(this);
 }
 
@@ -1655,6 +1671,8 @@ bool Document::hasPendingForcedStyleRecalc() const
 
 void Document::updateDistributionIfNeeded()
 {
+    ScriptForbiddenScope forbidScript;
+
     if (!childNeedsDistributionRecalc())
         return;
     TRACE_EVENT0("webkit", "Document::updateDistributionIfNeeded");
@@ -1663,6 +1681,8 @@ void Document::updateDistributionIfNeeded()
 
 void Document::updateStyleInvalidationIfNeeded()
 {
+    ScriptForbiddenScope forbidScript;
+
     if (!isActive())
         return;
     if (!childNeedsStyleInvalidation())
@@ -1675,6 +1695,8 @@ void Document::updateStyleInvalidationIfNeeded()
 
 void Document::updateDistributionForNodeIfNeeded(Node* node)
 {
+    ScriptForbiddenScope forbidScript;
+
     if (node->inDocument()) {
         updateDistributionIfNeeded();
         return;
@@ -1809,8 +1831,12 @@ void Document::updateRenderTree(StyleRecalcChange change)
     TRACE_EVENT0("webkit", "Document::updateRenderTree");
     TRACE_EVENT_SCOPED_SAMPLING_STATE("Blink", "UpdateRenderTree");
 
+    m_styleRecalcElementCounter = 0;
+    TRACE_EVENT_BEGIN1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "RecalculateStyles", "frame", frame());
+    // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentationCookie cookie = InspectorInstrumentation::willRecalculateStyle(this);
 
+    DocumentAnimations::updateOutdatedAnimationPlayersIfNeeded(*this);
     updateDistributionIfNeeded();
     updateUseShadowTreesIfNeeded();
     updateStyleInvalidationIfNeeded();
@@ -1844,13 +1870,16 @@ void Document::updateRenderTree(StyleRecalcChange change)
     if (svgExtensions())
         accessSVGExtensions().removePendingSVGFontFaceElementsForRemoval();
 #endif
-    InspectorInstrumentation::didRecalculateStyle(cookie);
+    TRACE_EVENT_END1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "RecalculateStyles", "elementCount", m_styleRecalcElementCounter);
+    // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
+    InspectorInstrumentation::didRecalculateStyle(cookie, m_styleRecalcElementCounter);
 }
 
 void Document::updateStyle(StyleRecalcChange change)
 {
     TRACE_EVENT0("webkit", "Document::updateStyle");
 
+    ScriptForbiddenScope forbidScript;
     HTMLFrameOwnerElement::UpdateSuspendScope suspendWidgetHierarchyUpdates;
     m_lifecycle.advanceTo(DocumentLifecycle::InStyleRecalc);
 
@@ -1892,6 +1921,7 @@ void Document::updateStyle(StyleRecalcChange change)
 
     ensureStyleResolver().printStats();
 
+    view()->recalcOverflowAfterStyleChange();
     view()->updateCompositingLayersAfterStyleChange();
 
     clearChildNeedsStyleRecalc();
@@ -2106,6 +2136,8 @@ void Document::unscheduleUseShadowTreeUpdate(SVGUseElement& element)
 
 void Document::updateUseShadowTreesIfNeeded()
 {
+    ScriptForbiddenScope forbidScript;
+
     if (m_useElementsNeedingUpdate.isEmpty())
         return;
 
@@ -2183,10 +2215,8 @@ void Document::detach(const AttachContext& context)
     if (m_domWindow)
         m_domWindow->clearEventQueue();
 
-    RenderView* renderView = m_renderView;
-
-    if (renderView)
-        renderView->setIsInWindow(false);
+    if (m_renderView)
+        m_renderView->setIsInWindow(false);
 
     if (m_frame) {
         FrameView* view = m_frame->view();
@@ -2194,22 +2224,15 @@ void Document::detach(const AttachContext& context)
             view->detachCustomScrollbars();
     }
 
-    // Indicate destruction mode by setting the renderer to null.
-    // FIXME: Don't do this and use m_lifecycle.state() == Stopping instead.
-    setRenderer(0);
-    m_renderView = 0;
-
     m_hoverNode = nullptr;
     m_focusedElement = nullptr;
     m_activeHoverElement = nullptr;
     m_autofocusElement = nullptr;
 
+    m_renderView = 0;
     ContainerNode::detach(context);
 
     m_styleEngine->didDetach();
-
-    if (renderView)
-        renderView->destroy();
 
     if (Document* parentDoc = parentDocument())
         parentDoc->didClearTouchEventHandlers(this);
@@ -4597,6 +4620,8 @@ void Document::finishedParsing()
 
         f->loader().finishedParsing();
 
+        TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "MarkDOMContent", "data", InspectorMarkLoadEvent::data(f.get()));
+        // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
         InspectorInstrumentation::domContentLoadedEventFired(f.get());
     }
 
@@ -4861,7 +4886,7 @@ void Document::detachRange(Range* range)
     m_ranges.remove(range);
 }
 
-void Document::getCSSCanvasContext(const String& type, const String& name, int width, int height, bool& is2d, RefPtr<CanvasRenderingContext2D>& context2d, bool& is3d, RefPtr<WebGLRenderingContext>& context3d)
+void Document::getCSSCanvasContext(const String& type, const String& name, int width, int height, bool& is2d, RefPtrWillBeRawPtr<CanvasRenderingContext2D>& context2d, bool& is3d, RefPtrWillBeRawPtr<WebGLRenderingContext>& context3d)
 {
     HTMLCanvasElement& element = getCSSCanvasElement(name);
     element.setSize(IntSize(width, height));
@@ -4918,12 +4943,12 @@ void Document::reportBlockedScriptExecutionToInspector(const String& directiveTe
     InspectorInstrumentation::scriptExecutionBlockedByCSP(this, directiveText);
 }
 
-void Document::addMessage(MessageSource source, MessageLevel level, const String& message, const String& sourceURL, unsigned lineNumber, NewScriptState* scriptState)
+void Document::addMessage(MessageSource source, MessageLevel level, const String& message, const String& sourceURL, unsigned lineNumber, ScriptState* scriptState)
 {
     internalAddMessage(source, level, message, sourceURL, lineNumber, nullptr, scriptState);
 }
 
-void Document::internalAddMessage(MessageSource source, MessageLevel level, const String& message, const String& sourceURL, unsigned lineNumber, PassRefPtr<ScriptCallStack> callStack, NewScriptState* scriptState)
+void Document::internalAddMessage(MessageSource source, MessageLevel level, const String& message, const String& sourceURL, unsigned lineNumber, PassRefPtr<ScriptCallStack> callStack, ScriptState* scriptState)
 {
     if (!isContextThread()) {
         m_taskRunner->postTask(AddConsoleMessageTask::create(source, level, message));
@@ -5064,9 +5089,32 @@ void Document::decrementLoadEventDelayCount()
     ASSERT(m_loadEventDelayCount);
     --m_loadEventDelayCount;
 
-    if (frame() && !m_loadEventDelayCount && !m_loadEventDelayTimer.isActive())
+    if (!m_loadEventDelayCount)
+        checkLoadEventSoon();
+}
+
+void Document::checkLoadEventSoon()
+{
+    if (frame() && !m_loadEventDelayTimer.isActive())
         m_loadEventDelayTimer.startOneShot(0, FROM_HERE);
 }
+
+bool Document::isDelayingLoadEvent()
+{
+#if ENABLE(OILPAN)
+    // Always delay load events until after garbage collection.
+    // This way we don't have to explicitly delay load events via
+    // incrementLoadEventDelayCount and decrementLoadEventDelayCount in
+    // Node destructors.
+    if (ThreadState::current()->isSweepInProgress()) {
+        if (!m_loadEventDelayCount)
+            checkLoadEventSoon();
+        return true;
+    }
+#endif
+    return m_loadEventDelayCount;
+}
+
 
 void Document::loadEventDelayTimerFired(Timer<Document>*)
 {
@@ -5278,7 +5326,6 @@ void Document::decrementActiveParserCount()
     // FIXME: This should always be enabled, but it seems to cause
     // http/tests/security/feed-urls-from-remote.html to timeout on Mac WK1
     // see http://webkit.org/b/110554 and http://webkit.org/b/110401
-    loader()->checkLoadComplete();
     frame()->loader().checkLoadComplete();
 }
 
@@ -5621,10 +5668,36 @@ void Document::invalidateNodeListCaches(const QualifiedName* attrName)
         (*it)->invalidateCacheForAttribute(attrName);
 }
 
+void Document::clearWeakMembers(Visitor* visitor)
+{
+    if (m_axObjectCache)
+        m_axObjectCache->clearWeakMembers(visitor);
+
+    if (m_markers)
+        m_markers->clearWeakMembers(visitor);
+
+    // FIXME: Oilpan: Use a weak counted set instead.
+    if (m_touchEventTargets) {
+        Vector<Node*> deadNodes;
+        for (TouchEventTargetSet::iterator it = m_touchEventTargets->begin(); it != m_touchEventTargets->end(); ++it) {
+            if (!visitor->isAlive(it->key))
+                deadNodes.append(it->key);
+        }
+        for (unsigned i = 0; i < deadNodes.size(); ++i)
+            didClearTouchEventHandlers(deadNodes[i]);
+    }
+}
+
 void Document::trace(Visitor* visitor)
 {
-    Supplementable<Document>::trace(visitor);
+    visitor->trace(m_styleSheetList);
+    visitor->trace(m_mediaQueryMatcher);
+    visitor->trace(m_visibilityObservers);
+    visitor->registerWeakMembers<Document, &Document::clearWeakMembers>(this);
+    DocumentSupplementable::trace(visitor);
+    TreeScope::trace(visitor);
     ContainerNode::trace(visitor);
+    ExecutionContext::trace(visitor);
 }
 
 } // namespace WebCore

@@ -32,7 +32,7 @@
 #define ScriptWrappable_h
 
 #include "bindings/v8/WrapperTypeInfo.h"
-#include "heap/Handle.h"
+#include "platform/heap/Handle.h"
 #include <v8.h>
 
 // Helper to call webCoreInitializeScriptWrappableForInterface in the global namespace.
@@ -128,6 +128,13 @@ public:
     {
         m_wrapperOrTypeInfo = reinterpret_cast<uintptr_t>(typeInfo);
         ASSERT(containsTypeInfo());
+    }
+
+    bool isEqualTo(const v8::Local<v8::Object>& other) const
+    {
+        v8::Persistent<v8::Object> persistent;
+        getPersistent(&persistent);
+        return persistent == other;
     }
 
     static bool wrapperCanBeStoredInObject(const void*) { return false; }

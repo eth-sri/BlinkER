@@ -6,8 +6,6 @@
 
 #include "core/frame/PinchViewport.h"
 
-#include "WebSettings.h"
-#include "WebViewClient.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/LocalFrame.h"
 #include "core/rendering/RenderView.h"
@@ -16,6 +14,8 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebLayerTreeView.h"
 #include "public/platform/WebUnitTestSupport.h"
+#include "public/web/WebSettings.h"
+#include "public/web/WebViewClient.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/tests/FrameTestHelpers.h"
 #include "web/tests/URLTestHelpers.h"
@@ -47,23 +47,6 @@ using namespace WebCore;
 using namespace blink;
 
 namespace {
-
-class FakeWebViewClient : public WebViewClient {
-public:
-    virtual void initializeLayerTreeView()
-    {
-        m_layerTreeView = adoptPtr(Platform::current()->unitTestSupport()->createLayerTreeViewForTesting(WebUnitTestSupport::TestViewTypeUnitTest));
-        ASSERT(m_layerTreeView);
-    }
-
-    virtual WebLayerTreeView* layerTreeView()
-    {
-        return m_layerTreeView.get();
-    }
-
-private:
-    OwnPtr<WebLayerTreeView> m_layerTreeView;
-};
 
 class PinchViewportTest : public testing::Test {
 public:
@@ -110,7 +93,7 @@ public:
 
 protected:
     std::string m_baseURL;
-    FakeWebViewClient m_mockWebViewClient;
+    FrameTestHelpers::TestWebViewClient m_mockWebViewClient;
 
 private:
     static void configureSettings(WebSettings* settings)

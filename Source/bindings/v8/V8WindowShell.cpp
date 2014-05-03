@@ -43,16 +43,17 @@
 #include "bindings/v8/V8HiddenValue.h"
 #include "bindings/v8/V8Initializer.h"
 #include "bindings/v8/V8ObjectConstructor.h"
+#include "core/dom/ScriptForbiddenScope.h"
+#include "core/frame/LocalFrame.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLCollection.h"
 #include "core/html/HTMLIFrameElement.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/FrameLoaderClient.h"
-#include "core/frame/LocalFrame.h"
-#include "core/frame/csp/ContentSecurityPolicy.h"
-#include "heap/Handle.h"
 #include "platform/TraceEvent.h"
+#include "platform/heap/Handle.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/Platform.h"
 #include "wtf/Assertions.h"
@@ -123,7 +124,7 @@ void V8WindowShell::clearForNavigation()
     if (!isContextInitialized())
         return;
 
-    NewScriptState::Scope scope(m_scriptState.get());
+    ScriptState::Scope scope(m_scriptState.get());
 
     m_document.clear();
 
@@ -189,6 +190,8 @@ bool V8WindowShell::initialize()
     TRACE_EVENT0("v8", "V8WindowShell::initialize");
     TRACE_EVENT_SCOPED_SAMPLING_STATE("Blink", "InitializeWindow");
 
+    ScriptForbiddenScope::AllowUserAgentScript allowScript;
+
     v8::HandleScope handleScope(m_isolate);
 
     createContext();
@@ -196,7 +199,7 @@ bool V8WindowShell::initialize()
     if (!isContextInitialized())
         return false;
 
-    NewScriptState::Scope scope(m_scriptState.get());
+    ScriptState::Scope scope(m_scriptState.get());
     v8::Handle<v8::Context> context = m_scriptState->context();
     if (m_global.isEmpty()) {
         m_global.set(m_isolate, context->Global());
@@ -237,7 +240,7 @@ bool V8WindowShell::initialize()
 
         SecurityOrigin* origin = m_world->isolatedWorldSecurityOrigin();
         if (origin && InspectorInstrumentation::hasFrontends()) {
-            InspectorInstrumentation::didCreateIsolatedContext(m_frame, NewScriptState::current(m_isolate), origin);
+            InspectorInstrumentation::didCreateIsolatedContext(m_frame, ScriptState::current(m_isolate), origin);
         }
     }
     m_frame->loader().client()->didCreateScriptContext(context, m_world->extensionGroup(), m_world->worldId());
@@ -276,7 +279,7 @@ void V8WindowShell::createContext()
     v8::Handle<v8::Context> context = v8::Context::New(m_isolate, &extensionConfiguration, globalTemplate, m_global.newLocal(m_isolate));
     if (context.IsEmpty())
         return;
-    m_scriptState = NewScriptState::create(context, m_world);
+    m_scriptState = ScriptState::create(context, m_world);
 
     double contextCreationDurationInMilliseconds = (currentTime() - contextCreationStartInSeconds) * 1000;
     const char* histogramName = "WebCore.V8WindowShell.createContext.MainWorld";
@@ -339,7 +342,7 @@ void V8WindowShell::updateDocumentProperty()
     if (!m_world->isMainWorld())
         return;
 
-    NewScriptState::Scope scope(m_scriptState.get());
+    ScriptState::Scope scope(m_scriptState.get());
     v8::Handle<v8::Context> context = m_scriptState->context();
     v8::Handle<v8::Value> documentWrapper = toV8(m_frame->document(), v8::Handle<v8::Object>(), context->GetIsolate());
     ASSERT(documentWrapper == m_document.newLocal(m_isolate) || m_document.isEmpty());
@@ -460,7 +463,7 @@ void V8WindowShell::namedItemAdded(HTMLDocument* document, const AtomicString& n
     if (!isContextInitialized())
         return;
 
-    NewScriptState::Scope scope(m_scriptState.get());
+    ScriptState::Scope scope(m_scriptState.get());
     ASSERT(!m_document.isEmpty());
     v8::Handle<v8::Object> documentHandle = m_document.newLocal(m_isolate);
     checkDocumentWrapper(documentHandle, document);
@@ -477,7 +480,7 @@ void V8WindowShell::namedItemRemoved(HTMLDocument* document, const AtomicString&
     if (document->hasNamedItem(name) || document->hasExtraNamedItem(name))
         return;
 
-    NewScriptState::Scope scope(m_scriptState.get());
+    ScriptState::Scope scope(m_scriptState.get());
     ASSERT(!m_document.isEmpty());
     v8::Handle<v8::Object> documentHandle = m_document.newLocal(m_isolate);
     checkDocumentWrapper(documentHandle, document);

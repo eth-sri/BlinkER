@@ -37,8 +37,9 @@
 namespace WebCore {
 
 DeviceOrientationController::DeviceOrientationController(Document& document)
-    : DeviceSensorEventController(document)
+    : DeviceSensorEventController(document.page())
     , DOMWindowLifecycleObserver(document.domWindow())
+    , m_document(document)
 {
 }
 
@@ -64,7 +65,7 @@ DeviceOrientationController& DeviceOrientationController::from(Document& documen
     DeviceOrientationController* controller = static_cast<DeviceOrientationController*>(DocumentSupplement::from(document, supplementName()));
     if (!controller) {
         controller = new DeviceOrientationController(document);
-        DocumentSupplement::provideTo(document, supplementName(), adoptPtr(controller));
+        DocumentSupplement::provideTo(document, supplementName(), adoptPtrWillBeNoop(controller));
     }
     return *controller;
 }
@@ -98,6 +99,11 @@ bool DeviceOrientationController::isNullEvent(Event* event)
 {
     DeviceOrientationEvent* orientationEvent = toDeviceOrientationEvent(event);
     return !orientationEvent->orientation()->canProvideEventData();
+}
+
+Document* DeviceOrientationController::document()
+{
+    return &m_document;
 }
 
 void DeviceOrientationController::didAddEventListener(DOMWindow* window, const AtomicString& eventType)
@@ -141,6 +147,11 @@ void DeviceOrientationController::clearOverride()
     DeviceOrientationData* orientation = lastData();
     if (orientation)
         didChangeDeviceOrientation(orientation);
+}
+
+void DeviceOrientationController::trace(Visitor* visitor)
+{
+    visitor->trace(m_overrideOrientationData);
 }
 
 } // namespace WebCore

@@ -204,8 +204,11 @@ void RenderText::styleDidChange(StyleDifference diff, const RenderStyle* oldStyl
     if (oldTransform != newStyle->textTransform() || oldSecurity != newStyle->textSecurity())
         transformText();
 
+    // This is an optimization that kicks off font load before layout.
+    // In order to make it fast, we only check if the first character of the
+    // text is included in the unicode ranges of the fonts.
     if (!text().containsOnlyWhitespace())
-        newStyle->font().willUseFontData();
+        newStyle->font().willUseFontData(text().characterStartingAt(0));
 }
 
 void RenderText::removeAndDestroyTextBoxes()
@@ -1449,7 +1452,7 @@ void RenderText::positionLineBox(InlineBox* box)
     // FIXME: should not be needed!!!
     if (!s->len()) {
         // We want the box to be destroyed.
-        s->remove();
+        s->remove(DontMarkLineBoxes);
         if (m_firstTextBox == s)
             m_firstTextBox = s->nextTextBox();
         else

@@ -260,7 +260,7 @@ const PassRefPtr<TimingFunction> timingFromAnimationData(const CSSAnimationData*
     ASSERT(!timing.iterationStart);
     ASSERT(timing.playbackRate == 1);
     ASSERT(!std::isinf(timing.iterationDuration));
-    ASSERT(timing.timingFunction == LinearTimingFunction::preset());
+    ASSERT(timing.timingFunction == LinearTimingFunction::shared());
 
     isPaused = animationData->isPlayStateSet() && animationData->playState() == AnimPlayStatePaused;
     return animationData->isTimingFunctionSet() ? animationData->timingFunction() : CSSAnimationData::initialAnimationTimingFunction();
@@ -841,6 +841,46 @@ const StylePropertyShorthand& CSSAnimations::animatableProperties()
         propertyShorthand = StylePropertyShorthand(CSSPropertyInvalid, properties.begin(), properties.size());
     }
     return propertyShorthand;
+}
+
+// Animation properties are not allowed to be affected by Web Animations.
+// http://dev.w3.org/fxtf/web-animations/#not-animatable
+bool CSSAnimations::isAllowedAnimation(CSSPropertyID property)
+{
+    switch (property) {
+    case CSSPropertyAnimation:
+    case CSSPropertyAnimationDelay:
+    case CSSPropertyAnimationDirection:
+    case CSSPropertyAnimationDuration:
+    case CSSPropertyAnimationFillMode:
+    case CSSPropertyAnimationIterationCount:
+    case CSSPropertyAnimationName:
+    case CSSPropertyAnimationPlayState:
+    case CSSPropertyAnimationTimingFunction:
+    case CSSPropertyDisplay:
+    case CSSPropertyTransition:
+    case CSSPropertyTransitionDelay:
+    case CSSPropertyTransitionDuration:
+    case CSSPropertyTransitionProperty:
+    case CSSPropertyTransitionTimingFunction:
+    case CSSPropertyWebkitAnimation:
+    case CSSPropertyWebkitAnimationDelay:
+    case CSSPropertyWebkitAnimationDirection:
+    case CSSPropertyWebkitAnimationDuration:
+    case CSSPropertyWebkitAnimationFillMode:
+    case CSSPropertyWebkitAnimationIterationCount:
+    case CSSPropertyWebkitAnimationName:
+    case CSSPropertyWebkitAnimationPlayState:
+    case CSSPropertyWebkitAnimationTimingFunction:
+    case CSSPropertyWebkitTransition:
+    case CSSPropertyWebkitTransitionDelay:
+    case CSSPropertyWebkitTransitionDuration:
+    case CSSPropertyWebkitTransitionProperty:
+    case CSSPropertyWebkitTransitionTimingFunction:
+        return false;
+    default:
+        return true;
+    }
 }
 
 void CSSAnimations::trace(Visitor* visitor)

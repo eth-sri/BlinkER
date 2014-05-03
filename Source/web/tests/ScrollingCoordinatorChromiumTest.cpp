@@ -26,8 +26,6 @@
 
 #include "core/page/scrolling/ScrollingCoordinator.h"
 
-#include "WebSettings.h"
-#include "WebViewClient.h"
 #include "core/rendering/RenderView.h"
 #include "core/rendering/compositing/CompositedLayerMapping.h"
 #include "core/rendering/compositing/RenderLayerCompositor.h"
@@ -37,6 +35,8 @@
 #include "public/platform/WebLayerPositionConstraint.h"
 #include "public/platform/WebLayerTreeView.h"
 #include "public/platform/WebUnitTestSupport.h"
+#include "public/web/WebSettings.h"
+#include "public/web/WebViewClient.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebViewImpl.h"
 #include "web/tests/FrameTestHelpers.h"
@@ -47,23 +47,6 @@ using namespace WebCore;
 using namespace blink;
 
 namespace {
-
-class FakeWebViewClient : public WebViewClient {
-public:
-    virtual void initializeLayerTreeView()
-    {
-        m_layerTreeView = adoptPtr(Platform::current()->unitTestSupport()->createLayerTreeViewForTesting(WebUnitTestSupport::TestViewTypeUnitTest));
-        ASSERT(m_layerTreeView);
-    }
-
-    virtual WebLayerTreeView* layerTreeView()
-    {
-        return m_layerTreeView.get();
-    }
-
-private:
-    OwnPtr<WebLayerTreeView> m_layerTreeView;
-};
 
 class ScrollingCoordinatorChromiumTest : public testing::Test {
 public:
@@ -110,7 +93,7 @@ public:
 
 protected:
     std::string m_baseURL;
-    FakeWebViewClient m_mockWebViewClient;
+    FrameTestHelpers::TestWebViewClient m_mockWebViewClient;
 
 private:
     static void configureSettings(WebSettings* settings)
@@ -389,7 +372,7 @@ TEST_F(ScrollingCoordinatorChromiumTest, iframeScrolling)
     ASSERT_TRUE(innerRenderView);
 
     RenderLayerCompositor* innerCompositor = innerRenderView->compositor();
-    ASSERT_TRUE(innerCompositor->staleInCompositingMode());
+    ASSERT_TRUE(innerCompositor->inCompositingMode());
     ASSERT_TRUE(innerCompositor->scrollLayer());
 
     GraphicsLayer* scrollLayer = innerCompositor->scrollLayer();
@@ -433,7 +416,7 @@ TEST_F(ScrollingCoordinatorChromiumTest, rtlIframe)
     ASSERT_TRUE(innerRenderView);
 
     RenderLayerCompositor* innerCompositor = innerRenderView->compositor();
-    ASSERT_TRUE(innerCompositor->staleInCompositingMode());
+    ASSERT_TRUE(innerCompositor->inCompositingMode());
     ASSERT_TRUE(innerCompositor->scrollLayer());
 
     GraphicsLayer* scrollLayer = innerCompositor->scrollLayer();

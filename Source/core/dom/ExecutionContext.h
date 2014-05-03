@@ -37,6 +37,7 @@
 #include "core/frame/ConsoleTypes.h"
 #include "core/frame/DOMTimer.h"
 #include "platform/LifecycleContext.h"
+#include "platform/Supplementable.h"
 #include "platform/weborigin/KURL.h"
 #include "wtf/Functional.h"
 #include "wtf/OwnPtr.h"
@@ -54,12 +55,12 @@ class EventListener;
 class EventQueue;
 class EventTarget;
 class ExecutionContextTask;
-class NewScriptState;
+class ScriptState;
 class PublicURLManager;
 class SecurityOrigin;
 class ScriptCallStack;
 
-class ExecutionContext : public LifecycleContext<ExecutionContext> {
+class ExecutionContext : public LifecycleContext<ExecutionContext>, public Supplementable<ExecutionContext> {
 public:
     ExecutionContext();
     virtual ~ExecutionContext();
@@ -84,7 +85,7 @@ public:
     void reportException(PassRefPtrWillBeRawPtr<ErrorEvent>, PassRefPtr<ScriptCallStack>, AccessControlStatus);
 
     void addConsoleMessage(MessageSource, MessageLevel, const String& message, const String& sourceURL, unsigned lineNumber);
-    void addConsoleMessage(MessageSource, MessageLevel, const String& message, NewScriptState* = 0);
+    void addConsoleMessage(MessageSource, MessageLevel, const String& message, ScriptState* = 0);
 
     PublicURLManager& publicURLManager();
 

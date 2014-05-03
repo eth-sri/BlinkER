@@ -34,6 +34,7 @@
 #include "core/animation/DocumentAnimations.h"
 #include "core/dom/FullscreenElementStack.h"
 #include "core/dom/NodeList.h"
+#include "core/dom/ScriptForbiddenScope.h"
 #include "core/frame/DeprecatedScheduleStyleRecalcDuringCompositingUpdate.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
@@ -132,6 +133,8 @@ RenderLayerCompositor::~RenderLayerCompositor()
 
 bool RenderLayerCompositor::inCompositingMode() const
 {
+    // FIXME: This should assert that lificycle is >= CompositingClean since
+    // the last step of updateIfNeeded can set this bit to false.
     ASSERT(!m_rootShouldAlwaysCompositeDirty);
     return m_compositing;
 }
@@ -230,16 +233,16 @@ bool RenderLayerCompositor::acceleratedCompositingForOverflowScrollEnabled() con
 
 bool RenderLayerCompositor::canRender3DTransforms() const
 {
-    return hasAcceleratedCompositing() && m_compositingReasonFinder.has3DTransformTrigger();
+    return hasAcceleratedCompositing();
 }
 
 void RenderLayerCompositor::setCompositingLayersNeedRebuild()
 {
-    // FIXME: crbug,com/332248 ideally this could be merged with setNeedsCompositingUpdate().
+    // FIXME: crbug.com/332248 ideally this could be merged with setNeedsCompositingUpdate().
+    // FIXME: We can remove the staleInCompositingMode check once we get rid of the
+    // forceCompositingMode setting.
     if (staleInCompositingMode())
         m_compositingLayersNeedRebuild = true;
-    if (!lifecycle().isActive())
-        return;
     page()->animator().scheduleVisualUpdate();
     lifecycle().ensureStateAtMost(DocumentLifecycle::LayoutClean);
 }
@@ -296,6 +299,8 @@ void RenderLayerCompositor::updateIfNeededRecursive()
 
     ASSERT(!m_renderView.needsLayout());
 
+    ScriptForbiddenScope forbidScript;
+
     lifecycle().advanceTo(DocumentLifecycle::InCompositingUpdate);
 
     updateIfNeeded();
@@ -325,6 +330,8 @@ void RenderLayerCompositor::setNeedsCompositingUpdate(CompositingUpdateType upda
     case CompositingUpdateNone:
         ASSERT_NOT_REACHED();
         break;
+    case CompositingUpdateOnCompositedScroll:
+        break;
     case CompositingUpdateAfterStyleChange:
         m_needsToRecomputeCompositingRequirements = true;
         break;
@@ -334,7 +341,6 @@ void RenderLayerCompositor::setNeedsCompositingUpdate(CompositingUpdateType upda
     case CompositingUpdateOnScroll:
         m_needsToRecomputeCompositingRequirements = true; // Overlap can change with scrolling, so need to check for hierarchy updates.
         break;
-    case CompositingUpdateOnCompositedScroll:
     case CompositingUpdateAfterCanvasContextChange:
         break;
     }
@@ -433,7 +439,7 @@ void RenderLayerCompositor::updateIfNeeded()
             needHierarchyAndGeometryUpdate = true;
     }
 
-    if (updateType >= CompositingUpdateAfterStyleChange || needHierarchyAndGeometryUpdate) {
+    if (updateType > CompositingUpdateNone || needHierarchyAndGeometryUpdate) {
         TRACE_EVENT0("blink_rendering", "GraphicsLayerUpdater::updateRecursive");
         GraphicsLayerUpdater updater;
         updater.update(*updateRoot, graphicsLayerUpdateType);
@@ -485,7 +491,7 @@ void RenderLayerCompositor::updateIfNeeded()
 
     // The scrolling coordinator may realize that it needs updating while compositing was being updated in this function.
     needsToUpdateScrollingCoordinator |= scrollingCoordinator() && scrollingCoordinator()->needsToUpdateAfterCompositingChange();
-    if (needsToUpdateScrollingCoordinator && m_renderView.frame()->isMainFrame() && scrollingCoordinator() && staleInCompositingMode())
+    if (needsToUpdateScrollingCoordinator && m_renderView.frame()->isMainFrame() && scrollingCoordinator() && inCompositingMode())
         scrollingCoordinator()->updateAfterCompositingChange();
 
     // Inform the inspector that the layer tree has changed.
@@ -605,17 +611,8 @@ bool RenderLayerCompositor::allocateOrClearCompositedLayerMapping(RenderLayer* l
     return compositedLayerMappingChanged || nonCompositedReasonChanged;
 }
 
-static LayoutPoint computeOffsetFromAbsolute(RenderLayer* layer)
-{
-    TransformState transformState(TransformState::ApplyTransformDirection, FloatPoint());
-    layer->renderer()->mapLocalToContainer(0, transformState, ApplyContainerFlip);
-    transformState.flatten();
-    return LayoutPoint(transformState.lastPlanarPoint());
-}
-
 bool RenderLayerCompositor::updateSquashingAssignment(RenderLayer* layer, SquashingState& squashingState, const CompositingStateTransitionType compositedLayerUpdate)
 {
-
     // NOTE: In the future as we generalize this, the background of this layer may need to be assigned to a different backing than
     // the squashed RenderLayer's own primary contents. This would happen when we have a composited negative z-index element that needs
     // to paint on top of the background, but below the layer's main contents. For now, because we always composite layers
@@ -625,10 +622,12 @@ bool RenderLayerCompositor::updateSquashingAssignment(RenderLayer* layer, Squash
         ASSERT(!layer->hasCompositedLayerMapping());
         ASSERT(squashingState.hasMostRecentMapping);
 
-        LayoutPoint offsetFromAbsoluteForSquashedLayer = computeOffsetFromAbsolute(layer);
+        LayoutPoint offsetFromTransformedAncestorForSquashedLayer = layer->computeOffsetFromTransformedAncestor();
 
-        LayoutSize offsetFromSquashingCLM(offsetFromAbsoluteForSquashedLayer.x() - squashingState.offsetFromAbsoluteForSquashingCLM.x(),
-            offsetFromAbsoluteForSquashedLayer.y() - squashingState.offsetFromAbsoluteForSquashingCLM.y());
+        // Compute the offset of this layer from the squashing owner. This computation is correct only because layers are allowed to squash only if they
+        // share a transformed ancestor (see canSquashIntoCurrentSquashingOwner).
+        LayoutSize offsetFromSquashingCLM(offsetFromTransformedAncestorForSquashedLayer.x() - squashingState.offsetFromTransformedAncestorForSquashingCLM.x(),
+            offsetFromTransformedAncestorForSquashedLayer.y() - squashingState.offsetFromTransformedAncestorForSquashingCLM.y());
 
         bool changedSquashingLayer =
             squashingState.mostRecentMapping->updateSquashingLayerAssignment(layer, offsetFromSquashingCLM, squashingState.nextSquashedLayerIndex);
@@ -672,8 +671,7 @@ bool RenderLayerCompositor::updateLayerIfViewportConstrained(RenderLayer* layer)
     m_compositingReasonFinder.requiresCompositingForPosition(layer->renderer(), layer, &viewportConstrainedNotCompositedReason, &m_needsToRecomputeCompositingRequirements);
 
     if (layer->viewportConstrainedNotCompositedReason() != viewportConstrainedNotCompositedReason) {
-        ASSERT(layer->renderer()->style()->position() == FixedPosition);
-
+        ASSERT(viewportConstrainedNotCompositedReason == RenderLayer::NoNotCompositedReason || layer->renderer()->style()->position() == FixedPosition);
         layer->setViewportConstrainedNotCompositedReason(viewportConstrainedNotCompositedReason);
         return true;
     }
@@ -711,6 +709,11 @@ bool RenderLayerCompositor::canSquashIntoCurrentSquashingOwner(const RenderLayer
     const RenderLayer& squashingLayer = squashingState.mostRecentMapping->owningLayer();
 
     if (layer->renderer()->clippingContainer() != squashingLayer.renderer()->clippingContainer())
+        return false;
+
+    // FIXME: this seems to be overly aggressive. clipsCompositingDescendants() should suffice. However, it does not fix all testcases,
+    // in particular crbug.com/366101.
+    if (layer->renderer()->hasClipOrOverflowClip())
         return false;
 
     if (layer->scrollsWithRespectTo(&squashingLayer))
@@ -784,10 +787,7 @@ void RenderLayerCompositor::repaintOnCompositingChange(RenderLayer* layer)
         return;
 
     RenderLayerModelObject* repaintContainer = layer->renderer()->containerForRepaint();
-    // FIXME: Repaint container should never be null. crbug.com/363699
-    if (!repaintContainer)
-        repaintContainer = &m_renderView;
-
+    ASSERT(repaintContainer);
     layer->repainter().repaintIncludingNonCompositingDescendants(repaintContainer);
 }
 
@@ -829,7 +829,7 @@ void RenderLayerCompositor::layerWillBeRemoved(RenderLayer* parent, RenderLayer*
     setCompositingLayersNeedRebuild();
 }
 
-void RenderLayerCompositor::SquashingState::updateSquashingStateForNewMapping(CompositedLayerMappingPtr newCompositedLayerMapping, bool hasNewCompositedLayerMapping, LayoutPoint newOffsetFromAbsoluteForSquashingCLM)
+void RenderLayerCompositor::SquashingState::updateSquashingStateForNewMapping(CompositedLayerMappingPtr newCompositedLayerMapping, bool hasNewCompositedLayerMapping, LayoutPoint newOffsetFromTransformedAncestorForSquashingCLM)
 {
     // The most recent backing is done accumulating any more squashing layers.
     if (hasMostRecentMapping)
@@ -838,7 +838,7 @@ void RenderLayerCompositor::SquashingState::updateSquashingStateForNewMapping(Co
     nextSquashedLayerIndex = 0;
     mostRecentMapping = newCompositedLayerMapping;
     hasMostRecentMapping = hasNewCompositedLayerMapping;
-    offsetFromAbsoluteForSquashingCLM = newOffsetFromAbsoluteForSquashingCLM;
+    offsetFromTransformedAncestorForSquashingCLM = newOffsetFromTransformedAncestorForSquashingCLM;
 }
 
 void RenderLayerCompositor::assignLayersToBackings(RenderLayer* updateRoot, bool& layersChanged)
@@ -900,8 +900,8 @@ void RenderLayerCompositor::assignLayersToBackingsInternal(RenderLayer* layer, S
         // At this point, if the layer is to be "separately" composited, then its backing becomes the most recent in paint-order.
         if (layer->compositingState() == PaintsIntoOwnBacking || layer->compositingState() == HasOwnBackingButPaintsIntoAncestor) {
             ASSERT(!requiresSquashing(layer->compositingReasons()));
-            LayoutPoint offsetFromAbsoluteForSquashingCLM = computeOffsetFromAbsolute(layer);
-            squashingState.updateSquashingStateForNewMapping(layer->compositedLayerMapping(), layer->hasCompositedLayerMapping(), offsetFromAbsoluteForSquashingCLM);
+            LayoutPoint offsetFromTransformedAncestorForSquashingCLM = layer->computeOffsetFromTransformedAncestor();
+            squashingState.updateSquashingStateForNewMapping(layer->compositedLayerMapping(), layer->hasCompositedLayerMapping(), offsetFromTransformedAncestorForSquashingCLM);
         }
     }
 
@@ -1210,7 +1210,7 @@ bool RenderLayerCompositor::canBeComposited(const RenderLayer* layer) const
 // according to the z-order hierarchy, yet clipping goes down the renderer hierarchy.
 // Thus, a RenderLayer can be clipped by a RenderLayer that is an ancestor in the renderer hierarchy,
 // but a sibling in the z-order hierarchy.
-bool RenderLayerCompositor::clippedByAncestor(const RenderLayer* layer) const
+bool RenderLayerCompositor::clippedByNonAncestorInStackingTree(const RenderLayer* layer) const
 {
     if (!layer->hasCompositedLayerMapping() || !layer->parent())
         return false;

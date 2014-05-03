@@ -245,11 +245,11 @@ CodePath Font::codePath(const TextRun& run) const
     return Character::characterRangeCodePath(run.characters16(), run.length());
 }
 
-void Font::willUseFontData() const
+void Font::willUseFontData(UChar32 character) const
 {
     const FontFamily& family = fontDescription().family();
     if (m_fontFallbackList && m_fontFallbackList->fontSelector() && !family.familyIsEmpty())
-        m_fontFallbackList->fontSelector()->willUseFontData(fontDescription(), family.family());
+        m_fontFallbackList->fontSelector()->willUseFontData(fontDescription(), family.family(), character);
 }
 
 static inline bool isInRange(UChar32 character, UChar32 lowerBound, UChar32 upperBound)
@@ -760,31 +760,36 @@ float Font::floatWidthForSimpleText(const TextRun& run, HashSet<const SimpleFont
     return it.m_runWidthSoFar;
 }
 
+FloatRect Font::pixelSnappedSelectionRect(float fromX, float toX, float y, float height)
+{
+    // Using roundf() rather than ceilf() for the right edge as a compromise to
+    // ensure correct caret positioning.
+    // Use LayoutUnit::epsilon() to ensure that values that cannot be stored as
+    // an integer are floored to n and not n-1 due to floating point imprecision.
+    float pixelAlignedX = floorf(fromX + LayoutUnit::epsilon());
+    return FloatRect(pixelAlignedX, y, roundf(toX) - pixelAlignedX, height);
+}
+
 FloatRect Font::selectionRectForSimpleText(const TextRun& run, const FloatPoint& point, int h, int from, int to, bool accountForGlyphBounds) const
 {
     GlyphBuffer glyphBuffer;
     WidthIterator it(this, run, 0, accountForGlyphBounds);
     it.advance(from, &glyphBuffer);
-    float beforeWidth = it.m_runWidthSoFar;
+    float fromX = it.m_runWidthSoFar;
     it.advance(to, &glyphBuffer);
-    float afterWidth = it.m_runWidthSoFar;
+    float toX = it.m_runWidthSoFar;
 
-    // Using roundf() rather than ceilf() for the right edge as a compromise to
-    // ensure correct caret positioning.
-    // Use LayoutUnit::epsilon() to ensure that values that cannot be stored as
-    // an integer are floored to n and not n-1 due to floating point imprecision.
     if (run.rtl()) {
         it.advance(run.length(), &glyphBuffer);
         float totalWidth = it.m_runWidthSoFar;
-        float pixelAlignedX = floorf(point.x() + totalWidth - afterWidth + LayoutUnit::epsilon());
-        return FloatRect(pixelAlignedX, accountForGlyphBounds ? it.minGlyphBoundingBoxY() : point.y(),
-            roundf(point.x() + totalWidth - beforeWidth) - pixelAlignedX,
-            accountForGlyphBounds ? it.maxGlyphBoundingBoxY() - it.minGlyphBoundingBoxY() : h);
+        float beforeWidth = fromX;
+        float afterWidth = toX;
+        fromX = totalWidth - afterWidth;
+        toX = totalWidth - beforeWidth;
     }
 
-    float pixelAlignedX = floorf(point.x() + beforeWidth + LayoutUnit::epsilon());
-    return FloatRect(pixelAlignedX, accountForGlyphBounds ? it.minGlyphBoundingBoxY() : point.y(),
-        roundf(point.x() + afterWidth) - pixelAlignedX,
+    return pixelSnappedSelectionRect(point.x() + fromX, point.x() + toX,
+        accountForGlyphBounds ? it.minGlyphBoundingBoxY() : point.y(),
         accountForGlyphBounds ? it.maxGlyphBoundingBoxY() - it.minGlyphBoundingBoxY() : h);
 }
 

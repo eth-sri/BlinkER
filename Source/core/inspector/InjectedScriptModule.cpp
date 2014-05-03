@@ -33,7 +33,6 @@
 
 #include "bindings/v8/ScriptFunctionCall.h"
 #include "bindings/v8/ScriptObject.h"
-#include "bindings/v8/ScriptScope.h"
 #include "core/inspector/InjectedScript.h"
 #include "core/inspector/InjectedScriptManager.h"
 
@@ -44,7 +43,7 @@ InjectedScriptModule::InjectedScriptModule(const String& name)
 {
 }
 
-void InjectedScriptModule::ensureInjected(InjectedScriptManager* injectedScriptManager, NewScriptState* scriptState)
+void InjectedScriptModule::ensureInjected(InjectedScriptManager* injectedScriptManager, ScriptState* scriptState)
 {
     InjectedScript injectedScript = injectedScriptManager->injectedScriptFor(scriptState);
     ASSERT(!injectedScript.isEmpty());
@@ -57,7 +56,7 @@ void InjectedScriptModule::ensureInjected(InjectedScriptManager* injectedScriptM
     bool hadException = false;
     ScriptValue resultValue = injectedScript.callFunctionWithEvalEnabled(function, hadException);
     ASSERT(!hadException);
-    NewScriptState::Scope scope(scriptState);
+    ScriptState::Scope scope(scriptState);
     if (hadException || resultValue.isEmpty() || !resultValue.isObject()) {
         ScriptFunctionCall function(injectedScript.injectedScriptObject(), "injectModule");
         function.appendArgument(name());
@@ -69,7 +68,7 @@ void InjectedScriptModule::ensureInjected(InjectedScriptManager* injectedScriptM
         }
     }
 
-    ScriptObject moduleObject(scriptState->oldScriptState(), resultValue);
+    ScriptObject moduleObject(scriptState, resultValue);
     initialize(moduleObject, injectedScriptManager->inspectedStateAccessCheck());
 }
 

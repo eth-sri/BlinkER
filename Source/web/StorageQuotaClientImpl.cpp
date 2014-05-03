@@ -31,10 +31,9 @@
 #include "config.h"
 #include "web/StorageQuotaClientImpl.h"
 
-#include "WebFrameClient.h"
-#include "bindings/v8/NewScriptState.h"
 #include "bindings/v8/ScriptPromise.h"
 #include "bindings/v8/ScriptPromiseResolverWithContext.h"
+#include "bindings/v8/ScriptState.h"
 #include "core/dom/DOMError.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
@@ -45,6 +44,7 @@
 #include "modules/quota/StorageQuotaCallbacksImpl.h"
 #include "modules/quota/StorageUsageCallback.h"
 #include "public/platform/WebStorageQuotaType.h"
+#include "public/web/WebFrameClient.h"
 #include "web/WebLocalFrameImpl.h"
 #include "wtf/Threading.h"
 
@@ -52,9 +52,9 @@ using namespace WebCore;
 
 namespace blink {
 
-PassOwnPtr<StorageQuotaClientImpl> StorageQuotaClientImpl::create()
+PassOwnPtrWillBeRawPtr<StorageQuotaClientImpl> StorageQuotaClientImpl::create()
 {
-    return adoptPtr(new StorageQuotaClientImpl());
+    return adoptPtrWillBeNoop(new StorageQuotaClientImpl());
 }
 
 StorageQuotaClientImpl::~StorageQuotaClientImpl()
@@ -80,7 +80,7 @@ ScriptPromise StorageQuotaClientImpl::requestPersistentQuota(ExecutionContext* e
 {
     ASSERT(executionContext);
 
-    RefPtr<ScriptPromiseResolverWithContext> resolver = ScriptPromiseResolverWithContext::create(NewScriptState::current(toIsolate(executionContext)));
+    RefPtr<ScriptPromiseResolverWithContext> resolver = ScriptPromiseResolverWithContext::create(ScriptState::current(toIsolate(executionContext)));
     ScriptPromise promise = resolver->promise();
 
     if (executionContext->isDocument()) {

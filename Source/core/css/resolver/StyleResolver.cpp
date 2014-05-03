@@ -123,7 +123,7 @@ static StylePropertySet* rightToLeftDeclaration()
 
 static void addFontFaceRule(Document* document, CSSFontSelector* cssFontSelector, const StyleRuleFontFace* fontFaceRule)
 {
-    RefPtr<FontFace> fontFace = FontFace::create(document, fontFaceRule);
+    RefPtrWillBeRawPtr<FontFace> fontFace = FontFace::create(document, fontFaceRule);
     if (fontFace)
         cssFontSelector->fontFaceCache()->add(cssFontSelector, fontFaceRule, fontFace);
 }
@@ -204,12 +204,12 @@ void StyleResolver::appendPendingAuthorStyleSheets()
     finishAppendAuthorStyleSheets();
 }
 
-void StyleResolver::appendAuthorStyleSheets(unsigned firstNew, const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet> >& styleSheets)
+void StyleResolver::appendAuthorStyleSheets(const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet> >& styleSheets)
 {
     // This handles sheets added to the end of the stylesheet list only. In other cases the style resolver
     // needs to be reconstructed. To handle insertions too the rule order numbers would need to be updated.
     unsigned size = styleSheets.size();
-    for (unsigned i = firstNew; i < size; ++i)
+    for (unsigned i = 0; i < size; ++i)
         appendCSSStyleSheet(styleSheets[i].get());
 }
 
@@ -644,10 +644,7 @@ PassRefPtr<RenderStyle> StyleResolver::styleForElement(Element* element, RenderS
     {
         ElementRuleCollector collector(state.elementContext(), m_selectorFilter, state.style());
 
-        if (matchingBehavior == MatchOnlyUserAgentRules)
-            matchUARules(collector);
-        else
-            matchAllRules(state, collector, matchingBehavior != MatchAllRulesExcludingSMIL);
+        matchAllRules(state, collector, matchingBehavior != MatchAllRulesExcludingSMIL);
 
         applyMatchedProperties(state, collector.matchedResult());
 
@@ -1096,6 +1093,86 @@ static inline bool isValidCueStyleProperty(CSSPropertyID id)
     return false;
 }
 
+static inline bool isValidFirstLetterStyleProperty(CSSPropertyID id)
+{
+    switch (id) {
+    // Valid ::first-letter properties listed in spec:
+    // http://www.w3.org/TR/css3-selectors/#application-in-css
+    case CSSPropertyBackgroundAttachment:
+    case CSSPropertyBackgroundClip:
+    case CSSPropertyBackgroundColor:
+    case CSSPropertyBackgroundImage:
+    case CSSPropertyBackgroundOrigin:
+    case CSSPropertyBackgroundPosition:
+    case CSSPropertyBackgroundPositionX:
+    case CSSPropertyBackgroundPositionY:
+    case CSSPropertyBackgroundRepeat:
+    case CSSPropertyBackgroundRepeatX:
+    case CSSPropertyBackgroundRepeatY:
+    case CSSPropertyBackgroundSize:
+    case CSSPropertyBorderBottomColor:
+    case CSSPropertyBorderBottomLeftRadius:
+    case CSSPropertyBorderBottomRightRadius:
+    case CSSPropertyBorderBottomStyle:
+    case CSSPropertyBorderBottomWidth:
+    case CSSPropertyBorderImageOutset:
+    case CSSPropertyBorderImageRepeat:
+    case CSSPropertyBorderImageSlice:
+    case CSSPropertyBorderImageSource:
+    case CSSPropertyBorderImageWidth:
+    case CSSPropertyBorderLeftColor:
+    case CSSPropertyBorderLeftStyle:
+    case CSSPropertyBorderLeftWidth:
+    case CSSPropertyBorderRightColor:
+    case CSSPropertyBorderRightStyle:
+    case CSSPropertyBorderRightWidth:
+    case CSSPropertyBorderTopColor:
+    case CSSPropertyBorderTopLeftRadius:
+    case CSSPropertyBorderTopRightRadius:
+    case CSSPropertyBorderTopStyle:
+    case CSSPropertyBorderTopWidth:
+    case CSSPropertyColor:
+    case CSSPropertyFloat:
+    case CSSPropertyFont:
+    case CSSPropertyFontFamily:
+    case CSSPropertyFontSize:
+    case CSSPropertyFontStyle:
+    case CSSPropertyFontVariant:
+    case CSSPropertyFontWeight:
+    case CSSPropertyLetterSpacing:
+    case CSSPropertyLineHeight:
+    case CSSPropertyMarginBottom:
+    case CSSPropertyMarginLeft:
+    case CSSPropertyMarginRight:
+    case CSSPropertyMarginTop:
+    case CSSPropertyPaddingBottom:
+    case CSSPropertyPaddingLeft:
+    case CSSPropertyPaddingRight:
+    case CSSPropertyPaddingTop:
+    case CSSPropertyTextTransform:
+    case CSSPropertyVerticalAlign:
+    case CSSPropertyWordSpacing:
+        return true;
+    case CSSPropertyTextDecorationColor:
+    case CSSPropertyTextDecorationLine:
+    case CSSPropertyTextDecorationStyle:
+        return RuntimeEnabledFeatures::css3TextDecorationsEnabled();
+
+    // text-shadow added in text decoration spec:
+    // http://www.w3.org/TR/css-text-decor-3/#text-shadow-property
+    case CSSPropertyTextShadow:
+        return true;
+
+    // Properties that we currently support outside of spec.
+    case CSSPropertyWebkitLineBoxContain:
+    case CSSPropertyVisibility:
+        return true;
+
+    default:
+        return false;
+    }
+}
+
 template <StyleResolver::StyleApplicationPass pass>
 bool StyleResolver::isPropertyForPass(CSSPropertyID property)
 {
@@ -1139,6 +1216,8 @@ void StyleResolver::applyProperties(StyleResolverState& state, const StyleProper
         CSSPropertyID property = current.id();
 
         if (propertyWhitelistType == PropertyWhitelistCue && !isValidCueStyleProperty(property))
+            continue;
+        if (propertyWhitelistType == PropertyWhitelistFirstLetter && !isValidFirstLetterStyleProperty(property))
             continue;
         if (!isPropertyForPass<pass>(property))
             continue;

@@ -45,12 +45,32 @@ RenderMultiColumnSet::RenderMultiColumnSet(RenderFlowThread* flowThread)
 {
 }
 
-RenderMultiColumnSet* RenderMultiColumnSet::createAnonymous(RenderFlowThread* flowThread)
+RenderMultiColumnSet* RenderMultiColumnSet::createAnonymous(RenderFlowThread* flowThread, RenderStyle* parentStyle)
 {
     Document& document = flowThread->document();
     RenderMultiColumnSet* renderer = new RenderMultiColumnSet(flowThread);
     renderer->setDocumentForAnonymous(&document);
+    renderer->setStyle(RenderStyle::createAnonymousStyleWithDisplay(parentStyle, BLOCK));
     return renderer;
+}
+
+RenderMultiColumnSet* RenderMultiColumnSet::nextSiblingMultiColumnSet() const
+{
+    for (RenderObject* sibling = nextSibling(); sibling; sibling = sibling->nextSibling()) {
+        if (sibling->isRenderMultiColumnSet())
+            return toRenderMultiColumnSet(sibling);
+    }
+    return 0;
+}
+
+LayoutSize RenderMultiColumnSet::flowThreadTranslationAtOffset(LayoutUnit blockOffset) const
+{
+    unsigned columnIndex = columnIndexAtOffset(blockOffset);
+    LayoutRect portionRect(flowThreadPortionRectAt(columnIndex));
+    flipForWritingMode(portionRect);
+    LayoutRect columnRect(columnRectAt(columnIndex));
+    flipForWritingMode(columnRect);
+    return contentBoxRect().location() + columnRect.location() - portionRect.location();
 }
 
 LayoutUnit RenderMultiColumnSet::heightAdjustedForSetOffset(LayoutUnit height) const
@@ -241,7 +261,7 @@ void RenderMultiColumnSet::prepareForLayout()
     // Set box width.
     updateLogicalWidth();
 
-    if (multicolBlock->multiColumnFlowThread()->requiresBalancing()) {
+    if (multiColumnFlowThread()->requiresBalancing()) {
         // Set maximum column height. We will not stretch beyond this.
         m_maxColumnHeight = RenderFlowThread::maxLogicalHeight();
         if (!multicolStyle->logicalHeight().isAuto()) {
@@ -257,7 +277,7 @@ void RenderMultiColumnSet::prepareForLayout()
         m_maxColumnHeight = heightAdjustedForSetOffset(m_maxColumnHeight);
         m_computedColumnHeight = 0; // Restart balancing.
     } else {
-        setAndConstrainColumnHeight(heightAdjustedForSetOffset(multicolBlock->multiColumnFlowThread()->columnHeightAvailable()));
+        setAndConstrainColumnHeight(heightAdjustedForSetOffset(multiColumnFlowThread()->columnHeightAvailable()));
     }
 
     clearForcedBreaks();

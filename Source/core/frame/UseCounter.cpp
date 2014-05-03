@@ -641,10 +641,6 @@ String UseCounter::deprecationMessage(Feature feature)
     case PrefixedStorageInfo:
         return "'window.webkitStorageInfo' is deprecated. Please use 'navigator.webkitTemporaryStorage' or 'navigator.webkitPersistentStorage' instead.";
 
-    // Performance
-    case PrefixedPerformanceTimeline:
-        return "'window.performance.webkitGet*' methods have been deprecated. Please use the unprefixed 'performance.get*' methods instead.";
-
     // HTML Media Capture
     case CaptureAttributeAsEnum:
         return "Using the 'capture' attribute as an enum is deprecated. Please use it as a boolean and specify the media types that should be accepted in the 'accept' attribute.";
@@ -683,9 +679,6 @@ String UseCounter::deprecationMessage(Feature feature)
     case PrefixedVideoExitFullScreen:
         return "'HTMLVideoElement.webkitExitFullScreen()' is deprecated. Please use 'Document.exitFullscreen()' and 'Document.webkitExitFullscreen()' instead.";
 
-    case PrefixedMediaSourceOpen:
-        return "'WebKitMediaSource' is deprecated. Please use 'MediaSource' instead.";
-
     case MediaErrorEncrypted:
         return "'MediaError.MEDIA_ERR_ENCRYPTED' is deprecated. This error code is never used.";
 
@@ -715,6 +708,28 @@ String UseCounter::deprecationMessage(Feature feature)
 
     case ElementSetAttributeNodeNS:
         return "'Element.setAttributeNodeNS' is deprecated and has been removed from DOM4 (http://w3.org/tr/dom).";
+
+    case NodeIteratorDetach:
+        return "'NodeIterator.detach' is now a no-op, as per DOM (http://dom.spec.whatwg.org/#dom-nodeiterator-detach).";
+
+    case AttrNodeValue:
+        return "'Attr.nodeValue' is deprecated. Please use 'value' instead.";
+
+    case AttrTextContent:
+        return "'Attr.textContent' is deprecated. Please use 'value' instead.";
+
+    case NodeIteratorExpandEntityReferences:
+        return "'NodeIterator.expandEntityReferences' is deprecated and has been removed from DOM. It always returns false.";
+
+    case TreeWalkerExpandEntityReferences:
+        return "'TreeWalker.expandEntityReferences' is deprecated and has been removed from DOM. It always returns false.";
+
+    case RangeDetach:
+        return "'Range.detach' is now a no-op, as per DOM (http://dom.spec.whatwg.org/#dom-range-detach).";
+
+    case DocumentImportNodeOptionalArgument:
+        return "The behavior of importNode() with no boolean argument is about to change from doing a deep clone to doing a shallow clone.  "
+            "Make sure to pass an explicit boolean argument to keep your current behavior.";
 
     // Features that aren't deprecated don't have a deprecation message.
     default:

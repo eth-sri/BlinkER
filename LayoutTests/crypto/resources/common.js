@@ -1,11 +1,6 @@
-function shouldBeTypeError(toEval)
+function logError(error)
 {
-    var value = eval(toEval);
-    if (value instanceof TypeError) {
-        testPassed(toEval + " is: " + value.toString());
-    } else {
-        testFailed(toEval + " is not a TypeError: " + value);
-    }
+    debug("error is: " + error.toString());
 }
 
 // Verifies that the given "bytes" holds the same value as "expectedHexString".
@@ -99,8 +94,12 @@ function cloneKey(key)
 // Logging the serialized format ensures that if it changes it will break tests.
 function logSerializedKey(o)
 {
-    if (internals)
-        debug("Serialized key bytes: " + bytesToHexString(internals.serializeObject(o)));
+    if (internals) {
+        // Removing the version tag from the output so serialization format changes don't need to update all the crypto tests.
+        var serialized = internals.serializeObject(o);
+        var serializedWithoutVersion = new Uint8Array(serialized, 2);
+        debug("Serialized key bytes: " + bytesToHexString(serializedWithoutVersion));
+    }
 }
 
 function shouldEvaluateAs(actual, expectedValue)

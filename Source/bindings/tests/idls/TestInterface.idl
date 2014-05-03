@@ -39,20 +39,25 @@
     ImplementedAs=TestInterfaceImplementation,
     RuntimeEnabled=FeatureName,
     SetWrapperReferenceTo(TestInterface referencedName),
-    StrictTypeChecking,
+    TypeChecking=Interface|Nullable|Unrestricted,
 ] interface TestInterface : TestInterfaceEmpty {
     // members needed to test [ImplementedAs], as this affect attribute
-    // configuration and method configuration, and [StrictTypeChecking]
+    // configuration and method configuration, and [TypeChecking]
     // constants also needed for [DoNotCheckConstants]
     const unsigned long UNSIGNED_LONG = 0;
     [Reflect=CONST_CPP] const short CONST_JAVASCRIPT = 1;
 
     attribute TestInterface testInterfaceAttribute; // Self-referential interface type with [ImplementedAs]
     attribute TestImplementedAsConstructor testImplementedAsConstructorAttribute;
+    attribute double doubleAttribute;
+    attribute float floatAttribute;
+    attribute unrestricted double unrestrictedDoubleAttribute;
+    attribute unrestricted float unrestrictedFloatAttribute;
     static attribute DOMString staticStringAttribute;
 
     void voidMethodTestInterfaceEmptyArg(TestInterfaceEmpty testInterfaceEmptyArg);
-    [PerWorldBindings] attribute DOMString perWorldBindingsStringAttribute;
+    void voidMethodDoubleArgFloatArg(double doubleArg, float floatArg);
+    void voidMethodUnrestrictedDoubleArgUnrestrictedFloatArg(unrestricted double unrestrictedDoubleArg, unrestricted float unrestrictedFloatArg);
     [PerWorldBindings] void voidMethod();
 
     // Anonymous indexed property operations

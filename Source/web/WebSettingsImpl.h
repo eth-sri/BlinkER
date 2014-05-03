@@ -31,7 +31,7 @@
 #ifndef WebSettingsImpl_h
 #define WebSettingsImpl_h
 
-#include "WebSettings.h"
+#include "public/web/WebSettings.h"
 
 namespace WebCore {
 class InspectorController;
@@ -54,8 +54,6 @@ public:
     virtual void setAccelerated2dCanvasEnabled(bool) OVERRIDE;
     virtual void setAccelerated2dCanvasMSAASampleCount(int) OVERRIDE;
     virtual void setAcceleratedCompositingEnabled(bool) OVERRIDE;
-    virtual void setAcceleratedCompositingFor3DTransformsEnabled(bool) OVERRIDE;
-    virtual void setAcceleratedCompositingForAnimationEnabled(bool) OVERRIDE;
     virtual void setAcceleratedCompositingForCanvasEnabled(bool) OVERRIDE;
     virtual void setAcceleratedCompositingForFiltersEnabled(bool) OVERRIDE;
     virtual void setAcceleratedCompositingForFixedPositionEnabled(bool) OVERRIDE;
@@ -63,7 +61,6 @@ public:
     virtual void setCompositorDrivenAcceleratedScrollingEnabled(bool) OVERRIDE;
     virtual void setAcceleratedCompositingForFixedRootBackgroundEnabled(bool) OVERRIDE;
     virtual void setAcceleratedCompositingForGpuRasterizationHintEnabled(bool) OVERRIDE;
-    virtual void setAcceleratedCompositingForPluginsEnabled(bool) OVERRIDE;
     virtual void setAcceleratedCompositingForVideoEnabled(bool) OVERRIDE;
     virtual void setAllowDisplayOfInsecureContent(bool) OVERRIDE;
     virtual void setAllowFileAccessFromFileURLs(bool) OVERRIDE;
@@ -119,6 +116,7 @@ public:
     virtual void setMainFrameClipsContent(bool) OVERRIDE;
     virtual void setMainFrameResizesAreOrientationChanges(bool) OVERRIDE;
     virtual void setMaxTouchPoints(int) OVERRIDE;
+    virtual void setMediaControlsOverlayPlayButtonEnabled(bool) OVERRIDE;
     virtual void setMediaPlaybackRequiresUserGesture(bool) OVERRIDE;
     virtual void setMinimumAccelerated2dCanvasSize(int) OVERRIDE;
     virtual void setMinimumFontSize(int) OVERRIDE;
@@ -166,6 +164,7 @@ public:
     virtual void setUseLegacyBackgroundSizeShorthandBehavior(bool) OVERRIDE;
     virtual void setUseSolidColorScrollbars(bool) OVERRIDE;
     virtual void setUseWideViewport(bool) OVERRIDE;
+    virtual void setUseThreadedHTMLParserForDataURLs(bool) OVERRIDE;
     virtual void setValidationMessageTimerMagnification(int) OVERRIDE;
     virtual void setViewportEnabled(bool) OVERRIDE;
     virtual void setViewportMetaEnabled(bool) OVERRIDE;
