@@ -812,22 +812,16 @@ void FrameLoaderClientImpl::dispatchDidStartEventRacerLog()
         m_webFrame->client()->didStartEventRacerLog();
 }
 
-void FrameLoaderClientImpl::dispatchDidStartEventRacerEvent(unsigned int id)
+void FrameLoaderClientImpl::dispatchDidCompleteEventAction(const WebCore::EventAction &a)
 {
     if (m_webFrame->client())
-        m_webFrame->client()->didStartEventRacerEvent(id);
+        m_webFrame->client()->didCompleteEventAction(WebEventAction(a));
 }
 
-void FrameLoaderClientImpl::dispatchDidEndEventRacerEvent()
+void FrameLoaderClientImpl::dispatchDidHappenBefore(const WTF::Vector<WebCore::EventAction::Edge> &v)
 {
     if (m_webFrame->client())
-        m_webFrame->client()->didEndEventRacerEvent();
-}
-
-void FrameLoaderClientImpl::dispatchDidEventRacerOperation()
-{
-    if (m_webFrame->client())
-        m_webFrame->client()->didEventRacerOperation();
+        m_webFrame->client()->didHappenBefore(WebVector<WebEventActionEdge>(v));
 }
 
 } // namespace blink

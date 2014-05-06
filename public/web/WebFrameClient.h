@@ -34,6 +34,7 @@
 #include "../platform/WebColor.h"
 #include "WebDOMMessageEvent.h"
 #include "WebDataSource.h"
+#include "WebEventRacer.h"
 #include "WebFrame.h"
 #include "WebHistoryCommitType.h"
 #include "WebHistoryItem.h"
@@ -50,7 +51,7 @@
 #include "public/platform/WebURLError.h"
 #include "public/platform/WebURLRequest.h"
 #include <v8.h>
-
+ 
 namespace blink {
 
 class WebApplicationCacheHost;
@@ -490,11 +491,8 @@ public:
 
     // EventRacer ------------------------------------------------------
     virtual void didStartEventRacerLog() {}
-
-    virtual void didStartEventRacerEvent(unsigned int id) {}
-    virtual void didEndEventRacerEvent() {}
-
-    virtual void didEventRacerOperation() {}
+    virtual void didCompleteEventAction(const WebEventAction &) {}
+    virtual void didHappenBefore(const WebVector<WebEventActionEdge> &) {}
 
 protected:
     ~WebFrameClient() { }

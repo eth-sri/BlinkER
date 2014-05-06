@@ -31,6 +31,7 @@
 #define FrameLoaderClient_h
 
 #include "core/dom/IconURL.h"
+#include "core/eventracer/EventAction.h"
 #include "core/frame/FrameClient.h"
 #include "core/loader/FrameLoaderTypes.h"
 #include "core/loader/NavigationPolicy.h"
@@ -233,11 +234,8 @@ namespace WebCore {
 
         // EventRacer ------------------------------------------------------
         virtual void dispatchDidStartEventRacerLog() = 0;
-
-        virtual void dispatchDidStartEventRacerEvent(unsigned int) = 0;
-        virtual void dispatchDidEndEventRacerEvent() = 0;
-
-        virtual void dispatchDidEventRacerOperation() = 0;
+        virtual void dispatchDidCompleteEventAction(const EventAction &) = 0;
+        virtual void dispatchDidHappenBefore(const Vector<EventAction::Edge> &) = 0;
     };
 
 } // namespace WebCore
