@@ -102,6 +102,7 @@
 #include "core/editing/Editor.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/SpellChecker.h"
+#include "core/eventracer/EventRacerLog.h"
 #include "core/events/BeforeUnloadEvent.h"
 #include "core/events/Event.h"
 #include "core/events/EventFactory.h"
@@ -521,10 +522,6 @@ Document::Document(const DocumentInit& initializer, DocumentClassFlags documentC
     // CSSFontSelector, need to initialize m_styleEngine after initializing
     // m_fetcher.
     m_styleEngine = StyleEngine::create(*this);
-
-    // Do not create an event log for documents iwith an empty URL.
-    if (m_url.isEmpty())
-        return;
 
     // Check if the containing frame has a parent or an opener.
     LocalFrame *upper = NULL;
@@ -5698,6 +5695,11 @@ void Document::trace(Visitor* visitor)
     TreeScope::trace(visitor);
     ContainerNode::trace(visitor);
     ExecutionContext::trace(visitor);
+}
+
+PassRefPtr<EventRacerLog>
+Document::getEventRacerLog() const {
+    return m_eventRacerLog;
 }
 
 } // namespace WebCore

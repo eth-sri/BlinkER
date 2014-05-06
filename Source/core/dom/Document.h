@@ -46,7 +46,6 @@
 #include "core/dom/UserActionElementSet.h"
 #include "core/dom/ViewportDescription.h"
 #include "core/dom/custom/CustomElement.h"
-#include "core/eventracer/EventRacerLog.h"
 #include "core/html/CollectionType.h"
 #include "core/page/FocusType.h"
 #include "core/page/PageVisibilityState.h"
@@ -97,6 +96,7 @@ class Element;
 class ElementDataCache;
 class Event;
 class EventListener;
+class EventRacerLog;
 class ExceptionState;
 class FastTextAutosizer;
 class FloatQuad;
@@ -1071,6 +1071,8 @@ public:
     bool hasElementsRequiringLayerUpdate() const { return m_layerUpdateElements.size(); }
     void didRecalculateStyleForElement() { ++m_styleRecalcElementCounter; }
 
+    PassRefPtr<EventRacerLog> getEventRacerLog() const;
+
 protected:
     Document(const DocumentInit&, DocumentClassFlags = DefaultDocumentClass);
 
@@ -1084,8 +1086,6 @@ protected:
 
     bool importContainerNodeChildren(ContainerNode* oldContainerNode, PassRefPtr<ContainerNode> newContainerNode, ExceptionState&);
     void lockCompatibilityMode() { m_compatibilityModeLocked = true; }
-
-    PassRefPtr<EventRacerLog> getEventRacerLog() const { return m_eventRacerLog; }
 
 private:
     friend class Node;
