@@ -75,7 +75,7 @@ public:
     virtual ~HTMLDocumentParser();
 
     // Exposed for HTMLParserScheduler
-    void resumeParsingAfterYield();
+    void resumeParsingAfterYield(unsigned int);
 
     static void parseDocumentFragment(const String&, DocumentFragment*, Element* contextElement, ParserContentPolicy = AllowScriptingContent);
 
@@ -96,7 +96,7 @@ public:
         HTMLInputCheckpoint inputCheckpoint;
         TokenPreloadScannerCheckpoint preloadScannerCheckpoint;
     };
-    void didReceiveParsedChunkFromBackgroundParser(PassOwnPtr<ParsedChunk>);
+    void didReceiveParsedChunkFromBackgroundParser(PassOwnPtr<ParsedChunk>, unsigned int);
     void didReceiveEncodingDataFromBackgroundParser(const DocumentEncodingData&);
 
     virtual void appendBytes(const char* bytes, size_t length) OVERRIDE;

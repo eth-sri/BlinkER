@@ -30,6 +30,8 @@
 #include "core/css/MediaValuesCached.h"
 #include "core/dom/DocumentFragment.h"
 #include "core/dom/Element.h"
+#include "core/eventracer/EventActionScope.h"
+#include "core/eventracer/EventRacerLog.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLDocument.h"
 #include "core/html/parser/AtomicHTMLToken.h"
@@ -87,7 +89,7 @@ public:
     {
         ASSERT(backgroundThread()->isCurrentThread());
         if (m_backgroundParser.get())
-            m_backgroundParser.get()->appendRawBytesFromParserThread(data, dataLength);
+            m_backgroundParser.get()->appendRawBytesFromParserThread(data, dataLength, 0); // FIXME: need a real id
     }
 
     virtual blink::WebThread* backgroundThread() OVERRIDE FINAL
@@ -254,9 +256,12 @@ bool HTMLDocumentParser::isScheduledForResume() const
 }
 
 // Used by HTMLParserScheduler
-void HTMLDocumentParser::resumeParsingAfterYield()
+void HTMLDocumentParser::resumeParsingAfterYield(unsigned int id)
 {
     ASSERT(!m_isPinnedToMainThread);
+
+    EventActionScope scope(document(), id);
+
     // pumpTokenizer can cause this parser to be detached from the Document,
     // but we need to ensure it isn't deleted yet.
     RefPtr<HTMLDocumentParser> protect(this);
@@ -322,7 +327,8 @@ bool HTMLDocumentParser::canTakeNextToken(SynchronousMode mode, PumpSession& ses
     return true;
 }
 
-void HTMLDocumentParser::didReceiveParsedChunkFromBackgroundParser(PassOwnPtr<ParsedChunk> chunk)
+void HTMLDocumentParser::didReceiveParsedChunkFromBackgroundParser(PassOwnPtr<ParsedChunk> chunk,
+                                                                   unsigned int id)
 {
     TRACE_EVENT0("webkit", "HTMLDocumentParser::didReceiveParsedChunkFromBackgroundParser");
 
@@ -334,6 +340,8 @@ void HTMLDocumentParser::didReceiveParsedChunkFromBackgroundParser(PassOwnPtr<Pa
         m_speculations.append(chunk);
         return;
     }
+
+    EventActionScope scope(document(), id);
 
     // processParsedChunkFromBackgroundParser can cause this parser to be detached from the Document,
     // but we need to ensure it isn't deleted yet.
@@ -405,7 +413,8 @@ void HTMLDocumentParser::discardSpeculationsAndResumeFrom(PassOwnPtr<ParsedChunk
     m_input.current().clear(); // FIXME: This should be passed in instead of cleared.
 
     ASSERT(checkpoint->unparsedInput.isSafeToSendToAnotherThread());
-    HTMLParserThread::shared()->postTask(bind(&BackgroundHTMLParser::resumeFrom, m_backgroundParser, checkpoint.release()));
+    unsigned int id = EventActionScope::fork();
+    HTMLParserThread::shared()->postTask(bind(&BackgroundHTMLParser::resumeFrom, m_backgroundParser, checkpoint.release(), id));
 }
 
 void HTMLDocumentParser::processParsedChunkFromBackgroundParser(PassOwnPtr<ParsedChunk> popChunk)
@@ -428,7 +437,8 @@ void HTMLDocumentParser::processParsedChunkFromBackgroundParser(PassOwnPtr<Parse
     OwnPtr<ParsedChunk> chunk(popChunk);
     OwnPtr<CompactHTMLTokenStream> tokens = chunk->tokens.release();
 
-    HTMLParserThread::shared()->postTask(bind(&BackgroundHTMLParser::startedChunkWithCheckpoint, m_backgroundParser, chunk->inputCheckpoint));
+    unsigned int id = EventActionScope::fork();
+    HTMLParserThread::shared()->postTask(bind(&BackgroundHTMLParser::startedChunkWithCheckpoint, m_backgroundParser, chunk->inputCheckpoint, id));
 
     for (XSSInfoStream::const_iterator it = chunk->xssInfos.begin(); it != chunk->xssInfos.end(); ++it) {
         m_textPosition = (*it)->m_textPosition;
@@ -511,7 +521,8 @@ void HTMLDocumentParser::pumpPendingSpeculations()
             break;
 
         if (currentTime() - startTime > parserTimeLimit && !m_speculations.isEmpty()) {
-            m_parserScheduler->scheduleForResume();
+            unsigned int id = EventActionScope::fork();
+            m_parserScheduler->scheduleForResume(id);
             break;
         }
     }
@@ -608,7 +619,7 @@ void HTMLDocumentParser::pumpTokenizer(SynchronousMode mode)
     RELEASE_ASSERT(!isStopped());
 
     if (session.needsYield)
-        m_parserScheduler->scheduleForResume();
+        m_parserScheduler->scheduleForResume(EventActionScope::fork());
 
     if (isWaitingForScripts()) {
         ASSERT(m_tokenizer->state() == HTMLTokenizer::DataState);
@@ -845,7 +856,9 @@ void HTMLDocumentParser::finish()
     if (m_haveBackgroundParser) {
         if (!m_input.haveSeenEndOfFile())
             m_input.closeWithoutMarkingEndOfFile();
-        HTMLParserThread::shared()->postTask(bind(&BackgroundHTMLParser::finish, m_backgroundParser));
+        
+        unsigned int id = EventActionScope::fork();
+        HTMLParserThread::shared()->postTask(bind(&BackgroundHTMLParser::finish, m_backgroundParser, id));
         return;
     }
 
@@ -1021,8 +1034,9 @@ void HTMLDocumentParser::appendBytes(const char* data, size_t length)
         OwnPtr<Vector<char> > buffer = adoptPtr(new Vector<char>(length));
         memcpy(buffer->data(), data, length);
         TRACE_EVENT1("net", "HTMLDocumentParser::appendBytes", "size", (unsigned)length);
-
-        HTMLParserThread::shared()->postTask(bind(&BackgroundHTMLParser::appendRawBytesFromMainThread, m_backgroundParser, buffer.release()));
+        
+        unsigned int id = EventActionScope::fork();
+        HTMLParserThread::shared()->postTask(bind(&BackgroundHTMLParser::appendRawBytesFromMainThread, m_backgroundParser, buffer.release(), id));
         return;
     }
 
@@ -1035,8 +1049,10 @@ void HTMLDocumentParser::flush()
     if (isDetached() || needsDecoder())
         return;
 
-    if (m_haveBackgroundParser)
-        HTMLParserThread::shared()->postTask(bind(&BackgroundHTMLParser::flush, m_backgroundParser));
+    if (m_haveBackgroundParser) {
+        unsigned int id = EventActionScope::fork();
+        HTMLParserThread::shared()->postTask(bind(&BackgroundHTMLParser::flush, m_backgroundParser, id));
+    }
     else
         DecodedDataDocumentParser::flush();
 }

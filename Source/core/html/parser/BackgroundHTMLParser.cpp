@@ -100,23 +100,25 @@ BackgroundHTMLParser::~BackgroundHTMLParser()
 {
 }
 
-void BackgroundHTMLParser::appendRawBytesFromParserThread(const char* data, int dataLength)
+void BackgroundHTMLParser::appendRawBytesFromParserThread(const char* data, int dataLength,
+                                                          unsigned int id)
 {
     ASSERT(m_decoder);
-    updateDocument(m_decoder->decode(data, dataLength));
+    updateDocument(m_decoder->decode(data, dataLength), id);
 }
 
-void BackgroundHTMLParser::appendRawBytesFromMainThread(PassOwnPtr<Vector<char> > buffer)
+void BackgroundHTMLParser::appendRawBytesFromMainThread(PassOwnPtr<Vector<char> > buffer,
+                                                        unsigned int id)
 {
     ASSERT(m_decoder);
-    updateDocument(m_decoder->decode(buffer->data(), buffer->size()));
+    updateDocument(m_decoder->decode(buffer->data(), buffer->size()), id);
 }
 
-void BackgroundHTMLParser::appendDecodedBytes(const String& input)
+void BackgroundHTMLParser::appendDecodedBytes(const String& input, unsigned int id)
 {
     ASSERT(!m_input.current().isClosed());
     m_input.append(input);
-    pumpTokenizer();
+    pumpTokenizer(id);
 }
 
 void BackgroundHTMLParser::setDecoder(PassOwnPtr<TextResourceDecoder> decoder)
@@ -125,13 +127,13 @@ void BackgroundHTMLParser::setDecoder(PassOwnPtr<TextResourceDecoder> decoder)
     m_decoder = decoder;
 }
 
-void BackgroundHTMLParser::flush()
+void BackgroundHTMLParser::flush(unsigned int id)
 {
     ASSERT(m_decoder);
-    updateDocument(m_decoder->flush());
+    updateDocument(m_decoder->flush(), id);
 }
 
-void BackgroundHTMLParser::updateDocument(const String& decodedData)
+void BackgroundHTMLParser::updateDocument(const String& decodedData, unsigned int id)
 {
     DocumentEncodingData encodingData(*m_decoder.get());
 
@@ -145,10 +147,10 @@ void BackgroundHTMLParser::updateDocument(const String& decodedData)
     if (decodedData.isEmpty())
         return;
 
-    appendDecodedBytes(decodedData);
+    appendDecodedBytes(decodedData, id);
 }
 
-void BackgroundHTMLParser::resumeFrom(PassOwnPtr<Checkpoint> checkpoint)
+void BackgroundHTMLParser::resumeFrom(PassOwnPtr<Checkpoint> checkpoint, unsigned int id)
 {
     m_parser = checkpoint->parser;
     m_token = checkpoint->token.release();
@@ -156,21 +158,22 @@ void BackgroundHTMLParser::resumeFrom(PassOwnPtr<Checkpoint> checkpoint)
     m_treeBuilderSimulator.setState(checkpoint->treeBuilderState);
     m_input.rewindTo(checkpoint->inputCheckpoint, checkpoint->unparsedInput);
     m_preloadScanner->rewindTo(checkpoint->preloadScannerCheckpoint);
-    pumpTokenizer();
+    pumpTokenizer(id);
 }
 
-void BackgroundHTMLParser::startedChunkWithCheckpoint(HTMLInputCheckpoint inputCheckpoint)
+void BackgroundHTMLParser::startedChunkWithCheckpoint(HTMLInputCheckpoint inputCheckpoint,
+                                                      unsigned int id)
 {
     // Note, we should not have to worry about the index being invalid
     // as messages from the main thread will be processed in FIFO order.
     m_input.invalidateCheckpointsBefore(inputCheckpoint);
-    pumpTokenizer();
+    pumpTokenizer(id);
 }
 
-void BackgroundHTMLParser::finish()
+void BackgroundHTMLParser::finish(unsigned int id)
 {
     markEndOfFile();
-    pumpTokenizer();
+    pumpTokenizer(id);
 }
 
 void BackgroundHTMLParser::stop()
@@ -193,7 +196,7 @@ void BackgroundHTMLParser::markEndOfFile()
     m_input.close();
 }
 
-void BackgroundHTMLParser::pumpTokenizer()
+void BackgroundHTMLParser::pumpTokenizer(unsigned int id)
 {
     // No need to start speculating until the main thread has almost caught up.
     if (m_input.totalCheckpointTokenCount() > outstandingTokenLimit)
@@ -203,7 +206,7 @@ void BackgroundHTMLParser::pumpTokenizer()
         m_sourceTracker.start(m_input.current(), m_tokenizer.get(), *m_token);
         if (!m_tokenizer->nextToken(m_input.current(), *m_token)) {
             // We've reached the end of our current input.
-            sendTokensToMainThread();
+            sendTokensToMainThread(id);
             break;
         }
         m_sourceTracker.end(m_input.current(), m_tokenizer.get(), *m_token);
@@ -226,15 +229,13 @@ void BackgroundHTMLParser::pumpTokenizer()
         m_token->clear();
 
         if (!m_treeBuilderSimulator.simulate(m_pendingTokens->last(), m_tokenizer.get()) || m_pendingTokens->size() >= pendingTokenLimit) {
-            sendTokensToMainThread();
-            // If we're far ahead of the main thread, yield for a bit to avoid consuming too much memory.
-            if (m_input.totalCheckpointTokenCount() > outstandingTokenLimit)
-                break;
+            sendTokensToMainThread(id);
+            break;
         }
     }
 }
 
-void BackgroundHTMLParser::sendTokensToMainThread()
+void BackgroundHTMLParser::sendTokensToMainThread(unsigned int id)
 {
     if (m_pendingTokens->isEmpty())
         return;
@@ -253,7 +254,7 @@ void BackgroundHTMLParser::sendTokensToMainThread()
     chunk->inputCheckpoint = m_input.createCheckpoint(m_pendingTokens->size());
     chunk->preloadScannerCheckpoint = m_preloadScanner->createCheckpoint();
     chunk->tokens = m_pendingTokens.release();
-    callOnMainThread(bind(&HTMLDocumentParser::didReceiveParsedChunkFromBackgroundParser, m_parser, chunk.release()));
+    callOnMainThread(bind(&HTMLDocumentParser::didReceiveParsedChunkFromBackgroundParser, m_parser, chunk.release(), id));
 
     m_pendingTokens = adoptPtr(new CompactHTMLTokenStream);
 }

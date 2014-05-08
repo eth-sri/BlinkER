@@ -85,7 +85,7 @@ public:
         ++session.processedTokens;
     }
 
-    void scheduleForResume();
+    void scheduleForResume(unsigned int);
     bool isScheduledForResume() const { return m_isSuspendedWithActiveTimer || m_continueNextChunkTimer.isActive(); }
 
     void suspend();
@@ -103,6 +103,7 @@ private:
 
     Timer<HTMLParserScheduler> m_continueNextChunkTimer;
     bool m_isSuspendedWithActiveTimer;
+    unsigned int m_id;
 };
 
 }

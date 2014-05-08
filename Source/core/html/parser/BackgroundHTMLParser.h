@@ -65,14 +65,14 @@ public:
         String unparsedInput;
     };
 
-    void appendRawBytesFromParserThread(const char* data, int dataLength);
+    void appendRawBytesFromParserThread(const char* data, int dataLength, unsigned int id);
 
-    void appendRawBytesFromMainThread(PassOwnPtr<Vector<char> >);
+    void appendRawBytesFromMainThread(PassOwnPtr<Vector<char> >, unsigned int);
     void setDecoder(PassOwnPtr<TextResourceDecoder>);
-    void flush();
-    void resumeFrom(PassOwnPtr<Checkpoint>);
-    void startedChunkWithCheckpoint(HTMLInputCheckpoint);
-    void finish();
+    void flush(unsigned int);
+    void resumeFrom(PassOwnPtr<Checkpoint>, unsigned int);
+    void startedChunkWithCheckpoint(HTMLInputCheckpoint, unsigned int);
+    void finish(unsigned int);
     void stop();
 
     void forcePlaintextForTextDocument();
@@ -81,11 +81,11 @@ private:
     BackgroundHTMLParser(PassRefPtr<WeakReference<BackgroundHTMLParser> >, PassOwnPtr<Configuration>);
     ~BackgroundHTMLParser();
 
-    void appendDecodedBytes(const String&);
+    void appendDecodedBytes(const String&, unsigned int);
     void markEndOfFile();
-    void pumpTokenizer();
-    void sendTokensToMainThread();
-    void updateDocument(const String& decodedData);
+    void pumpTokenizer(unsigned int);
+    void sendTokensToMainThread(unsigned int);
+    void updateDocument(const String& decodedData, unsigned int);
 
     WeakPtrFactory<BackgroundHTMLParser> m_weakFactory;
     BackgroundHTMLInputStream m_input;
