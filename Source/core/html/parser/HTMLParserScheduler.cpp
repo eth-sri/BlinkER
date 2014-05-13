@@ -77,7 +77,6 @@ HTMLParserScheduler::HTMLParserScheduler(HTMLDocumentParser* parser)
     : m_parser(parser)
     , m_continueNextChunkTimer(this, &HTMLParserScheduler::continueNextChunkTimerFired)
     , m_isSuspendedWithActiveTimer(false)
-    , m_id(0)
 {
 }
 
@@ -89,14 +88,11 @@ HTMLParserScheduler::~HTMLParserScheduler()
 void HTMLParserScheduler::continueNextChunkTimerFired(Timer<HTMLParserScheduler>* timer)
 {
     ASSERT_UNUSED(timer, timer == &m_continueNextChunkTimer);
-    unsigned int id = m_id;
-    m_id = 0;
-    m_parser->resumeParsingAfterYield(id);
+    m_parser->resumeParsingAfterYield();
 }
 
-void HTMLParserScheduler::scheduleForResume(unsigned int id)
+void HTMLParserScheduler::scheduleForResume()
 {
-    m_id = id;
     m_continueNextChunkTimer.startOneShot(0, FROM_HERE);
 }
 
