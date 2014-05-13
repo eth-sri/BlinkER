@@ -1,6 +1,8 @@
 #ifndef Operation_h
 #define Operation_h
 
+#include <cstddef>
+
 namespace WebCore {
 
 class Operation {
@@ -14,17 +16,17 @@ public:
         MEMORY_VALUE
     };
 
-    Operation(Type type, int loc = -1) : m_type(type), m_location(loc) {}
+    Operation(Type type, size_t loc = 0) : m_type(type), m_location(loc) {}
 
     Type getType() const { return m_type; }
-    int getLocation() const { return m_location;}
+    size_t getLocation() const { return m_location;}
 
 private:
     Type m_type;
 
     // Memory location for reads/writes and scope id for scopes.
-    // Should be -1 if the location is unused.
-    int m_location;
+    // Should be 0 if the location is unused.
+    size_t m_location;
 };
 
 } // end namespace

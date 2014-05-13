@@ -163,6 +163,7 @@ public:
     virtual void dispatchDidStartEventRacerLog() OVERRIDE;
     virtual void dispatchDidCompleteEventAction(const WebCore::EventAction &) OVERRIDE;
     virtual void dispatchDidHappenBefore(const WTF::Vector<WebCore::EventAction::Edge> &) OVERRIDE;
+    virtual void dispatchDidUpdateStringTable(size_t, const WTF::Vector<WTF::String> &) OVERRIDE;
 
 private:
     virtual bool isFrameLoaderClientImpl() const OVERRIDE { return true; }

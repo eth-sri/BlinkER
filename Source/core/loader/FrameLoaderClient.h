@@ -236,6 +236,7 @@ namespace WebCore {
         virtual void dispatchDidStartEventRacerLog() = 0;
         virtual void dispatchDidCompleteEventAction(const EventAction &) = 0;
         virtual void dispatchDidHappenBefore(const Vector<EventAction::Edge> &) = 0;
+        virtual void dispatchDidUpdateStringTable(size_t, const Vector<String> &) = 0;
     };
 
 } // namespace WebCore

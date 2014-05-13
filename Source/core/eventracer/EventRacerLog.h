@@ -2,6 +2,7 @@
 #define EventRacerLog_h
 
 #include "EventAction.h"
+#include "StringSet.h"
 #include "wtf/HashMap.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/PassRefPtr.h"
@@ -15,7 +16,6 @@ class Document;
 
 class EventRacerLog : public WTF::RefCounted<EventRacerLog> {
 public:
-
     static WTF::PassRefPtr<EventRacerLog> create();
 
     // Notifies the host that an new log is created.
@@ -50,6 +50,13 @@ public:
     // identifier to the current event action.
     void join(unsigned int id);
 
+    // Records an operation, performed by the current event action.
+    void logOperation(Operation::Type, size_t);
+    void logOperation(Operation::Type, const WTF::String &);
+
+    // Interns a string.
+    size_t intern(const WTF::String &);
+
 private:
     EventRacerLog();
 
@@ -57,6 +64,8 @@ private:
     EventAction *m_currentEventAction;
     WTF::HashMap<unsigned int, WTF::OwnPtr<EventAction> > m_eventActions;
     WTF::Vector<EventAction::Edge> m_pendingEdges;
+    StringSet m_strings;
+    size_t m_pendingString;
 };
 
 } // namespace WebCore

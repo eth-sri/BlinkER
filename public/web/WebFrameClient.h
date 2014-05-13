@@ -493,6 +493,7 @@ public:
     virtual void didStartEventRacerLog() {}
     virtual void didCompleteEventAction(const WebEventAction &) {}
     virtual void didHappenBefore(const WebVector<WebEventActionEdge> &) {}
+    virtual void didUpdateStringTable(size_t, const WebVector<WebString> &) {}
 
 protected:
     ~WebFrameClient() { }

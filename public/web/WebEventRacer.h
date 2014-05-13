@@ -12,7 +12,7 @@ namespace blink {
 
 struct WebOperation {
     unsigned int type; // WebCore::Operation::Type
-    int location;
+    size_t location;
 
 #if BLINK_IMPLEMENTATION
     WebOperation(const WebCore::Operation &op)

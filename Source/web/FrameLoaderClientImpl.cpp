@@ -824,4 +824,9 @@ void FrameLoaderClientImpl::dispatchDidHappenBefore(const WTF::Vector<WebCore::E
         m_webFrame->client()->didHappenBefore(WebVector<WebEventActionEdge>(v));
 }
 
+void FrameLoaderClientImpl::dispatchDidUpdateStringTable(size_t index, const WTF::Vector<WTF::String> &v) {
+    if (m_webFrame->client())
+        m_webFrame->client()->didUpdateStringTable(index, WebVector<WebString>(v));
+}
+
 } // namespace blink

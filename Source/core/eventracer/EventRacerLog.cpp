@@ -12,7 +12,7 @@ WTF::PassRefPtr<EventRacerLog> EventRacerLog::create()
 }
 
 EventRacerLog::EventRacerLog()
-	: m_nextEventActionId(1), m_currentEventAction(NULL)
+	: m_nextEventActionId(1), m_currentEventAction(NULL), m_pendingString(1)
 {
 }
 
@@ -29,11 +29,19 @@ void EventRacerLog::flush(Document *doc, EventAction *a) {
     if (frame) {
         frame->loader().client()->dispatchDidCompleteEventAction(*a);
         EventAction::EdgesType::const_iterator i;
-        for ( i = a->getEdges().begin(); i != a->getEdges().end(); ++i)
+        for (i = a->getEdges().begin(); i != a->getEdges().end(); ++i)
             m_pendingEdges.append(std::make_pair(a->getId(), *i));
         if (m_pendingEdges.size()) {
             frame->loader().client()->dispatchDidHappenBefore(m_pendingEdges);
             m_pendingEdges.clear();
+        }
+        if (m_pendingString < m_strings.size()) {
+            WTF::Vector<WTF::String> s;
+            s.reserveInitialCapacity(m_strings.size() - m_pendingString);
+            for (size_t i = m_pendingString; i < m_strings.size(); ++i)
+                s.append(m_strings.get(i));
+            frame->loader().client()->dispatchDidUpdateStringTable(m_pendingString, s);
+            m_pendingString = m_strings.size();
         }
     }
 }
@@ -76,8 +84,10 @@ unsigned int EventRacerLog::fork(EventAction::Type type) {
     EventAction *new_action = createEventAction(type);
     // ASSERT(m_currentEventAction);
     // ASSERT(m_currentEventAction->getState() == EventAction::ACTIVE);
-    if (m_currentEventAction)
+    if (m_currentEventAction) {
         m_currentEventAction->addEdge(new_action->getId());
+        logOperation(Operation::TRIGGER_ARC, new_action->getId());
+    }
     return new_action->getId();
 }
 
@@ -91,6 +101,21 @@ void EventRacerLog::join(unsigned int id) {
     ASSERT (src->getState() == EventAction::COMPLETED);
     src->addEdge(m_currentEventAction->getId());
     m_pendingEdges.append(std::make_pair(src->getId(), m_currentEventAction->getId()));
+}
+
+// Records an operation, performed by the current event action.
+void EventRacerLog::logOperation(Operation::Type type, const WTF::String &loc) {
+    logOperation(type, intern(loc));
+}
+
+void EventRacerLog::logOperation(Operation::Type type, size_t loc) {
+    ASSERT(m_currentEventAction);
+    m_currentEventAction->getOps().append(Operation(type, loc));
+}
+
+// Interns a string.
+size_t EventRacerLog::intern(const WTF::String &s) {
+    return m_strings.put(s);
 }
 
 } // end namespace WebCore

@@ -3290,6 +3290,8 @@
             'eventracer/EventActionScope.h',
             'eventracer/EventRacerLog.cpp',
             'eventracer/EventRacerLog.h',
+            'eventracer/StringSet.cpp',
+            'eventracer/StringSet.h',
         ],
         'webcore_testing_idl_files': [
           'testing/GCObservation.idl',

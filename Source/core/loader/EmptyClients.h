@@ -257,6 +257,7 @@ public:
     virtual void dispatchDidStartEventRacerLog() OVERRIDE {}
     virtual void dispatchDidCompleteEventAction(const EventAction &) OVERRIDE {}
     virtual void dispatchDidHappenBefore(const Vector<EventAction::Edge> &) OVERRIDE {}
+    virtual void dispatchDidUpdateStringTable (size_t, const Vector<String> &) OVERRIDE {}
 };
 
 class EmptyTextCheckerClient FINAL : public TextCheckerClient {
