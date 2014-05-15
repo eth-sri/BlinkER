@@ -30,6 +30,7 @@
 #include "config.h"
 #include "core/fetch/ResourceLoader.h"
 
+#include "core/eventracer/EventActionScope.h"
 #include "core/fetch/Resource.h"
 #include "core/fetch/ResourceLoaderHost.h"
 #include "core/fetch/ResourcePtr.h"
@@ -148,6 +149,10 @@ void ResourceLoader::start()
     if (m_state == Terminated)
         return;
 
+    EventActionHolder holder(EventActionHolder::current()
+                             ? EventActionHolder::fork("rsc-load")
+                             : EventActionHolder::empty());
+
     RELEASE_ASSERT(m_connectionState == ConnectionStateNew);
     m_connectionState = ConnectionStateStarted;
 
@@ -155,6 +160,10 @@ void ResourceLoader::start()
     ASSERT(m_loader);
     blink::WrappedResourceRequest wrappedRequest(m_request);
     m_loader->loadAsynchronously(wrappedRequest, this);
+
+    // Keep the event-action for the subsequent resource loading phases.
+    ASSERT(!m_startAction);
+    m_startAction = EventActionHolder::current();
 }
 
 void ResourceLoader::changeToSynchronous()
@@ -392,6 +401,10 @@ void ResourceLoader::didReceiveData(blink::WebURLLoader*, const char* data, int 
     if (m_resource->response().httpStatusCode() >= 400 && !m_resource->shouldIgnoreHTTPStatusCodeErrors())
         return;
     ASSERT(m_state == Initialized);
+
+    ASSERT(!EventActionHolder::current());
+    EventActionHolder holder(m_startAction);
+    m_startAction.clear();
 
     // Reference the object in this method since the additional processing can do
     // anything including removing the last reference to this object.

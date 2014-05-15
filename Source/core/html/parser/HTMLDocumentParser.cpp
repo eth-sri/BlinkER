@@ -30,6 +30,7 @@
 #include "core/css/MediaValuesCached.h"
 #include "core/dom/DocumentFragment.h"
 #include "core/dom/Element.h"
+#include "core/eventracer/EventActionScope.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLDocument.h"
 #include "core/html/parser/AtomicHTMLToken.h"
@@ -114,6 +115,7 @@ HTMLDocumentParser::HTMLDocumentParser(HTMLDocument* document, bool reportErrors
     , m_endWasDelayed(false)
     , m_haveBackgroundParser(false)
     , m_pumpSessionNestingLevel(0)
+    , m_lastParserAction(0)
 {
     ASSERT(shouldUseThreading() || (m_token && m_tokenizer));
 }
@@ -132,6 +134,7 @@ HTMLDocumentParser::HTMLDocumentParser(DocumentFragment* fragment, Element* cont
     , m_endWasDelayed(false)
     , m_haveBackgroundParser(false)
     , m_pumpSessionNestingLevel(0)
+    , m_lastParserAction(0)
 {
     ASSERT(!shouldUseThreading());
     bool reportErrors = false; // For now document fragment parsing never reports errors.
@@ -257,6 +260,12 @@ bool HTMLDocumentParser::isScheduledForResume() const
 void HTMLDocumentParser::resumeParsingAfterYield()
 {
     ASSERT(!m_isPinnedToMainThread);
+
+    //EventActionHolder holder = EventActionHolder::begin("parser::from-yield");
+    // EventActionScope scope("parser:from-yield", document()->frame());
+    // EventActionScope::join(m_lastParserAction);
+    // m_lastParserAction = scope.getAction()->getId();
+
     // pumpTokenizer can cause this parser to be detached from the Document,
     // but we need to ensure it isn't deleted yet.
     RefPtr<HTMLDocumentParser> protect(this);
@@ -325,6 +334,12 @@ bool HTMLDocumentParser::canTakeNextToken(SynchronousMode mode, PumpSession& ses
 void HTMLDocumentParser::didReceiveParsedChunkFromBackgroundParser(PassOwnPtr<ParsedChunk> chunk)
 {
     TRACE_EVENT0("webkit", "HTMLDocumentParser::didReceiveParsedChunkFromBackgroundParser");
+
+    EventActionHolder holder =
+        m_lastParserAction == 0 
+        ? EventActionHolder::begin(document()->frame(), "parser:from-bck")
+        : EventActionHolder:: join(document()->frame(), "parser:from-bck", m_lastParserAction);
+    m_lastParserAction = EventActionHolder::current()->getAction()->getId();
 
     // alert(), runModalDialog, and the JavaScript Debugger all run nested event loops
     // which can cause this method to be re-entered. We detect re-entry using
@@ -1013,6 +1028,14 @@ void HTMLDocumentParser::appendBytes(const char* data, size_t length)
 {
     if (!length || isStopped())
         return;
+
+    // If there wasn't a parser action before and this is the first receive of
+    // data, set the next parser event-action to be triggered by
+    // the current event-action.
+    if (m_lastParserAction == 0) {
+        ASSERT(EventActionHolder::current());
+        m_lastParserAction = EventActionHolder::current()->getAction()->getId();
+    }
 
     if (shouldUseThreading()) {
         if (!m_haveBackgroundParser)

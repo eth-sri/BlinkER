@@ -45,6 +45,7 @@
 #include "core/editing/UndoStack.h"
 #include "core/events/Event.h"
 #include "core/events/PageTransitionEvent.h"
+#include "core/eventracer/EventActionScope.h"
 #include "core/eventracer/EventRacerLog.h"
 #include "core/fetch/FetchContext.h"
 #include "core/fetch/ResourceFetcher.h"
@@ -1271,6 +1272,8 @@ void FrameLoader::loadWithNavigationAction(const NavigationAction& action, Frame
         m_frame->setEventRacerLog(log);
         log->startLog(m_frame);
     }
+
+    EventActionHolder holder = EventActionHolder::begin(m_frame, "frm:load-nav");
 
     if (isLoadingMainFrame())
         m_frame->page()->inspectorController().resume();

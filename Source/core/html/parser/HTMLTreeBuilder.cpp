@@ -36,6 +36,7 @@
 #include "bindings/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/DocumentFragment.h"
 #include "core/dom/ElementTraversal.h"
+#include "core/eventracer/EventActionScope.h"
 #include "core/html/HTMLDocument.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/html/parser/AtomicHTMLToken.h"
@@ -359,6 +360,27 @@ PassRefPtr<Element> HTMLTreeBuilder::takeScriptToProcess(TextPosition& scriptSta
 
 void HTMLTreeBuilder::constructTree(AtomicHTMLToken* token)
 {
+#if 0
+    String scope_name;
+    switch (token->type()) {
+    case HTMLToken::StartTag:
+        scope_name = token->name();
+        break;
+    case HTMLToken::EndTag:
+        scope_name = "/";
+        scope_name.append(token->name());
+        break;
+    case HTMLToken::Character:
+        scope_name = "$chars";
+        break;
+    default:
+        scope_name = "$other";
+        break;
+    }
+
+    EventActionHolder holder = EventActionHolder::begin(scope_name);
+#endif
+
     if (shouldProcessTokenInForeignContent(token))
         processTokenInForeignContent(token);
     else

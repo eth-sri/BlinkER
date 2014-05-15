@@ -207,6 +207,7 @@ private:
     bool m_endWasDelayed;
     bool m_haveBackgroundParser;
     unsigned m_pumpSessionNestingLevel;
+    unsigned int m_lastParserAction;
 };
 
 }
