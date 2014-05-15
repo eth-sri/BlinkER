@@ -96,7 +96,6 @@ class Element;
 class ElementDataCache;
 class Event;
 class EventListener;
-class EventRacerLog;
 class ExceptionState;
 class FastTextAutosizer;
 class FloatQuad;
@@ -1071,8 +1070,6 @@ public:
     bool hasElementsRequiringLayerUpdate() const { return m_layerUpdateElements.size(); }
     void didRecalculateStyleForElement() { ++m_styleRecalcElementCounter; }
 
-    PassRefPtr<EventRacerLog> getEventRacerLog() const;
-
 protected:
     Document(const DocumentInit&, DocumentClassFlags = DefaultDocumentClass);
 
@@ -1388,8 +1385,6 @@ private:
     DocumentVisibilityObserverSet m_visibilityObservers;
 
     int m_styleRecalcElementCounter;
-
-    RefPtr<EventRacerLog> m_eventRacerLog;
 };
 
 inline void Document::notifyRemovePendingSheetIfNeeded()

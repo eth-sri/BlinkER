@@ -522,24 +522,6 @@ Document::Document(const DocumentInit& initializer, DocumentClassFlags documentC
     // CSSFontSelector, need to initialize m_styleEngine after initializing
     // m_fetcher.
     m_styleEngine = StyleEngine::create(*this);
-
-    // Check if the containing frame has a parent or an opener.
-    LocalFrame *upper = NULL;
-    if (m_frame) {
-        upper = m_frame->tree().parent();
-        if (!upper)
-            upper = m_frame->loader().opener();
-    }
-
-    // If the containing frame has a parent or an opener, then the EventRacer
-    // log is shared between the corresponding documents, otherwise, create
-    // a new log for the "root" frame/document.
-    if (upper && upper->document())
-        m_eventRacerLog = upper->document()->getEventRacerLog();
-    else {
-       m_eventRacerLog = EventRacerLog::create();
-       m_eventRacerLog->startLog(this);
-    }
 }
 
 Document::~Document()
@@ -5695,11 +5677,6 @@ void Document::trace(Visitor* visitor)
     TreeScope::trace(visitor);
     ContainerNode::trace(visitor);
     ExecutionContext::trace(visitor);
-}
-
-PassRefPtr<EventRacerLog>
-Document::getEventRacerLog() const {
-    return m_eventRacerLog;
 }
 
 } // namespace WebCore

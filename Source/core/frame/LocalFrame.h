@@ -43,6 +43,7 @@ namespace WebCore {
     class DragImage;
     class Editor;
     class EventHandler;
+    class EventRacerLog;
     class FetchContext;
     class FloatSize;
     class FrameConsole;
@@ -98,6 +99,9 @@ namespace WebCore {
         FrameConsole& console() const;
 
         void didChangeVisibilityState();
+
+        PassRefPtr<EventRacerLog> getEventRacerLog() const;
+        void setEventRacerLog(PassRefPtr<EventRacerLog>);
 
         // FIXME: This method is only used by EventHandler to get the highest level
         // LocalFrame in this frame's in-process subtree. When user gesture tokens
@@ -178,6 +182,8 @@ namespace WebCore {
         int m_orientation;
 
         bool m_inViewSourceMode;
+
+        RefPtr<EventRacerLog> m_eventRacerLog;
     };
 
     inline void LocalFrame::init()

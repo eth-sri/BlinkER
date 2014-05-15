@@ -45,6 +45,7 @@
 #include "core/editing/UndoStack.h"
 #include "core/events/Event.h"
 #include "core/events/PageTransitionEvent.h"
+#include "core/eventracer/EventRacerLog.h"
 #include "core/fetch/FetchContext.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/fetch/ResourceLoader.h"
@@ -1254,6 +1255,22 @@ void FrameLoader::loadWithNavigationAction(const NavigationAction& action, Frame
     // might detach the current FrameLoader, in which case we should bail on this newly defunct load.
     if (!m_frame->page() || !m_policyDocumentLoader)
         return;
+
+    // Check if the containing frame has a parent or an opener.
+    LocalFrame *upper = m_frame->tree().parent();
+    if (!upper)
+        upper = opener();
+
+    // If the containing frame has a parent or an opener, then the EventRacer
+    // log is shared between the corresponding frames, otherwise, create
+    // a new log for the "root" frame.
+    if (upper)
+        m_frame->setEventRacerLog(upper->getEventRacerLog());
+    else {
+        RefPtr<EventRacerLog> log = EventRacerLog::create();
+        m_frame->setEventRacerLog(log);
+        log->startLog(m_frame);
+    }
 
     if (isLoadingMainFrame())
         m_frame->page()->inspectorController().resume();
