@@ -8,8 +8,8 @@
 #ifndef StringSet_h
 #define StringSet_h
 
-#include "WTF/text/WTFString.h"
-#include "WTF/Vector.h"
+#include "wtf/text/WTFString.h"
+#include "wtf/Vector.h"
 
 namespace WebCore {
 
