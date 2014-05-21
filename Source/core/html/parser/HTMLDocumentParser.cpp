@@ -30,7 +30,8 @@
 #include "core/css/MediaValuesCached.h"
 #include "core/dom/DocumentFragment.h"
 #include "core/dom/Element.h"
-#include "core/eventracer/EventActionScope.h"
+#include "core/eventracer/EventRacerContext.h"
+#include "core/eventracer/EventRacerLog.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLDocument.h"
 #include "core/html/parser/AtomicHTMLToken.h"
@@ -46,6 +47,7 @@
 #include "platform/TraceEvent.h"
 #include "public/platform/WebThreadedDataReceiver.h"
 #include "wtf/Functional.h"
+#include "wtf/MainThread.h"
 
 namespace WebCore {
 
@@ -115,7 +117,6 @@ HTMLDocumentParser::HTMLDocumentParser(HTMLDocument* document, bool reportErrors
     , m_endWasDelayed(false)
     , m_haveBackgroundParser(false)
     , m_pumpSessionNestingLevel(0)
-    , m_lastParserAction(0)
 {
     ASSERT(shouldUseThreading() || (m_token && m_tokenizer));
 }
@@ -134,7 +135,6 @@ HTMLDocumentParser::HTMLDocumentParser(DocumentFragment* fragment, Element* cont
     , m_endWasDelayed(false)
     , m_haveBackgroundParser(false)
     , m_pumpSessionNestingLevel(0)
-    , m_lastParserAction(0)
 {
     ASSERT(!shouldUseThreading());
     bool reportErrors = false; // For now document fragment parsing never reports errors.
@@ -261,10 +261,19 @@ void HTMLDocumentParser::resumeParsingAfterYield()
 {
     ASSERT(!m_isPinnedToMainThread);
 
-    //EventActionHolder holder = EventActionHolder::begin("parser::from-yield");
-    // EventActionScope scope("parser:from-yield", document()->frame());
-    // EventActionScope::join(m_lastParserAction);
-    // m_lastParserAction = scope.getAction()->getId();
+    ASSERT(!EventRacerContext::current());
+    EventRacerScope scope(document()->frame());
+    RefPtr<EventRacerContext> ctx = EventRacerContext::current();
+    RefPtr<EventRacerLog> log = ctx->getLog();
+    EventAction *parserAction = log->createEventAction();
+    EventActionScope ascope(ctx, parserAction);
+    if (!m_joinActions.isEmpty()) {
+        for (size_t i = 0; i < m_joinActions.size(); ++i)
+            log->join(m_joinActions[i], parserAction);
+        m_joinActions.clear();
+    }
+    m_joinActions.append(parserAction);
+    OperationScope op("parser:from-yield");
 
     // pumpTokenizer can cause this parser to be detached from the Document,
     // but we need to ensure it isn't deleted yet.
@@ -335,29 +344,49 @@ void HTMLDocumentParser::didReceiveParsedChunkFromBackgroundParser(PassOwnPtr<Pa
 {
     TRACE_EVENT0("webkit", "HTMLDocumentParser::didReceiveParsedChunkFromBackgroundParser");
 
-    EventActionHolder holder =
-        m_lastParserAction == 0 
-        ? EventActionHolder::begin(document()->frame(), "parser:from-bck")
-        : EventActionHolder:: join(document()->frame(), "parser:from-bck", m_lastParserAction);
-    m_lastParserAction = EventActionHolder::current()->getAction()->getId();
+    EventRacerScope scope(document()->frame());
+    RefPtr<EventRacerContext> ctx = EventRacerContext::current();
+    RefPtr<EventRacerLog> log = ctx->getLog();
+    if (document()->activeParserCount() == 0) {
+        EventAction *parserAction = log->createEventAction();
+        ctx->push(parserAction);
+        if (!m_joinActions.isEmpty()) {
+            for (size_t i = 0; i < m_joinActions.size(); ++i)
+                log->join(m_joinActions[i], parserAction);
+            m_joinActions.clear();
+        }
+        m_joinActions.append(parserAction);
+    }
 
     // alert(), runModalDialog, and the JavaScript Debugger all run nested event loops
     // which can cause this method to be re-entered. We detect re-entry using
     // hasActiveParser(), save the chunk as a speculation, and return.
     if (isWaitingForScripts() || !m_speculations.isEmpty() || document()->activeParserCount() > 0) {
-        m_preloader->takeAndPreload(chunk->preloads);
+        if (!chunk->preloads.isEmpty()) {
+            OperationScope op("parser:preload");
+            m_preloader->takeAndPreload(chunk->preloads);
+        }
         m_speculations.append(chunk);
+        if (document()->activeParserCount() == 0)
+            ctx->pop();
         return;
     }
 
-    // processParsedChunkFromBackgroundParser can cause this parser to be detached from the Document,
-    // but we need to ensure it isn't deleted yet.
-    RefPtr<HTMLDocumentParser> protect(this);
+    {
+        OperationScope op("parser:from-bck");
 
-    ASSERT(m_speculations.isEmpty());
-    chunk->preloads.clear(); // We don't need to preload because we're going to parse immediately.
-    m_speculations.append(chunk);
-    pumpPendingSpeculations();
+        // processParsedChunkFromBackgroundParser can cause this parser to be
+        // detached from the Document, but we need to ensure it isn't deleted
+        // yet.
+        RefPtr<HTMLDocumentParser> protect(this);
+
+        ASSERT(m_speculations.isEmpty());
+        chunk->preloads.clear(); // We don't need to preload because we're going to parse immediately.
+        m_speculations.append(chunk);
+        pumpPendingSpeculations();
+    }
+
+    ctx->pop();
 }
 
 void HTMLDocumentParser::didReceiveEncodingDataFromBackgroundParser(const DocumentEncodingData& data)
@@ -930,6 +959,20 @@ void HTMLDocumentParser::resumeParsingAfterScriptExecution()
     ASSERT(!isExecutingScript());
     ASSERT(!isWaitingForScripts());
 
+    ASSERT(!EventRacerContext::current());
+    EventRacerScope scope(document()->frame());
+    RefPtr<EventRacerContext> ctx = EventRacerContext::current();
+    RefPtr<EventRacerLog> log = ctx->getLog();
+    EventAction *parserAction = log->createEventAction();
+    EventActionScope ascope(ctx, parserAction);
+    if (!m_joinActions.isEmpty()) {
+        for (size_t i = 0; i < m_joinActions.size(); ++i)
+            log->join(m_joinActions[i], parserAction);
+        m_joinActions.clear();
+    }
+    m_joinActions.append(parserAction);
+    OperationScope op("parser:after-scr");
+
     if (m_haveBackgroundParser) {
         validateSpeculations(m_lastChunkBeforeScript.release());
         ASSERT(!m_lastChunkBeforeScript);
@@ -972,6 +1015,9 @@ void HTMLDocumentParser::notifyFinished(Resource* cachedResource)
     // but we need to ensure it isn't deleted yet.
     RefPtr<HTMLDocumentParser> protect(this);
 
+    ASSERT(EventRacerContext::current());
+    m_joinActions.append(EventRacerContext::current()->getAction());
+
     ASSERT(m_scriptRunner);
     ASSERT(!isExecutingScript());
     if (isStopping()) {
@@ -979,9 +1025,13 @@ void HTMLDocumentParser::notifyFinished(Resource* cachedResource)
         return;
     }
 
-    m_scriptRunner->executeScriptsWaitingForLoad(cachedResource);
+    {
+        OperationScope scope("parser:rsc-finish");
+        m_scriptRunner->executeScriptsWaitingForLoad(cachedResource);
+    }
+
     if (!isWaitingForScripts())
-        resumeParsingAfterScriptExecution();
+        callOnMainThread(bind(&HTMLDocumentParser::resumeParsingAfterScriptExecution, this));
 }
 
 void HTMLDocumentParser::executeScriptsWaitingForResources()
@@ -995,12 +1045,17 @@ void HTMLDocumentParser::executeScriptsWaitingForResources()
     if (!m_scriptRunner->hasScriptsWaitingForResources())
         return;
 
+    RefPtr<EventRacerContext> ctx = EventRacerContext::current();
+    if (ctx && ctx->hasAction())
+        m_joinActions.append(ctx->getAction());
+ 
     // pumpTokenizer can cause this parser to be detached from the Document,
     // but we need to ensure it isn't deleted yet.
     RefPtr<HTMLDocumentParser> protect(this);
     m_scriptRunner->executeScriptsWaitingForResources();
+    
     if (!isWaitingForScripts())
-        resumeParsingAfterScriptExecution();
+        callOnMainThread(bind(&HTMLDocumentParser::resumeParsingAfterScriptExecution, this));
 }
 
 void HTMLDocumentParser::parseDocumentFragment(const String& source, DocumentFragment* fragment, Element* contextElement, ParserContentPolicy parserContentPolicy)
@@ -1029,13 +1084,12 @@ void HTMLDocumentParser::appendBytes(const char* data, size_t length)
     if (!length || isStopped())
         return;
 
-    // If there wasn't a parser action before and this is the first receive of
-    // data, set the next parser event-action to be triggered by
-    // the current event-action.
-    if (m_lastParserAction == 0) {
-        ASSERT(EventActionHolder::current());
-        m_lastParserAction = EventActionHolder::current()->getAction()->getId();
-    }
+    // On the first data receival data only, set the next parser event-action to
+    // be preceded by the current event-action. The second and following data
+    // receivals will not have an associated event-action.
+    ASSERT(EventRacerContext::current());
+    if (m_joinActions.isEmpty())
+        m_joinActions.append(EventRacerContext::current()->getAction());
 
     if (shouldUseThreading()) {
         if (!m_haveBackgroundParser)

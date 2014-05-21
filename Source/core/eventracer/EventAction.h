@@ -38,7 +38,7 @@ public:
 
     void activate() { ASSERT(m_state != COMPLETED); m_state = ACTIVE; }
 
-    void complete() { ASSERT(m_state == ACTIVE); m_state = COMPLETED; }
+    void complete() { m_state = COMPLETED; }
 
     void addEdge (unsigned int dst) { m_edges.append(dst); }
 

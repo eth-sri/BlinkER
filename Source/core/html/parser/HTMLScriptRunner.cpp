@@ -29,6 +29,8 @@
 #include "bindings/v8/ScriptSourceCode.h"
 #include "core/dom/Element.h"
 #include "core/events/Event.h"
+#include "core/eventracer/EventRacerContext.h"
+#include "core/eventracer/EventRacerLog.h"
 #include "core/dom/IgnoreDestructiveWriteCountIncrementer.h"
 #include "core/dom/Microtask.h"
 #include "core/dom/ScriptLoader.h"
@@ -201,8 +203,10 @@ bool HTMLScriptRunner::hasParserBlockingScript() const
 
 void HTMLScriptRunner::executeParsingBlockingScripts()
 {
-    while (hasParserBlockingScript() && isPendingScriptReady(m_parserBlockingScript))
+    while (hasParserBlockingScript() && isPendingScriptReady(m_parserBlockingScript)) {
+        OperationScope scope("parser:exec-blk-scr");
         executeParsingBlockingScript();
+    }
 }
 
 void HTMLScriptRunner::executeScriptsWaitingForLoad(Resource* resource)
@@ -235,6 +239,8 @@ bool HTMLScriptRunner::executeScriptsWaitingForParsing()
             watchForLoad(m_scriptsToExecuteAfterParsing.first());
             return false;
         }
+
+        OperationScope op("parser:exec-defer-scr");
         PendingScript first = m_scriptsToExecuteAfterParsing.takeFirst();
         executePendingScriptAndDispatchEvent(first, PendingScriptDeferred);
         // FIXME: What is this m_document check for?

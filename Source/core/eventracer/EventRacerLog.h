@@ -25,7 +25,7 @@ public:
     void flush(LocalFrame *, EventAction *);
 
     // Creates an event action of the given type.
-    EventAction *createEventAction(EventAction::Type type);
+    EventAction *createEventAction(EventAction::Type type = EventAction::UNKNOWN);
 
     // Starts a new event action of the given type and identifier. If the given
     // id is zero, allocate a new one and assign it to the new event action.
@@ -52,7 +52,7 @@ public:
     void join(unsigned int id, EventAction *succ);
 
     // Records an operation, performed by the event action |act|.
-    void logOperation(EventAction *act, Operation::Type, size_t);
+    void logOperation(EventAction *act, Operation::Type, size_t = 0);
     void logOperation(EventAction *act, Operation::Type, const WTF::String &);
 
     // Interns a string.

@@ -30,7 +30,8 @@
 #include "config.h"
 #include "core/fetch/ResourceLoader.h"
 
-#include "core/eventracer/EventActionScope.h"
+#include "core/eventracer/EventRacerContext.h"
+#include "core/eventracer/EventRacerLog.h"
 #include "core/fetch/Resource.h"
 #include "core/fetch/ResourceLoaderHost.h"
 #include "core/fetch/ResourcePtr.h"
@@ -78,6 +79,7 @@ ResourceLoader::ResourceLoader(ResourceLoaderHost* host, Resource* resource, con
     , m_state(Initialized)
     , m_connectionState(ConnectionStateNew)
     , m_requestCountTracker(adoptPtr(new RequestCountTracker(host, resource)))
+    , m_eventAction(0)
 {
 }
 
@@ -149,9 +151,10 @@ void ResourceLoader::start()
     if (m_state == Terminated)
         return;
 
-    EventActionHolder holder(EventActionHolder::current()
-                             ? EventActionHolder::fork("rsc-load")
-                             : EventActionHolder::empty());
+    ASSERT(!m_eventRacerContext);
+    m_eventRacerContext = EventRacerContext::current();
+    if (m_eventRacerContext)
+        m_eventAction = m_eventRacerContext->getLog()->fork(m_eventRacerContext->getAction());
 
     RELEASE_ASSERT(m_connectionState == ConnectionStateNew);
     m_connectionState = ConnectionStateStarted;
@@ -160,10 +163,6 @@ void ResourceLoader::start()
     ASSERT(m_loader);
     blink::WrappedResourceRequest wrappedRequest(m_request);
     m_loader->loadAsynchronously(wrappedRequest, this);
-
-    // Keep the event-action for the subsequent resource loading phases.
-    ASSERT(!m_startAction);
-    m_startAction = EventActionHolder::current();
 }
 
 void ResourceLoader::changeToSynchronous()
@@ -393,6 +392,7 @@ void ResourceLoader::didReceiveResponse(blink::WebURLLoader*, const blink::WebUR
 
 void ResourceLoader::didReceiveData(blink::WebURLLoader*, const char* data, int length, int encodedDataLength)
 {
+    ConnectionState entryState = m_connectionState;
     RELEASE_ASSERT(m_connectionState == ConnectionStateReceivedResponse || m_connectionState == ConnectionStateReceivingData);
     m_connectionState = ConnectionStateReceivingData;
 
@@ -402,9 +402,13 @@ void ResourceLoader::didReceiveData(blink::WebURLLoader*, const char* data, int 
         return;
     ASSERT(m_state == Initialized);
 
-    ASSERT(!EventActionHolder::current());
-    EventActionHolder holder(m_startAction);
-    m_startAction.clear();
+    // Activate the initial event action only on the first data receive.
+    EventRacerScope scope(m_eventRacerContext);
+    if (m_eventAction && entryState == ConnectionStateReceivedResponse) {
+        m_eventRacerContext->push(m_eventAction);
+        m_eventRacerContext->getLog()->logOperation(m_eventAction,
+                                                    Operation::ENTER_SCOPE, "rsc-data");
+    }
 
     // Reference the object in this method since the additional processing can do
     // anything including removing the last reference to this object.
@@ -415,6 +419,13 @@ void ResourceLoader::didReceiveData(blink::WebURLLoader*, const char* data, int 
     // Could be an issue with a giant local file.
     m_host->didReceiveData(m_resource, data, length, encodedDataLength);
     m_resource->appendData(data, length);
+
+    if (m_eventAction && entryState == ConnectionStateReceivedResponse) {  // FIXME: exception safety
+        EventAction *endAction = m_eventRacerContext->getLog()->fork(m_eventAction);
+        m_eventRacerContext->getLog()->logOperation(m_eventAction, Operation::EXIT_SCOPE);
+        m_eventRacerContext->pop();
+        m_eventAction = endAction;
+    }
 }
 
 void ResourceLoader::didFinishLoading(blink::WebURLLoader*, double finishTime, int64 encodedDataLength)
@@ -426,11 +437,23 @@ void ResourceLoader::didFinishLoading(blink::WebURLLoader*, double finishTime, i
     ASSERT(m_state != Terminated);
     WTF_LOG(ResourceLoading, "Received '%s'.", m_resource->url().string().latin1().data());
 
+    EventRacerScope scope(m_eventRacerContext);
+    if (m_eventAction) {
+        m_eventRacerContext->push(m_eventAction);;
+        m_eventRacerContext->getLog()->logOperation(m_eventAction,
+                                                    Operation::ENTER_SCOPE, "rsc-finish");
+    }
+
     RefPtr<ResourceLoader> protect(this);
     ResourcePtr<Resource> protectResource(m_resource);
     m_state = Finishing;
     didFinishLoadingOnePart(finishTime, encodedDataLength);
     m_resource->finish(finishTime);
+
+    if (m_eventAction) { // FIXME: exception safety
+        m_eventRacerContext->getLog()->logOperation(m_eventAction, Operation::EXIT_SCOPE);
+        m_eventRacerContext->pop();
+    }
 
     // If the load has been cancelled by a delegate in response to didFinishLoad(), do not release
     // the resources a second time, they have been released by cancel.

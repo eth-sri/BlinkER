@@ -42,7 +42,8 @@ class WebThreadedDataReceiver;
 
 namespace WebCore {
 
-class EventActionScope;
+class EventAction;
+class EventRacerContext;
 class Resource;
 class KURL;
 class ResourceError;
@@ -148,8 +149,8 @@ private:
 
     OwnPtr<RequestCountTracker> m_requestCountTracker;
 
-    RefPtr<EventActionScope> m_startAction;
-    RefPtr<EventActionScope> m_endAction;
+    RefPtr<EventRacerContext> m_eventRacerContext;
+    EventAction *m_eventAction;
 };
 
 }

@@ -36,7 +36,6 @@
 #include "bindings/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/DocumentFragment.h"
 #include "core/dom/ElementTraversal.h"
-#include "core/eventracer/EventActionScope.h"
 #include "core/html/HTMLDocument.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/html/parser/AtomicHTMLToken.h"
