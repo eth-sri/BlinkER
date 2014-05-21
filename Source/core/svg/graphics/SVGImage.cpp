@@ -29,7 +29,7 @@
 
 #include "core/svg/graphics/SVGImage.h"
 
-#include "core/animation/DocumentTimeline.h"
+#include "core/animation/AnimationTimeline.h"
 #include "core/dom/NodeTraversal.h"
 #include "core/dom/shadow/ComposedTreeWalker.h"
 #include "core/frame/FrameView.h"
@@ -39,7 +39,7 @@
 #include "core/page/Chrome.h"
 #include "core/rendering/style/RenderStyle.h"
 #include "core/rendering/svg/RenderSVGRoot.h"
-#include "core/svg/SVGDocument.h"
+#include "core/svg/SVGDocumentExtensions.h"
 #include "core/svg/SVGFEImageElement.h"
 #include "core/svg/SVGImageElement.h"
 #include "core/svg/SVGSVGElement.h"
@@ -92,7 +92,7 @@ bool SVGImage::currentFrameHasSingleSecurityOrigin() const
 
     RELEASE_ASSERT(frame->document()->loadEventFinished());
 
-    SVGSVGElement* rootElement = toSVGDocument(frame->document())->rootElement();
+    SVGSVGElement* rootElement = frame->document()->accessSVGExtensions().rootElement();
     if (!rootElement)
         return true;
 
@@ -122,7 +122,7 @@ static SVGSVGElement* svgRootElement(Page* page)
     if (!page)
         return 0;
     LocalFrame* frame = page->mainFrame();
-    return toSVGDocument(frame->document())->rootElement();
+    return frame->document()->accessSVGExtensions().rootElement();
 }
 
 void SVGImage::setContainerSize(const IntSize& size)
@@ -274,6 +274,9 @@ void SVGImage::draw(GraphicsContext* context, const FloatRect& dstRect, const Fl
 
     FrameView* view = frameView();
     view->resize(containerSize());
+
+    if (!m_url.isEmpty())
+        view->scrollToFragment(m_url);
 
     if (view->needsLayout())
         view->layout();

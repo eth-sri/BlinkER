@@ -141,7 +141,9 @@ static void beginDeferredFilter(GraphicsContext* context, FilterData* filterData
 {
     SkiaImageFilterBuilder builder(context);
     RefPtr<ImageFilter> imageFilter = builder.build(filterData->builder->lastEffect(), ColorSpaceDeviceRGB);
-    filterData->filter->beginApply(context);
+    // FIXME: Remove the cache when impl-size painting is enabled on every platform and the non impl-side painting path is removed
+    if (!context->isRecordingCanvas()) // Recording canvases do not use the cache
+        filterData->filter->enableCache();
     FloatRect boundaries = enclosingIntRect(filterData->boundaries);
     context->save();
     // Clip drawing of filtered image to primitive boundaries.
@@ -181,7 +183,9 @@ static void endDeferredFilter(GraphicsContext* context, FilterData* filterData)
 {
     context->endLayer();
     context->restore();
-    filterData->filter->endApply(context);
+    // FIXME: Remove the cache when impl-size painting is enabled on every platform and the non impl-side painting path is removed
+    if (!context->isRecordingCanvas()) // Recording canvases do not use the cache
+        filterData->filter->disableCache();
 }
 
 bool RenderSVGResourceFilter::applyResource(RenderObject* object, RenderStyle*, GraphicsContext*& context, unsigned short resourceMode)
@@ -313,6 +317,7 @@ void RenderSVGResourceFilter::postApplyResource(RenderObject* object, GraphicsCo
 
     if (object->document().settings()->deferredFiltersEnabled() && (filterData->state == FilterData::PaintingSource || filterData->state == FilterData::Built)) {
         endDeferredFilter(context, filterData);
+        filterData->state = FilterData::Built;
         return;
     }
 

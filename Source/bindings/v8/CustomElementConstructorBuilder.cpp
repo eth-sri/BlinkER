@@ -59,7 +59,7 @@ CustomElementConstructorBuilder::CustomElementConstructorBuilder(ScriptState* sc
     , m_options(options)
     , m_wrapperType(0)
 {
-    ASSERT(m_scriptState->context() == v8::Isolate::GetCurrent()->GetCurrentContext());
+    ASSERT(m_scriptState->context() == m_scriptState->isolate()->GetCurrentContext());
 }
 
 bool CustomElementConstructorBuilder::isFeatureAllowed() const
@@ -234,7 +234,7 @@ bool CustomElementConstructorBuilder::didRegisterDefinition(CustomElementDefinit
 
 ScriptValue CustomElementConstructorBuilder::bindingsReturnValue() const
 {
-    return ScriptValue(m_constructor, m_scriptState->isolate());
+    return ScriptValue(m_scriptState.get(), m_constructor);
 }
 
 bool CustomElementConstructorBuilder::hasValidPrototypeChainFor(const WrapperTypeInfo* type) const
@@ -275,10 +275,16 @@ static void constructCustomElement(const v8::FunctionCallbackInfo<v8::Value>& in
 
     ExceptionState exceptionState(ExceptionState::ConstructionContext, "CustomElement", info.Holder(), info.GetIsolate());
     CustomElementCallbackDispatcher::CallbackDeliveryScope deliveryScope;
-    RefPtr<Element> element = document->createElementNS(namespaceURI, tagName, maybeType->IsNull() ? nullAtom : type, exceptionState);
+    RefPtrWillBeRawPtr<Element> element = document->createElementNS(namespaceURI, tagName, maybeType->IsNull() ? nullAtom : type, exceptionState);
     if (exceptionState.throwIfNeeded())
         return;
+#if ENABLE(OILPAN)
+    // FIXME: Oilpan: We don't have RawPtr<Eement> version of
+    // v8SetReturnValueFast until Node.idl has WillBeGarbageCollected.
+    v8SetReturnValueFast(info, element.get(), document);
+#else
     v8SetReturnValueFast(info, element.release(), document);
+#endif
 }
 
 } // namespace WebCore

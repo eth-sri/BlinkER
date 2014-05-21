@@ -117,7 +117,7 @@ public:
             return;
         }
 
-        RefPtr<DOMStringList> databaseNamesList = requestResult->domStringList();
+        RefPtrWillBeRawPtr<DOMStringList> databaseNamesList = requestResult->domStringList();
         RefPtr<TypeBuilder::Array<String> > databaseNames = TypeBuilder::Array<String>::create();
         for (size_t i = 0; i < databaseNamesList->length(); ++i)
             databaseNames->addItem(databaseNamesList->item(i));
@@ -139,7 +139,7 @@ public:
         : m_scriptState(scriptState) { }
     virtual ~ExecutableWithDatabase() { };
     void start(IDBFactory*, SecurityOrigin*, const String& databaseName);
-    virtual void execute(PassRefPtr<IDBDatabase>) = 0;
+    virtual void execute(PassRefPtrWillBeRawPtr<IDBDatabase>) = 0;
     virtual RequestCallback* requestCallback() = 0;
     ExecutionContext* context() const { return m_scriptState->executionContext(); }
     ScriptState* scriptState() const { return m_scriptState.get(); }
@@ -175,7 +175,7 @@ public:
             return;
         }
 
-        RefPtr<IDBDatabase> idbDatabase = requestResult->idbDatabase();
+        RefPtrWillBeRawPtr<IDBDatabase> idbDatabase = requestResult->idbDatabase();
         m_executableWithDatabase->execute(idbDatabase);
         IDBPendingTransactionMonitor::from(*context).deactivateNewTransactions();
         idbDatabase->close();
@@ -200,31 +200,31 @@ void ExecutableWithDatabase::start(IDBFactory* idbFactory, SecurityOrigin*, cons
     idbOpenDBRequest->addEventListener(EventTypeNames::success, callback, false);
 }
 
-static PassRefPtr<IDBTransaction> transactionForDatabase(ExecutionContext* executionContext, IDBDatabase* idbDatabase, const String& objectStoreName, const String& mode = IDBTransaction::modeReadOnly())
+static PassRefPtrWillBeRawPtr<IDBTransaction> transactionForDatabase(ExecutionContext* executionContext, IDBDatabase* idbDatabase, const String& objectStoreName, const String& mode = IDBTransaction::modeReadOnly())
 {
     TrackExceptionState exceptionState;
-    RefPtr<IDBTransaction> idbTransaction = idbDatabase->transaction(executionContext, objectStoreName, mode, exceptionState);
+    RefPtrWillBeRawPtr<IDBTransaction> idbTransaction = idbDatabase->transaction(executionContext, objectStoreName, mode, exceptionState);
     if (exceptionState.hadException())
         return nullptr;
-    return idbTransaction;
+    return idbTransaction.release();
 }
 
-static PassRefPtr<IDBObjectStore> objectStoreForTransaction(IDBTransaction* idbTransaction, const String& objectStoreName)
+static PassRefPtrWillBeRawPtr<IDBObjectStore> objectStoreForTransaction(IDBTransaction* idbTransaction, const String& objectStoreName)
 {
     TrackExceptionState exceptionState;
-    RefPtr<IDBObjectStore> idbObjectStore = idbTransaction->objectStore(objectStoreName, exceptionState);
+    RefPtrWillBeRawPtr<IDBObjectStore> idbObjectStore = idbTransaction->objectStore(objectStoreName, exceptionState);
     if (exceptionState.hadException())
         return nullptr;
-    return idbObjectStore;
+    return idbObjectStore.release();
 }
 
-static PassRefPtr<IDBIndex> indexForObjectStore(IDBObjectStore* idbObjectStore, const String& indexName)
+static PassRefPtrWillBeRawPtr<IDBIndex> indexForObjectStore(IDBObjectStore* idbObjectStore, const String& indexName)
 {
     TrackExceptionState exceptionState;
-    RefPtr<IDBIndex> idbIndex = idbObjectStore->index(indexName, exceptionState);
+    RefPtrWillBeRawPtr<IDBIndex> idbIndex = idbObjectStore->index(indexName, exceptionState);
     if (exceptionState.hadException())
         return nullptr;
-    return idbIndex;
+    return idbIndex.release();
 }
 
 static PassRefPtr<KeyPath> keyPathFromIDBKeyPath(const IDBKeyPath& idbKeyPath)
@@ -263,9 +263,9 @@ public:
 
     virtual ~DatabaseLoader() { }
 
-    virtual void execute(PassRefPtr<IDBDatabase> prpDatabase) OVERRIDE
+    virtual void execute(PassRefPtrWillBeRawPtr<IDBDatabase> prpDatabase) OVERRIDE
     {
-        RefPtr<IDBDatabase> idbDatabase = prpDatabase;
+        RefPtrWillBeRawPtr<IDBDatabase> idbDatabase = prpDatabase;
         if (!requestCallback()->isActive())
             return;
 
@@ -487,17 +487,17 @@ public:
 
     virtual ~DataLoader() { }
 
-    virtual void execute(PassRefPtr<IDBDatabase> prpDatabase) OVERRIDE
+    virtual void execute(PassRefPtrWillBeRawPtr<IDBDatabase> prpDatabase) OVERRIDE
     {
-        RefPtr<IDBDatabase> idbDatabase = prpDatabase;
+        RefPtrWillBeRawPtr<IDBDatabase> idbDatabase = prpDatabase;
         if (!requestCallback()->isActive())
             return;
-        RefPtr<IDBTransaction> idbTransaction = transactionForDatabase(context(), idbDatabase.get(), m_objectStoreName);
+        RefPtrWillBeRawPtr<IDBTransaction> idbTransaction = transactionForDatabase(context(), idbDatabase.get(), m_objectStoreName);
         if (!idbTransaction) {
             m_requestCallback->sendFailure("Could not get transaction");
             return;
         }
-        RefPtr<IDBObjectStore> idbObjectStore = objectStoreForTransaction(idbTransaction.get(), m_objectStoreName);
+        RefPtrWillBeRawPtr<IDBObjectStore> idbObjectStore = objectStoreForTransaction(idbTransaction.get(), m_objectStoreName);
         if (!idbObjectStore) {
             m_requestCallback->sendFailure("Could not get object store");
             return;
@@ -507,7 +507,7 @@ public:
 
         RefPtrWillBeRawPtr<IDBRequest> idbRequest;
         if (!m_indexName.isEmpty()) {
-            RefPtr<IDBIndex> idbIndex = indexForObjectStore(idbObjectStore.get(), m_indexName);
+            RefPtrWillBeRawPtr<IDBIndex> idbIndex = indexForObjectStore(idbObjectStore.get(), m_indexName);
             if (!idbIndex) {
                 m_requestCallback->sendFailure("Could not get index");
                 return;
@@ -725,17 +725,17 @@ public:
     {
     }
 
-    virtual void execute(PassRefPtr<IDBDatabase> prpDatabase) OVERRIDE
+    virtual void execute(PassRefPtrWillBeRawPtr<IDBDatabase> prpDatabase) OVERRIDE
     {
-        RefPtr<IDBDatabase> idbDatabase = prpDatabase;
+        RefPtrWillBeRawPtr<IDBDatabase> idbDatabase = prpDatabase;
         if (!requestCallback()->isActive())
             return;
-        RefPtr<IDBTransaction> idbTransaction = transactionForDatabase(context(), idbDatabase.get(), m_objectStoreName, IDBTransaction::modeReadWrite());
+        RefPtrWillBeRawPtr<IDBTransaction> idbTransaction = transactionForDatabase(context(), idbDatabase.get(), m_objectStoreName, IDBTransaction::modeReadWrite());
         if (!idbTransaction) {
             m_requestCallback->sendFailure("Could not get transaction");
             return;
         }
-        RefPtr<IDBObjectStore> idbObjectStore = objectStoreForTransaction(idbTransaction.get(), m_objectStoreName);
+        RefPtrWillBeRawPtr<IDBObjectStore> idbObjectStore = objectStoreForTransaction(idbTransaction.get(), m_objectStoreName);
         if (!idbObjectStore) {
             m_requestCallback->sendFailure("Could not get object store");
             return;

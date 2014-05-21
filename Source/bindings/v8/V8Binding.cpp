@@ -50,10 +50,12 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/inspector/BindingVisitors.h"
+#include "core/inspector/InspectorTraceEvents.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/FrameLoaderClient.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/xml/XPathNSResolver.h"
+#include "platform/EventTracer.h"
 #include "platform/JSONValues.h"
 #include "wtf/ArrayBufferContents.h"
 #include "wtf/MainThread.h"
@@ -83,17 +85,33 @@ v8::Handle<v8::Value> throwTypeError(const String& message, v8::Isolate* isolate
     return V8ThrowException::throwTypeError(message, isolate);
 }
 
-void throwArityTypeErrorForMethod(const char* method, const char* type, unsigned expected, unsigned providedLeastNumMandatoryParams, v8::Isolate* isolate)
+void throwArityTypeErrorForMethod(const char* method, const char* type, const char* valid, unsigned provided, v8::Isolate* isolate)
+{
+    throwTypeError(ExceptionMessages::failedToExecute(method, type, ExceptionMessages::invalidArity(valid, provided)), isolate);
+}
+
+void throwArityTypeErrorForConstructor(const char* type, const char* valid, unsigned provided, v8::Isolate* isolate)
+{
+    throwTypeError(ExceptionMessages::failedToConstruct(type, ExceptionMessages::invalidArity(valid, provided)), isolate);
+}
+
+void throwArityTypeError(ExceptionState& exceptionState, const char* valid, unsigned provided)
+{
+    exceptionState.throwTypeError(ExceptionMessages::invalidArity(valid, provided));
+    exceptionState.throwIfNeeded();
+}
+
+void throwMinimumArityTypeErrorForMethod(const char* method, const char* type, unsigned expected, unsigned providedLeastNumMandatoryParams, v8::Isolate* isolate)
 {
     throwTypeError(ExceptionMessages::failedToExecute(method, type, ExceptionMessages::notEnoughArguments(expected, providedLeastNumMandatoryParams)), isolate);
 }
 
-void throwArityTypeErrorForConstructor(const char* type, unsigned expected, unsigned providedLeastNumMandatoryParams, v8::Isolate* isolate)
+void throwMinimumArityTypeErrorForConstructor(const char* type, unsigned expected, unsigned providedLeastNumMandatoryParams, v8::Isolate* isolate)
 {
     throwTypeError(ExceptionMessages::failedToConstruct(type, ExceptionMessages::notEnoughArguments(expected, providedLeastNumMandatoryParams)), isolate);
 }
 
-void throwArityTypeError(ExceptionState& exceptionState, unsigned expected, unsigned providedLeastNumMandatoryParams)
+void throwMinimumArityTypeError(ExceptionState& exceptionState, unsigned expected, unsigned providedLeastNumMandatoryParams)
 {
     exceptionState.throwTypeError(ExceptionMessages::notEnoughArguments(expected, providedLeastNumMandatoryParams));
     exceptionState.throwIfNeeded();
@@ -126,14 +144,13 @@ v8::ArrayBuffer::Allocator* v8ArrayBufferAllocator()
     return &arrayBufferAllocator;
 }
 
-PassRefPtr<NodeFilter> toNodeFilter(v8::Handle<v8::Value> callback, v8::Isolate* isolate)
+PassRefPtrWillBeRawPtr<NodeFilter> toNodeFilter(v8::Handle<v8::Value> callback, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
 {
-    RefPtr<NodeFilter> filter = NodeFilter::create();
+    RefPtrWillBeRawPtr<NodeFilter> filter = NodeFilter::create();
 
-    // FIXME: Should pass in appropriate creationContext
-    v8::Handle<v8::Object> filterWrapper = toV8(filter, v8::Handle<v8::Object>(), isolate).As<v8::Object>();
+    v8::Handle<v8::Object> filterWrapper = toV8(filter, creationContext, isolate).As<v8::Object>();
 
-    RefPtr<NodeFilterCondition> condition = V8NodeFilterCondition::create(callback, filterWrapper, isolate);
+    RefPtrWillBeRawPtr<NodeFilterCondition> condition = V8NodeFilterCondition::create(callback, filterWrapper, isolate);
     filter->setCondition(condition.release());
 
     return filter.release();
@@ -505,7 +522,15 @@ DOMWindow* toDOMWindow(v8::Handle<v8::Context> context)
 
 DOMWindow* enteredDOMWindow(v8::Isolate* isolate)
 {
-    return toDOMWindow(isolate->GetEnteredContext());
+    DOMWindow* window = toDOMWindow(isolate->GetEnteredContext());
+    if (!window) {
+        // We don't always have an entered DOM window, for example during microtask callbacks from V8
+        // (where the entered context may be the DOM-in-JS context). In that case, we fall back
+        // to the current context.
+        window = currentDOMWindow(isolate);
+        ASSERT(window);
+    }
+    return window;
 }
 
 DOMWindow* currentDOMWindow(v8::Isolate* isolate)
@@ -735,6 +760,40 @@ V8ExecutionScope::V8ExecutionScope(v8::Isolate* isolate)
 V8ExecutionScope::~V8ExecutionScope()
 {
     m_scriptState->disposePerContextData();
+}
+
+void GetDevToolsFunctionInfo(v8::Handle<v8::Function> function, v8::Isolate* isolate, int& scriptId, String& resourceName, int& lineNumber)
+{
+    v8::Handle<v8::Function> originalFunction = getBoundFunction(function);
+    scriptId = originalFunction->ScriptId();
+    v8::ScriptOrigin origin = originalFunction->GetScriptOrigin();
+    if (!origin.ResourceName().IsEmpty()) {
+        resourceName = NativeValueTraits<String>::nativeValue(origin.ResourceName(), isolate);
+        lineNumber = originalFunction->GetScriptLineNumber() + 1;
+    }
+    if (resourceName.isEmpty()) {
+        resourceName = "undefined";
+        lineNumber = 1;
+    }
+}
+
+PassRefPtr<TraceEvent::ConvertableToTraceFormat> devToolsTraceEventData(ExecutionContext* context, v8::Handle<v8::Function> function, v8::Isolate* isolate)
+{
+    int scriptId = 0;
+    String resourceName;
+    int lineNumber = 1;
+    GetDevToolsFunctionInfo(function, isolate, scriptId, resourceName, lineNumber);
+    return InspectorFunctionCallEvent::data(context, scriptId, resourceName, lineNumber);
+}
+
+ScriptState* V8ExecutionScope::scriptState() const
+{
+    return m_scriptState.get();
+}
+
+v8::Isolate* V8ExecutionScope::isolate() const
+{
+    return m_scriptState->isolate();
 }
 
 } // namespace WebCore

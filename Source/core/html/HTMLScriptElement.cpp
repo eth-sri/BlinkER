@@ -43,9 +43,9 @@ inline HTMLScriptElement::HTMLScriptElement(Document& document, bool wasInserted
     ScriptWrappable::init(this);
 }
 
-PassRefPtr<HTMLScriptElement> HTMLScriptElement::create(Document& document, bool wasInsertedByParser, bool alreadyStarted)
+PassRefPtrWillBeRawPtr<HTMLScriptElement> HTMLScriptElement::create(Document& document, bool wasInsertedByParser, bool alreadyStarted)
 {
-    return adoptRef(new HTMLScriptElement(document, wasInsertedByParser, alreadyStarted));
+    return adoptRefWillBeRefCountedGarbageCollected(new HTMLScriptElement(document, wasInsertedByParser, alreadyStarted));
 }
 
 bool HTMLScriptElement::isURLAttribute(const Attribute& attribute) const
@@ -88,12 +88,6 @@ Node::InsertionNotificationRequest HTMLScriptElement::insertedInto(ContainerNode
 void HTMLScriptElement::didNotifySubtreeInsertionsToDocument()
 {
     m_loader->didNotifySubtreeInsertionsToDocument();
-}
-
-void HTMLScriptElement::didMoveToNewDocument(Document& oldDocument)
-{
-    HTMLElement::didMoveToNewDocument(oldDocument);
-    m_loader->cancel(&oldDocument);
 }
 
 void HTMLScriptElement::setText(const String &value)
@@ -176,9 +170,9 @@ void HTMLScriptElement::dispatchLoadEvent()
     dispatchEvent(Event::create(EventTypeNames::load));
 }
 
-PassRefPtr<Element> HTMLScriptElement::cloneElementWithoutAttributesAndChildren()
+PassRefPtrWillBeRawPtr<Element> HTMLScriptElement::cloneElementWithoutAttributesAndChildren()
 {
-    return adoptRef(new HTMLScriptElement(document(), false, m_loader->alreadyStarted()));
+    return adoptRefWillBeRefCountedGarbageCollected(new HTMLScriptElement(document(), false, m_loader->alreadyStarted()));
 }
 
 }

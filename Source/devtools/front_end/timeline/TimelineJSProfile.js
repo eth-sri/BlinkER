@@ -16,6 +16,7 @@ WebInspector.TimelineJSProfileProcessor.mergeJSProfileIntoTimeline = function(ti
     var jsProfileModel = new WebInspector.CPUProfileDataModel(jsProfile);
     var idleNode = jsProfileModel.idleNode;
     var programNode = jsProfileModel.programNode;
+    var gcNode = jsProfileModel.gcNode;
 
     /**
      * @param {!WebInspector.TimelineModel.Record} record
@@ -37,7 +38,7 @@ WebInspector.TimelineJSProfileProcessor.mergeJSProfileIntoTimeline = function(ti
          */
         function onOpenFrame(depth, node, startTime)
         {
-            if (node === idleNode || node === programNode)
+            if (node === idleNode || node === programNode || node === gcNode)
                 return;
             var event = {
                 type: "JSFrame",
@@ -45,7 +46,7 @@ WebInspector.TimelineJSProfileProcessor.mergeJSProfileIntoTimeline = function(ti
                 startTime: startTime
             };
             putOriginalChildrenUpToTime(startTime);
-            record = new WebInspector.TimelineModel.Record(timelineModel, event, record);
+            record = new WebInspector.TimelineModel.RecordImpl(timelineModel, event, record);
         }
 
         /**
@@ -57,11 +58,14 @@ WebInspector.TimelineJSProfileProcessor.mergeJSProfileIntoTimeline = function(ti
          */
         function onCloseFrame(depth, node, startTime, totalTime, selfTime)
         {
-            if (node === idleNode || node === programNode)
+            if (node === idleNode || node === programNode || node === gcNode)
                 return;
             record.setEndTime(Math.min(startTime + totalTime, recordEndTime));
             record._selfTime = record.endTime() - record.startTime();
             putOriginalChildrenUpToTime(record.endTime());
+            var deoptReason = node.deoptReason;
+            if (deoptReason && deoptReason !== "no reason")
+                record.addWarning(deoptReason);
             record = record.parent;
         }
 

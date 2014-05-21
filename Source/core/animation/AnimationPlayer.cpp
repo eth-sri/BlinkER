@@ -32,7 +32,7 @@
 #include "core/animation/AnimationPlayer.h"
 
 #include "core/animation/Animation.h"
-#include "core/animation/DocumentTimeline.h"
+#include "core/animation/AnimationTimeline.h"
 #include "core/events/AnimationPlayerEvent.h"
 #include "core/frame/UseCounter.h"
 
@@ -48,12 +48,12 @@ static unsigned nextSequenceNumber()
 
 }
 
-PassRefPtr<AnimationPlayer> AnimationPlayer::create(DocumentTimeline& timeline, TimedItem* content)
+PassRefPtrWillBeRawPtr<AnimationPlayer> AnimationPlayer::create(AnimationTimeline& timeline, TimedItem* content)
 {
-    return adoptRef(new AnimationPlayer(timeline, content));
+    return adoptRefWillBeRefCountedGarbageCollected(new AnimationPlayer(timeline, content));
 }
 
-AnimationPlayer::AnimationPlayer(DocumentTimeline& timeline, TimedItem* content)
+AnimationPlayer::AnimationPlayer(AnimationTimeline& timeline, TimedItem* content)
     : m_playbackRate(1)
     , m_startTime(nullValue())
     , m_holdTime(nullValue())
@@ -64,7 +64,7 @@ AnimationPlayer::AnimationPlayer(DocumentTimeline& timeline, TimedItem* content)
     , m_paused(false)
     , m_held(false)
     , m_isPausedForTesting(false)
-    , m_outdated(false)
+    , m_outdated(true)
     , m_finished(false)
 {
     if (m_content) {
@@ -76,10 +76,12 @@ AnimationPlayer::AnimationPlayer(DocumentTimeline& timeline, TimedItem* content)
 
 AnimationPlayer::~AnimationPlayer()
 {
+#if !ENABLE(OILPAN)
     if (m_content)
         m_content->detach();
     if (m_timeline)
         m_timeline->playerDestroyed(this);
+#endif
 }
 
 double AnimationPlayer::sourceEnd() const
@@ -173,17 +175,22 @@ void AnimationPlayer::setStartTimeInternal(double newStartTime, bool isUpdateFro
     if (newStartTime == m_startTime)
         return;
     updateCurrentTimingState(); // Update the value of held
+    bool hadStartTime = hasStartTime();
+    double previousCurrentTime = currentTimeInternal();
     m_startTime = newStartTime;
     m_sortInfo.m_startTime = newStartTime;
-    if (!isUpdateFromCompositor)
-        cancelAnimationOnCompositor();
-    if (isUpdateFromCompositor || !m_held)
-        setOutdated();
-    if (m_held)
-        return;
     updateCurrentTimingState();
-    if (!isUpdateFromCompositor)
+    if (previousCurrentTime != currentTimeInternal()) {
+        setOutdated();
+    } else if (!hadStartTime && m_timeline) {
+        // Even though this player is not outdated, time to effect change is
+        // infinity until start time is set.
+        m_timeline->wake();
+    }
+    if (!isUpdateFromCompositor) {
+        cancelAnimationOnCompositor();
         schedulePendingAnimationOnCompositor();
+    }
 }
 
 void AnimationPlayer::setSource(TimedItem* newSource)
@@ -344,7 +351,7 @@ void AnimationPlayer::cancelAnimationOnCompositor()
         toAnimation(m_content.get())->cancelAnimationOnCompositor();
 }
 
-bool AnimationPlayer::update(UpdateReason reason)
+bool AnimationPlayer::update(TimingUpdateReason reason)
 {
     m_outdated = false;
 
@@ -353,20 +360,18 @@ bool AnimationPlayer::update(UpdateReason reason)
 
     if (m_content) {
         double inheritedTime = isNull(m_timeline->currentTimeInternal()) ? nullValue() : currentTimeInternal();
-        m_content->updateInheritedTime(inheritedTime);
+        m_content->updateInheritedTime(inheritedTime, reason);
     }
 
     if (finished() && !m_finished) {
-        const AtomicString& eventType = EventTypeNames::finish;
-        if (executionContext() && hasEventListeners(eventType)) {
-            if (reason == UpdateForAnimationFrame) {
+        if (reason == TimingUpdateForAnimationFrame && hasStartTime()) {
+            const AtomicString& eventType = EventTypeNames::finish;
+            if (executionContext() && hasEventListeners(eventType)) {
                 RefPtrWillBeRawPtr<AnimationPlayerEvent> event = AnimationPlayerEvent::create(eventType, currentTime(), timeline()->currentTime());
                 event->setTarget(this);
                 event->setCurrentTarget(this);
                 m_timeline->document()->enqueueAnimationFrameEvent(event.release());
-                m_finished = true;
             }
-        } else {
             m_finished = true;
         }
     }
@@ -401,11 +406,13 @@ bool AnimationPlayer::SortInfo::operator<(const SortInfo& other) const
     return m_sequenceNumber < other.m_sequenceNumber;
 }
 
+#if !ENABLE(OILPAN)
 bool AnimationPlayer::canFree() const
 {
     ASSERT(m_content);
     return hasOneRef() && m_content->isAnimation() && m_content->hasOneRef();
 }
+#endif
 
 bool AnimationPlayer::addEventListener(const AtomicString& eventType, PassRefPtr<EventListener> listener, bool useCapture)
 {
@@ -422,6 +429,12 @@ void AnimationPlayer::pauseForTesting(double pauseTime)
         toAnimation(m_content.get())->pauseAnimationForTestingOnCompositor(currentTimeInternal());
     m_isPausedForTesting = true;
     pause();
+}
+
+void AnimationPlayer::trace(Visitor* visitor)
+{
+    visitor->trace(m_content);
+    visitor->trace(m_timeline);
 }
 
 } // namespace

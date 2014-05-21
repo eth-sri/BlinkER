@@ -44,12 +44,6 @@ namespace blink {
     // Provides readonly access to some properties of a DOM input element node.
     class WebInputElement : public WebFormControlElement {
     public:
-        enum SpeechInputState {
-            Idle,
-            Recording,
-            Recognizing,
-        };
-
         WebInputElement() : WebFormControlElement() { }
         WebInputElement(const WebInputElement& element) : WebFormControlElement(element) { }
 
@@ -86,11 +80,6 @@ namespace blink {
         // Return the localized value for this input type.
         BLINK_EXPORT WebString localizeValue(const WebString&) const;
 
-        BLINK_EXPORT bool isSpeechInputEnabled() const;
-        BLINK_EXPORT SpeechInputState getSpeechInputState() const;
-        BLINK_EXPORT void startSpeechInput();
-        BLINK_EXPORT void stopSpeechInput();
-
         // Exposes the default value of the maxLength attribute.
         BLINK_EXPORT static int defaultMaxLength();
 
@@ -101,9 +90,9 @@ namespace blink {
         BLINK_EXPORT void setShouldRevealPassword(bool value);
 
 #if BLINK_IMPLEMENTATION
-        WebInputElement(const WTF::PassRefPtr<WebCore::HTMLInputElement>&);
-        WebInputElement& operator=(const WTF::PassRefPtr<WebCore::HTMLInputElement>&);
-        operator WTF::PassRefPtr<WebCore::HTMLInputElement>() const;
+        WebInputElement(const PassRefPtrWillBeRawPtr<WebCore::HTMLInputElement>&);
+        WebInputElement& operator=(const PassRefPtrWillBeRawPtr<WebCore::HTMLInputElement>&);
+        operator PassRefPtrWillBeRawPtr<WebCore::HTMLInputElement>() const;
 #endif
     };
 

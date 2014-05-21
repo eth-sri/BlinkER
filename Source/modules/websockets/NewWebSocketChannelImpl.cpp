@@ -58,7 +58,7 @@ using blink::WebSocketHandle;
 
 namespace WebCore {
 
-class NewWebSocketChannelImpl::BlobLoader FINAL : public FileReaderLoaderClient {
+class NewWebSocketChannelImpl::BlobLoader FINAL : public NoBaseWillBeGarbageCollectedFinalized<NewWebSocketChannelImpl::BlobLoader>, public FileReaderLoaderClient {
 public:
     BlobLoader(PassRefPtr<BlobDataHandle>, NewWebSocketChannelImpl*);
     virtual ~BlobLoader() { }
@@ -71,8 +71,13 @@ public:
     virtual void didFinishLoading() OVERRIDE;
     virtual void didFail(FileError::ErrorCode) OVERRIDE;
 
+    void trace(Visitor* visitor)
+    {
+        visitor->trace(m_channel);
+    }
+
 private:
-    NewWebSocketChannelImpl* m_channel;
+    RawPtrWillBeMember<NewWebSocketChannelImpl> m_channel;
     FileReaderLoader m_loader;
 };
 
@@ -153,6 +158,7 @@ bool NewWebSocketChannelImpl::connect(const KURL& url, const String& protocol)
     flowControlIfNecessary();
     if (m_identifier) {
         TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "WebSocketCreate", "data", InspectorWebSocketCreateEvent::data(document(), m_identifier, url, protocol));
+        TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline.stack"), "CallStack", "stack", InspectorCallStackEvent::currentCallStack());
         // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
         InspectorInstrumentation::didCreateWebSocket(document(), m_identifier, url, protocol);
     }
@@ -178,8 +184,7 @@ WebSocketChannel::SendResult NewWebSocketChannelImpl::send(const String& message
         // FIXME: Change the inspector API to show the entire message instead
         // of individual frames.
         CString data = message.utf8();
-        WebSocketFrame frame(WebSocketFrame::OpCodeText, data.data(), data.length(), WebSocketFrame::Final | WebSocketFrame::Masked);
-        InspectorInstrumentation::didSendWebSocketFrame(document(), m_identifier, frame.opCode, frame.masked, frame.payload, frame.payloadLength);
+        InspectorInstrumentation::didSendWebSocketFrame(document(), m_identifier, WebSocketFrame::OpCodeText, true, data.data(), data.length());
     }
     m_messages.append(Message(message));
     sendInternal();
@@ -195,8 +200,7 @@ WebSocketChannel::SendResult NewWebSocketChannelImpl::send(PassRefPtr<BlobDataHa
         // FIXME: We can't access the data here.
         // Since Binary data are not displayed in Inspector, this does not
         // affect actual behavior.
-        WebSocketFrame frame(WebSocketFrame::OpCodeBinary, "", 0, WebSocketFrame::Final | WebSocketFrame::Masked);
-        InspectorInstrumentation::didSendWebSocketFrame(document(), m_identifier, frame.opCode, frame.masked, frame.payload, frame.payloadLength);
+        InspectorInstrumentation::didSendWebSocketFrame(document(), m_identifier, WebSocketFrame::OpCodeBinary, true, "", 0);
     }
     m_messages.append(Message(blobDataHandle));
     sendInternal();
@@ -209,8 +213,7 @@ WebSocketChannel::SendResult NewWebSocketChannelImpl::send(const ArrayBuffer& bu
     if (m_identifier) {
         // FIXME: Change the inspector API to show the entire message instead
         // of individual frames.
-        WebSocketFrame frame(WebSocketFrame::OpCodeBinary, static_cast<const char*>(buffer.data()) + byteOffset, byteLength, WebSocketFrame::Final | WebSocketFrame::Masked);
-        InspectorInstrumentation::didSendWebSocketFrame(document(), m_identifier, frame.opCode, frame.masked, frame.payload, frame.payloadLength);
+        InspectorInstrumentation::didSendWebSocketFrame(document(), m_identifier, WebSocketFrame::OpCodeBinary, true, static_cast<const char*>(buffer.data()) + byteOffset, byteLength);
     }
     // buffer.slice copies its contents.
     m_messages.append(buffer.slice(byteOffset, byteOffset + byteLength));
@@ -255,6 +258,7 @@ void NewWebSocketChannelImpl::disconnect()
     WTF_LOG(Network, "NewWebSocketChannelImpl %p disconnect()", this);
     if (m_identifier) {
         TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "WebSocketDestroy", "data", InspectorWebSocketEvent::data(document(), m_identifier));
+        TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline.stack"), "CallStack", "stack", InspectorCallStackEvent::currentCallStack());
         // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
         InspectorInstrumentation::didCloseWebSocket(document(), m_identifier);
     }
@@ -306,7 +310,7 @@ void NewWebSocketChannelImpl::sendInternal()
         }
         case MessageTypeBlob:
             ASSERT(!m_blobLoader);
-            m_blobLoader = adoptPtr(new BlobLoader(message.blobDataHandle, this));
+            m_blobLoader = adoptPtrWillBeNoop(new BlobLoader(message.blobDataHandle, this));
             break;
         case MessageTypeArrayBuffer: {
             WebSocketHandle::MessageType type =
@@ -390,6 +394,7 @@ void NewWebSocketChannelImpl::didStartOpeningHandshake(WebSocketHandle* handle, 
     WTF_LOG(Network, "NewWebSocketChannelImpl %p didStartOpeningHandshake(%p)", this, handle);
     if (m_identifier) {
         TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "WebSocketSendHandshakeRequest", "data", InspectorWebSocketEvent::data(document(), m_identifier));
+        TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline.stack"), "CallStack", "stack", InspectorCallStackEvent::currentCallStack());
         // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
         InspectorInstrumentation::willSendWebSocketHandshakeRequest(document(), m_identifier, &request.toCoreRequest());
         m_handshakeRequest = WebSocketHandshakeRequest::create(request.toCoreRequest());
@@ -400,7 +405,7 @@ void NewWebSocketChannelImpl::didFinishOpeningHandshake(WebSocketHandle* handle,
 {
     WTF_LOG(Network, "NewWebSocketChannelImpl %p didFinishOpeningHandshake(%p)", this, handle);
     if (m_identifier) {
-        TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "WebSocketReceiveHandshakeResponseWebSocketSendHandshakeRequest", "data", InspectorWebSocketEvent::data(document(), m_identifier));
+        TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "WebSocketReceiveHandshakeResponse", "data", InspectorWebSocketEvent::data(document(), m_identifier));
         // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
         InspectorInstrumentation::didReceiveWebSocketHandshakeResponse(document(), m_identifier, m_handshakeRequest.get(), &response.toCoreResponse());
     }
@@ -475,6 +480,7 @@ void NewWebSocketChannelImpl::didClose(WebSocketHandle* handle, bool wasClean, u
     m_handle.clear();
     if (m_identifier) {
         TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "WebSocketDestroy", "data", InspectorWebSocketEvent::data(document(), m_identifier));
+        TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline.stack"), "CallStack", "stack", InspectorCallStackEvent::currentCallStack());
         // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
         InspectorInstrumentation::didCloseWebSocket(document(), m_identifier);
         m_identifier = 0;
@@ -520,6 +526,12 @@ void NewWebSocketChannelImpl::didFailLoadingBlob(FileError::ErrorCode errorCode)
     // FIXME: Generate human-friendly reason message.
     failAsError("Failed to load Blob: error code = " + String::number(errorCode));
     // |this| can be deleted here.
+}
+
+void NewWebSocketChannelImpl::trace(Visitor* visitor)
+{
+    visitor->trace(m_blobLoader);
+    WebSocketChannel::trace(visitor);
 }
 
 } // namespace WebCore

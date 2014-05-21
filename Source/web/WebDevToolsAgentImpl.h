@@ -105,7 +105,8 @@ public:
     virtual void sendMessageToFrontend(PassRefPtr<WebCore::JSONObject> message) OVERRIDE;
     virtual void flush() OVERRIDE;
 
-    virtual void overrideDeviceMetrics(int width, int height, float deviceScaleFactor, bool emulateViewport, bool fitWindow) OVERRIDE;
+    virtual void setDeviceMetricsOverride(int width, int height, float deviceScaleFactor, bool emulateViewport, bool fitWindow) OVERRIDE;
+    virtual void clearDeviceMetricsOverride() OVERRIDE;
     virtual void setTouchEventEmulationEnabled(bool) OVERRIDE;
 
     virtual void getAllocatedObjects(HashSet<const void*>&) OVERRIDE;
@@ -133,11 +134,13 @@ private:
 
     void enableViewportEmulation();
     void disableViewportEmulation();
+    void updatePageScaleFactorLimits();
 
     WebCore::InspectorController* inspectorController();
     WebCore::LocalFrame* mainFrame();
 
     int m_hostId;
+    int m_layerTreeId;
     WebDevToolsAgentClient* m_client;
     WebViewImpl* m_webViewImpl;
     bool m_attached;
@@ -147,6 +150,10 @@ private:
     bool m_emulateViewportEnabled;
     bool m_originalViewportEnabled;
     bool m_isOverlayScrollbarsEnabled;
+
+    float m_originalMinimumPageScaleFactor;
+    float m_originalMaximumPageScaleFactor;
+    bool m_pageScaleLimitsOverriden;
 
     bool m_touchEventEmulationEnabled;
     OwnPtr<WebCore::IntPoint> m_lastPinchAnchorCss;

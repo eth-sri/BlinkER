@@ -338,12 +338,17 @@
                 "parameters": [
                     { "name": "width", "type": "integer", "description": "Overriding width value in pixels (minimum 0, maximum 10000000). 0 disables the override." },
                     { "name": "height", "type": "integer", "description": "Overriding height value in pixels (minimum 0, maximum 10000000). 0 disables the override." },
-                    { "name": "deviceScaleFactor", "type": "number", "description": "Overriding device scale factor value (must be positive)." },
+                    { "name": "deviceScaleFactor", "type": "number", "description": "Overriding device scale factor value. 0 disables the override." },
                     { "name": "emulateViewport", "type": "boolean", "description": "Whether viewport meta tag should be respected." },
                     { "name": "fitWindow", "type": "boolean", "description": "Whether a view that exceeds the available browser window area should be scaled down to fit." },
                     { "name": "textAutosizing", "type": "boolean", "optional": true, "description": "Whether to override the text autosizing feature." },
                     { "name": "fontScaleFactor", "type": "number", "optional": true, "description": "Overriding system font scale factor (must be positive)." }
                 ],
+                "hidden": true
+            },
+            {
+                "name": "clearDeviceMetricsOverride",
+                "description": "Clears the overriden device metrics.",
                 "hidden": true
             },
             {
@@ -1916,9 +1921,21 @@
                     { "name": "border", "$ref": "Quad", "description": "Border box" },
                     { "name": "margin", "$ref": "Quad", "description": "Margin box" },
                     { "name": "width", "type": "integer", "description": "Node width" },
-                    { "name": "height", "type": "integer", "description": "Node height" }
+                    { "name": "height", "type": "integer", "description": "Node height" },
+                    { "name": "shapeOutside", "$ref": "ShapeOutsideInfo", "optional": true, "description": "Shape outside coordinates" }
                 ],
                 "description": "Box model."
+            },
+            {
+                "id": "ShapeOutsideInfo",
+                "type": "object",
+                "hidden": true,
+                "properties": [
+                    { "name": "bounds", "$ref": "Quad", "description": "Shape bounds" },
+                    { "name": "shape", "type": "array", "items": { "type": "any"}, "description": "Shape coordinate details" },
+                    { "name": "marginShape", "type": "array", "items": { "type": "any"}, "description": "Margin shape bounds" }
+                ],
+                "description": "CSS Shape Outside details."
             },
             {
                 "id": "Rect",
@@ -2184,14 +2201,6 @@
                     { "name": "nodeIds", "type": "array", "items": {"$ref": "NodeId"}, "description": "The array of ids of pushed nodes that correspond to the backend ids specified in backendNodeIds." }
                 ],
                 "description": "Requests that a batch of nodes is sent to the caller given their backend node ids.",
-                "hidden": true
-            },
-            {
-                "name": "releaseBackendNodeIds",
-                "parameters": [
-                    { "name": "nodeGroup", "type": "string", "description": "The backend node ids group name." }
-                ],
-                "description": "Requests that group of <code>BackendNodeIds</code> is released.",
                 "hidden": true
             },
             {
@@ -3966,6 +3975,16 @@
                 "description": "Replays the layer snapshot and returns the resulting bitmap.",
                 "returns": [
                     { "name": "dataURL", "type": "string", "description": "A data: URL for resulting image." }
+                ]
+            },
+            {
+                "name": "snapshotCommandLog",
+                "parameters": [
+                    { "name": "snapshotId", "$ref": "SnapshotId", "description": "The id of the layer snapshot." }
+                ],
+                "description": "Replays the layer snapshot and returns canvas log.",
+                "returns": [
+                    { "name": "commandLog", "type": "array", "items": { "type": "object" }, "description": "The array of canvas function calls." }
                 ]
             }
         ],

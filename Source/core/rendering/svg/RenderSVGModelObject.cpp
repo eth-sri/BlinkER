@@ -33,6 +33,7 @@
 #include "core/rendering/svg/RenderSVGModelObject.h"
 
 #include "SVGNames.h"
+#include "core/rendering/RenderView.h"
 #include "core/rendering/svg/RenderSVGRoot.h"
 #include "core/rendering/svg/SVGResourcesCache.h"
 #include "core/svg/SVGGraphicsElement.h"
@@ -121,6 +122,40 @@ bool RenderSVGModelObject::nodeAtPoint(const HitTestRequest&, HitTestResult&, co
 void RenderSVGModelObject::absoluteFocusRingQuads(Vector<FloatQuad>& quads)
 {
     quads.append(localToAbsoluteQuad(FloatQuad(repaintRectInLocalCoordinates())));
+}
+
+void RenderSVGModelObject::repaintTreeAfterLayout(const RenderLayerModelObject& repaintContainer)
+{
+    // Note: This is a reduced version of RenderBox::repaintTreeAfterLayout().
+    // FIXME: Should share code with RenderBox::repaintTreeAfterLayout().
+    ASSERT(RuntimeEnabledFeatures::repaintAfterLayoutEnabled());
+    ASSERT(!needsLayout());
+
+    if (!shouldCheckForInvalidationAfterLayout())
+        return;
+
+    LayoutStateDisabler layoutStateDisabler(*this);
+
+    const LayoutRect oldRepaintRect = previousRepaintRect();
+    const LayoutPoint oldPositionFromRepaintContainer = previousPositionFromRepaintContainer();
+    const RenderLayerModelObject& newRepaintContainer = *containerForRepaint();
+    setPreviousRepaintRect(clippedOverflowRectForRepaint(&newRepaintContainer));
+    setPreviousPositionFromRepaintContainer(positionFromRepaintContainer(&newRepaintContainer));
+
+    // If we are set to do a full repaint that means the RenderView will be
+    // invalidated. We can then skip issuing of invalidations for the child
+    // renderers as they'll be covered by the RenderView.
+    if (view()->doingFullRepaint()) {
+        RenderObject::repaintTreeAfterLayout(newRepaintContainer);
+        return;
+    }
+
+    const LayoutRect& newRepaintRect = previousRepaintRect();
+    const LayoutPoint& newPositionFromRepaintContainer = previousPositionFromRepaintContainer();
+    repaintAfterLayoutIfNeeded(containerForRepaint(),
+        shouldDoFullRepaintAfterLayout(), oldRepaintRect, oldPositionFromRepaintContainer, &newRepaintRect, &newPositionFromRepaintContainer);
+
+    RenderObject::repaintTreeAfterLayout(newRepaintContainer);
 }
 
 } // namespace WebCore

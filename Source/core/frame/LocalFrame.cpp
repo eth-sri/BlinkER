@@ -59,10 +59,11 @@
 #include "core/rendering/RenderLayer.h"
 #include "core/rendering/RenderView.h"
 #include "core/rendering/compositing/RenderLayerCompositor.h"
-#include "core/svg/SVGDocument.h"
+#include "core/svg/SVGDocumentExtensions.h"
 #include "platform/DragImage.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/ImageBuffer.h"
+#include "platform/text/TextStream.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/StdLibExtras.h"
 
@@ -102,7 +103,6 @@ inline LocalFrame::LocalFrame(FrameLoaderClient* client, FrameHost* host, HTMLFr
     , m_inputMethodController(InputMethodController::create(*this))
     , m_pageZoomFactor(parentPageZoomFactor(this))
     , m_textZoomFactor(parentTextZoomFactor(this))
-    , m_orientation(0)
     , m_inViewSourceMode(false)
 {
 }
@@ -155,16 +155,19 @@ void LocalFrame::setView(PassRefPtr<FrameView> view)
 
     m_view = view;
 
-    if (m_view && isMainFrame())
-        m_view->setVisibleContentScaleFactor(page()->pageScaleFactor());
+    if (m_view && isMainFrame()) {
+        if (settings()->pinchVirtualViewportEnabled())
+            m_host->pinchViewport().mainFrameDidChangeSize();
+        else
+            m_view->setVisibleContentScaleFactor(page()->pageScaleFactor());
+    }
 }
 
-void LocalFrame::sendOrientationChangeEvent(int orientation)
+void LocalFrame::sendOrientationChangeEvent()
 {
     if (!RuntimeEnabledFeatures::orientationEventEnabled())
         return;
 
-    m_orientation = orientation;
     if (DOMWindow* window = domWindow())
         window->dispatchEvent(Event::create(EventTypeNames::orientationchange));
 }
@@ -178,7 +181,7 @@ void LocalFrame::setPrinting(bool printing, const FloatSize& pageSize, const Flo
     document()->setPrinting(printing);
     view()->adjustMediaTypeForPrinting(printing);
 
-    document()->styleResolverChanged(RecalcStyleImmediately);
+    document()->styleResolverChanged(RecalcStyleDeferred);
     if (shouldUsePrintingLayout()) {
         view()->forceLayoutForPagination(pageSize, originalPageSize, maximumShrinkRatio);
     } else {
@@ -412,7 +415,26 @@ void LocalFrame::countObjectsNeedingLayout(unsigned& needsLayoutObjects, unsigne
     }
 }
 
-String LocalFrame::layerTreeAsText(unsigned flags) const
+String LocalFrame::layerTreeAsText(LayerTreeFlags flags) const
+{
+    TextStream textStream;
+    textStream << localLayerTreeAsText(flags);
+
+    for (LocalFrame* child = tree().firstChild(); child; child = child->tree().traverseNext(this)) {
+        String childLayerTree = child->localLayerTreeAsText(flags);
+        if (!childLayerTree.length())
+            continue;
+
+        textStream << "\n\n--------\nFrame: '";
+        textStream << child->tree().uniqueName();
+        textStream << "'\n--------\n";
+        textStream << childLayerTree;
+    }
+
+    return textStream.release();
+}
+
+String LocalFrame::localLayerTreeAsText(unsigned flags) const
 {
     if (!contentRenderer())
         return String();
@@ -453,7 +475,7 @@ void LocalFrame::setPageAndTextZoomFactors(float pageZoomFactor, float textZoomF
     // Respect SVGs zoomAndPan="disabled" property in standalone SVG documents.
     // FIXME: How to handle compound documents + zoomAndPan="disabled"? Needs SVG WG clarification.
     if (document->isSVGDocument()) {
-        if (!toSVGDocument(document)->zoomAndPanEnabled())
+        if (!document->accessSVGExtensions().zoomAndPanEnabled())
             return;
     }
 

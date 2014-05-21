@@ -158,4 +158,50 @@ TEST_F(BitmapImageTest, maybeAnimated)
     EXPECT_FALSE(m_image->maybeAnimated());
 }
 
+TEST_F(BitmapImageTest, isAllDataReceived)
+{
+    RefPtr<SharedBuffer> imageData = readFile("/LayoutTests/fast/images/resources/green.jpg");
+    ASSERT_TRUE(imageData.get());
+
+    RefPtr<BitmapImage> image = BitmapImage::create();
+    EXPECT_FALSE(image->isAllDataReceived());
+
+    image->setData(imageData, false);
+    EXPECT_FALSE(image->isAllDataReceived());
+
+    image->setData(imageData, true);
+    EXPECT_TRUE(image->isAllDataReceived());
+
+    image->setData(SharedBuffer::create("data", sizeof("data")), false);
+    EXPECT_FALSE(image->isAllDataReceived());
+
+    image->setData(imageData, true);
+    EXPECT_TRUE(image->isAllDataReceived());
+}
+
+#if USE(QCMSLIB)
+
+TEST_F(BitmapImageTest, jpegHasColorProfile)
+{
+    loadImage("/LayoutTests/fast/images/resources/icc-v2-gbr.jpg");
+    EXPECT_EQ(1u, decodedFramesCount());
+    EXPECT_TRUE(m_image->hasColorProfile());
+}
+
+TEST_F(BitmapImageTest, pngHasColorProfile)
+{
+    loadImage("/LayoutTests/fast/images/resources/palatted-color-png-gamma-one-color-profile.png");
+    EXPECT_EQ(1u, decodedFramesCount());
+    EXPECT_TRUE(m_image->hasColorProfile());
+}
+
+TEST_F(BitmapImageTest, webpHasColorProfile)
+{
+    loadImage("/LayoutTests/fast/images/resources/webp-color-profile-lossy.webp");
+    EXPECT_EQ(1u, decodedFramesCount());
+    EXPECT_TRUE(m_image->hasColorProfile());
+}
+
+#endif // USE(QCMSLIB)
+
 } // namespace

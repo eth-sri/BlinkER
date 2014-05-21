@@ -91,6 +91,14 @@ WebInspector.InspectorFrontendHostStub.prototype = {
     },
 
     /**
+     * Requests inspected page to be placed atop of the inspector frontend with specified bounds.
+     * @param {{x: number, y: number, width: number, height: number}} bounds
+     */
+    setInspectedPageBounds: function(bounds)
+    {
+    },
+
+    /**
      * Requests inspected page to be placed atop of the inspector frontend
      * with passed insets from the frontend sides, respecting minimum size passed.
      * @param {{top: number, left: number, right: number, bottom: number}} insets
@@ -114,7 +122,7 @@ WebInspector.InspectorFrontendHostStub.prototype = {
 
     inspectedURLChanged: function(url)
     {
-        document.title = WebInspector.UIString(Preferences.applicationTitle, url);
+        document.title = WebInspector.UIString("Developer Tools - %s", url);
     },
 
     copyText: function(text)
@@ -236,13 +244,24 @@ WebInspector.InspectorFrontendHostStub.prototype = {
     {
     },
 
-    startRemoteDevicesListener: function()
+    /**
+     * @param {string} eventType
+     */
+    subscribe: function(eventType)
     {
     },
 
-    stopRemoteDevicesListener: function()
+    /**
+     * @param {string} eventType
+     */
+    unsubscribe: function(eventType)
     {
     }
+}
+
+// Inherit bindings from the embedder.
+if (top !== window) {
+    window.InspectorFrontendHost = top.InspectorFrontendHost;
 }
 
 if (!window.InspectorFrontendHost) {

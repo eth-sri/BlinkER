@@ -37,7 +37,7 @@ class SVGScriptElement FINAL
     , public SVGURIReference
     , public ScriptLoaderClient {
 public:
-    static PassRefPtr<SVGScriptElement> create(Document&, bool wasInsertedByParser);
+    static PassRefPtrWillBeRawPtr<SVGScriptElement> create(Document&, bool wasInsertedByParser);
 
     ScriptLoader* loader() const { return m_loader.get(); }
 
@@ -52,7 +52,6 @@ private:
     virtual void parseAttribute(const QualifiedName&, const AtomicString&) OVERRIDE;
     virtual InsertionNotificationRequest insertedInto(ContainerNode*) OVERRIDE;
     virtual void didNotifySubtreeInsertionsToDocument() OVERRIDE;
-    virtual void didMoveToNewDocument(Document&) OVERRIDE;
     virtual void childrenChanged(bool changedByParser = false, Node* beforeChange = 0, Node* afterChange = 0, int childCountDelta = 0) OVERRIDE;
 
     virtual void svgAttributeChanged(const QualifiedName&) OVERRIDE;
@@ -74,7 +73,7 @@ private:
 
     virtual void dispatchLoadEvent() OVERRIDE;
 
-    virtual PassRefPtr<Element> cloneElementWithoutAttributesAndChildren() OVERRIDE;
+    virtual PassRefPtrWillBeRawPtr<Element> cloneElementWithoutAttributesAndChildren() OVERRIDE;
     virtual bool rendererIsNeeded(const RenderStyle&) OVERRIDE { return false; }
 
     virtual Timer<SVGElement>* svgLoadEventTimer() OVERRIDE { return &m_svgLoadEventTimer; }

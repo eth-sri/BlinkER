@@ -29,7 +29,7 @@
 
 namespace WebCore {
 
-inline SVGCursorElement::SVGCursorElement(Document& document)
+SVGCursorElement::SVGCursorElement(Document& document)
     : SVGElement(SVGNames::cursorTag, document)
     , SVGTests(this)
     , SVGURIReference(this)
@@ -40,11 +40,6 @@ inline SVGCursorElement::SVGCursorElement(Document& document)
 
     addToPropertyMap(m_x);
     addToPropertyMap(m_y);
-}
-
-PassRefPtr<SVGCursorElement> SVGCursorElement::create(Document& document)
-{
-    return adoptRef(new SVGCursorElement(document));
 }
 
 SVGCursorElement::~SVGCursorElement()
@@ -117,7 +112,7 @@ void SVGCursorElement::svgAttributeChanged(const QualifiedName& attrName)
         return;
     }
 
-    SVGElementInstance::InvalidationGuard invalidationGuard(this);
+    SVGElement::InvalidationGuard invalidationGuard(this);
 
     // Any change of a cursor specific attribute triggers this recalc.
     WillBeHeapHashSet<RawPtrWillBeWeakMember<SVGElement> >::const_iterator it = m_clients.begin();

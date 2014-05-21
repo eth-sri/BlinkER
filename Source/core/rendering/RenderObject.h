@@ -120,6 +120,7 @@ enum InvalidationReason {
     InvalidationBorderRadius,
     InvalidationBoundsChangeWithBackground,
     InvalidationBoundsChange,
+    InvalidationLocationChange,
     InvalidationScroll,
     InvalidationSelection,
     InvalidationLayer,
@@ -169,18 +170,13 @@ public:
     RenderObject* previousSibling() const { return m_previous; }
     RenderObject* nextSibling() const { return m_next; }
 
-    // FIXME: These should be renamed slowFirstChild, slowLastChild, etc.
-    // to discourage their use. The virtualChildren() call inside these
-    // can be slow for hot code paths.
-    // Currently, some subclasses like RenderBlock, override these NON-virtual
-    // functions to make these fast when we already have a more specific pointer type.
-    RenderObject* firstChild() const
+    RenderObject* slowFirstChild() const
     {
         if (const RenderObjectChildList* children = virtualChildren())
             return children->firstChild();
         return 0;
     }
-    RenderObject* lastChild() const
+    RenderObject* slowLastChild() const
     {
         if (const RenderObjectChildList* children = virtualChildren())
             return children->lastChild();
@@ -301,7 +297,6 @@ private:
 #endif
 
     void addAbsoluteRectForLayer(LayoutRect& result);
-    void setLayerNeedsFullRepaint();
     void setLayerNeedsFullRepaintForPositionedMovementLayout();
     bool requiresAnonymousTableWrappers(const RenderObject*) const;
 
@@ -423,7 +418,7 @@ public:
     {
         m_bitfields.setAncestorLineBoxDirty(value);
         if (value)
-            setNeedsLayout();
+            setNeedsLayoutAndFullRepaint();
     }
 
     enum FlowThreadState {
@@ -633,7 +628,7 @@ public:
     Element* offsetParent() const;
 
     void markContainingBlocksForLayout(bool scheduleRelayout = true, RenderObject* newRoot = 0, SubtreeLayoutScope* = 0);
-    void setNeedsLayout(MarkingBehavior = MarkContainingBlockChain, SubtreeLayoutScope* = 0);
+    void setNeedsLayoutAndFullRepaint(MarkingBehavior = MarkContainingBlockChain, SubtreeLayoutScope* = 0);
     void clearNeedsLayout();
     void setChildNeedsLayout(MarkingBehavior = MarkContainingBlockChain, SubtreeLayoutScope* = 0);
     void setNeedsPositionedMovementLayout();
@@ -641,9 +636,9 @@ public:
     void clearPreferredLogicalWidthsDirty();
     void invalidateContainerPreferredLogicalWidths();
 
-    void setNeedsLayoutAndPrefWidthsRecalc()
+    void setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint()
     {
-        setNeedsLayout();
+        setNeedsLayoutAndFullRepaint();
         setPreferredLogicalWidthsDirty();
     }
 
@@ -753,11 +748,13 @@ public:
 
     // Return the offset from the container() renderer (excluding transforms). In multi-column layout,
     // different offsets apply at different points, so return the offset that applies to the given point.
-    virtual LayoutSize offsetFromContainer(RenderObject*, const LayoutPoint&, bool* offsetDependsOnPoint = 0) const;
+    virtual LayoutSize offsetFromContainer(const RenderObject*, const LayoutPoint&, bool* offsetDependsOnPoint = 0) const;
     // Return the offset from an object up the container() chain. Asserts that none of the intermediate objects have transforms.
-    LayoutSize offsetFromAncestorContainer(RenderObject*) const;
+    LayoutSize offsetFromAncestorContainer(const RenderObject*) const;
 
     virtual void absoluteRects(Vector<IntRect>&, const LayoutPoint&) const { }
+
+    LayoutPoint positionFromRepaintContainer(const RenderLayerModelObject* repaintContainer) const;
 
     IntRect absoluteBoundingBoxRect() const;
     // FIXME: This function should go away eventually
@@ -811,7 +808,10 @@ public:
     // Return the RenderLayerModelObject in the container chain which is responsible for painting this object, or 0
     // if painting is root-relative. This is the container that should be passed to the 'forRepaint'
     // methods.
-    RenderLayerModelObject* containerForRepaint() const;
+    const RenderLayerModelObject* containerForRepaint() const;
+    const RenderLayerModelObject* enclosingCompositedContainer() const;
+    const RenderLayerModelObject* adjustCompositedContainerForSpecialAncestors(const RenderLayerModelObject* repaintContainer) const;
+    bool isRepaintContainer() const;
 
     // Actually do the repaint of rect r for this object which has been computed in the coordinate space
     // of repaintContainer. If repaintContainer is 0, repaint via the view.
@@ -826,10 +826,10 @@ public:
 
     // Repaint only if our old bounds and new bounds are different. The caller may pass in newBounds if they are known.
     bool repaintAfterLayoutIfNeeded(const RenderLayerModelObject* repaintContainer, bool wasSelfLayout,
-        const LayoutRect& oldBounds, const LayoutRect* newBoundsPtr = 0);
+        const LayoutRect& oldBounds, const LayoutPoint& oldPositionFromRepaintContainer, const LayoutRect* newBoundsPtr = 0, const LayoutPoint* newPositionFromRepaintContainer = 0);
 
     // Walk the tree after layout repainting renderers that have changed or moved, updating bounds that have changed, and clearing repaint state.
-    virtual void repaintTreeAfterLayout();
+    virtual void repaintTreeAfterLayout(const RenderLayerModelObject& repaintContainer);
 
     virtual void repaintOverflow();
     void repaintOverflowIfNeeded();
@@ -982,6 +982,9 @@ public:
     const LayoutRect& previousRepaintRect() const { return m_previousRepaintRect; }
     void setPreviousRepaintRect(const LayoutRect& rect) { m_previousRepaintRect = rect; }
 
+    const LayoutPoint& previousPositionFromRepaintContainer() const { return m_previousPositionFromRepaintContainer; }
+    void setPreviousPositionFromRepaintContainer(const LayoutPoint& location) { m_previousPositionFromRepaintContainer = location; }
+
     LayoutRect newOutlineRect();
     void setNewOutlineRect(const LayoutRect&);
 
@@ -1004,6 +1007,21 @@ public:
     // since the last call to setLayoutDidGetCalled(false) on this object.
     bool layoutDidGetCalled() { return m_bitfields.layoutDidGetCalled(); }
     void setLayoutDidGetCalled(bool b) { m_bitfields.setLayoutDidGetCalled(b); }
+
+    bool mayNeedInvalidation() { return m_bitfields.mayNeedInvalidation(); }
+    void setMayNeedInvalidation(bool b)
+    {
+        m_bitfields.setMayNeedInvalidation(b);
+
+        // Make sure our parent is marked as needing invalidation.
+        if (b && parent() && !parent()->mayNeedInvalidation())
+            parent()->setMayNeedInvalidation(b);
+    }
+
+    bool shouldCheckForInvalidationAfterLayout()
+    {
+        return layoutDidGetCalled() || mayNeedInvalidation();
+    }
 
     bool shouldDisableLayoutState() const { return hasColumns() || hasTransform() || hasReflection() || style()->isFlippedBlocksWritingMode(); }
 
@@ -1082,6 +1100,8 @@ private:
 #endif
     const char* invalidationReasonToString(InvalidationReason) const;
 
+    static bool isAllowedToModifyRenderTreeStructure(Document&);
+
     RefPtr<RenderStyle> m_style;
 
     Node* m_node;
@@ -1120,6 +1140,9 @@ private:
             , m_shouldDoFullRepaintAfterLayout(false)
             , m_shouldRepaintOverflow(false)
             , m_shouldDoFullRepaintIfSelfPaintingLayer(false)
+            // FIXME: We should remove mayNeedInvalidation once we are able to
+            // use the other layout flags to detect the same cases. crbug.com/370118
+            , m_mayNeedInvalidation(false)
             , m_onlyNeededPositionedMovementLayout(false)
             , m_needsPositionedMovementLayout(false)
             , m_normalChildNeedsLayout(false)
@@ -1154,11 +1177,12 @@ private:
         {
         }
 
-        // 32 bits have been used in the first word, and 5 in the second.
+        // 32 bits have been used in the first word, and 6 in the second.
         ADD_BOOLEAN_BITFIELD(selfNeedsLayout, SelfNeedsLayout);
         ADD_BOOLEAN_BITFIELD(shouldDoFullRepaintAfterLayout, ShouldDoFullRepaintAfterLayout);
         ADD_BOOLEAN_BITFIELD(shouldRepaintOverflow, ShouldRepaintOverflow);
         ADD_BOOLEAN_BITFIELD(shouldDoFullRepaintIfSelfPaintingLayer, ShouldDoFullRepaintIfSelfPaintingLayer);
+        ADD_BOOLEAN_BITFIELD(mayNeedInvalidation, MayNeedInvalidation);
         ADD_BOOLEAN_BITFIELD(onlyNeededPositionedMovementLayout, OnlyNeededPositionedMovementLayout);
         ADD_BOOLEAN_BITFIELD(needsPositionedMovementLayout, NeedsPositionedMovementLayout);
         ADD_BOOLEAN_BITFIELD(normalChildNeedsLayout, NormalChildNeedsLayout);
@@ -1245,6 +1269,22 @@ private:
 
     // This stores the repaint rect from the previous layout.
     LayoutRect m_previousRepaintRect;
+
+    // This stores the position in the repaint container's coordinate.
+    // It is used to detect renderer shifts that forces a full invalidation.
+    LayoutPoint m_previousPositionFromRepaintContainer;
+};
+
+// FIXME: remove this once the render object lifecycle ASSERTS are no longer hit.
+class DeprecatedDisableModifyRenderTreeStructureAsserts {
+    WTF_MAKE_NONCOPYABLE(DeprecatedDisableModifyRenderTreeStructureAsserts);
+public:
+    DeprecatedDisableModifyRenderTreeStructureAsserts();
+
+    static bool canModifyRenderTreeStateInAnyState();
+
+private:
+    TemporaryChange<bool> m_disabler;
 };
 
 // Allow equality comparisons of RenderObject's by reference or pointer, interchangeably.
@@ -1285,7 +1325,7 @@ inline bool RenderObject::isBeforeOrAfterContent() const
     return isBeforeContent() || isAfterContent();
 }
 
-inline void RenderObject::setNeedsLayout(MarkingBehavior markParents, SubtreeLayoutScope* layouter)
+inline void RenderObject::setNeedsLayoutAndFullRepaint(MarkingBehavior markParents, SubtreeLayoutScope* layouter)
 {
     ASSERT(!isSetNeedsLayoutForbidden());
     bool alreadyNeededLayout = m_bitfields.selfNeedsLayout();
@@ -1293,8 +1333,6 @@ inline void RenderObject::setNeedsLayout(MarkingBehavior markParents, SubtreeLay
     if (!alreadyNeededLayout) {
         if (markParents == MarkContainingBlockChain && (!layouter || layouter->root() != this))
             markContainingBlocksForLayout(true, 0, layouter);
-        if (hasLayer())
-            setLayerNeedsFullRepaint();
     }
 }
 

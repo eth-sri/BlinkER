@@ -360,16 +360,41 @@ void RenderBlock::styleDidChange(StyleDifference diff, const RenderStyle* oldSty
         ResourceLoadPriorityOptimizer::resourceLoadPriorityOptimizer()->addRenderObject(this);
 }
 
-void RenderBlock::repaintTreeAfterLayout()
+void RenderBlock::repaintTreeAfterLayout(const RenderLayerModelObject& repaintContainer)
 {
-    RenderBox::repaintTreeAfterLayout();
+    if (!shouldCheckForInvalidationAfterLayout())
+        return;
+
+    RenderBox::repaintTreeAfterLayout(repaintContainer);
 
     // Take care of positioned objects. This is required as LayoutState keeps a single clip rect.
     if (TrackedRendererListHashSet* positionedObjects = this->positionedObjects()) {
         TrackedRendererListHashSet::iterator end = positionedObjects->end();
         LayoutStateMaintainer statePusher(*this, isTableRow() ? LayoutSize() : locationOffset());
-        for (TrackedRendererListHashSet::iterator it = positionedObjects->begin(); it != end; ++it)
-            (*it)->repaintTreeAfterLayout();
+        for (TrackedRendererListHashSet::iterator it = positionedObjects->begin(); it != end; ++it) {
+            RenderBox* box = *it;
+
+            // One of the renderers we're skipping over here may be the child's repaint container,
+            // so we can't pass our own repaint container along.
+            const RenderLayerModelObject& repaintContainerForChild = *box->containerForRepaint();
+
+            // If the positioned renderer is absolutely positioned and it is inside
+            // a relatively positioend inline element, we need to account for
+            // the inline elements position in LayoutState.
+            if (box->style()->position() == AbsolutePosition) {
+                RenderObject* container = box->container(&repaintContainerForChild, 0);
+                if (container->isInFlowPositioned() && container->isRenderInline()) {
+                    // FIXME: We should be able to use layout-state for this.
+                    // Currently, we will place absolutly positioned elements inside
+                    // relatively positioned inline blocks in the wrong location. crbug.com/371485
+                    LayoutStateDisabler disable(*this);
+                    box->repaintTreeAfterLayout(repaintContainerForChild);
+                    continue;
+                }
+            }
+
+            box->repaintTreeAfterLayout(repaintContainerForChild);
+        }
     }
 }
 
@@ -673,9 +698,9 @@ void RenderBlock::splitFlow(RenderObject* beforeChild, RenderBlock* newBlockBox,
     // Always just do a full layout in order to ensure that line boxes (especially wrappers for images)
     // get deleted properly.  Because objects moves from the pre block into the post block, we want to
     // make new line boxes instead of leaving the old line boxes around.
-    pre->setNeedsLayoutAndPrefWidthsRecalc();
-    block->setNeedsLayoutAndPrefWidthsRecalc();
-    post->setNeedsLayoutAndPrefWidthsRecalc();
+    pre->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
+    block->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
+    post->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
 }
 
 void RenderBlock::makeChildrenAnonymousColumnBlocks(RenderObject* beforeChild, RenderBlockFlow* newBlockBox, RenderObject* newChild)
@@ -723,10 +748,10 @@ void RenderBlock::makeChildrenAnonymousColumnBlocks(RenderObject* beforeChild, R
     // get deleted properly.  Because objects moved from the pre block into the post block, we want to
     // make new line boxes instead of leaving the old line boxes around.
     if (pre)
-        pre->setNeedsLayoutAndPrefWidthsRecalc();
-    block->setNeedsLayoutAndPrefWidthsRecalc();
+        pre->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
+    block->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
     if (post)
-        post->setNeedsLayoutAndPrefWidthsRecalc();
+        post->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
 }
 
 RenderBlockFlow* RenderBlock::columnsBlockForSpanningElement(RenderObject* newChild)
@@ -776,7 +801,7 @@ void RenderBlock::addChildIgnoringAnonymousColumnBlocks(RenderObject* newChild, 
                 || beforeChildAnonymousContainer->isRenderFullScreenPlaceholder()
                 ) {
                 // Insert the child into the anonymous block box instead of here.
-                if (newChild->isInline() || newChild->isFloatingOrOutOfFlowPositioned() || beforeChild->parent()->firstChild() != beforeChild)
+                if (newChild->isInline() || newChild->isFloatingOrOutOfFlowPositioned() || beforeChild->parent()->slowFirstChild() != beforeChild)
                     beforeChild->parent()->addChild(newChild, beforeChild);
                 else
                     addChild(newChild, beforeChild->parent());
@@ -1059,7 +1084,7 @@ void RenderBlock::collapseAnonymousBlockChild(RenderBlock* parent, RenderBlock* 
     // destroyed. See crbug.com/282088
     if (child->beingDestroyed())
         return;
-    parent->setNeedsLayoutAndPrefWidthsRecalc();
+    parent->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
     parent->setChildrenInline(child->childrenInline());
     RenderObject* nextSibling = child->nextSibling();
 
@@ -1093,7 +1118,7 @@ void RenderBlock::removeChild(RenderObject* oldChild)
     RenderObject* next = oldChild->nextSibling();
     bool canMergeAnonymousBlocks = canMergeContiguousAnonymousBlocks(oldChild, prev, next);
     if (canMergeAnonymousBlocks && prev && next) {
-        prev->setNeedsLayoutAndPrefWidthsRecalc();
+        prev->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
         RenderBlockFlow* nextBlock = toRenderBlockFlow(next);
         RenderBlockFlow* prevBlock = toRenderBlockFlow(prev);
 
@@ -1115,7 +1140,7 @@ void RenderBlock::removeChild(RenderObject* oldChild)
             // Now just put the inlineChildrenBlock inside the blockChildrenBlock.
             blockChildrenBlock->children()->insertChildNode(blockChildrenBlock, inlineChildrenBlock, prev == inlineChildrenBlock ? blockChildrenBlock->firstChild() : 0,
                                                             inlineChildrenBlockHasLayer || blockChildrenBlock->hasLayer());
-            next->setNeedsLayoutAndPrefWidthsRecalc();
+            next->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
 
             // inlineChildrenBlock got reparented to blockChildrenBlock, so it is no longer a child
             // of "this". we null out prev or next so that is not used later in the function.
@@ -1457,12 +1482,6 @@ void RenderBlock::addVisualOverflowFromTheme()
     addVisualOverflow(inflatedRect);
 }
 
-bool RenderBlock::createsBlockFormattingContext() const
-{
-    return isInlineBlockOrInlineTable() || isFloatingOrOutOfFlowPositioned() || hasOverflowClip() || isFlexItemIncludingDeprecated()
-        || style()->specifiesColumns() || isRenderFlowThread() || isTableCell() || isTableCaption() || isFieldset() || isWritingModeRoot() || isDocumentElement() || style()->columnSpan();
-}
-
 void RenderBlock::updateBlockChildDirtyBitsBeforeLayout(bool relayoutChildren, RenderBox* child)
 {
     // FIXME: Technically percentage height objects only need a relayout if their percentage isn't going to be turned into
@@ -1529,11 +1548,6 @@ bool RenderBlock::simplifiedLayout()
         // Lay out positioned descendants or objects that just need to recompute overflow.
         if (needsSimplifiedNormalFlowLayout())
             simplifiedNormalFlowLayout();
-
-        // Make sure a forced break is applied after the content if we are a flow thread in a simplified layout.
-        // This ensures the size information is correctly computed for the last auto-height region receiving content.
-        if (isRenderFlowThread())
-            toRenderFlowThread(this)->applyBreakAfterContent(clientLogicalBottom());
 
         // Lay out our positioned objects if our positioned child bit is set.
         // Also, if an absolute position element inside a relative positioned container moves, and the absolute element has a fixed position
@@ -1665,7 +1679,7 @@ void RenderBlock::layoutPositionedObjects(bool relayoutChildren, PositionedLayou
         // FIXME: We should be able to do a r->setNeedsPositionedMovementLayout() here instead of a full layout. Need
         // to investigate why it does not trigger the correct invalidations in that case. crbug.com/350756
         if (info == ForcedLayoutAfterContainingBlockMoved)
-            r->setNeedsLayout();
+            r->setNeedsLayoutAndFullRepaint();
 
         r->layoutIfNeeded();
 
@@ -2667,7 +2681,7 @@ void RenderBlock::removePercentHeightDescendantIfNeeded(RenderBox* descendant)
 void RenderBlock::clearPercentHeightDescendantsFrom(RenderBox* parent)
 {
     ASSERT(gPercentHeightContainerMap);
-    for (RenderObject* curr = parent->firstChild(); curr; curr = curr->nextInPreOrder(parent)) {
+    for (RenderObject* curr = parent->slowFirstChild(); curr; curr = curr->nextInPreOrder(parent)) {
         if (!curr->isBox())
             continue;
 
@@ -2703,12 +2717,6 @@ void RenderBlock::markLinesDirtyInBlockRange(LayoutUnit logicalTop, LayoutUnit l
         afterLowest->markDirty();
         afterLowest = afterLowest->prevRootBox();
     }
-}
-
-bool RenderBlock::avoidsFloats() const
-{
-    // Floats can't intrude into our box if we have a non-auto column count or width.
-    return RenderBox::avoidsFloats() || !style()->hasAutoColumnCount() || !style()->hasAutoColumnWidth();
 }
 
 bool RenderBlock::isPointInOverflowControl(HitTestResult& result, const LayoutPoint& locationInContainer, const LayoutPoint& accumulatedOffset)
@@ -3873,10 +3881,12 @@ RenderBlock* RenderBlock::firstLineBlock() const
         // FIXME: Remove when buttons are implemented with align-items instead
         // of flexbox.
         if (firstLineBlock->isReplaced() || firstLineBlock->isFloating()
-            || !parentBlock || parentBlock->firstChild() != firstLineBlock
+            || !parentBlock
             || (!parentBlock->isRenderBlockFlow() && !parentBlock->isRenderButton()))
             break;
         ASSERT_WITH_SECURITY_IMPLICATION(parentBlock->isRenderBlock());
+        if (toRenderBlock(parentBlock)->firstChild() != firstLineBlock)
+            break;
         firstLineBlock = toRenderBlock(parentBlock);
     }
 
@@ -3931,8 +3941,12 @@ static inline RenderObject* findFirstLetterBlock(RenderBlock* start)
             return firstLetterBlock;
 
         RenderObject* parentBlock = firstLetterBlock->parent();
-        if (firstLetterBlock->isReplaced() || !parentBlock || parentBlock->firstChild() != firstLetterBlock ||
-            (!parentBlock->isRenderBlockFlow() && !parentBlock->isRenderButton()))
+        if (firstLetterBlock->isReplaced() || !parentBlock
+            || (!parentBlock->isRenderBlockFlow() && !parentBlock->isRenderButton())) {
+            return 0;
+        }
+        ASSERT(parentBlock->isRenderBlock());
+        if (toRenderBlock(parentBlock)->firstChild() != firstLetterBlock)
             return 0;
         firstLetterBlock = parentBlock;
     }
@@ -3958,7 +3972,7 @@ void RenderBlock::updateFirstLetterStyle(RenderObject* firstLetterBlock, RenderO
 
         // Move the first letter into the new renderer.
         LayoutStateDisabler layoutStateDisabler(*this);
-        while (RenderObject* child = firstLetter->firstChild()) {
+        while (RenderObject* child = firstLetter->slowFirstChild()) {
             if (child->isText())
                 toRenderText(child)->removeAndDestroyTextBoxes();
             firstLetter->removeChild(child);
@@ -3981,7 +3995,7 @@ void RenderBlock::updateFirstLetterStyle(RenderObject* firstLetterBlock, RenderO
     } else
         firstLetter->setStyle(pseudoStyle);
 
-    for (RenderObject* genChild = firstLetter->firstChild(); genChild; genChild = genChild->nextSibling()) {
+    for (RenderObject* genChild = firstLetter->slowFirstChild(); genChild; genChild = genChild->nextSibling()) {
         if (genChild->isText())
             genChild->setStyle(pseudoStyle);
     }
@@ -4033,8 +4047,12 @@ void RenderBlock::createFirstLetterRenderer(RenderObject* firstLetterBlock, Rend
     else
         firstLetter = RenderBlockFlow::createAnonymous(&document());
     firstLetter->setStyle(pseudoStyle);
-    firstLetterContainer->addChild(firstLetter, currentChild);
 
+    // FIXME: The first letter code should not modify the render tree during
+    // layout. crbug.com/370458
+    DeprecatedDisableModifyRenderTreeStructureAsserts disabler;
+
+    firstLetterContainer->addChild(firstLetter, currentChild);
     RenderText* textObj = toRenderText(currentChild);
 
     // The original string is going to be either a generated content string or a DOM node's
@@ -4080,7 +4098,7 @@ void RenderBlock::updateFirstLetter()
         return;
 
     // Drill into inlines looking for our first text child.
-    RenderObject* currChild = firstLetterBlock->firstChild();
+    RenderObject* currChild = firstLetterBlock->slowFirstChild();
     unsigned length = 0;
     while (currChild) {
         if (currChild->isText()) {
@@ -4094,18 +4112,19 @@ void RenderBlock::updateFirstLetter()
             currChild = currChild->nextSibling();
         } else if (currChild->isFloatingOrOutOfFlowPositioned()) {
             if (currChild->style()->styleType() == FIRST_LETTER) {
-                currChild = currChild->firstChild();
+                currChild = currChild->slowFirstChild();
                 break;
             }
             currChild = currChild->nextSibling();
-        } else if (currChild->isReplaced() || currChild->isRenderButton() || currChild->isMenuList())
+        } else if (currChild->isReplaced() || currChild->isRenderButton() || currChild->isMenuList()) {
             break;
-        else if (currChild->style()->hasPseudoStyle(FIRST_LETTER) && currChild->canHaveGeneratedChildren())  {
+        } else if (currChild->style()->hasPseudoStyle(FIRST_LETTER) && currChild->canHaveGeneratedChildren())  {
             // We found a lower-level node with first-letter, which supersedes the higher-level style
             firstLetterBlock = currChild;
-            currChild = currChild->firstChild();
-        } else
-            currChild = currChild->firstChild();
+            currChild = currChild->slowFirstChild();
+        } else {
+            currChild = currChild->slowFirstChild();
+        }
     }
 
     if (!currChild)

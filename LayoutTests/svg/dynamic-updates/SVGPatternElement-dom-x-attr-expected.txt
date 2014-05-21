@@ -10,7 +10,4 @@ PASS patternElement.getAttribute('x') is "0"
 PASS successfullyParsed is true
 
 TEST COMPLETE
-(repaint rects
-  (rect 18 18 190 190)
-)
 

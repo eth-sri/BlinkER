@@ -260,7 +260,7 @@ void IDBRequest::onSuccess(const Vector<String>& stringList)
     if (!shouldEnqueueEvent())
         return;
 
-    RefPtr<DOMStringList> domStringList = DOMStringList::create();
+    RefPtrWillBeRawPtr<DOMStringList> domStringList = DOMStringList::create();
     for (size_t i = 0; i < stringList.size(); ++i)
         domStringList->append(stringList[i]);
     onSuccessInternal(IDBAny::create(domStringList.release()));
@@ -319,7 +319,7 @@ void IDBRequest::onSuccess(PassRefPtr<SharedBuffer> valueBuffer, PassOwnPtr<Vect
 }
 
 #ifndef NDEBUG
-static PassRefPtr<IDBObjectStore> effectiveObjectStore(PassRefPtrWillBeRawPtr<IDBAny> source)
+static PassRefPtrWillBeRawPtr<IDBObjectStore> effectiveObjectStore(PassRefPtrWillBeRawPtr<IDBAny> source)
 {
     if (source->type() == IDBAny::IDBObjectStoreType)
         return source->idbObjectStore();

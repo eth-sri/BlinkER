@@ -60,7 +60,7 @@ public:
     virtual bool isRenderFlowThread() const OVERRIDE FINAL { return true; }
     virtual bool isRenderMultiColumnFlowThread() const { return false; }
 
-    virtual void layout() OVERRIDE FINAL;
+    virtual void layout() OVERRIDE;
 
     // Always create a RenderLayer for the RenderFlowThread so that we
     // can easily avoid drawing the children directly.
@@ -72,7 +72,6 @@ public:
     virtual void removeRegionFromThread(RenderRegion*);
     const RenderRegionList& renderRegionList() const { return m_regionList; }
 
-    virtual void updateLogicalWidth() OVERRIDE FINAL;
     virtual void computeLogicalHeight(LayoutUnit logicalHeight, LayoutUnit logicalTop, LogicalExtentComputedValues&) const OVERRIDE;
 
     bool hasRegions() const { return m_regionList.size(); }
@@ -103,7 +102,6 @@ public:
     void getRegionRangeForBox(const RenderBox*, RenderRegion*& startRegion, RenderRegion*& endRegion) const;
 
     virtual bool addForcedRegionBreak(LayoutUnit, RenderObject* breakChild, bool isBefore, LayoutUnit* offsetBreakAdjustment = 0) { return false; }
-    void applyBreakAfterContent(LayoutUnit);
 
     virtual bool isPageLogicalHeightKnown() const { return true; }
     bool pageLogicalSizeChanged() const { return m_pageLogicalSizeChanged; }
@@ -120,10 +118,6 @@ public:
 
 protected:
     virtual const char* renderName() const = 0;
-
-    // Overridden by columns/pages to set up an initial logical width of the page width even when
-    // no regions have been generated yet.
-    virtual LayoutUnit initialLogicalWidth() const { return 0; };
 
     void updateRegionsFlowThreadPortionRect();
     bool shouldRepaint(const LayoutRect&) const;

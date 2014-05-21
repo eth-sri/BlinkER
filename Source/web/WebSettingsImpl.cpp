@@ -470,11 +470,6 @@ void WebSettingsImpl::setAcceleratedCompositingForFixedRootBackgroundEnabled(boo
     m_settings->setAcceleratedCompositingForFixedRootBackgroundEnabled(enabled);
 }
 
-void WebSettingsImpl::setAcceleratedCompositingForGpuRasterizationHintEnabled(bool enabled)
-{
-    m_settings->setAcceleratedCompositingForGpuRasterizationHintEnabled(enabled);
-}
-
 void WebSettingsImpl::setAcceleratedCompositingForCanvasEnabled(bool enabled)
 {
     m_settings->setAcceleratedCompositingForCanvasEnabled(enabled);
@@ -508,9 +503,7 @@ void WebSettingsImpl::setDeferredImageDecodingEnabled(bool enabled)
 
 void WebSettingsImpl::setDeferredFiltersEnabled(bool enabled)
 {
-    // FIXME: Once the default has been flipped in Chrome, re-enable this.
-    // http://crbug.com/368265
-//    m_settings->setDeferredFiltersEnabled(enabled);
+    m_settings->setDeferredFiltersEnabled(enabled);
 }
 
 void WebSettingsImpl::setAcceleratedCompositingForFixedPositionEnabled(bool enabled)
@@ -725,7 +718,7 @@ void WebSettingsImpl::setUseSolidColorScrollbars(bool enabled)
 
 void WebSettingsImpl::setUseThreadedHTMLParserForDataURLs(bool enabled)
 {
-    m_settings->setUseThreadedHTMLParserForDataURLs(enabled);
+    // FIXME: Remove once Chrome dependencies are gone.
 }
 
 void WebSettingsImpl::setMainFrameResizesAreOrientationChanges(bool enabled)

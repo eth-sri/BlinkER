@@ -40,13 +40,17 @@
 #include "modules/indexeddb/IDBTracing.h"
 #include "modules/indexeddb/WebIDBCallbacksImpl.h"
 #include "platform/SharedBuffer.h"
+#include "public/platform/WebBlobInfo.h"
 #include "public/platform/WebData.h"
 #include "public/platform/WebIDBKey.h"
 #include "public/platform/WebIDBKeyRange.h"
+#include "public/platform/WebVector.h"
 
+using blink::WebBlobInfo;
 using blink::WebIDBCallbacks;
 using blink::WebIDBCursor;
 using blink::WebIDBDatabase;
+using blink::WebVector;
 
 namespace WebCore {
 
@@ -56,9 +60,17 @@ IDBObjectStore::IDBObjectStore(const IDBObjectStoreMetadata& metadata, IDBTransa
     , m_deleted(false)
 {
     ASSERT(m_transaction);
+#if !ENABLE(OILPAN)
     // We pass a reference to this object before it can be adopted.
     relaxAdoptionRequirement();
+#endif
     ScriptWrappable::init(this);
+}
+
+void IDBObjectStore::trace(Visitor* visitor)
+{
+    visitor->trace(m_transaction);
+    visitor->trace(m_indexMap);
 }
 
 ScriptValue IDBObjectStore::keyPath(ScriptState* scriptState) const
@@ -66,10 +78,10 @@ ScriptValue IDBObjectStore::keyPath(ScriptState* scriptState) const
     return idbAnyToScriptValue(scriptState, IDBAny::create(m_metadata.keyPath));
 }
 
-PassRefPtr<DOMStringList> IDBObjectStore::indexNames() const
+PassRefPtrWillBeRawPtr<DOMStringList> IDBObjectStore::indexNames() const
 {
     IDB_TRACE("IDBObjectStore::indexNames");
-    RefPtr<DOMStringList> indexNames = DOMStringList::create();
+    RefPtrWillBeRawPtr<DOMStringList> indexNames = DOMStringList::create();
     for (IDBObjectStoreMetadata::IndexMap::const_iterator it = m_metadata.indexes.begin(); it != m_metadata.indexes.end(); ++it)
         indexNames->append(it->value.name);
     indexNames->sort();
@@ -169,7 +181,9 @@ PassRefPtrWillBeRawPtr<IDBRequest> IDBObjectStore::put(ExecutionContext* executi
         return nullptr;
     }
 
-    RefPtr<SerializedScriptValue> serializedValue = SerializedScriptValue::create(value, 0, exceptionState, toIsolate(executionContext));
+    Vector<WebBlobInfo> blobInfo;
+
+    RefPtr<SerializedScriptValue> serializedValue = SerializedScriptValue::create(value, &blobInfo, exceptionState, toIsolate(executionContext));
     if (exceptionState.hadException())
         return nullptr;
 
@@ -178,6 +192,7 @@ PassRefPtrWillBeRawPtr<IDBRequest> IDBObjectStore::put(ExecutionContext* executi
         exceptionState.throwDOMException(DataCloneError, "The object store currently does not support blob values.");
         return nullptr;
     }
+    ASSERT(blobInfo.isEmpty());
 
     const IDBKeyPath& keyPath = m_metadata.keyPath;
     const bool usesInLineKeys = !keyPath.isNull();
@@ -233,7 +248,8 @@ PassRefPtrWillBeRawPtr<IDBRequest> IDBObjectStore::put(ExecutionContext* executi
     Vector<char> wireBytes;
     serializedValue->toWireBytes(wireBytes);
     RefPtr<SharedBuffer> valueBuffer = SharedBuffer::adoptVector(wireBytes);
-    backendDB()->put(m_transaction->id(), id(), blink::WebData(valueBuffer), key.release(), static_cast<WebIDBDatabase::PutMode>(putMode), WebIDBCallbacksImpl::create(request).leakPtr(), indexIds, indexKeys);
+
+    backendDB()->put(m_transaction->id(), id(), blink::WebData(valueBuffer), blobInfo, key.release(), static_cast<WebIDBDatabase::PutMode>(putMode), WebIDBCallbacksImpl::create(request).leakPtr(), indexIds, indexKeys);
     return request.release();
 }
 
@@ -311,7 +327,7 @@ namespace {
 // cursor success handlers are kept alive.
 class IndexPopulator FINAL : public EventListener {
 public:
-    static PassRefPtr<IndexPopulator> create(ScriptState* scriptState, PassRefPtr<IDBDatabase> database, int64_t transactionId, int64_t objectStoreId, const IDBIndexMetadata& indexMetadata)
+    static PassRefPtr<IndexPopulator> create(ScriptState* scriptState, PassRefPtrWillBeRawPtr<IDBDatabase> database, int64_t transactionId, int64_t objectStoreId, const IDBIndexMetadata& indexMetadata)
     {
         return adoptRef(new IndexPopulator(scriptState, database, transactionId, objectStoreId, indexMetadata));
     }
@@ -322,7 +338,7 @@ public:
     }
 
 private:
-    IndexPopulator(ScriptState* scriptState, PassRefPtr<IDBDatabase> database, int64_t transactionId, int64_t objectStoreId, const IDBIndexMetadata& indexMetadata)
+    IndexPopulator(ScriptState* scriptState, PassRefPtrWillBeRawPtr<IDBDatabase> database, int64_t transactionId, int64_t objectStoreId, const IDBIndexMetadata& indexMetadata)
         : EventListener(CPPEventListenerType)
         , m_scriptState(scriptState)
         , m_database(database)
@@ -371,14 +387,14 @@ private:
     }
 
     RefPtr<ScriptState> m_scriptState;
-    RefPtr<IDBDatabase> m_database;
+    RefPtrWillBePersistent<IDBDatabase> m_database;
     const int64_t m_transactionId;
     const int64_t m_objectStoreId;
     const IDBIndexMetadata m_indexMetadata;
 };
 }
 
-PassRefPtr<IDBIndex> IDBObjectStore::createIndex(ScriptState* scriptState, const String& name, const IDBKeyPath& keyPath, const Dictionary& options, ExceptionState& exceptionState)
+PassRefPtrWillBeRawPtr<IDBIndex> IDBObjectStore::createIndex(ScriptState* scriptState, const String& name, const IDBKeyPath& keyPath, const Dictionary& options, ExceptionState& exceptionState)
 {
     bool unique = false;
     options.get("unique", unique);
@@ -389,7 +405,7 @@ PassRefPtr<IDBIndex> IDBObjectStore::createIndex(ScriptState* scriptState, const
     return createIndex(scriptState, name, keyPath, unique, multiEntry, exceptionState);
 }
 
-PassRefPtr<IDBIndex> IDBObjectStore::createIndex(ScriptState* scriptState, const String& name, const IDBKeyPath& keyPath, bool unique, bool multiEntry, ExceptionState& exceptionState)
+PassRefPtrWillBeRawPtr<IDBIndex> IDBObjectStore::createIndex(ScriptState* scriptState, const String& name, const IDBKeyPath& keyPath, bool unique, bool multiEntry, ExceptionState& exceptionState)
 {
     IDB_TRACE("IDBObjectStore::createIndex");
     if (!m_transaction->isVersionChange()) {
@@ -436,7 +452,7 @@ PassRefPtr<IDBIndex> IDBObjectStore::createIndex(ScriptState* scriptState, const
     ++m_metadata.maxIndexId;
 
     IDBIndexMetadata metadata(name, indexId, keyPath, unique, multiEntry);
-    RefPtr<IDBIndex> index = IDBIndex::create(metadata, this, m_transaction.get());
+    RefPtrWillBeRawPtr<IDBIndex> index = IDBIndex::create(metadata, this, m_transaction.get());
     m_indexMap.set(name, index);
     m_metadata.indexes.set(indexId, metadata);
     m_transaction->db()->indexCreated(id(), metadata);
@@ -454,7 +470,7 @@ PassRefPtr<IDBIndex> IDBObjectStore::createIndex(ScriptState* scriptState, const
     return index.release();
 }
 
-PassRefPtr<IDBIndex> IDBObjectStore::index(const String& name, ExceptionState& exceptionState)
+PassRefPtrWillBeRawPtr<IDBIndex> IDBObjectStore::index(const String& name, ExceptionState& exceptionState)
 {
     IDB_TRACE("IDBObjectStore::index");
     if (isDeleted()) {
@@ -486,7 +502,7 @@ PassRefPtr<IDBIndex> IDBObjectStore::index(const String& name, ExceptionState& e
     ASSERT(indexMetadata);
     ASSERT(indexMetadata->id != IDBIndexMetadata::InvalidId);
 
-    RefPtr<IDBIndex> index = IDBIndex::create(*indexMetadata, this, m_transaction.get());
+    RefPtrWillBeRawPtr<IDBIndex> index = IDBIndex::create(*indexMetadata, this, m_transaction.get());
     m_indexMap.set(name, index);
     return index.release();
 }

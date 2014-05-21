@@ -55,7 +55,7 @@ class CSSStyleSheet;
 class CSSValue;
 class ContainerNode;
 class Document;
-class DocumentTimeline;
+class AnimationTimeline;
 class Element;
 class ElementRuleCollector;
 class KeyframeList;
@@ -84,7 +84,8 @@ enum RuleMatchingBehavior {
     MatchAllRulesExcludingSMIL
 };
 
-const unsigned styleSharingListSize = 40;
+const unsigned styleSharingListSize = 15;
+const unsigned styleSharingMaxDepth = 32;
 typedef WTF::Deque<Element*, styleSharingListSize> StyleSharingList;
 
 struct CSSPropertyValue {
@@ -206,7 +207,7 @@ public:
         return m_features;
     }
 
-    StyleSharingList& styleSharingList() { return m_styleSharingList; }
+    StyleSharingList& styleSharingList();
 
     bool hasRulesForId(const AtomicString&) const;
 
@@ -223,6 +224,9 @@ public:
     unsigned accessCount() const { return m_accessCount; }
     void didAccess() { ++m_accessCount; }
 
+    void increaseStyleSharingDepth() { ++m_styleSharingDepth; }
+    void decreaseStyleSharingDepth() { --m_styleSharingDepth; }
+
     PassRefPtr<PseudoElement> createPseudoElementIfNeeded(Element& parent, PseudoId);
 
     virtual void trace(Visitor*) OVERRIDE;
@@ -238,6 +242,7 @@ private:
     void updateFont(StyleResolverState&);
 
     void loadPendingResources(StyleResolverState&);
+    void adjustRenderStyle(StyleResolverState&, Element*);
 
     void appendCSSStyleSheet(CSSStyleSheet*);
 
@@ -255,7 +260,7 @@ private:
     bool fastRejectSelector(const RuleData&) const;
 
     void applyMatchedProperties(StyleResolverState&, const MatchResult&);
-    void applyAnimatedProperties(StyleResolverState&, Element* animatingElement);
+    bool applyAnimatedProperties(StyleResolverState&, Element* animatingElement);
 
     enum StyleApplicationPass {
         AnimationProperties,
@@ -300,10 +305,7 @@ private:
 
     OwnPtrWillBeMember<ViewportStyleResolver> m_viewportStyleResolver;
 
-    // FIXME: Oilpan: This should be a WillBeHeapListHashSet.
-    // This is safe for now, but should be updated when we support
-    // heap allocated ListHashSets.
-    ListHashSet<CSSStyleSheet*, 16> m_pendingStyleSheets;
+    WillBeHeapListHashSet<RawPtrWillBeMember<CSSStyleSheet>, 16> m_pendingStyleSheets;
 
     ScopedStyleTree m_styleTree;
 
@@ -321,7 +323,8 @@ private:
 
     StyleResourceLoader m_styleResourceLoader;
 
-    StyleSharingList m_styleSharingList;
+    unsigned m_styleSharingDepth;
+    Vector<OwnPtr<StyleSharingList>, styleSharingMaxDepth> m_styleSharingLists;
 
     OwnPtr<StyleResolverStats> m_styleResolverStats;
     OwnPtr<StyleResolverStats> m_styleResolverStatsTotals;

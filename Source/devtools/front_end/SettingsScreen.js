@@ -59,6 +59,8 @@ WebInspector.SettingsScreen = function(onHide)
     this._lastSelectedTabSetting = WebInspector.settings.createSetting("lastSelectedSettingsTab", WebInspector.SettingsScreen.Tabs.General);
     this.selectTab(this._lastSelectedTabSetting.get());
     this._tabbedPane.addEventListener(WebInspector.TabbedPane.EventTypes.TabSelected, this._tabSelected, this);
+    this.element.addEventListener("keydown", this._keyDown.bind(this), false);
+    this._developerModeCounter = 0;
 }
 
 /**
@@ -130,6 +132,16 @@ WebInspector.SettingsScreen.prototype = {
     {
         this._onHide();
         WebInspector.HelpScreen.prototype.willHide.call(this);
+    },
+
+    /**
+     * @param {?Event} event
+     */
+    _keyDown: function(event)
+    {
+        var shiftKeyCode = 16;
+        if (event.keyCode === shiftKeyCode && ++this._developerModeCounter > 5)
+            this.element.classList.add("settings-developer-mode");
     },
 
     __proto__: WebInspector.HelpScreen.prototype
@@ -247,12 +259,12 @@ WebInspector.GenericSettingsTab.prototype = {
             var extensions = /** @type {!Set.<!WebInspector.ModuleManager.Extension>} */ (extensionsBySectionId.get(explicitSectionOrder[i]));
             if (!extensions)
                 continue;
-            this._addSectionWithExtensionProvidedSettings(explicitSectionOrder[i], extensions.items(), childSettingExtensionsByParentName);
+            this._addSectionWithExtensionProvidedSettings(explicitSectionOrder[i], extensions.values(), childSettingExtensionsByParentName);
         }
         for (var i = 0; i < sectionIds.length; ++i) {
             if (explicitlyOrderedSections[sectionIds[i]])
                 continue;
-            this._addSectionWithExtensionProvidedSettings(sectionIds[i], /** @type {!Set.<!WebInspector.ModuleManager.Extension>} */ (extensionsBySectionId.get(sectionIds[i])).items(), childSettingExtensionsByParentName);
+            this._addSectionWithExtensionProvidedSettings(sectionIds[i], /** @type {!Set.<!WebInspector.ModuleManager.Extension>} */ (extensionsBySectionId.get(sectionIds[i])).values(), childSettingExtensionsByParentName);
         }
     },
 
@@ -297,7 +309,7 @@ WebInspector.GenericSettingsTab.prototype = {
                 if (childSettings) {
                     var fieldSet = WebInspector.SettingsUI.createSettingFieldset(setting);
                     settingControl.appendChild(fieldSet);
-                    childSettings.items().forEach(function(item) { processSetting.call(this, fieldSet, item); }, this);
+                    childSettings.values().forEach(function(item) { processSetting.call(this, fieldSet, item); }, this);
                 }
             }
             var containerElement = parentFieldset || sectionElement;
@@ -590,7 +602,8 @@ WebInspector.ExperimentsSettingsTab.prototype = {
         input.addEventListener("click", listener, false);
 
         var p = document.createElement("p");
-        var label = document.createElement("label");
+        p.className = experiment.hidden && !experiment.isEnabled() ? "settings-experiment-hidden" : "";
+        var label = p.createChild("label");
         label.appendChild(input);
         label.appendChild(document.createTextNode(WebInspector.UIString(experiment.title)));
         p.appendChild(label);

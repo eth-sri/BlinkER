@@ -39,9 +39,9 @@ namespace WebCore {
 
 class HTMLDataListElement FINAL : public HTMLElement {
 public:
-    static PassRefPtr<HTMLDataListElement> create(Document&);
+    static PassRefPtrWillBeRawPtr<HTMLDataListElement> create(Document&);
 
-    PassRefPtr<HTMLCollection> options();
+    PassRefPtrWillBeRawPtr<HTMLCollection> options();
 
     void optionElementChildrenChanged();
 

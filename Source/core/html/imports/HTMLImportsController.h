@@ -78,8 +78,6 @@ public:
 
     void recalcTimerFired(Timer<HTMLImportsController>*);
 
-
-    virtual void trace(Visitor*) OVERRIDE { }
     HTMLImportLoader* createLoader();
 
     size_t loaderCount() const { return m_loaders.size(); }

@@ -38,6 +38,7 @@
 #include "modules/websockets/WebSocketChannel.h"
 #include "modules/websockets/WebSocketChannelClient.h"
 #include "platform/Timer.h"
+#include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
 #include "wtf/Deque.h"
 #include "wtf/Forward.h"
@@ -69,8 +70,6 @@ public:
         CLOSED = 3
     };
 
-    void connect(const String& url, ExceptionState&);
-    void connect(const String& url, const String& protocol, ExceptionState&);
     void connect(const String& url, const Vector<String>& protocols, ExceptionState&);
 
     void send(const String& message, ExceptionState&);
@@ -206,7 +205,7 @@ private:
         BinaryTypeArrayBuffer
     };
 
-    RefPtr<WebSocketChannel> m_channel;
+    RefPtrWillBeMember<WebSocketChannel> m_channel;
 
     State m_state;
     KURL m_url;

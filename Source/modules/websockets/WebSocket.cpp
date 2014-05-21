@@ -54,6 +54,7 @@
 #include "public/platform/Platform.h"
 #include "wtf/ArrayBuffer.h"
 #include "wtf/ArrayBufferView.h"
+#include "wtf/Assertions.h"
 #include "wtf/HashSet.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/StdLibExtras.h"
@@ -276,19 +277,6 @@ PassRefPtrWillBeRawPtr<WebSocket> WebSocket::create(ExecutionContext* context, c
     Vector<String> protocols;
     protocols.append(protocol);
     return create(context, url, protocols, exceptionState);
-}
-
-void WebSocket::connect(const String& url, ExceptionState& exceptionState)
-{
-    Vector<String> protocols;
-    connect(url, protocols, exceptionState);
-}
-
-void WebSocket::connect(const String& url, const String& protocol, ExceptionState& exceptionState)
-{
-    Vector<String> protocols;
-    protocols.append(protocol);
-    connect(url, protocols, exceptionState);
 }
 
 void WebSocket::connect(const String& url, const Vector<String>& protocols, ExceptionState& exceptionState)
@@ -635,7 +623,14 @@ void WebSocket::didReceiveBinaryData(PassOwnPtr<Vector<char> > binaryData)
     }
 
     case BinaryTypeArrayBuffer:
-        m_eventQueue->dispatch(MessageEvent::create(ArrayBuffer::create(binaryData->data(), binaryData->size()), SecurityOrigin::create(m_url)->toString()));
+        RefPtr<ArrayBuffer> arrayBuffer = ArrayBuffer::create(binaryData->data(), binaryData->size());
+        if (!arrayBuffer) {
+            // Failed to allocate an ArrayBuffer. We need to crash the renderer
+            // since there's no way defined in the spec to tell this to the
+            // user.
+            CRASH();
+        }
+        m_eventQueue->dispatch(MessageEvent::create(arrayBuffer.release(), SecurityOrigin::create(m_url)->toString()));
         break;
     }
 }
@@ -690,6 +685,7 @@ size_t WebSocket::getFramingOverhead(size_t payloadSize)
 
 void WebSocket::trace(Visitor* visitor)
 {
+    visitor->trace(m_channel);
     visitor->trace(m_eventQueue);
 }
 

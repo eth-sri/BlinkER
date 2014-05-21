@@ -33,12 +33,13 @@
 namespace WebCore {
 
 class HTMLFormElement;
+class ImageCandidate;
 
 class HTMLImageElement FINAL : public HTMLElement, public CanvasImageSource {
 public:
-    static PassRefPtr<HTMLImageElement> create(Document&);
-    static PassRefPtr<HTMLImageElement> create(Document&, HTMLFormElement*);
-    static PassRefPtr<HTMLImageElement> createForJSConstructor(Document&, int width, int height);
+    static PassRefPtrWillBeRawPtr<HTMLImageElement> create(Document&);
+    static PassRefPtrWillBeRawPtr<HTMLImageElement> create(Document&, HTMLFormElement*);
+    static PassRefPtrWillBeRawPtr<HTMLImageElement> createForJSConstructor(Document&, int width, int height);
 
     virtual ~HTMLImageElement();
 
@@ -123,12 +124,15 @@ private:
     virtual Image* imageContents() OVERRIDE;
 
     void resetFormOwner();
+    ImageCandidate findBestFitImageFromPictureParent();
+    void setBestFitURLAndDPRFromImageCandidate(const ImageCandidate&);
 
     HTMLImageLoader m_imageLoader;
     // m_form should be a strong reference in Oilpan.
     WeakPtr<HTMLFormElement> m_form;
     CompositeOperator m_compositeOperator;
     AtomicString m_bestFitImageURL;
+    AtomicString m_currentSrc;
     float m_imageDevicePixelRatio;
     bool m_formWasSetByParser;
 };

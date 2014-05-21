@@ -37,6 +37,7 @@
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
 #include "wtf/Vector.h"
+#include "wtf/WeakPtr.h"
 
 namespace WebCore {
 
@@ -66,6 +67,7 @@ public:
     void wasAlreadyLoaded();
     void startLoading(const ResourcePtr<RawResource>&);
     void importDestroyed();
+    WeakPtr<HTMLImportChild> weakPtr() { return m_weakFactory.createWeakPtr(); }
 
     // HTMLImport
     virtual bool isChild() const OVERRIDE { return true; }
@@ -84,6 +86,10 @@ public:
     bool loaderHasError() const;
 
     void didFinishLoading();
+    void didFinishUpgradingCustomElements();
+    bool isLoaded() const;
+    bool isFirst() const;
+    void normalize();
 
 private:
     // RawResourceOwner doing nothing.
@@ -96,6 +102,7 @@ private:
     void createLoader();
     void shareLoader(HTMLImportChild*);
     void ensureLoader();
+    void createCustomElementMicrotaskStepIfNeeded();
 
 #if ENABLE(OILPAN)
     Persistent<Document> m_master;
@@ -103,7 +110,8 @@ private:
     Document& m_master;
 #endif
     KURL m_url;
-    CustomElementMicrotaskImportStep* m_customElementMicrotaskStep;
+    WeakPtrFactory<HTMLImportChild> m_weakFactory;
+    WeakPtr<CustomElementMicrotaskImportStep> m_customElementMicrotaskStep;
     HTMLImportLoader* m_loader;
     HTMLImportChildClient* m_client;
 };

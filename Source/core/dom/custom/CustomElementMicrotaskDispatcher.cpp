@@ -95,4 +95,19 @@ void CustomElementMicrotaskDispatcher::doDispatch()
     m_phase = Quiescent;
 }
 
+#if !defined(NDEBUG)
+void CustomElementMicrotaskDispatcher::show()
+{
+    fprintf(stderr, "Dispatcher:\n");
+    m_resolutionAndImports->show(1);
+}
+#endif
+
 } // namespace WebCore
+
+#if !defined(NDEBUG)
+void showCEMD()
+{
+    WebCore::CustomElementMicrotaskDispatcher::instance().show();
+}
+#endif

@@ -102,8 +102,11 @@ public:
     virtual void animate(double) OVERRIDE;
     virtual void layout() OVERRIDE;
     virtual void enterForceCompositingMode(bool enable) OVERRIDE;
-    virtual void paint(WebCanvas*, const WebRect&, PaintOptions = ReadbackFromCompositorIfAvailable) OVERRIDE;
-    virtual bool compositeAndReadbackAsync(WebCompositeAndReadbackAsyncCallback*) OVERRIDE;
+    virtual void paint(WebCanvas*, const WebRect&) OVERRIDE;
+#if OS(ANDROID)
+    virtual void paintCompositedDeprecated(WebCanvas*, const WebRect&) OVERRIDE;
+#endif
+    virtual void compositeAndReadbackAsync(WebCompositeAndReadbackAsyncCallback*) OVERRIDE;
     virtual bool isTrackingRepaints() const OVERRIDE;
     virtual void themeChanged() OVERRIDE;
     virtual bool handleInputEvent(const WebInputEvent&) OVERRIDE;
@@ -167,7 +170,6 @@ public:
     virtual void setFocusedFrame(WebFrame*) OVERRIDE;
     virtual void setInitialFocus(bool reverse) OVERRIDE;
     virtual void clearFocusedElement() OVERRIDE;
-    virtual void scrollFocusedNodeIntoView() OVERRIDE;
     virtual void scrollFocusedNodeIntoRect(const WebRect&) OVERRIDE;
     virtual void zoomToFindInPageRect(const WebRect&) OVERRIDE;
     virtual void advanceFocus(bool reverse) OVERRIDE;
@@ -186,8 +188,6 @@ public:
     virtual WebFloatPoint pinchViewportOffset() const OVERRIDE;
     virtual float minimumPageScaleFactor() const OVERRIDE;
     virtual float maximumPageScaleFactor() const OVERRIDE;
-    virtual void saveScrollAndScaleState() OVERRIDE;
-    virtual void restoreScrollAndScaleState() OVERRIDE;
     virtual void resetScrollAndScaleState() OVERRIDE;
     virtual void setIgnoreViewportTagScaleLimits(bool) OVERRIDE;
     virtual WebSize contentsPreferredMinimumSize() OVERRIDE;
@@ -209,6 +209,7 @@ public:
         const WebPoint&) OVERRIDE;
     virtual WebHitTestResult hitTestResultAt(const WebPoint&) OVERRIDE;
     virtual void copyImageAt(const WebPoint&) OVERRIDE;
+    virtual void saveImageAt(const WebPoint&) OVERRIDE;
     virtual void dragSourceEndedAt(
         const WebPoint& clientPoint,
         const WebPoint& screenPoint,
@@ -485,14 +486,14 @@ public:
 
     WebLayerTreeView* layerTreeView() const { return m_layerTreeView; }
 
+    bool pinchVirtualViewportEnabled() const;
+
     bool matchesHeuristicsForGpuRasterizationForTesting() const { return m_matchesHeuristicsForGpuRasterization; }
 
 private:
     // TODO(bokan): Remains for legacy pinch. Remove once it's gone. Made private to
     // prevent external usage
     virtual void setPageScaleFactor(float scaleFactor, const WebPoint& origin) OVERRIDE;
-
-    bool pinchVirtualViewportEnabled() const;
 
     float legibleScale() const;
     void refreshPageScaleFactorAfterLayout();
@@ -547,7 +548,6 @@ private:
 
     void setIsAcceleratedCompositingActive(bool);
     void doComposite();
-    void doPixelReadbackToCanvas(WebCanvas*, const WebCore::IntRect&);
     void reallocateRenderer();
     void updateLayerTreeViewport();
     void updateLayerTreeBackgroundColor();
@@ -623,10 +623,6 @@ private:
     double m_maximumZoomLevel;
 
     PageScaleConstraintsSet m_pageScaleConstraintsSet;
-
-    // Saved page scale state.
-    float m_savedPageScaleFactor; // 0 means that no page scale factor is saved.
-    WebCore::IntSize m_savedScrollOffset;
 
     // The scale moved to by the latest double tap zoom, if any.
     float m_doubleTapZoomPageScaleFactor;

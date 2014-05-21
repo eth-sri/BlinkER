@@ -83,12 +83,12 @@ public:
     const String& mode() const;
     IDBDatabase* db() const { return m_database.get(); }
     PassRefPtrWillBeRawPtr<DOMError> error() const { return m_error; }
-    PassRefPtr<IDBObjectStore> objectStore(const String& name, ExceptionState&);
+    PassRefPtrWillBeRawPtr<IDBObjectStore> objectStore(const String& name, ExceptionState&);
     void abort(ExceptionState&);
 
     void registerRequest(IDBRequest*);
     void unregisterRequest(IDBRequest*);
-    void objectStoreCreated(const String&, PassRefPtr<IDBObjectStore>);
+    void objectStoreCreated(const String&, PassRefPtrWillBeRawPtr<IDBObjectStore>);
     void objectStoreDeleted(const String&);
     void setActive(bool);
     void setError(PassRefPtrWillBeRawPtr<DOMError>);
@@ -124,7 +124,7 @@ private:
     };
 
     int64_t m_id;
-    RefPtr<IDBDatabase> m_database;
+    RefPtrWillBeMember<IDBDatabase> m_database;
     const Vector<String> m_objectStoreNames;
     RawPtrWillBeMember<IDBOpenDBRequest> m_openDBRequest;
     const blink::WebIDBDatabase::TransactionMode m_mode;
@@ -133,16 +133,15 @@ private:
     bool m_contextStopped;
     RefPtrWillBeMember<DOMError> m_error;
 
-    // FIXME: Oilpan: We should use HeapListHashSet if it is available.
-    ListHashSet<RefPtrWillBeMember<IDBRequest> > m_requestList;
+    WillBeHeapListHashSet<RefPtrWillBeMember<IDBRequest> > m_requestList;
 
-    typedef HashMap<String, RefPtr<IDBObjectStore> > IDBObjectStoreMap;
+    typedef WillBeHeapHashMap<String, RefPtrWillBeMember<IDBObjectStore> > IDBObjectStoreMap;
     IDBObjectStoreMap m_objectStoreMap;
 
-    typedef HashSet<RefPtr<IDBObjectStore> > IDBObjectStoreSet;
+    typedef WillBeHeapHashSet<RefPtrWillBeMember<IDBObjectStore> > IDBObjectStoreSet;
     IDBObjectStoreSet m_deletedObjectStores;
 
-    typedef HashMap<RefPtr<IDBObjectStore>, IDBObjectStoreMetadata> IDBObjectStoreMetadataMap;
+    typedef WillBeHeapHashMap<RefPtrWillBeMember<IDBObjectStore>, IDBObjectStoreMetadata> IDBObjectStoreMetadataMap;
     IDBObjectStoreMetadataMap m_objectStoreCleanupMap;
     IDBDatabaseMetadata m_previousMetadata;
 };

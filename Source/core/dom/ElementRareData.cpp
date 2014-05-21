@@ -37,19 +37,27 @@ namespace WebCore {
 
 struct SameSizeAsElementRareData : NodeRareData {
     short indices[2];
-    LayoutSize sizeForResizing;
     IntSize scrollOffset;
-    void* pointers[11];
-    OwnPtrWillBePersistent<ActiveAnimations> m_activeAnimations;
+    void* pointers[12];
 };
 
 CSSStyleDeclaration& ElementRareData::ensureInlineCSSStyleDeclaration(Element* ownerElement)
 {
     if (!m_cssomWrapper)
-        m_cssomWrapper = adoptPtr(new InlineCSSStyleDeclaration(ownerElement));
+        m_cssomWrapper = adoptPtrWillBeNoop(new InlineCSSStyleDeclaration(ownerElement));
     return *m_cssomWrapper;
 }
 
+void ElementRareData::traceAfterDispatch(Visitor* visitor)
+{
+    visitor->trace(m_dataset);
+    visitor->trace(m_classList);
+    visitor->trace(m_shadow);
+    visitor->trace(m_attributeMap);
+    visitor->trace(m_activeAnimations);
+    visitor->trace(m_cssomWrapper);
+    NodeRareData::traceAfterDispatch(visitor);
+}
 
 COMPILE_ASSERT(sizeof(ElementRareData) == sizeof(SameSizeAsElementRareData), ElementRareDataShouldStaySmall);
 

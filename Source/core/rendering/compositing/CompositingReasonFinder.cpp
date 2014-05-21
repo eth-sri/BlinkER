@@ -51,8 +51,6 @@ void CompositingReasonFinder::updateTriggers()
         m_compositingTriggers |= ScrollableInnerFrameTrigger;
     if (settings.acceleratedCompositingForFiltersEnabled())
         m_compositingTriggers |= FilterTrigger;
-    if (settings.acceleratedCompositingForGpuRasterizationHintEnabled())
-        m_compositingTriggers |= GPURasterizationTrigger;
 
     // We map both these settings to universal overlow scrolling.
     // FIXME: Replace these settings with a generic compositing setting for HighDPI.
@@ -70,31 +68,10 @@ bool CompositingReasonFinder::hasOverflowScrollTrigger() const
     return m_compositingTriggers & OverflowScrollTrigger;
 }
 
-// FIXME: This is a temporary trigger for enabling the old, opt-in path for
-// accelerated overflow scroll. It should be removed once the "universal"
-// path is ready (crbug.com/254111).
-bool CompositingReasonFinder::hasLegacyOverflowScrollTrigger() const
-{
-    return m_compositingTriggers & LegacyOverflowScrollTrigger;
-}
-
 bool CompositingReasonFinder::isMainFrame() const
 {
     // FIXME: LocalFrame::isMainFrame() is probably better.
     return !m_renderView.document().ownerElement();
-}
-
-CompositingReasons CompositingReasonFinder::suppressWillChangeAndAnimationForGpuRasterization(const RenderLayer* layer, CompositingReasons styleReasons) const
-{
-    CompositingReasons adjustedReasons = styleReasons;
-    adjustedReasons &= ~(CompositingReasonWillChangeCompositingHint | CompositingReasonWillChangeGpuRasterizationHint);
-
-    // We can suppress layer creation for animations before animations start, but not
-    // once they're already running on the compositor.
-    if (!layer->renderer()->style()->isRunningAnimationOnCompositor())
-        adjustedReasons &= ~CompositingReasonActiveAnimation;
-
-    return adjustedReasons;
 }
 
 CompositingReasons CompositingReasonFinder::directReasons(const RenderLayer* layer, bool* needToRecomputeCompositingRequirements) const
@@ -138,9 +115,6 @@ CompositingReasons CompositingReasonFinder::styleDeterminedReasons(RenderObject*
     if (requiresCompositingForWillChangeCompositingHint(renderer))
         directReasons |= CompositingReasonWillChangeCompositingHint;
 
-    if (requiresCompositingForWillChangeGpuRasterizationHint(renderer))
-        directReasons |= CompositingReasonWillChangeGpuRasterizationHint;
-
     ASSERT(!(directReasons & ~CompositingReasonComboAllStyleDeterminedReasons));
     return directReasons;
 }
@@ -168,14 +142,6 @@ bool CompositingReasonFinder::requiresCompositingForFilters(RenderObject* render
 bool CompositingReasonFinder::requiresCompositingForWillChangeCompositingHint(const RenderObject* renderer) const
 {
     return renderer->style()->hasWillChangeCompositingHint();
-}
-
-bool CompositingReasonFinder::requiresCompositingForWillChangeGpuRasterizationHint(const RenderObject* renderer) const
-{
-    if (!(m_compositingTriggers & GPURasterizationTrigger))
-        return false;
-
-    return renderer->style()->hasWillChangeGpuRasterizationHint();
 }
 
 CompositingReasons CompositingReasonFinder::nonStyleDeterminedDirectReasons(const RenderLayer* layer, bool* needToRecomputeCompositingRequirements) const
@@ -228,30 +194,6 @@ bool CompositingReasonFinder::requiresCompositingForOverflowScrolling(const Rend
     return layer->needsCompositedScrolling();
 }
 
-static bool isViewportConstrainedStickyLayer(const RenderLayer* layer)
-{
-    ASSERT(layer->renderer()->isStickyPositioned());
-    return !layer->enclosingOverflowClipLayer(ExcludeSelf);
-}
-
-bool CompositingReasonFinder::isViewportConstrainedFixedOrStickyLayer(const RenderLayer* layer)
-{
-    if (layer->renderer()->isStickyPositioned())
-        return isViewportConstrainedStickyLayer(layer);
-
-    if (layer->renderer()->style()->position() != FixedPosition)
-        return false;
-
-    for (const RenderLayerStackingNode* stackingContainer = layer->stackingNode(); stackingContainer;
-        stackingContainer = stackingContainer->ancestorStackingContainerNode()) {
-        if (stackingContainer->layer()->compositingState() != NotComposited
-            && stackingContainer->layer()->renderer()->style()->position() == FixedPosition)
-            return false;
-    }
-
-    return true;
-}
-
 bool CompositingReasonFinder::requiresCompositingForPosition(RenderObject* renderer, const RenderLayer* layer, RenderLayer::ViewportConstrainedNotCompositedReason* viewportConstrainedNotCompositedReason, bool* needToRecomputeCompositingRequirements) const
 {
     return requiresCompositingForPositionSticky(renderer, layer) || requiresCompositingForPositionFixed(renderer, layer, viewportConstrainedNotCompositedReason, needToRecomputeCompositingRequirements);
@@ -265,7 +207,7 @@ bool CompositingReasonFinder::requiresCompositingForPositionSticky(RenderObject*
         return false;
     // FIXME: This probably isn't correct for accelerated overflow scrolling. crbug.com/361723
     // Instead it should return false only if the layer is not inside a scrollable region.
-    return isViewportConstrainedStickyLayer(layer);
+    return !layer->enclosingOverflowClipLayer(ExcludeSelf);
 }
 
 bool CompositingReasonFinder::requiresCompositingForPositionFixed(RenderObject* renderer, const RenderLayer* layer, RenderLayer::ViewportConstrainedNotCompositedReason* viewportConstrainedNotCompositedReason, bool* needToRecomputeCompositingRequirements) const

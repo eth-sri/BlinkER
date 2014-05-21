@@ -34,7 +34,7 @@
 
 #include "core/html/VoidCallback.h"
 #include "modules/notifications/NotificationPermissionCallback.h"
-#include "wtf/PassRefPtr.h"
+#include "wtf/PassOwnPtr.h"
 
 namespace WebCore {
 
@@ -44,6 +44,8 @@ class Notification;
 class NotificationClient {
 
 public:
+    virtual ~NotificationClient() { }
+
     enum Permission {
         PermissionAllowed, // User has allowed notifications
         PermissionNotAllowed, // User has not yet allowed
@@ -68,9 +70,6 @@ public:
 
     // Checks the current level of permission.
     virtual Permission checkPermission(ExecutionContext*) = 0;
-
-protected:
-    virtual ~NotificationClient() { }
 };
 
 } // namespace WebCore

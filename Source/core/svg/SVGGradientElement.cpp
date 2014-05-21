@@ -100,7 +100,7 @@ void SVGGradientElement::svgAttributeChanged(const QualifiedName& attrName)
         return;
     }
 
-    SVGElementInstance::InvalidationGuard invalidationGuard(this);
+    SVGElement::InvalidationGuard invalidationGuard(this);
 
     RenderSVGResourceContainer* renderer = toRenderSVGResourceContainer(this->renderer());
     if (renderer)
@@ -115,7 +115,7 @@ void SVGGradientElement::childrenChanged(bool changedByParser, Node* beforeChang
         return;
 
     if (RenderObject* object = renderer())
-        object->setNeedsLayout();
+        object->setNeedsLayoutAndFullRepaint();
 }
 
 Vector<Gradient::ColorStop> SVGGradientElement::buildStops()

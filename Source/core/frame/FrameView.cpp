@@ -70,7 +70,7 @@
 #include "core/rendering/compositing/RenderLayerCompositor.h"
 #include "core/rendering/style/RenderStyle.h"
 #include "core/rendering/svg/RenderSVGRoot.h"
-#include "core/svg/SVGDocument.h"
+#include "core/svg/SVGDocumentExtensions.h"
 #include "core/svg/SVGSVGElement.h"
 #include "platform/TraceEvent.h"
 #include "platform/fonts/FontCache.h"
@@ -224,7 +224,6 @@ void FrameView::reset()
     m_layoutSchedulingEnabled = true;
     m_inPerformLayout = false;
     m_canRepaintDuringPerformLayout = false;
-    m_doingPreLayoutStyleUpdate = false;
     m_inSynchronousPostLayout = false;
     m_layoutCount = 0;
     m_nestedLayoutCount = 0;
@@ -397,6 +396,11 @@ void FrameView::setFrameRect(const IntRect& newRect)
     }
 
     viewportConstrainedVisibleContentSizeChanged(newRect.width() != oldRect.width(), newRect.height() != oldRect.height());
+
+    if (oldRect.size() != newRect.size()
+        && m_frame->isMainFrame()
+        && m_frame->settings()->pinchVirtualViewportEnabled())
+        page()->frameHost().pinchViewport().mainFrameDidChangeSize();
 }
 
 bool FrameView::scheduleAnimation()
@@ -529,6 +533,10 @@ void FrameView::applyOverflowToViewportAndSetRenderer(RenderObject* o, Scrollbar
     EOverflow overflowY = o->style()->overflowY();
 
     if (o->isSVGRoot()) {
+        // Don't allow overflow to affect <img> and css backgrounds
+        if (toRenderSVGRoot(o)->isEmbeddedThroughSVGImage())
+            return;
+
         // FIXME: evaluate if we can allow overflow for these cases too.
         // Overflow is always hidden when stand-alone SVG documents are embedded.
         if (toRenderSVGRoot(o)->isEmbeddedThroughFrameContainingSVGDocument()) {
@@ -634,13 +642,6 @@ void FrameView::updateCompositingLayersAfterStyleChange()
     RenderView* renderView = this->renderView();
     if (!renderView)
         return;
-
-    // FIXME: These early returns are probably not necessary anymore now that we
-    // just set dirty bits below.
-    // If we expect to update compositing after an incipient layout, don't do so here.
-    if (m_doingPreLayoutStyleUpdate || layoutPending() || renderView->needsLayout())
-        return;
-
     renderView->compositor()->setNeedsCompositingUpdate(CompositingUpdateAfterStyleChange);
 }
 
@@ -738,7 +739,7 @@ inline void FrameView::forceLayoutParentViewIfNeeded()
     RefPtr<FrameView> frameView = ownerRenderer->frame()->view();
 
     // Mark the owner renderer as needing layout.
-    ownerRenderer->setNeedsLayoutAndPrefWidthsRecalc();
+    ownerRenderer->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
 
     // Synchronously enter layout, to layout the view containing the host object/embed/iframe.
     ASSERT(frameView);
@@ -775,9 +776,6 @@ void FrameView::performPreLayoutTasks()
         document->evaluateMediaQueryList();
     }
 
-    // Always ensure our style info is up-to-date. This can happen in situations where
-    // the layout beats any sort of style recalc update that needs to occur.
-    TemporaryChange<bool> changeDoingPreLayoutStyleUpdate(m_doingPreLayoutStyleUpdate, true);
     document->updateRenderTreeIfNeeded();
     lifecycle().advanceTo(DocumentLifecycle::StyleClean);
 }
@@ -871,6 +869,7 @@ void FrameView::layout(bool allowSubtree)
     RELEASE_ASSERT(!isPainting());
 
     TRACE_EVENT_BEGIN1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "Layout", "beginData", InspectorLayoutEvent::beginData(this));
+    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline.stack"), "CallStack", "stack", InspectorCallStackEvent::currentCallStack());
     // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentationCookie cookie = InspectorInstrumentation::willLayout(m_frame.get());
 
@@ -1054,7 +1053,7 @@ void FrameView::repaintTree(RenderObject* root)
 
     RootLayoutStateScope rootLayoutStateScope(*root);
 
-    root->repaintTreeAfterLayout();
+    root->repaintTreeAfterLayout(*root->containerForRepaint());
 
     // Repaint the frameviews scrollbars if needed
     if (hasVerticalBarDamage())
@@ -1310,13 +1309,13 @@ void FrameView::viewportConstrainedVisibleContentSizeChanged(bool widthChanged, 
             if (style->width().isFixed() && (style->left().isAuto() || style->right().isAuto()))
                 renderer->setNeedsPositionedMovementLayout();
             else
-                renderer->setNeedsLayout();
+                renderer->setNeedsLayoutAndFullRepaint();
         }
         if (heightChanged) {
             if (style->height().isFixed() && (style->top().isAuto() || style->bottom().isAuto()))
                 renderer->setNeedsPositionedMovementLayout();
             else
-                renderer->setNeedsLayout();
+                renderer->setNeedsLayoutAndFullRepaint();
         }
     }
 }
@@ -1534,7 +1533,7 @@ bool FrameView::scrollToAnchor(const String& name)
     m_frame->document()->setCSSTarget(anchorNode);
 
     if (m_frame->document()->isSVGDocument()) {
-        if (SVGSVGElement* svg = toSVGDocument(m_frame->document())->rootElement()) {
+        if (SVGSVGElement* svg = SVGDocumentExtensions::rootElement(*m_frame->document())) {
             svg->setupInitialView(name, anchorNode);
             if (!anchorNode)
                 return true;
@@ -1573,12 +1572,36 @@ void FrameView::maintainScrollPositionAtAnchor(Node* anchorNode)
 
 void FrameView::scrollElementToRect(Element* element, const IntRect& rect)
 {
+    // FIXME(http://crbug.com/371896) - This method shouldn't be manually doing
+    // coordinate transformations to the PinchViewport.
+    IntRect targetRect(rect);
+
     m_frame->document()->updateLayoutIgnorePendingStylesheets();
 
+    bool pinchVirtualViewportEnabled = m_frame->settings()->pinchVirtualViewportEnabled();
+
+    if (pinchVirtualViewportEnabled) {
+        PinchViewport& pinchViewport = m_frame->page()->frameHost().pinchViewport();
+
+        IntSize pinchViewportSize = expandedIntSize(pinchViewport.visibleRect().size());
+        targetRect.moveBy(ceiledIntPoint(pinchViewport.visibleRect().location()));
+        targetRect.setSize(pinchViewportSize.shrunkTo(targetRect.size()));
+    }
+
     LayoutRect bounds = element->boundingBox();
-    int centeringOffsetX = (rect.width() - bounds.width()) / 2;
-    int centeringOffsetY = (rect.height() - bounds.height()) / 2;
-    setScrollPosition(IntPoint(bounds.x() - centeringOffsetX - rect.x(), bounds.y() - centeringOffsetY - rect.y()));
+    int centeringOffsetX = (targetRect.width() - bounds.width()) / 2;
+    int centeringOffsetY = (targetRect.height() - bounds.height()) / 2;
+
+    IntPoint targetOffset(
+        bounds.x() - centeringOffsetX - targetRect.x(),
+        bounds.y() - centeringOffsetY - targetRect.y());
+
+    setScrollPosition(targetOffset);
+
+    if (pinchVirtualViewportEnabled) {
+        IntPoint remainder = IntPoint(targetOffset - scrollPosition());
+        m_frame->page()->frameHost().pinchViewport().move(remainder);
+    }
 }
 
 void FrameView::setScrollPosition(const IntPoint& scrollPoint)
@@ -1740,6 +1763,10 @@ void FrameView::repaintContentRectangle(const IntRect& r)
         IntRect repaintRect = r;
         repaintRect.move(-scrollOffset());
         m_trackedRepaintRects.append(repaintRect);
+        // FIXME: http://crbug.com/368518. Eventually, repaintContentRectangle
+        // is going away entirely once all layout tests are FCM. In the short
+        // term, no code should be tracking non-composited FrameView repaints.
+        RELEASE_ASSERT_NOT_REACHED();
     }
 
     ScrollView::repaintContentRectangle(r);
@@ -1805,6 +1832,7 @@ void FrameView::scheduleRelayout()
     if (!m_frame->document()->shouldScheduleLayout())
         return;
     TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "InvalidateLayout", "frame", m_frame.get());
+    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline.stack"), "CallStack", "stack", InspectorCallStackEvent::currentCallStack());
     // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentation::didInvalidateLayout(m_frame.get());
 
@@ -1868,6 +1896,7 @@ void FrameView::scheduleRelayoutOfSubtree(RenderObject* relayoutRoot)
         lifecycle().ensureStateAtMost(DocumentLifecycle::StyleClean);
     }
     TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "InvalidateLayout", "frame", m_frame.get());
+    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline.stack"), "CallStack", "stack", InspectorCallStackEvent::currentCallStack());
     // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentation::didInvalidateLayout(m_frame.get());
 }
@@ -1899,7 +1928,7 @@ bool FrameView::needsLayout() const
 void FrameView::setNeedsLayout()
 {
     if (RenderView* renderView = this->renderView())
-        renderView->setNeedsLayout();
+        renderView->setNeedsLayoutAndFullRepaint();
 }
 
 bool FrameView::isTransparent() const
@@ -2704,6 +2733,7 @@ void FrameView::paintContents(GraphicsContext* p, const IntRect& rect)
         return;
 
     TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "Paint", "data", InspectorPaintEvent::data(renderView, rect, 0));
+    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline.stack"), "CallStack", "stack", InspectorCallStackEvent::currentCallStack());
     // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentation::willPaint(renderView, 0);
 
@@ -2911,7 +2941,7 @@ void FrameView::forceLayoutForPagination(const FloatSize& pageSize, const FloatS
         LayoutUnit flooredPageLogicalHeight = static_cast<LayoutUnit>(pageLogicalHeight);
         renderView->setLogicalWidth(flooredPageLogicalWidth);
         renderView->setPageLogicalHeight(flooredPageLogicalHeight);
-        renderView->setNeedsLayoutAndPrefWidthsRecalc();
+        renderView->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
         forceLayout();
 
         // If we don't fit in the given page width, we'll lay out again. If we don't fit in the
@@ -2931,7 +2961,7 @@ void FrameView::forceLayoutForPagination(const FloatSize& pageSize, const FloatS
             flooredPageLogicalHeight = static_cast<LayoutUnit>(pageLogicalHeight);
             renderView->setLogicalWidth(flooredPageLogicalWidth);
             renderView->setPageLogicalHeight(flooredPageLogicalHeight);
-            renderView->setNeedsLayoutAndPrefWidthsRecalc();
+            renderView->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
             forceLayout();
 
             const LayoutRect& updatedDocumentRect = renderView->documentRect();
@@ -3144,25 +3174,19 @@ void FrameView::removeResizerArea(RenderBox& resizerBox)
         m_resizerAreas->remove(it);
 }
 
-bool FrameView::addScrollableArea(ScrollableArea* scrollableArea)
+void FrameView::addScrollableArea(ScrollableArea* scrollableArea)
 {
     ASSERT(scrollableArea);
     if (!m_scrollableAreas)
         m_scrollableAreas = adoptPtr(new ScrollableAreaSet);
-    return m_scrollableAreas->add(scrollableArea).isNewEntry;
+    m_scrollableAreas->add(scrollableArea);
 }
 
-bool FrameView::removeScrollableArea(ScrollableArea* scrollableArea)
+void FrameView::removeScrollableArea(ScrollableArea* scrollableArea)
 {
     if (!m_scrollableAreas)
-        return false;
-
-    ScrollableAreaSet::iterator it = m_scrollableAreas->find(scrollableArea);
-    if (it == m_scrollableAreas->end())
-        return false;
-
-    m_scrollableAreas->remove(it);
-    return true;
+        return;
+    m_scrollableAreas->remove(scrollableArea);
 }
 
 void FrameView::removeChild(Widget* widget)

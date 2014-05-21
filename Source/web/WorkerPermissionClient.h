@@ -54,13 +54,14 @@ public:
 
     bool allowDatabase(const WebString& name, const WebString& displayName, unsigned long estimatedSize);
     bool allowFileSystem();
-    void requestFileSystemAccess(const WebPermissionCallbacks&);
+    bool requestFileSystemAccessSync();
+    void requestFileSystemAccessAsync(const WebPermissionCallbacks&);
     bool allowIndexedDB(const WebString& name);
 
     static const char* supplementName();
     static WorkerPermissionClient* from(WebCore::ExecutionContext&);
 
-    virtual void trace(WebCore::Visitor*) OVERRIDE { }
+    virtual void trace(WebCore::Visitor* visitor) OVERRIDE { WillBeHeapSupplement<WebCore::WorkerClients>::trace(visitor); }
 
 private:
     explicit WorkerPermissionClient(PassOwnPtr<WebWorkerPermissionClientProxy>);

@@ -14,16 +14,7 @@ crbug.com/364267 [ Win Mac ] http/tests/security/webgl-remote-read-remote-image-
 
 crbug.com/289002 http/tests/security/frame-loading-via-document-write.html [ Pass Failure ]
 
-# -----------------------------------------------------------------
-# Inspector tests
-# -----------------------------------------------------------------
-
 crbug.com/364088 inspector/audits/audits-panel-noimages-functional.html [ Pass Failure ]
-crbug.com/369035 inspector/profiler/cpu-profiler-profiling.html [ Failure Pass ]
-
-# -----------------------------------------------------------------
-# Plugin tests
-# -----------------------------------------------------------------
 
 crbug.com/260351 [ Linux ] plugins/mouse-click-plugin-clears-selection.html [ ImageOnlyFailure Pass ]
 
@@ -88,12 +79,14 @@ crbug.com/310679 [ Mac ] compositing/rubberbanding/transform-overhang-sw.html [ 
 crbug.com/310679 [ Mac ] compositing/rubberbanding/transform-overhang-w.html [ ImageOnlyFailure Pass ]
 crbug.com/310679 [ Mac ] fast/events/scale-and-scroll-iframe-body.html [ ImageOnlyFailure Pass ]
 crbug.com/310679 [ Mac ] fast/events/scale-and-scroll-iframe-window.html [ ImageOnlyFailure Pass ]
-crbug.com/310679 [ Mac ] fast/frames/frame-set-rotation-hit.html [ ImageOnlyFailure Pass ]
-crbug.com/310679 [ Mac ] fast/frames/frame-set-scaling-hit.html [ ImageOnlyFailure Pass ]
-crbug.com/318434 virtual/gpu/compositedscrolling/scrollbars/custom-scrollbar-with-incomplete-style.html [ ImageOnlyFailure ]
+crbug.com/310679 [ Mac ] fast/frames/frame-set-rotation-hit.html [ Failure ImageOnlyFailure Pass ]
+crbug.com/310679 [ Mac ] fast/frames/frame-set-scaling-hit.html [ Failure ImageOnlyFailure Pass ]
 
 # Tests failing since applyPageScaleFactorInCompositor enabled
 crbug.com/225184 fast/repaint/relayout-fixed-position-after-scale.html [ ImageOnlyFailure ]
+
+crbug.com/371916 [ Debug ] http/tests/security/contentSecurityPolicy/xsl-unaffected-by-style-src-2.php [ Crash ]
+crbug.com/371916 [ Debug ] http/tests/security/contentSecurityPolicy/xsl-allowed.php [ Crash ]
 
 # Pixel tests for RTL iframe scrollbar is erroneous. Cannot observe on actual browser.
 # Temporarily marking the flaky set below as NeedsManualRebaseline, so we can grab results
@@ -156,7 +149,7 @@ crbug.com/330083 w3c/web-platform-tests/custom-elements/concepts/custom-elements
 crbug.com/330083 w3c/web-platform-tests/custom-elements/concepts/custom-elements-type-naming.html [ Failure ]
 crbug.com/330083 w3c/web-platform-tests/custom-elements/creating-and-passing-registries/no-registry-test.html [ Failure ]
 crbug.com/330083 w3c/web-platform-tests/custom-elements/creating-and-passing-registries/share-registry-import-document.html [ Timeout ]
-crbug.com/330083 w3c/web-platform-tests/shadow-dom/elements-and-dom-objects/shadowroot-object/shadowroot-attributes/test-014.html [ Failure ]
+crbug.com/330083 w3c/web-platform-tests/shadow-dom/elements-and-dom-objects/shadowroot-object/shadowroot-attributes/test-014.html [ Timeout Failure ]
 crbug.com/330083 w3c/web-platform-tests/webrtc/simplecall.html [ Failure ]
 
 # Untriaged Aura-specific failure.
@@ -202,7 +195,10 @@ crbug.com/318978 [ Linux ] permissionclient/plugin-permission.html [ Skip ]
 crbug.com/318978 [ Linux ] plugins/ [ Skip ]
 crbug.com/318978 [ Linux ] virtual/softwarecompositing/plugins/invalidate_rect.html [ Skip ]
 
-crbug.com/365911 fast/text-autosizing/hackernews-comments.html [ Failure ]
+# Flaky:
+crbug.com/374270 http/tests/security/frameNavigation/context-for-location.html [ Failure Pass ]
+crbug.com/374270 http/tests/security/frameNavigation/context-for-location-assign.html [ Failure Pass ]
+crbug.com/374284 html5lib/generated/run-tests19-data.html [ Timeout Pass ]
 
 # Flaky tests under Linux Aura
 crbug.com/318980 [ Linux ] virtual/deferred/fast/images/imagemap-focus-ring.html [ ImageOnlyFailure Pass ]
@@ -229,7 +225,6 @@ crbug.com/314947 [ Mavericks ] fast/forms/datetimelocal-multiple-fields/datetime
 crbug.com/314947 [ Mavericks ] fast/forms/datetimelocal-multiple-fields/datetimelocal-multiple-fields-preserve-value-after-history-back.html [ Failure ]
 crbug.com/314947 [ Mavericks ] fast/forms/datetimelocal-multiple-fields/datetimelocal-multiple-fields-value-set-empty.html [ Failure ]
 crbug.com/314947 [ Mavericks ] http/tests/images/drag-image-to-desktop.html [ Failure ]
-crbug.com/314947 [ Mavericks ] printing/return-from-printing-mode.html [ ImageOnlyFailure ]
 
 # Mavericks bots seem to fail lots of tests on occasion.
 crbug.com/331582 [ Mavericks ] fast/inline/justify-emphasis-inline-box.html [ Pass ImageOnlyFailure ]
@@ -269,10 +264,8 @@ crbug.com/331583 [ Mavericks ] fast/text/whitespace/015.html [ Pass ImageOnlyFai
 crbug.com/331583 [ Mavericks ] fast/text/whitespace/016.html [ Pass ImageOnlyFailure ]
 crbug.com/331583 [ Mavericks ] fast/text/whitespace/017.html [ Pass ImageOnlyFailure ]
 crbug.com/331583 [ Mavericks ] fast/text/whitespace/018.html [ Pass ImageOnlyFailure ]
-crbug.com/331583 [ Mavericks ] fast/transforms/shadows.html [ Pass ImageOnlyFailure ]
 crbug.com/331583 [ Mavericks ] ietestcenter/css3/multicolumn/column-block-formatting-context-001.htm [ Pass ImageOnlyFailure ]
 crbug.com/331583 [ Mavericks ] ietestcenter/css3/multicolumn/column-containing-block-003.htm [ Pass ImageOnlyFailure ]
-# Also svg/hixie/text/001.xml and fullscreen/parent-flow-inline-with-block-child.html but they have other lines in this file.
 
 crbug.com/225184 scrollingcoordinator/non-fast-scrollable-region-scaled-iframe.html [ ImageOnlyFailure Pass ]
 
@@ -288,8 +281,7 @@ crbug.com/237270 http/tests/images/png-partial-load-no-alpha.html [ Pass Timeout
 # FIXME: This is flaky on XP, too, but we omit that until things are rebaselined.
 crbug.com/317806 [ Mac ] fast/sub-pixel/selection/selection-gaps-at-fractional-offsets.html [ Pass ImageOnlyFailure ]
 
-crbug.com/341435 [ Win ] http/tests/images/image-with-origin-header.html [ Failure Timeout ]
-crbug.com/341435 [ Linux Mac ] http/tests/images/image-with-origin-header.html [ Pass Timeout ]
+crbug.com/341435 http/tests/images/image-with-origin-header.html [ Pass Timeout ]
 
 crbug.com/248938 virtual/threaded/animations/3d/transform-origin-vs-functions.html [ Pass Failure ]
 crbug.com/248938 [ Linux Win ] virtual/threaded/animations/animation-border-overflow.html [ Pass Timeout ]
@@ -371,6 +363,8 @@ crbug.com/248938 [ Win Debug ] virtual/threaded/animations/compositor-start-even
 crbug.com/248938 [ Debug ] virtual/threaded/animations/animation-hit-test-transform.html [ Pass Failure Timeout ]
 crbug.com/364640 animations/compositor-start-event-timing.html [ Pass Failure ]
 
+crbug.com/360889 virtual/softwarecompositing/iframes/scrolling-iframe.html [ NeedsManualRebaseline ]
+
 crbug.com/320477 [ Debug ] inspector/sources/debugger/debugger-pause-in-internal.html [ Pass Crash ]
 crbug.com/347484 [ Debug ] inspector/profiler/canvas2d/canvas-replay-log-grid.html [ Timeout ]
 
@@ -381,12 +375,27 @@ crbug.com/290411 [ Win Mac ] fast/text/sub-pixel/text-scaling-rtl.html [ Skip ]
 crbug.com/290411 [ Win Mac ] fast/text/sub-pixel/text-scaling-vertical.html [ Skip ]
 crbug.com/290411 [ Win Mac ] fast/text/sub-pixel/text-scaling-webfont.html [ Skip ]
 
+crbug.com/371725 http/tests/webfont/slow-loading.html [ Pass ImageOnlyFailure Timeout ]
+
+# Issues on the mac-antialiased fonts virtual test suite.
+# crbug.com/367074 [ Mac ] virtual/mac-antialiasedtext/fast/text/sub-pixel/text-scaling-pixel.html [ Skip ]
+crbug.com/334269 [ Mac ] virtual/mac-antialiasedtext/fast/text/font-variant-ligatures.html [ ImageOnlyFailure ]
+crbug.com/334269 [ Mac ] virtual/mac-antialiasedtext/fast/text/international/zerowidthjoiner.html [ ImageOnlyFailure ]
+crbug.com/334269 [ Mac ] virtual/mac-antialiasedtext/fast/text/international/bdo-bidi-width.html [ ImageOnlyFailure ]
+crbug.com/348911 [ Mac ] virtual/mac-antialiasedtext/fast/text/international/rtl-space-in-ltr-element.html [ ImageOnlyFailure ]
+crbug.com/367078 [ Mac ] virtual/mac-antialiasedtext/fast/text/international/text-overflow-ellipsis-bidi.html [ ImageOnlyFailure ]
+crbug.com/367078 [ Mac ] virtual/mac-antialiasedtext/fast/text/international/inline-block-with-mixed-direction-words.html  [ ImageOnlyFailure ]
+crbug.com/290411 [ Mac ] virtual/mac-antialiasedtext/fast/text/sub-pixel/text-scaling-pixel.html [ Skip ]
+
+crbug.com/334269 [ Mac ] fast/text/international/bdo-bidi-width.html [ ImageOnlyFailure ]
 crbug.com/334269 [ Mac ] fast/text/font-variant-ligatures.html [ ImageOnlyFailure ]
+
+# Failing on Mac since r168339
+crbug.com/348911 [ Mac ] fast/text/international/rtl-space-in-ltr-element.html [ ImageOnlyFailure ]
 
 # Switching to content shell failures
 crbug.com/231866 [ Lion ] fast/backgrounds/animated-gif-as-background.html [ Pass ImageOnlyFailure ]
 crbug.com/235110 [ Mac ] virtual/softwarecompositing [ Skip ]
-crbug.com/243596 [ Win ] inspector-protocol/input/dispatchMouseEvent.html [ Failure ]
 crbug.com/243599 [ Debug ] http/tests/plugins/interrupted-get-url.html [ Crash Pass ]
 crbug.com/243782 fullscreen/full-screen-remove-ancestor.html [ Pass Timeout ]
 crbug.com/246077 fullscreen/full-screen-render-inline.html [ ImageOnlyFailure ]
@@ -394,6 +403,7 @@ crbug.com/318210 svg/text/text-style-recalc-crash.html [ Pass Timeout ]
 
 # Seems to be hit by the try jobs only.
 crbug.com/243599 [ Linux Win ] http/tests/xmlhttprequest/access-control-repeated-failed-preflight-crash.html [ Crash Pass Timeout ]
+crbug.com/374230 storage/indexeddb/createIndex-deleteObjectStore.htm [ Pass Failure Timeout Crash ]
 
 crbug.com/310866 fast/workers/storage/use-same-database-in-page-and-workers.html [ Pass Timeout ]
 
@@ -424,7 +434,7 @@ crbug.com/268111 [ Win ] http/tests/appcache/online-whitelist.html [ Failure Pas
 crbug.com/268588 [ Release ] http/tests/w3c/webperf/submission/Google/HighResolutionTime/worker-shared-basic.html [ Failure Pass ]
 crbug.com/316148 [ Win ] http/tests/w3c/webperf/approved/UserTiming/idlharness.html [ Pass Crash ]
 
-crbug.com/268692 [ SnowLeopard ] svg/custom/foreign-object-skew.svg [ ImageOnlyFailure Pass ]
+crbug.com/268692 [ Mac ] svg/custom/foreign-object-skew.svg [ ImageOnlyFailure ]
 
 crbug.com/268832 [ SnowLeopard Debug ] fast/multicol/newmulticol/direct-child-column-span-all.html [ Crash Pass ]
 
@@ -444,7 +454,7 @@ crbug.com/282089 [ Win7 Debug ] plugins/override-node-method.html [ Crash Pass ]
 crbug.com/282091 fast/forms/time-multiple-fields/time-multiple-fields-speech-crash.html [ Pass Timeout ]
 crbug.com/282092 [ Mac ] svg/dom/SVGLength-px-with-context.html [ Failure Pass ]
 crbug.com/282093 [ Mac ] svg/hixie/text/001.xml [ Crash Failure Pass ImageOnlyFailure ]
-crbug.com/282094 fast/repaint/video-mute-repaint.html [ Pass Timeout ]
+crbug.com/282094 fast/repaint/video-mute-repaint.html [ Pass Failure Timeout ]
 crbug.com/282095 storage/websql/read-transactions-running-concurrently.html [ Failure Pass ]
 crbug.com/318431 [ Linux ] fast/dom/shadow/transition-on-shadow-host-with-distributed-node.html [ Pass Timeout ]
 
@@ -453,6 +463,7 @@ crbug.com/340206 [ Win ] http/tests/security/cross-origin-css.html [ Pass Timeou
 crbug.com/284734 svg/custom/getsvgdocument.html [ Pass ImageOnlyFailure ]
 
 crbug.com/283723 [ Win ] http/tests/local/fileapi/file-last-modified-after-delete.html [ Failure Pass Timeout ]
+crbug.com/371716 [ Win ] http/tests/local/formdata/send-form-data.html [ Pass Timeout ]
 
 # 309184 and 303419 track Android-specific failures
 crbug.com/309184 crbug.com/303419 crbug.com/284782 http/tests/media/media-source/mediasource-duration.html [ Failure Pass ]
@@ -523,9 +534,6 @@ crbug.com/307777 [ Android ] virtual/softwarecompositing/overflow/get-transform-
 crbug.com/307777 [ Android ] webaudio/stereo2mono-down-mixing.html [ Timeout Pass ]
 crbug.com/307777 [ Android ] webexposed/custom-elements.html [ Timeout Pass ]
 
-# Exceeds the number of file descriptors allowed when allocating shared bitmaps.
-crbug.com/351897 [ Mac ] virtual/softwarecompositing/overflow/universal-accelerated-overflow-scroll.html [ Crash Pass ]
-
 crbug.com/363280 [ Debug ] inspector-protocol/debugger/debugger-terminate-dedicated-worker-while-paused.html [ Crash Pass ]
 
 crbug.com/309675 compositing/gestures/gesture-tapHighlight-simple-longPress.html [ ImageOnlyFailure ]
@@ -537,20 +545,17 @@ crbug.com/100798 [ Debug ] virtual/android/fullscreen/full-screen-iframe-allowed
 crbug.com/100798 [ Debug ] virtual/android/fullscreen/full-screen-iframe-allowed-prefixed.html [ Failure Pass ]
 crbug.com/243782 virtual/android/fullscreen/full-screen-remove-ancestor.html [ Pass Timeout ]
 
-crbug.com/298045 [ Mac ] virtual/implsidepainting [ Skip ]
-
 crbug.com/267888 [ Android ] crypto [ Skip ]
 
 crbug.com/327698 [ Win Release ] virtual/gpu/fast/canvas/canvas-lost-gpu-context.html [ Pass Timeout ]
 crbug.com/327698 [ Debug Mac Win ] virtual/gpu/fast/canvas/canvas-lost-gpu-context.html [ Pass Timeout ]
 
-crbug.com/298039 [ Mac ] compositing/overflow/clear-scroll-parent.html [ Failure ]
-crbug.com/298039 [ Mac ] virtual/gpu/compositedscrolling/overflow/clear-scroll-parent.html [ Failure ]
-crbug.com/334269 [ Mac ] fast/text/international/bdo-bidi-width.html [ ImageOnlyFailure ]
+crbug.com/369615 virtual/gpu/fast/canvas/canvas-overflow-hidden-animation.html [ Crash Pass Timeout ]
 
 # Test results depends on image caching behavior in Blink/Skia. This is being
 # worked on actively. Rebaseline after impl-side painting becomes stable.
-crbug.com/24182 crbug.com/318490 virtual/implsidepainting/inspector/timeline/timeline-decode-resize.html [ Crash Pass ]
+crbug.com/24182 crbug.com/318490 [ Win Linux Android ] virtual/implsidepainting/inspector/timeline/timeline-decode-resize.html [ Crash Pass ]
+crbug.com/24182 crbug.com/318490 crbug.com/372213 [ Mac ] virtual/implsidepainting/inspector/timeline/timeline-decode-resize.html [ Crash Pass Timeout ]
 
 # This test is flaky on all platforms, and has image failures most of the time on
 # WebKit Win7 (dbg)
@@ -559,26 +564,19 @@ crbug.com/302529 svg/custom/js-late-clipPath-and-object-creation.svg [ Failure P
 crbug.com/255714 [ Linux ] editing/execCommand/switch-list-type-with-orphaned-li.html [ Failure Pass ]
 crbug.com/231910 fast/dom/vertical-scrollbar-in-rtl.html [ Failure Pass ]
 
-# Mac has overlay scrollbars depending on external settings.
-crbug.com/304841 [ SnowLeopard ] inspector/device-emulation/device-emulation-320-2x.html [ Failure ]
-crbug.com/304841 [ SnowLeopard ] inspector/device-emulation/device-emulation-320.html [ Failure ]
-crbug.com/304841 [ SnowLeopard ] inspector/device-emulation/device-emulation-980-2x.html [ Failure ]
-crbug.com/304841 [ SnowLeopard ] inspector/device-emulation/device-emulation-980.html [ Failure ]
-crbug.com/304841 [ SnowLeopard ] inspector/device-emulation/device-emulation-restore.html [ Failure ]
-crbug.com/304841 [ SnowLeopard ] inspector/device-emulation/device-emulation-small.html [ Failure ]
-
 # Mac sets NSUserDefault setting to turn off smooth scrolling, and it cannot be turned on for a single test.
 crbug.com/364614 [ Mac ] fast/scroll-behavior/sub-frame-scroll.html [ Failure ]
 
 # Complex text failures on XP (likely caused by r158845).
 crbug.com/305290 [ XP ] fast/text/international/plane2.html [ Failure ]
-#crbug.com/316145 [ XP ] fast/text/justify-ideograph-complex.html [ Failure Pass ]
 
-crbug.com/306280 http/tests/pointer-lock/iframe-sandboxed-allow-pointer-lock.html [ Crash Pass ]
+crbug.com/310323 http/tests/pointer-lock/iframe-sandboxed-allow-pointer-lock.html [ Crash Pass ]
+crbug.com/310323 http/tests/pointer-lock/iframe-sandboxed-allow-pointer-lock-prefixed.html [ Crash Pass ]
 
-crbug.com/306595 svg/W3C-SVG-1.1-SE/struct-dom-11-f.svg [ Pass Timeout ]
-crbug.com/306595 svg/W3C-SVG-1.1-SE/types-dom-03-b.svg [ Pass Timeout ]
-crbug.com/306595 svg/W3C-SVG-1.1-SE/svgdom-over-01-f.svg [ Pass Timeout ]
+# TODO(enne): rebaseline these and leave them as flaky timeouts
+crbug.com/306595 svg/W3C-SVG-1.1-SE/struct-dom-11-f.svg [ Pass Timeout NeedsManualRebaseline ]
+crbug.com/306595 svg/W3C-SVG-1.1-SE/types-dom-03-b.svg [ Pass Timeout NeedsManualRebaseline ]
+crbug.com/306595 svg/W3C-SVG-1.1-SE/svgdom-over-01-f.svg [ Pass Timeout NeedsManualRebaseline ]
 
 crbug.com/310992 virtual/threaded/animations/play-state.html [ Pass Failure ]
 crbug.com/310992 animations/play-state.html [ Pass Failure ]
@@ -599,13 +597,6 @@ crbug.com/310292 [ Mac ] http/tests/security/video-poster-cross-origin-crash.htm
 
 crbug.com/310323 [ Debug ] http/tests/plugins/third-party-cookie-accept-policy.html [ Crash Pass ]
 crbug.com/310323 [ Debug ] http/tests/security/contentSecurityPolicy/report-multiple-violations-02.html [ Crash Pass ]
-
-crbug.com/311164 fast/js/mozilla/strict/15.4.4.6.html [ Failure Pass ]
-
-crbug.com/363103 fast/js/mozilla/strict/15.4.4.12.html [ NeedsManualRebaseline ]
-crbug.com/363103 fast/js/mozilla/strict/15.4.4.13.html [ NeedsManualRebaseline ]
-crbug.com/363103 fast/js/mozilla/strict/15.4.4.8.html [ NeedsManualRebaseline ]
-crbug.com/363103 fast/js/mozilla/strict/15.4.4.9.html [ NeedsManualRebaseline ]
 
 crbug.com/311301 fast/history/history_reload.html [ Failure Pass ]
 
@@ -644,20 +635,12 @@ crbug.com/313846 http/tests/images/webp-partial-load.html [ ImageOnlyFailure Tim
 
 crbug.com/316150 inspector/timeline/timeline-network-received-data.html [ Failure Pass ]
 
-crbug.com/315514 [ Linux ] fast/workers/storage/test-authorizer-sync.html [ Failure ]
-crbug.com/315514 [ Linux ] fast/workers/storage/test-authorizer.html [ Failure ]
-crbug.com/315514 [ Linux ] storage/websql/sql-error-codes.html [ Failure ]
-crbug.com/315514 [ Linux ] storage/websql/test-authorizer.html [ Failure ]
-
 # Macs do not support keyboard events to show a context menu.
 crbug.com/345913 [ Mac ] editing/spelling/spelling-on-context-menu-key.html [ Failure ]
 
 crbug.com/316349 inspector-protocol/page/enable-disable.html [ Failure Pass ]
 
 crbug.com/316730 canvas/synchronous-create-pattern.html [ ImageOnlyFailure Pass ]
-
-crbug.com/318632 webaudio/audiobuffersource-multi-channels.html [ NeedsManualRebaseline ]
-crbug.com/318632 webaudio/test-basic.html [ NeedsManualRebaseline ]
 
 crbug.com/320099 webaudio/oscillator-sawtooth.html [ NeedsManualRebaseline ]
 crbug.com/320099 webaudio/oscillator-triangle.html [ NeedsManualRebaseline ]
@@ -668,7 +651,6 @@ crbug.com/245556 compositing/transitions/transform-on-large-layer.html [ ImageOn
 crbug.com/245556 virtual/softwarecompositing/transitions/transform-on-large-layer.html [ ImageOnlyFailure ]
 
 crbug.com/369008 [ Mac ] fast/writing-mode/flipped-blocks-inline-map-local-to-container.html [ Crash Pass ]
-crbug.com/369009 inspector/elements/styles/styles-should-not-force-sync-style-recalc.html [ Failure Pass ]
 
 crbug.com/321787 [ Win ] virtual/gpu/fast/canvas/webgl/premultiplyalpha-test.html [ Pass Failure ]
 crbug.com/321793 [ Win ] fast/frames/sandboxed-iframe-navigation-windowopen.html [ Pass Timeout ]
@@ -684,184 +666,6 @@ crbug.com/368560 [ Win ] http/tests/svg/image-fetch-fail.svg [ Timeout Pass ]
 
 crbug.com/253763 fast/text-autosizing/first-line-scale-factor.html [ ImageOnlyFailure ]
 
-crbug.com/368265 svg/W3C-SVG-1.1-SE/filters-image-03-f.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/W3C-SVG-1.1-SE/filters-image-05-f.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/W3C-SVG-1.1/filters-blend-01-b.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/W3C-SVG-1.1/filters-color-01-b.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/W3C-SVG-1.1/filters-composite-02-b.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/W3C-SVG-1.1/filters-comptran-01-b.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/W3C-SVG-1.1/filters-diffuse-01-f.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/W3C-SVG-1.1/filters-displace-01-f.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/W3C-SVG-1.1/filters-example-01-b.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/W3C-SVG-1.1/filters-gauss-01-b.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/W3C-SVG-1.1/filters-light-01-f.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/W3C-SVG-1.1/filters-light-04-f.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/W3C-SVG-1.1/filters-specular-01-f.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/W3C-SVG-1.1/filters-turb-01-f.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/W3C-SVG-1.1/filters-turb-02-f.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/batik/filters/feTile.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/batik/text/smallFonts.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/batik/text/textFeatures.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/custom/convolution-crash.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/custom/feComponentTransfer-Discrete.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/custom/feComponentTransfer-Gamma.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/custom/feComponentTransfer-Linear.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/custom/feComponentTransfer-Table.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/custom/image-with-transform-clip-filter.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/custom/text-filter.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEBlendElement-dom-in-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEBlendElement-dom-in2-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEBlendElement-dom-mode-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEBlendElement-svgdom-in-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEBlendElement-svgdom-in2-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEBlendElement-svgdom-mode-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFECompositeElement-dom-in-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFECompositeElement-dom-in2-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFECompositeElement-dom-k1-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFECompositeElement-dom-k2-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFECompositeElement-dom-k3-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFECompositeElement-dom-k4-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFECompositeElement-dom-operator-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFECompositeElement-svgdom-in-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFECompositeElement-svgdom-in2-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFECompositeElement-svgdom-k1-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFECompositeElement-svgdom-k2-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFECompositeElement-svgdom-k3-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFECompositeElement-svgdom-k4-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFECompositeElement-svgdom-operator-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDiffuseLightingElement-dom-diffuseConstant-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDiffuseLightingElement-dom-in-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDiffuseLightingElement-dom-lighting-color-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDiffuseLightingElement-dom-surfaceScale-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDiffuseLightingElement-inherit-lighting-color-css-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDiffuseLightingElement-lighting-color-css-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDiffuseLightingElement-svgdom-diffuseConstant-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDiffuseLightingElement-svgdom-in-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDiffuseLightingElement-svgdom-surfaceScale-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDisplacementMapElement-dom-in-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDisplacementMapElement-dom-in2-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDisplacementMapElement-dom-scale-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDisplacementMapElement-dom-xChannelSelector-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDisplacementMapElement-dom-yChannelSelector-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDisplacementMapElement-svgdom-in-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDisplacementMapElement-svgdom-in2-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDisplacementMapElement-svgdom-scale-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDisplacementMapElement-svgdom-xChannelSelector-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDisplacementMapElement-svgdom-yChannelSelector-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDistantLightElement-dom-azimuth-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDistantLightElement-dom-elevation-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDistantLightElement-svgdom-azimuth-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDistantLightElement-svgdom-elevation-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDropShadowElement-dom-dx-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDropShadowElement-dom-dy-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDropShadowElement-dom-in-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDropShadowElement-dom-shadow-color-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDropShadowElement-dom-shadow-opacity-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDropShadowElement-svgdom-dx-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDropShadowElement-svgdom-dy-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDropShadowElement-svgdom-in-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDropShadowElement-svgdom-shadow-color-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDropShadowElement-svgdom-shadow-opacity-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEDropShadowElement-svgdom-stdDeviation-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEGaussianBlurElement-dom-in-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEGaussianBlurElement-dom-stdDeviation-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEGaussianBlurElement-dom-stdDeviation-call.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEGaussianBlurElement-svgdom-in-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEImageElement-dom-preserveAspectRatio-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEImageElement-svgdom-preserveAspectRatio-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEPointLightElement-dom-x-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEPointLightElement-dom-y-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEPointLightElement-dom-z-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEPointLightElement-svgdom-x-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEPointLightElement-svgdom-y-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFEPointLightElement-svgdom-z-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFESpecularLightingElement-dom-in-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFESpecularLightingElement-dom-specularConstant-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFESpecularLightingElement-dom-specularExponent-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFESpecularLightingElement-dom-suraceScale-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFESpecularLightingElement-inherit-lighting-color-css-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFESpecularLightingElement-lighting-color-css-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFESpecularLightingElement-svgdom-in-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFESpecularLightingElement-svgdom-specularConstant-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFESpecularLightingElement-svgdom-specularExponent-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFESpecularLightingElement-svgdom-suraceScale-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFESpotLightElement-dom-limitingConeAngle-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFESpotLightElement-dom-pointsAtX-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFESpotLightElement-dom-pointsAtY-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFESpotLightElement-dom-pointsAtZ-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFESpotLightElement-dom-specularExponent-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFESpotLightElement-dom-x-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFESpotLightElement-dom-y-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFESpotLightElement-dom-z-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFESpotLightElement-svgdom-limitingConeAngle-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFESpotLightElement-svgdom-pointsAtX-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFESpotLightElement-svgdom-pointsAtY-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFESpotLightElement-svgdom-pointsAtZ-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFESpotLightElement-svgdom-specularExponent-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFESpotLightElement-svgdom-x-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFESpotLightElement-svgdom-y-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFESpotLightElement-svgdom-z-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFETurbulenceElement-dom-baseFrequency-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFETurbulenceElement-dom-numOctaves-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFETurbulenceElement-dom-seed-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFETurbulenceElement-dom-stitchTiles-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFETurbulenceElement-dom-type-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFETurbulenceElement-svgdom-baseFrequency-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFETurbulenceElement-svgdom-numOctaves-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFETurbulenceElement-svgdom-seed-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFETurbulenceElement-svgdom-stitchTiles-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFETurbulenceElement-svgdom-type-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFilterElement-dom-width-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFilterElement-dom-x-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFilterElement-dom-y-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFilterElement-svgdom-filterRes-call.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFilterElement-svgdom-filterResX-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFilterElement-svgdom-filterResY-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFilterElement-svgdom-filterUnits-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFilterElement-svgdom-height-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFilterElement-svgdom-primitiveUnits-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFilterElement-svgdom-width-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFilterElement-svgdom-x-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFilterElement-svgdom-y-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFilterPrimitiveStandardAttributes-dom-height-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFilterPrimitiveStandardAttributes-dom-result-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFilterPrimitiveStandardAttributes-dom-width-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFilterPrimitiveStandardAttributes-dom-x-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFilterPrimitiveStandardAttributes-dom-y-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFilterPrimitiveStandardAttributes-svgdom-height-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFilterPrimitiveStandardAttributes-svgdom-result-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFilterPrimitiveStandardAttributes-svgdom-width-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFilterPrimitiveStandardAttributes-svgdom-x-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFilterPrimitiveStandardAttributes-svgdom-y-prop.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFilterElement-dom-filterRes-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFilterElement-dom-filterUnits-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFilterElement-dom-height-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/dynamic-updates/SVGFilterElement-dom-primitiveUnits-attr.html [ NeedsRebaseline ]
-crbug.com/368265 svg/filters/big-sized-filter.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/filters/feComposite.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/filters/feDropShadow.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/filters/feGaussianBlur.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/filters/feImage-preserveAspectRatio-all.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/filters/feLighting-crash.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/filters/feTile.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/filters/feTurbulence-scale.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/filters/fecomposite-region.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/filters/fecomposite-two-regions.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/filters/filterRes.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/filters/filterRes1.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/filters/filterRes2.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/filters/filterRes3.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/filters/shadow-on-filter.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/filters/subRegion-two-effects.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/repaint/filter-repaint.svg [ NeedsRebaseline ]
-crbug.com/368265 svg/repaint/paintorder-filtered.svg [ NeedsRebaseline ]
-
-# TODO(senorblanco): remove this suppression once
-# https://codereview.chromium.org/265693005/ lands in Skia and rolls into Chrome
-crbug.com/368265 [ Debug ] svg/W3C-SVG-1.1/filters-conv-01-f.svg [ Crash ]
-crbug.com/368265 [ Release ] svg/W3C-SVG-1.1/filters-conv-01-f.svg [ NeedsRebaseline ]
-
 # FIXME(crbug.com/302005): Remove these as expectations are updated or the fasttextautosizer improves.
 crbug.com/322782 fast/text-autosizing/cluster-inline-grid-flex-box.html [ ImageOnlyFailure ]
 crbug.com/322782 fast/text-autosizing/cluster-list-item.html [ ImageOnlyFailure ]
@@ -870,6 +674,9 @@ crbug.com/322782 fast/text-autosizing/narrow-descendants-combined.html [ ImageOn
 crbug.com/322782 fast/text-autosizing/oscillation-javascript-fontsize-change.html [ ImageOnlyFailure ]
 crbug.com/322782 fast/text-autosizing/narrow-iframe.html [ ImageOnlyFailure ]
 crbug.com/322782 fast/text-autosizing/clusters-insufficient-text.html [ ImageOnlyFailure ]
+
+crbug.com/374643 [ Mac ] fast/text-autosizing/supercluster-multiple-layout.html [ Failure ]
+crbug.com/374643 [ Mac ] fast/text-autosizing/tables/table-with-inline-block.html [ Failure ]
 
 crbug.com/335710 virtual/gpu/canvas/philip/tests/2d.text.draw.fontface.notinpage.html [ Pass Failure ]
 crbug.com/335710 canvas/philip/tests/2d.text.draw.fontface.notinpage.html [ Pass Failure ]
@@ -892,9 +699,6 @@ crbug.com/326524 virtual/threaded/compositing/visibility/visibility-simple-video
 crbug.com/342574 [ Debug ] fast/css-generated-content/crash-selection-editing-removes-pseudo.html [ Crash ]
 
 crbug.com/346151 css3/filters/effect-reference-hidpi-hw.html [ Pass ImageOnlyFailure ]
-
-# crbug.com/333242 svg/dynamic-updates/SVGUseElement-dom-href1-attr.html [ Pass ImageOnlyFailure ]
-# crbug.com/333242 svg/dynamic-updates/SVGUseElement-svgdom-href1-prop.html [ Pass ImageOnlyFailure ]
 
 crbug.com/337732 fast/css/fontfaceset-download-error.html [ Pass Timeout ]
 
@@ -956,26 +760,12 @@ crbug.com/339373 http/tests/websocket/deflate-frame-parameter.html [ Skip ]
 crbug.com/339373 http/tests/websocket/deflate-frame-set-bfinal.html [ Skip ]
 crbug.com/339373 http/tests/websocket/handshake-fail-by-no-cr.html [ Skip ]
 
-crbug.com/349537 http/tests/websocket/workers/worker-reload-repeated.html [ Crash Pass Timeout ]
-crbug.com/349537 virtual/stable/http/tests/websocket/workers/worker-reload-repeated.html [ Crash Pass Timeout ]
+crbug.com/349537 http/tests/websocket/workers/worker-reload-repeated.html [ Pass Timeout ]
+crbug.com/349537 virtual/stable/http/tests/websocket/workers/worker-reload-repeated.html [ Pass Timeout ]
 
 crbug.com/339778 [ Debug ] fast/dom/timer-throttling-hidden-page.html [ Failure Pass ]
 
 crbug.com/356828 fast/dom/gc-dom-tree-lifetime.html [ Timeout Pass ]
-
-# Repaint tests are marked flaky temporarily. Need rebaseline later. crbug.com/367201
-crbug.com/352460 compositing/squashing/squashed-layer-loses-graphicslayer.html [ NeedsRebaseline ]
-crbug.com/352460 fast/repaint/change-transform.html [ NeedsRebaseline ]
-crbug.com/352460 fast/repaint/fixed-scale.html [ NeedsRebaseline ]
-crbug.com/352460 fast/repaint/scroll-in-transformed-layer.html [ NeedsRebaseline ]
-crbug.com/352460 fast/repaint/transform-absolute-child.html [ NeedsRebaseline ]
-crbug.com/352460 fast/repaint/transform-absolute-in-positioned-container.html [ NeedsRebaseline ]
-crbug.com/352460 fast/repaint/transform-relative-position.html [ NeedsRebaseline ]
-crbug.com/352460 fast/repaint/transform-repaint-descendants.html [ NeedsRebaseline ]
-crbug.com/352460 fast/repaint/transform-replaced-shadows.html [ NeedsRebaseline ]
-crbug.com/352460 fast/repaint/transform-rotate-and-remove.html [ NeedsRebaseline ]
-crbug.com/352460 fast/repaint/transform-translate.html [ NeedsRebaseline ]
-crbug.com/352460 virtual/softwarecompositing/squashing/squashed-layer-loses-graphicslayer.html [ NeedsRebaseline ]
 
 # Heap buffer overflow failures on Linux ASAN
 crbug.com/347365 [ Linux ] dom/xhtml/level3/core/canonicalform08.xhtml [ Crash Pass ]
@@ -985,17 +775,16 @@ crbug.com/309197 [ Win Debug ] webaudio/oscillator-custom.html [ Skip ]
 crbug.com/309197 [ Win Debug ] webaudio/oscillator-sine.html [ Skip ]
 crbug.com/309197 [ Win Debug ] webaudio/oscillator-square.html [ Skip ]
 
-crbug.com/350011 [ Debug ] svg/W3C-SVG-1.1/animate-elem-40-t.svg [ ImageOnlyFailure ]
-crbug.com/350011 [ Debug ] svg/W3C-SVG-1.1/animate-elem-41-t.svg [ ImageOnlyFailure ]
-
-crbug.com/352464 http/tests/security/dataURL/xss-DENIED-to-data-url-in-foreign-domain-subframe-location-change.html [ Pass Missing ]
+crbug.com/349523 [ Win ] webaudio/dynamicscompressor-simple.html [ Failure ]
+crbug.com/349523 [ Win ] webaudio/realtimeanalyser-fft-scaling.html [ Failure ]
+crbug.com/352464 http/tests/security/dataURL/xss-DENIED-to-data-url-in-foreign-domain-subframe-location-change.html [ Pass Failure Missing ]
+crbug.com/372425 http/tests/security/dataURL/xss-DENIED-to-data-url-in-foreign-domain-subframe.html [ Pass Failure Timeout ]
+crbug.com/372428 http/tests/security/dataURL/xss-DENIED-to-data-url-in-foreign-domain-window-open.html [ Pass Failure ]
+crbug.com/374282 http/tests/security/dataURL/xss-DENIED-to-data-url-sub-frame-uppercase.html [ Failure Pass ]
 
 crbug.com/361940 [ Lion MountainLion Retina Mavericks ] compositing/update-paint-phases.html [ Failure ]
 
 crbug.com/356777 http/tests/history/frameset-repeated-name.html [ Pass Failure ]
-
-# Failing on Mac since r168339
-crbug.com/348911 [ Mac ] fast/text/international/rtl-space-in-ltr-element.html [ ImageOnlyFailure ]
 
 # Temporary until the Web Notification API test-runner changes finished.
 crbug.com/349015 fast/notifications/notifications-constructor-with-permission.html [ Failure Pass ]
@@ -1015,15 +804,15 @@ crbug.com/352385 [ Debug ] virtual/threaded/animations/3d/transform-perspective.
 crbug.com/352705 [ Win Debug ] virtual/threaded/animations/sample-on-last-keyframe.html [ Timeout Pass ]
 crbug.com/352705 [ Linux ] virtual/threaded/animations/sample-on-last-keyframe.html [ Timeout Pass ]
 crbug.com/352801 [ Mavericks ] http/tests/security/link-crossorigin-stylesheet-no-cors.html [ Pass Failure ]
-crbug.com/352856 [ Mac ] svg/batik/text/textPosition2.svg [ Pass Failure ]
-crbug.com/352856 [ Mac ] svg/batik/text/textPosition.svg [ Failure Pass ]
 crbug.com/352856 [ Mac ] svg/batik/text/xmlSpace.svg [ Failure Pass ]
+# TODO(enne): rebaseline these and leave as flaky
+crbug.com/352856 [ Mac ] svg/batik/text/textPosition.svg [ Pass Failure NeedsManualRebaseline ]
+crbug.com/352856 [ Mac ] svg/batik/text/textPosition2.svg [ Pass Failure NeedsManualRebaseline ]
 
 crbug.com/353186 [ Win Debug ] http/tests/security/webgl-remote-read-remote-image-allowed-with-credentials.html [ Pass Timeout ]
 crbug.com/353208 fast/files/workers/worker-read-blob-async-crash.html [ Pass Crash Timeout ]
 crbug.com/353301 svg/custom/js-late-gradient-and-object-creation.svg [ Pass Failure ]
 
-crbug.com/351658 fast/events/window-onerror-03.html [ NeedsManualRebaseline ]
 crbug.com/356991 [ Linux Debug ] fast/canvas/canvas-createImageBitmap-drawImage-video.html [ Crash Pass ]
 crbug.com/356996 [ Debug ] html5lib/generated/run-tests1-data.html [ Pass Timeout ]
 crbug.com/356996 [ Mac Release ] html5lib/generated/run-tests1-data.html [ Pass Timeout ]
@@ -1041,7 +830,6 @@ crbug.com/357084 [ Linux Win Debug ] virtual/threaded/animations/keyframe-timing
 crbug.com/357085 [ Win Debug ] virtual/threaded/animations/unanimated-style.html [ Pass Timeout ]
 crbug.com/357088 [ Debug ] web-animations-api/timeline-updates-players.html [ Failure Pass ]
 crbug.com/357088 [ Linux Release ] web-animations-api/timeline-updates-players.html [ Failure Pass ]
-crbug.com/357097 editing/context-menu-leak-document.html [ Failure ]
 crbug.com/357427 http/tests/workers/terminate-during-sync-operation.html [ Crash Pass Timeout ]
 crbug.com/357437 web-animations-api/change-in-animation-frame.html [ Failure Pass ]
 crbug.com/357438 [ Mac Win ] compositing/plugins/invalidate_rect.html [ Failure Pass ]
@@ -1073,39 +861,19 @@ crbug.com/354785 [ Linux Debug ] svg/as-background-image/animated-svg-animation-
 crbug.com/354791 [ Mac ] transitions/webkit-clip-path-equality.html [ Pass Failure ]
 crbug.com/354791 [ Mac ] virtual/threaded/transitions/webkit-clip-path-equality.html [ Pass Failure ]
 
-crbug.com/355463 [ Linux Win ] css3/flexbox/repaint.html [ Pass Failure ]
 crbug.com/356957 [ Win Debug ] editing/spelling/spellcheck-editable-on-focus.html [ Pass Timeout ]
 crbug.com/356148 media/audio-delete-while-slider-thumb-clicked.html [ Pass Crash ]
 
-crbug.com/344238 inspector/timeline/timeline-auto-record.html [ Pass Failure ]
-crbug.com/344238 virtual/deferred/inspector/timeline/timeline-auto-record.html [ Pass Failure ]
 crbug.com/344238 [ Mac Win Debug ] virtual/deferred/inspector/timeline/timeline-window-filter.html [ Pass Timeout ]
-crbug.com/344238 virtual/implsidepainting/inspector/timeline/timeline-auto-record.html [ Pass Failure ]
 
-crbug.com/359194 css3/viewport-percentage-lengths/viewport-percentage-lengths-page-zoom.html [ NeedsManualRebaseline ]
-crbug.com/359194 editing/pasteboard/drag-drop-copy-text.html [ NeedsManualRebaseline ]
-crbug.com/359194 editing/spelling/spellcheck-editable-on-focus-sync.html [ NeedsManualRebaseline ]
-crbug.com/359194 fast/dom/documentmarker-add-adjacent-text.html [ NeedsManualRebaseline ]
-crbug.com/359194 fast/dom/documentmarker-set-active.html [ NeedsManualRebaseline ]
-crbug.com/359194 fast/events/mouse-click-events-pseudo-element.html [ NeedsManualRebaseline ]
-crbug.com/359194 fast/events/touch/touch-target-removed-crash.html [ NeedsManualRebaseline ]
-crbug.com/359194 http/tests/local/formdata/send-form-data-with-bad-string.html [ NeedsManualRebaseline ]
-crbug.com/359194 http/tests/xmlhttprequest/xhr-to-blob-in-isolated-world.html [ NeedsManualRebaseline ]
-
-crbug.com/308992 css2.1/20110323/replaced-intrinsic-001.htm [ Failure ]
-crbug.com/308992 css2.1/20110323/replaced-intrinsic-002.htm [ Failure ]
-
-# Disabling this for now since Chromium CL changes output. Will re-enable once Chromium side lands.
-Bug(simonhatch) http/tests/loading/promote-img-in-viewport-priority.html [ Skip ]
+crbug.com/366387 [ Debug ] svg/as-object/deep-nested-embedded-svg-size-changes-no-layout-triggers-1.html [ Crash ]
+crbug.com/366387 [ Debug ] svg/as-object/deep-nested-embedded-svg-size-changes-no-layout-triggers-2.html [ Crash ]
 
 crbug.com/359960 compositing/iframes/scrolling-iframe.html [ Pass Failure ]
-crbug.com/359960 virtual/softwarecompositing/iframes/scrolling-iframe.html [ Pass Failure ]
+#crbug.com/359960 virtual/softwarecompositing/iframes/scrolling-iframe.html [ Pass Failure ]
 crbug.com/359961 inspector/timeline/timeline-window-filter.html [ Pass Timeout ]
 
-crbug.com/27987 fast/images/exif-orientation-height-image-document.html [ NeedsRebaseline ]
-crbug.com/27987 fast/images/image-zoom-to-25.html [ NeedsRebaseline ]
-crbug.com/27987 virtual/deferred/fast/images/exif-orientation-height-image-document.html [ NeedsRebaseline ]
-crbug.com/27987 virtual/deferred/fast/images/image-zoom-to-25.html [ NeedsRebaseline ]
+crbug.com/371886 virtual/softwarecompositing/geometry/assert-marquee-timer.html [ Crash ]
 
 crbug.com/361133 fast/frames/remove-frame-during-load-event.html [ Pass Crash ]
 
@@ -1115,17 +883,6 @@ crbug.com/362047 [ Mac Linux ] mhtml/mhtml_in_iframe.html [ Crash Pass ]
 crbug.com/320139 fast/repaint/block-layout-inline-children-replaced.html [ NeedsManualRebaseline ]
 #crbug.com/362050 [ Retina ] fast/repaint/block-layout-inline-children-replaced.html [ Failure ]
 crbug.com/362073 [ Mac Debug ] fast/dom/shadow/input-color-in-content.html [ Crash Pass ]
-crbug.com/368518 [ Mac ] css3/flexbox/repaint.html [ NeedsRebaseline ]
-crbug.com/368518 fast/repaint/background-shorthand-with-gradient-and-height-changes.html [ NeedsRebaseline ]
-crbug.com/368518 fast/repaint/background-size-auto-with-gradient-and-height-changes.html [ NeedsRebaseline ]
-crbug.com/368518 fast/repaint/obscured-background-no-repaint.html [ NeedsRebaseline ]
-
-crbug.com/356780 [ Win ] virtual/windows-directwrite/fast/text/basic/generic-family-reset.html [ NeedsManualRebaseline ]
-crbug.com/356780 [ Win ] virtual/windows-directwrite/fast/text/drawBidiText.html [ NeedsManualRebaseline ]
-crbug.com/356780 [ Win ] virtual/windows-directwrite/fast/text/international/bidi-listbox-atsui.html [ NeedsManualRebaseline ]
-crbug.com/356780 [ Win ] virtual/windows-directwrite/fast/text/international/bidi-listbox.html [ NeedsManualRebaseline ]
-crbug.com/356780 [ Win ] virtual/windows-directwrite/fast/text/international/bidi-menulist.html [ NeedsManualRebaseline ]
-crbug.com/356780 [ Win ] virtual/windows-directwrite/fast/text/textIteratorNilRenderer.html [ NeedsManualRebaseline ]
 
 # Very subtle alignment/clipping differences, tests likely need to be updated.
 crbug.com/356780 [ Win ] virtual/windows-directwrite/fast/text/international/complex-text-missing-glyph-fallback.html [ ImageOnlyFailure ]
@@ -1156,34 +913,7 @@ crbug.com/362501 [ Mac ] svg/text/obb-paintserver.html [ ImageOnlyFailure Crash 
 
 crbug.com/362503 http/tests/xmlhttprequest/xmlhttprequest-responseXML-exception.html [ Pass Timeout ]
 
-crbug.com/363025 virtual/serviceworker/http/tests/serviceworker/state.html [ Failure Pass ]
-
 crbug.com/364250 [ Debug ] virtual/threaded/animations/interpolation/webkit-transform-interpolation.html [ Pass Crash Timeout ]
-
-crbug.com/366939 svg/W3C-I18N/text-anchor-inherited-dirLTR-anchorStart.svg [ NeedsRebaseline ]
-crbug.com/366939 svg/W3C-I18N/text-anchor-dirLTR-anchorMiddle.svg [ NeedsRebaseline ]
-crbug.com/366939 svg/W3C-I18N/g-dirLTR-ubOverride.svg [ NeedsRebaseline ]
-crbug.com/366939 svg/W3C-I18N/text-anchor-dirNone-anchorEnd.svg [ NeedsRebaseline ]
-crbug.com/366939 svg/W3C-I18N/g-dirRTL-ubOverride.svg [ NeedsRebaseline ]
-crbug.com/366939 svg/W3C-I18N/text-dirLTR-ubNone.svg [ NeedsRebaseline ]
-crbug.com/366939 svg/W3C-I18N/tspan-direction-ltr.svg [ NeedsRebaseline ]
-crbug.com/366939 svg/W3C-I18N/text-anchor-inherited-dirLTR-anchorEnd.svg [ NeedsRebaseline ]
-crbug.com/366939 svg/text/bidi-text-query.svg [ NeedsRebaseline ]
-crbug.com/366939 svg/W3C-I18N/text-anchor-no-markup.svg [ NeedsRebaseline ]
-crbug.com/366939 svg/text/bidi-tspans.svg [ NeedsRebaseline ]
-crbug.com/366939 svg/W3C-I18N/tspan-dirLTR-ubNone-in-rtl-context.svg [ NeedsRebaseline ]
-crbug.com/366939 svg/W3C-I18N/g-dirLTR-ubNone.svg [ NeedsRebaseline ]
-crbug.com/366939 svg/W3C-SVG-1.1/text-intro-05-t.svg [ NeedsRebaseline ]
-crbug.com/366939 svg/W3C-I18N/text-anchor-dirNone-anchorMiddle.svg [ NeedsRebaseline ]
-crbug.com/366939 svg/text/text-intro-05-t.svg [ NeedsRebaseline ]
-crbug.com/366939 svg/W3C-I18N/text-anchor-inherited-dirLTR-anchorMiddle.svg [ NeedsRebaseline ]
-crbug.com/366939 svg/W3C-I18N/text-dirRTL-ubNone.svg [ NeedsRebaseline ]
-crbug.com/366939 svg/W3C-I18N/tspan-direction-rtl.svg [ NeedsRebaseline ]
-crbug.com/366939 svg/W3C-I18N/text-anchor-dirLTR-anchorEnd.svg [ NeedsRebaseline ]
-crbug.com/366939 svg/W3C-I18N/tspan-dirLTR-ubEmbed-in-rtl-context.svg [ NeedsRebaseline ]
-crbug.com/366939 svg/W3C-I18N/text-anchor-dirLTR-anchorStart.svg [ NeedsRebaseline ]
-crbug.com/366939 svg/W3C-I18N/text-anchor-dirNone-anchorStart.svg [ NeedsRebaseline ]
-crbug.com/366939 svg/W3C-I18N/g-dirRTL-ubNone.svg [ NeedsRebaseline ]
 
 # Need rebaseline once all tests are in ForceCompositingMode.
 crbug.com/361729 [ Mac ] virtual/gpu/fast/hidpi/image-srcset-svg-canvas.html [ ImageOnlyFailure ]
@@ -1205,19 +935,52 @@ crbug.com/366185 inspector/split-view.html [ Pass Timeout ]
 
 crbug.com/367814 [ Win Debug ] fast/dom/custom/document-register-reentrant-throwing-constructor.html [ Pass Crash ]
 
-crbug.com/368571 transitions/opacity-transform-transitions-inside-iframe.html [ NeedsRebaseline ]
-crbug.com/368571 virtual/threaded/transitions/opacity-transform-transitions-inside-iframe.html [ NeedsRebaseline ]
-
 crbug.com/361729 fast/multicol/pagination-h-horizontal-bt.html [ Pass Failure ]
 crbug.com/361729 fast/multicol/pagination-h-horizontal-tb.html [ Pass Failure ]
 
-crbug.com/367653 svg/transforms/animated-path-inside-transformed-html.xhtml [ NeedsRebaseline ]
+crbug.com/374569 [ Win ] http/tests/navigation/beacon-cross-origin.html [ Pass Failure Timeout ]
+crbug.com/374572 svg/filters/feImage-target-reappend-to-document.svg [ Pass Failure ]
+crbug.com/374572 svg/dynamic-updates/SVGImageElement-svgdom-preserveAspectRatio-prop.html [ Pass ImageOnlyFailure ]
+
+crbug.com/371651 svg/custom/deep-dynamic-updates.svg [ Pass Failure ]
+crbug.com/371651 svg/custom/js-update-gradient.svg [ Pass Failure ]
+crbug.com/371651 svg/custom/js-update-pattern.svg [ Pass Failure ]
+crbug.com/371651 svg/custom/js-update-pattern-child.svg [ Pass Failure ]
+crbug.com/371651 svg/custom/js-update-stop.svg [ Pass Failure ]
+crbug.com/371651 svg/custom/js-update-stop-linked-gradient.svg [ Pass Failure ]
+crbug.com/371651 svg/custom/use-disappears-after-style-update.svg [ Pass Failure ]
+crbug.com/371651 svg/filters/filter-refresh.svg [ Failure ]
+crbug.com/371651 svg/text/text-text-05-t.svg [ Failure ]
+
+crbug.com/371654 fast/html/imports/import-custom-element-dup-resolve.html [ Pass Failure ]
+
 crbug.com/367903 web-animations-api/timeline-time.html [ Pass Failure ]
 
-crbug.com/169282 virtual/threaded/compositing/visibility/visibility-image-layers.html [ NeedsRebaseline ]
+# Started failing with v8 roll in chromium r267851.
+crbug.com/369600 fast/events/onerror-no-constructor.html [ Failure ]
 
-crbug.com/367817 fast/frames/location-observe-callback-crash.html [ Pass Failure ]
+crbug.com/370789 fast/dom/document-contentType-data-uri.html [ Failure ]
 
-# Text selections on svg:a is no longer possible, same as for html:a, we no longer get a caret in this test:
-crbug.com/352175 svg/custom/linking-uri-01-b.svg [ NeedsRebaseline ]
-crbug.com/352175 svg/repaint/focus-element.html [ NeedsRebaseline ]
+crbug.com/370906 fast/dom/StyleSheet/gc-declaration-parent-rule.html [ Failure ]
+
+crbug.com/371276 [ Linux ] virtual/deferred/inspector/timeline/timeline-window-filter.html [ Pass Timeout ]
+crbug.com/371276 [ Linux ] virtual/implsidepainting/inspector/timeline/timeline-window-filter.html [ Pass Timeout ]
+
+crbug.com/372917 http/tests/security/contentSecurityPolicy/connect-src-beacon-redirect-to-blocked.html [ Failure ]
+
+crbug.com/361729 [ MountainLion ] printing/return-from-printing-mode.html [ ImageOnlyFailure ]
+
+crbug.com/373430 [ Win7 ] fast/dom/Geolocation/error-clear-watch.html [ Pass Timeout ]
+
+crbug.com/374936 [ Win ] svg/dynamic-updates/SVGImageElement-dom-height-attr.html [ ImageOnlyFailure ]
+crbug.com/374936 [ Win ] svg/dynamic-updates/SVGImageElement-dom-preserveAspectRatio-attr.html [ ImageOnlyFailure ]
+crbug.com/374936 [ Win ] svg/dynamic-updates/SVGImageElement-dom-width-attr.html [ ImageOnlyFailure ]
+crbug.com/374936 [ Win ] svg/dynamic-updates/SVGImageElement-svgdom-height-prop.html [ ImageOnlyFailure ]
+crbug.com/374936 [ Win ] svg/dynamic-updates/SVGImageElement-svgdom-width-prop.html [ ImageOnlyFailure ]
+crbug.com/374936 [ Linux ] svg/dynamic-updates/SVGImageElement-dom-height-attr.html [ ImageOnlyFailure Pass ]
+crbug.com/374936 [ Linux ] svg/dynamic-updates/SVGImageElement-dom-preserveAspectRatio-attr.html [ ImageOnlyFailure Pass ]
+crbug.com/374936 [ Linux ] svg/dynamic-updates/SVGImageElement-dom-width-attr.html [ ImageOnlyFailure Pass ]
+crbug.com/374936 [ Linux ] svg/dynamic-updates/SVGImageElement-svgdom-height-prop.html [ ImageOnlyFailure Pass ]
+crbug.com/374936 [ Linux ] svg/dynamic-updates/SVGImageElement-svgdom-width-prop.html [ ImageOnlyFailure Pass ]
+
+crbug.com/374939 [ XP ] virtual/softwarecompositing/layer-creation/should-invoke-deferred-compositing.html [ Failure ]

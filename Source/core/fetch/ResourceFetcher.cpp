@@ -226,8 +226,16 @@ static ResourceRequest::TargetType requestTargetType(const ResourceFetcher* fetc
     return ResourceRequest::TargetIsSubresource;
 }
 
+static void reportFontResourceCORSFailed(Resource* resource, const KURL& url, LocalFrame* frame)
+{
+    FontResource* fontResource = toFontResource(resource);
+    fontResource->setCORSFailed();
+    if (frame && frame->document())
+        frame->document()->addConsoleMessage(JSMessageSource, WarningMessageLevel, "Blink is considering rejecting non spec-compliant cross-origin web font requests: " + url.string() + ". Please use Access-Control-Allow-Origin to make these requests spec-compliant.");
+}
+
 ResourceFetcher::ResourceFetcher(DocumentLoader* documentLoader)
-    : m_document(0)
+    : m_document(nullptr)
     , m_documentLoader(documentLoader)
     , m_requestCount(0)
     , m_garbageCollectDocumentResourcesTimer(this, &ResourceFetcher::garbageCollectDocumentResourcesTimerFired)
@@ -241,7 +249,7 @@ ResourceFetcher::ResourceFetcher(DocumentLoader* documentLoader)
 ResourceFetcher::~ResourceFetcher()
 {
     m_documentLoader = 0;
-    m_document = 0;
+    m_document = nullptr;
 
     clearPreloads();
 
@@ -590,10 +598,7 @@ bool ResourceFetcher::canAccessResource(Resource* resource, SecurityOrigin* sour
     if (!resource->passesAccessControlCheck(sourceOrigin, errorDescription)) {
         // FIXME: Remove later, http://crbug.com/286681
         if (resource->type() == Resource::Font) {
-            FontResource* fontResource = toFontResource(resource);
-            fontResource->setCORSFailed();
-            if (frame() && frame()->document())
-                frame()->document()->addConsoleMessage(JSMessageSource, WarningMessageLevel, "Blink is considering rejecting non spec-compliant cross-origin web font requests: " + url.string() + ". Please use Access-Control-Allow-Origin to make these requests spec-compliant.");
+            reportFontResourceCORSFailed(resource, url, frame());
             return false;
         }
 
@@ -867,6 +872,12 @@ void ResourceFetcher::storeResourceTimingInitiatorInformation(Resource* resource
 
     RefPtr<ResourceTimingInfo> info = ResourceTimingInfo::create(resource->options().initiatorInfo.name, monotonicallyIncreasingTime());
 
+    if (resource->isCacheValidator()) {
+        const AtomicString& timingAllowOrigin = resource->resourceToRevalidate()->response().httpHeaderField("Timing-Allow-Origin");
+        if (!timingAllowOrigin.isEmpty())
+            info->setOriginalTimingAllowOrigin(timingAllowOrigin);
+    }
+
     if (resource->type() == Resource::MainResource) {
         // <iframe>s should report the initial navigation requested by the parent document, but not subsequent navigations.
         if (frame()->ownerElement() && !frame()->ownerElement()->loadedNonEmptyDocument()) {
@@ -978,6 +989,12 @@ ResourceFetcher::RevalidationPolicy ResourceFetcher::determineRevalidationPolicy
         WTF_LOG(ResourceLoading, "ResourceFetcher::determineRevalidationPolicye reloading due to resource being in the error state");
         return Reload;
     }
+
+    // List of available images logic allows images to be re-used without cache validation. We restrict this only to images
+    // from memory cache which are the same as the version in the current document.
+    if (type == Resource::Image && existingResource == cachedResource(request.url()))
+        return Use;
+
     // If any of the redirects in the chain to loading the resource were not cacheable, we cannot reuse our cached resource.
     if (!existingResource->canReuseRedirectChain()) {
         WTF_LOG(ResourceLoading, "ResourceFetcher::determineRevalidationPolicy reloading due to an uncacheable redirect");
@@ -1072,7 +1089,7 @@ void ResourceFetcher::redirectReceived(Resource* resource, const ResourceRespons
 void ResourceFetcher::didLoadResource(Resource* resource)
 {
     RefPtr<DocumentLoader> protectDocumentLoader(m_documentLoader);
-    RefPtr<Document> protectDocument(m_document);
+    RefPtrWillBeRawPtr<Document> protectDocument(m_document.get());
 
     if (resource && resource->response().isHTTP() && ((!resource->errorOccurred() && !resource->wasCanceled()) || resource->response().httpStatusCode() == 304) && document()) {
         ResourceTimingInfoMap::iterator it = m_resourceTimingInfoMap.find(resource);
@@ -1334,6 +1351,12 @@ bool ResourceFetcher::canAccessRedirect(Resource* resource, ResourceRequest& req
 
         String errorMessage;
         if (!CrossOriginAccessControl::handleRedirect(resource, sourceOrigin, request, redirectResponse, options, errorMessage)) {
+            // FIXME: Remove later, http://crbug.com/286681
+            if (resource->type() == Resource::Font) {
+                reportFontResourceCORSFailed(resource, request.url(), frame());
+                return false;
+            }
+
             if (frame() && frame()->document())
                 frame()->document()->addConsoleMessage(JSMessageSource, ErrorMessageLevel, errorMessage);
             return false;
@@ -1344,6 +1367,7 @@ bool ResourceFetcher::canAccessRedirect(Resource* resource, ResourceRequest& req
     return true;
 }
 
+#if !ENABLE(OILPAN)
 void ResourceFetcher::refResourceLoaderHost()
 {
     ref();
@@ -1353,6 +1377,7 @@ void ResourceFetcher::derefResourceLoaderHost()
 {
     deref();
 }
+#endif
 
 #if PRELOAD_DEBUG
 void ResourceFetcher::printPreloadStats()
@@ -1443,6 +1468,12 @@ void ResourceFetcher::DeadResourceStatsRecorder::update(RevalidationPolicy polic
         ++m_useCount;
         return;
     }
+}
+
+void ResourceFetcher::trace(Visitor* visitor)
+{
+    visitor->trace(m_document);
+    ResourceLoaderHost::trace(visitor);
 }
 
 }

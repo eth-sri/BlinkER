@@ -74,12 +74,13 @@ private:
     virtual void layout() OVERRIDE;
     virtual void enterForceCompositingMode(bool enter) OVERRIDE;
     virtual void willCloseLayerTreeView() OVERRIDE;
-    virtual void paint(WebCanvas*, const WebRect&, PaintOptions = ReadbackFromCompositorIfAvailable) OVERRIDE;
+    virtual void paint(WebCanvas*, const WebRect&) OVERRIDE;
     virtual void resize(const WebSize&) OVERRIDE;
     virtual void close() OVERRIDE;
     virtual bool handleInputEvent(const WebInputEvent&) OVERRIDE;
     virtual void setFocus(bool) OVERRIDE;
     virtual bool isPagePopup() const OVERRIDE { return true; }
+    virtual bool isAcceleratedCompositingActive() const OVERRIDE { return m_isAcceleratedCompositingActive; }
 
     // PageWidgetEventHandler functions
     virtual bool handleKeyEvent(const WebKeyboardEvent&) OVERRIDE;

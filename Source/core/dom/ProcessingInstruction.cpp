@@ -48,17 +48,17 @@ inline ProcessingInstruction::ProcessingInstruction(Document& document, const St
     ScriptWrappable::init(this);
 }
 
-PassRefPtr<ProcessingInstruction> ProcessingInstruction::create(Document& document, const String& target, const String& data)
+PassRefPtrWillBeRawPtr<ProcessingInstruction> ProcessingInstruction::create(Document& document, const String& target, const String& data)
 {
-    return adoptRef(new ProcessingInstruction(document, target, data));
+    return adoptRefWillBeRefCountedGarbageCollected(new ProcessingInstruction(document, target, data));
 }
 
 ProcessingInstruction::~ProcessingInstruction()
 {
+#if !ENABLE(OILPAN)
     if (m_sheet)
         m_sheet->clearOwnerNode();
 
-#if !ENABLE(OILPAN)
     if (inDocument())
         document().styleEngine()->removeStyleSheetCandidateNode(this);
 #endif
@@ -74,7 +74,7 @@ Node::NodeType ProcessingInstruction::nodeType() const
     return PROCESSING_INSTRUCTION_NODE;
 }
 
-PassRefPtr<Node> ProcessingInstruction::cloneNode(bool /*deep*/)
+PassRefPtrWillBeRawPtr<Node> ProcessingInstruction::cloneNode(bool /*deep*/)
 {
     // FIXME: Is it a problem that this does not copy m_localHref?
     // What about other data members?
@@ -271,6 +271,12 @@ void ProcessingInstruction::removedFrom(ContainerNode* insertionPoint)
     // If we're in document teardown, then we don't need to do any notification of our sheet's removal.
     if (document().isActive())
         document().removedStyleSheet(removedSheet.get());
+}
+
+void ProcessingInstruction::trace(Visitor* visitor)
+{
+    visitor->trace(m_sheet);
+    CharacterData::trace(visitor);
 }
 
 } // namespace

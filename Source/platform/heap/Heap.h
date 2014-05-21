@@ -39,8 +39,10 @@
 #include "wtf/Assertions.h"
 #include "wtf/HashCountedSet.h"
 #include "wtf/LinkedHashSet.h"
+#include "wtf/ListHashSet.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassRefPtr.h"
+#include "wtf/ThreadSafeRefCounted.h"
 
 #include <stdint.h>
 
@@ -69,6 +71,7 @@ class HeapStats;
 class PageMemory;
 template<ThreadAffinity affinity> class ThreadLocalPersistents;
 template<typename T, typename RootsAccessor = ThreadLocalPersistents<ThreadingTrait<T>::Affinity > > class Persistent;
+template<typename T> class CrossThreadPersistent;
 
 PLATFORM_EXPORT size_t osPageSize();
 
@@ -85,6 +88,11 @@ inline size_t blinkPagePayloadSize()
 inline Address roundToBlinkPageStart(Address address)
 {
     return reinterpret_cast<Address>(reinterpret_cast<uintptr_t>(address) & blinkPageBaseMask);
+}
+
+inline Address roundToBlinkPageEnd(Address address)
+{
+    return reinterpret_cast<Address>(reinterpret_cast<uintptr_t>(address - 1) & blinkPageBaseMask) + blinkPageSize;
 }
 
 // Compute the amount of padding we have to add to a header to make
@@ -133,17 +141,15 @@ public:
         ASSERT(isPageHeaderAddress(reinterpret_cast<Address>(this)));
     }
 
-    // Check if the given address could point to an object in this
+    // Check if the given address points to an object in this
     // heap page. If so, find the start of that object and mark it
-    // using the given Visitor.
-    //
-    // Returns true if the object was found and marked, returns false
-    // otherwise.
+    // using the given Visitor. Otherwise do nothing. The pointer must
+    // be within the same aligned blinkPageSize as the this-pointer.
     //
     // This is used during conservative stack scanning to
     // conservatively mark all objects that could be referenced from
     // the stack.
-    virtual bool checkAndMarkPointer(Visitor*, Address) = 0;
+    virtual void checkAndMarkPointer(Visitor*, Address) = 0;
 
 #if ENABLE(GC_TRACING)
     virtual const GCInfo* findGCInfo(Address) = 0;
@@ -153,6 +159,7 @@ public:
     PageMemory* storage() const { return m_storage; }
     ThreadState* threadState() const { return m_threadState; }
     const GCInfo* gcInfo() { return m_gcInfo; }
+    virtual bool isLargeObject() { return false; }
 
 private:
     // Accessor to silence unused warnings.
@@ -184,11 +191,14 @@ public:
         COMPILE_ASSERT(!(sizeof(LargeHeapObject<Header>) & allocationMask), large_heap_object_header_misaligned);
     }
 
-    virtual bool checkAndMarkPointer(Visitor*, Address);
+    virtual void checkAndMarkPointer(Visitor*, Address) OVERRIDE;
+    virtual bool isLargeObject() OVERRIDE { return true; }
 
 #if ENABLE(GC_TRACING)
-    virtual const GCInfo* findGCInfo(Address)
+    virtual const GCInfo* findGCInfo(Address address)
     {
+        if (!objectContains(address))
+            return 0;
         return gcInfo();
     }
 #endif
@@ -204,9 +214,19 @@ public:
         *previousNext = m_next;
     }
 
+    // The LargeHeapObject pseudo-page contains one actual object. Determine
+    // whether the pointer is within that object.
+    bool objectContains(Address object)
+    {
+        return (payload() <= object) && (object < address() + size());
+    }
+
+    // Returns true for any address that is on one of the pages that this
+    // large object uses. That ensures that we can use a negative result to
+    // populate the negative page cache.
     bool contains(Address object)
     {
-        return (address() <= object) && (object <= (address() + size()));
+        return roundToBlinkPageStart(address()) <= object && object < roundToBlinkPageEnd(address() + size());
     }
 
     LargeHeapObject<Header>* next()
@@ -235,7 +255,6 @@ public:
     void finalize();
 
 private:
-    friend class Heap;
     friend class ThreadHeap<Header>;
 
     LargeHeapObject<Header>* m_next;
@@ -438,10 +457,14 @@ public:
 
     bool isEmpty();
 
+    // Returns true for the whole blinkPageSize page that the page is on, even
+    // for the header, and the unmapped guard page at the start. That ensures
+    // the result can be used to populate the negative page cache.
     bool contains(Address addr)
     {
         Address blinkPageStart = roundToBlinkPageStart(address());
-        return blinkPageStart <= addr && (blinkPageStart + blinkPageSize) > addr;
+        ASSERT(blinkPageStart = address() - osPageSize()); // Page is at aligned address plus guard page size.
+        return blinkPageStart <= addr && addr < blinkPageStart + blinkPageSize;
     }
 
     HeapPage* next() { return m_next; }
@@ -463,7 +486,7 @@ public:
     void sweep();
     void clearObjectStartBitMap();
     void finalize(Header*);
-    virtual bool checkAndMarkPointer(Visitor*, Address);
+    virtual void checkAndMarkPointer(Visitor*, Address) OVERRIDE;
 #if ENABLE(GC_TRACING)
     const GCInfo* findGCInfo(Address) OVERRIDE;
 #endif
@@ -487,75 +510,163 @@ protected:
     friend class ThreadHeap<Header>;
 };
 
-// A HeapContainsCache provides a fast way of taking an arbitrary
+class AddressEntry {
+public:
+    AddressEntry() : m_address(0) { }
+
+    explicit AddressEntry(Address address) : m_address(address) { }
+
+    Address address() const { return m_address; }
+
+private:
+    Address m_address;
+};
+
+class PositiveEntry : public AddressEntry {
+public:
+    PositiveEntry()
+        : AddressEntry()
+        , m_containingPage(0)
+    {
+    }
+
+    PositiveEntry(Address address, BaseHeapPage* containingPage)
+        : AddressEntry(address)
+        , m_containingPage(containingPage)
+    {
+    }
+
+    BaseHeapPage* result() const { return m_containingPage; }
+
+    typedef BaseHeapPage* LookupResult;
+
+private:
+    BaseHeapPage* m_containingPage;
+};
+
+class NegativeEntry : public AddressEntry {
+public:
+    NegativeEntry() : AddressEntry() { }
+
+    NegativeEntry(Address address, bool) : AddressEntry(address) { }
+
+    bool result() const { return true; }
+
+    typedef bool LookupResult;
+};
+
+// A HeapExtentCache provides a fast way of taking an arbitrary
 // pointer-sized word, and determining whether it can be interpreted
 // as a pointer to an area that is managed by the garbage collected
 // Blink heap. There is a cache of 'pages' that have previously been
-// determined to be either wholly inside or wholly outside the
-// heap. The size of these pages must be smaller than the allocation
-// alignment of the heap pages. We determine on-heap-ness by rounding
-// down the pointer to the nearest page and looking up the page in the
-// cache. If there is a miss in the cache we ask the heap to determine
-// the status of the pointer by iterating over all of the heap. The
-// result is then cached in the two-way associative page cache.
+// determined to be wholly inside the heap. The size of these pages must be
+// smaller than the allocation alignment of the heap pages. We determine
+// on-heap-ness by rounding down the pointer to the nearest page and looking up
+// the page in the cache. If there is a miss in the cache we can ask the heap
+// to determine the status of the pointer by iterating over all of the heap.
+// The result is then cached in the two-way associative page cache.
 //
-// A HeapContainsCache is both a positive and negative
-// cache. Therefore, it must be flushed both when new memory is added
-// and when memory is removed from the Blink heap.
-class HeapContainsCache {
+// A HeapContainsCache is a positive cache. Therefore, it must be flushed when
+// memory is removed from the Blink heap. The HeapDoesNotContainCache is a
+// negative cache, so it must be flushed when memory is added to the heap.
+template<typename Entry>
+class HeapExtentCache {
 public:
-    HeapContainsCache();
+    HeapExtentCache()
+        : m_entries(adoptArrayPtr(new Entry[HeapExtentCache::numberOfEntries]))
+        , m_hasEntries(false)
+    {
+    }
 
     void flush();
     bool contains(Address);
+    bool isEmpty() { return !m_hasEntries; }
 
     // Perform a lookup in the cache.
     //
-    // If lookup returns false the argument address was not found in
+    // If lookup returns null/false the argument address was not found in
     // the cache and it is unknown if the address is in the Blink
     // heap.
     //
-    // If lookup returns true the argument address was found in the
-    // cache. In that case, the address is in the heap if the base
-    // heap page out parameter is different from 0 and is not in the
-    // heap if the base heap page out parameter is 0.
-    bool lookup(Address, BaseHeapPage**);
+    // If lookup returns true/a page, the argument address was found in the
+    // cache. For the HeapContainsCache this means the address is in the heap.
+    // For the HeapDoesNotContainCache this means the address is not in the
+    // heap.
+    PLATFORM_EXPORT typename Entry::LookupResult lookup(Address);
 
-    // Add an entry to the cache. Use a 0 base heap page pointer to
-    // add a negative entry.
-    void addEntry(Address, BaseHeapPage*);
+    // Add an entry to the cache.
+    PLATFORM_EXPORT void addEntry(Address, typename Entry::LookupResult);
 
 private:
-    class Entry {
-    public:
-        Entry()
-            : m_address(0)
-            , m_containingPage(0)
-        {
-        }
-
-        Entry(Address address, BaseHeapPage* containingPage)
-            : m_address(address)
-            , m_containingPage(containingPage)
-        {
-        }
-
-        BaseHeapPage* containingPage() { return m_containingPage; }
-        Address address() { return m_address; }
-
-    private:
-        Address m_address;
-        BaseHeapPage* m_containingPage;
-    };
-
     static const int numberOfEntriesLog2 = 12;
     static const int numberOfEntries = 1 << numberOfEntriesLog2;
 
     static size_t hash(Address);
 
-    WTF::OwnPtr<HeapContainsCache::Entry[]> m_entries;
+    WTF::OwnPtr<Entry[]> m_entries;
+    bool m_hasEntries;
 
     friend class ThreadState;
+};
+
+// Normally these would be typedefs instead of subclasses, but that makes them
+// very hard to forward declare.
+class HeapContainsCache : public HeapExtentCache<PositiveEntry> {
+public:
+    BaseHeapPage* lookup(Address);
+    void addEntry(Address, BaseHeapPage*);
+};
+
+class HeapDoesNotContainCache : public HeapExtentCache<NegativeEntry> { };
+
+// FIXME: This is currently used by the WebAudio code.
+// We should attempt to restructure the WebAudio code so that the main thread
+// alone determines life-time and receives messages about life-time from the
+// audio thread.
+template<typename T>
+class ThreadSafeRefCountedGarbageCollected : public GarbageCollectedFinalized<T>, public WTF::ThreadSafeRefCountedBase {
+    WTF_MAKE_NONCOPYABLE(ThreadSafeRefCountedGarbageCollected);
+
+public:
+    ThreadSafeRefCountedGarbageCollected()
+    {
+        m_keepAlive = adoptPtr(new CrossThreadPersistent<T>(static_cast<T*>(this)));
+    }
+
+    // Override ref to deal with a case where a reference count goes up
+    // from 0 to 1. This can happen in the following scenario:
+    // (1) The reference count becomes 0, but on-stack pointers keep references to the object.
+    // (2) The on-stack pointer is assigned to a RefPtr. The reference count becomes 1.
+    // In this case, we have to resurrect m_keepAlive.
+    void ref()
+    {
+        MutexLocker lock(m_mutex);
+        if (UNLIKELY(!refCount())) {
+            ASSERT(!m_keepAlive);
+            m_keepAlive = adoptPtr(new CrossThreadPersistent<T>(static_cast<T*>(this)));
+        }
+        WTF::ThreadSafeRefCountedBase::ref();
+    }
+
+    // Override deref to deal with our own deallocation based on ref counting.
+    void deref()
+    {
+        MutexLocker lock(m_mutex);
+        if (derefBase()) {
+            ASSERT(m_keepAlive);
+            m_keepAlive.clear();
+        }
+    }
+
+    using GarbageCollectedFinalized<T>::operator new;
+    using GarbageCollectedFinalized<T>::operator delete;
+
+protected:
+    ~ThreadSafeRefCountedGarbageCollected() { }
+
+private:
+    OwnPtr<CrossThreadPersistent<T> > m_keepAlive;
+    mutable Mutex m_mutex;
 };
 
 // The CallbackStack contains all the visitor callbacks used to trace and mark
@@ -628,26 +739,9 @@ public:
     // page in this thread heap.
     virtual BaseHeapPage* heapPageFromAddress(Address) = 0;
 
-    // Find the large object in this thread heap containing the given
-    // address. Returns 0 if the address is not contained in any
-    // page in this thread heap.
-    virtual BaseHeapPage* largeHeapObjectFromAddress(Address) = 0;
-
 #if ENABLE(GC_TRACING)
     virtual const GCInfo* findGCInfoOfLargeHeapObject(Address) = 0;
 #endif
-
-    // Check if the given address could point to an object in this
-    // heap. If so, find the start of that object and mark it using
-    // the given Visitor.
-    //
-    // Returns true if the object was found and marked, returns false
-    // otherwise.
-    //
-    // This is used during conservative stack scanning to
-    // conservatively mark all objects that could be referenced from
-    // the stack.
-    virtual bool checkAndMarkLargeHeapObject(Visitor*, Address) = 0;
 
     // Sweep this part of the Blink heap. This finalizes dead objects
     // and builds freelists for all the unused memory.
@@ -691,11 +785,9 @@ public:
     virtual ~ThreadHeap();
 
     virtual BaseHeapPage* heapPageFromAddress(Address);
-    virtual BaseHeapPage* largeHeapObjectFromAddress(Address);
 #if ENABLE(GC_TRACING)
     virtual const GCInfo* findGCInfoOfLargeHeapObject(Address);
 #endif
-    virtual bool checkAndMarkLargeHeapObject(Visitor*, Address);
     virtual void sweep();
     virtual void assertEmpty();
     virtual void clearFreeLists();
@@ -709,7 +801,10 @@ public:
 
     ThreadState* threadState() { return m_threadState; }
     HeapStats& stats() { return m_threadState->stats(); }
-    HeapContainsCache* heapContainsCache() { return m_threadState->heapContainsCache(); }
+    void flushHeapContainsCache()
+    {
+        m_threadState->heapContainsCache()->flush();
+    }
 
     inline Address allocate(size_t, const GCInfo*);
     void addToFreeList(Address, size_t);
@@ -853,11 +948,17 @@ public:
     static bool isConsistentForGC();
     static void makeConsistentForGC();
 
+    static void flushHeapDoesNotContainCache();
+    static bool heapDoesNotContainCacheIsEmpty() { return s_heapDoesNotContainCache->isEmpty(); }
+
+private:
     static Visitor* s_markingVisitor;
 
     static CallbackStack* s_markingStack;
     static CallbackStack* s_weakCallbackStack;
+    static HeapDoesNotContainCache* s_heapDoesNotContainCache;
     static bool s_shutdownCalled;
+    friend class ThreadState;
 };
 
 // The NoAllocationScope class is used in debug mode to catch unwanted
@@ -1295,6 +1396,8 @@ public:
     static const size_t kMaxUnquantizedAllocation = maxHeapObjectSize;
 };
 
+// This is a static-only class used as a trait on collections to make them heap allocated.
+// However see also HeapListHashSetAllocator.
 class HeapAllocator {
 public:
     typedef HeapAllocatorQuantizer Quantizer;
@@ -1335,15 +1438,12 @@ public:
         visitor->mark(buffer, FinalizedHeapObjectHeader::fromPayload(buffer)->traceCallback());
     }
 
-    static void markNoTracing(Visitor* visitor, const void* t)
-    {
-        visitor->mark(t, reinterpret_cast<TraceCallback>(0));
-    }
+    static void markNoTracing(Visitor* visitor, const void* t) { visitor->markNoTracing(t); }
 
     template<typename T, typename Traits>
     static void trace(Visitor* visitor, T& t)
     {
-        CollectionBackingTraceTrait<WTF::ShouldBeTraced<Traits>::value, Traits::isWeak, WeakPointersActWeak, T, Traits>::mark(visitor, t);
+        CollectionBackingTraceTrait<WTF::ShouldBeTraced<Traits>::value, Traits::isWeak, WeakPointersActWeak, T, Traits>::trace(visitor, t);
     }
 
     template<typename T>
@@ -1414,10 +1514,66 @@ public:
         return *other;
     }
 
+    static bool isAlive(Visitor* visitor, void* pointer) { return visitor->isAlive(pointer); }
+
 private:
     template<typename T, size_t u, typename V> friend class WTF::Vector;
     template<typename T, typename U, typename V, typename W> friend class WTF::HashSet;
     template<typename T, typename U, typename V, typename W, typename X, typename Y> friend class WTF::HashMap;
+};
+
+template<typename Value>
+static void traceListHashSetValue(Visitor* visitor, Value& value)
+{
+    // We use the default hash traits for the value in the node, because
+    // ListHashSet does not let you specify any specific ones.
+    // We don't allow ListHashSet of WeakMember, so we set that one false
+    // (there's an assert elsewhere), but we have to specify some value for the
+    // strongify template argument, so we specify WeakPointersActWeak,
+    // arbitrarily.
+    CollectionBackingTraceTrait<WTF::ShouldBeTraced<WTF::HashTraits<Value> >::value, false, WeakPointersActWeak, Value, WTF::HashTraits<Value> >::trace(visitor, value);
+}
+
+// The inline capacity is just a dummy template argument to match the off-heap
+// allocator.
+// This inherits from the static-only HeapAllocator trait class, but we do
+// declare pointers to instances. These pointers are always null, and no
+// objects are instantiated.
+template<typename ValueArg, size_t inlineCapacity>
+struct HeapListHashSetAllocator : public HeapAllocator {
+    typedef HeapAllocator TableAllocator;
+    typedef WTF::ListHashSetNode<ValueArg, HeapListHashSetAllocator> Node;
+
+public:
+    class AllocatorProvider {
+    public:
+        // For the heap allocation we don't need an actual allocator object, so we just
+        // return null.
+        HeapListHashSetAllocator* get() const { return 0; }
+
+        // No allocator object is needed.
+        void createAllocatorIfNeeded() { }
+
+        // There is no allocator object in the HeapListHashSet (unlike in
+        // the regular ListHashSet) so there is nothing to swap.
+        void swap(AllocatorProvider& other) { }
+    };
+
+    void deallocate(void* dummy) { }
+
+    // This is not a static method even though it could be, because it
+    // needs to match the one that the (off-heap) ListHashSetAllocator
+    // has. The 'this' pointer will always be null.
+    void* allocateNode()
+    {
+        COMPILE_ASSERT(!WTF::IsWeak<ValueArg>::value, WeakPointersInAListHashSetWillJustResultInNullEntriesInTheSetThatsNotWhatYouWantConsiderUsingLinkedHashSetInstead);
+        return malloc<void*, Node>(sizeof(Node));
+    }
+
+    static void traceValue(Visitor* visitor, Node* node)
+    {
+        traceListHashSetValue(visitor, node->m_value);
+    }
 };
 
 // FIXME: These should just be template aliases:
@@ -1446,6 +1602,12 @@ template<
     typename HashArg = typename DefaultHash<ValueArg>::Hash,
     typename TraitsArg = HashTraits<ValueArg> >
 class HeapLinkedHashSet : public LinkedHashSet<ValueArg, HashArg, TraitsArg, HeapAllocator> { };
+
+template<
+    typename ValueArg,
+    size_t inlineCapacity = 0, // The inlineCapacity is just a dummy to match ListHashSet (off-heap).
+    typename HashArg = typename DefaultHash<ValueArg>::Hash>
+class HeapListHashSet : public ListHashSet<ValueArg, inlineCapacity, HashArg, HeapListHashSetAllocator<ValueArg, inlineCapacity> > { };
 
 template<
     typename Value,
@@ -1620,7 +1782,7 @@ struct GCInfoTrait<HashMap<Key, Value, T, U, V, HeapAllocator> > {
             TraceTrait<TargetType>::trace,
             0,
             false, // HashMap needs no finalizer.
-            VTableTrait<TargetType>::hasVTable,
+            WTF::IsPolymorphic<TargetType>::value,
 #if ENABLE(GC_TRACING)
             TypenameStringTrait<TargetType>::get()
 #endif
@@ -1638,7 +1800,7 @@ struct GCInfoTrait<HashSet<T, U, V, HeapAllocator> > {
             TraceTrait<TargetType>::trace,
             0,
             false, // HashSet needs no finalizer.
-            VTableTrait<TargetType>::hasVTable,
+            WTF::IsPolymorphic<TargetType>::value,
 #if ENABLE(GC_TRACING)
             TypenameStringTrait<TargetType>::get()
 #endif
@@ -1656,26 +1818,63 @@ struct GCInfoTrait<LinkedHashSet<T, U, V, HeapAllocator> > {
             TraceTrait<TargetType>::trace,
             LinkedHashSet<T, U, V, HeapAllocator>::finalize,
             true, // Needs finalization. The anchor needs to unlink itself from the chain.
-            VTableTrait<TargetType>::hasVTable,
+            WTF::IsPolymorphic<TargetType>::value,
 #if ENABLE(GC_TRACING)
             TypenameStringTrait<TargetType>::get()
 #endif
         };
         return &info;
     }
-    static const GCInfo info;
+};
+
+template<typename ValueArg, size_t inlineCapacity, typename U>
+struct GCInfoTrait<ListHashSet<ValueArg, inlineCapacity, U, HeapListHashSetAllocator<ValueArg, inlineCapacity> > > {
+    static const GCInfo* get()
+    {
+        typedef WTF::ListHashSet<ValueArg, inlineCapacity, U, HeapListHashSetAllocator<ValueArg, inlineCapacity> > TargetType;
+        static const GCInfo info = {
+            TraceTrait<TargetType>::trace,
+            0,
+            false, // ListHashSet needs no finalization though its backing might.
+            false, // no vtable.
+#if ENABLE(GC_TRACING)
+            TypenameStringTrait<TargetType>::get()
+#endif
+        };
+        return &info;
+    }
+};
+
+template<typename T, typename Allocator>
+struct GCInfoTrait<WTF::ListHashSetNode<T, Allocator> > {
+    static const GCInfo* get()
+    {
+        typedef WTF::ListHashSetNode<T, Allocator> TargetType;
+        static const GCInfo info = {
+            TraceTrait<TargetType>::trace,
+            TargetType::finalize,
+            WTF::HashTraits<T>::needsDestruction, // The node needs destruction if its data does.
+            false, // no vtable.
+#if ENABLE(GC_TRACING)
+            TypenameStringTrait<TargetType>::get()
+#endif
+        };
+        return &info;
+    }
 };
 
 template<typename T>
 struct GCInfoTrait<Vector<T, 0, HeapAllocator> > {
     static const GCInfo* get()
     {
+#if ENABLE(GC_TRACING)
         typedef Vector<T, 0, HeapAllocator> TargetType;
+#endif
         static const GCInfo info = {
             TraceTrait<Vector<T, 0, HeapAllocator> >::trace,
             0,
             false, // Vector needs no finalizer if it has no inline capacity.
-            VTableTrait<Vector<T, 0, HeapAllocator> >::hasVTable,
+            WTF::IsPolymorphic<Vector<T, 0, HeapAllocator> >::value,
 #if ENABLE(GC_TRACING)
             TypenameStringTrait<TargetType>::get()
 #endif
@@ -1697,7 +1896,7 @@ struct GCInfoTrait<Vector<T, inlineCapacity, HeapAllocator> > {
             FinalizerTrait<TargetType>::finalize,
             // Finalizer is needed to destruct things stored in the inline capacity.
             inlineCapacity && VectorTraits<T>::needsDestruction,
-            VTableTrait<TargetType>::hasVTable,
+            WTF::IsPolymorphic<TargetType>::value,
 #if ENABLE(GC_TRACING)
             TypenameStringTrait<TargetType>::get()
 #endif
@@ -1715,7 +1914,7 @@ struct GCInfoTrait<Deque<T, 0, HeapAllocator> > {
             TraceTrait<TargetType>::trace,
             0,
             false, // Deque needs no finalizer if it has no inline capacity.
-            VTableTrait<TargetType>::hasVTable,
+            WTF::IsPolymorphic<TargetType>::value,
 #if ENABLE(GC_TRACING)
             TypenameStringTrait<TargetType>::get()
 #endif
@@ -1734,7 +1933,7 @@ struct GCInfoTrait<HashCountedSet<T, U, V, HeapAllocator> > {
             TraceTrait<TargetType>::trace,
             0,
             false, // HashCountedSet is just a HashTable, and needs no finalizer.
-            VTableTrait<TargetType>::hasVTable,
+            WTF::IsPolymorphic<TargetType>::value,
 #if ENABLE(GC_TRACING)
             TypenameStringTrait<TargetType>::get()
 #endif
@@ -1757,7 +1956,7 @@ struct GCInfoTrait<Deque<T, inlineCapacity, HeapAllocator> > {
             FinalizerTrait<TargetType>::finalize,
             // Finalizer is needed to destruct things stored in the inline capacity.
             inlineCapacity && VectorTraits<T>::needsDestruction,
-            VTableTrait<TargetType>::hasVTable,
+            WTF::IsPolymorphic<TargetType>::value,
 #if ENABLE(GC_TRACING)
             TypenameStringTrait<TargetType>::get()
 #endif
@@ -1794,7 +1993,7 @@ struct GCInfoTrait<HeapHashTableBacking<Table> > {
             TraceTrait<TargetType>::trace,
             HeapHashTableBacking<Table>::finalize,
             Table::ValueTraits::needsDestruction,
-            VTableTrait<TargetType>::hasVTable,
+            WTF::IsPolymorphic<TargetType>::value,
 #if ENABLE(GC_TRACING)
             TypenameStringTrait<TargetType>::get()
 #endif
@@ -1805,7 +2004,7 @@ struct GCInfoTrait<HeapHashTableBacking<Table> > {
 
 template<typename T, typename Traits>
 struct BaseVisitVectorBackingTrait {
-    static void mark(WebCore::Visitor* visitor, void* self)
+    static void trace(WebCore::Visitor* visitor, void* self)
     {
         // The allocator can oversize the allocation a little, according to
         // the allocation granularity. The extra size is included in the
@@ -1820,42 +2019,70 @@ struct BaseVisitVectorBackingTrait {
         // elements to mark.
         size_t length = header->payloadSize() / sizeof(T);
         for (size_t i = 0; i < length; i++)
-            CollectionBackingTraceTrait<WTF::ShouldBeTraced<Traits>::value, Traits::isWeak, WeakPointersActStrong, T, Traits>::mark(visitor, array[i]);
+            CollectionBackingTraceTrait<WTF::ShouldBeTraced<Traits>::value, Traits::isWeak, WeakPointersActStrong, T, Traits>::trace(visitor, array[i]);
     }
 };
 
+// Almost all hash table backings are visited with this specialization.
 template<ShouldWeakPointersBeMarkedStrongly strongify, typename Table>
 struct BaseVisitHashTableBackingTrait {
     typedef typename Table::ValueType Value;
     typedef typename Table::ValueTraits Traits;
-    static void mark(WebCore::Visitor* visitor, void* self)
+    static void trace(WebCore::Visitor* visitor, void* self)
     {
         Value* array = reinterpret_cast<Value*>(self);
         WebCore::FinalizedHeapObjectHeader* header = WebCore::FinalizedHeapObjectHeader::fromPayload(self);
         size_t length = header->payloadSize() / sizeof(Value);
         for (size_t i = 0; i < length; i++) {
             if (!WTF::HashTableHelper<Value, typename Table::ExtractorType, typename Table::KeyTraitsType>::isEmptyOrDeletedBucket(array[i]))
-                CollectionBackingTraceTrait<WTF::ShouldBeTraced<Traits>::value, Traits::isWeak, strongify, Value, Traits>::mark(visitor, array[i]);
+                CollectionBackingTraceTrait<WTF::ShouldBeTraced<Traits>::value, Traits::isWeak, strongify, Value, Traits>::trace(visitor, array[i]);
+        }
+    }
+};
+
+// This specialization of BaseVisitHashTableBackingTrait is for the backing of
+// HeapListHashSet. This is for the case that we find a reference to the
+// backing from the stack. That probably means we have a GC while we are in a
+// ListHashSet method since normal API use does not put pointers to the backing
+// on the stack.
+template<ShouldWeakPointersBeMarkedStrongly strongify, typename NodeContents, size_t inlineCapacity, typename T, typename U, typename V, typename W, typename X, typename Y>
+struct BaseVisitHashTableBackingTrait<strongify, WTF::HashTable<WTF::ListHashSetNode<NodeContents, HeapListHashSetAllocator<T, inlineCapacity> >*, U, V, W, X, Y, HeapAllocator> > {
+    typedef WTF::ListHashSetNode<NodeContents, HeapListHashSetAllocator<T, inlineCapacity> > Node;
+    typedef WTF::HashTable<Node*, U, V, W, X, Y, HeapAllocator> Table;
+    static void trace(WebCore::Visitor* visitor, void* self)
+    {
+        Node** array = reinterpret_cast<Node**>(self);
+        WebCore::FinalizedHeapObjectHeader* header = WebCore::FinalizedHeapObjectHeader::fromPayload(self);
+        size_t length = header->payloadSize() / sizeof(Node*);
+        for (size_t i = 0; i < length; i++) {
+            if (!WTF::HashTableHelper<Node*, typename Table::ExtractorType, typename Table::KeyTraitsType>::isEmptyOrDeletedBucket(array[i])) {
+                traceListHashSetValue(visitor, array[i]->m_value);
+                // Just mark the node without tracing because we already traced
+                // the contents, and there is no need to trace the next and
+                // prev fields since iterating over the hash table backing will
+                // find the whole chain.
+                visitor->markNoTracing(array[i]);
+            }
         }
     }
 };
 
 template<ShouldWeakPointersBeMarkedStrongly strongify, typename Key, typename Value, typename Traits>
 struct BaseVisitKeyValuePairTrait {
-    static void mark(WebCore::Visitor* visitor, WTF::KeyValuePair<Key, Value>& self)
+    static void trace(WebCore::Visitor* visitor, WTF::KeyValuePair<Key, Value>& self)
     {
         ASSERT(WTF::ShouldBeTraced<Traits>::value || (Traits::isWeak && strongify == WeakPointersActStrong));
-        CollectionBackingTraceTrait<WTF::ShouldBeTraced<typename Traits::KeyTraits>::value, Traits::KeyTraits::isWeak, strongify, Key, typename Traits::KeyTraits>::mark(visitor, self.key);
-        CollectionBackingTraceTrait<WTF::ShouldBeTraced<typename Traits::ValueTraits>::value, Traits::ValueTraits::isWeak, strongify, Value, typename Traits::ValueTraits>::mark(visitor, self.value);
+        CollectionBackingTraceTrait<WTF::ShouldBeTraced<typename Traits::KeyTraits>::value, Traits::KeyTraits::isWeak, strongify, Key, typename Traits::KeyTraits>::trace(visitor, self.key);
+        CollectionBackingTraceTrait<WTF::ShouldBeTraced<typename Traits::ValueTraits>::value, Traits::ValueTraits::isWeak, strongify, Value, typename Traits::ValueTraits>::trace(visitor, self.value);
     }
 };
 
 template<ShouldWeakPointersBeMarkedStrongly strongify, typename Value, typename Traits>
 struct BaseVisitLinkedNodeTrait {
-    static void mark(WebCore::Visitor* visitor, WTF::LinkedHashSetNode<Value>& self)
+    static void trace(WebCore::Visitor* visitor, WTF::LinkedHashSetNode<Value>& self)
     {
         ASSERT(WTF::ShouldBeTraced<Traits>::value || (Traits::isWeak && strongify == WeakPointersActStrong));
-        CollectionBackingTraceTrait<WTF::ShouldBeTraced<Traits>::value, Traits::isWeak, strongify, Value, Traits>::mark(visitor, self.m_value);
+        CollectionBackingTraceTrait<WTF::ShouldBeTraced<Traits>::value, Traits::isWeak, strongify, Value, Traits>::trace(visitor, self.m_value);
     }
 };
 
@@ -1863,16 +2090,16 @@ struct BaseVisitLinkedNodeTrait {
 // do nothing, even if WeakPointersActStrong.
 template<ShouldWeakPointersBeMarkedStrongly strongify, typename T, typename U>
 struct CollectionBackingTraceTrait<false, false, strongify, T, U> {
-    static void mark(Visitor*, const T&) { }
-    static void mark(Visitor*, const void*) { }
+    static void trace(Visitor*, const T&) { }
+    static void trace(Visitor*, const void*) { }
 };
 
 // Catch-all for things that don't need marking. They have weak pointers, but
 // we are not marking weak pointers in this object in this GC.
 template<typename T, typename U>
 struct CollectionBackingTraceTrait<false, true, WeakPointersActWeak, T, U> {
-    static void mark(Visitor*, const T&) { }
-    static void mark(Visitor*, const void*) { }
+    static void trace(Visitor*, const T&) { }
+    static void trace(Visitor*, const void*) { }
 };
 
 // For each type that we understand we have the strongified case and the
@@ -1907,14 +2134,29 @@ template<bool isWeak, ShouldWeakPointersBeMarkedStrongly strongify, typename Key
 struct CollectionBackingTraceTrait<true, isWeak, strongify, WTF::KeyValuePair<Key, Value>, Traits> : public BaseVisitKeyValuePairTrait<strongify, Key, Value, Traits> {
 };
 
-// List hash set node that would not normally need marking, but strongified.
+// Linked hash set node that would not normally need marking, but strongified.
 template<typename Value, typename Traits>
 struct CollectionBackingTraceTrait<false, true, WeakPointersActStrong, WTF::LinkedHashSetNode<Value>, Traits> : public BaseVisitLinkedNodeTrait<WeakPointersActStrong, Value, Traits> {
 };
 
-// List hash set node that needs marking, optionally also strongified.
+// Linked hash set node that needs marking, optionally also strongified.
 template<bool isWeak, ShouldWeakPointersBeMarkedStrongly strongify, typename Value, typename Traits>
 struct CollectionBackingTraceTrait<true, isWeak, strongify, WTF::LinkedHashSetNode<Value>, Traits> : public BaseVisitLinkedNodeTrait<strongify, Value, Traits> {
+};
+
+// ListHashSetNode pointers (a ListHashSet is implemented as a hash table of these pointers).
+template<ShouldWeakPointersBeMarkedStrongly strongify, typename Value, size_t inlineCapacity, typename Traits>
+struct CollectionBackingTraceTrait<true, false, strongify, WTF::ListHashSetNode<Value, HeapListHashSetAllocator<Value, inlineCapacity> >*, Traits> {
+    typedef WTF::ListHashSetNode<Value, HeapListHashSetAllocator<Value, inlineCapacity> > Node;
+    static void trace(WebCore::Visitor* visitor, Node* node)
+    {
+        traceListHashSetValue(visitor, node->m_value);
+        // Just mark the node without tracing because we already traced the
+        // contents, and there is no need to trace the next and prev fields
+        // since iterating over the hash table backing will find the whole
+        // chain.
+        visitor->markNoTracing(node);
+    }
 };
 
 // Vector backing that needs marking. We don't support weak members in vectors,
@@ -1926,7 +2168,7 @@ struct CollectionBackingTraceTrait<true, isWeak, strongify, HeapVectorBacking<T,
 // Member always needs marking, never weak.
 template<ShouldWeakPointersBeMarkedStrongly strongify, typename T, typename Traits>
 struct CollectionBackingTraceTrait<true, false, strongify, Member<T>, Traits> {
-    static void mark(WebCore::Visitor* visitor, Member<T> self)
+    static void trace(WebCore::Visitor* visitor, Member<T> self)
     {
         visitor->mark(self.get());
     }
@@ -1935,7 +2177,7 @@ struct CollectionBackingTraceTrait<true, false, strongify, Member<T>, Traits> {
 // Weak member never has needsMarking, always weak, strongified case.
 template<typename T, typename Traits>
 struct CollectionBackingTraceTrait<false, true, WeakPointersActStrong, WeakMember<T>, Traits> {
-    static void mark(WebCore::Visitor* visitor, WeakMember<T> self)
+    static void trace(WebCore::Visitor* visitor, WeakMember<T> self)
     {
         // This can mark weak members as if they were strong. The reason we
         // need this is that we don't do weak processing unless we reach the
@@ -1954,7 +2196,7 @@ struct CollectionBackingTraceTrait<false, true, WeakPointersActStrong, WeakMembe
 // removed from the collection.
 template<bool isWeak, ShouldWeakPointersBeMarkedStrongly strongify, typename T, typename Traits>
 struct CollectionBackingTraceTrait<true, isWeak, strongify, T, Traits> {
-    static void mark(WebCore::Visitor* visitor, T& t)
+    static void trace(WebCore::Visitor* visitor, T& t)
     {
         TraceTrait<T>::trace(visitor, &t);
     }
@@ -1967,7 +2209,7 @@ struct TraceTrait<HeapVectorBacking<T, Traits> > {
     {
         COMPILE_ASSERT(!Traits::isWeak, WeDontSupportWeaknessInHeapVectorsOrDeques);
         if (WTF::ShouldBeTraced<Traits>::value)
-            CollectionBackingTraceTrait<WTF::ShouldBeTraced<Traits>::value, false, WeakPointersActWeak, HeapVectorBacking<T, Traits>, void>::mark(visitor, self);
+            CollectionBackingTraceTrait<WTF::ShouldBeTraced<Traits>::value, false, WeakPointersActWeak, HeapVectorBacking<T, Traits>, void>::trace(visitor, self);
     }
     static void mark(Visitor* visitor, const Backing* backing)
     {
@@ -1994,14 +2236,14 @@ struct TraceTrait<HeapHashTableBacking<Table> > {
     static void trace(WebCore::Visitor* visitor, void* self)
     {
         if (WTF::ShouldBeTraced<Traits>::value || Traits::isWeak)
-            CollectionBackingTraceTrait<WTF::ShouldBeTraced<Traits>::value, Traits::isWeak, WeakPointersActStrong, Backing, void>::mark(visitor, self);
+            CollectionBackingTraceTrait<WTF::ShouldBeTraced<Traits>::value, Traits::isWeak, WeakPointersActStrong, Backing, void>::trace(visitor, self);
     }
     static void mark(Visitor* visitor, const Backing* backing)
     {
         if (WTF::ShouldBeTraced<Traits>::value || Traits::isWeak)
             visitor->mark(backing, &trace);
         else
-            visitor->mark(backing, 0);
+            visitor->markNoTracing(backing); // If we know the trace function will do nothing there is no need to call it.
     }
     static void checkGCInfo(Visitor* visitor, const Backing* backing)
     {
@@ -2033,6 +2275,8 @@ template<typename T, typename U, typename V>
 struct GCInfoTrait<HeapHashSet<T, U, V> > : public GCInfoTrait<HashSet<T, U, V, HeapAllocator> > { };
 template<typename T, typename U, typename V>
 struct GCInfoTrait<HeapLinkedHashSet<T, U, V> > : public GCInfoTrait<LinkedHashSet<T, U, V, HeapAllocator> > { };
+template<typename T, size_t inlineCapacity, typename U>
+struct GCInfoTrait<HeapListHashSet<T, inlineCapacity, U> > : public GCInfoTrait<ListHashSet<T, inlineCapacity, U, HeapListHashSetAllocator<T, inlineCapacity> > > { };
 template<typename T, size_t inlineCapacity>
 struct GCInfoTrait<HeapVector<T, inlineCapacity> > : public GCInfoTrait<Vector<T, inlineCapacity, HeapAllocator> > { };
 template<typename T, size_t inlineCapacity>

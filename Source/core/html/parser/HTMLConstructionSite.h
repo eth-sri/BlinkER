@@ -213,8 +213,8 @@ private:
 
     void findFosterSite(HTMLConstructionSiteTask&);
 
-    PassRefPtr<Element> createHTMLElement(AtomicHTMLToken*);
-    PassRefPtr<Element> createElement(AtomicHTMLToken*, const AtomicString& namespaceURI);
+    PassRefPtrWillBeRawPtr<Element> createHTMLElement(AtomicHTMLToken*);
+    PassRefPtrWillBeRawPtr<Element> createElement(AtomicHTMLToken*, const AtomicString& namespaceURI);
 
     void mergeAttributesFromTokenIntoElement(AtomicHTMLToken*, Element*);
     void dispatchDocumentElementAvailableIfNeeded();
@@ -230,7 +230,7 @@ private:
     ContainerNode* m_attachmentRoot;
 
     RefPtr<HTMLStackItem> m_head;
-    RefPtr<HTMLFormElement> m_form;
+    RefPtrWillBePersistent<HTMLFormElement> m_form;
     mutable HTMLElementStack m_openElements;
     mutable HTMLFormattingElementList m_activeFormattingElements;
 

@@ -100,7 +100,7 @@ bool InsertTextCommand::performTrivialReplace(const String& text, bool selectIns
 bool InsertTextCommand::performOverwrite(const String& text, bool selectInsertedText)
 {
     Position start = endingSelection().start();
-    RefPtr<Text> textNode = start.containerText();
+    RefPtrWillBeRawPtr<Text> textNode = start.containerText();
     if (!textNode)
         return false;
 
@@ -194,7 +194,7 @@ void InsertTextCommand::doApply()
         ASSERT(startPosition.containerNode()->isTextNode());
         if (placeholder.isNotNull())
             removePlaceholderAt(placeholder);
-        RefPtr<Text> textNode = startPosition.containerText();
+        RefPtrWillBeRawPtr<Text> textNode = startPosition.containerText();
         const unsigned offset = startPosition.offsetInContainerNode();
 
         insertTextIntoNode(textNode, offset, m_text);
@@ -235,19 +235,19 @@ Position InsertTextCommand::insertTab(const Position& pos)
 
     // keep tabs coalesced in tab span
     if (isTabSpanTextNode(node)) {
-        RefPtr<Text> textNode = toText(node);
+        RefPtrWillBeRawPtr<Text> textNode = toText(node);
         insertTextIntoNode(textNode, offset, "\t");
         return Position(textNode.release(), offset + 1);
     }
 
     // create new tab span
-    RefPtr<Element> spanNode = createTabSpanElement(document());
+    RefPtrWillBeRawPtr<Element> spanNode = createTabSpanElement(document());
 
     // place it
     if (!node->isTextNode()) {
         insertNodeAt(spanNode.get(), insertPos);
     } else {
-        RefPtr<Text> textNode = toText(node);
+        RefPtrWillBeRawPtr<Text> textNode = toText(node);
         if (offset >= textNode->length())
             insertNodeAfter(spanNode, textNode.release());
         else {

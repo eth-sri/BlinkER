@@ -40,7 +40,7 @@ enum TranslateAttributeMode {
 
 class HTMLElement : public Element {
 public:
-    static PassRefPtr<HTMLElement> create(const QualifiedName& tagName, Document&);
+    static PassRefPtrWillBeRawPtr<HTMLElement> create(const QualifiedName& tagName, Document&);
 
     virtual String title() const OVERRIDE FINAL;
     virtual short tabIndex() const OVERRIDE;
@@ -113,7 +113,7 @@ private:
 
     void mapLanguageAttributeToLocale(const AtomicString&, MutableStylePropertySet*);
 
-    PassRefPtr<DocumentFragment> textToFragment(const String&, ExceptionState&);
+    PassRefPtrWillBeRawPtr<DocumentFragment> textToFragment(const String&, ExceptionState&);
 
     void dirAttributeChanged(const AtomicString&);
     void adjustDirectionalityIfNeededAfterChildAttributeChanged(Element* child);

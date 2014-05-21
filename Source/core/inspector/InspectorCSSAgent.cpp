@@ -729,7 +729,7 @@ void InspectorCSSAgent::getComputedStyleForNode(ErrorString* errorString, int no
     if (!node)
         return;
 
-    RefPtr<CSSComputedStyleDeclaration> computedStyleInfo = CSSComputedStyleDeclaration::create(node, true);
+    RefPtrWillBeRawPtr<CSSComputedStyleDeclaration> computedStyleInfo = CSSComputedStyleDeclaration::create(node, true);
     RefPtr<InspectorStyle> inspectorStyle = InspectorStyle::create(InspectorCSSId(), computedStyleInfo, 0);
     style = inspectorStyle->buildArrayForComputedStyle();
 }
@@ -759,7 +759,7 @@ void InspectorCSSAgent::getPlatformFontsForNode(ErrorString* errorString, int no
     if (!node)
         return;
 
-    RefPtr<CSSComputedStyleDeclaration> computedStyleInfo = CSSComputedStyleDeclaration::create(node, true);
+    RefPtrWillBeRawPtr<CSSComputedStyleDeclaration> computedStyleInfo = CSSComputedStyleDeclaration::create(node, true);
     *cssFamilyName = computedStyleInfo->getPropertyValue(CSSPropertyFontFamily);
 
     Vector<Node*> textNodes;
@@ -781,7 +781,7 @@ void InspectorCSSAgent::getPlatformFontsForNode(ErrorString* errorString, int no
             RenderTextFragment* textFragment = toRenderTextFragment(renderer);
             if (textFragment->firstLetter()) {
                 RenderObject* firstLetter = textFragment->firstLetter();
-                for (RenderObject* current = firstLetter->firstChild(); current; current = current->nextSibling()) {
+                for (RenderObject* current = firstLetter->slowFirstChild(); current; current = current->nextSibling()) {
                     if (current->isText())
                         collectPlatformFontsForRenderer(toRenderText(current), &fontStats);
                 }
@@ -1122,7 +1122,7 @@ void InspectorCSSAgent::collectAllDocumentStyleSheets(Document* document, Vector
 {
     const WillBeHeapVector<RefPtrWillBeMember<StyleSheet> > activeStyleSheets = document->styleEngine()->activeStyleSheetsForInspector();
     for (WillBeHeapVector<RefPtrWillBeMember<StyleSheet> >::const_iterator it = activeStyleSheets.begin(); it != activeStyleSheets.end(); ++it) {
-        StyleSheet* styleSheet = (*it).get();
+        StyleSheet* styleSheet = it->get();
         if (styleSheet->isCSSStyleSheet())
             collectStyleSheets(toCSSStyleSheet(styleSheet), result);
     }
@@ -1180,7 +1180,7 @@ InspectorStyleSheet* InspectorCSSAgent::viaInspectorStyleSheet(Document* documen
         return inspectorStyleSheet.get();
 
     TrackExceptionState exceptionState;
-    RefPtr<Element> styleElement = document->createElement("style", exceptionState);
+    RefPtrWillBeRawPtr<Element> styleElement = document->createElement("style", exceptionState);
     if (!exceptionState.hadException())
         styleElement->setAttribute("type", "text/css", exceptionState);
     if (!exceptionState.hadException()) {

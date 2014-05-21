@@ -53,9 +53,9 @@ HTMLFrameSetElement::HTMLFrameSetElement(Document& document)
     setHasCustomStyleCallbacks();
 }
 
-PassRefPtr<HTMLFrameSetElement> HTMLFrameSetElement::create(Document& document)
+PassRefPtrWillBeRawPtr<HTMLFrameSetElement> HTMLFrameSetElement::create(Document& document)
 {
-    return adoptRef(new HTMLFrameSetElement(document));
+    return adoptRefWillBeRefCountedGarbageCollected(new HTMLFrameSetElement(document));
 }
 
 bool HTMLFrameSetElement::isPresentationAttribute(const QualifiedName& name) const
@@ -207,7 +207,7 @@ Node::InsertionNotificationRequest HTMLFrameSetElement::insertedInto(ContainerNo
 void HTMLFrameSetElement::willRecalcStyle(StyleRecalcChange)
 {
     if (needsStyleRecalc() && renderer()) {
-        renderer()->setNeedsLayout();
+        renderer()->setNeedsLayoutAndFullRepaint();
         clearNeedsStyleRecalc();
     }
 }

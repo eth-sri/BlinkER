@@ -156,9 +156,9 @@ v8::Handle<v8::Value> JavaScriptCallFrame::restart()
 {
     v8::Handle<v8::Object> callFrame = m_callFrame.newLocal(m_isolate);
     v8::Handle<v8::Function> restartFunction = v8::Handle<v8::Function>::Cast(callFrame->Get(v8AtomicString(m_isolate, "restart")));
-    v8::Debug::SetLiveEditEnabled(true, m_isolate);
+    v8::Debug::SetLiveEditEnabled(m_isolate, true);
     v8::Handle<v8::Value> result = restartFunction->Call(callFrame, 0, 0);
-    v8::Debug::SetLiveEditEnabled(false, m_isolate);
+    v8::Debug::SetLiveEditEnabled(m_isolate, false);
     return result;
 }
 
@@ -176,7 +176,7 @@ ScriptValue JavaScriptCallFrame::setVariableValue(int scopeNumber, const String&
         v8String(m_isolate, variableName),
         newValue.v8Value()
     };
-    return ScriptValue(setVariableValueFunction->Call(callFrame, WTF_ARRAY_LENGTH(argv), argv), m_isolate);
+    return ScriptValue(ScriptState::current(m_isolate), setVariableValueFunction->Call(callFrame, WTF_ARRAY_LENGTH(argv), argv));
 }
 
 } // namespace WebCore

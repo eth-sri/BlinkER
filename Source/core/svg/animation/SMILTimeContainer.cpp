@@ -27,7 +27,7 @@
 #include "core/svg/animation/SMILTimeContainer.h"
 
 #include "core/animation/AnimationClock.h"
-#include "core/animation/DocumentTimeline.h"
+#include "core/animation/AnimationTimeline.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/frame/FrameView.h"
 #include "core/svg/SVGSVGElement.h"
@@ -39,6 +39,7 @@ namespace WebCore {
 
 static const double initialFrameDelay = 0.025;
 
+#if !ENABLE(OILPAN)
 // Every entry-point that calls updateAnimations() should instantiate a
 // DiscardScope to prevent deletion of the ownerElement (and hence itself.)
 class DiscardScope {
@@ -48,6 +49,7 @@ public:
 private:
     RefPtr<SVGSVGElement> m_discardScopeElement;
 };
+#endif
 
 SMILTimeContainer::SMILTimeContainer(SVGSVGElement& owner)
     : m_beginTime(0)
@@ -157,13 +159,15 @@ bool SMILTimeContainer::isStarted() const
 
 void SMILTimeContainer::begin()
 {
-    ASSERT(!m_beginTime);
+    RELEASE_ASSERT(!m_beginTime);
     double now = currentTime();
 
     // If 'm_presetStartTime' is set, the timeline was modified via setElapsed() before the document began.
     // In this case pass on 'seekToTime=true' to updateAnimations().
     m_beginTime = now - m_presetStartTime;
+#if !ENABLE(OILPAN)
     DiscardScope discardScope(m_ownerSVGElement);
+#endif
     SMILTime earliestFireTime = updateAnimations(SMILTime(m_presetStartTime), m_presetStartTime ? true : false);
     m_presetStartTime = 0;
 
@@ -254,10 +258,10 @@ void SMILTimeContainer::scheduleAnimationFrame(SMILTime fireTime)
     ASSERT(!m_wakeupTimer.isActive());
 
     SMILTime delay = fireTime - elapsed();
-    if (delay.value() < DocumentTimeline::s_minimumDelay) {
+    if (delay.value() < AnimationTimeline::s_minimumDelay) {
         serviceOnNextFrame();
     } else {
-        scheduleWakeUp(delay.value() - DocumentTimeline::s_minimumDelay, FutureAnimationFrame);
+        scheduleWakeUp(delay.value() - AnimationTimeline::s_minimumDelay, FutureAnimationFrame);
     }
 }
 
@@ -341,7 +345,9 @@ void SMILTimeContainer::serviceAnimations(double monotonicAnimationStartTime)
 
 void SMILTimeContainer::updateAnimationsAndScheduleFrameIfNeeded(SMILTime elapsed, bool seekToTime)
 {
+#if !ENABLE(OILPAN)
     DiscardScope discardScope(m_ownerSVGElement);
+#endif
     SMILTime earliestFireTime = updateAnimations(elapsed, seekToTime);
     // If updateAnimations() ended up triggering a synchronization (most likely
     // via syncbases), then give that priority.

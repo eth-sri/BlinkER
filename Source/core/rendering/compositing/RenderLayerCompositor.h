@@ -48,10 +48,18 @@ class StickyPositionViewportConstraints;
 enum CompositingUpdateType {
     CompositingUpdateNone,
     CompositingUpdateOnCompositedScroll,
+    CompositingUpdateAfterCompositingInputChange,
     CompositingUpdateAfterStyleChange,
     CompositingUpdateAfterLayout,
     CompositingUpdateOnScroll,
-    CompositingUpdateAfterCanvasContextChange,
+};
+
+enum CompositingStateTransitionType {
+    NoCompositingStateChange,
+    AllocateOwnCompositedLayerMapping,
+    RemoveOwnCompositedLayerMapping,
+    PutInSquashingLayer,
+    RemoveFromSquashingLayer
 };
 
 // RenderLayerCompositor manages the hierarchy of
@@ -82,12 +90,7 @@ public:
     bool hasAcceleratedCompositing() const { return m_hasAcceleratedCompositing; }
     bool layerSquashingEnabled() const;
 
-    bool legacyOrCurrentAcceleratedCompositingForOverflowScrollEnabled() const;
-    bool legacyAcceleratedCompositingForOverflowScrollEnabled() const;
-
     bool acceleratedCompositingForOverflowScrollEnabled() const;
-
-    bool canRender3DTransforms() const;
 
     bool rootShouldAlwaysComposite() const;
 
@@ -111,7 +114,6 @@ public:
     };
 
     // Update the compositing dirty bits, based on the compositing-impacting properties of the layer.
-    // (At the moment, it also has some legacy compatibility hacks.)
     void updateLayerCompositingState(RenderLayer*, UpdateLayerCompositingStateOptions = Normal);
 
     // Returns whether this layer is clipped by another layer that is not an ancestor of the given layer in the stacking context hierarchy.
@@ -178,9 +180,6 @@ public:
     GraphicsLayer* layerForVerticalScrollbar() const { return m_layerForVerticalScrollbar.get(); }
     GraphicsLayer* layerForScrollCorner() const { return m_layerForScrollCorner.get(); }
 
-    void updateViewportConstraintStatus(RenderLayer*);
-    void removeViewportConstrainedLayer(RenderLayer*);
-
     void addOutOfFlowPositionedLayer(RenderLayer*);
     void removeOutOfFlowPositionedLayer(RenderLayer*);
 
@@ -198,51 +197,17 @@ public:
     // Whether the layer could ever be composited.
     bool canBeComposited(const RenderLayer*) const;
 
+    // FIXME: Move allocateOrClearCompositedLayerMapping to CompositingLayerAssigner once we've fixed
+    // the compositing chicken/egg issues.
+    bool allocateOrClearCompositedLayerMapping(RenderLayer*, CompositingStateTransitionType compositedLayerUpdate);
+
+    void updateDirectCompositingReasons(RenderLayer*);
+
 private:
     class OverlapMap;
 
-    enum CompositingStateTransitionType {
-        NoCompositingStateChange,
-        AllocateOwnCompositedLayerMapping,
-        RemoveOwnCompositedLayerMapping,
-        PutInSquashingLayer,
-        RemoveFromSquashingLayer
-    };
+    void assertNoUnresolvedDirtyBits();
 
-    struct SquashingState {
-        SquashingState()
-            : mostRecentMapping(0)
-            , hasMostRecentMapping(false)
-            , nextSquashedLayerIndex(0)
-            , totalAreaOfSquashedRects(0) { }
-
-        void updateSquashingStateForNewMapping(CompositedLayerMappingPtr, bool hasNewCompositedLayerMapping, LayoutPoint newOffsetFromTransformedAncestorForSquashingCLM);
-
-        // The most recent composited backing that the layer should squash onto if needed.
-        CompositedLayerMappingPtr mostRecentMapping;
-        bool hasMostRecentMapping;
-
-        // Coordinates of the compositedLayerMapping's owning layer in the space of the transformed ancestor. This is used for computing the correct
-        // positions of renderlayers when they paint into the squashing layer.
-        LayoutPoint offsetFromTransformedAncestorForSquashingCLM;
-
-        // Counter that tracks what index the next RenderLayer would be if it gets squashed to the current squashing layer.
-        size_t nextSquashedLayerIndex;
-
-        // The absolute bounding rect of all the squashed layers.
-        IntRect boundingRect;
-
-        // This is simply the sum of the areas of the squashed rects. This can be very skewed if the rects overlap,
-        // but should be close enough to drive a heuristic.
-        uint64_t totalAreaOfSquashedRects;
-    };
-
-    bool hasUnresolvedDirtyBits();
-
-    bool squashingWouldExceedSparsityTolerance(const RenderLayer* candidate, const SquashingState&);
-    bool canSquashIntoCurrentSquashingOwner(const RenderLayer* candidate, const SquashingState&);
-
-    CompositingStateTransitionType computeCompositedLayerUpdate(RenderLayer*);
     // Make updates to the layer based on viewport-constrained properties such as position:fixed. This can in turn affect
     // compositing.
     bool updateLayerIfViewportConstrained(RenderLayer*);
@@ -256,24 +221,11 @@ private:
     // Whether the given RL needs to paint into its own separate backing (and hence would need its own CompositedLayerMapping).
     bool needsOwnBacking(const RenderLayer*) const;
 
-    void updateDirectCompositingReasons(RenderLayer*);
-
     void updateIfNeeded();
-
-    // Make or destroy the CompositedLayerMapping for this layer; returns true if the compositedLayerMapping changed.
-    bool allocateOrClearCompositedLayerMapping(RenderLayer*, CompositingStateTransitionType compositedLayerUpdate);
-    bool updateSquashingAssignment(RenderLayer*, SquashingState&, CompositingStateTransitionType compositedLayerUpdate);
 
     void recursiveRepaintLayer(RenderLayer*);
 
     void computeCompositingRequirements(RenderLayer* ancestorLayer, RenderLayer*, OverlapMap&, struct CompositingRecursionData&, bool& descendantHas3DTransform, Vector<RenderLayer*>& unclippedDescendants, IntRect& absoluteDecendantBoundingBox);
-
-    // Defines which RenderLayers will paint into which composited backings, by allocating and destroying CompositedLayerMappings as needed.
-    void assignLayersToBackings(RenderLayer*, bool& layersChanged);
-    void assignLayersToBackingsInternal(RenderLayer*, SquashingState&, bool& layersChanged);
-
-    // Hook compositing layers together
-    void setCompositingParent(RenderLayer* childLayer, RenderLayer* parentLayer);
 
     bool hasAnyAdditionalCompositedLayers(const RenderLayer* rootLayer) const;
 
@@ -292,8 +244,6 @@ private:
     GraphicsLayerFactory* graphicsLayerFactory() const;
     ScrollingCoordinator* scrollingCoordinator() const;
 
-    void addViewportConstrainedLayer(RenderLayer*);
-
     bool compositingLayersNeedRebuild();
 
     void enableCompositingModeIfNeeded();
@@ -306,9 +256,10 @@ private:
 #endif
 
     void applyUpdateLayerCompositingStateChickenEggHacks(RenderLayer*, CompositingStateTransitionType compositedLayerUpdate);
-    void assignLayersToBackingsForReflectionLayer(RenderLayer* reflectionLayer, bool& layersChanged);
 
     DocumentLifecycle& lifecycle() const;
+
+    void applyOverlayFullscreenVideoAdjustment();
 
     RenderView& m_renderView;
     OwnPtr<GraphicsLayer> m_rootContentLayer;
@@ -340,9 +291,6 @@ private:
     // Enclosing container layer, which clips for iframe content
     OwnPtr<GraphicsLayer> m_containerLayer;
     OwnPtr<GraphicsLayer> m_scrollLayer;
-
-    HashSet<RenderLayer*> m_viewportConstrainedLayers;
-    HashSet<RenderLayer*> m_viewportConstrainedLayersNeedingUpdate;
 
     // This is used in updateCompositingRequirementsState to avoid full tree
     // walks while determining if layers have unclipped descendants.

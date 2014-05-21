@@ -8,6 +8,7 @@ AnalyserNode
 Animation
 AnimationEvent
 AnimationPlayerEvent
+AnimationTimeline
 ApplicationCache
 ApplicationCacheErrorEvent
 Array
@@ -74,6 +75,7 @@ DataTransferItemList
 DataView
 Date
 DelayNode
+DeviceLightEvent
 DeviceMotionEvent
 DeviceOrientationEvent
 Document
@@ -153,6 +155,7 @@ HTMLOptionsCollection
 HTMLOutputElement
 HTMLParagraphElement
 HTMLParamElement
+HTMLPictureElement
 HTMLPreElement
 HTMLProgressElement
 HTMLQuoteElement
@@ -408,7 +411,6 @@ ServiceWorker
 ServiceWorkerContainer
 ShadowRoot
 SharedWorker
-SpeechInputEvent
 SpeechSynthesisEvent
 SpeechSynthesisUtterance
 Storage
@@ -429,7 +431,6 @@ TextTrackCueList
 TextTrackList
 TimeRanges
 TimedItem
-Timeline
 Timing
 Touch
 TouchEvent

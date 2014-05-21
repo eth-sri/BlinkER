@@ -422,7 +422,7 @@ WebInspector.ElementsTreeOutline.prototype = {
         }
 
         if (element && element._node)
-            element._node.highlight();
+            this._domModel.highlightDOMNodeWithConfig(element._node.id, { mode: "all", showInfo: !WebInspector.KeyboardShortcut.eventHasCtrlOrMeta(event) });
         else
             this._domModel.hideDOMNodeHighlight();
     },
@@ -2271,7 +2271,8 @@ WebInspector.ElementsTreeElement.prototype = {
         if (!this._node.firstChild || this._node.firstChild !== this._node.lastChild || this._node.firstChild.nodeType() !== Node.TEXT_NODE)
             return false;
         var textChild = this._node.firstChild;
-        if (textChild.nodeValue().length < Preferences.maxInlineTextChildLength)
+        var maxInlineTextChildLength = 80;
+        if (textChild.nodeValue().length < maxInlineTextChildLength)
             return true;
         return false;
     },

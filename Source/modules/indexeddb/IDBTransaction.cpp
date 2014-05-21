@@ -111,9 +111,13 @@ IDBTransaction::~IDBTransaction()
 
 void IDBTransaction::trace(Visitor* visitor)
 {
+    visitor->trace(m_database);
     visitor->trace(m_openDBRequest);
     visitor->trace(m_error);
     visitor->trace(m_requestList);
+    visitor->trace(m_objectStoreMap);
+    visitor->trace(m_deletedObjectStores);
+    visitor->trace(m_objectStoreCleanupMap);
 }
 
 const String& IDBTransaction::mode() const
@@ -133,7 +137,7 @@ void IDBTransaction::setError(PassRefPtrWillBeRawPtr<DOMError> error)
     }
 }
 
-PassRefPtr<IDBObjectStore> IDBTransaction::objectStore(const String& name, ExceptionState& exceptionState)
+PassRefPtrWillBeRawPtr<IDBObjectStore> IDBTransaction::objectStore(const String& name, ExceptionState& exceptionState)
 {
     if (m_state == Finished) {
         exceptionState.throwDOMException(InvalidStateError, IDBDatabase::transactionFinishedErrorMessage);
@@ -158,15 +162,15 @@ PassRefPtr<IDBObjectStore> IDBTransaction::objectStore(const String& name, Excep
 
     const IDBDatabaseMetadata& metadata = m_database->metadata();
 
-    RefPtr<IDBObjectStore> objectStore = IDBObjectStore::create(metadata.objectStores.get(objectStoreId), this);
+    RefPtrWillBeRawPtr<IDBObjectStore> objectStore = IDBObjectStore::create(metadata.objectStores.get(objectStoreId), this);
     objectStoreCreated(name, objectStore);
     return objectStore.release();
 }
 
-void IDBTransaction::objectStoreCreated(const String& name, PassRefPtr<IDBObjectStore> prpObjectStore)
+void IDBTransaction::objectStoreCreated(const String& name, PassRefPtrWillBeRawPtr<IDBObjectStore> prpObjectStore)
 {
     ASSERT(m_state != Finished);
-    RefPtr<IDBObjectStore> objectStore = prpObjectStore;
+    RefPtrWillBeRawPtr<IDBObjectStore> objectStore = prpObjectStore;
     m_objectStoreMap.set(name, objectStore);
     if (isVersionChange())
         m_objectStoreCleanupMap.set(objectStore, objectStore->metadata());
@@ -178,7 +182,7 @@ void IDBTransaction::objectStoreDeleted(const String& name)
     ASSERT(isVersionChange());
     IDBObjectStoreMap::iterator it = m_objectStoreMap.find(name);
     if (it != m_objectStoreMap.end()) {
-        RefPtr<IDBObjectStore> objectStore = it->value;
+        RefPtrWillBeRawPtr<IDBObjectStore> objectStore = it->value;
         m_objectStoreMap.remove(name);
         objectStore->markDeleted();
         m_objectStoreCleanupMap.set(objectStore, objectStore->metadata());
@@ -216,7 +220,7 @@ void IDBTransaction::abort(ExceptionState& exceptionState)
         request->abort();
     }
 
-    RefPtr<IDBTransaction> selfRef = this;
+    RefPtrWillBeRawPtr<IDBTransaction> selfRef(this);
     if (backendDB())
         backendDB()->abort(m_id);
 }
@@ -239,7 +243,7 @@ void IDBTransaction::onAbort(PassRefPtrWillBeRawPtr<DOMError> prpError)
 {
     IDB_TRACE("IDBTransaction::onAbort");
     if (m_contextStopped) {
-        RefPtr<IDBTransaction> protect(this);
+        RefPtrWillBeRawPtr<IDBTransaction> protect(this);
         m_database->transactionFinished(this);
         return;
     }
@@ -281,7 +285,7 @@ void IDBTransaction::onComplete()
 {
     IDB_TRACE("IDBTransaction::onComplete");
     if (m_contextStopped) {
-        RefPtr<IDBTransaction> protect(this);
+        RefPtrWillBeRawPtr<IDBTransaction> protect(this);
         m_database->transactionFinished(this);
         return;
     }
@@ -294,7 +298,7 @@ void IDBTransaction::onComplete()
     enqueueEvent(Event::create(EventTypeNames::complete));
 
     // If script has stopped and GC has completed, database may have last reference to this object.
-    RefPtr<IDBTransaction> protect(this);
+    RefPtrWillBeRawPtr<IDBTransaction> protect(this);
     m_database->transactionFinished(this);
 }
 

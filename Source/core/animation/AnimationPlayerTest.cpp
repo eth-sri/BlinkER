@@ -34,7 +34,7 @@
 #include "core/animation/ActiveAnimations.h"
 #include "core/animation/Animation.h"
 #include "core/animation/AnimationClock.h"
-#include "core/animation/DocumentTimeline.h"
+#include "core/animation/AnimationTimeline.h"
 #include "core/dom/Document.h"
 #include "core/dom/QualifiedName.h"
 #include "platform/weborigin/KURL.h"
@@ -56,7 +56,7 @@ protected:
     {
         document = Document::create();
         document->animationClock().resetTimeForTesting();
-        timeline = DocumentTimeline::create(document.get());
+        timeline = AnimationTimeline::create(document.get());
         player = timeline->createAnimationPlayer(0);
         player->setStartTimeInternal(0);
         player->setSource(makeAnimation().get());
@@ -64,11 +64,10 @@ protected:
 
     void startTimeline()
     {
-        timeline->setZeroTime(0);
         updateTimeline(0);
     }
 
-    PassRefPtr<Animation> makeAnimation(double duration = 30, double playbackRate = 1)
+    PassRefPtrWillBeRawPtr<Animation> makeAnimation(double duration = 30, double playbackRate = 1)
     {
         Timing timing;
         timing.iterationDuration = duration;
@@ -80,12 +79,12 @@ protected:
     {
         document->animationClock().updateTime(time);
         // The timeline does not know about our player, so we have to explicitly call update().
-        return player->update(AnimationPlayer::UpdateOnDemand);
+        return player->update(TimingUpdateOnDemand);
     }
 
     RefPtr<Document> document;
-    RefPtr<DocumentTimeline> timeline;
-    RefPtr<AnimationPlayer> player;
+    RefPtrWillBePersistent<AnimationTimeline> timeline;
+    RefPtrWillBePersistent<AnimationPlayer> player;
     TrackExceptionState exceptionState;
 };
 
@@ -93,7 +92,6 @@ TEST_F(AnimationAnimationPlayerTest, InitialState)
 {
     setUpWithoutStartingTimeline();
     player = timeline->createAnimationPlayer(0);
-    EXPECT_TRUE(isNull(timeline->currentTimeInternal()));
     EXPECT_EQ(0, player->currentTimeInternal());
     EXPECT_FALSE(player->paused());
     EXPECT_EQ(1, player->playbackRate());
@@ -562,8 +560,8 @@ TEST_F(AnimationAnimationPlayerTest, SetSource)
 {
     player = timeline->createAnimationPlayer(0);
     player->setStartTimeInternal(0);
-    RefPtr<TimedItem> source1 = makeAnimation();
-    RefPtr<TimedItem> source2 = makeAnimation();
+    RefPtrWillBeRawPtr<TimedItem> source1 = makeAnimation();
+    RefPtrWillBeRawPtr<TimedItem> source2 = makeAnimation();
     player->setSource(source1.get());
     EXPECT_EQ(source1, player->source());
     EXPECT_EQ(0, player->currentTimeInternal());
@@ -599,6 +597,7 @@ TEST_F(AnimationAnimationPlayerTest, SetSourceUnlimitsAnimationPlayer)
 TEST_F(AnimationAnimationPlayerTest, EmptyAnimationPlayersDontUpdateEffects)
 {
     player = timeline->createAnimationPlayer(0);
+    player->update(TimingUpdateOnDemand);
     EXPECT_EQ(std::numeric_limits<double>::infinity(), player->timeToEffectChange());
 
     updateTimeline(1234);
@@ -620,7 +619,7 @@ TEST_F(AnimationAnimationPlayerTest, AnimationPlayersReturnTimeToNextEffect)
     timing.startDelay = 1;
     timing.iterationDuration = 1;
     timing.endDelay = 1;
-    RefPtr<Animation> animation = Animation::create(0, nullptr, timing);
+    RefPtrWillBeRawPtr<Animation> animation = Animation::create(0, nullptr, timing);
     player = timeline->createAnimationPlayer(animation.get());
     player->setStartTimeInternal(0);
 
@@ -643,24 +642,24 @@ TEST_F(AnimationAnimationPlayerTest, AnimationPlayersReturnTimeToNextEffect)
     EXPECT_EQ(std::numeric_limits<double>::infinity(), player->timeToEffectChange());
 
     player->setCurrentTimeInternal(0);
-    player->update(AnimationPlayer::UpdateOnDemand);
+    player->update(TimingUpdateOnDemand);
     EXPECT_EQ(1, player->timeToEffectChange());
 
     player->setPlaybackRate(2);
-    player->update(AnimationPlayer::UpdateOnDemand);
+    player->update(TimingUpdateOnDemand);
     EXPECT_EQ(0.5, player->timeToEffectChange());
 
     player->setPlaybackRate(0);
-    player->update(AnimationPlayer::UpdateOnDemand);
+    player->update(TimingUpdateOnDemand);
     EXPECT_EQ(std::numeric_limits<double>::infinity(), player->timeToEffectChange());
 
     player->setCurrentTimeInternal(3);
     player->setPlaybackRate(-1);
-    player->update(AnimationPlayer::UpdateOnDemand);
+    player->update(TimingUpdateOnDemand);
     EXPECT_EQ(1, player->timeToEffectChange());
 
     player->setPlaybackRate(-2);
-    player->update(AnimationPlayer::UpdateOnDemand);
+    player->update(TimingUpdateOnDemand);
     EXPECT_EQ(0.5, player->timeToEffectChange());
 }
 
@@ -668,7 +667,7 @@ TEST_F(AnimationAnimationPlayerTest, TimeToNextEffectWhenPaused)
 {
     EXPECT_EQ(0, player->timeToEffectChange());
     player->pause();
-    player->update(AnimationPlayer::UpdateOnDemand);
+    player->update(TimingUpdateOnDemand);
     EXPECT_EQ(std::numeric_limits<double>::infinity(), player->timeToEffectChange());
 }
 
@@ -678,7 +677,7 @@ TEST_F(AnimationAnimationPlayerTest, TimeToNextEffectWhenCancelledBeforeStart)
     player->setCurrentTimeInternal(-8);
     player->setPlaybackRate(2);
     player->cancel();
-    player->update(AnimationPlayer::UpdateOnDemand);
+    player->update(TimingUpdateOnDemand);
     EXPECT_EQ(4, player->timeToEffectChange());
 }
 
@@ -688,22 +687,23 @@ TEST_F(AnimationAnimationPlayerTest, TimeToNextEffectWhenCancelledBeforeStartRev
     player->setCurrentTimeInternal(9);
     player->setPlaybackRate(-3);
     player->cancel();
-    player->update(AnimationPlayer::UpdateOnDemand);
+    player->update(TimingUpdateOnDemand);
     EXPECT_EQ(3, player->timeToEffectChange());
 }
 
 TEST_F(AnimationAnimationPlayerTest, AttachedAnimationPlayers)
 {
-    RefPtr<Element> element = document->createElement("foo", ASSERT_NO_EXCEPTION);
+    RefPtrWillBePersistent<Element> element = document->createElement("foo", ASSERT_NO_EXCEPTION);
 
     Timing timing;
-    RefPtr<Animation> animation = Animation::create(element.get(), nullptr, timing);
-    RefPtr<AnimationPlayer> player = timeline->createAnimationPlayer(animation.get());
-    timeline->serviceAnimations(AnimationPlayer::UpdateForAnimationFrame);
+    RefPtrWillBeRawPtr<Animation> animation = Animation::create(element.get(), nullptr, timing);
+    RefPtrWillBeRawPtr<AnimationPlayer> player = timeline->createAnimationPlayer(animation.get());
+    player->setStartTime(0);
+    timeline->serviceAnimations(TimingUpdateForAnimationFrame);
     EXPECT_EQ(1, element->activeAnimations()->players().find(player.get())->value);
 
     player.release();
-    EXPECT_EQ(0, element->activeAnimations()->players().find(player.get())->value);
+    Heap::collectAllGarbage();
     EXPECT_TRUE(element->activeAnimations()->players().isEmpty());
 }
 
@@ -711,17 +711,17 @@ TEST_F(AnimationAnimationPlayerTest, HasLowerPriority)
 {
     // Sort time defaults to timeline current time
     updateTimeline(15);
-    RefPtr<AnimationPlayer> player1 = timeline->createAnimationPlayer(0);
-    RefPtr<AnimationPlayer> player2 = timeline->createAnimationPlayer(0);
+    RefPtrWillBeRawPtr<AnimationPlayer> player1 = timeline->createAnimationPlayer(0);
+    RefPtrWillBeRawPtr<AnimationPlayer> player2 = timeline->createAnimationPlayer(0);
     player2->setStartTimeInternal(10);
-    RefPtr<AnimationPlayer> player3 = timeline->createAnimationPlayer(0);
-    RefPtr<AnimationPlayer> player4 = timeline->createAnimationPlayer(0);
+    RefPtrWillBeRawPtr<AnimationPlayer> player3 = timeline->createAnimationPlayer(0);
+    RefPtrWillBeRawPtr<AnimationPlayer> player4 = timeline->createAnimationPlayer(0);
     player4->setStartTimeInternal(20);
-    RefPtr<AnimationPlayer> player5 = timeline->createAnimationPlayer(0);
+    RefPtrWillBeRawPtr<AnimationPlayer> player5 = timeline->createAnimationPlayer(0);
     player5->setStartTimeInternal(10);
-    RefPtr<AnimationPlayer> player6 = timeline->createAnimationPlayer(0);
+    RefPtrWillBeRawPtr<AnimationPlayer> player6 = timeline->createAnimationPlayer(0);
     player6->setStartTimeInternal(-10);
-    Vector<RefPtr<AnimationPlayer> > players;
+    Vector<RefPtrWillBeMember<AnimationPlayer> > players;
     players.append(player6);
     players.append(player2);
     players.append(player5);

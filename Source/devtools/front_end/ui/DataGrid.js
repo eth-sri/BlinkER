@@ -1374,15 +1374,13 @@ WebInspector.DataGridNode.prototype = {
         var cell = this.createTD(columnIdentifier);
 
         var data = this.data[columnIdentifier];
-        var div = document.createElement("div");
-        if (data instanceof Node)
-            div.appendChild(data);
-        else {
-            div.textContent = data;
+        if (data instanceof Node) {
+            cell.appendChild(data);
+        } else {
+            cell.textContent = data;
             if (this.dataGrid.columns[columnIdentifier].longText)
-                div.title = data;
+                cell.title = data;
         }
-        cell.appendChild(div);
 
         if (columnIdentifier === this.dataGrid.disclosureColumnIdentifier) {
             cell.classList.add("disclosure");
@@ -1505,21 +1503,15 @@ WebInspector.DataGridNode.prototype = {
         if (!this.parent)
             return;
 
-        var previousChild = (myIndex > 0 ? this.parent.children[myIndex - 1] : null);
-
-        if (previousChild) {
+        var previousChild = this.parent.children[myIndex - 1] || null;
+        if (previousChild)
             previousChild.nextSibling = this;
-            this.previousSibling = previousChild;
-        } else
-            this.previousSibling = null;
+        this.previousSibling = previousChild;
 
-        var nextChild = this.parent.children[myIndex + 1];
-
-        if (nextChild) {
+        var nextChild = this.parent.children[myIndex + 1] || null;
+        if (nextChild)
             nextChild.previousSibling = this;
-            this.nextSibling = nextChild;
-        } else
-            this.nextSibling = null;
+        this.nextSibling = nextChild;
     },
 
     collapse: function()

@@ -40,7 +40,7 @@ namespace WebCore {
 
 using namespace SVGNames;
 
-inline SVGAnimateMotionElement::SVGAnimateMotionElement(Document& document)
+SVGAnimateMotionElement::SVGAnimateMotionElement(Document& document)
     : SVGAnimationElement(animateMotionTag, document)
     , m_hasToPointAtEndOfDuration(false)
 {
@@ -50,13 +50,10 @@ inline SVGAnimateMotionElement::SVGAnimateMotionElement(Document& document)
 
 SVGAnimateMotionElement::~SVGAnimateMotionElement()
 {
+#if !ENABLE(OILPAN)
     if (targetElement())
         clearAnimatedType(targetElement());
-}
-
-PassRefPtr<SVGAnimateMotionElement> SVGAnimateMotionElement::create(Document& document)
-{
-    return adoptRef(new SVGAnimateMotionElement(document));
+#endif
 }
 
 bool SVGAnimateMotionElement::hasValidAttributeType()
@@ -309,10 +306,10 @@ void SVGAnimateMotionElement::applyResultsToTarget()
         return;
 
     // ...except in case where we have additional instances in <use> trees.
-    const HashSet<SVGElementInstance*>& instances = targetElement->instancesForElement();
-    const HashSet<SVGElementInstance*>::const_iterator end = instances.end();
-    for (HashSet<SVGElementInstance*>::const_iterator it = instances.begin(); it != end; ++it) {
-        SVGElement* shadowTreeElement = (*it)->shadowTreeElement();
+    const WillBeHeapHashSet<RawPtrWillBeWeakMember<SVGElement> >& instances = targetElement->instancesForElement();
+    const WillBeHeapHashSet<RawPtrWillBeWeakMember<SVGElement> >::const_iterator end = instances.end();
+    for (WillBeHeapHashSet<RawPtrWillBeWeakMember<SVGElement> >::const_iterator it = instances.begin(); it != end; ++it) {
+        SVGElement* shadowTreeElement = *it;
         ASSERT(shadowTreeElement);
         AffineTransform* transform = shadowTreeElement->supplementalTransform();
         if (!transform)

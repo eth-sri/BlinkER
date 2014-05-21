@@ -59,7 +59,6 @@
 #include "core/svg/SVGFontFaceSource.h"
 #include "core/svg/SVGRemoteFontFaceSource.h"
 #include "platform/SharedBuffer.h"
-#include "platform/fonts/FontDescription.h"
 
 namespace WebCore {
 
@@ -379,7 +378,7 @@ void FontFace::setLoadStatus(LoadStatus status)
     if (m_status == Loaded || m_status == Error) {
         resolveReadyPromises();
 
-        Vector<RefPtr<LoadFontCallback> > callbacks;
+        WillBeHeapVector<RefPtrWillBeMember<LoadFontCallback> > callbacks;
         m_callbacks.swap(callbacks);
         for (size_t i = 0; i < callbacks.size(); ++i) {
             if (m_status == Loaded)
@@ -403,7 +402,7 @@ ScriptPromise FontFace::load(ExecutionContext* context)
     return promise;
 }
 
-void FontFace::loadWithCallback(PassRefPtr<LoadFontCallback> callback, ExecutionContext* context)
+void FontFace::loadWithCallback(PassRefPtrWillBeRawPtr<LoadFontCallback> callback, ExecutionContext* context)
 {
     loadInternal(context);
     if (m_status == Loaded)
@@ -419,14 +418,8 @@ void FontFace::loadInternal(ExecutionContext* context)
     if (m_status != Unloaded)
         return;
 
-    FontDescription fontDescription;
-    FontFamily fontFamily;
-    fontFamily.setFamily(m_family);
-    fontDescription.setFamily(fontFamily);
-    fontDescription.setTraits(traits());
-
     CSSFontSelector* fontSelector = toDocument(context)->styleEngine()->fontSelector();
-    m_cssFontFace->load(fontDescription, fontSelector);
+    m_cssFontFace->load(fontSelector);
     fontSelector->loadPendingFonts();
 }
 
@@ -583,7 +576,7 @@ void FontFace::initCSSFontFace(Document* document, PassRefPtrWillBeRawPtr<CSSVal
         } else {
 #if ENABLE(SVG_FONTS)
             if (item->svgFontFaceElement()) {
-                RefPtr<SVGFontFaceElement> fontfaceElement = item->svgFontFaceElement();
+                RefPtrWillBeRawPtr<SVGFontFaceElement> fontfaceElement = item->svgFontFaceElement();
                 // SVGFontFaceSource assumes that it is the case where <font-face> element resides in the same document.
                 // We put a RELEASE_ASSERT here as it will cause UAF if the assumption is false.
                 RELEASE_ASSERT(fontfaceElement->inDocument());
@@ -627,6 +620,7 @@ void FontFace::trace(Visitor* visitor)
     visitor->trace(m_featureSettings);
     visitor->trace(m_error);
     visitor->trace(m_cssFontFace);
+    visitor->trace(m_callbacks);
 }
 
 bool FontFace::hadBlankText() const

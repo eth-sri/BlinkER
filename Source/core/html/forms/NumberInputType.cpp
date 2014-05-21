@@ -94,9 +94,9 @@ static RealNumberRenderSize calculateRenderSize(const Decimal& value)
     return RealNumberRenderSize(sizeOfSign + sizeOfZero , numberOfZeroAfterDecimalPoint + sizeOfDigits);
 }
 
-PassRefPtr<InputType> NumberInputType::create(HTMLInputElement& element)
+PassRefPtrWillBeRawPtr<InputType> NumberInputType::create(HTMLInputElement& element)
 {
-    return adoptRef(new NumberInputType(element));
+    return adoptRefWillBeNoop(new NumberInputType(element));
 }
 
 void NumberInputType::countUsage()
@@ -277,7 +277,7 @@ void NumberInputType::minOrMaxAttributeChanged()
     InputType::minOrMaxAttributeChanged();
 
     if (element().renderer())
-        element().renderer()->setNeedsLayoutAndPrefWidthsRecalc();
+        element().renderer()->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
 }
 
 void NumberInputType::stepAttributeChanged()
@@ -285,7 +285,7 @@ void NumberInputType::stepAttributeChanged()
     InputType::stepAttributeChanged();
 
     if (element().renderer())
-        element().renderer()->setNeedsLayoutAndPrefWidthsRecalc();
+        element().renderer()->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
 }
 
 bool NumberInputType::supportsSelectionAPI() const

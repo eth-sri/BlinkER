@@ -180,9 +180,6 @@ public:
     // send it.
     virtual void clearFocusedElement() = 0;
 
-    // Scrolls the node currently in focus into view.
-    virtual void scrollFocusedNodeIntoView() = 0;
-
     // Scrolls the node currently in focus into |rect|, where |rect| is in
     // window space.
     virtual void scrollFocusedNodeIntoRect(const WebRect&) { }
@@ -272,14 +269,6 @@ public:
     virtual float minimumPageScaleFactor() const = 0;
     virtual float maximumPageScaleFactor() const = 0;
 
-    // Save the WebView's current scroll and scale state. Each call to this function
-    // overwrites the previously saved scroll and scale state.
-    virtual void saveScrollAndScaleState() = 0;
-
-    // Restore the previously saved scroll and scale state. After restoring the
-    // state, this function deletes any saved scroll and scale state.
-    virtual void restoreScrollAndScaleState() = 0;
-
     // Reset any saved values for the scroll and scale state.
     virtual void resetScrollAndScaleState() = 0;
 
@@ -337,6 +326,10 @@ public:
     // Copy to the clipboard the image located at a particular point in the
     // WebView (if there is such an image)
     virtual void copyImageAt(const WebPoint&) = 0;
+
+    // Save as the image located at a particular point in the
+    // WebView (if there is such an image)
+    virtual void saveImageAt(const WebPoint&) = 0;
 
     // Notifies the WebView that a drag has terminated.
     virtual void dragSourceEndedAt(

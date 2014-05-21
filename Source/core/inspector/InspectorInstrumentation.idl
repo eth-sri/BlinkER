@@ -68,7 +68,7 @@ interface InspectorInstrumentation {
 #include "core/dom/PseudoElement.h"
 
     [Page, Inspector, PageDebugger, PageRuntime]
-    void didClearWindowObjectInMainWorld([Keep] LocalFrame*);
+    void didClearDocumentOfWindowObject([Keep] LocalFrame*);
 
     [DOMDebugger, Inline=FastReturn]
     void willInsertDOMNode([Keep] Node* parent);
@@ -483,7 +483,7 @@ interface InspectorConsoleInstrumentation {
     void consoleProfile(ExecutionContext* context, const String& title, ScriptState* state);
 
     [Profiler, Inline=FastReturn]
-    void consoleProfileEnd(ExecutionContext* context, const String& title);
+    void consoleProfileEnd(ExecutionContext* context, const String& title, ScriptState* state);
 }
 
 interface InspectorOverrides {
@@ -504,32 +504,4 @@ interface InspectorCanvasInstrumentation {
 
     [Canvas]
     ScriptObject wrapWebGLRenderingContextForInstrumentation(Document*, const ScriptObject&);
-}
-
-
-interface InspectorPromiseInstrumentation {
-
-#include "bindings/v8/custom/V8PromiseCustom.h"
-#include "bindings/v8/ScriptObject.h"
-
-    [Debugger, Inline=FastReturn]
-    void didPostPromiseTask([Keep] ExecutionContext*, ExecutionContextTask*, bool isResolved);
-
-    [Debugger, Inline=FastReturn]
-    InspectorInstrumentationCookie willPerformPromiseTask([Keep] ExecutionContext*, ExecutionContextTask*);
-
-    [Debugger, Inline=FastReturn]
-    void didPerformPromiseTask(const InspectorInstrumentationCookie&);
-
-    [Debugger, Inline=FastReturn]
-    bool isPromiseTrackerEnabled(ExecutionContext*);
-
-    [Debugger, Inline=FastReturn]
-    void didCreatePromise(ExecutionContext*, const ScriptObject& promise);
-
-    [Debugger, Inline=FastReturn]
-    void didUpdatePromiseParent(ExecutionContext*, const ScriptObject& promise, const ScriptObject& parentPromise);
-
-    [Debugger, Inline=FastReturn]
-    void didUpdatePromiseState(ExecutionContext*, const ScriptObject& promise, V8PromiseCustom::PromiseState, const ScriptValue& result);
 }

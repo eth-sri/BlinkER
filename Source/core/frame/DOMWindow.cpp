@@ -59,6 +59,7 @@
 #include "core/frame/Console.h"
 #include "core/frame/DOMPoint.h"
 #include "core/frame/DOMWindowLifecycleNotifier.h"
+#include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/FrameConsole.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
@@ -76,6 +77,7 @@
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/FrameLoaderClient.h"
+#include "core/loader/MixedContentChecker.h"
 #include "core/loader/SinkDocument.h"
 #include "core/loader/appcache/ApplicationCache.h"
 #include "core/page/BackForwardClient.h"
@@ -486,7 +488,12 @@ DOMWindow::~DOMWindow()
 
     removeAllEventListeners();
 
+#if ENABLE(OILPAN)
+    ASSERT(m_document->isDisposed());
+#else
     ASSERT(m_document->isStopped());
+#endif
+
     clearDocument();
 }
 
@@ -523,6 +530,7 @@ void DOMWindow::frameDestroyed()
 
 void DOMWindow::willDetachFrameHost()
 {
+    m_frame->host()->eventHandlerRegistry().didRemoveAllEventHandlers(*this);
     InspectorInstrumentation::frameWindowDiscarded(m_frame, this);
 }
 
@@ -599,7 +607,13 @@ int DOMWindow::orientation() const
     if (!m_frame)
         return 0;
 
-    return m_frame->orientation();
+    int orientation = screenOrientationAngle(m_frame->view());
+    // For backward compatibility, we want to return a value in the range of
+    // [-90; 180] instead of [0; 360[ because window.orientation used to behave
+    // like that in WebKit (this is a WebKit proprietary API).
+    if (orientation == 270)
+        return -90;
+    return orientation;
 }
 
 Screen& DOMWindow::screen() const
@@ -821,6 +835,11 @@ void DOMWindow::postMessage(PassRefPtr<SerializedScriptValue> message, const Mes
         return;
     String sourceOrigin = sourceDocument->securityOrigin()->toString();
 
+    if (MixedContentChecker::isMixedContent(sourceDocument->securityOrigin(), document()->url()))
+        UseCounter::count(document(), UseCounter::PostMessageFromSecureToInsecure);
+    else if (MixedContentChecker::isMixedContent(document()->securityOrigin(), sourceDocument->url()))
+        UseCounter::count(document(), UseCounter::PostMessageFromInsecureToSecure);
+
     // Capture stack trace only when inspector front-end is loaded as it may be time consuming.
     RefPtr<ScriptCallStack> stackTrace;
     if (InspectorInstrumentation::consoleAgentEnabled(sourceDocument))
@@ -847,10 +866,7 @@ void DOMWindow::postMessageTimerFired(PassOwnPtr<PostMessageTimer> t)
     if (m_frame->loader().client()->willCheckAndDispatchMessageEvent(timer->targetOrigin(), event.get()))
         return;
 
-    UserGestureToken* token = timer->userGestureToken();
-    if (token)
-        token->setForwarded();
-    UserGestureIndicator gestureIndicator(token);
+    UserGestureIndicator gestureIndicator(timer->userGestureToken());
 
     event->entangleMessagePorts(document());
     dispatchMessageEventWithOriginCheck(timer->targetOrigin(), event, timer->stackTrace());
@@ -1252,10 +1268,6 @@ DOMWindow* DOMWindow::top() const
     if (!m_frame)
         return 0;
 
-    Page* page = m_frame->page();
-    if (!page)
-        return 0;
-
     return m_frame->tree().top()->domWindow();
 }
 
@@ -1271,7 +1283,7 @@ StyleMedia& DOMWindow::styleMedia() const
     return *m_media;
 }
 
-PassRefPtr<CSSStyleDeclaration> DOMWindow::getComputedStyle(Element* elt, const String& pseudoElt) const
+PassRefPtrWillBeRawPtr<CSSStyleDeclaration> DOMWindow::getComputedStyle(Element* elt, const String& pseudoElt) const
 {
     if (!elt)
         return nullptr;
@@ -1494,6 +1506,9 @@ bool DOMWindow::addEventListener(const AtomicString& eventType, PassRefPtr<Event
     if (!EventTarget::addEventListener(eventType, listener, useCapture))
         return false;
 
+    if (m_frame && m_frame->host())
+        m_frame->host()->eventHandlerRegistry().didAddEventHandler(*this, eventType);
+
     if (Document* document = this->document()) {
         document->addListenerTypeIfNeeded(eventType);
         if (isTouchEventType(eventType))
@@ -1527,6 +1542,9 @@ bool DOMWindow::removeEventListener(const AtomicString& eventType, EventListener
 {
     if (!EventTarget::removeEventListener(eventType, listener, useCapture))
         return false;
+
+    if (m_frame && m_frame->host())
+        m_frame->host()->eventHandlerRegistry().didRemoveEventHandler(*this, eventType);
 
     if (Document* document = this->document()) {
         if (isTouchEventType(eventType))
@@ -1597,6 +1615,9 @@ void DOMWindow::removeAllEventListeners()
     EventTarget::removeAllEventListeners();
 
     lifecycleNotifier().notifyRemoveAllEventListeners(this);
+
+    if (m_frame && m_frame->host())
+        m_frame->host()->eventHandlerRegistry().didRemoveAllEventHandlers(*this);
 
     if (Document* document = this->document())
         document->didClearTouchEventHandlers(document);

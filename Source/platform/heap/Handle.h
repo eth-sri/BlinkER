@@ -68,28 +68,30 @@ struct IsGarbageCollectedMixin {
     static bool const value = (sizeof(TrueType) == sizeof(hasAdjustAndMark<T>(0))) && (sizeof(TrueType) == sizeof(hasIsAlive<T>(0)));
 };
 
-#define COMPILE_ASSERT_IS_GARBAGE_COLLECTED(T, ErrorMessage)                                              \
-    do {                                                                                                  \
-        typedef typename WTF::RemoveConst<T>::Type NonConstType;                                          \
-        typedef WTF::IsSubclassOfTemplate<NonConstType, GarbageCollected> GarbageCollectedSubclass;       \
-        typedef IsGarbageCollectedMixin<NonConstType> GarbageCollectedMixinSubclass;                      \
-        typedef WTF::IsSubclassOfTemplate3<NonConstType, HeapHashSet> HeapHashSetSubclass;                \
-        typedef WTF::IsSubclassOfTemplate3<NonConstType, HeapLinkedHashSet> HeapLinkedHashSetSubclass;    \
-        typedef WTF::IsSubclassOfTemplate5<NonConstType, HeapHashMap> HeapHashMapSubclass;                \
-        typedef WTF::IsSubclassOfTemplateTypenameSize<NonConstType, HeapVector> HeapVectorSubclass;       \
-        typedef WTF::IsSubclassOfTemplateTypenameSize<NonConstType, HeapDeque> HeapDequeSubclass;         \
-        typedef WTF::IsSubclassOfTemplate3<NonConstType, HeapHashCountedSet> HeapHashCountedSetSubclass;  \
-        typedef WTF::IsSubclassOfTemplate<NonConstType, HeapTerminatedArray> HeapTerminatedArraySubclass; \
-        COMPILE_ASSERT(GarbageCollectedSubclass::value ||                                                 \
-            GarbageCollectedMixinSubclass::value ||                                                       \
-            HeapHashSetSubclass::value ||                                                                 \
-            HeapLinkedHashSetSubclass::value ||                                                           \
-            HeapHashMapSubclass::value ||                                                                 \
-            HeapVectorSubclass::value ||                                                                  \
-            HeapDequeSubclass::value ||                                                                   \
-            HeapHashCountedSetSubclass::value ||                                                          \
-            HeapTerminatedArraySubclass::value,                                                           \
-            ErrorMessage);                                                                                \
+#define COMPILE_ASSERT_IS_GARBAGE_COLLECTED(T, ErrorMessage)                                                          \
+    do {                                                                                                              \
+        typedef typename WTF::RemoveConst<T>::Type NonConstType;                                                      \
+        typedef WTF::IsSubclassOfTemplate<NonConstType, GarbageCollected> GarbageCollectedSubclass;                   \
+        typedef IsGarbageCollectedMixin<NonConstType> GarbageCollectedMixinSubclass;                                  \
+        typedef WTF::IsSubclassOfTemplate3<NonConstType, HeapHashSet> HeapHashSetSubclass;                            \
+        typedef WTF::IsSubclassOfTemplate3<NonConstType, HeapLinkedHashSet> HeapLinkedHashSetSubclass;                \
+        typedef WTF::IsSubclassOfTemplateTypenameSizeTypename<NonConstType, HeapListHashSet> HeapListHashSetSubclass; \
+        typedef WTF::IsSubclassOfTemplate5<NonConstType, HeapHashMap> HeapHashMapSubclass;                            \
+        typedef WTF::IsSubclassOfTemplateTypenameSize<NonConstType, HeapVector> HeapVectorSubclass;                   \
+        typedef WTF::IsSubclassOfTemplateTypenameSize<NonConstType, HeapDeque> HeapDequeSubclass;                     \
+        typedef WTF::IsSubclassOfTemplate3<NonConstType, HeapHashCountedSet> HeapHashCountedSetSubclass;              \
+        typedef WTF::IsSubclassOfTemplate<NonConstType, HeapTerminatedArray> HeapTerminatedArraySubclass;             \
+        COMPILE_ASSERT(GarbageCollectedSubclass::value ||                                                             \
+            GarbageCollectedMixinSubclass::value ||                                                                   \
+            HeapHashSetSubclass::value ||                                                                             \
+            HeapLinkedHashSetSubclass::value ||                                                                       \
+            HeapListHashSetSubclass::value ||                                                                         \
+            HeapHashMapSubclass::value ||                                                                             \
+            HeapVectorSubclass::value ||                                                                              \
+            HeapDequeSubclass::value ||                                                                               \
+            HeapHashCountedSetSubclass::value ||                                                                      \
+            HeapTerminatedArraySubclass::value,                                                                       \
+            ErrorMessage);                                                                                            \
     } while (0)
 
 template<typename T> class Member;
@@ -354,6 +356,9 @@ public:
 
     operator T*() const { return m_raw; }
     operator RawPtr<T>() const { return m_raw; }
+    // FIXME: Oilpan: Remove this ASAP. Only here to make Node transition easier.
+    template<typename U>
+    operator PassRefPtr<U>() { return PassRefPtr<U>(m_raw); }
 
     T* operator->() const { return *this; }
 
@@ -442,6 +447,12 @@ template<
     typename TraitsArg = HashTraits<ValueArg> >
 class PersistentHeapLinkedHashSet : public PersistentHeapCollectionBase<HeapLinkedHashSet<ValueArg, HashArg, TraitsArg> > { };
 
+template<
+    typename ValueArg,
+    size_t inlineCapacity = 0,
+    typename HashArg = typename DefaultHash<ValueArg>::Hash>
+class PersistentHeapListHashSet : public PersistentHeapCollectionBase<HeapListHashSet<ValueArg, inlineCapacity, HashArg> > { };
+
 template<typename T, typename U, typename V>
 class PersistentHeapHashCountedSet : public PersistentHeapCollectionBase<HeapHashCountedSet<T, U, V> > { };
 
@@ -514,6 +525,14 @@ public:
     template<typename U>
     Member(const Member<U>& other) : m_raw(other) { }
 
+    // FIXME: Oilpan: Get rid of these ASAP; this is only here to make
+    // Node hierarchy transition easier.
+    template<typename U>
+    Member(const PassRefPtr<U>& other) : m_raw(other.get()) { }
+
+    template<typename U>
+    Member(const RefPtr<U>& other) : m_raw(other.get()) { }
+
     T* release()
     {
         T* result = m_raw;
@@ -574,6 +593,11 @@ public:
     T* get() const { return m_raw; }
 
     void clear() { m_raw = 0; }
+
+
+    // FIXME: Oilpan: Remove this ASAP. Only here to make Node transition easier.
+    template<typename U>
+    operator PassRefPtr<U>() { return PassRefPtr<U>(m_raw); }
 
 protected:
     void verifyTypeIsGarbageCollected() const
@@ -722,6 +746,16 @@ template<typename T, typename U> inline bool operator!=(const Persistent<T>& a, 
 template<typename T, typename U> inline bool operator==(const Persistent<T>& a, const Persistent<U>& b) { return a.get() == b.get(); }
 template<typename T, typename U> inline bool operator!=(const Persistent<T>& a, const Persistent<U>& b) { return a.get() != b.get(); }
 
+// FIXME: Oilpan: Get rid of these ASAP; only here to make Node transition easier.
+template<typename T, typename U> inline bool operator==(const Member<T>& a, const RefPtr<U>& b) { return a.get() == b.get(); }
+template<typename T, typename U> inline bool operator!=(const Member<T>& a, const RefPtr<U>& b) { return a.get() != b.get(); }
+template<typename T, typename U> inline bool operator==(const RefPtr<T>& a, const Member<U>& b) { return a.get() == b.get(); }
+template<typename T, typename U> inline bool operator!=(const RefPtr<T>& a, const Member<U>& b) { return a.get() != b.get(); }
+template<typename T, typename U> inline bool operator==(const Member<T>& a, const PassRefPtr<U>& b) { return a.get() == b.get(); }
+template<typename T, typename U> inline bool operator!=(const Member<T>& a, const PassRefPtr<U>& b) { return a.get() != b.get(); }
+template<typename T, typename U> inline bool operator==(const PassRefPtr<T>& a, const Member<U>& b) { return a.get() == b.get(); }
+template<typename T, typename U> inline bool operator!=(const PassRefPtr<T>& a, const Member<U>& b) { return a.get() != b.get(); }
+
 // CPP-defined type names for the transition period where we want to
 // support both reference counting and garbage collection based on a
 // compile-time flag.
@@ -746,10 +780,13 @@ template<typename T, typename U> inline bool operator!=(const Persistent<T>& a, 
 #define RefCountedWillBeRefCountedGarbageCollected WebCore::RefCountedGarbageCollected
 #define ThreadSafeRefCountedWillBeGarbageCollected WebCore::GarbageCollected
 #define ThreadSafeRefCountedWillBeGarbageCollectedFinalized WebCore::GarbageCollectedFinalized
+#define ThreadSafeRefCountedWillBeThreadSafeRefCountedGarbageCollected WebCore::ThreadSafeRefCountedGarbageCollected
+#define TreeSharedWillBeRefCountedGarbageCollected WebCore::RefCountedGarbageCollected
 #define PersistentWillBeMember WebCore::Member
 #define RefPtrWillBePersistent WebCore::Persistent
 #define RefPtrWillBeRawPtr WTF::RawPtr
 #define RefPtrWillBeMember WebCore::Member
+#define RefPtrWillBeWeakMember WebCore::WeakMember
 #define RefPtrWillBeCrossThreadPersistent WebCore::CrossThreadPersistent
 #define RawPtrWillBeMember WebCore::Member
 #define RawPtrWillBeWeakMember WebCore::WeakMember
@@ -767,6 +804,8 @@ template<typename T, typename U> inline bool operator!=(const Persistent<T>& a, 
 #define WillBePersistentHeapHashSet WebCore::PersistentHeapHashSet
 #define WillBeHeapLinkedHashSet WebCore::HeapLinkedHashSet
 #define WillBePersistentHeapLinkedHashSet WebCore::PersistentHeapLinkedHashSet
+#define WillBeHeapListHashSet WebCore::HeapListHashSet
+#define WillBePersistentHeapListHashSet WebCore::PersistentHeapListHashSet
 #define WillBeHeapVector WebCore::HeapVector
 #define WillBePersistentHeapVector WebCore::PersistentHeapVector
 #define WillBeHeapDeque WebCore::HeapDeque
@@ -782,8 +821,8 @@ template<typename T, typename U> inline bool operator!=(const Persistent<T>& a, 
 
 template<typename T> PassRefPtrWillBeRawPtr<T> adoptRefWillBeNoop(T* ptr)
 {
-    static const bool notRefCountedGarbageCollected = !WTF::IsSubclassOfTemplate<T, RefCountedGarbageCollected>::value;
-    static const bool notRefCounted = !WTF::IsSubclassOfTemplate<T, RefCounted>::value;
+    static const bool notRefCountedGarbageCollected = !WTF::IsSubclassOfTemplate<typename WTF::RemoveConst<T>::Type, RefCountedGarbageCollected>::value;
+    static const bool notRefCounted = !WTF::IsSubclassOfTemplate<typename WTF::RemoveConst<T>::Type, RefCounted>::value;
     COMPILE_ASSERT(notRefCountedGarbageCollected, useAdoptRefCountedWillBeRefCountedGarbageCollected);
     COMPILE_ASSERT(notRefCounted, youMustAdopt);
     return PassRefPtrWillBeRawPtr<T>(ptr);
@@ -791,15 +830,22 @@ template<typename T> PassRefPtrWillBeRawPtr<T> adoptRefWillBeNoop(T* ptr)
 
 template<typename T> PassRefPtrWillBeRawPtr<T> adoptRefWillBeRefCountedGarbageCollected(T* ptr)
 {
-    static const bool isRefCountedGarbageCollected = WTF::IsSubclassOfTemplate<T, RefCountedGarbageCollected>::value;
+    static const bool isRefCountedGarbageCollected = WTF::IsSubclassOfTemplate<typename WTF::RemoveConst<T>::Type, RefCountedGarbageCollected>::value;
     COMPILE_ASSERT(isRefCountedGarbageCollected, useAdoptRefWillBeNoop);
+    return PassRefPtrWillBeRawPtr<T>(adoptRefCountedGarbageCollected(ptr));
+}
+
+template<typename T> PassRefPtrWillBeRawPtr<T> adoptRefWillBeThreadSafeRefCountedGarbageCollected(T* ptr)
+{
+    static const bool isThreadSafeRefCountedGarbageCollected = WTF::IsSubclassOfTemplate<typename WTF::RemoveConst<T>::Type, ThreadSafeRefCountedGarbageCollected>::value;
+    COMPILE_ASSERT(isThreadSafeRefCountedGarbageCollected, useAdoptRefWillBeNoop);
     return PassRefPtrWillBeRawPtr<T>(adoptRefCountedGarbageCollected(ptr));
 }
 
 template<typename T> PassOwnPtrWillBeRawPtr<T> adoptPtrWillBeNoop(T* ptr)
 {
-    static const bool notRefCountedGarbageCollected = !WTF::IsSubclassOfTemplate<T, RefCountedGarbageCollected>::value;
-    static const bool notRefCounted = !WTF::IsSubclassOfTemplate<T, RefCounted>::value;
+    static const bool notRefCountedGarbageCollected = !WTF::IsSubclassOfTemplate<typename WTF::RemoveConst<T>::Type, RefCountedGarbageCollected>::value;
+    static const bool notRefCounted = !WTF::IsSubclassOfTemplate<typename WTF::RemoveConst<T>::Type, RefCounted>::value;
     COMPILE_ASSERT(notRefCountedGarbageCollected, useAdoptRefCountedWillBeRefCountedGarbageCollected);
     COMPILE_ASSERT(notRefCounted, youMustAdopt);
     return PassOwnPtrWillBeRawPtr<T>(ptr);
@@ -809,6 +855,9 @@ template<typename T> PassOwnPtrWillBeRawPtr<T> adoptPtrWillBeNoop(T* ptr)
 #define DECLARE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(type) // do nothing
 #define DECLARE_EMPTY_VIRTUAL_DESTRUCTOR_WILL_BE_REMOVED(type) // do nothing
 #define DEFINE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(type) // do nothing
+
+#define DEFINE_STATIC_REF_WILL_BE_PERSISTENT(type, name, arguments) \
+    DEFINE_STATIC_LOCAL(Persistent<type>, name, arguments)
 
 #else // !ENABLE(OILPAN)
 
@@ -825,10 +874,13 @@ public:
 #define RefCountedWillBeRefCountedGarbageCollected WTF::RefCounted
 #define ThreadSafeRefCountedWillBeGarbageCollected WTF::ThreadSafeRefCounted
 #define ThreadSafeRefCountedWillBeGarbageCollectedFinalized WTF::ThreadSafeRefCounted
+#define ThreadSafeRefCountedWillBeThreadSafeRefCountedGarbageCollected WTF::ThreadSafeRefCounted
+#define TreeSharedWillBeRefCountedGarbageCollected WebCore::TreeShared
 #define PersistentWillBeMember WebCore::Persistent
 #define RefPtrWillBePersistent WTF::RefPtr
 #define RefPtrWillBeRawPtr WTF::RefPtr
 #define RefPtrWillBeMember WTF::RefPtr
+#define RefPtrWillBeWeakMember WTF::RefPtr
 #define RefPtrWillBeCrossThreadPersistent WTF::RefPtr
 #define RawPtrWillBeMember WTF::RawPtr
 #define RawPtrWillBeWeakMember WTF::RawPtr
@@ -846,6 +898,8 @@ public:
 #define WillBePersistentHeapHashSet WTF::HashSet
 #define WillBeHeapLinkedHashSet WTF::LinkedHashSet
 #define WillBePersistentLinkedHeapHashSet WTF::LinkedHashSet
+#define WillBeHeapListHashSet WTF::ListHashSet
+#define WillBePersistentListHeapHashSet WTF::ListHashSet
 #define WillBeHeapVector WTF::Vector
 #define WillBePersistentHeapVector WTF::Vector
 #define WillBeHeapDeque WTF::Deque
@@ -861,6 +915,7 @@ public:
 
 template<typename T> PassRefPtrWillBeRawPtr<T> adoptRefWillBeNoop(T* ptr) { return adoptRef(ptr); }
 template<typename T> PassRefPtrWillBeRawPtr<T> adoptRefWillBeRefCountedGarbageCollected(T* ptr) { return adoptRef(ptr); }
+template<typename T> PassRefPtrWillBeRawPtr<T> adoptRefWillBeThreadSafeRefCountedGarbageCollected(T* ptr) { return adoptRef(ptr); }
 template<typename T> PassOwnPtrWillBeRawPtr<T> adoptPtrWillBeNoop(T* ptr) { return adoptPtr(ptr); }
 
 #define WTF_MAKE_FAST_ALLOCATED_WILL_BE_REMOVED WTF_MAKE_FAST_ALLOCATED
@@ -875,6 +930,9 @@ template<typename T> PassOwnPtrWillBeRawPtr<T> adoptPtrWillBeNoop(T* ptr) { retu
 
 #define DEFINE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(type) \
     type::~type() { }
+
+#define DEFINE_STATIC_REF_WILL_BE_PERSISTENT(type, name, arguments) \
+    DEFINE_STATIC_REF(type, name, arguments)
 
 #endif // ENABLE(OILPAN)
 
@@ -1071,6 +1129,14 @@ struct NeedsTracing<LinkedHashSet<T, U, V> > {
 template<typename T, typename U, typename V, typename W, typename X>
 struct NeedsTracing<HashMap<T, U, V, W, X> > {
     static const bool value = false;
+};
+
+template<typename T, size_t inlineCapacity>
+struct NeedsTracing<ListHashSetNode<T, WebCore::HeapListHashSetAllocator<T, inlineCapacity> > *> {
+    // All heap allocated node pointers need visiting to keep the nodes alive,
+    // regardless of whether they contain pointers to other heap allocated
+    // objects.
+    static const bool value = true;
 };
 
 } // namespace WTF

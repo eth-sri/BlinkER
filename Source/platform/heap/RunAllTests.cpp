@@ -30,16 +30,18 @@
 
 #include "config.h"
 
+#include "platform/EventTracer.h"
 #include "platform/heap/Heap.h"
 #include "wtf/CryptographicallyRandomNumber.h"
 #include "wtf/MainThread.h"
 #include "wtf/WTF.h"
 #include <base/test/test_suite.h>
+#include <base/time/time.h>
 #include <string.h>
 
 static double CurrentTime()
 {
-    return 0.0;
+    return base::Time::Now().ToDoubleT();
 }
 
 static void AlwaysZeroNumberSource(unsigned char* buf, size_t len)
@@ -54,6 +56,7 @@ int main(int argc, char** argv)
     WTF::initializeMainThread(0);
     WebCore::Heap::init();
     WebCore::ThreadState::attachMainThread();
+    WebCore::EventTracer::initialize();
     int result = base::RunUnitTestsUsingBaseTestSuite(argc, argv);
     WebCore::ThreadState::detachMainThread();
     WebCore::Heap::shutdown();

@@ -36,10 +36,6 @@ const v8::PropertyCallbackInfo<v8::Value>& info
     {% elif not attribute.is_static %}
     {{cpp_class}}* impl = {{v8_class}}::toNative(holder);
     {% endif %}
-    {% if attribute.is_partial_interface_member and not attribute.is_static %}
-    {# instance members (non-static members) in partial interface take |impl| #}
-    ASSERT(impl);
-    {% endif %}
     {% if interface_name == 'Window' and attribute.idl_type == 'EventHandler' %}
     if (!impl->document())
         return;
@@ -95,7 +91,7 @@ const v8::PropertyCallbackInfo<v8::Value>& info
     }
     {% endif %}
     {% if attribute.cached_attribute_validation_method %}
-    V8HiddenValue::setHiddenValue(info.GetIsolate(), holder, propertyName, {{attribute.cpp_value}}.v8Value());
+    V8HiddenValue::setHiddenValue(info.GetIsolate(), holder, propertyName, {{attribute.cpp_value_to_v8_value}});
     {% endif %}
     {# v8SetReturnValue #}
     {% if attribute.is_keep_alive_for_gc %}
@@ -169,9 +165,9 @@ v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value>& info
     UseCounter::count(callingExecutionContext(info.GetIsolate()), UseCounter::{{attribute.measure_as}});
     {% endif %}
     {% if world_suffix in attribute.activity_logging_world_list_for_getter %}
-    V8PerContextData* contextData = V8PerContextData::from(info.GetIsolate()->GetCurrentContext());
-    if (contextData && contextData->activityLogger())
-        contextData->activityLogger()->log("{{interface_name}}.{{attribute.name}}", 0, 0, "Getter");
+    DOMWrapperWorld& world = DOMWrapperWorld::current(info.GetIsolate());
+    if (world.activityLogger())
+        world.activityLogger()->logGetter("{{interface_name}}.{{attribute.name}}");
     {% endif %}
     {% if attribute.has_custom_getter %}
     {{v8_class}}::{{attribute.name}}AttributeGetterCustom(info);
@@ -242,10 +238,6 @@ v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info
         return;
     {% elif not attribute.is_static %}
     {{cpp_class}}* impl = {{v8_class}}::toNative(holder);
-    {% endif %}
-    {% if attribute.is_partial_interface_member and not attribute.is_static %}
-    {# instance members (non-static members) in partial interface take |impl| #}
-    ASSERT(impl);
     {% endif %}
     {% if attribute.idl_type == 'EventHandler' and interface_name == 'Window' %}
     if (!impl->document())
@@ -321,10 +313,20 @@ v8::Local<v8::String>, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackI
     UseCounter::count(callingExecutionContext(info.GetIsolate()), UseCounter::{{attribute.measure_as}});
     {% endif %}
     {% if world_suffix in attribute.activity_logging_world_list_for_setter %}
-    V8PerContextData* contextData = V8PerContextData::from(info.GetIsolate()->GetCurrentContext());
-    if (contextData && contextData->activityLogger()) {
-        v8::Handle<v8::Value> loggerArg[] = { v8Value };
-        contextData->activityLogger()->log("{{interface_name}}.{{attribute.name}}", 1, &loggerArg[0], "Setter");
+    DOMWrapperWorld& world = DOMWrapperWorld::current(info.GetIsolate());
+    if (world.activityLogger()) {
+        {% if attribute.activity_logging_include_old_value_for_setter %}
+        {{cpp_class}}* impl = {{v8_class}}::toNative(info.Holder());
+        {% if attribute.cpp_value_original %}
+        {{attribute.cpp_type}} original = {{attribute.cpp_value_original}};
+        {% else %}
+        {{attribute.cpp_type}} original = {{attribute.cpp_value}};
+        {% endif %}
+        v8::Handle<v8::Value> originalValue = {{attribute.cpp_value_to_v8_value}};
+        world.activityLogger()->logSetter("{{interface_name}}.{{attribute.name}}", v8Value, originalValue);
+        {% else %}
+        world.activityLogger()->logSetter("{{interface_name}}.{{attribute.name}}", v8Value);
+        {% endif %}
     }
     {% endif %}
     {% if attribute.is_custom_element_callbacks or attribute.is_reflect %}

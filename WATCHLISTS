@@ -65,6 +65,10 @@
     'fetch': {
       'filepath': 'Source/core/fetch',
     },
+    'filters': {
+      'filepath': 'Source/platform/graphics/filters' \
+                  '|Source/core/svg/graphics/filters'
+    },
     'heap': {
       'filepath': 'Source/heap' \
                   '|Source/platform/heap',
@@ -247,6 +251,12 @@
                   '|LayoutTests/platform/.*/fast/css-grid-layout/' \
                   '|LayoutTests/platform/.*/ietestcenter/css3/grid/'
     },
+    'css_flexbox': {
+      'filepath': 'Source/core/rendering/.*Flex' \
+                  '|LayoutTests/fast/flexbox/' \
+                  '|LayoutTests/css3/flexbox/' \
+                  '|LayoutTests/ietestcenter/css3/flexbox/'
+    },
     'fragment_layout': {
       'filepath': 'Source/core/rendering/.*(FlowThread|MultiCol|Region)' \
                   '|Source/core/rendering/ColumnInfo' \
@@ -265,8 +275,7 @@
   'WATCHLISTS': {
     'accessibility':['dmazzoni@chromium.org',
                      'aboxhall@chromium.org'],
-    'animations': ['alancutter@chromium.org',
-                   'alexis.menard@intel.com',
+    'animations': ['alexis.menard@intel.com',
                    'dstockwell@chromium.org',
                    'ericwilligers@chromium.org',
                    'mikelawther@chromium.org',
@@ -274,11 +283,10 @@
                    'shans@chromium.org',
                    'steveblock@chromium.org',
                    'timloh@chromium.org',
-                   'dino@apple.com'],
+                   'blink-reviews-animation@chromium.org'],
     'audio': ['rtoy@chromium.org'],
     'devtools': [ 'pfeldman+blink@chromium.org',
                   'aandrey+blink@chromium.org',
-                  'alph+blink@chromium.org',
                   'apavlov+blink@chromium.org',
                   'loislo+blink@chromium.org',
                   'lushnikov+blink@chromium.org',
@@ -292,16 +300,7 @@
                   'devtools-reviews@chromium.org' ],
     'bidi': [ 'leviw+bidiwatch@chromium.org' ],
     'bindings': [ 'abarth@chromium.org',
-                  'adamk+blink@chromium.org',
                   'arv+blink@chromium.org',
-                  'ch.dumez@samsung.com',
-                  'haraken@chromium.org',
-                  'japhet@chromium.org',
-                  'jsbell+bindings@chromium.org',
-                  'marja+watch@chromium.org',
-                  'nbarth@chromium.org',
-                  'sigbjornf@opera.com',
-                  'kouhei+bindings@chromium.org',
                   'blink-reviews-bindings@chromium.org' ],
     'canvas': [ 'cabanier@adobe.com', 'aandrey+blink@chromium.org' ],
     'clipboard': [ 'dcheng@chromium.org', ],
@@ -316,29 +315,24 @@
                            'danakj@chromium.org',
                            'pdr@chromium.org',
                            'cabanier@adobe.com',
-                           'dsinclair@chromium.org',
                            'dschulze@chromium.org',
                            'rob.buis@samsung.com',
                            'jbroman@chromium.org' ],
     'svg': [ 'schenney@chromium.org', 'pdr@chromium.org', 'fmalita@chromium.org', 'dschulze@chromium.org', 'rob.buis@samsung.com', 'fs@opera.com', 'ed+blinkwatch@opera.com', 'gyuyoung.kim@webkit.org', 'kouhei+svg@chromium.org' ],
     'css': [ 'alexis.menard@intel.com', 'apavlov+blink@chromium.org', 'dglazkov+blink@chromium.org', 'ed+blinkwatch@opera.com', 'rune+blink@opera.com', 'rob.buis@samsung.com', 'blink-reviews-css@chromium.org' ],
-    'dom': [ 'adamk+blink@chromium.org',
-             'eae+blinkwatch@chromium.org',
+    'dom': [ 'eae+blinkwatch@chromium.org',
              'dglazkov+blink@chromium.org',
              'sigbjornf@opera.com',
-             'ch.dumez@samsung.com',
              'rob.buis@samsung.com',
              'blink-reviews-dom@chromium.org' ],
     'events': [ 'eae+blinkwatch@chromium.org', 'dglazkov+blink@chromium.org', 'blink-reviews-events@chromium.org' ],
     'heap': [ 'ager@chromium.org', 'haraken@chromium.org', 'kouhei+heap@chromium.org' ],
-    'html': [ 'adamk+blink@chromium.org', 'dglazkov+blink@chromium.org', 'blink-reviews-html@chromium.org' ],
+    'html': [ 'dglazkov+blink@chromium.org', 'blink-reviews-html@chromium.org' ],
     'public_api': [ 'abarth@chromium.org', 'jamesr@chromium.org', 'dglazkov+blink@chromium.org' ],
     'workers': [ 'kinuko+watch@chromium.org',
                  'horo+watch@chromium.org',
                  'falken@chromium.org' ],
     'wtf': [ 'abarth@chromium.org',
-             'adamk+blink@chromium.org',
-             'ch.dumez@samsung.com',
              'mikhail.pozdnyakov@intel.com',
              'blink-reviews-wtf@chromium.org' ],
     'indexed_db': ['alecflett@chromium.org','dgrogan@chromium.org',
@@ -349,8 +343,6 @@
                    'jchaffraix+rendering@chromium.org',
                    'leviw+renderwatch@chromium.org',
                    'zoltan@webkit.org',
-                   'bemjb+rendering@chromium.org',
-                   'dsinclair@chromium.org',
                    'rune+blink@opera.com',
                    'blink-reviews-rendering@chromium.org' ],
     'compositing': [ 'abarth@chromium.org' ],
@@ -390,6 +382,7 @@
               'skal@google.com',
               'vikasa@google.com' ],
     'css_grid_layout': [ 'svillar@igalia.com', 'jfernandez@igalia.com', 'rego@igalia.com' ],
+    'css_flexbox': [ 'cbiesinger@chromium.org' ],
     'fragment_layout': [ 'mstensho+blink@opera.com' ],
     'table_layout': [ 'mstensho+blink@opera.com' ],
     'battery_status': [ 'timvolodine@chromium.org' ],

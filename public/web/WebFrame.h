@@ -38,6 +38,7 @@
 #include "WebURLLoaderOptions.h"
 #include "public/platform/WebCanvas.h"
 #include "public/platform/WebMessagePortChannel.h"
+#include "public/platform/WebPrivateOwnPtr.h"
 #include "public/platform/WebReferrerPolicy.h"
 #include "public/platform/WebURL.h"
 #include "public/platform/WebURLRequest.h"
@@ -55,6 +56,7 @@ template <class T> class Local;
 
 namespace blink {
 
+class OpenedFrameTracker;
 class WebData;
 class WebDataSource;
 class WebDocument;
@@ -111,6 +113,8 @@ public:
     virtual WebLocalFrame* toWebLocalFrame() = 0;
     virtual bool isWebRemoteFrame() const = 0;
     virtual WebRemoteFrame* toWebRemoteFrame() = 0;
+
+    BLINK_EXPORT void swap(WebFrame*);
 
     // This method closes and deletes the WebFrame.
     virtual void close() = 0;
@@ -184,34 +188,34 @@ public:
     virtual WebView* view() const = 0;
 
     // Returns the frame that opened this frame or 0 if there is none.
-    virtual WebFrame* opener() const = 0;
+    BLINK_EXPORT WebFrame* opener() const;
 
     // Sets the frame that opened this one or 0 if there is none.
-    virtual void setOpener(WebFrame*) = 0;
+    virtual void setOpener(WebFrame*);
 
     // Reset the frame that opened this frame to 0.
     // This is executed between layout tests runs
     void clearOpener() { setOpener(0); }
 
     // Adds the given frame as a child of this frame.
-    virtual void appendChild(WebFrame*) = 0;
+    virtual void appendChild(WebFrame*);
 
     // Removes the given child from this frame.
-    virtual void removeChild(WebFrame*) = 0;
+    virtual void removeChild(WebFrame*);
 
     // Returns the parent frame or 0 if this is a top-most frame.
-    virtual WebFrame* parent() const = 0;
+    BLINK_EXPORT WebFrame* parent() const;
 
     // Returns the top-most frame in the hierarchy containing this frame.
-    virtual WebFrame* top() const = 0;
+    BLINK_EXPORT WebFrame* top() const;
 
     // Returns the first/last child frame.
-    virtual WebFrame* firstChild() const = 0;
-    virtual WebFrame* lastChild() const = 0;
+    BLINK_EXPORT WebFrame* firstChild() const;
+    BLINK_EXPORT WebFrame* lastChild() const;
 
-    // Returns the next/previous sibling frame.
-    virtual WebFrame* nextSibling() const = 0;
-    virtual WebFrame* previousSibling() const = 0;
+    // Returns the previous/next sibling frame.
+    BLINK_EXPORT WebFrame* previousSibling() const;
+    BLINK_EXPORT WebFrame* nextSibling() const;
 
     // Returns the next/previous frame in "frame traversal order"
     // optionally wrapping around.
@@ -603,11 +607,18 @@ public:
 
     // OrientationChange event ---------------------------------------------
 
+    // Notify the frame that the screen orientation has changed.
+    virtual void sendOrientationChangeEvent() = 0;
+
+    // FIXME: this is only there for backward compatibility, it will be removed.
     // Orientation is the interface orientation in degrees.
     // Some examples are:
     //  0 is straight up; -90 is when the device is rotated 90 clockwise;
     //  90 is when rotated counter clockwise.
-    virtual void sendOrientationChangeEvent(int orientation) = 0;
+    void sendOrientationChangeEvent(int orientation)
+    {
+        sendOrientationChangeEvent();
+    }
 
     // Events --------------------------------------------------------------
 
@@ -659,7 +670,20 @@ public:
     virtual WebString layerTreeAsText(bool showDebugInfo = false) const = 0;
 
 protected:
-    ~WebFrame() { }
+    explicit WebFrame();
+    virtual ~WebFrame();
+
+private:
+    friend class OpenedFrameTracker;
+
+    WebFrame* m_parent;
+    WebFrame* m_previousSibling;
+    WebFrame* m_nextSibling;
+    WebFrame* m_firstChild;
+    WebFrame* m_lastChild;
+
+    WebFrame* m_opener;
+    WebPrivateOwnPtr<OpenedFrameTracker> m_openedFrameTracker;
 };
 
 } // namespace blink

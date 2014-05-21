@@ -37,7 +37,6 @@
 #include "core/inspector/ConsoleAPITypes.h"
 #include "core/inspector/InjectedScript.h"
 #include "core/inspector/InspectorBaseAgent.h"
-#include "core/inspector/PromiseTracker.h"
 #include "core/inspector/ScriptBreakpoint.h"
 #include "core/inspector/ScriptDebugListener.h"
 #include "wtf/Forward.h"
@@ -51,12 +50,12 @@ namespace WebCore {
 class Document;
 class EventListener;
 class EventTarget;
-class ExecutionContextTask;
 class FormData;
 class HTTPHeaderMap;
 class InjectedScriptManager;
 class InspectorFrontend;
 class InstrumentingAgents;
+class JavaScriptCallFrame;
 class JSONObject;
 class KURL;
 class MutationObserver;
@@ -159,13 +158,6 @@ public:
     void didClearAllMutationRecords(ExecutionContext*, MutationObserver*);
     void willDeliverMutationRecords(ExecutionContext*, MutationObserver*);
     void didDeliverMutationRecords();
-    void didPostPromiseTask(ExecutionContext*, ExecutionContextTask*, bool isResolved);
-    void willPerformPromiseTask(ExecutionContext*, ExecutionContextTask*);
-    void didPerformPromiseTask();
-    bool isPromiseTrackerEnabled();
-    void didCreatePromise(const ScriptObject& promise);
-    void didUpdatePromiseParent(const ScriptObject& promise, const ScriptObject& parentPromise);
-    void didUpdatePromiseState(const ScriptObject& promise, V8PromiseCustom::PromiseState, const ScriptValue& result);
     bool canBreakProgram();
     void breakProgram(InspectorFrontend::Debugger::Reason::Enum breakReason, PassRefPtr<JSONObject> data);
     void scriptExecutionBlockedByCSP(const String& directiveText);
@@ -185,10 +177,6 @@ public:
     void setBreakpoint(const String& scriptId, int lineNumber, int columnNumber, BreakpointSource, const String& condition = String());
     void removeBreakpoint(const String& scriptId, int lineNumber, int columnNumber, BreakpointSource);
 
-    virtual SkipPauseRequest shouldSkipExceptionPause(RefPtr<JavaScriptCallFrame>& topFrame) OVERRIDE FINAL;
-    virtual SkipPauseRequest shouldSkipBreakpointPause(RefPtr<JavaScriptCallFrame>& topFrame) OVERRIDE FINAL;
-    virtual SkipPauseRequest shouldSkipStepPause(RefPtr<JavaScriptCallFrame>& topFrame) OVERRIDE FINAL;
-
 protected:
     explicit InspectorDebuggerAgent(InjectedScriptManager*);
 
@@ -201,12 +189,16 @@ protected:
 
     virtual void enable();
     virtual void disable();
-    virtual void didPause(ScriptState*, const ScriptValue& callFrames, const ScriptValue& exception, const Vector<String>& hitBreakpoints) OVERRIDE FINAL;
+    virtual SkipPauseRequest didPause(ScriptState*, const ScriptValue& callFrames, const ScriptValue& exception, const Vector<String>& hitBreakpoints) OVERRIDE FINAL;
     virtual void didContinue() OVERRIDE FINAL;
     void reset();
     void pageDidCommitLoad();
 
 private:
+    SkipPauseRequest shouldSkipExceptionPause();
+    SkipPauseRequest shouldSkipBreakpointPause();
+    SkipPauseRequest shouldSkipStepPause();
+
     void cancelPauseOnNextStatement();
     void addMessageToConsole(MessageSource, MessageType);
 
@@ -253,7 +245,6 @@ private:
     bool m_skipAllPauses;
     OwnPtr<ScriptRegexp> m_cachedSkipStackRegExp;
     AsyncCallStackTracker m_asyncCallStackTracker;
-    PromiseTracker m_promiseTracker;
 };
 
 } // namespace WebCore

@@ -53,10 +53,12 @@
 #include "core/page/Page.h"
 #include "core/page/WindowFeatures.h"
 #include "core/rendering/HitTestResult.h"
+#include "modules/device_light/DeviceLightController.h"
 #include "modules/device_orientation/DeviceMotionController.h"
 #include "modules/device_orientation/DeviceOrientationController.h"
 #include "modules/gamepad/NavigatorGamepad.h"
 #include "modules/screen_orientation/ScreenOrientationController.h"
+#include "modules/serviceworkers/NavigatorServiceWorker.h"
 #include "platform/MIMETypeRegistry.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/exported/WrappedResourceRequest.h"
@@ -112,13 +114,15 @@ FrameLoaderClientImpl::~FrameLoaderClientImpl()
 {
 }
 
-void FrameLoaderClientImpl::dispatchDidClearWindowObjectInWorld(DOMWrapperWorld& world)
+void FrameLoaderClientImpl::dispatchDidClearWindowObjectInMainWorld()
 {
     if (m_webFrame->client()) {
-        m_webFrame->client()->didClearWindowObject(m_webFrame, world.worldId());
+        m_webFrame->client()->didClearWindowObject(m_webFrame);
         Document* document = m_webFrame->frame()->document();
         if (document) {
             WheelController::from(*document);
+            if (RuntimeEnabledFeatures::deviceLightEnabled())
+                DeviceLightController::from(*document);
             if (RuntimeEnabledFeatures::deviceMotionEnabled())
                 DeviceMotionController::from(*document);
             if (RuntimeEnabledFeatures::deviceOrientationEnabled())
@@ -127,6 +131,8 @@ void FrameLoaderClientImpl::dispatchDidClearWindowObjectInWorld(DOMWrapperWorld&
                 ScreenOrientationController::from(*document);
             if (RuntimeEnabledFeatures::gamepadEnabled())
                 NavigatorGamepad::from(*document);
+            if (RuntimeEnabledFeatures::serviceWorkerEnabled())
+                NavigatorServiceWorker::from(*document);
         }
     }
 }
@@ -806,6 +812,12 @@ void FrameLoaderClientImpl::didStopAllLoaders()
         m_webFrame->client()->didAbortLoading(m_webFrame);
 }
 
+void FrameLoaderClientImpl::dispatchDidChangeManifest()
+{
+    if (m_webFrame->client())
+        m_webFrame->client()->didChangeManifest(m_webFrame);
+}
+
 void FrameLoaderClientImpl::dispatchDidStartEventRacerLog()
 {
     if (m_webFrame->client())
@@ -824,7 +836,8 @@ void FrameLoaderClientImpl::dispatchDidHappenBefore(const WTF::Vector<WebCore::E
         m_webFrame->client()->didHappenBefore(WebVector<WebEventActionEdge>(v));
 }
 
-void FrameLoaderClientImpl::dispatchDidUpdateStringTable(size_t index, const WTF::Vector<WTF::String> &v) {
+void FrameLoaderClientImpl::dispatchDidUpdateStringTable(size_t index, const WTF::Vector<WTF::String> &v)
+{
     if (m_webFrame->client())
         m_webFrame->client()->didUpdateStringTable(index, WebVector<WebString>(v));
 }

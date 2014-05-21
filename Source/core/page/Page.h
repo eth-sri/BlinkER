@@ -217,7 +217,6 @@ public:
     PassOwnPtr<LifecycleNotifier<Page> > createLifecycleNotifier();
 
     void trace(Visitor*);
-    void clearWeakMembers(Visitor*);
     void willBeDestroyed();
 
 protected:
@@ -287,7 +286,7 @@ private:
 
     // A pointer to all the interfaces provided to in-process Frames for this Page.
     // FIXME: Most of the members of Page should move onto FrameHost.
-    OwnPtr<FrameHost> m_frameHost;
+    OwnPtrWillBeMember<FrameHost> m_frameHost;
 };
 
 } // namespace WebCore

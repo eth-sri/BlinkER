@@ -30,6 +30,7 @@
 #include "core/fetch/ResourceFetcher.h"
 #include "core/frame/DOMTimer.h"
 #include "core/frame/DOMWindow.h"
+#include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
@@ -53,7 +54,6 @@
 #include "core/rendering/FastTextAutosizer.h"
 #include "core/rendering/RenderView.h"
 #include "core/rendering/TextAutosizer.h"
-#include "core/speech/SpeechInput.h"
 #include "core/storage/StorageNamespace.h"
 #include "platform/plugins/PluginData.h"
 #include "wtf/HashMap.h"
@@ -205,6 +205,7 @@ void Page::documentDetached(Document* document)
     m_contextMenuController->documentDetached(document);
     if (m_validationMessageClient)
         m_validationMessageClient->documentDetached(*document);
+    m_frameHost->eventHandlerRegistry().documentDetached(*document);
 }
 
 bool Page::openedByDOM() const
@@ -322,7 +323,7 @@ void Page::setPageScaleFactor(float scale, const IntPoint& origin)
     if (scale != viewport.scale()) {
         viewport.setScale(scale);
 
-        if (view)
+        if (view && !settings().pinchVirtualViewportEnabled())
             view->setVisibleContentScaleFactor(scale);
 
         mainFrame()->deviceOrPageScaleFactorChanged();
@@ -541,6 +542,7 @@ PassOwnPtr<LifecycleNotifier<Page> > Page::createLifecycleNotifier()
 void Page::trace(Visitor* visitor)
 {
     visitor->trace(m_multisamplingChangedObservers);
+    visitor->trace(m_frameHost);
     WillBeHeapSupplementable<Page>::trace(visitor);
 }
 

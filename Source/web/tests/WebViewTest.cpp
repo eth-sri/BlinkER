@@ -223,14 +223,10 @@ TEST_F(WebViewTest, SetBaseBackgroundColor)
     EXPECT_EQ(kBlue, webView->backgroundColor());
 
     WebURL baseURL = URLTestHelpers::toKURL("http://example.com/");
-    webView->mainFrame()->loadHTMLString(
-        "<html><head><style>body {background-color:#227788}</style></head></html>", baseURL);
-    Platform::current()->unitTestSupport()->serveAsynchronousMockedRequests();
+    FrameTestHelpers::loadHTMLString(webView->mainFrame(), "<html><head><style>body {background-color:#227788}</style></head></html>", baseURL);
     EXPECT_EQ(kDarkCyan, webView->backgroundColor());
 
-    webView->mainFrame()->loadHTMLString(
-        "<html><head><style>body {background-color:rgba(255,0,0,0.5)}</style></head></html>", baseURL);
-    Platform::current()->unitTestSupport()->serveAsynchronousMockedRequests();
+    FrameTestHelpers::loadHTMLString(webView->mainFrame(), "<html><head><style>body {background-color:rgba(255,0,0,0.5)}</style></head></html>", baseURL);
     // Expected: red (50% alpha) blended atop base of kBlue.
     EXPECT_EQ(0xFF7F0080, webView->backgroundColor());
 
@@ -249,6 +245,11 @@ TEST_F(WebViewTest, SetBaseBackgroundColorBeforeMainFrame)
     EXPECT_EQ(kBlue, webView->backgroundColor());
 }
 
+static void disableAccleratedCompositing(WebSettings* webSettings)
+{
+    webSettings->setAcceleratedCompositingEnabled(false);
+}
+
 TEST_F(WebViewTest, SetBaseBackgroundColorAndBlendWithExistingContent)
 {
     const WebColor kAlphaRed = 0x80FF0000;
@@ -256,8 +257,13 @@ TEST_F(WebViewTest, SetBaseBackgroundColorAndBlendWithExistingContent)
     const int kWidth = 100;
     const int kHeight = 100;
 
+    // Make a WebView that is not composited.
+    bool enableJavascript = false;
+    FrameTestHelpers::TestWebFrameClient* frameClient = 0;
+    WebViewClient* viewClient = 0;
+    WebView* webView = m_webViewHelper.initialize(enableJavascript, frameClient, viewClient, &disableAccleratedCompositing);
+
     // Set WebView background to green with alpha.
-    WebView* webView = m_webViewHelper.initialize();
     webView->setBaseBackgroundColor(kAlphaGreen);
     webView->settings()->setShouldClearDocumentBackground(false);
     webView->resize(WebSize(kWidth, kHeight));
@@ -273,10 +279,7 @@ TEST_F(WebViewTest, SetBaseBackgroundColorAndBlendWithExistingContent)
     // The result should be a blend of red and green.
     SkColor color = bitmap.getColor(kWidth / 2, kHeight / 2);
     EXPECT_TRUE(WebCore::redChannel(color));
-    // FIXME: This should be EXPECT_TRUE. This looks to only work
-    // if compositing is disabled, which is no longer a shipping configuration.
-    // crbug.com/365810
-    EXPECT_FALSE(WebCore::greenChannel(color));
+    EXPECT_TRUE(WebCore::greenChannel(color));
 }
 
 TEST_F(WebViewTest, FocusIsInactive)
@@ -743,6 +746,7 @@ TEST_F(WebViewTest, IsSelectionAnchorFirst)
     WebView* webView = m_webViewHelper.initializeAndLoad(m_baseURL + "input_field_populated.html");
     WebFrame* frame = webView->mainFrame();
 
+    webView->setPageScaleFactorLimits(1, 1);
     webView->setInitialFocus(false);
     frame->setEditableSelectionOffsets(4, 10);
     EXPECT_TRUE(webView->isSelectionAnchorFirst());
@@ -810,7 +814,7 @@ TEST_F(WebViewTest, EnterFullscreenResetScrollAndScaleState)
     EXPECT_EQ(116, webViewImpl->mainFrame()->scrollOffset().width);
     EXPECT_EQ(84, webViewImpl->mainFrame()->scrollOffset().height);
 
-    RefPtr<WebCore::Element> element = static_cast<PassRefPtr<WebCore::Element> >(webViewImpl->mainFrame()->document().body());
+    RefPtrWillBeRawPtr<WebCore::Element> element = static_cast<PassRefPtrWillBeRawPtr<WebCore::Element> >(webViewImpl->mainFrame()->document().body());
     webViewImpl->enterFullScreenForElement(element.get());
     webViewImpl->willEnterFullScreen();
     webViewImpl->didEnterFullScreen();
@@ -820,7 +824,7 @@ TEST_F(WebViewTest, EnterFullscreenResetScrollAndScaleState)
     EXPECT_EQ(1.0f, webViewImpl->pageScaleFactor());
 
     // Make sure fullscreen nesting doesn't disrupt scroll/scale saving.
-    RefPtr<WebCore::Element> otherElement = static_cast<PassRefPtr<WebCore::Element> >(webViewImpl->mainFrame()->document().head());
+    RefPtrWillBeRawPtr<WebCore::Element> otherElement = static_cast<PassRefPtrWillBeRawPtr<WebCore::Element> >(webViewImpl->mainFrame()->document().head());
     webViewImpl->enterFullScreenForElement(otherElement.get());
 
     // Confirm that exiting fullscreen restores the parameters.
@@ -833,6 +837,22 @@ TEST_F(WebViewTest, EnterFullscreenResetScrollAndScaleState)
     m_webViewHelper.reset(); // Explicitly reset to break dependency on locally scoped client.
 }
 
+class DropTask : public WebThread::Task {
+public:
+    explicit DropTask(WebView* webView) : m_webView(webView)
+    {
+    }
+
+    virtual void run() OVERRIDE
+    {
+        const WebPoint clientPoint(0, 0);
+        const WebPoint screenPoint(0, 0);
+        m_webView->dragTargetDrop(clientPoint, screenPoint, 0);
+    }
+
+private:
+    WebView* const m_webView;
+};
 static void DragAndDropURL(WebViewImpl* webView, const std::string& url)
 {
     blink::WebDragData dragData;
@@ -847,9 +867,8 @@ static void DragAndDropURL(WebViewImpl* webView, const std::string& url)
     const WebPoint clientPoint(0, 0);
     const WebPoint screenPoint(0, 0);
     webView->dragTargetDragEnter(dragData, clientPoint, screenPoint, blink::WebDragOperationCopy, 0);
-    webView->dragTargetDrop(clientPoint, screenPoint, 0);
-    FrameTestHelpers::runPendingTasks();
-    Platform::current()->unitTestSupport()->serveAsynchronousMockedRequests();
+    Platform::current()->currentThread()->postTask(new DropTask(webView));
+    FrameTestHelpers::pumpPendingRequestsDoNotUse(webView->mainFrame());
 }
 
 TEST_F(WebViewTest, DragDropURL)
@@ -923,7 +942,7 @@ private:
 static bool tapElementById(WebView* webView, WebInputEvent::Type type, const WebString& id)
 {
     ASSERT(webView);
-    RefPtr<WebCore::Element> element = static_cast<PassRefPtr<WebCore::Element> >(webView->mainFrame()->document().getElementById(id));
+    RefPtrWillBeRawPtr<WebCore::Element> element = static_cast<PassRefPtrWillBeRawPtr<WebCore::Element> >(webView->mainFrame()->document().getElementById(id));
     if (!element)
         return false;
 
@@ -1097,9 +1116,7 @@ TEST_F(WebViewTest, ShowPressOnTransformedLink)
     webViewImpl->resize(WebSize(pageWidth, pageHeight));
 
     WebURL baseURL = URLTestHelpers::toKURL("http://example.com/");
-    webViewImpl->mainFrame()->loadHTMLString(
-        "<a href='http://www.test.com' style='position: absolute; left: 20px; top: 20px; width: 200px; -webkit-transform:translateZ(0);'>A link to highlight</a>", baseURL);
-    Platform::current()->unitTestSupport()->serveAsynchronousMockedRequests();
+    FrameTestHelpers::loadHTMLString(webViewImpl->mainFrame(), "<a href='http://www.test.com' style='position: absolute; left: 20px; top: 20px; width: 200px; -webkit-transform:translateZ(0);'>A link to highlight</a>", baseURL);
 
     WebGestureEvent event;
     event.type = WebInputEvent::GestureShowPress;
@@ -1439,6 +1456,7 @@ TEST_F(WebViewTest, SmartClipData)
     URLTestHelpers::registerMockedURLFromBaseURL(WebString::fromUTF8(m_baseURL.c_str()), WebString::fromUTF8("Ahem.ttf"));
     URLTestHelpers::registerMockedURLFromBaseURL(WebString::fromUTF8(m_baseURL.c_str()), WebString::fromUTF8("smartclip.html"));
     WebView* webView = m_webViewHelper.initializeAndLoad(m_baseURL + "smartclip.html");
+    webView->setPageScaleFactorLimits(1, 1);
     webView->resize(WebSize(500, 500));
     webView->layout();
     WebRect cropRect(300, 125, 100, 50);

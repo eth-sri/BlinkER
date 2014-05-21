@@ -10,7 +10,4 @@ PASS patternElement.patternUnits.baseVal is SVGUnitTypes.SVG_UNIT_TYPE_USERSPACE
 PASS successfullyParsed is true
 
 TEST COMPLETE
-(repaint rects
-  (rect 18 18 190 190)
-)
 

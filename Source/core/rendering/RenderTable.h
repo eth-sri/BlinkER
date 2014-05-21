@@ -227,7 +227,7 @@ public:
         if (documentBeingDestroyed())
             return;
         m_needsSectionRecalc = true;
-        setNeedsLayout();
+        setNeedsLayoutAndFullRepaint();
     }
 
     RenderTableSection* sectionAbove(const RenderTableSection*, SkipEmptySectionsValue = DoNotSkipEmptySections) const;
@@ -276,8 +276,6 @@ private:
     virtual const char* renderName() const OVERRIDE { return "RenderTable"; }
 
     virtual bool isTable() const OVERRIDE { return true; }
-
-    virtual bool avoidsFloats() const OVERRIDE { return true; }
 
     virtual void paint(PaintInfo&, const LayoutPoint&) OVERRIDE;
     virtual void paintObject(PaintInfo&, const LayoutPoint&) OVERRIDE;

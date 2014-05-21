@@ -34,17 +34,19 @@ public:
     static const double IndeterminatePosition;
     static const double InvalidPosition;
 
-    static PassRefPtr<HTMLProgressElement> create(Document&);
+    static PassRefPtrWillBeRawPtr<HTMLProgressElement> create(Document&);
 
     double value() const;
-    void setValue(double, ExceptionState&);
+    void setValue(double);
 
     double max() const;
-    void setMax(double, ExceptionState&);
+    void setMax(double);
 
     double position() const;
 
     virtual bool canContainRangeEndPoint() const OVERRIDE { return false; }
+
+    virtual void trace(Visitor*) OVERRIDE;
 
 private:
     explicit HTMLProgressElement(Document&);
@@ -65,7 +67,7 @@ private:
     virtual void didAddUserAgentShadowRoot(ShadowRoot&) OVERRIDE;
     bool isDeterminate() const;
 
-    ProgressValueElement* m_value;
+    RawPtrWillBeMember<ProgressValueElement> m_value;
 };
 
 } // namespace

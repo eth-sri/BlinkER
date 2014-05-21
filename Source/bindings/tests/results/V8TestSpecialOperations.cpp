@@ -47,7 +47,7 @@ template <typename T> void V8_USE(T) { }
 static void namedItemMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     if (UNLIKELY(info.Length() < 1)) {
-        throwArityTypeErrorForMethod("namedItem", "TestSpecialOperations", 1, info.Length(), info.GetIsolate());
+        throwMinimumArityTypeErrorForMethod("namedItem", "TestSpecialOperations", 1, info.Length(), info.GetIsolate());
         return;
     }
     TestSpecialOperations* impl = V8TestSpecialOperations::toNative(info.Holder());
@@ -55,7 +55,7 @@ static void namedItemMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
     bool result0Enabled = false;
     RefPtr<Node> result0;
     bool result1Enabled = false;
-    RefPtr<NodeList> result1;
+    RefPtrWillBeRawPtr<NodeList> result1;
     impl->getItem(name, result0Enabled, result0, result1Enabled, result1);
     if (result0Enabled) {
         v8SetReturnValue(info, result0.release());
@@ -82,7 +82,7 @@ static void namedPropertyGetter(v8::Local<v8::String> name, const v8::PropertyCa
     bool result0Enabled = false;
     RefPtr<Node> result0;
     bool result1Enabled = false;
-    RefPtr<NodeList> result1;
+    RefPtrWillBeRawPtr<NodeList> result1;
     impl->getItem(propertyName, result0Enabled, result0, result1Enabled, result1);
     if (!result0Enabled && !result1Enabled)
         return;

@@ -227,7 +227,7 @@ public:
     // The window object for the frame has been cleared of any extra
     // properties that may have been set by script from the previously
     // loaded document.
-    virtual void didClearWindowObject(WebLocalFrame* frame, int worldId) { }
+    virtual void didClearWindowObject(WebLocalFrame* frame) { }
 
     // The document element has been created.
     virtual void didCreateDocumentElement(WebLocalFrame*) { }
@@ -259,6 +259,10 @@ public:
     // non-navigational events related to the data held by WebHistoryItem.
     // WARNING: This method may be called very frequently.
     virtual void didUpdateCurrentHistoryItem(WebLocalFrame*) { }
+
+    // The frame's manifest has changed.
+    virtual void didChangeManifest(WebLocalFrame*) { }
+
 
     // Misc ----------------------------------------------------------------
 

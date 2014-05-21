@@ -51,13 +51,12 @@ Timing::FillMode resolvedFillMode(Timing::FillMode fillMode, bool isAnimation)
 } // namespace
 
 TimedItem::TimedItem(const Timing& timing, PassOwnPtr<EventDelegate> eventDelegate)
-    : m_parent(0)
+    : m_parent(nullptr)
     , m_startTime(0)
-    , m_player(0)
+    , m_player(nullptr)
     , m_timing(timing)
     , m_eventDelegate(eventDelegate)
     , m_calculated()
-    , m_isFirstSample(true)
     , m_needsUpdate(true)
     , m_lastUpdateTime(nullValue())
 {
@@ -97,14 +96,11 @@ void TimedItem::updateSpecifiedTiming(const Timing& timing)
     specifiedTimingChanged();
 }
 
-void TimedItem::updateInheritedTime(double inheritedTime) const
+void TimedItem::updateInheritedTime(double inheritedTime, TimingUpdateReason reason) const
 {
     bool needsUpdate = m_needsUpdate || (m_lastUpdateTime != inheritedTime && !(isNull(m_lastUpdateTime) && isNull(inheritedTime)));
     m_needsUpdate = false;
     m_lastUpdateTime = inheritedTime;
-
-    const double previousIteration = m_calculated.currentIteration;
-    const Phase previousPhase = m_calculated.phase;
 
     const double localTime = inheritedTime - m_startTime;
     double timeToNextIteration = std::numeric_limits<double>::infinity();
@@ -162,12 +158,9 @@ void TimedItem::updateInheritedTime(double inheritedTime) const
 
     // Test for events even if timing didn't need an update as the player may have gained a start time.
     // FIXME: Refactor so that we can ASSERT(m_player) here, this is currently required to be nullable for testing.
-    if (!m_player || m_player->hasStartTime()) {
-        // This logic is specific to CSS animation events and assumes that all
-        // animations start after the DocumentTimeline has started.
-        if (m_eventDelegate && (m_isFirstSample || previousPhase != phase() || (phase() == PhaseActive && previousIteration != m_calculated.currentIteration)))
-            m_eventDelegate->onEventCondition(this, m_isFirstSample, previousPhase, previousIteration);
-        m_isFirstSample = false;
+    if (reason == TimingUpdateForAnimationFrame && (!m_player || m_player->hasStartTime())) {
+        if (m_eventDelegate)
+            m_eventDelegate->onEventCondition(this);
     }
 
     if (needsUpdate)  {
@@ -183,14 +176,20 @@ const TimedItem::CalculatedTiming& TimedItem::ensureCalculated() const
     if (!m_player)
         return m_calculated;
     if (m_player->outdated())
-        m_player->update(AnimationPlayer::UpdateOnDemand);
+        m_player->update(TimingUpdateOnDemand);
     ASSERT(!m_player->outdated());
     return m_calculated;
 }
 
-PassRefPtr<TimedItemTiming> TimedItem::timing()
+PassRefPtrWillBeRawPtr<TimedItemTiming> TimedItem::timing()
 {
     return TimedItemTiming::create(this);
+}
+
+void TimedItem::trace(Visitor* visitor)
+{
+    visitor->trace(m_parent);
+    visitor->trace(m_player);
 }
 
 } // namespace WebCore

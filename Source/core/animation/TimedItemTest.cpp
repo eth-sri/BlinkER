@@ -39,40 +39,37 @@ namespace {
 
 class TestTimedItemEventDelegate : public TimedItem::EventDelegate {
 public:
-    virtual void onEventCondition(const TimedItem* timedItem, bool isFirstSample, TimedItem::Phase previousPhase, double previousIteration) OVERRIDE
+    virtual void onEventCondition(const TimedItem* timedItem) OVERRIDE
     {
         m_eventTriggered = true;
-        m_phaseChanged = previousPhase != timedItem->phase();
-        m_iterationChanged = previousIteration != timedItem->currentIteration();
 
     }
     void reset()
     {
         m_eventTriggered = false;
-        m_phaseChanged = false;
-        m_iterationChanged = false;
     }
     bool eventTriggered() { return m_eventTriggered; }
-    bool phaseChanged() { return m_phaseChanged; }
-    bool iterationChanged() { return m_iterationChanged; }
 
 private:
     bool m_eventTriggered;
-    bool m_phaseChanged;
-    bool m_iterationChanged;
 };
 
 class TestTimedItem : public TimedItem {
 public:
-    static PassRefPtr<TestTimedItem> create(const Timing& specified)
+    static PassRefPtrWillBeRawPtr<TestTimedItem> create(const Timing& specified)
     {
-        return adoptRef(new TestTimedItem(specified, new TestTimedItemEventDelegate()));
+        return adoptRefWillBeNoop(new TestTimedItem(specified, new TestTimedItemEventDelegate()));
     }
 
     void updateInheritedTime(double time)
     {
+        updateInheritedTime(time, TimingUpdateForAnimationFrame);
+    }
+
+    void updateInheritedTime(double time, TimingUpdateReason reason)
+    {
         m_eventDelegate->reset();
-        TimedItem::updateInheritedTime(time);
+        TimedItem::updateInheritedTime(time, reason);
     }
 
     virtual void updateChildrenAndEffects() const OVERRIDE { }
@@ -114,7 +111,7 @@ TEST(AnimationTimedItemTest, Sanity)
 {
     Timing timing;
     timing.iterationDuration = 2;
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     EXPECT_EQ(0, timedItem->startTime());
 
@@ -167,7 +164,7 @@ TEST(AnimationTimedItemTest, FillAuto)
 {
     Timing timing;
     timing.iterationDuration = 1;
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     timedItem->updateInheritedTime(-1);
     EXPECT_EQ(0, timedItem->timeFraction());
@@ -181,7 +178,7 @@ TEST(AnimationTimedItemTest, FillForwards)
     Timing timing;
     timing.iterationDuration = 1;
     timing.fillMode = Timing::FillModeForwards;
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     timedItem->updateInheritedTime(-1);
     EXPECT_TRUE(isNull(timedItem->timeFraction()));
@@ -195,7 +192,7 @@ TEST(AnimationTimedItemTest, FillBackwards)
     Timing timing;
     timing.iterationDuration = 1;
     timing.fillMode = Timing::FillModeBackwards;
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     timedItem->updateInheritedTime(-1);
     EXPECT_EQ(0, timedItem->timeFraction());
@@ -209,7 +206,7 @@ TEST(AnimationTimedItemTest, FillBoth)
     Timing timing;
     timing.iterationDuration = 1;
     timing.fillMode = Timing::FillModeBoth;
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     timedItem->updateInheritedTime(-1);
     EXPECT_EQ(0, timedItem->timeFraction());
@@ -224,7 +221,7 @@ TEST(AnimationTimedItemTest, StartDelay)
     timing.iterationDuration = 1;
     timing.fillMode = Timing::FillModeForwards;
     timing.startDelay = 0.5;
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     timedItem->updateInheritedTime(0);
     EXPECT_TRUE(isNull(timedItem->timeFraction()));
@@ -242,7 +239,7 @@ TEST(AnimationTimedItemTest, ZeroIteration)
     timing.iterationDuration = 1;
     timing.fillMode = Timing::FillModeForwards;
     timing.iterationCount = 0;
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     timedItem->updateInheritedTime(-1);
     EXPECT_EQ(0, timedItem->activeDurationInternal());
@@ -261,7 +258,7 @@ TEST(AnimationTimedItemTest, InfiniteIteration)
     timing.iterationDuration = 1;
     timing.fillMode = Timing::FillModeForwards;
     timing.iterationCount = std::numeric_limits<double>::infinity();
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     timedItem->updateInheritedTime(-1);
     EXPECT_TRUE(isNull(timedItem->currentIteration()));
@@ -279,7 +276,7 @@ TEST(AnimationTimedItemTest, Iteration)
     Timing timing;
     timing.iterationCount = 2;
     timing.iterationDuration = 2;
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     timedItem->updateInheritedTime(0);
     EXPECT_EQ(0, timedItem->currentIteration());
@@ -309,7 +306,7 @@ TEST(AnimationTimedItemTest, IterationStart)
     timing.iterationCount = 2.2;
     timing.iterationDuration = 1;
     timing.fillMode = Timing::FillModeBoth;
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     timedItem->updateInheritedTime(-1);
     EXPECT_EQ(1, timedItem->currentIteration());
@@ -330,7 +327,7 @@ TEST(AnimationTimedItemTest, IterationAlternate)
     timing.iterationCount = 10;
     timing.iterationDuration = 1;
     timing.direction = Timing::PlaybackDirectionAlternate;
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     timedItem->updateInheritedTime(0.75);
     EXPECT_EQ(0, timedItem->currentIteration());
@@ -351,7 +348,7 @@ TEST(AnimationTimedItemTest, IterationAlternateReverse)
     timing.iterationCount = 10;
     timing.iterationDuration = 1;
     timing.direction = Timing::PlaybackDirectionAlternateReverse;
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     timedItem->updateInheritedTime(0.75);
     EXPECT_EQ(0, timedItem->currentIteration());
@@ -369,7 +366,7 @@ TEST(AnimationTimedItemTest, IterationAlternateReverse)
 TEST(AnimationTimedItemTest, ZeroDurationSanity)
 {
     Timing timing;
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     EXPECT_EQ(0, timedItem->startTime());
 
@@ -400,7 +397,7 @@ TEST(AnimationTimedItemTest, ZeroDurationFillForwards)
 {
     Timing timing;
     timing.fillMode = Timing::FillModeForwards;
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     timedItem->updateInheritedTime(-1);
     EXPECT_TRUE(isNull(timedItem->timeFraction()));
@@ -416,7 +413,7 @@ TEST(AnimationTimedItemTest, ZeroDurationFillBackwards)
 {
     Timing timing;
     timing.fillMode = Timing::FillModeBackwards;
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     timedItem->updateInheritedTime(-1);
     EXPECT_EQ(0, timedItem->timeFraction());
@@ -432,7 +429,7 @@ TEST(AnimationTimedItemTest, ZeroDurationFillBoth)
 {
     Timing timing;
     timing.fillMode = Timing::FillModeBoth;
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     timedItem->updateInheritedTime(-1);
     EXPECT_EQ(0, timedItem->timeFraction());
@@ -449,7 +446,7 @@ TEST(AnimationTimedItemTest, ZeroDurationStartDelay)
     Timing timing;
     timing.fillMode = Timing::FillModeForwards;
     timing.startDelay = 0.5;
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     timedItem->updateInheritedTime(0);
     EXPECT_TRUE(isNull(timedItem->timeFraction()));
@@ -468,7 +465,7 @@ TEST(AnimationTimedItemTest, ZeroDurationIterationStartAndCount)
     timing.iterationCount = 0.2;
     timing.fillMode = Timing::FillModeBoth;
     timing.startDelay = 0.3;
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     timedItem->updateInheritedTime(0);
     EXPECT_EQ(0.1, timedItem->timeFraction());
@@ -486,7 +483,7 @@ TEST(AnimationTimedItemTest, ZeroDurationInfiniteIteration)
     Timing timing;
     timing.fillMode = Timing::FillModeForwards;
     timing.iterationCount = std::numeric_limits<double>::infinity();
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     timedItem->updateInheritedTime(-1);
     EXPECT_EQ(0, timedItem->activeDurationInternal());
@@ -504,7 +501,7 @@ TEST(AnimationTimedItemTest, ZeroDurationIteration)
     Timing timing;
     timing.fillMode = Timing::FillModeForwards;
     timing.iterationCount = 2;
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     timedItem->updateInheritedTime(-1);
     EXPECT_TRUE(isNull(timedItem->currentIteration()));
@@ -525,7 +522,7 @@ TEST(AnimationTimedItemTest, ZeroDurationIterationStart)
     timing.iterationStart = 1.2;
     timing.iterationCount = 2.2;
     timing.fillMode = Timing::FillModeBoth;
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     timedItem->updateInheritedTime(-1);
     EXPECT_EQ(1, timedItem->currentIteration());
@@ -546,7 +543,7 @@ TEST(AnimationTimedItemTest, ZeroDurationIterationAlternate)
     timing.fillMode = Timing::FillModeForwards;
     timing.iterationCount = 2;
     timing.direction = Timing::PlaybackDirectionAlternate;
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     timedItem->updateInheritedTime(-1);
     EXPECT_TRUE(isNull(timedItem->currentIteration()));
@@ -567,7 +564,7 @@ TEST(AnimationTimedItemTest, ZeroDurationIterationAlternateReverse)
     timing.fillMode = Timing::FillModeForwards;
     timing.iterationCount = 2;
     timing.direction = Timing::PlaybackDirectionAlternateReverse;
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     timedItem->updateInheritedTime(-1);
     EXPECT_TRUE(isNull(timedItem->currentIteration()));
@@ -587,7 +584,7 @@ TEST(AnimationTimedItemTest, InfiniteDurationSanity)
     Timing timing;
     timing.iterationDuration = std::numeric_limits<double>::infinity();
     timing.iterationCount = 1;
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     EXPECT_EQ(0, timedItem->startTime());
 
@@ -618,7 +615,7 @@ TEST(AnimationTimedItemTest, InfiniteDurationZeroIterations)
     Timing timing;
     timing.iterationDuration = std::numeric_limits<double>::infinity();
     timing.iterationCount = 0;
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     EXPECT_EQ(0, timedItem->startTime());
 
@@ -648,7 +645,7 @@ TEST(AnimationTimedItemTest, InfiniteDurationInfiniteIterations)
     Timing timing;
     timing.iterationDuration = std::numeric_limits<double>::infinity();
     timing.iterationCount = std::numeric_limits<double>::infinity();
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     EXPECT_EQ(0, timedItem->startTime());
 
@@ -678,7 +675,7 @@ TEST(AnimationTimedItemTest, InfiniteDurationZeroPlaybackRate)
     Timing timing;
     timing.iterationDuration = std::numeric_limits<double>::infinity();
     timing.playbackRate = 0;
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     EXPECT_EQ(0, timedItem->startTime());
 
@@ -710,7 +707,7 @@ TEST(AnimationTimedItemTest, EndTime)
     timing.endDelay = 2;
     timing.iterationDuration = 4;
     timing.iterationCount = 2;
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
     EXPECT_EQ(11, timedItem->endTimeInternal());
 }
 
@@ -721,42 +718,20 @@ TEST(AnimationTimedItemTest, Events)
     timing.fillMode = Timing::FillModeForwards;
     timing.iterationCount = 2;
     timing.startDelay = 1;
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
-    // First sample
-    timedItem->updateInheritedTime(0.0);
-    EXPECT_TRUE(timedItem->eventDelegate()->eventTriggered());
-
-    // Before start
-    timedItem->updateInheritedTime(0.5);
+    timedItem->updateInheritedTime(0.0, TimingUpdateOnDemand);
     EXPECT_FALSE(timedItem->eventDelegate()->eventTriggered());
 
-    // First iteration
-    timedItem->updateInheritedTime(1.5);
+    timedItem->updateInheritedTime(0.0, TimingUpdateForAnimationFrame);
     EXPECT_TRUE(timedItem->eventDelegate()->eventTriggered());
-    EXPECT_TRUE(timedItem->eventDelegate()->phaseChanged());
-    EXPECT_TRUE(timedItem->eventDelegate()->iterationChanged());
 
-    timedItem->updateInheritedTime(1.6);
+    timedItem->updateInheritedTime(1.5, TimingUpdateOnDemand);
     EXPECT_FALSE(timedItem->eventDelegate()->eventTriggered());
 
-    // Second iteration
-    timedItem->updateInheritedTime(2.5);
+    timedItem->updateInheritedTime(1.5, TimingUpdateForAnimationFrame);
     EXPECT_TRUE(timedItem->eventDelegate()->eventTriggered());
-    EXPECT_FALSE(timedItem->eventDelegate()->phaseChanged());
-    EXPECT_TRUE(timedItem->eventDelegate()->iterationChanged());
 
-    timedItem->updateInheritedTime(2.6);
-    EXPECT_FALSE(timedItem->eventDelegate()->eventTriggered());
-
-    // After end
-    timedItem->updateInheritedTime(3.5);
-    EXPECT_TRUE(timedItem->eventDelegate()->eventTriggered());
-    EXPECT_TRUE(timedItem->eventDelegate()->phaseChanged());
-    EXPECT_FALSE(timedItem->eventDelegate()->iterationChanged());
-
-    timedItem->updateInheritedTime(3.6);
-    EXPECT_FALSE(timedItem->eventDelegate()->eventTriggered());
 }
 
 TEST(AnimationTimedItemTest, TimeToEffectChange)
@@ -768,7 +743,7 @@ TEST(AnimationTimedItemTest, TimeToEffectChange)
     timing.iterationCount = 2.5;
     timing.startDelay = 1;
     timing.direction = Timing::PlaybackDirectionAlternate;
-    RefPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
+    RefPtrWillBeRawPtr<TestTimedItem> timedItem = TestTimedItem::create(timing);
 
     timedItem->updateInheritedTime(0);
     EXPECT_EQ(0, timedItem->takeLocalTime());

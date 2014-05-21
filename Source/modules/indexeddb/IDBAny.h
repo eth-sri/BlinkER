@@ -124,12 +124,12 @@ public:
 
 private:
     explicit IDBAny(Type);
-    explicit IDBAny(PassRefPtr<DOMStringList>);
+    explicit IDBAny(PassRefPtrWillBeRawPtr<DOMStringList>);
     explicit IDBAny(PassRefPtrWillBeRawPtr<IDBCursor>);
-    explicit IDBAny(PassRefPtr<IDBDatabase>);
-    explicit IDBAny(PassRefPtr<IDBIndex>);
-    explicit IDBAny(PassRefPtr<IDBObjectStore>);
-    explicit IDBAny(PassRefPtr<IDBTransaction>);
+    explicit IDBAny(PassRefPtrWillBeRawPtr<IDBDatabase>);
+    explicit IDBAny(PassRefPtrWillBeRawPtr<IDBIndex>);
+    explicit IDBAny(PassRefPtrWillBeRawPtr<IDBObjectStore>);
+    explicit IDBAny(PassRefPtrWillBeRawPtr<IDBTransaction>);
     explicit IDBAny(PassRefPtrWillBeRawPtr<IDBKey>);
     explicit IDBAny(const IDBKeyPath&);
     explicit IDBAny(const String&);
@@ -140,12 +140,12 @@ private:
     const Type m_type;
 
     // Only one of the following should ever be in use at any given time, except that BufferType uses two and BufferKeyAndKeyPathType uses four.
-    const RefPtr<DOMStringList> m_domStringList;
+    const RefPtrWillBeMember<DOMStringList> m_domStringList;
     const RefPtrWillBeMember<IDBCursor> m_idbCursor;
-    const RefPtr<IDBDatabase> m_idbDatabase;
-    const RefPtr<IDBIndex> m_idbIndex;
-    const RefPtr<IDBObjectStore> m_idbObjectStore;
-    const RefPtr<IDBTransaction> m_idbTransaction;
+    const RefPtrWillBeMember<IDBDatabase> m_idbDatabase;
+    const RefPtrWillBeMember<IDBIndex> m_idbIndex;
+    const RefPtrWillBeMember<IDBObjectStore> m_idbObjectStore;
+    const RefPtrWillBeMember<IDBTransaction> m_idbTransaction;
     const RefPtrWillBeMember<IDBKey> m_idbKey;
     const IDBKeyPath m_idbKeyPath;
     const RefPtr<SharedBuffer> m_buffer;

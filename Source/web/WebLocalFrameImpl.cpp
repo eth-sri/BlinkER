@@ -473,7 +473,7 @@ WebLocalFrame* WebLocalFrame::frameForContext(v8::Handle<v8::Context> context)
 
 WebLocalFrame* WebLocalFrame::fromFrameOwnerElement(const WebElement& element)
 {
-    return WebLocalFrameImpl::fromFrameOwnerElement(PassRefPtr<Element>(element).get());
+    return WebLocalFrameImpl::fromFrameOwnerElement(PassRefPtrWillBeRawPtr<Element>(element).get());
 }
 
 bool WebLocalFrameImpl::isWebLocalFrame() const
@@ -594,6 +594,10 @@ WebSize WebLocalFrameImpl::contentsSize() const
 
 bool WebLocalFrameImpl::hasVisibleContent() const
 {
+    if (RenderPart* renderer = frame()->ownerRenderer()) {
+        if (renderer->style()->visibility() != VISIBLE)
+            return false;
+    }
     return frame()->view()->visibleWidth() > 0 && frame()->view()->visibleHeight() > 0;
 }
 
@@ -617,100 +621,31 @@ WebView* WebLocalFrameImpl::view() const
     return viewImpl();
 }
 
-WebFrame* WebLocalFrameImpl::opener() const
-{
-    return m_opener;
-}
-
 void WebLocalFrameImpl::setOpener(WebFrame* opener)
 {
-    WebLocalFrameImpl* openerImpl = toWebLocalFrameImpl(opener);
-    if (m_opener && !openerImpl && m_client)
+    // FIXME: Does this need to move up into WebFrame too?
+    if (WebFrame::opener() && !opener && m_client)
         m_client->didDisownOpener(this);
 
-    if (m_opener)
-        m_opener->m_openedFrames.remove(this);
-    if (openerImpl)
-        openerImpl->m_openedFrames.add(this);
-    m_opener = openerImpl;
+    WebFrame::setOpener(opener);
 
     ASSERT(m_frame);
     if (m_frame && m_frame->document())
         m_frame->document()->initSecurityContext();
 }
 
+// FIXME: These methods should move into WebFrame once FrameTree is no longer
+// dependent on LocalFrame.
 void WebLocalFrameImpl::appendChild(WebFrame* child)
 {
-    // FIXME: Original code asserts that the frames have the same Page. We
-    // should add an equivalent check... figure out what.
-    WebLocalFrameImpl* childImpl = toWebLocalFrameImpl(child);
-    childImpl->m_parent = this;
-    WebLocalFrameImpl* oldLast = m_lastChild;
-    m_lastChild = childImpl;
-
-    if (oldLast) {
-        childImpl->m_previousSibling = oldLast;
-        oldLast->m_nextSibling = childImpl;
-    } else {
-        m_firstChild = childImpl;
-    }
-    // FIXME: Not sure if this is a legitimate assert.
-    ASSERT(frame());
+    WebFrame::appendChild(child);
     frame()->tree().invalidateScopedChildCount();
 }
 
 void WebLocalFrameImpl::removeChild(WebFrame* child)
 {
-    WebLocalFrameImpl* childImpl = toWebLocalFrameImpl(child);
-    childImpl->m_parent = 0;
-
-    if (m_firstChild == childImpl)
-        m_firstChild = childImpl->m_nextSibling;
-    else
-        childImpl->m_previousSibling->m_nextSibling = childImpl->m_nextSibling;
-
-    if (m_lastChild == childImpl)
-        m_lastChild = childImpl->m_previousSibling;
-    else
-        childImpl->m_nextSibling->m_previousSibling = childImpl->m_previousSibling;
-
-    childImpl->m_previousSibling = childImpl->m_nextSibling = 0;
-    // FIXME: Not sure if this is a legitimate assert.
-    ASSERT(frame());
+    WebFrame::removeChild(child);
     frame()->tree().invalidateScopedChildCount();
-}
-
-WebFrame* WebLocalFrameImpl::parent() const
-{
-    return m_parent;
-}
-
-WebFrame* WebLocalFrameImpl::top() const
-{
-    WebLocalFrameImpl* frame = const_cast<WebLocalFrameImpl*>(this);
-    for (WebLocalFrameImpl* parent = frame; parent; parent = parent->m_parent)
-        frame = parent;
-    return frame;
-}
-
-WebFrame* WebLocalFrameImpl::previousSibling() const
-{
-    return m_previousSibling;
-}
-
-WebFrame* WebLocalFrameImpl::nextSibling() const
-{
-    return m_nextSibling;
-}
-
-WebFrame* WebLocalFrameImpl::firstChild() const
-{
-    return m_firstChild;
-}
-
-WebFrame* WebLocalFrameImpl::lastChild() const
-{
-    return m_lastChild;
 }
 
 WebFrame* WebLocalFrameImpl::traversePrevious(bool wrap) const
@@ -1211,7 +1146,7 @@ void WebLocalFrameImpl::replaceMisspelledRange(const WebString& text)
     RefPtrWillBeRawPtr<Range> caretRange = frame()->selection().toNormalizedRange();
     if (!caretRange)
         return;
-    Vector<DocumentMarker*> markers = frame()->document()->markers().markersInRange(caretRange.get(), DocumentMarker::MisspellingMarkers());
+    WillBeHeapVector<DocumentMarker*> markers = frame()->document()->markers().markersInRange(caretRange.get(), DocumentMarker::MisspellingMarkers());
     if (markers.size() < 1 || markers[0]->startOffset() >= markers[0]->endOffset())
         return;
     RefPtrWillBeRawPtr<Range> markerRange = Range::create(caretRange->ownerDocument(), caretRange->startContainer(), markers[0]->startOffset(), caretRange->endContainer(), markers[0]->endOffset());
@@ -1284,7 +1219,6 @@ void WebLocalFrameImpl::selectWordAroundPosition(LocalFrame* frame, VisiblePosit
 bool WebLocalFrameImpl::selectWordAroundCaret()
 {
     FrameSelection& selection = frame()->selection();
-    ASSERT(!selection.isNone());
     if (selection.isNone() || selection.isRange())
         return false;
     selectWordAroundPosition(frame(), selection.selection().visibleStart());
@@ -1375,13 +1309,6 @@ WebPlugin* WebLocalFrameImpl::focusedPluginIfInputMethodSupported()
     if (container && container->supportsInputMethod())
         return container->plugin();
     return 0;
-}
-
-NotificationPresenterImpl* WebLocalFrameImpl::notificationPresenterImpl()
-{
-    if (!m_notificationPresenter.isInitialized() && m_client)
-        m_notificationPresenter.initialize(m_client->notificationPresenter());
-    return &m_notificationPresenter;
 }
 
 int WebLocalFrameImpl::printBegin(const WebPrintParams& printParams, const WebNode& constrainToNode)
@@ -1510,10 +1437,10 @@ void WebLocalFrameImpl::resetMatchCount()
     m_textFinder->resetMatchCount();
 }
 
-void WebLocalFrameImpl::sendOrientationChangeEvent(int orientation)
+void WebLocalFrameImpl::sendOrientationChangeEvent()
 {
     if (frame())
-        frame()->sendOrientationChangeEvent(orientation);
+        frame()->sendOrientationChangeEvent();
 }
 
 void WebLocalFrameImpl::dispatchMessageEventWithOriginCheck(const WebSecurityOrigin& intendedTargetOrigin, const WebDOMEvent& event)
@@ -1643,12 +1570,6 @@ WebLocalFrameImpl* WebLocalFrameImpl::create(WebFrameClient* client)
 
 WebLocalFrameImpl::WebLocalFrameImpl(WebFrameClient* client)
     : m_frameLoaderClientImpl(this)
-    , m_parent(0)
-    , m_previousSibling(0)
-    , m_nextSibling(0)
-    , m_firstChild(0)
-    , m_lastChild(0)
-    , m_opener(0)
     , m_client(client)
     , m_permissionClient(0)
     , m_inputEventsScaleFactorForEmulation(1)
@@ -1660,10 +1581,6 @@ WebLocalFrameImpl::WebLocalFrameImpl(WebFrameClient* client)
 
 WebLocalFrameImpl::~WebLocalFrameImpl()
 {
-    HashSet<WebLocalFrameImpl*>::iterator end = m_openedFrames.end();
-    for (HashSet<WebLocalFrameImpl*>::iterator it = m_openedFrames.begin(); it != end; ++it)
-        (*it)->m_opener = 0;
-
     blink::Platform::current()->decrementStatsCounter(webFrameActiveCount);
     frameCount--;
 
@@ -1676,7 +1593,11 @@ void WebLocalFrameImpl::setWebCoreFrame(PassRefPtr<WebCore::LocalFrame> frame)
 
     // FIXME: we shouldn't add overhead to every frame by registering these objects when they're not used.
     if (m_frame) {
-        provideNotification(*m_frame, notificationPresenterImpl());
+        OwnPtr<NotificationPresenterImpl> notificationPresenter = adoptPtr(new NotificationPresenterImpl());
+        if (m_client)
+            notificationPresenter->initialize(m_client->notificationPresenter());
+
+        provideNotification(*m_frame, notificationPresenter.release());
         provideUserMediaTo(*m_frame, &m_userMediaClientImpl);
     }
 }

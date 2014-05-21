@@ -13,7 +13,4 @@ PASS morphologyElement.radiusY.baseVal is 4
 PASS successfullyParsed is true
 
 TEST COMPLETE
-(repaint rects
-  (rect 8 8 700 200)
-)
 

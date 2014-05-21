@@ -81,7 +81,7 @@ enum ThreadAffinity {
 class Node;
 class CSSValue;
 
-template<typename T, bool derivesNode = WTF::IsSubclass<T, Node>::value> struct DefaultThreadingTrait;
+template<typename T, bool derivesNode = WTF::IsSubclass<typename WTF::RemoveConst<T>::Type, Node>::value> struct DefaultThreadingTrait;
 
 template<typename T>
 struct DefaultThreadingTrait<T, false> {
@@ -259,8 +259,7 @@ public:
         return reinterpret_cast<ThreadState*>(s_mainThreadStateStorage);
     }
 
-    static bool isMainThread() { return current() == mainThreadState(); }
-
+    bool isMainThread() const { return this == mainThreadState(); }
     inline bool checkThread() const
     {
         ASSERT(m_thread == currentThread());
@@ -360,7 +359,7 @@ public:
     //
 
     // Request all other threads to stop. Must only be called if the current thread is at safepoint.
-    static void stopThreads();
+    static bool stopThreads();
     static void resumeThreads();
 
     // Check if GC is requested by another thread and pause this thread if this is the case.
@@ -468,7 +467,7 @@ public:
     // address ranges for the Blink heap. If the address is in the Blink
     // heap the containing heap page is returned.
     HeapContainsCache* heapContainsCache() { return m_heapContainsCache.get(); }
-    BaseHeapPage* contains(Address);
+    BaseHeapPage* contains(Address address) { return heapPageFromAddress(address); }
     BaseHeapPage* contains(void* pointer) { return contains(reinterpret_cast<Address>(pointer)); }
     BaseHeapPage* contains(const void* pointer) { return contains(const_cast<void*>(pointer)); }
 
@@ -591,7 +590,7 @@ public:
     static ThreadState* state()
     {
         // This specialization must only be used from the main thread.
-        ASSERT(ThreadState::isMainThread());
+        ASSERT(ThreadState::current()->isMainThread());
         return ThreadState::mainThreadState();
     }
 };

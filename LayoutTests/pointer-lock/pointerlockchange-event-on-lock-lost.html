@@ -18,17 +18,17 @@
     todo = [
         function () {
             expectOnlyChangeEvent("Lock targetDiv1.");
-            targetDiv1.webkitRequestPointerLock();
+            targetDiv1.requestPointerLock();
             // doNextStep called by event handler.
         },
         function () {
-            shouldBe("document.webkitPointerLockElement", "targetDiv1");
+            shouldBe("document.pointerLockElement", "targetDiv1");
             expectOnlyChangeEvent("Host initiated unlock.");
             testRunner.didLosePointerLock();
             // doNextStep called by event handler.
         },
         function () {
-            shouldBe("document.webkitPointerLockElement", "null");
+            shouldBe("document.pointerLockElement", "null");
             doNextStep();
         },
     ];

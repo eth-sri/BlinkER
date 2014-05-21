@@ -24,12 +24,12 @@
 #ifndef HTMLFormControlsCollection_h
 #define HTMLFormControlsCollection_h
 
+#include "core/html/FormAssociatedElement.h"
 #include "core/html/HTMLCollection.h"
 #include "core/html/RadioNodeList.h"
 
 namespace WebCore {
 
-class FormAssociatedElement;
 class HTMLElement;
 class HTMLImageElement;
 class QualifiedName;
@@ -39,12 +39,12 @@ class QualifiedName;
 
 class HTMLFormControlsCollection FINAL : public HTMLCollection {
 public:
-    static PassRefPtr<HTMLFormControlsCollection> create(ContainerNode&, CollectionType);
+    static PassRefPtrWillBeRawPtr<HTMLFormControlsCollection> create(ContainerNode&, CollectionType);
 
     virtual ~HTMLFormControlsCollection();
 
     virtual Element* namedItem(const AtomicString& name) const OVERRIDE;
-    void namedGetter(const AtomicString& name, bool& radioNodeListEnabled, RefPtr<RadioNodeList>&, bool& elementEnabled, RefPtr<Element>&);
+    void namedGetter(const AtomicString& name, bool& radioNodeListEnabled, RefPtrWillBeRawPtr<RadioNodeList>&, bool& elementEnabled, RefPtr<Element>&);
 
 private:
     explicit HTMLFormControlsCollection(ContainerNode&);
@@ -52,7 +52,7 @@ private:
     virtual void updateIdNameCache() const OVERRIDE;
     virtual void supportedPropertyNames(Vector<String>& names) OVERRIDE;
 
-    const Vector<FormAssociatedElement*>& formControlElements() const;
+    const FormAssociatedElement::List& formControlElements() const;
     const Vector<HTMLImageElement*>& formImageElements() const;
     virtual Element* virtualItemAfter(Element*) const OVERRIDE;
     virtual void invalidateCache(Document* oldDocument = 0) const OVERRIDE;

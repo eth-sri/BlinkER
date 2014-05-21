@@ -243,6 +243,16 @@ bool BitmapImage::dataChanged(bool allDataReceived)
     return isSizeAvailable();
 }
 
+bool BitmapImage::isAllDataReceived() const
+{
+    return m_allDataReceived;
+}
+
+bool BitmapImage::hasColorProfile() const
+{
+    return m_source.hasColorProfile();
+}
+
 String BitmapImage::filenameExtension() const
 {
     return m_source.filenameExtension();

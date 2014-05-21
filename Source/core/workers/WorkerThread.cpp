@@ -128,6 +128,8 @@ void WorkerThread::workerThread()
     m_workerReportingProxy.workerGlobalScopeStarted(m_workerGlobalScope.get());
 
     WorkerScriptController* script = m_workerGlobalScope->script();
+    if (!script->isExecutionForbidden())
+        script->initializeContextIfNeeded();
     InspectorInstrumentation::willEvaluateWorkerScript(workerGlobalScope(), startMode);
     script->evaluate(ScriptSourceCode(sourceCode, scriptURL));
 
@@ -243,9 +245,5 @@ bool WorkerThread::isCurrentThread() const
 {
     return m_threadID == currentThread();
 }
-
-class ReleaseFastMallocFreeMemoryTask : public ExecutionContextTask {
-    virtual void performTask(ExecutionContext*) OVERRIDE { WTF::releaseFastMallocFreeMemory(); }
-};
 
 } // namespace WebCore

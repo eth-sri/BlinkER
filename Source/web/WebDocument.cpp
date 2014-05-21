@@ -159,7 +159,7 @@ WebElementCollection WebDocument::all()
 
 void WebDocument::images(WebVector<WebElement>& results)
 {
-    RefPtr<HTMLCollection> images = unwrap<Document>()->images();
+    RefPtrWillBeRawPtr<HTMLCollection> images = unwrap<Document>()->images();
     size_t sourceLength = images->length();
     Vector<WebElement> temp;
     temp.reserveCapacity(sourceLength);
@@ -173,7 +173,7 @@ void WebDocument::images(WebVector<WebElement>& results)
 
 void WebDocument::forms(WebVector<WebFormElement>& results) const
 {
-    RefPtr<HTMLCollection> forms = const_cast<Document*>(constUnwrap<Document>())->forms();
+    RefPtrWillBeRawPtr<HTMLCollection> forms = const_cast<Document*>(constUnwrap<Document>())->forms();
     size_t sourceLength = forms->length();
     Vector<WebFormElement> temp;
     temp.reserveCapacity(sourceLength);
@@ -301,18 +301,18 @@ v8::Handle<v8::Value> WebDocument::registerEmbedderCustomElement(const WebString
     return constructor.v8Value();
 }
 
-WebDocument::WebDocument(const PassRefPtr<Document>& elem)
+WebDocument::WebDocument(const PassRefPtrWillBeRawPtr<Document>& elem)
     : WebNode(elem)
 {
 }
 
-WebDocument& WebDocument::operator=(const PassRefPtr<Document>& elem)
+WebDocument& WebDocument::operator=(const PassRefPtrWillBeRawPtr<Document>& elem)
 {
     m_private = elem;
     return *this;
 }
 
-WebDocument::operator PassRefPtr<Document>() const
+WebDocument::operator PassRefPtrWillBeRawPtr<Document>() const
 {
     return toDocument(m_private.get());
 }

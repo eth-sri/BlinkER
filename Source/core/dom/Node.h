@@ -109,12 +109,12 @@ private:
     RenderObject* m_renderer;
 };
 
-class Node : public TreeShared<Node>, public EventTarget, public ScriptWrappable {
+class Node : public TreeSharedWillBeRefCountedGarbageCollected<Node>, public EventTarget, public ScriptWrappable {
     friend class Document;
     friend class TreeScope;
     friend class TreeScopeAdopter;
 
-    DEFINE_EVENT_TARGET_REFCOUNTING(TreeShared<Node>);
+    DEFINE_EVENT_TARGET_REFCOUNTING(TreeSharedWillBeRefCountedGarbageCollected<Node>);
 public:
     enum NodeType {
         ELEMENT_NODE = 1,
@@ -170,9 +170,10 @@ public:
     ContainerNode* parentNode() const;
     Element* parentElement() const;
     ContainerNode* parentElementOrShadowRoot() const;
+    ContainerNode* parentElementOrDocumentFragment() const;
     Node* previousSibling() const { return m_previous; }
     Node* nextSibling() const { return m_next; }
-    PassRefPtr<NodeList> childNodes();
+    PassRefPtrWillBeRawPtr<NodeList> childNodes();
     Node* firstChild() const;
     Node* lastChild() const;
 
@@ -193,7 +194,7 @@ public:
     void appendChild(PassRefPtr<Node> newChild, ExceptionState& = ASSERT_NO_EXCEPTION);
 
     bool hasChildren() const { return firstChild(); }
-    virtual PassRefPtr<Node> cloneNode(bool deep = false) = 0;
+    virtual PassRefPtrWillBeRawPtr<Node> cloneNode(bool deep = false) = 0;
     virtual const AtomicString& localName() const;
     virtual const AtomicString& namespaceURI() const;
     void normalize();
@@ -666,7 +667,7 @@ public:
     void updateAncestorConnectedSubframeCountForRemoval() const;
     void updateAncestorConnectedSubframeCountForInsertion() const;
 
-    PassRefPtr<NodeList> getDestinationInsertionPoints();
+    PassRefPtrWillBeRawPtr<NodeList> getDestinationInsertionPoints();
 
     void setAlreadySpellChecked(bool flag) { setFlag(flag, AlreadySpellCheckedFlag); }
     bool isAlreadySpellChecked() { return getFlag(AlreadySpellCheckedFlag); }
@@ -755,10 +756,10 @@ protected:
 
     Node(TreeScope* treeScope, ConstructionType type)
         : m_nodeFlags(type)
-        , m_parentOrShadowHostNode(0)
+        , m_parentOrShadowHostNode(nullptr)
         , m_treeScope(treeScope)
-        , m_previous(0)
-        , m_next(0)
+        , m_previous(nullptr)
+        , m_next(nullptr)
     {
         ASSERT(m_treeScope || type == CreateDocument || type == CreateShadowRoot);
         ScriptWrappable::init(this);
@@ -785,9 +786,9 @@ protected:
 
     NodeRareData* rareData() const;
     NodeRareData& ensureRareData();
+#if !ENABLE(OILPAN)
     void clearRareData();
 
-#if !ENABLE(OILPAN)
     void clearEventTargetData();
 #endif
 
@@ -814,7 +815,11 @@ private:
         return NOPSEUDO;
     }
 
+    unsigned styledSubtreeSize() const;
+
+#if !ENABLE(OILPAN)
     void removedLastRef();
+#endif
     bool hasTreeSharedParent() const { return !!parentOrShadowHostNode(); }
 
     enum EditableLevel { Editable, RichlyEditable };
@@ -840,10 +845,10 @@ private:
     WillBeHeapHashSet<RawPtrWillBeMember<MutationObserverRegistration> >* transientMutationObserverRegistry();
 
     mutable uint32_t m_nodeFlags;
-    ContainerNode* m_parentOrShadowHostNode;
+    RawPtrWillBeMember<ContainerNode> m_parentOrShadowHostNode;
     RawPtrWillBeMember<TreeScope> m_treeScope;
-    Node* m_previous;
-    Node* m_next;
+    RawPtrWillBeMember<Node> m_previous;
+    RawPtrWillBeMember<Node> m_next;
     // When a node has rare data we move the renderer into the rare data.
     union DataUnion {
         DataUnion() : m_renderer(0) { }
@@ -919,6 +924,12 @@ inline bool operator!=(const Node& a, const PassRefPtr<Node>& b) { return !(a ==
 #define DEFINE_NODE_TYPE_CASTS_WITH_FUNCTION(thisType) \
     template<typename T> inline thisType* to##thisType(const RefPtr<T>& node) { return to##thisType(node.get()); } \
     DEFINE_TYPE_CASTS(thisType, Node, node, is##thisType(*node), is##thisType(node))
+
+#define DEFINE_NODE_FACTORY(T) \
+    inline static PassRefPtrWillBeRawPtr<T> create(Document& document) \
+    { \
+        return adoptRefWillBeRefCountedGarbageCollected(new T(document)); \
+    }
 
 } // namespace WebCore
 

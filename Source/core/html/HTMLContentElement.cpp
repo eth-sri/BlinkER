@@ -40,9 +40,9 @@ namespace WebCore {
 
 using namespace HTMLNames;
 
-PassRefPtr<HTMLContentElement> HTMLContentElement::create(Document& document)
+PassRefPtrWillBeRawPtr<HTMLContentElement> HTMLContentElement::create(Document& document)
 {
-    return adoptRef(new HTMLContentElement(document));
+    return adoptRefWillBeRefCountedGarbageCollected(new HTMLContentElement(document));
 }
 
 HTMLContentElement::HTMLContentElement(Document& document)
@@ -108,7 +108,7 @@ bool HTMLContentElement::validateSelect() const
     return true;
 }
 
-static inline bool checkOneSelector(const CSSSelector& selector, const Vector<Node*, 32>& siblings, int nth)
+static inline bool checkOneSelector(const CSSSelector& selector, const WillBeHeapVector<RawPtrWillBeMember<Node>, 32>& siblings, int nth)
 {
     Element* element = toElement(siblings[nth]);
     SelectorChecker selectorChecker(element->document(), SelectorChecker::CollectingCSSRules);
@@ -117,7 +117,7 @@ static inline bool checkOneSelector(const CSSSelector& selector, const Vector<No
     return selectorChecker.match(context, strategy) == SelectorChecker::SelectorMatches;
 }
 
-bool HTMLContentElement::matchSelector(const Vector<Node*, 32>& siblings, int nth) const
+bool HTMLContentElement::matchSelector(const WillBeHeapVector<RawPtrWillBeMember<Node>, 32>& siblings, int nth) const
 {
     for (const CSSSelector* selector = selectorList().first(); selector; selector = CSSSelectorList::next(*selector)) {
         if (checkOneSelector(*selector, siblings, nth))

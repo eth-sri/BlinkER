@@ -419,7 +419,7 @@ void XMLDocumentParser::end()
         insertErrorMessageBlock();
     else {
         exitText();
-        document()->styleResolverChanged(RecalcStyleImmediately);
+        document()->styleResolverChanged(RecalcStyleDeferred);
     }
 
     if (isParsing())
@@ -739,11 +739,11 @@ bool XMLDocumentParser::supportsXMLVersion(const String& version)
     return version == "1.0";
 }
 
-XMLDocumentParser::XMLDocumentParser(Document* document, FrameView* frameView)
+XMLDocumentParser::XMLDocumentParser(Document& document, FrameView* frameView)
     : ScriptableDocumentParser(document)
     , m_view(frameView)
     , m_context(nullptr)
-    , m_currentNode(document)
+    , m_currentNode(&document)
     , m_isCurrentlyParsing8BitChunk(false)
     , m_sawError(false)
     , m_sawCSS(false)
@@ -753,18 +753,18 @@ XMLDocumentParser::XMLDocumentParser(Document* document, FrameView* frameView)
     , m_parserPaused(false)
     , m_requestingScript(false)
     , m_finishCalled(false)
-    , m_xmlErrors(document)
+    , m_xmlErrors(&document)
     , m_pendingScript(0)
     , m_scriptStartPosition(TextPosition::belowRangePosition())
     , m_parsingFragment(false)
 {
     // This is XML being used as a document resource.
-    if (frameView && document->isXMLDocument())
-        UseCounter::count(*document, UseCounter::XMLDocument);
+    if (frameView && document.isXMLDocument())
+        UseCounter::count(document, UseCounter::XMLDocument);
 }
 
 XMLDocumentParser::XMLDocumentParser(DocumentFragment* fragment, Element* parentElement, ParserContentPolicy parserContentPolicy)
-    : ScriptableDocumentParser(&fragment->document(), parserContentPolicy)
+    : ScriptableDocumentParser(fragment->document(), parserContentPolicy)
     , m_view(0)
     , m_context(nullptr)
     , m_currentNode(fragment)
@@ -944,7 +944,7 @@ void XMLDocumentParser::startElementNs(const AtomicString& localName, const Atom
     m_sawFirstElement = true;
 
     QualifiedName qName(prefix, localName, adjustedURI);
-    RefPtr<Element> newElement = m_currentNode->document().createElement(qName, true);
+    RefPtrWillBeRawPtr<Element> newElement = m_currentNode->document().createElement(qName, true);
     if (!newElement) {
         stopParsing();
         return;
@@ -1107,7 +1107,7 @@ void XMLDocumentParser::processingInstruction(const String& target, const String
 
     // ### handle exceptions
     TrackExceptionState exceptionState;
-    RefPtr<ProcessingInstruction> pi = m_currentNode->document().createProcessingInstruction(target, data, exceptionState);
+    RefPtrWillBeRawPtr<ProcessingInstruction> pi = m_currentNode->document().createProcessingInstruction(target, data, exceptionState);
     if (exceptionState.hadException())
         return;
 
@@ -1146,8 +1146,7 @@ void XMLDocumentParser::cdataBlock(const String& text)
 
     exitText();
 
-    RefPtr<CDATASection> newNode = CDATASection::create(m_currentNode->document(), text);
-    m_currentNode->parserAppendChild(newNode.get());
+    m_currentNode->parserAppendChild(CDATASection::create(m_currentNode->document(), text));
 }
 
 void XMLDocumentParser::comment(const String& text)
@@ -1162,8 +1161,7 @@ void XMLDocumentParser::comment(const String& text)
 
     exitText();
 
-    RefPtr<Comment> newNode = Comment::create(m_currentNode->document(), text);
-    m_currentNode->parserAppendChild(newNode.get());
+    m_currentNode->parserAppendChild(Comment::create(m_currentNode->document(), text));
 }
 
 enum StandaloneInfo {
@@ -1445,7 +1443,7 @@ void XMLDocumentParser::doEnd()
         document()->setTransformSource(adoptPtr(new TransformSource(doc)));
 
         document()->setParsing(false); // Make the document think it's done, so it will apply XSL stylesheets.
-        document()->styleResolverChanged(RecalcStyleImmediately);
+        document()->styleResolverChanged(RecalcStyleDeferred);
 
         // styleResolverChanged() call can detach the parser and null out its document.
         // In that case, we just bail out.

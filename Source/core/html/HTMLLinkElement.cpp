@@ -43,6 +43,7 @@
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
+#include "core/html/LinkManifest.h"
 #include "core/html/imports/LinkImport.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/FrameLoaderClient.h"
@@ -140,16 +141,16 @@ inline HTMLLinkElement::HTMLLinkElement(Document& document, bool createdByParser
     ScriptWrappable::init(this);
 }
 
-PassRefPtr<HTMLLinkElement> HTMLLinkElement::create(Document& document, bool createdByParser)
+PassRefPtrWillBeRawPtr<HTMLLinkElement> HTMLLinkElement::create(Document& document, bool createdByParser)
 {
-    return adoptRef(new HTMLLinkElement(document, createdByParser));
+    return adoptRefWillBeRefCountedGarbageCollected(new HTMLLinkElement(document, createdByParser));
 }
 
 HTMLLinkElement::~HTMLLinkElement()
 {
+#if !ENABLE(OILPAN)
     m_link.clear();
 
-#if !ENABLE(OILPAN)
     if (inDocument())
         document().styleEngine()->removeStyleSheetCandidateNode(this);
 #endif
@@ -206,10 +207,12 @@ LinkResource* HTMLLinkElement::linkResourceToProcess()
     }
 
     if (!m_link) {
-        if (m_relAttribute.isImport() && RuntimeEnabledFeatures::htmlImportsEnabled())
+        if (m_relAttribute.isImport() && RuntimeEnabledFeatures::htmlImportsEnabled()) {
             m_link = LinkImport::create(this);
-        else {
-            OwnPtr<LinkStyle> link = LinkStyle::create(this);
+        } else if (m_relAttribute.isManifest() && RuntimeEnabledFeatures::manifestEnabled()) {
+            m_link = LinkManifest::create(this);
+        } else {
+            OwnPtrWillBeRawPtr<LinkStyle> link = LinkStyle::create(this);
             if (fastHasAttribute(disabledAttr))
                 link->setDisabledState(true);
             m_link = link.release();
@@ -419,9 +422,16 @@ DOMSettableTokenList* HTMLLinkElement::sizes() const
     return m_sizes.get();
 }
 
-PassOwnPtr<LinkStyle> LinkStyle::create(HTMLLinkElement* owner)
+void HTMLLinkElement::trace(Visitor* visitor)
 {
-    return adoptPtr(new LinkStyle(owner));
+    visitor->trace(m_link);
+    visitor->trace(m_sizes);
+    HTMLElement::trace(visitor);
+}
+
+PassOwnPtrWillBeRawPtr<LinkStyle> LinkStyle::create(HTMLLinkElement* owner)
+{
+    return adoptPtrWillBeNoop(new LinkStyle(owner));
 }
 
 LinkStyle::LinkStyle(HTMLLinkElement* owner)
@@ -436,8 +446,10 @@ LinkStyle::LinkStyle(HTMLLinkElement* owner)
 
 LinkStyle::~LinkStyle()
 {
+#if !ENABLE(OILPAN)
     if (m_sheet)
         m_sheet->clearOwnerNode();
+#endif
 }
 
 Document& LinkStyle::document()
@@ -453,7 +465,7 @@ void LinkStyle::setCSSStyleSheet(const String& href, const KURL& baseURL, const 
 
     }
     // Completing the sheet load may cause scripts to execute.
-    RefPtr<Node> protector(m_owner);
+    RefPtrWillBeRawPtr<Node> protector(m_owner);
 
     CSSParserContext parserContext(m_owner->document(), 0, baseURL, charset);
 
@@ -690,6 +702,12 @@ void LinkStyle::ownerRemoved()
 
     if (styleSheetIsLoading())
         removePendingSheet(RemovePendingSheetNotifyLater);
+}
+
+void LinkStyle::trace(Visitor* visitor)
+{
+    visitor->trace(m_sheet);
+    LinkResource::trace(visitor);
 }
 
 } // namespace WebCore

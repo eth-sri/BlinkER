@@ -28,6 +28,7 @@
 #define HistoryItem_h
 
 #include "bindings/v8/SerializedScriptValue.h"
+#include "platform/geometry/FloatPoint.h"
 #include "platform/geometry/IntPoint.h"
 #include "platform/weborigin/Referrer.h"
 #include "wtf/RefCounted.h"
@@ -64,6 +65,8 @@ public:
     FormData* formData();
     const AtomicString& formContentType() const;
 
+    const FloatPoint& pinchViewportScrollPoint() const;
+    void setPinchViewportScrollPoint(const FloatPoint&);
     const IntPoint& scrollPoint() const;
     void setScrollPoint(const IntPoint&);
     void clearScrollPoint();
@@ -95,13 +98,6 @@ public:
     void setFormData(PassRefPtr<FormData>);
     void setFormContentType(const AtomicString&);
 
-    // HistoryItem's concept of children is deprecated and can be removed once chromium's
-    // HistoryItem serialization/deserialization code knows about HistoryController's
-    // representation of the histroy tree.
-    void deprecatedAddChildItem(PassRefPtr<HistoryItem>);
-    const HistoryItemVector& deprecatedChildren() const;
-    void deprecatedClearChildren();
-
     bool isCurrentDocument(Document*) const;
 
 private:
@@ -111,12 +107,11 @@ private:
     Referrer m_referrer;
     String m_target;
 
+    FloatPoint m_pinchViewportScrollPoint;
     IntPoint m_scrollPoint;
     float m_pageScaleFactor;
     Vector<String> m_documentStateVector;
-    RefPtr<DocumentState> m_documentState;
-
-    HistoryItemVector m_children;
+    RefPtrWillBePersistent<DocumentState> m_documentState;
 
     // If two HistoryItems have the same item sequence number, then they are
     // clones of one another. Traversing history from one such HistoryItem to

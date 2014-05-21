@@ -56,8 +56,7 @@ enum {
 
 class HTMLAnchorElement : public HTMLElement, public DOMURLUtils {
 public:
-    static PassRefPtr<HTMLAnchorElement> create(Document&);
-    static PassRefPtr<HTMLAnchorElement> create(const QualifiedName&, Document&);
+    static PassRefPtrWillBeRawPtr<HTMLAnchorElement> create(Document&);
 
     virtual ~HTMLAnchorElement();
 
@@ -72,8 +71,6 @@ public:
     virtual String input() const OVERRIDE FINAL;
     virtual void setInput(const String&) OVERRIDE FINAL;
 
-    String text();
-
     bool isLiveLink() const;
 
     virtual bool willRespondToMouseClickEvents() OVERRIDE FINAL;
@@ -83,6 +80,8 @@ public:
 
     LinkHash visitedLinkHash() const;
     void invalidateCachedVisitedLinkHash() { m_cachedVisitedLinkHash = 0; }
+
+    virtual void trace(Visitor*) OVERRIDE;
 
 protected:
     HTMLAnchorElement(const QualifiedName&, Document&);
@@ -111,7 +110,7 @@ private:
     PrefetchEventHandler* prefetchEventHandler();
 
     uint32_t m_linkRelations;
-    OwnPtr<PrefetchEventHandler> m_prefetchEventHandler;
+    OwnPtrWillBeMember<PrefetchEventHandler> m_prefetchEventHandler;
     mutable LinkHash m_cachedVisitedLinkHash;
 };
 

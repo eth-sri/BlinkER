@@ -27,17 +27,12 @@
 
 namespace WebCore {
 
-inline SVGFEMergeNodeElement::SVGFEMergeNodeElement(Document& document)
+SVGFEMergeNodeElement::SVGFEMergeNodeElement(Document& document)
     : SVGElement(SVGNames::feMergeNodeTag, document)
     , m_in1(SVGAnimatedString::create(this, SVGNames::inAttr, SVGString::create()))
 {
     ScriptWrappable::init(this);
     addToPropertyMap(m_in1);
-}
-
-PassRefPtr<SVGFEMergeNodeElement> SVGFEMergeNodeElement::create(Document& document)
-{
-    return adoptRef(new SVGFEMergeNodeElement(document));
 }
 
 bool SVGFEMergeNodeElement::isSupportedAttribute(const QualifiedName& attrName)
@@ -72,7 +67,7 @@ void SVGFEMergeNodeElement::svgAttributeChanged(const QualifiedName& attrName)
         return;
     }
 
-    SVGElementInstance::InvalidationGuard invalidationGuard(this);
+    SVGElement::InvalidationGuard invalidationGuard(this);
 
     if (attrName == SVGNames::inAttr) {
         invalidateFilterPrimitiveParent(this);

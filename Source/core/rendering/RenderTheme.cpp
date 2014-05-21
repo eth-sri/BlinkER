@@ -60,10 +60,6 @@
 #include "public/platform/WebRect.h"
 #include "wtf/text/StringBuilder.h"
 
-#if ENABLE(INPUT_SPEECH)
-#include "core/rendering/RenderInputSpeech.h"
-#endif
-
 // The methods in this file are shared by all themes on every platform.
 
 namespace WebCore {
@@ -226,10 +222,6 @@ void RenderTheme::adjustStyle(RenderStyle* style, Element* e, const CachedUAStyl
         return adjustSearchFieldDecorationStyle(style, e);
     case SearchFieldResultsDecorationPart:
         return adjustSearchFieldResultsDecorationStyle(style, e);
-#if ENABLE(INPUT_SPEECH)
-    case InputSpeechButtonPart:
-        return adjustInputFieldSpeechButtonStyle(style, e);
-#endif
     default:
         break;
     }
@@ -339,10 +331,6 @@ bool RenderTheme::paint(RenderObject* o, const PaintInfo& paintInfo, const IntRe
         return paintSearchFieldDecoration(o, paintInfo, r);
     case SearchFieldResultsDecorationPart:
         return paintSearchFieldResultsDecoration(o, paintInfo, r);
-#if ENABLE(INPUT_SPEECH)
-    case InputSpeechButtonPart:
-        return paintInputFieldSpeechButton(o, paintInfo, r);
-#endif
     default:
         break;
     }
@@ -381,9 +369,6 @@ bool RenderTheme::paintBorderOnly(RenderObject* o, const PaintInfo& paintInfo, c
     case SearchFieldCancelButtonPart:
     case SearchFieldDecorationPart:
     case SearchFieldResultsDecorationPart:
-#if ENABLE(INPUT_SPEECH)
-    case InputSpeechButtonPart:
-#endif
     default:
         break;
     }
@@ -420,9 +405,6 @@ bool RenderTheme::paintDecorations(RenderObject* o, const PaintInfo& paintInfo, 
     case SearchFieldCancelButtonPart:
     case SearchFieldDecorationPart:
     case SearchFieldResultsDecorationPart:
-#if ENABLE(INPUT_SPEECH)
-    case InputSpeechButtonPart:
-#endif
     default:
         break;
     }
@@ -647,11 +629,11 @@ bool RenderTheme::supportsFocusRing(const RenderStyle* style) const
 bool RenderTheme::stateChanged(RenderObject* o, ControlState state) const
 {
     // Default implementation assumes the controls don't respond to changes in :hover state
-    if (state == HoverState && !supportsHover(o->style()))
+    if (state == HoverControlState && !supportsHover(o->style()))
         return false;
 
     // Assume pressed state is only responded to if the control is enabled.
-    if (state == PressedState && !isEnabled(o))
+    if (state == PressedControlState && !isEnabled(o))
         return false;
 
     // Repaint the control.
@@ -663,27 +645,27 @@ ControlStates RenderTheme::controlStatesForRenderer(const RenderObject* o) const
 {
     ControlStates result = 0;
     if (isHovered(o)) {
-        result |= HoverState;
+        result |= HoverControlState;
         if (isSpinUpButtonPartHovered(o))
-            result |= SpinUpState;
+            result |= SpinUpControlState;
     }
     if (isPressed(o)) {
-        result |= PressedState;
+        result |= PressedControlState;
         if (isSpinUpButtonPartPressed(o))
-            result |= SpinUpState;
+            result |= SpinUpControlState;
     }
     if (isFocused(o) && o->style()->outlineStyleIsAuto())
-        result |= FocusState;
+        result |= FocusControlState;
     if (isEnabled(o))
-        result |= EnabledState;
+        result |= EnabledControlState;
     if (isChecked(o))
-        result |= CheckedState;
+        result |= CheckedControlState;
     if (isReadOnlyControl(o))
-        result |= ReadOnlyState;
+        result |= ReadOnlyControlState;
     if (!isActive(o))
-        result |= WindowInactiveState;
+        result |= WindowInactiveControlState;
     if (isIndeterminate(o))
-        result |= IndeterminateState;
+        result |= IndeterminateControlState;
     return result;
 }
 
@@ -825,18 +807,6 @@ void RenderTheme::adjustMenuListStyle(RenderStyle*, Element*) const
 {
 }
 
-#if ENABLE(INPUT_SPEECH)
-void RenderTheme::adjustInputFieldSpeechButtonStyle(RenderStyle* style, Element* element) const
-{
-    RenderInputSpeech::adjustInputFieldSpeechButtonStyle(style, element);
-}
-
-bool RenderTheme::paintInputFieldSpeechButton(RenderObject* object, const PaintInfo& paintInfo, const IntRect& rect)
-{
-    return RenderInputSpeech::paintInputFieldSpeechButton(object, paintInfo, rect);
-}
-#endif
-
 IntSize RenderTheme::meterSizeForBounds(const RenderMeter*, const IntRect& bounds) const
 {
     return bounds.size();
@@ -913,7 +883,7 @@ void RenderTheme::paintSliderTicks(RenderObject* o, const PaintInfo& paintInfo, 
         tickRegionSideMargin = trackBounds.y() + (thumbSize.width() - tickSize.width() * zoomFactor) / 2.0;
         tickRegionWidth = trackBounds.height() - thumbSize.width();
     }
-    RefPtr<HTMLCollection> options = dataList->options();
+    RefPtrWillBeRawPtr<HTMLCollection> options = dataList->options();
     GraphicsContextStateSaver stateSaver(*paintInfo.context);
     paintInfo.context->setFillColor(o->resolveColor(CSSPropertyColor));
     for (unsigned i = 0; Element* element = options->item(i); i++) {

@@ -42,6 +42,8 @@ public:
 
     virtual LayerType layerTypeRequired() const OVERRIDE FINAL { return NoLayer; }
 
+    virtual void repaintTreeAfterLayout(const RenderLayerModelObject& repaintContainer) OVERRIDE;
+
 protected:
     virtual void willBeDestroyed() OVERRIDE;
 

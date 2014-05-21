@@ -31,6 +31,7 @@
             "sdk/ContentProviderBasedProjectDelegate.js",
             "sdk/ContentProviders.js",
             "sdk/CookieParser.js",
+            "sdk/CPUProfileModel.js",
             "sdk/CPUProfilerModel.js",
             "sdk/CSSMetadata.js",
             "sdk/CSSParser.js",
@@ -42,7 +43,6 @@
             "sdk/Database.js",
             "sdk/DebuggerModel.js",
             "sdk/DebuggerScriptMapping.js",
-            "sdk/DevicesModel.js",
             "sdk/FileManager.js",
             "sdk/FileSystemMapping.js",
             "sdk/FileSystemModel.js",
@@ -83,7 +83,6 @@
             "sdk/ResourceType.js",
             "sdk/ResourceUtils.js",
             "sdk/SourceMap.js",
-            "sdk/TracingModel.js",
             "sdk/NetworkManager.js",
             "sdk/NetworkRequest.js",
             "sdk/UISourceCode.js",
@@ -110,6 +109,7 @@
             "ui/EmptyView.js",
             "ui/FilterBar.js",
             "ui/FilterSuggestionBuilder.js",
+            "ui/FlameChart.js",
             "ui/HelpScreen.js",
             "ui/InplaceEditor.js",
             "ui/InspectedPagePlaceholder.js",
@@ -117,10 +117,11 @@
             "ui/KeyboardShortcut.js",
             "ui/OverviewGrid.js",
             "ui/Panel.js",
-            "ui/Placard.js",
+            "ui/PieChart.js",
             "ui/Popover.js",
             "ui/ProgressIndicator.js",
             "ui/PropertiesSection.js",
+            "ui/ResizerWidget.js",
             "ui/SearchableView.js",
             "ui/Section.js",
             "ui/SettingsUI.js",
@@ -130,7 +131,6 @@
             "ui/ShortcutsScreen.js",
             "ui/ShowMoreDataGridNode.js",
             "ui/SoftContextMenu.js",
-            "ui/Spectrum.js",
             "ui/SplitView.js",
             "ui/StackView.js",
             "ui/StatusBarButton.js",
@@ -151,20 +151,16 @@
         "name": "components",
         "dependencies": ["sdk", "ui"],
         "sources": [
-            "components/CPUProfileModel.js",
             "components/ExecutionContextSelector.js",
             "components/HandlerRegistry.js",
             "components/CookiesTable.js",
             "components/DOMBreakpointsSidebarPane.js",
             "components/DOMPresentationUtils.js",
             "components/ExtensionServerProxy.js",
-            "components/FlameChart.js",
-            "components/HelpScreenUntilReload.js",
             "components/NativeBreakpointsSidebarPane.js",
             "components/InspectElementModeController.js",
             "components/ObjectPopoverHelper.js",
             "components/ObjectPropertiesSection.js",
-            "components/PieChart.js",
             "components/WorkerFrontendManager.js"
         ]
     },
@@ -200,6 +196,7 @@
             "elements/OverridesView.js",
             "elements/PlatformFontsSidebarPane.js",
             "elements/PropertiesSidebarPane.js",
+            "elements/Spectrum.js",
             "elements/StylesSidebarPane.js",
             "elements/RenderingOptionsView.js"
         ]
@@ -274,6 +271,7 @@
             "sources/FilteredItemSelectionDialog.js",
             "sources/JavaScriptSourceFrame.js",
             "sources/NavigatorView.js",
+            "sources/Placard.js",
             "sources/RevisionHistoryView.js",
             "sources/ScopeChainSidebarPane.js",
             "sources/ScriptFormatter.js",
@@ -317,7 +315,8 @@
             "timeline/TimelinePresentationModel.js",
             "timeline/TimelineUIUtils.js",
             "timeline/TimelineView.js",
-            "timeline/TimelineTracingView.js"
+            "timeline/TimelineTracingView.js",
+            "timeline/TracingModel.js"
         ]
     },
     {
@@ -339,7 +338,7 @@
         "dependencies": ["components"],
         "sources": [
             "layers/LayersPanel.js",
-            "layers/LayerTree.js",
+            "layers/LayerTreeOutline.js",
             "layers/Layers3DView.js",
             "layers/LayerDetailsView.js",
             "layers/PaintProfilerView.js",
@@ -430,6 +429,7 @@
         "dependencies": ["components", "profiler", "timeline", "sources", "input"],
         "sources": [
             "InspectorFrontendAPI.js",
+            "InspectorFrontendEventSink.js",
             "InspectorFrontendHostStub.js"
         ]
     },
@@ -455,7 +455,8 @@
             "sdk"
         ],
         "sources": [
-            "Main.js"
+            "main/HelpScreenUntilReload.js",
+            "main/Main.js"
         ]
     },
     {

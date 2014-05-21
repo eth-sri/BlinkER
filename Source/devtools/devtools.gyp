@@ -51,6 +51,7 @@
                 'build_profiler_module',
                 'build_resources_module',
                 'build_search_module',
+                'build_settings_module',
                 'build_source_frame_module',
                 'build_sources_module',
                 'build_timeline_module',
@@ -117,10 +118,13 @@
                     'actions': [{
                         'action_name': 'generate_devtools_grd',
                         'script_name': 'scripts/generate_devtools_grd.py',
-                        'relative_path_dir': '<(PRODUCT_DIR)/resources/inspector',
+                        'relative_path_dirs': [
+                            '<(PRODUCT_DIR)/resources/inspector',
+                            'front_end'
+                        ],
                         'input_pages': [
                             '<(PRODUCT_DIR)/resources/inspector/devtools.html',
-                            '<(PRODUCT_DIR)/resources/inspector/Main.js',
+                            '<(PRODUCT_DIR)/resources/inspector/main/Main.js',
                             '<(PRODUCT_DIR)/resources/inspector/search/AdvancedSearchView.js',
                             '<(PRODUCT_DIR)/resources/inspector/console/ConsolePanel.js',
                             '<(PRODUCT_DIR)/resources/inspector/elements/ElementsPanel.js',
@@ -140,6 +144,7 @@
                             '<(PRODUCT_DIR)/resources/inspector/inspector.css',
                             '<(PRODUCT_DIR)/resources/inspector/devtools_extension_api.js',
                             '<@(devtools_standalone_files)',
+                            '<@(devtools_cm_css_files)',
                         ],
                         'images': [
                             '<@(devtools_image_files)',
@@ -153,7 +158,7 @@
                             'front_end/Images',
                         ],
                         'outputs': ['<(SHARED_INTERMEDIATE_DIR)/devtools/devtools_resources.grd'],
-                        'action': ['python', '<@(_script_name)', '<@(_input_pages)', '--relative_path_dir', '<@(_relative_path_dir)', '--images', '<@(_images_path)', '--output', '<@(_outputs)'],
+                        'action': ['python', '<@(_script_name)', '<@(_input_pages)', '--relative_path_dirs', '<@(_relative_path_dirs)', '--images', '<@(_images_path)', '--output', '<@(_outputs)'],
                     }],
                 },
                 {
@@ -164,7 +169,11 @@
                     'actions': [{
                         'action_name': 'generate_devtools_grd',
                         'script_name': 'scripts/generate_devtools_grd.py',
-                        'relative_path_dir': '<(SHARED_INTERMEDIATE_DIR)/devtools',
+                        'relative_path_dirs': [
+                            'front_end',
+                            '<(PRODUCT_DIR)/resources/inspector',
+                            '<(SHARED_INTERMEDIATE_DIR)/blink',
+                        ],
                         'input_pages': [
                             '<@(all_devtools_files)',
                             '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorBackendCommands.js',
@@ -184,7 +193,7 @@
                         ],
                         # Note that other files are put under /devtools directory, together with declared devtools_resources.grd
                         'outputs': ['<(SHARED_INTERMEDIATE_DIR)/devtools/devtools_resources.grd'],
-                        'action': ['python', '<@(_script_name)', '<@(_input_pages)', '--relative_path_dir', '<@(_relative_path_dir)', '--images', '<@(_images_path)', '--output', '<@(_outputs)'],
+                        'action': ['python', '<@(_script_name)', '<@(_input_pages)', '--relative_path_dirs', '<@(_relative_path_dirs)', '--images', '<@(_images_path)', '--output', '<@(_outputs)'],
                     }],
                 }],
             ],
@@ -249,7 +258,8 @@
                     'dependencies': [
                         'devtools_html',
                         'supported_css_properties',
-                        'frontend_protocol_sources'
+                        'frontend_protocol_sources',
+                        'concatenated_module_descriptors',
                     ],
                     'actions': [{
                         'action_name': 'build_core_module',
@@ -260,13 +270,14 @@
                             '<@(_input_page)',
                             '<@(devtools_core_js_files)',
                             '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorBackendCommands.js',
-                            '<(SHARED_INTERMEDIATE_DIR)/blink/SupportedCSSProperties.js'
+                            '<(SHARED_INTERMEDIATE_DIR)/blink/SupportedCSSProperties.js',
+                            '<(SHARED_INTERMEDIATE_DIR)/blink/common/modules.js',
                         ],
                         'search_path': [
-                            'front_end',
                             '<(SHARED_INTERMEDIATE_DIR)/blink',
+                            'front_end',
                         ],
-                        'outputs': ['<(PRODUCT_DIR)/resources/inspector/Main.js'],
+                        'outputs': ['<(PRODUCT_DIR)/resources/inspector/main/Main.js'],
                         'action': ['python', '<@(_script_name)', '<@(_input_page)', '<@(_search_path)', '<@(_outputs)'],
                     }]
                 },
@@ -290,6 +301,7 @@
                             'destination': '<(PRODUCT_DIR)/resources/inspector/components',
                             'files': [
                                 '<@(devtools_components_js_files)',
+                                'front_end/components/module.json',
                             ],
                         },
                         {
@@ -302,6 +314,13 @@
                             'destination': '<(PRODUCT_DIR)/resources/inspector/ui',
                             'files': [
                                 '<@(devtools_ui_js_files)',
+                            ],
+                        },
+                        {
+                            'destination': '<(PRODUCT_DIR)/resources/inspector/main',
+                            'files': [
+                                '<@(devtools_main_js_files)',
+                                'front_end/main/module.json',
                             ],
                         },
                     ]
@@ -331,6 +350,7 @@
                             'destination': '<(PRODUCT_DIR)/resources/inspector/console',
                             'files': [
                                 '<@(devtools_console_js_files)',
+                                'front_end/console/module.json',
                             ],
                         }
                     ]
@@ -360,6 +380,7 @@
                             'destination': '<(PRODUCT_DIR)/resources/inspector/search',
                             'files': [
                                 '<@(devtools_search_js_files)',
+                                'front_end/search/module.json',
                             ],
                         }
                     ]
@@ -389,6 +410,7 @@
                             'destination': '<(PRODUCT_DIR)/resources/inspector/devices',
                             'files': [
                                 '<@(devtools_devices_js_files)',
+                                'front_end/devices/module.json',
                             ],
                         }
                     ]
@@ -418,6 +440,7 @@
                             'destination': '<(PRODUCT_DIR)/resources/inspector/elements',
                             'files': [
                                 '<@(devtools_elements_js_files)',
+                                'front_end/elements/module.json',
                             ],
                         }
                     ]
@@ -447,6 +470,7 @@
                             'destination': '<(PRODUCT_DIR)/resources/inspector/resources',
                             'files': [
                                 '<@(devtools_resources_js_files)',
+                                'front_end/resources/module.json',
                             ],
                         }
                     ]
@@ -476,6 +500,7 @@
                             'destination': '<(PRODUCT_DIR)/resources/inspector/network',
                             'files': [
                                 '<@(devtools_network_js_files)',
+                                'front_end/network/module.json',
                             ],
                         }
                     ]
@@ -505,6 +530,7 @@
                             'destination': '<(PRODUCT_DIR)/resources/inspector/extensions',
                             'files': [
                                 '<@(devtools_extensions_js_files)',
+                                'front_end/extensions/module.json',
                             ],
                         }
                     ]
@@ -523,11 +549,19 @@
                         'inputs': [
                             '<@(_script_name)',
                             '<@(devtools_source_frame_js_files)',
-                            '<@(devtools_cm_files)',
+                            '<@(devtools_cm_js_files)',
                         ],
                         'outputs': ['<(PRODUCT_DIR)/resources/inspector/source_frame/SourceFrame.js'],
                         'action': ['python', '<@(_script_name)', '<@(_input_file)', '<@(_outputs)'],
                     }],
+                    'copies': [
+                        {
+                            'destination': '<(PRODUCT_DIR)/resources/inspector/cm',
+                            'files': [
+                                '<@(devtools_cm_css_files)',
+                            ],
+                        }
+                    ],
                 },
                 { # Debug
                     'copies': [
@@ -535,12 +569,14 @@
                             'destination': '<(PRODUCT_DIR)/resources/inspector/source_frame',
                             'files': [
                                 '<@(devtools_source_frame_js_files)',
+                                'front_end/source_frame/module.json',
                             ],
                         },
                         {
                             'destination': '<(PRODUCT_DIR)/resources/inspector/cm',
                             'files': [
-                                '<@(devtools_cm_files)',
+                                '<@(devtools_cm_js_files)',
+                                '<@(devtools_cm_css_files)',
                             ],
                         }
                     ]
@@ -570,6 +606,7 @@
                             'destination': '<(PRODUCT_DIR)/resources/inspector/sources',
                             'files': [
                                 '<@(devtools_sources_js_files)',
+                                'front_end/sources/module.json',
                             ],
                         }
                     ]
@@ -599,6 +636,7 @@
                             'destination': '<(PRODUCT_DIR)/resources/inspector/timeline',
                             'files': [
                                 '<@(devtools_timeline_js_files)',
+                                'front_end/timeline/module.json',
                             ],
                         }
                     ]
@@ -628,6 +666,7 @@
                             'destination': '<(PRODUCT_DIR)/resources/inspector/profiler',
                             'files': [
                                 '<@(devtools_profiler_js_files)',
+                                'front_end/profiler/module.json',
                             ],
                         }
                     ]
@@ -657,6 +696,25 @@
                             'destination': '<(PRODUCT_DIR)/resources/inspector/audits',
                             'files': [
                                 '<@(devtools_audits_js_files)',
+                                'front_end/audits/module.json',
+                            ],
+                        }
+                    ]
+                }]
+            ]
+        },
+        {
+            'target_name': 'build_settings_module',
+            'type': 'none',
+            'conditions': [
+                ['debug_devtools==0', { # Release
+                },
+                { # Debug
+                    'copies': [
+                        {
+                            'destination': '<(PRODUCT_DIR)/resources/inspector/settings',
+                            'files': [
+                                'front_end/settings/module.json',
                             ],
                         }
                     ]
@@ -781,6 +839,7 @@
                             'destination': '<(PRODUCT_DIR)/resources/inspector/layers',
                             'files': [
                                 '<@(devtools_layers_js_files)',
+                                'front_end/layers/module.json',
                             ],
                         }
                     ]
@@ -815,6 +874,22 @@
                         'files': [
                             '<@(devtools_standalone_files)',
                         ],
+                    }],
+                },
+                {
+                    'target_name': 'concatenated_module_descriptors',
+                    'type': 'none',
+                    'actions': [{
+                        'action_name': 'concatenated_module_descriptors',
+                        'script_name': 'scripts/concatenate_module_descriptors.py',
+                        'input_file': ['front_end/common/modules.js'],
+                        'inputs': [
+                            '<@(_script_name)',
+                            '<@(_input_file)',
+                            '<@(devtools_module_json_files)',
+                        ],
+                        'outputs': ['<(SHARED_INTERMEDIATE_DIR)/blink/common/modules.js'],
+                        'action': ['python', '<@(_script_name)', '<@(_input_file)', '<@(_outputs)', '<@(devtools_module_json_files)'],
                     }],
                 },
             ],

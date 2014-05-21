@@ -133,8 +133,6 @@ public:
     virtual void scroll(const IntSize&, const IntRect&, const IntRect&) OVERRIDE { }
     virtual void scheduleAnimation() OVERRIDE { }
 
-    virtual bool isCompositorFramePending() const OVERRIDE { return false; }
-
     virtual IntRect rootViewToScreen(const IntRect& r) const OVERRIDE { return r; }
     virtual blink::WebScreenInfo screenInfo() const OVERRIDE { return blink::WebScreenInfo(); }
     virtual void contentsSizeChanged(LocalFrame*, const IntSize&) const OVERRIDE { }
@@ -240,7 +238,7 @@ public:
 
     virtual ObjectContentType objectContentType(const KURL&, const String&, bool) OVERRIDE { return ObjectContentType(); }
 
-    virtual void dispatchDidClearWindowObjectInWorld(DOMWrapperWorld&) OVERRIDE { }
+    virtual void dispatchDidClearWindowObjectInMainWorld() OVERRIDE { }
     virtual void documentElementAvailable() OVERRIDE { }
 
     virtual void didCreateScriptContext(v8::Handle<v8::Context>, int extensionGroup, int worldId) OVERRIDE { }

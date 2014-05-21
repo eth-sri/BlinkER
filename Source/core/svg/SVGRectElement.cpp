@@ -29,7 +29,7 @@
 
 namespace WebCore {
 
-inline SVGRectElement::SVGRectElement(Document& document)
+SVGRectElement::SVGRectElement(Document& document)
     : SVGGeometryElement(SVGNames::rectTag, document)
     , m_x(SVGAnimatedLength::create(this, SVGNames::xAttr, SVGLength::create(LengthModeWidth), AllowNegativeLengths))
     , m_y(SVGAnimatedLength::create(this, SVGNames::yAttr, SVGLength::create(LengthModeHeight), AllowNegativeLengths))
@@ -46,11 +46,6 @@ inline SVGRectElement::SVGRectElement(Document& document)
     addToPropertyMap(m_height);
     addToPropertyMap(m_rx);
     addToPropertyMap(m_ry);
-}
-
-PassRefPtr<SVGRectElement> SVGRectElement::create(Document& document)
-{
-    return adoptRef(new SVGRectElement(document));
 }
 
 bool SVGRectElement::isSupportedAttribute(const QualifiedName& attrName)
@@ -98,7 +93,7 @@ void SVGRectElement::svgAttributeChanged(const QualifiedName& attrName)
         return;
     }
 
-    SVGElementInstance::InvalidationGuard invalidationGuard(this);
+    SVGElement::InvalidationGuard invalidationGuard(this);
 
     bool isLengthAttribute = attrName == SVGNames::xAttr
                           || attrName == SVGNames::yAttr

@@ -43,8 +43,10 @@ WebInspector.OverridesView = function()
     this._tabbedPane.shrinkableTabs = false;
     this._tabbedPane.verticalTabLayout = true;
 
-    new WebInspector.OverridesView.DeviceTab().appendAsTab(this._tabbedPane);
-    new WebInspector.OverridesView.ViewportTab().appendAsTab(this._tabbedPane);
+    if (!WebInspector.overridesSupport.isInspectingDevice()) {
+        new WebInspector.OverridesView.DeviceTab().appendAsTab(this._tabbedPane);
+        new WebInspector.OverridesView.ViewportTab().appendAsTab(this._tabbedPane);
+    }
     new WebInspector.OverridesView.UserAgentTab().appendAsTab(this._tabbedPane);
     new WebInspector.OverridesView.SensorsTab().appendAsTab(this._tabbedPane);
 
@@ -548,13 +550,13 @@ WebInspector.OverridesView.ViewportTab.prototype = {
         var cellElement = rowElement.createChild("td");
         cellElement.appendChild(document.createTextNode(WebInspector.UIString("Resolution:")));
         cellElement = rowElement.createChild("td");
-        this._widthOverrideElement = this._createInput(cellElement, "metrics-override-width", String(metrics.width || screen.width), this._applyDeviceMetricsUserInput.bind(this), true);
+        this._widthOverrideElement = this._createInput(cellElement, "metrics-override-width", String(metrics.width), this._applyDeviceMetricsUserInput.bind(this), true);
         this._swapDimensionsElement = cellElement.createChild("button", "overrides-swap");
         this._swapDimensionsElement.appendChild(document.createTextNode(" \u21C4 ")); // RIGHTWARDS ARROW OVER LEFTWARDS ARROW.
         this._swapDimensionsElement.title = WebInspector.UIString("Swap dimensions");
         this._swapDimensionsElement.addEventListener("click", swapDimensionsClicked.bind(this), false);
         this._swapDimensionsElement.tabIndex = -1;
-        this._heightOverrideElement = this._createInput(cellElement, "metrics-override-height", String(metrics.height || screen.height), this._applyDeviceMetricsUserInput.bind(this), true);
+        this._heightOverrideElement = this._createInput(cellElement, "metrics-override-height", String(metrics.height), this._applyDeviceMetricsUserInput.bind(this), true);
 
         rowElement = tableElement.createChild("tr");
         cellElement = rowElement.createChild("td");
@@ -572,7 +574,7 @@ WebInspector.OverridesView.ViewportTab.prototype = {
         cellElement = rowElement.createChild("td");
         cellElement.appendChild(document.createTextNode(WebInspector.UIString("Device pixel ratio:")));
         cellElement = rowElement.createChild("td");
-        this._deviceScaleFactorOverrideElement = this._createInput(cellElement, "metrics-override-device-scale", String(metrics.deviceScaleFactor || 1), this._applyDeviceMetricsUserInput.bind(this), true);
+        this._deviceScaleFactorOverrideElement = this._createInput(cellElement, "metrics-override-device-scale", String(metrics.deviceScaleFactor), this._applyDeviceMetricsUserInput.bind(this), true);
 
         var textAutosizingOverrideElement = this._createNonPersistedCheckbox(WebInspector.UIString("Enable text autosizing "), this._applyDeviceMetricsUserInput.bind(this));
         textAutosizingOverrideElement.title = WebInspector.UIString("Text autosizing is the feature that boosts font sizes on mobile devices.");
@@ -595,17 +597,17 @@ WebInspector.OverridesView.ViewportTab.prototype = {
         var metrics = WebInspector.OverridesSupport.DeviceMetrics.parseSetting(metricsSetting);
 
         if (this._widthOverrideElement.value !== metrics.width)
-            this._widthOverrideElement.value  = metrics.width || screen.width;
+            this._widthOverrideElement.value = metrics.width;
         this._muteRangeListener = true;
         if (this._widthRangeInput.value != metrics.width)
-            this._widthRangeInput.value = metrics.width || screen.width;
+            this._widthRangeInput.value = metrics.width;
         delete this._muteRangeListener;
         if (this._heightOverrideElement.value !== metrics.height)
-            this._heightOverrideElement.value = metrics.height || screen.height;
+            this._heightOverrideElement.value = metrics.height;
         if (this._deviceScaleFactorOverrideElement.value !== metrics.deviceScaleFactor)
-            this._deviceScaleFactorOverrideElement.value = metrics.deviceScaleFactor || 1;
+            this._deviceScaleFactorOverrideElement.value = metrics.deviceScaleFactor;
         if (this._textAutosizingOverrideCheckbox.checked !== metrics.textAutosizing)
-            this._textAutosizingOverrideCheckbox.checked = metrics.textAutosizing || false;
+            this._textAutosizingOverrideCheckbox.checked = metrics.textAutosizing;
     },
 
     _createMediaEmulationFragment: function()
@@ -818,7 +820,11 @@ WebInspector.OverridesView.UserAgentTab.prototype = {
  */
 WebInspector.OverridesView.SensorsTab = function()
 {
-    WebInspector.OverridesView.Tab.call(this, "sensors", WebInspector.UIString("Sensors"), [WebInspector.overridesSupport.settings.emulateTouchEvents, WebInspector.overridesSupport.settings.overrideGeolocation, WebInspector.overridesSupport.settings.overrideDeviceOrientation]);
+    var settings = [WebInspector.overridesSupport.settings.overrideGeolocation, WebInspector.overridesSupport.settings.overrideDeviceOrientation];
+    if (!WebInspector.overridesSupport.hasTouchInputs())
+        settings.push(WebInspector.overridesSupport.settings.emulateTouchEvents);
+    WebInspector.OverridesView.Tab.call(this, "sensors", WebInspector.UIString("Sensors"), settings);
+
     this.element.classList.add("overrides-sensors");
     this.registerRequiredCSS("accelerometer.css");
     if (!WebInspector.overridesSupport.hasTouchInputs())

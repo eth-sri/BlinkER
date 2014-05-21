@@ -1182,7 +1182,7 @@ void ApplyStyleCommand::splitTextAtStart(const Position& start, const Position& 
     else
         newEnd = end;
 
-    RefPtr<Text> text = start.containerText();
+    RefPtrWillBeRawPtr<Text> text = start.containerText();
     splitTextNode(text, start.offsetInContainerNode());
     updateStartEnd(firstPositionInNode(text.get()), newEnd);
 }
@@ -1502,7 +1502,7 @@ float ApplyStyleCommand::computedFontSize(Node* node)
     if (!node)
         return 0;
 
-    RefPtr<CSSComputedStyleDeclaration> style = CSSComputedStyleDeclaration::create(node);
+    RefPtrWillBeRawPtr<CSSComputedStyleDeclaration> style = CSSComputedStyleDeclaration::create(node);
     if (!style)
         return 0;
 
@@ -1521,7 +1521,7 @@ void ApplyStyleCommand::joinChildTextNodes(Node* node, const Position& start, co
     Position newStart = start;
     Position newEnd = end;
 
-    Vector<RefPtr<Text> > textNodes;
+    WillBeHeapVector<RefPtrWillBeMember<Text> > textNodes;
     for (Node* curr = node->firstChild(); curr; curr = curr->nextSibling()) {
         if (!curr->isTextNode())
             continue;

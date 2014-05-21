@@ -55,6 +55,8 @@ struct WebContextMenuData {
         MediaTypeVideo,
         // An audio node is selected.
         MediaTypeAudio,
+        // A canvas node is selected.
+        MediaTypeCanvas,
         // A file node is selected.
         MediaTypeFile,
         // A plugin node is selected.
@@ -111,9 +113,6 @@ struct WebContextMenuData {
 
     // The raw text of the selection in context.
     WebString selectedText;
-
-    // Whether speech input is enabled.
-    bool isSpeechInputEnabled;
 
     // Whether spell checking is enabled.
     bool isSpellCheckingEnabled;
@@ -173,7 +172,6 @@ struct WebContextMenuData {
         : mediaType(MediaTypeNone)
         , hasImageContents(true)
         , mediaFlags(MediaNone)
-        , isSpeechInputEnabled(false)
         , isSpellCheckingEnabled(false)
         , isEditable(false)
         , writingDirectionDefault(CheckableMenuItemDisabled)

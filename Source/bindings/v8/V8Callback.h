@@ -41,8 +41,8 @@ namespace WebCore {
 class ExecutionContext;
 
 // Returns false if the callback threw an exception, true otherwise.
-bool invokeCallback(v8::Local<v8::Function> callback, int argc, v8::Handle<v8::Value> argv[], ExecutionContext*, v8::Isolate*);
-bool invokeCallback(v8::Local<v8::Function> callback, v8::Handle<v8::Object> thisObject, int argc, v8::Handle<v8::Value> argv[], ExecutionContext*, v8::Isolate*);
+bool invokeCallback(ScriptState*, v8::Local<v8::Function> callback, int argc, v8::Handle<v8::Value> argv[]);
+bool invokeCallback(ScriptState*, v8::Local<v8::Function> callback, v8::Handle<v8::Object> thisObject, int argc, v8::Handle<v8::Value> argv[]);
 
 enum CallbackAllowedValueFlag {
     CallbackAllowUndefined = 1,
@@ -70,7 +70,7 @@ PassOwnPtr<V8CallbackType> createFunctionOnlyCallback(v8::Local<v8::Value> value
         return nullptr;
     }
 
-    return V8CallbackType::create(v8::Handle<v8::Function>::Cast(value), currentExecutionContext(isolate));
+    return V8CallbackType::create(v8::Handle<v8::Function>::Cast(value), ScriptState::current(isolate));
 }
 
 } // namespace WebCore

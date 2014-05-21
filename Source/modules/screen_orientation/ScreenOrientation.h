@@ -16,6 +16,7 @@
 namespace WebCore {
 
 class Document;
+class ExceptionState;
 class Screen;
 
 class ScreenOrientation FINAL : public NoBaseWillBeGarbageCollectedFinalized<ScreenOrientation>, public WillBeHeapSupplement<Screen>, DOMWindowProperty {
@@ -25,10 +26,10 @@ public:
     virtual ~ScreenOrientation();
 
     static const AtomicString& orientation(Screen&);
-    static bool lockOrientation(Screen&, const AtomicString& orientation);
+    static bool lockOrientation(Screen&, const AtomicString& orientation, ExceptionState&);
     static void unlockOrientation(Screen&);
 
-    virtual void trace(Visitor*) { }
+    virtual void trace(Visitor* visitor) OVERRIDE { WillBeHeapSupplement<Screen>::trace(visitor); }
 
 private:
     explicit ScreenOrientation(Screen&);

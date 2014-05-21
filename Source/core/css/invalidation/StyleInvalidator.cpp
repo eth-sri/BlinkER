@@ -26,8 +26,10 @@ void StyleInvalidator::invalidate(Document& document)
     clearPendingInvalidations();
 }
 
-void StyleInvalidator::scheduleInvalidation(PassRefPtr<DescendantInvalidationSet> invalidationSet, Element& element)
+void StyleInvalidator::scheduleInvalidation(PassRefPtrWillBeRawPtr<DescendantInvalidationSet> invalidationSet, Element& element)
 {
+    ASSERT(element.inActiveDocument());
+    ASSERT(element.styleChangeType() < SubtreeStyleChange);
     InvalidationList& list = ensurePendingInvalidationList(element);
     // If we're already going to invalidate the whole subtree we don't need to store any new sets.
     if (!list.isEmpty() && list.last()->wholeSubtreeInvalid())
@@ -43,7 +45,7 @@ StyleInvalidator::InvalidationList& StyleInvalidator::ensurePendingInvalidationL
 {
     PendingInvalidationMap::AddResult addResult = m_pendingInvalidationMap.add(&element, nullptr);
     if (addResult.isNewEntry)
-        addResult.storedValue->value = adoptPtr(new InvalidationList);
+        addResult.storedValue->value = adoptPtrWillBeNoop(new InvalidationList);
     return *addResult.storedValue->value;
 }
 
@@ -51,8 +53,6 @@ void StyleInvalidator::clearInvalidation(Node& node)
 {
     if (node.isElementNode() && node.needsStyleInvalidation())
         m_pendingInvalidationMap.remove(toElement(&node));
-    node.clearChildNeedsStyleInvalidation();
-    node.clearNeedsStyleInvalidation();
 }
 
 void StyleInvalidator::clearPendingInvalidations()
@@ -153,6 +153,11 @@ bool StyleInvalidator::invalidate(Element& element)
     element.clearNeedsStyleInvalidation();
 
     return thisElementNeedsStyleRecalc;
+}
+
+void StyleInvalidator::trace(Visitor* visitor)
+{
+    visitor->trace(m_pendingInvalidationMap);
 }
 
 } // namespace WebCore

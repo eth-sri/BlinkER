@@ -33,7 +33,7 @@ class ScriptLoader;
 
 class HTMLScriptElement FINAL : public HTMLElement, public ScriptLoaderClient {
 public:
-    static PassRefPtr<HTMLScriptElement> create(Document&, bool wasInsertedByParser, bool alreadyStarted = false);
+    static PassRefPtrWillBeRawPtr<HTMLScriptElement> create(Document&, bool wasInsertedByParser, bool alreadyStarted = false);
 
     String text() { return textFromChildren(); }
     void setText(const String&);
@@ -52,7 +52,6 @@ private:
     virtual InsertionNotificationRequest insertedInto(ContainerNode*) OVERRIDE;
     virtual void didNotifySubtreeInsertionsToDocument() OVERRIDE;
     virtual void childrenChanged(bool changedByParser = false, Node* beforeChange = 0, Node* afterChange = 0, int childCountDelta = 0) OVERRIDE;
-    virtual void didMoveToNewDocument(Document&) OVERRIDE;
 
     virtual bool isURLAttribute(const Attribute&) const OVERRIDE;
     virtual bool hasLegalLinkAttribute(const QualifiedName&) const OVERRIDE;
@@ -70,7 +69,7 @@ private:
 
     virtual void dispatchLoadEvent() OVERRIDE;
 
-    virtual PassRefPtr<Element> cloneElementWithoutAttributesAndChildren() OVERRIDE;
+    virtual PassRefPtrWillBeRawPtr<Element> cloneElementWithoutAttributesAndChildren() OVERRIDE;
 
     OwnPtr<ScriptLoader> m_loader;
 };

@@ -70,8 +70,9 @@ typedef Vector<CueInterval> CueList;
 // But it can't be until the Chromium WebMediaPlayerClientImpl class is fixed so it
 // no longer depends on typecasting a MediaPlayerClient to an HTMLMediaElement.
 
-class HTMLMediaElement : public HTMLElement, public Supplementable<HTMLMediaElement>, public MediaPlayerClient, public ActiveDOMObject
+class HTMLMediaElement : public HTMLElement, public WillBeHeapSupplementable<HTMLMediaElement>, public MediaPlayerClient, public ActiveDOMObject
 {
+    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(HTMLMediaElement);
 public:
     static blink::WebMimeRegistry::SupportsType supportsType(const ContentType&, const String& keySystem = String());
 
@@ -102,7 +103,7 @@ public:
     bool isActive() const { return m_active; }
 
     // error state
-    PassRefPtr<MediaError> error() const;
+    PassRefPtrWillBeRawPtr<MediaError> error() const;
 
     // network state
     void setSrc(const AtomicString&);
@@ -129,9 +130,9 @@ public:
     double duration() const;
     bool paused() const;
     double defaultPlaybackRate() const;
-    void setDefaultPlaybackRate(double, ExceptionState&);
+    void setDefaultPlaybackRate(double);
     double playbackRate() const;
-    void setPlaybackRate(double, ExceptionState&);
+    void setPlaybackRate(double);
     void updatePlaybackRate();
     PassRefPtr<TimeRanges> played();
     PassRefPtr<TimeRanges> seekable() const;
@@ -354,6 +355,7 @@ private:
     void loadInternal();
     void selectMediaResource();
     void loadResource(const KURL&, ContentType&, const String& keySystem);
+    void startPlayerLoad();
     void setPlayerPreload();
     void startDelayedLoad();
     blink::WebMediaPlayer::LoadType loadType() const;
@@ -364,7 +366,7 @@ private:
     void clearMediaPlayerAndAudioSourceProviderClient();
     bool havePotentialSourceChild();
     void noneSupported();
-    void mediaEngineError(PassRefPtr<MediaError> err);
+    void mediaEngineError(PassRefPtrWillBeRawPtr<MediaError>);
     void cancelPendingEventsAndCallbacks();
     void waitForSourceChange();
     void prepareToPlay();
@@ -431,7 +433,7 @@ private:
     ReadyState m_readyStateMaximum;
     KURL m_currentSrc;
 
-    RefPtr<MediaError> m_error;
+    RefPtrWillBeMember<MediaError> m_error;
 
     double m_volume;
     double m_lastSeekTime;
@@ -450,8 +452,8 @@ private:
     // Loading state.
     enum LoadState { WaitingForSource, LoadingFromSrcAttr, LoadingFromSourceElement };
     LoadState m_loadState;
-    RefPtr<HTMLSourceElement> m_currentSourceNode;
-    RefPtr<Node> m_nextChildNodeToConsider;
+    RefPtrWillBeMember<HTMLSourceElement> m_currentSourceNode;
+    RefPtrWillBeMember<Node> m_nextChildNodeToConsider;
 
     OwnPtr<MediaPlayer> m_player;
     blink::WebLayer* m_webLayer;

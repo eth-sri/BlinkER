@@ -73,8 +73,9 @@ void RenderLayerRepainter::repaintAfterLayout(bool shouldCheckForRepaint)
         // LayoutState outside the layout() phase and use it here.
         ASSERT(!view->layoutStateEnabled());
 
-        RenderLayerModelObject* repaintContainer = m_renderer.containerForRepaint();
+        const RenderLayerModelObject* repaintContainer = m_renderer.containerForRepaint();
         LayoutRect oldRepaintRect = m_repaintRect;
+        LayoutPoint oldOffset = m_offset;
         computeRepaintRects(repaintContainer);
         shouldCheckForRepaint &= shouldRepaintLayer();
 
@@ -85,7 +86,7 @@ void RenderLayerRepainter::repaintAfterLayout(bool shouldCheckForRepaint)
                     if (m_repaintRect != oldRepaintRect)
                         m_renderer.repaintUsingContainer(repaintContainer, pixelSnappedIntRect(m_repaintRect), InvalidationLayer);
                 } else {
-                    m_renderer.repaintAfterLayoutIfNeeded(repaintContainer, m_renderer.selfNeedsLayout(), oldRepaintRect, &m_repaintRect);
+                    m_renderer.repaintAfterLayoutIfNeeded(repaintContainer, m_renderer.selfNeedsLayout(), oldRepaintRect, oldOffset, &m_repaintRect, &m_offset);
                 }
             }
         }
@@ -113,6 +114,7 @@ void RenderLayerRepainter::computeRepaintRects(const RenderLayerModelObject* rep
         m_renderer.setPreviousRepaintRect(m_renderer.clippedOverflowRectForRepaint(m_renderer.containerForRepaint()));
     } else {
         m_repaintRect = m_renderer.clippedOverflowRectForRepaint(repaintContainer);
+        m_offset = m_renderer.positionFromRepaintContainer(repaintContainer);
     }
 }
 
@@ -141,7 +143,7 @@ inline bool RenderLayerRepainter::shouldRepaintLayer() const
 }
 
 // Since we're only painting non-composited layers, we know that they all share the same repaintContainer.
-void RenderLayerRepainter::repaintIncludingNonCompositingDescendants(RenderLayerModelObject* repaintContainer)
+void RenderLayerRepainter::repaintIncludingNonCompositingDescendants(const RenderLayerModelObject* repaintContainer)
 {
     m_renderer.repaintUsingContainer(repaintContainer, pixelSnappedIntRect(m_renderer.clippedOverflowRectForRepaint(repaintContainer)), InvalidationLayer);
 
@@ -201,11 +203,28 @@ void RenderLayerRepainter::setBackingNeedsRepaintInRect(const LayoutRect& r)
     if (m_renderer.compositingState() == PaintsIntoGroupedBacking) {
         LayoutRect updatedRect(r);
 
+        ASSERT(m_renderer.layer());
+        ASSERT(m_renderer.layer()->enclosingTransformedAncestor());
+        ASSERT(m_renderer.layer()->enclosingTransformedAncestor()->renderer());
+
+        // FIXME: this defensive code should not have to exist. None of these pointers should ever be 0. See crbug.com/370410.
+        RenderLayerModelObject* transformedAncestor = 0;
+        if (RenderLayer* ancestor = m_renderer.layer()->enclosingTransformedAncestor())
+            transformedAncestor = ancestor->renderer();
+        if (!transformedAncestor)
+            return;
+
+        // If the transformedAncestor is actually the RenderView, we might get
+        // confused and think that we can use LayoutState. Ideally, we'd made
+        // LayoutState work for all composited layers as well, but until then
+        // we need to disable LayoutState for squashed layers.
+        LayoutStateDisabler layoutStateDisabler(*transformedAncestor);
+
         // This code adjusts the repaint rectangle to be in the space of the transformed ancestor of the grouped (i.e. squashed)
         // layer. This is because all layers that squash together need to repaint w.r.t. a single container that is
         // an ancestor of all of them, in order to properly take into account any local transforms etc.
         // FIXME: remove this special-case code that works around the repainting code structure.
-        m_renderer.computeRectForRepaint(m_renderer.layer()->enclosingTransformedAncestor()->renderer(), updatedRect);
+        m_renderer.computeRectForRepaint(transformedAncestor, updatedRect);
         updatedRect.moveBy(-m_renderer.layer()->groupedMapping()->squashingOffsetFromTransformedAncestor());
 
         IntRect repaintRect = pixelSnappedIntRect(updatedRect);

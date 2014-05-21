@@ -28,18 +28,13 @@
 
 namespace WebCore {
 
-inline SVGStopElement::SVGStopElement(Document& document)
+SVGStopElement::SVGStopElement(Document& document)
     : SVGElement(SVGNames::stopTag, document)
     , m_offset(SVGAnimatedNumber::create(this, SVGNames::offsetAttr, SVGNumberAcceptPercentage::create()))
 {
     ScriptWrappable::init(this);
 
     addToPropertyMap(m_offset);
-}
-
-PassRefPtr<SVGStopElement> SVGStopElement::create(Document& document)
-{
-    return adoptRef(new SVGStopElement(document));
 }
 
 bool SVGStopElement::isSupportedAttribute(const QualifiedName& attrName)
@@ -74,7 +69,7 @@ void SVGStopElement::svgAttributeChanged(const QualifiedName& attrName)
         return;
     }
 
-    SVGElementInstance::InvalidationGuard invalidationGuard(this);
+    SVGElement::InvalidationGuard invalidationGuard(this);
 
     if (!renderer())
         return;

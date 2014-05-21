@@ -141,9 +141,21 @@ public:
     }
 
 #if BLINK_IMPLEMENTATION
-    WebNode(const WTF::PassRefPtr<WebCore::Node>&);
-    WebNode& operator=(const WTF::PassRefPtr<WebCore::Node>&);
-    operator WTF::PassRefPtr<WebCore::Node>() const;
+    WebNode(const PassRefPtrWillBeRawPtr<WebCore::Node>&);
+    WebNode& operator=(const PassRefPtrWillBeRawPtr<WebCore::Node>&);
+    operator PassRefPtrWillBeRawPtr<WebCore::Node>() const;
+#if ENABLE(OILPAN)
+    // This constructor enables creation of WebNodes from Members
+    // holding WebCore::Node-derived objects (this shows up in WebVector
+    // assignments, for instance.) It is needed because a RawPtr<T> constructor
+    // from a Member<U> isn't provided, hence the above constructor
+    // won't be usable.
+    template<typename U>
+    WebNode(const WebCore::Member<U>& other, EnsurePtrConvertibleArgDecl(U, WebCore::Node))
+        : m_private(other.get())
+    {
+    }
+#endif
 #endif
 
 #if BLINK_IMPLEMENTATION

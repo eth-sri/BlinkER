@@ -321,7 +321,7 @@ public:
     VTTTreeBuilder(Document& document)
         : m_document(document) { }
 
-    PassRefPtr<DocumentFragment> buildFromString(const String& cueText);
+    PassRefPtrWillBeRawPtr<DocumentFragment> buildFromString(const String& cueText);
 
 private:
     void constructTreeFromToken(Document&);
@@ -332,13 +332,13 @@ private:
     Document& m_document;
 };
 
-PassRefPtr<DocumentFragment> VTTTreeBuilder::buildFromString(const String& cueText)
+PassRefPtrWillBeRawPtr<DocumentFragment> VTTTreeBuilder::buildFromString(const String& cueText)
 {
     // Cue text processing based on
     // 5.4 WebVTT cue text parsing rules, and
     // 5.5 WebVTT cue text DOM construction rules
 
-    RefPtr<DocumentFragment> fragment = DocumentFragment::create(m_document);
+    RefPtrWillBeRawPtr<DocumentFragment> fragment = DocumentFragment::create(m_document);
 
     if (cueText.isEmpty()) {
         fragment->parserAppendChild(Text::create(m_document, ""));
@@ -356,7 +356,7 @@ PassRefPtr<DocumentFragment> VTTTreeBuilder::buildFromString(const String& cueTe
     return fragment.release();
 }
 
-PassRefPtr<DocumentFragment> VTTParser::createDocumentFragmentFromCueText(Document& document, const String& cueText)
+PassRefPtrWillBeRawPtr<DocumentFragment> VTTParser::createDocumentFragmentFromCueText(Document& document, const String& cueText)
 {
     VTTTreeBuilder treeBuilder(document);
     return treeBuilder.buildFromString(cueText);
@@ -489,8 +489,7 @@ void VTTTreeBuilder::constructTreeFromToken(Document& document)
 
     switch (m_token.type()) {
     case VTTTokenTypes::Character: {
-        RefPtr<Text> child = Text::create(document, m_token.characters());
-        m_currentNode->parserAppendChild(child);
+        m_currentNode->parserAppendChild(Text::create(document, m_token.characters()));
         break;
     }
     case VTTTokenTypes::StartTag: {
@@ -503,7 +502,7 @@ void VTTTreeBuilder::constructTreeFromToken(Document& document)
         if (nodeType == VTTNodeTypeRubyText && currentType != VTTNodeTypeRuby)
             break;
 
-        RefPtr<VTTElement> child = VTTElement::create(nodeType, &document);
+        RefPtrWillBeRawPtr<VTTElement> child = VTTElement::create(nodeType, &document);
         if (!m_token.classes().isEmpty())
             child->setAttribute(classAttr, m_token.classes());
 

@@ -34,10 +34,10 @@ class HTMLSelectElement;
 
 class HTMLOptionsCollection FINAL : public HTMLCollection {
 public:
-    static PassRefPtr<HTMLOptionsCollection> create(ContainerNode&, CollectionType);
+    static PassRefPtrWillBeRawPtr<HTMLOptionsCollection> create(ContainerNode&, CollectionType);
 
-    void add(PassRefPtr<HTMLOptionElement>, ExceptionState&);
-    void add(PassRefPtr<HTMLOptionElement>, int index, ExceptionState&);
+    void add(PassRefPtrWillBeRawPtr<HTMLOptionElement>, ExceptionState&);
+    void add(PassRefPtrWillBeRawPtr<HTMLOptionElement>, int index, ExceptionState&);
     void remove(int index);
     void remove(HTMLOptionElement*);
 
@@ -45,8 +45,8 @@ public:
     void setSelectedIndex(int);
 
     void setLength(unsigned, ExceptionState&);
-    void namedGetter(const AtomicString& name, bool&, RefPtr<NodeList>&, bool&, RefPtr<Element>&);
-    bool anonymousIndexedSetter(unsigned, PassRefPtr<HTMLOptionElement>, ExceptionState&);
+    void namedGetter(const AtomicString& name, bool&, RefPtrWillBeRawPtr<NodeList>&, bool&, RefPtr<Element>&);
+    bool anonymousIndexedSetter(unsigned, PassRefPtrWillBeRawPtr<HTMLOptionElement>, ExceptionState&);
 
 private:
     explicit HTMLOptionsCollection(ContainerNode&);

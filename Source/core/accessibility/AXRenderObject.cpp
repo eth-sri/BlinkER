@@ -65,7 +65,7 @@
 #include "core/rendering/RenderTextFragment.h"
 #include "core/rendering/RenderView.h"
 #include "core/rendering/RenderWidget.h"
-#include "core/svg/SVGDocument.h"
+#include "core/svg/SVGDocumentExtensions.h"
 #include "core/svg/SVGSVGElement.h"
 #include "core/svg/graphics/SVGImage.h"
 #include "platform/text/PlatformLocale.h"
@@ -77,14 +77,14 @@ namespace WebCore {
 
 using namespace HTMLNames;
 
-static inline RenderObject* firstChildInContinuation(RenderObject* renderer)
+static inline RenderObject* firstChildInContinuation(const RenderInline& renderer)
 {
-    RenderObject* r = toRenderInline(renderer)->continuation();
+    RenderBoxModelObject* r = renderer.continuation();
 
     while (r) {
         if (r->isRenderBlock())
             return r;
-        if (RenderObject* child = r->firstChild())
+        if (RenderObject* child = r->slowFirstChild())
             return child;
         r = toRenderInline(r)->continuation();
     }
@@ -106,10 +106,10 @@ static inline bool isInlineWithContinuation(RenderObject* object)
 
 static inline RenderObject* firstChildConsideringContinuation(RenderObject* renderer)
 {
-    RenderObject* firstChild = renderer->firstChild();
+    RenderObject* firstChild = renderer->slowFirstChild();
 
     if (!firstChild && isInlineWithContinuation(renderer))
-        firstChild = firstChildInContinuation(renderer);
+        firstChild = firstChildInContinuation(toRenderInline(*renderer));
 
     return firstChild;
 }
@@ -150,7 +150,8 @@ static inline RenderObject* endOfContinuations(RenderObject* renderer)
 
 static inline bool lastChildHasContinuation(RenderObject* renderer)
 {
-    return renderer->lastChild() && isInlineWithContinuation(renderer->lastChild());
+    RenderObject* lastChild = renderer->slowLastChild();
+    return lastChild && isInlineWithContinuation(lastChild);
 }
 
 static RenderBoxModelObject* nextContinuation(RenderObject* renderer)
@@ -876,7 +877,7 @@ String AXRenderObject::stringValue() const
         // This has to be overridden in the case where the selected item has an ARIA label.
         HTMLSelectElement* selectElement = toHTMLSelectElement(m_renderer->node());
         int selectedIndex = selectElement->selectedIndex();
-        const Vector<HTMLElement*> listItems = selectElement->listItems();
+        const WillBeHeapVector<RawPtrWillBeMember<HTMLElement> >& listItems = selectElement->listItems();
         if (selectedIndex >= 0 && static_cast<size_t>(selectedIndex) < listItems.size()) {
             const AtomicString& overriddenDescription = listItems[selectedIndex]->fastGetAttribute(aria_labelAttr);
             if (!overriddenDescription.isNull())
@@ -1381,9 +1382,9 @@ AXObject* AXRenderObject::nextSibling() const
     } else if (m_renderer->isAnonymousBlock() && lastChildHasContinuation(m_renderer)) {
         // Case 2: Anonymous block parent of the start of a continuation - skip all the way to
         // after the parent of the end, since everything in between will be linked up via the continuation.
-        RenderObject* lastParent = endOfContinuations(m_renderer->lastChild())->parent();
+        RenderObject* lastParent = endOfContinuations(toRenderBlock(m_renderer)->lastChild())->parent();
         while (lastChildHasContinuation(lastParent))
-            lastParent = endOfContinuations(lastParent->lastChild())->parent();
+            lastParent = endOfContinuations(lastParent->slowLastChild())->parent();
         nextSibling = lastParent->nextSibling();
     } else if (RenderObject* ns = m_renderer->nextSibling()) {
         // Case 3: node has an actual next sibling
@@ -1961,7 +1962,7 @@ RenderObject* AXRenderObject::renderParentObject() const
         // Case 2: node's parent is an inline which is some node's continuation; parent is
         // the earliest node in the continuation chain.
         parent = startOfConts;
-    } else if (parent && (firstChild = parent->firstChild()) && firstChild->node()) {
+    } else if (parent && (firstChild = parent->slowFirstChild()) && firstChild->node()) {
         // Case 3: The first sibling is the beginning of a continuation chain. Find the origin of that continuation.
         // Get the node's renderer and follow that continuation chain until the first child is found.
         RenderObject* nodeRenderFirstChild = firstChild->node()->renderer();
@@ -1972,9 +1973,10 @@ RenderObject* AXRenderObject::renderParentObject() const
                     break;
                 }
             }
-            if (firstChild == parent->firstChild())
+            RenderObject* newFirstChild = parent->slowFirstChild();
+            if (firstChild == newFirstChild)
                 break;
-            firstChild = parent->firstChild();
+            firstChild = newFirstChild;
             if (!firstChild->node())
                 break;
             nodeRenderFirstChild = firstChild->node()->renderer();
@@ -2024,7 +2026,7 @@ AXSVGRoot* AXRenderObject::remoteSVGRootElement() const
     if (!doc || !doc->isSVGDocument())
         return 0;
 
-    SVGSVGElement* rootElement = toSVGDocument(doc)->rootElement();
+    SVGSVGElement* rootElement = doc->accessSVGExtensions().rootElement();
     if (!rootElement)
         return 0;
     RenderObject* rendererRoot = rootElement->renderer();

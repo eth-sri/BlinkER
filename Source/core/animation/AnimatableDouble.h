@@ -32,7 +32,6 @@
 #define AnimatableDouble_h
 
 #include "core/animation/AnimatableValue.h"
-#include "core/css/CSSValue.h"
 
 namespace WebCore {
 
@@ -50,10 +49,9 @@ public:
         return adoptRefWillBeNoop(new AnimatableDouble(number, constraint));
     }
 
-    PassRefPtrWillBeRawPtr<CSSValue> toCSSValue() const;
     double toDouble() const { return m_number; }
 
-    virtual void trace(Visitor*) OVERRIDE { }
+    virtual void trace(Visitor* visitor) OVERRIDE { AnimatableValue::trace(visitor); }
 
 protected:
     virtual PassRefPtrWillBeRawPtr<AnimatableValue> interpolateTo(const AnimatableValue*, double fraction) const OVERRIDE;

@@ -68,8 +68,8 @@ WebInspector.OverridesSupport.DeviceMetrics = function(width, height, deviceScal
  */
 WebInspector.OverridesSupport.DeviceMetrics.parseSetting = function(value)
 {
-    var width = 0;
-    var height = 0;
+    var width = screen.width;
+    var height = screen.height;
     var deviceScaleFactor = 1;
     var textAutosizing = true;
     if (value) {
@@ -94,7 +94,7 @@ WebInspector.OverridesSupport.DeviceMetrics.parseUserInput = function(widthStrin
     {
         if (!value)
             return true;
-        return isInteger ? /^[0]*[1-9][\d]*$/.test(value) : /^[0]*([1-9][\d]*(\.\d+)?|\.\d+)$/.test(value);
+        return isInteger ? /^[\d]+$/.test(value) : /^[\d]+(\.\d+)?|\.\d+$/.test(value);
     }
 
     if (!widthString ^ !heightString)
@@ -144,7 +144,7 @@ WebInspector.OverridesSupport.DeviceMetrics.prototype = {
      */
     isDeviceScaleFactorValid: function()
     {
-        return this.deviceScaleFactor > 0;
+        return this.deviceScaleFactor >= 0;
     },
 
     /**
@@ -155,7 +155,7 @@ WebInspector.OverridesSupport.DeviceMetrics.prototype = {
         if (!this.isValid())
             return "";
 
-        return this.width && this.height ? this.width + "x" + this.height + "x" + this.deviceScaleFactor + "x" + (this.textAutosizing ? "1" : "0") : "";
+        return this.width + "x" + this.height + "x" + this.deviceScaleFactor + "x" + (this.textAutosizing ? "1" : "0");
     },
 
     /**
@@ -163,7 +163,7 @@ WebInspector.OverridesSupport.DeviceMetrics.prototype = {
      */
     widthToInput: function()
     {
-        return this.isWidthValid() && this.width ? String(this.width) : "";
+        return this.isWidthValid() ? String(this.width) : "";
     },
 
     /**
@@ -171,7 +171,7 @@ WebInspector.OverridesSupport.DeviceMetrics.prototype = {
      */
     heightToInput: function()
     {
-        return this.isHeightValid() && this.height ? String(this.height) : "";
+        return this.isHeightValid() ? String(this.height) : "";
     },
 
     /**
@@ -179,7 +179,7 @@ WebInspector.OverridesSupport.DeviceMetrics.prototype = {
      */
     deviceScaleFactorToInput: function()
     {
-        return this.isDeviceScaleFactorValid() && this.deviceScaleFactor ? String(this.deviceScaleFactor) : "";
+        return this.isDeviceScaleFactorValid() ? String(this.deviceScaleFactor) : "";
     },
 
     /**
@@ -196,7 +196,7 @@ WebInspector.OverridesSupport.DeviceMetrics.prototype = {
     fontScaleFactor: function()
     {
         if (this.isValid()) {
-            var minWidth = Math.min(this.width, this.height) / this.deviceScaleFactor;
+            var minWidth = Math.min(this.width, this.height) / (this.deviceScaleFactor || 1);
 
             var kMinFSM = 1.05;
             var kWidthForMinFSM = 320;
@@ -398,6 +398,11 @@ WebInspector.OverridesSupport.prototype = {
 
     applyInitialOverrides: function()
     {
+        if (!this._target) {
+            this._applyInitialOverridesOnTargetAdded = true;
+            return;
+        }
+
         if (this.settings.overrideDeviceOrientation.get())
             this._deviceOrientationChanged();
 
@@ -432,21 +437,26 @@ WebInspector.OverridesSupport.prototype = {
     {
         if (this._deviceMetricsChangedListenerMuted)
             return;
-        var metrics = WebInspector.OverridesSupport.DeviceMetrics.parseSetting(this.settings.overrideDeviceMetrics.get() ? this.settings.deviceMetrics.get() : "");
+
+        var metricsOverrideEnabled = this.settings.overrideDeviceMetrics.get();
+        if (!metricsOverrideEnabled) {
+            PageAgent.clearDeviceMetricsOverride(apiCallback.bind(this));
+            this.maybeHasActiveOverridesChanged();
+            return;
+        }
+
+        var metrics = WebInspector.OverridesSupport.DeviceMetrics.parseSetting(this.settings.deviceMetrics.get());
         if (!metrics.isValid())
             return;
 
         var dipWidth = Math.round(metrics.width);
         var dipHeight = Math.round(metrics.height);
-        var metricsOverrideEnabled = !!(dipWidth && dipHeight);
 
         // Disable override without checks.
-        if (metricsOverrideEnabled && this.isInspectingDevice()) {
-            this._updateDeviceMetricsWarningMessage(WebInspector.UIString("Screen emulation on the device is not available."));
+        if (this.isInspectingDevice())
             return;
-        }
 
-        PageAgent.setDeviceMetricsOverride(dipWidth, dipHeight, metricsOverrideEnabled ? metrics.deviceScaleFactor : 0, this.settings.emulateViewport.get(), this.settings.deviceFitWindow.get(), metrics.textAutosizing, metrics.fontScaleFactor(), apiCallback.bind(this));
+        PageAgent.setDeviceMetricsOverride(dipWidth, dipHeight, metrics.deviceScaleFactor, this.settings.emulateViewport.get(), this.settings.deviceFitWindow.get(), metrics.textAutosizing, metrics.fontScaleFactor(), apiCallback.bind(this));
         this.maybeHasActiveOverridesChanged();
 
         /**
@@ -502,7 +512,7 @@ WebInspector.OverridesSupport.prototype = {
 
     _emulateTouchEventsChanged: function()
     {
-        if (WebInspector.overridesSupport.hasTouchInputs() && this.settings.emulateTouchEvents.get())
+        if (this.hasTouchInputs() && this.settings.emulateTouchEvents.get())
             return;
 
         var emulateTouch = this.settings.emulateTouchEvents.get();
@@ -514,6 +524,9 @@ WebInspector.OverridesSupport.prototype = {
 
     _cssMediaChanged: function()
     {
+        if (this.isInspectingDevice() && this.settings.overrideCSSMedia.get())
+            return;
+
         PageAgent.setEmulatedMedia(this.settings.overrideCSSMedia.get() ? this.settings.emulatedCSSMedia.get() : "");
         var targets = WebInspector.targetManager.targets();
         for (var i = 0; i < targets.length; ++i)
@@ -531,9 +544,13 @@ WebInspector.OverridesSupport.prototype = {
 
     maybeHasActiveOverridesChanged: function()
     {
-        var hasActiveOverrides = this.settings.overrideUserAgent.get() || this.settings.overrideDeviceMetrics.get() ||
-            this.settings.overrideGeolocation.get() || this.settings.overrideDeviceOrientation.get() ||
-            this.settings.emulateTouchEvents.get() || this.settings.overrideCSSMedia.get();
+        var hasActiveOverrides =
+            this.settings.overrideUserAgent.get() ||
+            (this.settings.overrideDeviceMetrics.get() && !this.isInspectingDevice()) ||
+            this.settings.overrideGeolocation.get() ||
+            this.settings.overrideDeviceOrientation.get() ||
+            (this.settings.emulateTouchEvents.get() && !this.hasTouchInputs()) ||
+            (this.settings.overrideCSSMedia.get() && !this.isInspectingDevice());
         if (this._hasActiveOverrides !== hasActiveOverrides) {
             this._hasActiveOverrides = hasActiveOverrides;
             this.dispatchEventToListeners(WebInspector.OverridesSupport.Events.HasActiveOverridesChanged);
@@ -617,6 +634,11 @@ WebInspector.OverridesSupport.prototype = {
 
         this.settings.overrideCSSMedia.addChangeListener(this._cssMediaChanged, this);
         this.settings.emulatedCSSMedia.addChangeListener(this._cssMediaChanged, this);
+
+        if (this._applyInitialOverridesOnTargetAdded) {
+            delete this._applyInitialOverridesOnTargetAdded;
+            this.applyInitialOverrides();
+        }
     },
 
     /**

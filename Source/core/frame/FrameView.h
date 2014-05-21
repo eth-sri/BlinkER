@@ -269,10 +269,8 @@ public:
     String trackedRepaintRectsAsText() const;
 
     typedef HashSet<ScrollableArea*> ScrollableAreaSet;
-    // Returns whether the scrollable area has just been newly added.
-    bool addScrollableArea(ScrollableArea*);
-    // Returns whether the scrollable area has just been removed.
-    bool removeScrollableArea(ScrollableArea*);
+    void addScrollableArea(ScrollableArea*);
+    void removeScrollableArea(ScrollableArea*);
     const ScrollableAreaSet* scrollableAreas() const { return m_scrollableAreas.get(); }
 
     // With CSS style "resize:" enabled, a little resizer handle will appear at the bottom
@@ -445,7 +443,6 @@ private:
     bool m_layoutSchedulingEnabled;
     bool m_inPerformLayout;
     bool m_canRepaintDuringPerformLayout;
-    bool m_doingPreLayoutStyleUpdate;
     bool m_inSynchronousPostLayout;
     int m_layoutCount;
     unsigned m_nestedLayoutCount;

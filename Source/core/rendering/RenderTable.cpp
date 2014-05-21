@@ -83,20 +83,20 @@ void RenderTable::styleDidChange(StyleDifference diff, const RenderStyle* oldSty
     RenderBlock::styleDidChange(diff, oldStyle);
     propagateStyleToAnonymousChildren();
 
-    ETableLayout oldTableLayout = oldStyle ? oldStyle->tableLayout() : TAUTO;
+    bool oldFixedTableLayout = oldStyle ? oldStyle->isFixedTableLayout() : false;
 
     // In the collapsed border model, there is no cell spacing.
     m_hSpacing = collapseBorders() ? 0 : style()->horizontalBorderSpacing();
     m_vSpacing = collapseBorders() ? 0 : style()->verticalBorderSpacing();
     m_columnPos[0] = m_hSpacing;
 
-    if (!m_tableLayout || style()->tableLayout() != oldTableLayout) {
+    if (!m_tableLayout || style()->isFixedTableLayout() != oldFixedTableLayout) {
         if (m_tableLayout)
             m_tableLayout->willChangeTableLayout();
 
         // According to the CSS2 spec, you only use fixed table layout if an
         // explicit width is specified on the table.  Auto width implies auto table layout.
-        if (style()->tableLayout() == TFIXED && !style()->logicalWidth().isAuto())
+        if (style()->isFixedTableLayout())
             m_tableLayout = adoptPtr(new FixedTableLayout(this));
         else
             m_tableLayout = adoptPtr(new AutoTableLayout(this));
@@ -197,7 +197,7 @@ void RenderTable::addChild(RenderObject* child, RenderObject* beforeChild)
         lastBox = lastBox->parent();
     if (lastBox && lastBox->isAnonymous() && !isAfterContent(lastBox)) {
         if (beforeChild == lastBox)
-            beforeChild = lastBox->firstChild();
+            beforeChild = lastBox->slowFirstChild();
         lastBox->addChild(child, beforeChild);
         return;
     }
@@ -602,10 +602,10 @@ void RenderTable::recalcCollapsedBorders()
     for (RenderObject* section = firstChild(); section; section = section->nextSibling()) {
         if (!section->isTableSection())
             continue;
-        for (RenderObject* row = section->firstChild(); row; row = row->nextSibling()) {
+        for (RenderObject* row = toRenderTableSection(section)->firstChild(); row; row = row->nextSibling()) {
             if (!row->isTableRow())
                 continue;
-            for (RenderObject* cell = row->firstChild(); cell; cell = cell->nextSibling()) {
+            for (RenderObject* cell = toRenderTableRow(row)->firstChild(); cell; cell = cell->nextSibling()) {
                 if (!cell->isTableCell())
                     continue;
                 ASSERT(toRenderTableCell(cell)->table() == this);

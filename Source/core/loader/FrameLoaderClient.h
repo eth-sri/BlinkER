@@ -40,8 +40,6 @@
 #include "wtf/Forward.h"
 #include "wtf/Vector.h"
 
-typedef class _jobject* jobject;
-
 namespace v8 {
 class Context;
 template<class T> class Handle;
@@ -173,7 +171,7 @@ namespace WebCore {
 
         virtual ObjectContentType objectContentType(const KURL&, const String& mimeType, bool shouldPreferPlugInsForImages) = 0;
 
-        virtual void dispatchDidClearWindowObjectInWorld(DOMWrapperWorld&) = 0;
+        virtual void dispatchDidClearWindowObjectInMainWorld() = 0;
         virtual void documentElementAvailable() = 0;
 
         virtual void didCreateScriptContext(v8::Handle<v8::Context>, int extensionGroup, int worldId) = 0;
@@ -229,6 +227,8 @@ namespace WebCore {
         virtual PassOwnPtr<blink::WebApplicationCacheHost> createApplicationCacheHost(blink::WebApplicationCacheHostClient*) = 0;
 
         virtual void didStopAllLoaders() { }
+
+        virtual void dispatchDidChangeManifest() { }
 
         virtual bool isFrameLoaderClientImpl() const { return false; }
 

@@ -34,18 +34,13 @@
 
 namespace WebCore {
 
-inline SVGFEImageElement::SVGFEImageElement(Document& document)
+SVGFEImageElement::SVGFEImageElement(Document& document)
     : SVGFilterPrimitiveStandardAttributes(SVGNames::feImageTag, document)
     , SVGURIReference(this)
     , m_preserveAspectRatio(SVGAnimatedPreserveAspectRatio::create(this, SVGNames::preserveAspectRatioAttr, SVGPreserveAspectRatio::create()))
 {
     ScriptWrappable::init(this);
     addToPropertyMap(m_preserveAspectRatio);
-}
-
-PassRefPtr<SVGFEImageElement> SVGFEImageElement::create(Document& document)
-{
-    return adoptRef(new SVGFEImageElement(document));
 }
 
 SVGFEImageElement::~SVGFEImageElement()
@@ -147,7 +142,7 @@ void SVGFEImageElement::svgAttributeChanged(const QualifiedName& attrName)
         return;
     }
 
-    SVGElementInstance::InvalidationGuard invalidationGuard(this);
+    SVGElement::InvalidationGuard invalidationGuard(this);
 
     if (attrName == SVGNames::preserveAspectRatioAttr) {
         invalidate();

@@ -72,6 +72,7 @@ static void collectChildrenAndRemoveFromOldParent(Node& node, NodeVector& nodes,
     toContainerNode(node).removeChildren();
 }
 
+#if !ENABLE(OILPAN)
 void ContainerNode::removeDetachedChildren()
 {
     if (connectedSubframeCount()) {
@@ -81,6 +82,7 @@ void ContainerNode::removeDetachedChildren()
     ASSERT(needsAttach());
     removeDetachedChildrenInContainer<Node, ContainerNode>(*this);
 }
+#endif
 
 void ContainerNode::parserTakeAllChildrenFrom(ContainerNode& oldParent)
 {
@@ -93,10 +95,12 @@ void ContainerNode::parserTakeAllChildrenFrom(ContainerNode& oldParent)
 
 ContainerNode::~ContainerNode()
 {
-#if !ENABLE(OILPAN)
+#if ENABLE(OILPAN)
+    ASSERT(needsAttach());
+#else
     willBeDeletedFromDocument();
-#endif
     removeDetachedChildren();
+#endif
 }
 
 bool ContainerNode::isChildTypeAllowed(const Node& child) const
@@ -254,11 +258,11 @@ void ContainerNode::insertBeforeCommon(Node& nextChild, Node& newChild)
     ASSERT(m_lastChild != prev);
     nextChild.setPreviousSibling(&newChild);
     if (prev) {
-        ASSERT(m_firstChild != nextChild);
+        ASSERT(firstChild() != nextChild);
         ASSERT(prev->nextSibling() == nextChild);
         prev->setNextSibling(&newChild);
     } else {
-        ASSERT(m_firstChild == nextChild);
+        ASSERT(firstChild() == nextChild);
         m_firstChild = &newChild;
     }
     newChild.setParentOrShadowHostNode(this);
@@ -409,6 +413,13 @@ void ContainerNode::disconnectDescendantFrames()
     ChildFrameDisconnector(*this).disconnect();
 }
 
+void ContainerNode::trace(Visitor* visitor)
+{
+    visitor->trace(m_firstChild);
+    visitor->trace(m_lastChild);
+    Node::trace(visitor);
+}
+
 void ContainerNode::removeChild(Node* oldChild, ExceptionState& exceptionState)
 {
 #if !ENABLE(OILPAN)
@@ -475,9 +486,9 @@ void ContainerNode::removeBetween(Node* previousChild, Node* nextChild, Node& ol
         nextChild->setPreviousSibling(previousChild);
     if (previousChild)
         previousChild->setNextSibling(nextChild);
-    if (m_firstChild == oldChild)
+    if (m_firstChild == &oldChild)
         m_firstChild = nextChild;
-    if (m_lastChild == oldChild)
+    if (m_lastChild == &oldChild)
         m_lastChild = previousChild;
 
     oldChild.setPreviousSibling(0);
@@ -564,9 +575,11 @@ void ContainerNode::appendChild(PassRefPtr<Node> newChild, ExceptionState& excep
 {
     RefPtr<ContainerNode> protect(this);
 
+#if !ENABLE(OILPAN)
     // Check that this node is not "floating".
     // If it is, it can be deleted as a side effect of sending mutation events.
     ASSERT(refCount() || parentOrShadowHostNode());
+#endif
 
     // Make sure adding the new child is ok
     if (!checkAcceptChild(newChild.get(), 0, exceptionState))
@@ -691,8 +704,8 @@ bool ContainerNode::getUpperLeftCorner(FloatPoint& point) const
     // find the next text/image child, to get a position
     while (o) {
         RenderObject* p = o;
-        if (o->firstChild()) {
-            o = o->firstChild();
+        if (RenderObject* oFirstChild = o->slowFirstChild()) {
+            o = oFirstChild;
         } else if (o->nextSibling()) {
             o = o->nextSibling();
         } else {
@@ -751,8 +764,8 @@ bool ContainerNode::getLowerRightCorner(FloatPoint& point) const
 
     // find the last text/image child, to get a position
     while (o) {
-        if (o->lastChild()) {
-            o = o->lastChild();
+        if (RenderObject* oLastChild = o->slowLastChild()) {
+            o = oLastChild;
         } else if (o->previousSibling()) {
             o = o->previousSibling();
         } else {
@@ -816,15 +829,17 @@ void ContainerNode::focusStateChanged()
     if (!renderer())
         return;
 
-    if (renderStyle()->affectedByFocus() && renderStyle()->hasPseudoStyle(FIRST_LETTER))
-        setNeedsStyleRecalc(SubtreeStyleChange);
-    else if (isElementNode() && toElement(this)->childrenAffectedByFocus())
-        document().ensureStyleResolver().ensureUpdatedRuleFeatureSet().scheduleStyleInvalidationForPseudoChange(CSSSelector::PseudoFocus, *toElement(this));
-    else if (renderStyle()->affectedByFocus())
-        setNeedsStyleRecalc(LocalStyleChange);
+    if (styleChangeType() < SubtreeStyleChange) {
+        if (renderStyle()->affectedByFocus() && renderStyle()->hasPseudoStyle(FIRST_LETTER))
+            setNeedsStyleRecalc(SubtreeStyleChange);
+        else if (isElementNode() && toElement(this)->childrenAffectedByFocus())
+            document().ensureStyleResolver().ensureUpdatedRuleFeatureSet().scheduleStyleInvalidationForPseudoChange(CSSSelector::PseudoFocus, *toElement(this));
+        else if (renderStyle()->affectedByFocus())
+            setNeedsStyleRecalc(LocalStyleChange);
+    }
 
     if (renderer() && renderer()->style()->hasAppearance())
-        RenderTheme::theme().stateChanged(renderer(), FocusState);
+        RenderTheme::theme().stateChanged(renderer(), FocusControlState);
 }
 
 void ContainerNode::setFocus(bool received)
@@ -840,7 +855,7 @@ void ContainerNode::setFocus(bool received)
         return;
 
     // If :focus sets display: none, we lose focus but still need to recalc our style.
-    if (isElementNode() && toElement(this)->childrenAffectedByFocus())
+    if (isElementNode() && toElement(this)->childrenAffectedByFocus() && styleChangeType() < SubtreeStyleChange)
         document().ensureStyleResolver().ensureUpdatedRuleFeatureSet().scheduleStyleInvalidationForPseudoChange(CSSSelector::PseudoFocus, *toElement(this));
     else
         setNeedsStyleRecalc(LocalStyleChange);
@@ -855,15 +870,17 @@ void ContainerNode::setActive(bool down)
 
     // FIXME: Why does this not need to handle the display: none transition like :hover does?
     if (renderer()) {
-        if (renderStyle()->affectedByActive() && renderStyle()->hasPseudoStyle(FIRST_LETTER))
-            setNeedsStyleRecalc(SubtreeStyleChange);
-        else if (isElementNode() && toElement(this)->childrenAffectedByActive())
-            document().ensureStyleResolver().ensureUpdatedRuleFeatureSet().scheduleStyleInvalidationForPseudoChange(CSSSelector::PseudoActive, *toElement(this));
-        else if (renderStyle()->affectedByActive())
-            setNeedsStyleRecalc(LocalStyleChange);
+        if (styleChangeType() < SubtreeStyleChange) {
+            if (renderStyle()->affectedByActive() && renderStyle()->hasPseudoStyle(FIRST_LETTER))
+                setNeedsStyleRecalc(SubtreeStyleChange);
+            else if (isElementNode() && toElement(this)->childrenAffectedByActive())
+                document().ensureStyleResolver().ensureUpdatedRuleFeatureSet().scheduleStyleInvalidationForPseudoChange(CSSSelector::PseudoActive, *toElement(this));
+            else if (renderStyle()->affectedByActive())
+                setNeedsStyleRecalc(LocalStyleChange);
+        }
 
         if (renderStyle()->hasAppearance())
-            RenderTheme::theme().stateChanged(renderer(), PressedState);
+            RenderTheme::theme().stateChanged(renderer(), PressedControlState);
     }
 }
 
@@ -878,25 +895,27 @@ void ContainerNode::setHovered(bool over)
     if (!renderer()) {
         if (over)
             return;
-        if (isElementNode() && toElement(this)->childrenAffectedByHover())
+        if (isElementNode() && toElement(this)->childrenAffectedByHover() && styleChangeType() < SubtreeStyleChange)
             document().ensureStyleResolver().ensureUpdatedRuleFeatureSet().scheduleStyleInvalidationForPseudoChange(CSSSelector::PseudoHover, *toElement(this));
         else
             setNeedsStyleRecalc(LocalStyleChange);
         return;
     }
 
-    if (renderStyle()->affectedByHover() && renderStyle()->hasPseudoStyle(FIRST_LETTER))
-        setNeedsStyleRecalc(SubtreeStyleChange);
-    else if (isElementNode() && toElement(this)->childrenAffectedByHover())
-        document().ensureStyleResolver().ensureUpdatedRuleFeatureSet().scheduleStyleInvalidationForPseudoChange(CSSSelector::PseudoHover, *toElement(this));
-    else if (renderStyle()->affectedByHover())
-        setNeedsStyleRecalc(LocalStyleChange);
+    if (styleChangeType() < SubtreeStyleChange) {
+        if (renderStyle()->affectedByHover() && renderStyle()->hasPseudoStyle(FIRST_LETTER))
+            setNeedsStyleRecalc(SubtreeStyleChange);
+        else if (isElementNode() && toElement(this)->childrenAffectedByHover())
+            document().ensureStyleResolver().ensureUpdatedRuleFeatureSet().scheduleStyleInvalidationForPseudoChange(CSSSelector::PseudoHover, *toElement(this));
+        else if (renderStyle()->affectedByHover())
+            setNeedsStyleRecalc(LocalStyleChange);
+    }
 
     if (renderer()->style()->hasAppearance())
-        RenderTheme::theme().stateChanged(renderer(), HoverState);
+        RenderTheme::theme().stateChanged(renderer(), HoverControlState);
 }
 
-PassRefPtr<HTMLCollection> ContainerNode::children()
+PassRefPtrWillBeRawPtr<HTMLCollection> ContainerNode::children()
 {
     return ensureRareData().ensureNodeLists().addCache<HTMLCollection>(*this, NodeChildren);
 }
@@ -932,7 +951,7 @@ PassRefPtr<Element> ContainerNode::querySelector(const AtomicString& selectors, 
     return selectorQuery->queryFirst(*this);
 }
 
-PassRefPtr<NodeList> ContainerNode::querySelectorAll(const AtomicString& selectors, ExceptionState& exceptionState)
+PassRefPtrWillBeRawPtr<NodeList> ContainerNode::querySelectorAll(const AtomicString& selectors, ExceptionState& exceptionState)
 {
     if (selectors.isEmpty()) {
         exceptionState.throwDOMException(SyntaxError, "The provided selector is empty.");
@@ -995,8 +1014,10 @@ static void dispatchChildRemovalEvents(Node& child)
 
 void ContainerNode::updateTreeAfterInsertion(Node& child)
 {
+#if !ENABLE(OILPAN)
     ASSERT(refCount());
     ASSERT(child.refCount());
+#endif
 
     ChildListMutationScope(*this).childAdded(child);
 
@@ -1125,7 +1146,7 @@ void ContainerNode::checkForSiblingStyleChanges(bool finishedParsingCallback, No
     }
 }
 
-PassRefPtr<HTMLCollection> ContainerNode::getElementsByTagName(const AtomicString& localName)
+PassRefPtrWillBeRawPtr<HTMLCollection> ContainerNode::getElementsByTagName(const AtomicString& localName)
 {
     if (localName.isNull())
         return nullptr;
@@ -1135,7 +1156,7 @@ PassRefPtr<HTMLCollection> ContainerNode::getElementsByTagName(const AtomicStrin
     return ensureRareData().ensureNodeLists().addCache<TagCollection>(*this, TagCollectionType, localName);
 }
 
-PassRefPtr<HTMLCollection> ContainerNode::getElementsByTagNameNS(const AtomicString& namespaceURI, const AtomicString& localName)
+PassRefPtrWillBeRawPtr<HTMLCollection> ContainerNode::getElementsByTagNameNS(const AtomicString& namespaceURI, const AtomicString& localName)
 {
     if (localName.isNull())
         return nullptr;
@@ -1148,19 +1169,19 @@ PassRefPtr<HTMLCollection> ContainerNode::getElementsByTagNameNS(const AtomicStr
 
 // Takes an AtomicString in argument because it is common for elements to share the same name attribute.
 // Therefore, the NameNodeList factory function expects an AtomicString type.
-PassRefPtr<NodeList> ContainerNode::getElementsByName(const AtomicString& elementName)
+PassRefPtrWillBeRawPtr<NodeList> ContainerNode::getElementsByName(const AtomicString& elementName)
 {
     return ensureRareData().ensureNodeLists().addCache<NameNodeList>(*this, NameNodeListType, elementName);
 }
 
 // Takes an AtomicString in argument because it is common for elements to share the same set of class names.
 // Therefore, the ClassNodeList factory function expects an AtomicString type.
-PassRefPtr<HTMLCollection> ContainerNode::getElementsByClassName(const AtomicString& classNames)
+PassRefPtrWillBeRawPtr<HTMLCollection> ContainerNode::getElementsByClassName(const AtomicString& classNames)
 {
     return ensureRareData().ensureNodeLists().addCache<ClassCollection>(*this, ClassCollectionType, classNames);
 }
 
-PassRefPtr<RadioNodeList> ContainerNode::radioNodeList(const AtomicString& name, bool onlyMatchImgElements)
+PassRefPtrWillBeRawPtr<RadioNodeList> ContainerNode::radioNodeList(const AtomicString& name, bool onlyMatchImgElements)
 {
     ASSERT(isHTMLFormElement(this) || isHTMLFieldSetElement(this));
     CollectionType type = onlyMatchImgElements ? RadioImgNodeListType : RadioNodeListType;

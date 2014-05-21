@@ -104,6 +104,7 @@ void initialize(Platform* platform)
     v8::V8::SetEntropySource(&generateEntropy);
     v8::V8::SetArrayBufferAllocator(WebCore::v8ArrayBufferAllocator());
     v8::V8::Initialize();
+    isolate->SetAutorunMicrotasks(false);
     WebCore::V8PerIsolateData::ensureInitialized(isolate);
 
     s_isolateInterruptor = new WebCore::V8IsolateInterruptor(v8::Isolate::GetCurrent());
@@ -167,7 +168,6 @@ void initializeWithoutV8(Platform* platform)
         WebCore::ThreadState::current()->addInterruptor(s_messageLoopInterruptor);
     }
     WebCore::init();
-    WebCore::ImageDecodingStore::initializeOnce();
 
     // There are some code paths (for example, running WebKit in the browser
     // process and calling into LocalStorage before anything else) where the
@@ -223,7 +223,6 @@ void shutdown()
 void shutdownWithoutV8()
 {
     ASSERT(!s_endOfTaskRunner);
-    WebCore::ImageDecodingStore::shutdown();
     WebCore::shutdown();
     WebCore::Heap::shutdown();
     WTF::shutdown();
@@ -249,18 +248,6 @@ void setFontAntialiasingEnabledForTest(bool value)
 bool fontAntialiasingEnabledForTest()
 {
     return WebCore::isFontAntialiasingEnabledForTest();
-}
-
-// FIXME(dro): Remove after Chromium side rename landed.
-void setFontSmoothingEnabledForTest(bool value)
-{
-    setFontAntialiasingEnabledForTest(value);
-}
-
-// FIXME(dro): Remove after Chromium side rename landed.
-bool fontSmoothingEnabledForTest()
-{
-    return fontAntialiasingEnabledForTest();
 }
 
 void enableLogChannel(const char* name)

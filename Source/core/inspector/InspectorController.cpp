@@ -96,15 +96,15 @@ InspectorController::InspectorController(Page* page, InspectorClient* inspectorC
     m_agents.append(domAgentPtr.release());
 
 
-    OwnPtr<InspectorLayerTreeAgent> layerTreeAgentPtr(InspectorLayerTreeAgent::create(m_domAgent, m_page));
+    OwnPtr<InspectorLayerTreeAgent> layerTreeAgentPtr(InspectorLayerTreeAgent::create(m_page));
     m_layerTreeAgent = layerTreeAgentPtr.get();
     m_agents.append(layerTreeAgentPtr.release());
 
-    OwnPtr<InspectorTracingAgent> tracingAgentPtr = InspectorTracingAgent::create();
+    OwnPtr<InspectorTracingAgent> tracingAgentPtr = InspectorTracingAgent::create(inspectorClient);
     m_tracingAgent = tracingAgentPtr.get();
     m_agents.append(tracingAgentPtr.release());
 
-    OwnPtr<InspectorTimelineAgent> timelineAgentPtr(InspectorTimelineAgent::create(m_pageAgent, m_domAgent, m_layerTreeAgent,
+    OwnPtr<InspectorTimelineAgent> timelineAgentPtr(InspectorTimelineAgent::create(m_pageAgent, m_layerTreeAgent,
         overlay, InspectorTimelineAgent::PageInspector, inspectorClient));
     m_timelineAgent = timelineAgentPtr.get();
     m_agents.append(timelineAgentPtr.release());
@@ -199,7 +199,7 @@ void InspectorController::setInspectorFrontendClient(PassOwnPtr<InspectorFronten
     m_inspectorFrontendClient = inspectorFrontendClient;
 }
 
-void InspectorController::didClearWindowObjectInMainWorld(LocalFrame* frame)
+void InspectorController::didClearDocumentOfWindowObject(LocalFrame* frame)
 {
     // If the page is supposed to serve as InspectorFrontend notify inspector frontend
     // client that it's cleared so that the client can expose inspector bindings.

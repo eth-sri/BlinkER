@@ -26,7 +26,8 @@
 #define RenderStyle_h
 
 #include "CSSPropertyNames.h"
-#include "core/animation/css/CSSAnimationDataList.h"
+#include "core/animation/css/CSSAnimationData.h"
+#include "core/animation/css/CSSTransitionData.h"
 #include "core/css/CSSLineBoxContainValue.h"
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/rendering/style/BorderValue.h"
@@ -97,9 +98,9 @@ using std::max;
 
 class FilterOperations;
 
+class AppliedTextDecoration;
 class BorderData;
 class CounterContent;
-class CursorList;
 class Font;
 class FontMetrics;
 class IntRect;
@@ -163,7 +164,7 @@ protected:
                 && (_visibility == other._visibility)
                 && (_text_align == other._text_align)
                 && (_text_transform == other._text_transform)
-                && (_text_decorations == other._text_decorations)
+                && (m_textUnderline == other.m_textUnderline)
                 && (_cursor_style == other._cursor_style)
                 && (_direction == other._direction)
                 && (_white_space == other._white_space)
@@ -185,24 +186,23 @@ protected:
         unsigned _visibility : 2; // EVisibility
         unsigned _text_align : 4; // ETextAlign
         unsigned _text_transform : 2; // ETextTransform
-        unsigned _text_decorations : TextDecorationBits;
+        unsigned m_textUnderline : 1;
         unsigned _cursor_style : 6; // ECursor
         unsigned _direction : 1; // TextDirection
         unsigned _white_space : 3; // EWhiteSpace
-        // 32 bits
         unsigned _border_collapse : 1; // EBorderCollapse
         unsigned _box_direction : 1; // EBoxDirection (CSS3 box_direction property, flexible box layout module)
+        // 32 bits
 
         // non CSS2 inherited
         unsigned m_rtlOrdering : 1; // Order
         unsigned m_printColorAdjust : PrintColorAdjustBits;
         unsigned _pointerEvents : 4; // EPointerEvents
         unsigned _insideLink : 2; // EInsideLink
-        // 43 bits
 
         // CSS Text Layout Module Level 3: Vertical writing support
         unsigned m_writingMode : 2; // WritingMode
-        // 45 bits
+        // 42 bits
     } inherited_flags;
 
 // don't inherit
@@ -302,7 +302,7 @@ protected:
         inherited_flags._visibility = initialVisibility();
         inherited_flags._text_align = initialTextAlign();
         inherited_flags._text_transform = initialTextTransform();
-        inherited_flags._text_decorations = initialTextDecoration();
+        inherited_flags.m_textUnderline = false;
         inherited_flags._cursor_style = initialCursor();
         inherited_flags._direction = initialDirection();
         inherited_flags._white_space = initialWhiteSpace();
@@ -563,6 +563,7 @@ public:
 
     EClear clear() const { return static_cast<EClear>(noninherited_flags._clear); }
     ETableLayout tableLayout() const { return static_cast<ETableLayout>(noninherited_flags._table_layout); }
+    bool isFixedTableLayout() const { return tableLayout() == TFIXED && !logicalWidth().isAuto(); }
 
     const Font& font() const;
     const FontMetrics& fontMetrics() const;
@@ -581,7 +582,8 @@ public:
     TextAlignLast textAlignLast() const { return static_cast<TextAlignLast>(rareInheritedData->m_textAlignLast); }
     TextJustify textJustify() const { return static_cast<TextJustify>(rareInheritedData->m_textJustify); }
     ETextTransform textTransform() const { return static_cast<ETextTransform>(inherited_flags._text_transform); }
-    TextDecoration textDecorationsInEffect() const { return static_cast<TextDecoration>(inherited_flags._text_decorations); }
+    TextDecoration textDecorationsInEffect() const;
+    const Vector<AppliedTextDecoration>& appliedTextDecorations() const;
     TextDecoration textDecoration() const { return static_cast<TextDecoration>(visual->textDecoration); }
     TextUnderlinePosition textUnderlinePosition() const { return static_cast<TextUnderlinePosition>(rareInheritedData->m_textUnderlinePosition); }
     TextDecorationStyle textDecorationStyle() const { return static_cast<TextDecorationStyle>(rareNonInheritedData->m_textDecorationStyle); }
@@ -901,13 +903,11 @@ public:
 
     // Apple-specific property getter methods
     EPointerEvents pointerEvents() const { return static_cast<EPointerEvents>(inherited_flags._pointerEvents); }
-    const CSSAnimationDataList* animations() const { return rareNonInheritedData->m_animations.get(); }
-    const CSSAnimationDataList* transitions() const { return rareNonInheritedData->m_transitions.get(); }
+    const CSSAnimationData* animations() const { return rareNonInheritedData->m_animations.get(); }
+    const CSSTransitionData* transitions() const { return rareNonInheritedData->m_transitions.get(); }
 
-    CSSAnimationDataList* accessAnimations();
-    CSSAnimationDataList* accessTransitions();
-
-    bool hasAnimations() const { return rareNonInheritedData->m_animations && rareNonInheritedData->m_animations->size() > 0; }
+    CSSAnimationData& accessAnimations();
+    CSSTransitionData& accessTransitions();
 
     ETransformStyle3D transformStyle3D() const { return static_cast<ETransformStyle3D>(rareNonInheritedData->m_transformStyle3D); }
     bool preserves3D() const { return rareNonInheritedData->m_transformStyle3D == TransformStyle3DPreserve3D; }
@@ -967,7 +967,6 @@ public:
     bool willChangeContents() const { return rareNonInheritedData->m_willChange->m_contents; }
     bool willChangeScrollPosition() const { return rareNonInheritedData->m_willChange->m_scrollPosition; }
     bool hasWillChangeCompositingHint() const;
-    bool hasWillChangeGpuRasterizationHint() const;
 
 // attribute setter methods
 
@@ -1114,8 +1113,8 @@ public:
     void setTextAlignLast(TextAlignLast v) { SET_VAR(rareInheritedData, m_textAlignLast, v); }
     void setTextJustify(TextJustify v) { SET_VAR(rareInheritedData, m_textJustify, v); }
     void setTextTransform(ETextTransform v) { inherited_flags._text_transform = v; }
-    void addToTextDecorationsInEffect(TextDecoration v) { inherited_flags._text_decorations |= v; }
-    void setTextDecorationsInEffect(TextDecoration v) { inherited_flags._text_decorations = v; }
+    void applyTextDecorations();
+    void clearAppliedTextDecorations();
     void setTextDecoration(TextDecoration v) { SET_VAR(visual, textDecoration, v); }
     void setTextUnderlinePosition(TextUnderlinePosition v) { SET_VAR(rareInheritedData, m_textUnderlinePosition, v); }
     void setTextDecorationStyle(TextDecorationStyle v) { SET_VAR(rareNonInheritedData, m_textDecorationStyle, v); }
@@ -1368,9 +1367,6 @@ public:
         rareNonInheritedData.access()->m_transitions.clear();
     }
 
-    void adjustAnimations();
-    void adjustTransitions();
-
     void setTransformStyle3D(ETransformStyle3D b) { SET_VAR(rareNonInheritedData, m_transformStyle3D, b); }
     void setBackfaceVisibility(EBackfaceVisibility b) { SET_VAR(rareNonInheritedData, m_backfaceVisibility, b); }
     void setPerspective(float p) { SET_VAR(rareNonInheritedData, m_perspective, p); }
@@ -1415,11 +1411,11 @@ public:
     void setStrokePaintColor(const Color& c) { accessSVGStyle()->setStrokePaint(SVGPaint::SVG_PAINTTYPE_RGBCOLOR, c, ""); }
     float strokeOpacity() const { return svgStyle()->strokeOpacity(); }
     void setStrokeOpacity(float f) { accessSVGStyle()->setStrokeOpacity(f); }
-    PassRefPtr<SVGLength> strokeWidth() const { return svgStyle()->strokeWidth(); }
+    SVGLength* strokeWidth() const { return svgStyle()->strokeWidth(); }
     void setStrokeWidth(PassRefPtr<SVGLength> w) { accessSVGStyle()->setStrokeWidth(w); }
-    PassRefPtr<SVGLengthList> strokeDashArray() const { return svgStyle()->strokeDashArray(); }
+    SVGLengthList* strokeDashArray() const { return svgStyle()->strokeDashArray(); }
     void setStrokeDashArray(PassRefPtr<SVGLengthList> array) { accessSVGStyle()->setStrokeDashArray(array); }
-    PassRefPtr<SVGLength> strokeDashOffset() const { return svgStyle()->strokeDashOffset(); }
+    SVGLength* strokeDashOffset() const { return svgStyle()->strokeDashOffset(); }
     void setStrokeDashOffset(PassRefPtr<SVGLength> d) { accessSVGStyle()->setStrokeDashOffset(d); }
     float strokeMiterLimit() const { return svgStyle()->strokeMiterLimit(); }
     void setStrokeMiterLimit(float f) { accessSVGStyle()->setStrokeMiterLimit(f); }
@@ -1434,7 +1430,7 @@ public:
     void setFloodColor(const Color& c) { accessSVGStyle()->setFloodColor(c); }
     void setLightingColor(const Color& c) { accessSVGStyle()->setLightingColor(c); }
 
-    PassRefPtr<SVGLength> baselineShiftValue() const { return svgStyle()->baselineShiftValue(); }
+    SVGLength* baselineShiftValue() const { return svgStyle()->baselineShiftValue(); }
     void setBaselineShiftValue(PassRefPtr<SVGLength> s) { accessSVGStyle()->setBaselineShiftValue(s); }
 
     void setShapeOutside(PassRefPtr<ShapeValue> value)
@@ -1515,7 +1511,8 @@ public:
     bool lastChildState() const { return noninherited_flags.lastChildState; }
     void setLastChildState() { setUnique(); noninherited_flags.lastChildState = true; }
 
-    StyleColor visitedDependentDecorationColor() const;
+    StyleColor visitedDependentDecorationStyleColor() const;
+    Color visitedDependentDecorationColor() const;
     Color visitedDependentColor(int colorProperty) const;
 
     void setHasExplicitlyInheritedProperties() { noninherited_flags.explicitInheritance = true; }
@@ -1780,6 +1777,7 @@ private:
     Color lightingColor() const { return svgStyle()->lightingColor(); }
 
     void appendContent(PassOwnPtr<ContentData>);
+    void addAppliedTextDecoration(const AppliedTextDecoration&);
 
     bool diffNeedsFullLayout(const RenderStyle& other) const;
     bool diffNeedsRepaintLayer(const RenderStyle& other) const;

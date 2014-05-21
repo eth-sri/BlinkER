@@ -26,11 +26,13 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+// http://www.whatwg.org/specs/web-apps/current-work/multipage/the-canvas-element.html#imagedata
+
 [
-    Constructor(Uint8ClampedArray data, unsigned long width, [Default=Undefined] optional unsigned long height),
     Constructor(unsigned long width, unsigned long height),
+    Constructor(Uint8ClampedArray data, unsigned long width, [Default=Undefined] optional unsigned long height),
     Custom=Wrap,
-    GlobalContext=Window&WorkerGlobalScope,
+    Exposed=Window&Worker,
     RaisesException=Constructor,
     WillBeGarbageCollected,
 ] interface ImageData {

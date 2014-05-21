@@ -146,7 +146,7 @@ int64_t IDBAny::integer() const
     return m_integer;
 }
 
-IDBAny::IDBAny(PassRefPtr<DOMStringList> value)
+IDBAny::IDBAny(PassRefPtrWillBeRawPtr<DOMStringList> value)
     : m_type(DOMStringListType)
     , m_domStringList(value)
     , m_integer(0)
@@ -160,28 +160,28 @@ IDBAny::IDBAny(PassRefPtrWillBeRawPtr<IDBCursor> value)
 {
 }
 
-IDBAny::IDBAny(PassRefPtr<IDBDatabase> value)
+IDBAny::IDBAny(PassRefPtrWillBeRawPtr<IDBDatabase> value)
     : m_type(IDBDatabaseType)
     , m_idbDatabase(value)
     , m_integer(0)
 {
 }
 
-IDBAny::IDBAny(PassRefPtr<IDBIndex> value)
+IDBAny::IDBAny(PassRefPtrWillBeRawPtr<IDBIndex> value)
     : m_type(IDBIndexType)
     , m_idbIndex(value)
     , m_integer(0)
 {
 }
 
-IDBAny::IDBAny(PassRefPtr<IDBTransaction> value)
+IDBAny::IDBAny(PassRefPtrWillBeRawPtr<IDBTransaction> value)
     : m_type(IDBTransactionType)
     , m_idbTransaction(value)
     , m_integer(0)
 {
 }
 
-IDBAny::IDBAny(PassRefPtr<IDBObjectStore> value)
+IDBAny::IDBAny(PassRefPtrWillBeRawPtr<IDBObjectStore> value)
     : m_type(IDBObjectStoreType)
     , m_idbObjectStore(value)
     , m_integer(0)
@@ -235,7 +235,12 @@ IDBAny::IDBAny(int64_t value)
 
 void IDBAny::trace(Visitor* visitor)
 {
+    visitor->trace(m_domStringList);
     visitor->trace(m_idbCursor);
+    visitor->trace(m_idbDatabase);
+    visitor->trace(m_idbIndex);
+    visitor->trace(m_idbObjectStore);
+    visitor->trace(m_idbTransaction);
     visitor->trace(m_idbKey);
 }
 

@@ -75,11 +75,15 @@ public:
     // Sets the location of the inner viewport relative to the outer viewport. The
     // coordinates are in partial CSS pixels.
     void setLocation(const FloatPoint&);
+    void move(const FloatPoint&);
 
     // Sets the size of the inner viewport when unscaled in CSS pixels.
     // This will be clamped to the size of the outer viewport (the main frame).
     void setSize(const IntSize&);
     IntSize size() const { return m_size; }
+
+    // Resets the viewport to initial state.
+    void reset();
 
     // Let the viewport know that the main frame changed size (either through screen
     // rotation on Android or window resize elsewhere).
@@ -124,7 +128,6 @@ private:
 
     void setupScrollbar(blink::WebScrollbar::Orientation);
     FloatPoint clampOffsetToBoundaries(const FloatPoint&);
-    IntSize clampToOuterViewportSize(const IntSize&);
 
     LocalFrame* mainFrame() const;
 

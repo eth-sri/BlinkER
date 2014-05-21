@@ -99,7 +99,6 @@ public:
         PlaceholderAttribute = 45,
         PrecisionAttribute = 46,
         PrefixedDirectoryAttribute = 47,
-        PrefixedSpeechAttribute = 48,
         RequiredAttribute = 49,
         ResultsAttribute = 50,
         StepAttribute = 51,
@@ -137,7 +136,6 @@ public:
         TextReplaceWholeText = 100,
         ConsoleMarkTimeline = 102,
         CSSPseudoElementUserAgentCustomPseudo = 103,
-        DocumentTypeInternalSubset = 105, // Removed from DOM4.
         ElementGetAttributeNode = 107, // Removed from DOM4.
         ElementSetAttributeNode = 108, // Removed from DOM4.
         ElementRemoveAttributeNode = 109, // Removed from DOM4.
@@ -247,10 +245,7 @@ public:
         PrefixedDevicePixelRatioMediaFeature = 233,
         PrefixedMaxDevicePixelRatioMediaFeature = 234,
         PrefixedMinDevicePixelRatioMediaFeature = 235,
-        PrefixedTransform2dMediaFeature = 236,
         PrefixedTransform3dMediaFeature = 237,
-        PrefixedAnimationMediaFeature = 238,
-        PrefixedViewModeMediaFeature = 239,
         PrefixedStorageQuota = 240,
         ContentSecurityPolicyReportOnlyInMeta = 241,
         ResetReferrerPolicy = 243,
@@ -261,7 +256,6 @@ public:
         FormAssociationByParser = 248,
         SVGSVGElementInDocument = 250,
         SVGDocumentRootElement = 251,
-        DocumentCreateEventOptionalArgument = 252,
         MediaErrorEncrypted = 253,
         EventSourceURL = 254,
         WebSocketURL = 255,
@@ -394,8 +388,46 @@ public:
         PrefixedWheelEventDirectionInvertedFromDevice = 384,
         PrefixedWheelEventInit = 385,
         PrefixedFileRelativePath = 386,
+        DocumentCaretRangeFromPoint = 387,
+        DocumentGetCSSCanvasContext = 388,
+        ElementScrollIntoViewIfNeeded = 389,
+        ElementScrollByLines = 390,
+        ElementScrollByPages = 391,
+        RangeCompareNode = 392,
+        RangeExpand = 393,
+        HTMLFrameElementWidth = 394,
+        HTMLFrameElementHeight = 395,
+        HTMLImageElementX = 396,
+        HTMLImageElementY = 397,
+        HTMLOptionsCollectionRemoveElement = 398,
+        HTMLPreElementWrap = 399,
+        SelectionBaseNode = 400,
+        SelectionBaseOffset = 401,
+        SelectionExtentNode = 402,
+        SelectionExtentOffset = 403,
+        SelectionType = 404,
+        SelectionModify = 405,
+        SelectionSetBaseAndExtent = 406,
+        SelectionEmpty = 407,
+        SVGFEMorphologyElementSetRadius = 408,
+        VTTCue = 409,
+        VTTCueRender = 410,
+        VTTCueRenderVertical = 411,
+        VTTCueRenderSnapToLinesFalse = 412,
+        VTTCueRenderLineNotAuto = 413,
+        VTTCueRenderPositionNot50 = 414,
+        VTTCueRenderSizeNot100 = 415,
+        VTTCueRenderAlignNotMiddle = 416,
+        ElementRequestPointerLock = 417,
+        VTTCueRenderRtl = 418,
+        PostMessageFromSecureToInsecure = 419,
+        PostMessageFromInsecureToSecure = 420,
+        DocumentExitPointerLock = 421,
+        DocumentPointerLockElement = 422,
         // Add new features immediately above this line. Don't change assigned
         // numbers of any item, and don't reuse removed slots.
+        // Also, run update_use_counter_feature_enum.py in chromium/src/tools/metrics/histograms/
+        // to update the UMA mapping.
         NumberOfFeatures, // This enum value must be last.
     };
 

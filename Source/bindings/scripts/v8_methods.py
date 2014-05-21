@@ -151,8 +151,6 @@ def generate_argument(interface, method, argument, index):
         'has_event_listener_argument': any(
             argument_so_far for argument_so_far in method.arguments[:index]
             if argument_so_far.idl_type.name == 'EventListener'),
-        'has_legacy_overload_string':  # [LegacyOverloadString]
-            'LegacyOverloadString' in extended_attributes,
         'has_type_checking_interface':
             (has_extended_attribute_value(interface, 'TypeChecking', 'Interface') or
              has_extended_attribute_value(method, 'TypeChecking', 'Interface')) and
@@ -230,7 +228,8 @@ def cpp_value(interface, method, number_of_arguments):
 def v8_set_return_value(interface_name, method, cpp_value, for_main_world=False):
     idl_type = method.idl_type
     extended_attributes = method.extended_attributes
-    if idl_type.name == 'void':
+    if not idl_type or idl_type.name == 'void':
+        # Constructors and void methods don't have a return type
         return None
 
     release = False

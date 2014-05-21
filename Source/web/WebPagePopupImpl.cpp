@@ -109,6 +109,11 @@ private:
 
     virtual void scheduleAnimation() OVERRIDE
     {
+        if (m_popup->isAcceleratedCompositingActive()) {
+            ASSERT(m_popup->m_layerTreeView);
+            m_popup->m_layerTreeView->setNeedsAnimate();
+            return;
+        }
         m_popup->widgetClient()->scheduleAnimation();
     }
 
@@ -320,7 +325,7 @@ void WebPagePopupImpl::layout()
     PageWidgetDelegate::layout(m_page.get());
 }
 
-void WebPagePopupImpl::paint(WebCanvas* canvas, const WebRect& rect, PaintOptions)
+void WebPagePopupImpl::paint(WebCanvas* canvas, const WebRect& rect)
 {
     if (!m_closing)
         PageWidgetDelegate::paint(m_page.get(), 0, canvas, rect, PageWidgetDelegate::Opaque);

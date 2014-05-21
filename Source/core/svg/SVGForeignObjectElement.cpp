@@ -31,7 +31,7 @@
 
 namespace WebCore {
 
-inline SVGForeignObjectElement::SVGForeignObjectElement(Document& document)
+SVGForeignObjectElement::SVGForeignObjectElement(Document& document)
     : SVGGraphicsElement(SVGNames::foreignObjectTag, document)
     , m_x(SVGAnimatedLength::create(this, SVGNames::xAttr, SVGLength::create(LengthModeWidth), AllowNegativeLengths))
     , m_y(SVGAnimatedLength::create(this, SVGNames::yAttr, SVGLength::create(LengthModeHeight), AllowNegativeLengths))
@@ -46,11 +46,6 @@ inline SVGForeignObjectElement::SVGForeignObjectElement(Document& document)
     addToPropertyMap(m_height);
 
     UseCounter::count(document, UseCounter::SVGForeignObjectElement);
-}
-
-PassRefPtr<SVGForeignObjectElement> SVGForeignObjectElement::create(Document& document)
-{
-    return adoptRef(new SVGForeignObjectElement(document));
 }
 
 bool SVGForeignObjectElement::isSupportedAttribute(const QualifiedName& attrName)
@@ -96,12 +91,13 @@ void SVGForeignObjectElement::collectStyleForPresentationAttribute(const Qualifi
 {
     if (name == SVGNames::widthAttr || name == SVGNames::heightAttr) {
         RefPtr<SVGLength> length = SVGLength::create(LengthModeOther);
-        length->setValueAsString(value, IGNORE_EXCEPTION);
-        if (length->unitType() != LengthTypeUnknown) {
+        TrackExceptionState exceptionState;
+        length->setValueAsString(value, exceptionState);
+        if (!exceptionState.hadException()) {
             if (name == SVGNames::widthAttr)
-                addPropertyToPresentationAttributeStyle(style, CSSPropertyWidth, length->valueAsString());
+                addPropertyToPresentationAttributeStyle(style, CSSPropertyWidth, value);
             else if (name == SVGNames::heightAttr)
-                addPropertyToPresentationAttributeStyle(style, CSSPropertyHeight, length->valueAsString());
+                addPropertyToPresentationAttributeStyle(style, CSSPropertyHeight, value);
         }
     } else {
         SVGGraphicsElement::collectStyleForPresentationAttribute(name, value, style);
@@ -120,7 +116,7 @@ void SVGForeignObjectElement::svgAttributeChanged(const QualifiedName& attrName)
         setNeedsStyleRecalc(LocalStyleChange);
     }
 
-    SVGElementInstance::InvalidationGuard invalidationGuard(this);
+    SVGElement::InvalidationGuard invalidationGuard(this);
 
     bool isLengthAttribute = attrName == SVGNames::xAttr
                           || attrName == SVGNames::yAttr

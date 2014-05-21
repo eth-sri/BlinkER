@@ -90,10 +90,16 @@ void InspectorClientImpl::updateInspectorStateCookie(const WTF::String& inspecto
         agent->updateInspectorStateCookie(inspectorState);
 }
 
-void InspectorClientImpl::overrideDeviceMetrics(int width, int height, float deviceScaleFactor, bool emulateViewport, bool fitWindow)
+void InspectorClientImpl::setDeviceMetricsOverride(int width, int height, float deviceScaleFactor, bool emulateViewport, bool fitWindow)
 {
     if (WebDevToolsAgentImpl* agent = devToolsAgent())
-        agent->overrideDeviceMetrics(width, height, deviceScaleFactor, emulateViewport, fitWindow);
+        agent->setDeviceMetricsOverride(width, height, deviceScaleFactor, emulateViewport, fitWindow);
+}
+
+void InspectorClientImpl::clearDeviceMetricsOverride()
+{
+    if (WebDevToolsAgentImpl* agent = devToolsAgent())
+        agent->clearDeviceMetricsOverride();
 }
 
 void InspectorClientImpl::setTouchEventEmulationEnabled(bool enabled)
@@ -166,6 +172,18 @@ void InspectorClientImpl::setTraceEventCallback(const String& categoryFilter, Tr
 {
     if (WebDevToolsAgentImpl* agent = devToolsAgent())
         agent->setTraceEventCallback(categoryFilter, callback);
+}
+
+void InspectorClientImpl::enableTracing(const String& categoryFilter)
+{
+    if (WebDevToolsAgentImpl* agent = devToolsAgent())
+        agent->enableTracing(categoryFilter);
+}
+
+void InspectorClientImpl::disableTracing()
+{
+    if (WebDevToolsAgentImpl* agent = devToolsAgent())
+        agent->disableTracing();
 }
 
 void InspectorClientImpl::resetTraceEventCallback()

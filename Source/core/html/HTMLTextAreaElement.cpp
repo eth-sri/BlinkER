@@ -88,9 +88,9 @@ HTMLTextAreaElement::HTMLTextAreaElement(Document& document, HTMLFormElement* fo
     ScriptWrappable::init(this);
 }
 
-PassRefPtr<HTMLTextAreaElement> HTMLTextAreaElement::create(Document& document, HTMLFormElement* form)
+PassRefPtrWillBeRawPtr<HTMLTextAreaElement> HTMLTextAreaElement::create(Document& document, HTMLFormElement* form)
 {
-    RefPtr<HTMLTextAreaElement> textArea = adoptRef(new HTMLTextAreaElement(document, form));
+    RefPtrWillBeRawPtr<HTMLTextAreaElement> textArea = adoptRefWillBeRefCountedGarbageCollected(new HTMLTextAreaElement(document, form));
     textArea->ensureUserAgentShadowRoot();
     return textArea.release();
 }
@@ -162,7 +162,7 @@ void HTMLTextAreaElement::parseAttribute(const QualifiedName& name, const Atomic
         if (m_rows != rows) {
             m_rows = rows;
             if (renderer())
-                renderer()->setNeedsLayoutAndPrefWidthsRecalc();
+                renderer()->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
         }
     } else if (name == colsAttr) {
         int cols = value.toInt();
@@ -171,7 +171,7 @@ void HTMLTextAreaElement::parseAttribute(const QualifiedName& name, const Atomic
         if (m_cols != cols) {
             m_cols = cols;
             if (renderer())
-                renderer()->setNeedsLayoutAndPrefWidthsRecalc();
+                renderer()->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
         }
     } else if (name == wrapAttr) {
         // The virtual/physical values were a Netscape extension of HTML 3.0, now deprecated.
@@ -186,7 +186,7 @@ void HTMLTextAreaElement::parseAttribute(const QualifiedName& name, const Atomic
         if (wrap != m_wrap) {
             m_wrap = wrap;
             if (renderer())
-                renderer()->setNeedsLayoutAndPrefWidthsRecalc();
+                renderer()->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
         }
     } else if (name == accesskeyAttr) {
         // ignore for the moment
@@ -335,7 +335,7 @@ String HTMLTextAreaElement::value() const
 
 void HTMLTextAreaElement::setValue(const String& value, TextFieldEventBehavior eventBehavior)
 {
-    RefPtr<HTMLTextAreaElement> protector(this);
+    RefPtrWillBeRawPtr<HTMLTextAreaElement> protector(this);
     setValueCommon(value, eventBehavior);
     m_isDirty = true;
     setNeedsValidityCheck();
@@ -541,14 +541,14 @@ bool HTMLTextAreaElement::matchesReadWritePseudoClass() const
 void HTMLTextAreaElement::updatePlaceholderText()
 {
     HTMLElement* placeholder = placeholderElement();
-    String placeholderText = strippedPlaceholder();
+    const AtomicString& placeholderText = fastGetAttribute(placeholderAttr);
     if (placeholderText.isEmpty()) {
         if (placeholder)
             userAgentShadowRoot()->removeChild(placeholder);
         return;
     }
     if (!placeholder) {
-        RefPtr<HTMLDivElement> newElement = HTMLDivElement::create(document());
+        RefPtrWillBeRawPtr<HTMLDivElement> newElement = HTMLDivElement::create(document());
         placeholder = newElement.get();
         placeholder->setShadowPseudoId(AtomicString("-webkit-input-placeholder", AtomicString::ConstructFromLiteral));
         placeholder->setAttribute(idAttr, ShadowElementNames::placeholder());

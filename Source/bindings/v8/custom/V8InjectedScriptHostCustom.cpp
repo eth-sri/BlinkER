@@ -81,8 +81,8 @@ ScriptValue InjectedScriptHost::nodeAsScriptValue(ScriptState* scriptState, Node
 
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "nodeAsScriptValue", "InjectedScriptHost", v8::Handle<v8::Object>(), isolate);
     if (!BindingSecurity::shouldAllowAccessToNode(isolate, node, exceptionState))
-        return ScriptValue(v8::Null(isolate), isolate);
-    return ScriptValue(toV8(node, v8::Handle<v8::Object>(), isolate), isolate);
+        return ScriptValue(scriptState, v8::Null(isolate));
+    return ScriptValue(scriptState, toV8(node, v8::Handle<v8::Object>(), isolate));
 }
 
 void V8InjectedScriptHost::inspectedObjectMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -312,9 +312,9 @@ void V8InjectedScriptHost::inspectMethodCustom(const v8::FunctionCallbackInfo<v8
         return;
 
     InjectedScriptHost* host = V8InjectedScriptHost::toNative(info.Holder());
-    ScriptValue object(info[0], info.GetIsolate());
-    ScriptValue hints(info[1], info.GetIsolate());
     ScriptState* scriptState = ScriptState::current(info.GetIsolate());
+    ScriptValue object(scriptState, info[0]);
+    ScriptValue hints(scriptState, info[1]);
     host->inspectImpl(object.toJSONValue(scriptState), hints.toJSONValue(scriptState));
 }
 
@@ -332,7 +332,7 @@ void V8InjectedScriptHost::evaluateMethodCustom(const v8::FunctionCallbackInfo<v
         return;
     }
 
-    ASSERT(!isolate->GetCurrentContext().IsEmpty());
+    ASSERT(isolate->InContext());
     v8::TryCatch tryCatch;
     v8::Handle<v8::Value> result = V8ScriptRunner::compileAndRunInternalScript(expression, info.GetIsolate());
     if (tryCatch.HasCaught()) {

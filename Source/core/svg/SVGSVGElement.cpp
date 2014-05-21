@@ -62,7 +62,7 @@
 
 namespace WebCore {
 
-inline SVGSVGElement::SVGSVGElement(Document& doc)
+SVGSVGElement::SVGSVGElement(Document& doc)
     : SVGGraphicsElement(SVGNames::svgTag, doc)
     , SVGFitToViewBox(this)
     , m_x(SVGAnimatedLength::create(this, SVGNames::xAttr, SVGLength::create(LengthModeWidth), AllowNegativeLengths))
@@ -84,11 +84,6 @@ inline SVGSVGElement::SVGSVGElement(Document& doc)
     addToPropertyMap(m_height);
 
     UseCounter::count(doc, UseCounter::SVGSVGElement);
-}
-
-PassRefPtr<SVGSVGElement> SVGSVGElement::create(Document& document)
-{
-    return adoptRef(new SVGSVGElement(document));
 }
 
 SVGSVGElement::~SVGSVGElement()
@@ -212,10 +207,7 @@ void SVGSVGElement::setCurrentTranslate(const FloatPoint& point)
 void SVGSVGElement::updateCurrentTranslate()
 {
     if (RenderObject* object = renderer())
-        object->setNeedsLayout();
-
-    if (parentNode() == document() && document().renderer())
-        document().renderer()->repaint();
+        object->setNeedsLayoutAndFullRepaint();
 }
 
 void SVGSVGElement::parseAttribute(const QualifiedName& name, const AtomicString& value)
@@ -273,8 +265,9 @@ void SVGSVGElement::collectStyleForPresentationAttribute(const QualifiedName& na
 {
     if (isOutermostSVGSVGElement() && (name == SVGNames::widthAttr || name == SVGNames::heightAttr)) {
         RefPtr<SVGLength> length = SVGLength::create(LengthModeOther);
-        length->setValueAsString(value, IGNORE_EXCEPTION);
-        if (length->unitType() != LengthTypeUnknown) {
+        TrackExceptionState exceptionState;
+        length->setValueAsString(value, exceptionState);
+        if (!exceptionState.hadException()) {
             if (name == SVGNames::widthAttr)
                 addPropertyToPresentationAttributeStyle(style, CSSPropertyWidth, value);
             else if (name == SVGNames::heightAttr)
@@ -319,7 +312,7 @@ void SVGSVGElement::svgAttributeChanged(const QualifiedName& attrName)
             object->setNeedsTransformUpdate();
     }
 
-    SVGElementInstance::InvalidationGuard invalidationGuard(this);
+    SVGElement::InvalidationGuard invalidationGuard(this);
 
     if (updateRelativeLengthsOrViewBox
         || SVGZoomAndPan::isKnownAttribute(attrName)) {
@@ -381,7 +374,7 @@ bool SVGSVGElement::checkIntersectionOrEnclosure(const SVGElement& element, cons
     return result;
 }
 
-PassRefPtr<NodeList> SVGSVGElement::collectIntersectionOrEnclosureList(const FloatRect& rect,
+PassRefPtrWillBeRawPtr<NodeList> SVGSVGElement::collectIntersectionOrEnclosureList(const FloatRect& rect,
     SVGElement* referenceElement, CheckIntersectionOrEnclosure mode) const
 {
     Vector<RefPtr<Node> > nodes;
@@ -406,14 +399,14 @@ PassRefPtr<NodeList> SVGSVGElement::collectIntersectionOrEnclosureList(const Flo
     return StaticNodeList::adopt(nodes);
 }
 
-PassRefPtr<NodeList> SVGSVGElement::getIntersectionList(PassRefPtr<SVGRectTearOff> rect, SVGElement* referenceElement) const
+PassRefPtrWillBeRawPtr<NodeList> SVGSVGElement::getIntersectionList(PassRefPtr<SVGRectTearOff> rect, SVGElement* referenceElement) const
 {
     document().updateLayoutIgnorePendingStylesheets();
 
     return collectIntersectionOrEnclosureList(rect->target()->value(), referenceElement, CheckIntersection);
 }
 
-PassRefPtr<NodeList> SVGSVGElement::getEnclosureList(PassRefPtr<SVGRectTearOff> rect, SVGElement* referenceElement) const
+PassRefPtrWillBeRawPtr<NodeList> SVGSVGElement::getEnclosureList(PassRefPtr<SVGRectTearOff> rect, SVGElement* referenceElement) const
 {
     document().updateLayoutIgnorePendingStylesheets();
 
@@ -771,6 +764,19 @@ void SVGSVGElement::inheritViewAttributes(SVGViewElement* viewElement)
         view->setZoomAndPan(viewElement->zoomAndPan());
     else
         view->setZoomAndPan(zoomAndPan());
+}
+
+void SVGSVGElement::finishParsingChildren()
+{
+    SVGGraphicsElement::finishParsingChildren();
+
+    // The outermost SVGSVGElement SVGLoad event is fired through Document::dispatchWindowLoadEvent.
+    if (isOutermostSVGSVGElement())
+        return;
+
+    // finishParsingChildren() is called when the close tag is reached for an element (e.g. </svg>)
+    // we send SVGLoad events here if we can, otherwise they'll be sent when any required loads finish
+    sendSVGLoadEventIfPossible();
 }
 
 }

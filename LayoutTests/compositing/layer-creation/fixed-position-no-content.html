@@ -20,8 +20,9 @@
   </style>
 
   <script type="text/javascript">
-    if (window.internals)
+    if (window.internals) {
       window.internals.settings.setAcceleratedCompositingForFixedPositionEnabled(true);
+    }
 
     if (window.testRunner) {
       testRunner.dumpAsText();

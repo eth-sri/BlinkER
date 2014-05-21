@@ -195,11 +195,6 @@ void WebRuntimeFeatures::enableSessionStorage(bool enable)
     RuntimeEnabledFeatures::setSessionStorageEnabled(enable);
 }
 
-void WebRuntimeFeatures::enableSpeechInput(bool enable)
-{
-    RuntimeEnabledFeatures::setSpeechInputEnabled(enable);
-}
-
 void WebRuntimeFeatures::enableSpeechSynthesis(bool enable)
 {
     RuntimeEnabledFeatures::setSpeechSynthesisEnabled(enable);
@@ -284,6 +279,11 @@ void WebRuntimeFeatures::enableTargetedStyleRecalc(bool enable)
 void WebRuntimeFeatures::enablePreciseMemoryInfo(bool enable)
 {
     RuntimeEnabledFeatures::setPreciseMemoryInfoEnabled(enable);
+}
+
+void WebRuntimeFeatures::enableLayerSquashing(bool enable)
+{
+    RuntimeEnabledFeatures::setLayerSquashingEnabled(enable);
 }
 
 } // namespace blink

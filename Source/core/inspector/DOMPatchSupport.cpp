@@ -97,7 +97,7 @@ void DOMPatchSupport::patchDocument(const String& markup)
     if (m_document.isHTMLDocument())
         parser = HTMLDocumentParser::create(toHTMLDocument(newDocument.get()), false);
     else
-        parser = XMLDocumentParser::create(newDocument.get(), 0);
+        parser = XMLDocumentParser::create(*newDocument, 0);
     parser->insert(markup); // Use insert() so that the parser will not yield.
     parser->finish();
     parser->detach();
@@ -121,7 +121,7 @@ Node* DOMPatchSupport::patchNode(Node* node, const String& markup, ExceptionStat
     }
 
     Node* previousSibling = node->previousSibling();
-    RefPtr<DocumentFragment> fragment = DocumentFragment::create(m_document);
+    RefPtrWillBeRawPtr<DocumentFragment> fragment = DocumentFragment::create(m_document);
     Node* targetNode = node->parentElementOrShadowRoot() ? node->parentElementOrShadowRoot() : m_document.documentElement();
 
     // Use the document BODY as the context element when editing immediate shadow root children,

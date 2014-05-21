@@ -528,7 +528,7 @@ int UseCounter::mapCSSPropertyIdToCSSSampleIdForHistogram(int id)
     return 0;
 }
 
-static int maximumCSSSampleId() { return 451; }
+static int maximumCSSSampleId() { return 453; }
 
 void UseCounter::muteForInspector()
 {
@@ -681,9 +681,6 @@ String UseCounter::deprecationMessage(Feature feature)
 
     case MediaErrorEncrypted:
         return "'MediaError.MEDIA_ERR_ENCRYPTED' is deprecated. This error code is never used.";
-
-    case PrefixedSpeechAttribute:
-        return "The 'x-webkit-speech' input field attribute is deprecated. Please use the JavaScript API instead.";
 
     case PrefixedGamepad:
         return "'navigator.webkitGetGamepads' is deprecated. Please use 'navigator.getGamepads' instead.";

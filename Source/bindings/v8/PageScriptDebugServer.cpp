@@ -187,6 +187,7 @@ void PageScriptDebugServer::runScript(ScriptState* scriptState, const String& sc
     ExecutionContext* executionContext = scriptState->executionContext();
     LocalFrame* frame = toDocument(executionContext)->frame();
     TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "EvaluateScript", "data", InspectorEvaluateScriptEvent::data(frame, sourceURL, TextPosition::minimumPosition().m_line.oneBasedInt()));
+    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline.stack"), "CallStack", "stack", InspectorCallStackEvent::currentCallStack());
     // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentationCookie cookie;
     if (frame)
@@ -197,6 +198,7 @@ void PageScriptDebugServer::runScript(ScriptState* scriptState, const String& sc
 
     if (frame)
         InspectorInstrumentation::didEvaluateScript(cookie);
+    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "UpdateCounters", "data", InspectorUpdateCountersEvent::data());
 }
 
 ScriptDebugListener* PageScriptDebugServer::getDebugListenerForContext(v8::Handle<v8::Context> context)

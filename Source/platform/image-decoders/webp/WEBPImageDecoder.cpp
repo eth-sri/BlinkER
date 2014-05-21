@@ -55,6 +55,7 @@ WEBPImageDecoder::WEBPImageDecoder(ImageSource::AlphaOption alphaOption,
     , m_decoder(0)
     , m_formatFlags(0)
     , m_frameBackgroundHasAlpha(false)
+    , m_hasColorProfile(false)
 #if USE(QCMSLIB)
     , m_haveReadProfile(false)
     , m_transform(0)
@@ -212,6 +213,10 @@ bool WEBPImageDecoder::updateDemuxer()
         hasAnimation = (m_formatFlags & ANIMATION_FLAG);
         if (!hasAnimation)
             m_repetitionCount = cAnimationNone;
+#if USE(QCMSLIB)
+        if ((m_formatFlags & ICCP_FLAG) && !ignoresGammaAndColorProfile())
+            m_hasColorProfile = true;
+#endif
         if (!setSize(WebPDemuxGetI(m_demux, WEBP_FF_CANVAS_WIDTH), WebPDemuxGetI(m_demux, WEBP_FF_CANVAS_HEIGHT)))
             return setFailed();
     }
@@ -224,8 +229,12 @@ bool WEBPImageDecoder::updateDemuxer()
         // This is because ANIM chunk always precedes ANMF chunks.
         m_repetitionCount = WebPDemuxGetI(m_demux, WEBP_FF_LOOP_COUNT);
         ASSERT(m_repetitionCount == (m_repetitionCount & 0xffff)); // Loop count is always <= 16 bits.
-        if (!m_repetitionCount)
-            m_repetitionCount = cAnimationLoopInfinite;
+        // |m_repetitionCount| is the total number of animation cycles to show,
+        // with 0 meaning "infinite". But ImageSource::repetitionCount()
+        // returns -1 for "infinite", and 0 and up for "show the animation one
+        // cycle more than this value". By subtracting one here, we convert
+        // both finite and infinite cases correctly.
+        --m_repetitionCount;
         m_haveReadAnimationParameters = true;
     }
 

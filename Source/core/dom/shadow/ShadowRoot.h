@@ -55,9 +55,9 @@ public:
         AuthorShadowRoot
     };
 
-    static PassRefPtr<ShadowRoot> create(Document& document, ShadowRootType type)
+    static PassRefPtrWillBeRawPtr<ShadowRoot> create(Document& document, ShadowRootType type)
     {
-        return adoptRef(new ShadowRoot(document, type));
+        return adoptRefWillBeRefCountedGarbageCollected(new ShadowRoot(document, type));
     }
 
     void recalcStyle(StyleRecalcChange);
@@ -97,11 +97,11 @@ public:
     unsigned childShadowRootCount() const;
 
     HTMLShadowElement* shadowInsertionPointOfYoungerShadowRoot() const;
-    void setShadowInsertionPointOfYoungerShadowRoot(PassRefPtr<HTMLShadowElement>);
+    void setShadowInsertionPointOfYoungerShadowRoot(PassRefPtrWillBeRawPtr<HTMLShadowElement>);
 
     void didAddInsertionPoint(InsertionPoint*);
     void didRemoveInsertionPoint(InsertionPoint*);
-    const Vector<RefPtr<InsertionPoint> >& descendantInsertionPoints();
+    const WillBeHeapVector<RefPtrWillBeMember<InsertionPoint> >& descendantInsertionPoints();
 
     ShadowRootType type() const { return static_cast<ShadowRootType>(m_type); }
 
@@ -117,8 +117,8 @@ public:
     String innerHTML() const;
     void setInnerHTML(const String&, ExceptionState&);
 
-    PassRefPtr<Node> cloneNode(bool, ExceptionState&);
-    PassRefPtr<Node> cloneNode(ExceptionState& exceptionState) { return cloneNode(true, exceptionState); }
+    PassRefPtrWillBeRawPtr<Node> cloneNode(bool, ExceptionState&);
+    PassRefPtrWillBeRawPtr<Node> cloneNode(ExceptionState& exceptionState) { return cloneNode(true, exceptionState); }
 
     StyleSheetList* styleSheets();
 
@@ -128,7 +128,10 @@ private:
     ShadowRoot(Document&, ShadowRootType);
     virtual ~ShadowRoot();
 
+#if !ENABLE(OILPAN)
     virtual void dispose() OVERRIDE;
+#endif
+
     virtual void childrenChanged(bool changedByParser, Node* beforeChange, Node* afterChange, int childCountDelta) OVERRIDE;
 
     ShadowRootRareData* ensureShadowRootRareData();
@@ -138,13 +141,13 @@ private:
     void invalidateDescendantInsertionPoints();
 
     // ShadowRoots should never be cloned.
-    virtual PassRefPtr<Node> cloneNode(bool) OVERRIDE { return nullptr; }
+    virtual PassRefPtrWillBeRawPtr<Node> cloneNode(bool) OVERRIDE { return nullptr; }
 
     // FIXME: This shouldn't happen. https://bugs.webkit.org/show_bug.cgi?id=88834
     bool isOrphan() const { return !host(); }
 
-    ShadowRoot* m_prev;
-    ShadowRoot* m_next;
+    RawPtrWillBeMember<ShadowRoot> m_prev;
+    RawPtrWillBeMember<ShadowRoot> m_next;
     OwnPtrWillBeMember<ShadowRootRareData> m_shadowRootRareData;
     unsigned m_numberOfStyles : 27;
     unsigned m_type : 1;

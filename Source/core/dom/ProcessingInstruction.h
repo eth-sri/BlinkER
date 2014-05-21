@@ -34,8 +34,9 @@ class CSSStyleSheet;
 
 class ProcessingInstruction FINAL : public CharacterData, private ResourceOwner<StyleSheetResource> {
 public:
-    static PassRefPtr<ProcessingInstruction> create(Document&, const String& target, const String& data);
+    static PassRefPtrWillBeRawPtr<ProcessingInstruction> create(Document&, const String& target, const String& data);
     virtual ~ProcessingInstruction();
+    virtual void trace(Visitor*) OVERRIDE;
 
     const String& target() const { return m_target; }
 
@@ -56,7 +57,7 @@ private:
 
     virtual String nodeName() const OVERRIDE;
     virtual NodeType nodeType() const OVERRIDE;
-    virtual PassRefPtr<Node> cloneNode(bool deep = true) OVERRIDE;
+    virtual PassRefPtrWillBeRawPtr<Node> cloneNode(bool deep = true) OVERRIDE;
 
     virtual InsertionNotificationRequest insertedInto(ContainerNode*) OVERRIDE;
     virtual void removedFrom(ContainerNode*) OVERRIDE;
@@ -75,7 +76,7 @@ private:
     String m_localHref;
     String m_title;
     String m_media;
-    RefPtrWillBePersistent<StyleSheet> m_sheet;
+    RefPtrWillBeMember<StyleSheet> m_sheet;
     bool m_loading;
     bool m_alternate;
     bool m_createdByParser;

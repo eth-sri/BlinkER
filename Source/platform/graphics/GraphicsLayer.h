@@ -97,6 +97,7 @@ public:
 
     void setCompositingReasons(CompositingReasons);
     CompositingReasons compositingReasons() const { return m_debugInfo.compositingReasons(); }
+    void setOwnerNodeId(int);
 
     GraphicsLayer* parent() const { return m_parent; };
     void setParent(GraphicsLayer*); // Internal use only.
@@ -204,9 +205,6 @@ public:
 
     bool isRootForIsolatedGroup() const { return m_isRootForIsolatedGroup; }
     void setIsRootForIsolatedGroup(bool);
-
-    bool hasGpuRasterizationHint() const { return m_hasGpuRasterizationHint; }
-    void setHasGpuRasterizationHint(bool);
 
     const FilterOperations& filters() const { return m_filters; }
 
@@ -362,7 +360,6 @@ private:
     bool m_drawsContent : 1;
     bool m_contentsVisible : 1;
     bool m_isRootForIsolatedGroup : 1;
-    bool m_hasGpuRasterizationHint: 1;
 
     bool m_hasScrollParent : 1;
     bool m_hasClipParent : 1;

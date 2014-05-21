@@ -98,9 +98,9 @@ private:
     }
 
 public:
-    static PassRefPtr<DataListIndicatorElement> create(Document& document)
+    static PassRefPtrWillBeRawPtr<DataListIndicatorElement> create(Document& document)
     {
-        RefPtr<DataListIndicatorElement> element = adoptRef(new DataListIndicatorElement(document));
+        RefPtrWillBeRawPtr<DataListIndicatorElement> element = adoptRefWillBeRefCountedGarbageCollected(new DataListIndicatorElement(document));
         element->setShadowPseudoId(AtomicString("-webkit-calendar-picker-indicator", AtomicString::ConstructFromLiteral));
         element->setAttribute(idAttr, ShadowElementNames::pickerIndicator());
         return element.release();
@@ -115,8 +115,10 @@ TextFieldInputType::TextFieldInputType(HTMLInputElement& element)
 
 TextFieldInputType::~TextFieldInputType()
 {
+#if !ENABLE(OILPAN)
     if (SpinButtonElement* spinButton = spinButtonElement())
         spinButton->removeSpinButtonOwner();
+#endif
 }
 
 SpinButtonElement* TextFieldInputType::spinButtonElement() const
@@ -230,9 +232,10 @@ void TextFieldInputType::forwardEvent(Event* event)
             if (RenderBox* innerTextRenderer = element().innerTextElement()->renderBox()) {
                 // FIXME: This class has no need to know about RenderLayer!
                 if (RenderLayer* innerLayer = innerTextRenderer->layer()) {
-                    RenderLayerScrollableArea* innerScrollableArea = innerLayer->scrollableArea();
-                    IntSize scrollOffset(!renderTextControl->style()->isLeftToRightDirection() ? innerScrollableArea->scrollWidth() : 0, 0);
-                    innerScrollableArea->scrollToOffset(scrollOffset, ScrollOffsetClamped);
+                    if (RenderLayerScrollableArea* innerScrollableArea = innerLayer->scrollableArea()) {
+                        IntSize scrollOffset(!renderTextControl->style()->isLeftToRightDirection() ? innerScrollableArea->scrollWidth() : 0, 0);
+                        innerScrollableArea->scrollToOffset(scrollOffset, ScrollOffsetClamped);
+                    }
                 }
             }
 
@@ -269,15 +272,6 @@ RenderObject* TextFieldInputType::createRenderer(RenderStyle*) const
     return new RenderTextControlSingleLine(&element());
 }
 
-bool TextFieldInputType::needsContainer() const
-{
-#if ENABLE(INPUT_SPEECH)
-    return element().isSpeechEnabled();
-#else
-    return false;
-#endif
-}
-
 bool TextFieldInputType::shouldHaveSpinButton() const
 {
     return RenderTheme::theme().shouldHaveSpinButton(&element());
@@ -294,24 +288,19 @@ void TextFieldInputType::createShadowSubtree()
     bool shouldHaveDataListIndicator = element().hasValidDataListOptions();
     bool createsContainer = shouldHaveSpinButton || shouldHaveDataListIndicator || needsContainer();
 
-    RefPtr<TextControlInnerTextElement> innerEditor = TextControlInnerTextElement::create(document);
+    RefPtrWillBeRawPtr<TextControlInnerTextElement> innerEditor = TextControlInnerTextElement::create(document);
     if (!createsContainer) {
         shadowRoot->appendChild(innerEditor.release());
         return;
     }
 
-    RefPtr<TextControlInnerContainer> container = TextControlInnerContainer::create(document);
+    RefPtrWillBeRawPtr<TextControlInnerContainer> container = TextControlInnerContainer::create(document);
     container->setShadowPseudoId(AtomicString("-webkit-textfield-decoration-container", AtomicString::ConstructFromLiteral));
     shadowRoot->appendChild(container);
 
-    RefPtr<EditingViewPortElement> editingViewPort = EditingViewPortElement::create(document);
+    RefPtrWillBeRawPtr<EditingViewPortElement> editingViewPort = EditingViewPortElement::create(document);
     editingViewPort->appendChild(innerEditor.release());
     container->appendChild(editingViewPort.release());
-
-#if ENABLE(INPUT_SPEECH)
-    if (element().isSpeechEnabled())
-        container->appendChild(InputFieldSpeechButtonElement::create(document));
-#endif
 
     if (shouldHaveDataListIndicator)
         container->appendChild(DataListIndicatorElement::create(document));
@@ -351,11 +340,11 @@ void TextFieldInputType::listAttributeTargetChanged()
             // FIXME: The following code is similar to createShadowSubtree(),
             // but they are different. We should simplify the code by making
             // containerElement mandatory.
-            RefPtr<Element> rpContainer = TextControlInnerContainer::create(document);
+            RefPtrWillBeRawPtr<Element> rpContainer = TextControlInnerContainer::create(document);
             rpContainer->setShadowPseudoId(AtomicString("-webkit-textfield-decoration-container", AtomicString::ConstructFromLiteral));
-            RefPtr<Element> innerEditor = element().innerTextElement();
+            RefPtrWillBeRawPtr<Element> innerEditor = element().innerTextElement();
             innerEditor->parentNode()->replaceChild(rpContainer.get(), innerEditor.get());
-            RefPtr<Element> editingViewPort = EditingViewPortElement::create(document);
+            RefPtrWillBeRawPtr<Element> editingViewPort = EditingViewPortElement::create(document);
             editingViewPort->appendChild(innerEditor.release());
             rpContainer->appendChild(editingViewPort.release());
             rpContainer->appendChild(DataListIndicatorElement::create(document));

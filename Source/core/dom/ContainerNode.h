@@ -103,13 +103,13 @@ public:
     bool hasOneTextChild() const { return hasOneChild() && m_firstChild->isTextNode(); }
     bool hasChildCount(unsigned) const;
 
-    PassRefPtr<HTMLCollection> children();
+    PassRefPtrWillBeRawPtr<HTMLCollection> children();
 
     unsigned countChildren() const;
     Node* traverseToChildAt(unsigned index) const;
 
     PassRefPtr<Element> querySelector(const AtomicString& selectors, ExceptionState&);
-    PassRefPtr<NodeList> querySelectorAll(const AtomicString& selectors, ExceptionState&);
+    PassRefPtrWillBeRawPtr<NodeList> querySelectorAll(const AtomicString& selectors, ExceptionState&);
 
     void insertBefore(PassRefPtr<Node> newChild, Node* refChild, ExceptionState& = ASSERT_NO_EXCEPTION);
     void replaceChild(PassRefPtr<Node> newChild, Node* oldChild, ExceptionState& = ASSERT_NO_EXCEPTION);
@@ -117,11 +117,11 @@ public:
     void appendChild(PassRefPtr<Node> newChild, ExceptionState& = ASSERT_NO_EXCEPTION);
 
     Element* getElementById(const AtomicString& id) const;
-    PassRefPtr<HTMLCollection> getElementsByTagName(const AtomicString&);
-    PassRefPtr<HTMLCollection> getElementsByTagNameNS(const AtomicString& namespaceURI, const AtomicString& localName);
-    PassRefPtr<NodeList> getElementsByName(const AtomicString& elementName);
-    PassRefPtr<HTMLCollection> getElementsByClassName(const AtomicString& classNames);
-    PassRefPtr<RadioNodeList> radioNodeList(const AtomicString&, bool onlyMatchImgElements = false);
+    PassRefPtrWillBeRawPtr<HTMLCollection> getElementsByTagName(const AtomicString&);
+    PassRefPtrWillBeRawPtr<HTMLCollection> getElementsByTagNameNS(const AtomicString& namespaceURI, const AtomicString& localName);
+    PassRefPtrWillBeRawPtr<NodeList> getElementsByName(const AtomicString& elementName);
+    PassRefPtrWillBeRawPtr<HTMLCollection> getElementsByClassName(const AtomicString& classNames);
+    PassRefPtrWillBeRawPtr<RadioNodeList> radioNodeList(const AtomicString&, bool onlyMatchImgElements = false);
 
     // These methods are only used during parsing.
     // They don't send DOM mutation events or handle reparenting.
@@ -190,6 +190,8 @@ public:
 
     void disconnectDescendantFrames();
 
+    virtual void trace(Visitor*) OVERRIDE;
+
 protected:
     ContainerNode(TreeScope*, ConstructionType = CreateContainer);
 
@@ -199,7 +201,10 @@ protected:
     template<class GenericNode, class GenericNodeContainer>
     friend void Private::addChildNodesToDeletionQueue(GenericNode*& head, GenericNode*& tail, GenericNodeContainer&);
 
+#if !ENABLE(OILPAN)
     void removeDetachedChildren();
+#endif
+
     void setFirstChild(Node* child) { m_firstChild = child; }
     void setLastChild(Node* child) { m_lastChild = child; }
 
@@ -227,8 +232,8 @@ private:
     bool getUpperLeftCorner(FloatPoint&) const;
     bool getLowerRightCorner(FloatPoint&) const;
 
-    Node* m_firstChild;
-    Node* m_lastChild;
+    RawPtrWillBeMember<Node> m_firstChild;
+    RawPtrWillBeMember<Node> m_lastChild;
 };
 
 #ifndef NDEBUG
@@ -249,8 +254,8 @@ inline bool ContainerNode::hasChildCount(unsigned count) const
 
 inline ContainerNode::ContainerNode(TreeScope* treeScope, ConstructionType type)
     : Node(treeScope, type)
-    , m_firstChild(0)
-    , m_lastChild(0)
+    , m_firstChild(nullptr)
+    , m_lastChild(nullptr)
 {
 }
 
@@ -316,6 +321,12 @@ inline ContainerNode* Node::parentElementOrShadowRoot() const
 {
     ContainerNode* parent = parentNode();
     return parent && (parent->isElementNode() || parent->isShadowRoot()) ? parent : 0;
+}
+
+inline ContainerNode* Node::parentElementOrDocumentFragment() const
+{
+    ContainerNode* parent = parentNode();
+    return parent && (parent->isElementNode() || parent->isDocumentFragment()) ? parent : 0;
 }
 
 // This constant controls how much buffer is initially allocated

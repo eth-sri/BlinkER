@@ -31,7 +31,7 @@
 
 namespace WebCore {
 
-inline SVGFESpecularLightingElement::SVGFESpecularLightingElement(Document& document)
+SVGFESpecularLightingElement::SVGFESpecularLightingElement(Document& document)
     : SVGFilterPrimitiveStandardAttributes(SVGNames::feSpecularLightingTag, document)
     , m_specularConstant(SVGAnimatedNumber::create(this, SVGNames::specularConstantAttr, SVGNumber::create(1)))
     , m_specularExponent(SVGAnimatedNumber::create(this, SVGNames::specularExponentAttr, SVGNumber::create(1)))
@@ -46,11 +46,6 @@ inline SVGFESpecularLightingElement::SVGFESpecularLightingElement(Document& docu
     addToPropertyMap(m_surfaceScale);
     addToPropertyMap(m_kernelUnitLength);
     addToPropertyMap(m_in1);
-}
-
-PassRefPtr<SVGFESpecularLightingElement> SVGFESpecularLightingElement::create(Document& document)
-{
-    return adoptRef(new SVGFESpecularLightingElement(document));
 }
 
 bool SVGFESpecularLightingElement::isSupportedAttribute(const QualifiedName& attrName)
@@ -145,7 +140,7 @@ void SVGFESpecularLightingElement::svgAttributeChanged(const QualifiedName& attr
         return;
     }
 
-    SVGElementInstance::InvalidationGuard invalidationGuard(this);
+    SVGElement::InvalidationGuard invalidationGuard(this);
 
     if (attrName == SVGNames::surfaceScaleAttr
         || attrName == SVGNames::specularConstantAttr

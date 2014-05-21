@@ -32,10 +32,11 @@
 #include "core/dom/FullscreenElementStack.h"
 #include "core/dom/Node.h"
 #include "core/dom/WheelController.h"
-#include "core/html/HTMLElement.h"
+#include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
+#include "core/html/HTMLElement.h"
 #include "core/page/Page.h"
 #include "core/plugins/PluginView.h"
 #include "core/rendering/RenderGeometryMap.h"
@@ -348,8 +349,9 @@ bool ScrollingCoordinator::scrollableAreaScrollLayerDidChange(ScrollableArea* sc
     GraphicsLayer* scrollLayer = scrollableArea->layerForScrolling();
 
     if (scrollLayer) {
+        ASSERT(m_page);
         // With pinch virtual viewport we no longer need to special case the main frame.
-        bool pinchVirtualViewportEnabled = m_page->mainFrame()->document()->settings()->pinchVirtualViewportEnabled();
+        bool pinchVirtualViewportEnabled = m_page->settings().pinchVirtualViewportEnabled();
         bool layerScrollShouldFireGraphicsLayerDidScroll = isForMainFrame(scrollableArea) && !pinchVirtualViewportEnabled;
         scrollLayer->setScrollableArea(scrollableArea, layerScrollShouldFireGraphicsLayerDidScroll);
     }
@@ -618,7 +620,7 @@ void ScrollingCoordinator::touchEventTargetRectsDidChange()
         return;
 
     // Wait until after layout to update.
-    if (m_page->mainFrame()->view()->needsLayout())
+    if (!m_page->mainFrame()->view() || m_page->mainFrame()->view()->needsLayout())
         return;
 
     // FIXME: scheduleAnimation() is just a method of forcing the compositor to realize that it
@@ -657,6 +659,8 @@ void ScrollingCoordinator::updateHaveWheelEventHandlers()
 {
     ASSERT(isMainThread());
     ASSERT(m_page);
+    if (!m_page->mainFrame()->view())
+        return;
 
     if (WebLayer* scrollLayer = toWebLayer(m_page->mainFrame()->view()->layerForScrolling())) {
         unsigned wheelEventHandlerCount = 0;
@@ -673,13 +677,14 @@ void ScrollingCoordinator::updateHaveScrollEventHandlers()
 {
     ASSERT(isMainThread());
     ASSERT(m_page);
+    if (!m_page->mainFrame()->view())
+        return;
 
     // Currently the compositor only cares whether there are scroll handlers anywhere on the page
     // instead on a per-layer basis. We therefore only update this information for the root
     // scrolling layer.
     if (WebLayer* scrollLayer = toWebLayer(m_page->mainFrame()->view()->layerForScrolling())) {
-        // TODO(skyostil): Hook this up.
-        bool haveHandlers = false;
+        bool haveHandlers = m_page->frameHost().eventHandlerRegistry().hasEventHandlers(EventHandlerRegistry::ScrollEvent);
         scrollLayer->setHaveScrollEventHandlers(haveHandlers);
     }
 }
@@ -759,7 +764,7 @@ Region ScrollingCoordinator::computeShouldHandleScrollGestureOnMainThreadRegion(
             if (!(*it)->isPluginView())
                 continue;
 
-            PluginView* pluginView = toPluginView((*it).get());
+            PluginView* pluginView = toPluginView(it->get());
             if (pluginView->wantsWheelEvents())
                 shouldHandleScrollGestureOnMainThreadRegion.unite(pluginView->frameRect());
         }

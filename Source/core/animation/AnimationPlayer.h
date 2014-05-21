@@ -37,22 +37,18 @@
 
 namespace WebCore {
 
-class DocumentTimeline;
+class AnimationTimeline;
 class ExceptionState;
 
-class AnimationPlayer FINAL : public RefCounted<AnimationPlayer>, public EventTargetWithInlineData {
-    REFCOUNTED_EVENT_TARGET(AnimationPlayer);
+class AnimationPlayer FINAL : public RefCountedWillBeRefCountedGarbageCollected<AnimationPlayer>, public EventTargetWithInlineData {
+    DEFINE_EVENT_TARGET_REFCOUNTING(RefCountedWillBeRefCountedGarbageCollected<AnimationPlayer>);
 public:
-    enum UpdateReason {
-        UpdateOnDemand,
-        UpdateForAnimationFrame
-    };
 
     ~AnimationPlayer();
-    static PassRefPtr<AnimationPlayer> create(DocumentTimeline&, TimedItem*);
+    static PassRefPtrWillBeRawPtr<AnimationPlayer> create(AnimationTimeline&, TimedItem*);
 
     // Returns whether the player is finished.
-    bool update(UpdateReason);
+    bool update(TimingUpdateReason);
 
     // timeToEffectChange returns:
     //  infinity  - if this player is no longer in effect
@@ -74,6 +70,9 @@ public:
     void reverse();
     void finish(ExceptionState&);
     bool finished() { return limited(currentTimeInternal()); }
+    // FIXME: Resolve whether finished() should just return the flag, and
+    // remove this method.
+    bool finishedInternal() const { return m_finished; }
 
     DEFINE_ATTRIBUTE_EVENT_LISTENER(finish);
 
@@ -82,10 +81,12 @@ public:
 
     double playbackRate() const { return m_playbackRate; }
     void setPlaybackRate(double);
-    const DocumentTimeline* timeline() const { return m_timeline; }
-    DocumentTimeline* timeline() { return m_timeline; }
+    const AnimationTimeline* timeline() const { return m_timeline; }
+    AnimationTimeline* timeline() { return m_timeline; }
 
-    void timelineDestroyed() { m_timeline = 0; }
+#if !ENABLE(OILPAN)
+    void timelineDestroyed() { m_timeline = nullptr; }
+#endif
 
     bool hasStartTime() const { return !isNull(m_startTime); }
     double startTime() const { return m_startTime * 1000; }
@@ -125,7 +126,8 @@ public:
         SortInfo(unsigned sequenceNumber, double startTime)
             : m_sequenceNumber(sequenceNumber)
             , m_startTime(startTime)
-        { }
+        {
+        }
         unsigned m_sequenceNumber;
         double m_startTime;
     };
@@ -137,14 +139,18 @@ public:
         return player1->sortInfo() < player2->sortInfo();
     }
 
+#if !ENABLE(OILPAN)
     // Checks if the AnimationStack is the last reference holder to the Player.
     // This won't be needed when AnimationPlayer is moved to Oilpan.
     bool canFree() const;
+#endif
 
     virtual bool addEventListener(const AtomicString& eventType, PassRefPtr<EventListener>, bool useCapture = false) OVERRIDE;
 
+    void trace(Visitor*);
+
 private:
-    AnimationPlayer(DocumentTimeline&, TimedItem*);
+    AnimationPlayer(AnimationTimeline&, TimedItem*);
     double sourceEnd() const;
     bool limited(double currentTime) const;
     double currentTimeWithoutLag() const;
@@ -159,10 +165,8 @@ private:
 
     SortInfo m_sortInfo;
 
-    RefPtr<TimedItem> m_content;
-    // FIXME: We should keep the timeline alive and have this as non-null
-    // but this is tricky to do without Oilpan
-    DocumentTimeline* m_timeline;
+    RefPtrWillBeMember<TimedItem> m_content;
+    RawPtrWillBeMember<AnimationTimeline> m_timeline;
     // Reflects all pausing, including via pauseForTesting().
     bool m_paused;
     bool m_held;

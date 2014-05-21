@@ -30,16 +30,11 @@
 
 namespace WebCore {
 
-inline SVGMPathElement::SVGMPathElement(Document& document)
+SVGMPathElement::SVGMPathElement(Document& document)
     : SVGElement(SVGNames::mpathTag, document)
     , SVGURIReference(this)
 {
     ScriptWrappable::init(this);
-}
-
-PassRefPtr<SVGMPathElement> SVGMPathElement::create(Document& document)
-{
-    return adoptRef(new SVGMPathElement(document));
 }
 
 SVGMPathElement::~SVGMPathElement()
@@ -126,7 +121,7 @@ void SVGMPathElement::svgAttributeChanged(const QualifiedName& attrName)
         return;
     }
 
-    SVGElementInstance::InvalidationGuard invalidationGuard(this);
+    SVGElement::InvalidationGuard invalidationGuard(this);
 
     if (SVGURIReference::isKnownAttribute(attrName)) {
         buildPendingResource();

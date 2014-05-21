@@ -50,7 +50,7 @@
 
 namespace WebCore {
 
-inline SVGPathElement::SVGPathElement(Document& document)
+SVGPathElement::SVGPathElement(Document& document)
     : SVGGeometryElement(SVGNames::pathTag, document)
     , m_pathLength(SVGAnimatedNumber::create(this, SVGNames::pathLengthAttr, SVGNumber::create()))
     , m_pathSegList(SVGAnimatedPath::create(this, SVGNames::dAttr))
@@ -59,11 +59,6 @@ inline SVGPathElement::SVGPathElement(Document& document)
 
     addToPropertyMap(m_pathLength);
     addToPropertyMap(m_pathSegList);
-}
-
-PassRefPtr<SVGPathElement> SVGPathElement::create(Document& document)
-{
-    return adoptRef(new SVGPathElement(document));
 }
 
 float SVGPathElement::getTotalLength()
@@ -221,7 +216,7 @@ void SVGPathElement::svgAttributeChanged(const QualifiedName& attrName)
         return;
     }
 
-    SVGElementInstance::InvalidationGuard invalidationGuard(this);
+    SVGElement::InvalidationGuard invalidationGuard(this);
 
     RenderSVGPath* renderer = toRenderSVGPath(this->renderer());
 

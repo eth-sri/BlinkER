@@ -130,14 +130,8 @@ struct FinalizerTraitImpl<T, false> {
 // behavior is not desired.
 template<typename T>
 struct FinalizerTrait {
-    static const bool nonTrivialFinalizer = WTF::IsSubclassOfTemplate<T, GarbageCollectedFinalized>::value;
+    static const bool nonTrivialFinalizer = WTF::IsSubclassOfTemplate<typename WTF::RemoveConst<T>::Type, GarbageCollectedFinalized>::value;
     static void finalize(void* obj) { FinalizerTraitImpl<T, nonTrivialFinalizer>::finalize(obj); }
-};
-
-// The VTableTrait is used to determine if a type has at least one virtual method.
-template<typename T>
-struct VTableTrait {
-    static const bool hasVTable = __is_polymorphic(T);
 };
 
 // Trait to get the GCInfo structure for types that have their
@@ -146,7 +140,7 @@ template<typename T> struct GCInfoTrait;
 
 template<typename T> class GarbageCollected;
 class GarbageCollectedMixin;
-template<typename T, bool = WTF::IsSubclassOfTemplate<T, GarbageCollected>::value> class NeedsAdjustAndMark;
+template<typename T, bool = WTF::IsSubclassOfTemplate<typename WTF::RemoveConst<T>::Type, GarbageCollected>::value> class NeedsAdjustAndMark;
 
 template<typename T>
 class NeedsAdjustAndMark<T, true> {
@@ -157,7 +151,7 @@ public:
 template<typename T>
 class NeedsAdjustAndMark<T, false> {
 public:
-    static const bool value = WTF::IsSubclass<T, GarbageCollectedMixin>::value;
+    static const bool value = WTF::IsSubclass<typename WTF::RemoveConst<T>::Type, GarbageCollectedMixin>::value;
 };
 
 template<typename T, bool = NeedsAdjustAndMark<T>::value> class DefaultTraceTrait;
@@ -268,7 +262,7 @@ public:
         const_cast<T&>(t).trace(this);
     }
 
-    // The following mark methods are for off-heap collections.
+    // The following trace methods are for off-heap collections.
     template<typename T, size_t inlineCapacity>
     void trace(const Vector<T, inlineCapacity, WTF::DefaultAllocator>& vector)
     {
@@ -361,6 +355,7 @@ public:
     // mark method above to automatically provide the callback
     // function.
     virtual void mark(const void*, TraceCallback) = 0;
+    virtual void markNoTracing(const void* pointer) { mark(pointer, reinterpret_cast<TraceCallback>(0)); }
 
     // Used to mark objects during conservative scanning.
     virtual void mark(HeapObjectHeader*, TraceCallback) = 0;
@@ -474,14 +469,14 @@ struct OffHeapCollectionTraceTrait<WTF::HashSet<T, HashFunctions, Traits, WTF::D
         if (WTF::ShouldBeTraced<Traits>::value) {
             HashSet& iterSet = const_cast<HashSet&>(set);
             for (typename HashSet::iterator it = iterSet.begin(), end = iterSet.end(); it != end; ++it)
-                CollectionBackingTraceTrait<WTF::ShouldBeTraced<Traits>::value, Traits::isWeak, WeakPointersActWeak, T, Traits>::mark(visitor, *it);
+                CollectionBackingTraceTrait<WTF::ShouldBeTraced<Traits>::value, Traits::isWeak, WeakPointersActWeak, T, Traits>::trace(visitor, *it);
         }
         COMPILE_ASSERT(!Traits::isWeak, WeakOffHeapCollectionsConsideredDangerous0);
     }
 };
 
 template<typename T, size_t inlineCapacity, typename HashFunctions>
-struct OffHeapCollectionTraceTrait<WTF::ListHashSet<T, inlineCapacity, HashFunctions> > {
+struct OffHeapCollectionTraceTrait<ListHashSet<T, inlineCapacity, HashFunctions> > {
     typedef WTF::ListHashSet<T, inlineCapacity, HashFunctions> ListHashSet;
 
     static void trace(Visitor* visitor, const ListHashSet& set)
@@ -519,8 +514,8 @@ struct OffHeapCollectionTraceTrait<WTF::HashMap<Key, Value, HashFunctions, KeyTr
         if (WTF::ShouldBeTraced<KeyTraits>::value || WTF::ShouldBeTraced<ValueTraits>::value) {
             HashMap& iterMap = const_cast<HashMap&>(map);
             for (typename HashMap::iterator it = iterMap.begin(), end = iterMap.end(); it != end; ++it) {
-                CollectionBackingTraceTrait<WTF::ShouldBeTraced<KeyTraits>::value, KeyTraits::isWeak, WeakPointersActWeak, Key, KeyTraits>::mark(visitor, it->key);
-                CollectionBackingTraceTrait<WTF::ShouldBeTraced<ValueTraits>::value, ValueTraits::isWeak, WeakPointersActWeak, Value, ValueTraits>::mark(visitor, it->value);
+                CollectionBackingTraceTrait<WTF::ShouldBeTraced<KeyTraits>::value, KeyTraits::isWeak, WeakPointersActWeak, typename HashMap::KeyType, KeyTraits>::trace(visitor, it->key);
+                CollectionBackingTraceTrait<WTF::ShouldBeTraced<ValueTraits>::value, ValueTraits::isWeak, WeakPointersActWeak, typename HashMap::MappedType, ValueTraits>::trace(visitor, it->value);
             }
         }
         COMPILE_ASSERT(!KeyTraits::isWeak, WeakOffHeapCollectionsConsideredDangerous1);
@@ -668,7 +663,7 @@ public:
 public: \
     virtual void adjustAndMark(WebCore::Visitor* visitor) const OVERRIDE    \
     { \
-        typedef WTF::IsSubclassOfTemplate<TYPE, WebCore::GarbageCollected> IsSubclassOfGarbageCollected; \
+        typedef WTF::IsSubclassOfTemplate<typename WTF::RemoveConst<TYPE>::Type, WebCore::GarbageCollected> IsSubclassOfGarbageCollected; \
         COMPILE_ASSERT(IsSubclassOfGarbageCollected::value, OnlyGarbageCollectedObjectsCanHaveGarbageCollectedMixins); \
         visitor->mark(this, &WebCore::TraceTrait<TYPE>::trace); \
     } \
@@ -702,7 +697,7 @@ struct GCInfoAtBase {
             TraceTrait<T>::trace,
             FinalizerTrait<T>::finalize,
             FinalizerTrait<T>::nonTrivialFinalizer,
-            VTableTrait<T>::hasVTable,
+            WTF::IsPolymorphic<T>::value,
 #if ENABLE(GC_TRACING)
             TypenameStringTrait<T>::get()
 #endif
@@ -712,7 +707,7 @@ struct GCInfoAtBase {
 };
 
 template<typename T> class GarbageCollected;
-template<typename T, bool = WTF::IsSubclassOfTemplate<T, GarbageCollected>::value> struct GetGarbageCollectedBase;
+template<typename T, bool = WTF::IsSubclassOfTemplate<typename WTF::RemoveConst<T>::Type, GarbageCollected>::value> struct GetGarbageCollectedBase;
 
 template<typename T>
 struct GetGarbageCollectedBase<T, true> {

@@ -127,7 +127,7 @@ void RenderTableSection::addChild(RenderObject* child, RenderObject* beforeChild
             last = lastChild();
         if (last && last->isAnonymous() && !last->isBeforeOrAfterContent()) {
             if (beforeChild == last)
-                beforeChild = last->firstChild();
+                beforeChild = last->slowFirstChild();
             last->addChild(child, beforeChild);
             return;
         }
@@ -1509,7 +1509,7 @@ void RenderTableSection::recalcCells()
             tableRow->setRowIndex(insertionRow);
             setRowLogicalHeightToRowStyleLogicalHeight(m_grid[insertionRow]);
 
-            for (RenderObject* cell = row->firstChild(); cell; cell = cell->nextSibling()) {
+            for (RenderObject* cell = tableRow->firstChild(); cell; cell = cell->nextSibling()) {
                 if (!cell->isTableCell())
                     continue;
 
@@ -1520,7 +1520,7 @@ void RenderTableSection::recalcCells()
     }
 
     m_grid.shrinkToFit();
-    setNeedsLayout();
+    setNeedsLayoutAndFullRepaint();
 }
 
 // FIXME: This function could be made O(1) in certain cases (like for the non-most-constrainive cells' case).

@@ -31,6 +31,7 @@
 #include "config.h"
 #include "platform/heap/ThreadState.h"
 
+#include "platform/TraceEvent.h"
 #include "platform/heap/AddressSanitizer.h"
 #include "platform/heap/Handle.h"
 #include "platform/heap/Heap.h"
@@ -42,6 +43,10 @@
 #include <winnt.h>
 #elif defined(__GLIBC__)
 extern "C" void* __libc_stack_end;  // NOLINT
+#endif
+
+#if defined(MEMORY_SANITIZER)
+#include <sanitizer/msan_interface.h>
 #endif
 
 namespace WebCore {
@@ -96,6 +101,13 @@ static Mutex& threadAttachMutex()
     return mutex;
 }
 
+static double lockingTimeout()
+{
+    // Wait time for parking all threads is at most 500 MS.
+    return 0.100;
+}
+
+
 typedef void (*PushAllRegistersCallback)(SafePointBarrier*, ThreadState*, intptr_t*);
 extern "C" void pushAllRegisters(SafePointBarrier*, ThreadState*, PushAllRegistersCallback);
 
@@ -105,7 +117,7 @@ public:
     ~SafePointBarrier() { }
 
     // Request other attached threads that are not at safe points to park themselves on safepoints.
-    void parkOthers()
+    bool parkOthers()
     {
         ASSERT(ThreadState::current()->isAtSafePoint());
 
@@ -128,16 +140,30 @@ public:
                 interruptors[i]->requestInterrupt();
         }
 
-        while (acquireLoad(&m_unparkedThreadCount) > 0)
-            m_parked.wait(m_mutex);
+        while (acquireLoad(&m_unparkedThreadCount) > 0) {
+            double expirationTime = currentTime() + lockingTimeout();
+            if (!m_parked.timedWait(m_mutex, expirationTime)) {
+                // One of the other threads did not return to a safepoint within the maximum
+                // time we allow for threads to be parked. Abandon the GC and resume the
+                // currently parked threads.
+                resumeOthers(true);
+                return false;
+            }
+        }
+        return true;
     }
 
-    void resumeOthers()
+    void resumeOthers(bool barrierLocked = false)
     {
         ThreadState::AttachedThreadStateSet& threads = ThreadState::attachedThreads();
         atomicSubtract(&m_unparkedThreadCount, threads.size());
         releaseStore(&m_canResume, 1);
-        {
+
+        // FIXME: Resumed threads will all contend for m_mutex just to unlock it
+        // later which is a waste of resources.
+        if (UNLIKELY(barrierLocked)) {
+            m_resume.broadcast();
+        } else {
             // FIXME: Resumed threads will all contend for
             // m_mutex just to unlock it later which is a waste of
             // resources.
@@ -159,6 +185,28 @@ public:
         ASSERT(ThreadState::current()->isAtSafePoint());
     }
 
+    void checkAndPark(ThreadState* state)
+    {
+        ASSERT(!state->isSweepInProgress());
+        if (!acquireLoad(&m_canResume)) {
+            pushAllRegisters(this, state, parkAfterPushRegisters);
+            state->performPendingSweep();
+        }
+    }
+
+    void enterSafePoint(ThreadState* state)
+    {
+        ASSERT(!state->isSweepInProgress());
+        pushAllRegisters(this, state, enterSafePointAfterPushRegisters);
+    }
+
+    void leaveSafePoint(ThreadState* state)
+    {
+        if (atomicIncrement(&m_unparkedThreadCount) > 0)
+            checkAndPark(state);
+    }
+
+private:
     void doPark(ThreadState* state, intptr_t* stackEnd)
     {
         state->recordStackEnd(stackEnd);
@@ -170,13 +218,9 @@ public:
         atomicIncrement(&m_unparkedThreadCount);
     }
 
-    void checkAndPark(ThreadState* state)
+    static void parkAfterPushRegisters(SafePointBarrier* barrier, ThreadState* state, intptr_t* stackEnd)
     {
-        ASSERT(!state->isSweepInProgress());
-        if (!acquireLoad(&m_canResume)) {
-            pushAllRegisters(this, state, parkAfterPushRegisters);
-            state->performPendingSweep();
-        }
+        barrier->doPark(state, stackEnd);
     }
 
     void doEnterSafePoint(ThreadState* state, intptr_t* stackEnd)
@@ -195,24 +239,6 @@ public:
             MutexLocker locker(m_mutex);
             m_parked.signal(); // Safe point reached.
         }
-    }
-
-    void enterSafePoint(ThreadState* state)
-    {
-        ASSERT(!state->isSweepInProgress());
-        pushAllRegisters(this, state, enterSafePointAfterPushRegisters);
-    }
-
-    void leaveSafePoint(ThreadState* state)
-    {
-        if (atomicIncrement(&m_unparkedThreadCount) > 0)
-            checkAndPark(state);
-    }
-
-private:
-    static void parkAfterPushRegisters(SafePointBarrier* barrier, ThreadState* state, intptr_t* stackEnd)
-    {
-        barrier->doPark(state, stackEnd);
     }
 
     static void enterSafePointAfterPushRegisters(SafePointBarrier* barrier, ThreadState* state, intptr_t* stackEnd)
@@ -440,8 +466,14 @@ void ThreadState::visitStack(Visitor* visitor)
     current = reinterpret_cast<Address*>(reinterpret_cast<intptr_t>(current) & ~(sizeof(Address) - 1));
 
     for (; current < start; ++current) {
-        Heap::checkAndMarkPointer(visitor, *current);
-        visitAsanFakeStackForPointer(visitor, *current);
+        Address ptr = *current;
+#if defined(MEMORY_SANITIZER)
+        // ptr may be uninitialized by design. Mark it as initialized to keep
+        // MSan from complaining.
+        __msan_unpoison(&ptr, sizeof(ptr));
+#endif
+        Heap::checkAndMarkPointer(visitor, ptr);
+        visitAsanFakeStackForPointer(visitor, ptr);
     }
 
     for (Vector<Address>::iterator it = m_safePointStackCopy.begin(); it != m_safePointStackCopy.end(); ++it) {
@@ -468,14 +500,18 @@ bool ThreadState::checkAndMarkPointer(Visitor* visitor, Address address)
     if (m_isCleaningUp)
         return false;
 
+    // This checks for normal pages and for large objects which span the extent
+    // of several normal pages.
     BaseHeapPage* page = heapPageFromAddress(address);
-    if (page)
-        return page->checkAndMarkPointer(visitor, address);
-    // Not in heap pages, check large objects
-    for (int i = 0; i < NumberOfHeaps; i++) {
-        if (m_heaps[i]->checkAndMarkLargeHeapObject(visitor, address))
-            return true;
+    if (page) {
+        page->checkAndMarkPointer(visitor, address);
+        // Whether or not the pointer was within an object it was certainly
+        // within a page that is part of the heap, so we don't want to ask the
+        // other other heaps or put this address in the
+        // HeapDoesNotContainCache.
+        return true;
     }
+
     return false;
 }
 
@@ -485,12 +521,6 @@ const GCInfo* ThreadState::findGCInfo(Address address)
     BaseHeapPage* page = heapPageFromAddress(address);
     if (page) {
         return page->findGCInfo(address);
-    }
-
-    // Not in heap pages, check large objects
-    for (int i = 0; i < NumberOfHeaps; i++) {
-        if (const GCInfo* info = m_heaps[i]->findGCInfoOfLargeHeapObject(address))
-            return info;
     }
     return 0;
 }
@@ -653,37 +683,28 @@ void ThreadState::prepareForGC()
 
 BaseHeapPage* ThreadState::heapPageFromAddress(Address address)
 {
-    BaseHeapPage* page;
-    bool found = heapContainsCache()->lookup(address, &page);
-    if (found)
-        return page;
-
-    for (int i = 0; i < NumberOfHeaps; i++) {
-        page = m_heaps[i]->heapPageFromAddress(address);
-#ifndef NDEBUG
-        Address blinkPageAddr = roundToBlinkPageStart(address);
+    BaseHeapPage* cachedPage = heapContainsCache()->lookup(address);
+#ifdef NDEBUG
+    if (cachedPage)
+        return cachedPage;
 #endif
-        ASSERT(page == m_heaps[i]->heapPageFromAddress(blinkPageAddr));
-        ASSERT(page == m_heaps[i]->heapPageFromAddress(blinkPageAddr + blinkPageSize - 1));
-        if (page)
-            break;
-    }
-    heapContainsCache()->addEntry(address, page);
-    return page; // 0 if not found.
-}
 
-BaseHeapPage* ThreadState::contains(Address address)
-{
-    // Check heap contains cache first.
-    BaseHeapPage* page = heapPageFromAddress(address);
-    if (page)
-        return page;
-    // If no heap page was found check large objects.
     for (int i = 0; i < NumberOfHeaps; i++) {
-        page = m_heaps[i]->largeHeapObjectFromAddress(address);
-        if (page)
+        BaseHeapPage* page = m_heaps[i]->heapPageFromAddress(address);
+        if (page) {
+            // Asserts that make sure heapPageFromAddress takes addresses from
+            // the whole aligned blinkPageSize memory area. This is necessary
+            // for the negative cache to work.
+            ASSERT(page->isLargeObject() || page == m_heaps[i]->heapPageFromAddress(roundToBlinkPageStart(address)));
+            if (roundToBlinkPageStart(address) != roundToBlinkPageEnd(address))
+                ASSERT(page->isLargeObject() || page == m_heaps[i]->heapPageFromAddress(roundToBlinkPageEnd(address) - 1));
+            ASSERT(!cachedPage || page == cachedPage);
+            if (!cachedPage)
+                heapContainsCache()->addEntry(address, page);
             return page;
+        }
     }
+    ASSERT(!cachedPage);
     return 0;
 }
 
@@ -701,9 +722,9 @@ void ThreadState::getStats(HeapStats& stats)
 #endif
 }
 
-void ThreadState::stopThreads()
+bool ThreadState::stopThreads()
 {
-    s_safePointBarrier->parkOthers();
+    return s_safePointBarrier->parkOthers();
 }
 
 void ThreadState::resumeThreads()
@@ -738,7 +759,7 @@ NO_SANITIZE_ADDRESS static void* adjustScopeMarkerForAdressSanitizer(void* scope
 
     // 256 is as good an approximation as any else.
     const size_t bytesToCopy = sizeof(Address) * 256;
-    if (start - end < bytesToCopy)
+    if (static_cast<size_t>(start - end) < bytesToCopy)
         return start;
 
     return end + bytesToCopy;
@@ -793,22 +814,31 @@ void ThreadState::copyStackUntilSafePointScope()
 
 void ThreadState::performPendingSweep()
 {
-    if (sweepRequested()) {
-        m_sweepInProgress = true;
-        // Disallow allocation during weak processing.
-        enterNoAllocationScope();
-        // Perform thread-specific weak processing.
-        while (popAndInvokeWeakPointerCallback(Heap::s_markingVisitor)) { }
-        leaveNoAllocationScope();
-        // Perform sweeping and finalization.
-        m_stats.clear(); // Sweeping will recalculate the stats
-        for (int i = 0; i < NumberOfHeaps; i++)
-            m_heaps[i]->sweep();
-        getStats(m_statsAfterLastGC);
-        m_sweepInProgress = false;
-        clearGCRequested();
-        clearSweepRequested();
-    }
+    if (!sweepRequested())
+        return;
+
+    TRACE_EVENT0("Blink", "ThreadState::performPendingSweep");
+    const char* samplingState = TRACE_EVENT_GET_SAMPLING_STATE();
+    if (isMainThread())
+        TRACE_EVENT_SET_SAMPLING_STATE("Blink", "BlinkGCSweeping");
+
+    m_sweepInProgress = true;
+    // Disallow allocation during weak processing.
+    enterNoAllocationScope();
+    // Perform thread-specific weak processing.
+    while (popAndInvokeWeakPointerCallback(Heap::s_markingVisitor)) { }
+    leaveNoAllocationScope();
+    // Perform sweeping and finalization.
+    m_stats.clear(); // Sweeping will recalculate the stats
+    for (int i = 0; i < NumberOfHeaps; i++)
+        m_heaps[i]->sweep();
+    getStats(m_statsAfterLastGC);
+    m_sweepInProgress = false;
+    clearGCRequested();
+    clearSweepRequested();
+
+    if (isMainThread())
+        TRACE_EVENT_SET_NONCONST_SAMPLING_STATE(samplingState);
 }
 
 void ThreadState::addInterruptor(Interruptor* interruptor)

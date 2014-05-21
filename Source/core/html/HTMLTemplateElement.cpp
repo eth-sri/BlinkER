@@ -47,13 +47,15 @@ inline HTMLTemplateElement::HTMLTemplateElement(Document& document)
 
 HTMLTemplateElement::~HTMLTemplateElement()
 {
+#if !ENABLE(OILPAN)
     if (m_content)
         m_content->clearHost();
+#endif
 }
 
-PassRefPtr<HTMLTemplateElement> HTMLTemplateElement::create(Document& document)
+PassRefPtrWillBeRawPtr<HTMLTemplateElement> HTMLTemplateElement::create(Document& document)
 {
-    return adoptRef(new HTMLTemplateElement(document));
+    return adoptRefWillBeRefCountedGarbageCollected(new HTMLTemplateElement(document));
 }
 
 DocumentFragment* HTMLTemplateElement::content() const
@@ -64,12 +66,12 @@ DocumentFragment* HTMLTemplateElement::content() const
     return m_content.get();
 }
 
-PassRefPtr<Node> HTMLTemplateElement::cloneNode(bool deep)
+PassRefPtrWillBeRawPtr<Node> HTMLTemplateElement::cloneNode(bool deep)
 {
     if (!deep)
         return cloneElementWithoutChildren();
 
-    RefPtr<Node> clone = cloneElementWithChildren();
+    RefPtrWillBeRawPtr<Node> clone = cloneElementWithChildren();
     if (m_content)
         content()->cloneChildNodes(toHTMLTemplateElement(clone.get())->content());
     return clone.release();
@@ -81,6 +83,12 @@ void HTMLTemplateElement::didMoveToNewDocument(Document& oldDocument)
     if (!m_content)
         return;
     document().ensureTemplateDocument().adoptIfNeeded(*m_content);
+}
+
+void HTMLTemplateElement::trace(Visitor* visitor)
+{
+    visitor->trace(m_content);
+    HTMLElement::trace(visitor);
 }
 
 } // namespace WebCore

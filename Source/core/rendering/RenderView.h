@@ -69,6 +69,7 @@ public:
         return style()->isHorizontalWritingMode() ? viewWidth(ExcludeScrollbars) : viewHeight(ExcludeScrollbars);
     }
     int viewLogicalHeight() const;
+    LayoutUnit viewLogicalHeightForPercentages() const;
 
     float zoomFactor() const;
 
@@ -215,7 +216,7 @@ private:
     bool pushLayoutState(RenderBox& renderer, const LayoutSize& offset, LayoutUnit pageHeight = 0, bool pageHeightChanged = false, ColumnInfo* colInfo = 0)
     {
         // We push LayoutState even if layoutState is disabled because it stores layoutDelta too.
-        if ((!doingFullRepaint() || RuntimeEnabledFeatures::repaintAfterLayoutEnabled()) || m_layoutState->isPaginated() || renderer.hasColumns() || renderer.flowThreadContainingBlock()
+        if ((!doingFullRepaint() || (RuntimeEnabledFeatures::repaintAfterLayoutEnabled() && layoutStateEnabled())) || m_layoutState->isPaginated() || renderer.hasColumns() || renderer.flowThreadContainingBlock()
             ) {
             pushLayoutStateForCurrentFlowThread(renderer);
             m_layoutState = new LayoutState(m_layoutState, renderer, offset, pageHeight, pageHeightChanged, colInfo);
@@ -363,7 +364,7 @@ private:
 class LayoutStateDisabler {
     WTF_MAKE_NONCOPYABLE(LayoutStateDisabler);
 public:
-    LayoutStateDisabler(const RenderBox& root)
+    LayoutStateDisabler(const RenderObject& root)
         : m_view(*root.view())
     {
         m_view.disableLayoutState();

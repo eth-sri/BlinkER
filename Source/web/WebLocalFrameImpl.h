@@ -39,7 +39,6 @@
 #include "web/NotificationPresenterImpl.h"
 #include "web/UserMediaClientImpl.h"
 #include "wtf/Compiler.h"
-#include "wtf/HashSet.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/text/WTFString.h"
@@ -102,16 +101,9 @@ public:
     virtual bool hasHorizontalScrollbar() const OVERRIDE;
     virtual bool hasVerticalScrollbar() const OVERRIDE;
     virtual WebView* view() const OVERRIDE;
-    virtual WebFrame* opener() const OVERRIDE;
     virtual void setOpener(WebFrame*) OVERRIDE;
     virtual void appendChild(WebFrame*) OVERRIDE;
     virtual void removeChild(WebFrame*) OVERRIDE;
-    virtual WebFrame* parent() const OVERRIDE;
-    virtual WebFrame* top() const OVERRIDE;
-    virtual WebFrame* previousSibling() const OVERRIDE;
-    virtual WebFrame* nextSibling() const OVERRIDE;
-    virtual WebFrame* firstChild() const OVERRIDE;
-    virtual WebFrame* lastChild() const OVERRIDE;
     virtual WebFrame* traversePrevious(bool wrap) const OVERRIDE;
     virtual WebFrame* traverseNext(bool wrap) const OVERRIDE;
     virtual WebFrame* findChildByName(const WebString&) const OVERRIDE;
@@ -223,7 +215,7 @@ public:
     virtual int selectNearestFindMatch(const WebFloatPoint&, WebRect* selectionRect) OVERRIDE;
     virtual void setTickmarks(const WebVector<WebRect>&) OVERRIDE;
 
-    virtual void sendOrientationChangeEvent(int orientation) OVERRIDE;
+    virtual void sendOrientationChangeEvent() OVERRIDE;
 
     virtual void dispatchMessageEventWithOriginCheck(
         const WebSecurityOrigin& intendedTargetOrigin,
@@ -334,23 +326,12 @@ private:
 
     WebPlugin* focusedPluginIfInputMethodSupported();
 
-    // Returns the provider of desktop notifications.
-    NotificationPresenterImpl* notificationPresenterImpl();
-
     FrameLoaderClientImpl m_frameLoaderClientImpl;
 
     // The embedder retains a reference to the WebCore LocalFrame while it is active in the DOM. This
     // reference is released when the frame is removed from the DOM or the entire page is closed.
     // FIXME: These will need to change to WebFrame when we introduce WebFrameProxy.
     RefPtr<WebCore::LocalFrame> m_frame;
-    WebLocalFrameImpl* m_parent;
-    WebLocalFrameImpl* m_previousSibling;
-    WebLocalFrameImpl* m_nextSibling;
-    WebLocalFrameImpl* m_firstChild;
-    WebLocalFrameImpl* m_lastChild;
-
-    WebLocalFrameImpl* m_opener;
-    WTF::HashSet<WebLocalFrameImpl*> m_openedFrames;
 
     // Indicate whether the current LocalFrame is local or remote. Remote frames are
     // rendered in a different process from their parent frames.
@@ -370,9 +351,6 @@ private:
     // Stores the additional input events offset and scale when device metrics emulation is enabled.
     WebCore::IntSize m_inputEventsOffsetForEmulation;
     float m_inputEventsScaleFactorForEmulation;
-
-    // The provider of desktop notifications;
-    NotificationPresenterImpl m_notificationPresenter;
 
     UserMediaClientImpl m_userMediaClientImpl;
 };

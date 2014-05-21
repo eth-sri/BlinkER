@@ -10,7 +10,4 @@ PASS circleElement.cy.baseVal.value is 150
 PASS successfullyParsed is true
 
 TEST COMPLETE
-(repaint rects
-  (rect 8 108 300 200)
-)
 

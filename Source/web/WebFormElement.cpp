@@ -78,7 +78,7 @@ void WebFormElement::submit()
 void WebFormElement::getNamedElements(const WebString& name,
                                       WebVector<WebNode>& result)
 {
-    Vector<RefPtr<Element> > tempVector;
+    WillBeHeapVector<RefPtrWillBeMember<Element> > tempVector;
     unwrap<HTMLFormElement>()->getNamedElements(name, tempVector);
     result.assign(tempVector);
 }
@@ -86,10 +86,10 @@ void WebFormElement::getNamedElements(const WebString& name,
 void WebFormElement::getFormControlElements(WebVector<WebFormControlElement>& result) const
 {
     const HTMLFormElement* form = constUnwrap<HTMLFormElement>();
-    Vector<RefPtr<HTMLFormControlElement> > formControlElements;
+    Vector<WebFormControlElement> formControlElements;
 
-    const Vector<FormAssociatedElement*>& associatedElements = form->associatedElements();
-    for (Vector<FormAssociatedElement*>::const_iterator it = associatedElements.begin(); it != associatedElements.end(); ++it) {
+    const FormAssociatedElement::List& associatedElements = form->associatedElements();
+    for (FormAssociatedElement::List::const_iterator it = associatedElements.begin(); it != associatedElements.end(); ++it) {
         if ((*it)->isFormControlElement())
             formControlElements.append(toHTMLFormControlElement(*it));
     }
@@ -106,18 +106,18 @@ void WebFormElement::finishRequestAutocomplete(WebFormElement::AutocompleteResul
     unwrap<HTMLFormElement>()->finishRequestAutocomplete(static_cast<HTMLFormElement::AutocompleteResult>(result));
 }
 
-WebFormElement::WebFormElement(const PassRefPtr<HTMLFormElement>& e)
+WebFormElement::WebFormElement(const PassRefPtrWillBeRawPtr<HTMLFormElement>& e)
     : WebElement(e)
 {
 }
 
-WebFormElement& WebFormElement::operator=(const PassRefPtr<HTMLFormElement>& e)
+WebFormElement& WebFormElement::operator=(const PassRefPtrWillBeRawPtr<HTMLFormElement>& e)
 {
     m_private = e;
     return *this;
 }
 
-WebFormElement::operator PassRefPtr<HTMLFormElement>() const
+WebFormElement::operator PassRefPtrWillBeRawPtr<HTMLFormElement>() const
 {
     return toHTMLFormElement(m_private.get());
 }

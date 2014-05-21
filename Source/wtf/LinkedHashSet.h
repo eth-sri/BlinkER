@@ -177,6 +177,8 @@ public:
     LinkedHashSet();
     LinkedHashSet(const LinkedHashSet&);
     LinkedHashSet& operator=(const LinkedHashSet&);
+
+    // Needs finalization. The anchor needs to unlink itself from the chain.
     ~LinkedHashSet();
 
     static void finalize(void* pointer) { reinterpret_cast<LinkedHashSet*>(pointer)->~LinkedHashSet(); }
@@ -675,9 +677,8 @@ struct IsWeak<LinkedHashSetNode<T> > {
 
 inline void swap(LinkedHashSetNodeBase& a, LinkedHashSetNodeBase& b)
 {
-    typedef LinkedHashSetNodeBase Base;
-    swap(a.m_next, b.m_next);
     swap(a.m_prev, b.m_prev);
+    swap(a.m_next, b.m_next);
     if (b.m_next) {
         b.m_next->m_prev = &b;
         b.m_prev->m_next = &b;

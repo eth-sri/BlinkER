@@ -655,7 +655,6 @@ square-button
 button
 button-bevel
 inner-spin-button
--webkit-input-speech-button
 listbox
 listitem
 media-enter-fullscreen-button
@@ -835,13 +834,6 @@ geometricPrecision
 // -webkit-color-adjust
 economy
 exact
-
-// (-webkit-view-mode:) media feature:
-floating
-fullscreen
-maximized
-minimized
-windowed
 
 // -webkit-hyphenate-limit-lines
 no-limit

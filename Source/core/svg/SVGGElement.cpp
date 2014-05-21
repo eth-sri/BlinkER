@@ -36,11 +36,6 @@ SVGGElement::SVGGElement(Document& document, ConstructionType constructionType)
     ScriptWrappable::init(this);
 }
 
-PassRefPtr<SVGGElement> SVGGElement::create(Document& document)
-{
-    return adoptRef(new SVGGElement(document));
-}
-
 bool SVGGElement::isSupportedAttribute(const QualifiedName& attrName)
 {
     DEFINE_STATIC_LOCAL(HashSet<QualifiedName>, supportedAttributes, ());
@@ -64,7 +59,7 @@ void SVGGElement::svgAttributeChanged(const QualifiedName& attrName)
         return;
     }
 
-    SVGElementInstance::InvalidationGuard invalidationGuard(this);
+    SVGElement::InvalidationGuard invalidationGuard(this);
 
     if (RenderObject* renderer = this->renderer())
         RenderSVGResource::markForLayoutAndParentResourceInvalidation(renderer);

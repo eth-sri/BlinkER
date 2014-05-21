@@ -23,6 +23,7 @@
 #define FormController_h
 
 #include "core/html/forms/RadioButtonGroupScope.h"
+#include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
 #include "wtf/ListHashSet.h"
 #include "wtf/Vector.h"
@@ -73,28 +74,30 @@ inline void FormControlState::append(const String& value)
 
 typedef HashMap<AtomicString, OwnPtr<SavedFormState> > SavedFormStateMap;
 
-class DocumentState : public RefCounted<DocumentState> {
+class DocumentState FINAL : public RefCountedWillBeGarbageCollected<DocumentState> {
+    DECLARE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(DocumentState);
 public:
-    static PassRefPtr<DocumentState> create();
-    ~DocumentState();
+    static PassRefPtrWillBeRawPtr<DocumentState> create();
+    void trace(Visitor*);
 
     void addControl(HTMLFormControlElementWithState*);
     void removeControl(HTMLFormControlElementWithState*);
     Vector<String> toStateVector();
 
 private:
-    typedef ListHashSet<RefPtr<HTMLFormControlElementWithState>, 64> FormElementListHashSet;
+    typedef WillBeHeapListHashSet<RefPtrWillBeMember<HTMLFormControlElementWithState>, 64> FormElementListHashSet;
     FormElementListHashSet m_formControls;
 };
 
-class FormController {
-    WTF_MAKE_FAST_ALLOCATED;
+class FormController FINAL : public NoBaseWillBeGarbageCollectedFinalized<FormController> {
+    WTF_MAKE_FAST_ALLOCATED_WILL_BE_REMOVED;
 public:
-    static PassOwnPtr<FormController> create()
+    static PassOwnPtrWillBeRawPtr<FormController> create()
     {
-        return adoptPtr(new FormController);
+        return adoptPtrWillBeNoop(new FormController);
     }
     ~FormController();
+    void trace(Visitor*);
 
     RadioButtonGroupScope& radioButtonGroupScope() { return m_radioButtonGroupScope; }
 
@@ -116,9 +119,9 @@ private:
     static void formStatesFromStateVector(const Vector<String>&, SavedFormStateMap&);
 
     RadioButtonGroupScope m_radioButtonGroupScope;
-    RefPtr<DocumentState> m_documentState;
+    RefPtrWillBeMember<DocumentState> m_documentState;
     SavedFormStateMap m_savedFormStateMap;
-    OwnPtr<FormKeyGenerator> m_formKeyGenerator;
+    OwnPtrWillBeMember<FormKeyGenerator> m_formKeyGenerator;
 };
 
 } // namespace WebCore

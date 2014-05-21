@@ -10,8 +10,4 @@ PASS clipPathElement.getAttribute('clipPathUnits') is "objectBoundingBox"
 PASS successfullyParsed is true
 
 TEST COMPLETE
-(repaint rects
-  (rect 18 8 90 100)
-  (rect 8 18 100 90)
-)
 

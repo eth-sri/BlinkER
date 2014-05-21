@@ -118,7 +118,7 @@ bool MediaValues::calculateThreeDEnabled(LocalFrame* frame) const
     ASSERT(frame && frame->contentRenderer() && frame->contentRenderer()->compositor());
     bool threeDEnabled = false;
     if (RenderView* view = frame->contentRenderer())
-        threeDEnabled = view->compositor()->canRender3DTransforms();
+        threeDEnabled = view->compositor()->hasAcceleratedCompositing();
     return threeDEnabled;
 }
 
@@ -196,10 +196,9 @@ bool MediaValues::computeLengthImpl(double value, CSSPrimitiveValue::UnitTypes t
         return false;
     }
 
+    ASSERT(factor > 0);
     result = value * factor;
     return true;
-
-    ASSERT(factor > 0);
 }
 
 } // namespace

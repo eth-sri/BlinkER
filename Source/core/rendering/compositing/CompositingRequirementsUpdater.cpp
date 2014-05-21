@@ -163,7 +163,6 @@ public:
         , m_subtreeIsCompositing(false)
         , m_hasUnisolatedCompositedBlendingDescendant(false)
         , m_testingOverlap(testOverlap)
-        , m_suppressLayerCreation(false)
 #ifndef NDEBUG
         , m_depth(0)
 #endif
@@ -175,7 +174,6 @@ public:
         , m_subtreeIsCompositing(other.m_subtreeIsCompositing)
         , m_hasUnisolatedCompositedBlendingDescendant(other.m_hasUnisolatedCompositedBlendingDescendant)
         , m_testingOverlap(other.m_testingOverlap)
-        , m_suppressLayerCreation(other.m_suppressLayerCreation)
 #ifndef NDEBUG
         , m_depth(other.m_depth + 1)
 #endif
@@ -186,7 +184,6 @@ public:
     bool m_subtreeIsCompositing;
     bool m_hasUnisolatedCompositedBlendingDescendant;
     bool m_testingOverlap;
-    bool m_suppressLayerCreation;
 #ifndef NDEBUG
     int m_depth;
 #endif
@@ -200,11 +197,6 @@ static bool requiresCompositingOrSquashing(CompositingReasons reasons)
     ASSERT(fastAnswer == slowAnswer);
 #endif
     return reasons != CompositingReasonNone;
-}
-
-static bool shouldMakeDescendantsSuppressCompositedLayerCreation(CompositingReasons reasons)
-{
-    return reasons & CompositingReasonWillChangeGpuRasterizationHint;
 }
 
 static CompositingReasons subtreeReasonsForCompositing(RenderObject* renderer, bool hasCompositedDescendants, bool has3DTransformedDescendants)
@@ -256,10 +248,9 @@ static CompositingReasons subtreeReasonsForCompositing(RenderObject* renderer, b
     return subtreeReasons;
 }
 
-CompositingRequirementsUpdater::CompositingRequirementsUpdater(RenderView& renderView, CompositingReasonFinder& compositingReasonFinder, bool* needsToRecomputeCompositingRequirements)
+CompositingRequirementsUpdater::CompositingRequirementsUpdater(RenderView& renderView, CompositingReasonFinder& compositingReasonFinder)
     : m_renderView(renderView)
     , m_compositingReasonFinder(compositingReasonFinder)
-    , m_needsToRecomputeCompositingRequirements(needsToRecomputeCompositingRequirements)
 {
 }
 
@@ -299,10 +290,7 @@ void CompositingRequirementsUpdater::updateRecursive(RenderLayer* ancestorLayer,
     CompositingReasons reasonsToComposite = CompositingReasonNone;
 
     // First accumulate the straightforward compositing reasons.
-    CompositingReasons directReasons = m_compositingReasonFinder.directReasons(layer, m_needsToRecomputeCompositingRequirements);
-    layer->setSuppressingCompositedLayerCreation(currentRecursionData.m_suppressLayerCreation);
-    if (layer->suppressingCompositedLayerCreation())
-        directReasons = m_compositingReasonFinder.suppressWillChangeAndAnimationForGpuRasterization(layer, directReasons);
+    CompositingReasons directReasons = m_compositingReasonFinder.directReasons(layer);
 
     // Video is special. It's the only RenderLayer type that can both have
     // RenderLayer children and whose children can't use its backing to render
@@ -357,7 +345,6 @@ void CompositingRequirementsUpdater::updateRecursive(RenderLayer* ancestorLayer,
     // ancestor with m_subtreeIsCompositing set to false.
     RecursionData childRecursionData(currentRecursionData);
     childRecursionData.m_subtreeIsCompositing = false;
-    childRecursionData.m_suppressLayerCreation = layer->suppressingCompositedLayerCreation() || shouldMakeDescendantsSuppressCompositedLayerCreation(directReasons);
 
     bool willBeCompositedOrSquashed = compositor->canBeComposited(layer) && requiresCompositingOrSquashing(reasonsToComposite);
     if (willBeCompositedOrSquashed) {
@@ -382,7 +369,7 @@ void CompositingRequirementsUpdater::updateRecursive(RenderLayer* ancestorLayer,
     bool anyDescendantHas3DTransform = false;
     bool willHaveForegroundLayer = false;
 
-    if (layer->stackingNode()->isStackingContainer()) {
+    if (layer->stackingNode()->isStackingContext()) {
         RenderLayerStackingNodeIterator iterator(*layer->stackingNode(), NegativeZOrderChildren);
         while (RenderLayerStackingNode* curNode = iterator.next()) {
             IntRect absoluteChildDecendantBoundingBox;

@@ -114,7 +114,7 @@ void RenderMenuList::adjustInnerStyle()
 
     if (m_optionStyle) {
         if ((m_optionStyle->direction() != innerStyle->direction() || m_optionStyle->unicodeBidi() != innerStyle->unicodeBidi()))
-            m_innerBlock->setNeedsLayoutAndPrefWidthsRecalc();
+            m_innerBlock->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
         innerStyle->setTextAlign(style()->isLeftToRightDirection() ? LEFT : RIGHT);
         innerStyle->setDirection(m_optionStyle->direction());
         innerStyle->setUnicodeBidi(m_optionStyle->unicodeBidi());
@@ -162,7 +162,7 @@ void RenderMenuList::styleDidChange(StyleDifference diff, const RenderStyle* old
 void RenderMenuList::updateOptionsWidth()
 {
     float maxOptionWidth = 0;
-    const Vector<HTMLElement*>& listItems = selectElement()->listItems();
+    const WillBeHeapVector<RawPtrWillBeMember<HTMLElement> >& listItems = selectElement()->listItems();
     int size = listItems.size();
     FontCachePurgePreventer fontCachePurgePreventer;
 
@@ -191,7 +191,7 @@ void RenderMenuList::updateOptionsWidth()
 
     m_optionsWidth = width;
     if (parent())
-        setNeedsLayoutAndPrefWidthsRecalc();
+        setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
 }
 
 void RenderMenuList::updateFromElement()
@@ -214,7 +214,7 @@ void RenderMenuList::updateFromElement()
 void RenderMenuList::setTextFromOption(int optionIndex)
 {
     HTMLSelectElement* select = selectElement();
-    const Vector<HTMLElement*>& listItems = select->listItems();
+    const WillBeHeapVector<RawPtrWillBeMember<HTMLElement> >& listItems = select->listItems();
     int size = listItems.size();
 
     int i = select->optionToListIndex(optionIndex);
@@ -235,6 +235,9 @@ void RenderMenuList::setText(const String& s)
 {
     if (s.isEmpty()) {
         if (!m_buttonText || !m_buttonText->isBR()) {
+            // FIXME: We should not modify the structure of the render tree
+            // during layout. crbug.com/370462
+            DeprecatedDisableModifyRenderTreeStructureAsserts disabler;
             if (m_buttonText)
                 m_buttonText->destroy();
             m_buttonText = new RenderBR(&document());
@@ -245,6 +248,9 @@ void RenderMenuList::setText(const String& s)
         if (m_buttonText && !m_buttonText->isBR())
             m_buttonText->setText(s.impl(), true);
         else {
+            // FIXME: We should not modify the structure of the render tree
+            // during layout. crbug.com/370462
+            DeprecatedDisableModifyRenderTreeStructureAsserts disabler;
             if (m_buttonText)
                 m_buttonText->destroy();
             m_buttonText = new RenderText(&document(), s.impl());
@@ -392,7 +398,7 @@ void RenderMenuList::didUpdateActiveOption(int optionIndex)
 String RenderMenuList::itemText(unsigned listIndex) const
 {
     HTMLSelectElement* select = selectElement();
-    const Vector<HTMLElement*>& listItems = select->listItems();
+    const WillBeHeapVector<RawPtrWillBeMember<HTMLElement> >& listItems = select->listItems();
     if (listIndex >= listItems.size())
         return String();
 
@@ -410,7 +416,7 @@ String RenderMenuList::itemText(unsigned listIndex) const
 String RenderMenuList::itemAccessibilityText(unsigned listIndex) const
 {
     // Allow the accessible name be changed if necessary.
-    const Vector<HTMLElement*>& listItems = selectElement()->listItems();
+    const WillBeHeapVector<RawPtrWillBeMember<HTMLElement> >& listItems = selectElement()->listItems();
     if (listIndex >= listItems.size())
         return String();
     return listItems[listIndex]->fastGetAttribute(aria_labelAttr);
@@ -418,7 +424,7 @@ String RenderMenuList::itemAccessibilityText(unsigned listIndex) const
 
 String RenderMenuList::itemToolTip(unsigned listIndex) const
 {
-    const Vector<HTMLElement*>& listItems = selectElement()->listItems();
+    const WillBeHeapVector<RawPtrWillBeMember<HTMLElement> >& listItems = selectElement()->listItems();
     if (listIndex >= listItems.size())
         return String();
     return listItems[listIndex]->title();
@@ -426,7 +432,7 @@ String RenderMenuList::itemToolTip(unsigned listIndex) const
 
 bool RenderMenuList::itemIsEnabled(unsigned listIndex) const
 {
-    const Vector<HTMLElement*>& listItems = selectElement()->listItems();
+    const WillBeHeapVector<RawPtrWillBeMember<HTMLElement> >& listItems = selectElement()->listItems();
     if (listIndex >= listItems.size())
         return false;
     HTMLElement* element = listItems[listIndex];
@@ -446,7 +452,7 @@ bool RenderMenuList::itemIsEnabled(unsigned listIndex) const
 
 PopupMenuStyle RenderMenuList::itemStyle(unsigned listIndex) const
 {
-    const Vector<HTMLElement*>& listItems = selectElement()->listItems();
+    const WillBeHeapVector<RawPtrWillBeMember<HTMLElement> >& listItems = selectElement()->listItems();
     if (listIndex >= listItems.size()) {
         // If we are making an out of bounds access, then we want to use the style
         // of a different option element (index 0). However, if there isn't an option element
@@ -471,7 +477,7 @@ PopupMenuStyle RenderMenuList::itemStyle(unsigned listIndex) const
 
 void RenderMenuList::getItemBackgroundColor(unsigned listIndex, Color& itemBackgroundColor, bool& itemHasCustomBackgroundColor) const
 {
-    const Vector<HTMLElement*>& listItems = selectElement()->listItems();
+    const WillBeHeapVector<RawPtrWillBeMember<HTMLElement> >& listItems = selectElement()->listItems();
     if (listIndex >= listItems.size()) {
         itemBackgroundColor = resolveColor(CSSPropertyBackgroundColor);
         itemHasCustomBackgroundColor = false;
@@ -547,19 +553,19 @@ void RenderMenuList::popupDidHide()
 
 bool RenderMenuList::itemIsSeparator(unsigned listIndex) const
 {
-    const Vector<HTMLElement*>& listItems = selectElement()->listItems();
+    const WillBeHeapVector<RawPtrWillBeMember<HTMLElement> >& listItems = selectElement()->listItems();
     return listIndex < listItems.size() && isHTMLHRElement(*listItems[listIndex]);
 }
 
 bool RenderMenuList::itemIsLabel(unsigned listIndex) const
 {
-    const Vector<HTMLElement*>& listItems = selectElement()->listItems();
+    const WillBeHeapVector<RawPtrWillBeMember<HTMLElement> >& listItems = selectElement()->listItems();
     return listIndex < listItems.size() && isHTMLOptGroupElement(*listItems[listIndex]);
 }
 
 bool RenderMenuList::itemIsSelected(unsigned listIndex) const
 {
-    const Vector<HTMLElement*>& listItems = selectElement()->listItems();
+    const WillBeHeapVector<RawPtrWillBeMember<HTMLElement> >& listItems = selectElement()->listItems();
     if (listIndex >= listItems.size())
         return false;
     HTMLElement* element = listItems[listIndex];

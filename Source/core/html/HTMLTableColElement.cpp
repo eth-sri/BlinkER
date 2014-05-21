@@ -41,9 +41,9 @@ inline HTMLTableColElement::HTMLTableColElement(const QualifiedName& tagName, Do
     ScriptWrappable::init(this);
 }
 
-PassRefPtr<HTMLTableColElement> HTMLTableColElement::create(const QualifiedName& tagName, Document& document)
+PassRefPtrWillBeRawPtr<HTMLTableColElement> HTMLTableColElement::create(const QualifiedName& tagName, Document& document)
 {
-    return adoptRef(new HTMLTableColElement(tagName, document));
+    return adoptRefWillBeRefCountedGarbageCollected(new HTMLTableColElement(tagName, document));
 }
 
 bool HTMLTableColElement::isPresentationAttribute(const QualifiedName& name) const
@@ -76,7 +76,7 @@ void HTMLTableColElement::parseAttribute(const QualifiedName& name, const Atomic
                 RenderTableCol* col = toRenderTableCol(renderer());
                 int newWidth = width().toInt();
                 if (newWidth != col->width())
-                    col->setNeedsLayoutAndPrefWidthsRecalc();
+                    col->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
             }
         }
     } else

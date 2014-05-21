@@ -61,24 +61,24 @@
 
     // Common extensions
 
-    readonly attribute long offsetLeft;
-    readonly attribute long offsetTop;
-    readonly attribute long offsetWidth;
-    readonly attribute long offsetHeight;
+    readonly attribute double offsetLeft;
+    readonly attribute double offsetTop;
+    readonly attribute double offsetWidth;
+    readonly attribute double offsetHeight;
     [ImplementedAs=offsetParentForBindings, PerWorldBindings] readonly attribute Element offsetParent;
-    readonly attribute long clientLeft;
-    readonly attribute long clientTop;
-    readonly attribute long clientWidth;
-    readonly attribute long clientHeight;
+    readonly attribute double clientLeft;
+    readonly attribute double clientTop;
+    readonly attribute double clientWidth;
+    readonly attribute double clientHeight;
 
     // FIXME: should be:
-    // attribute (Dictionary or long) scrollLeft;
-    // attribute (Dictionary or long) scrollTop;
+    // attribute (Dictionary or double) scrollLeft;
+    // attribute (Dictionary or double) scrollTop;
     // http://crbug.com/240176
-    [Custom=Setter] attribute long scrollLeft;
-    [Custom=Setter] attribute long scrollTop;
-    readonly attribute long scrollWidth;
-    readonly attribute long scrollHeight;
+    [Custom=Setter] attribute double scrollLeft;
+    [Custom=Setter] attribute double scrollTop;
+    readonly attribute double scrollWidth;
+    readonly attribute double scrollHeight;
 
     void focus();
     void blur();
@@ -86,9 +86,9 @@
 
     // WebKit extensions
 
-    void scrollIntoViewIfNeeded(optional boolean centerIfNeeded);
-    void scrollByLines([Default=Undefined] optional long lines);
-    void scrollByPages([Default=Undefined] optional long pages);
+    [MeasureAs=ElementScrollIntoViewIfNeeded] void scrollIntoViewIfNeeded(optional boolean centerIfNeeded);
+    [MeasureAs=ElementScrollByLines] void scrollByLines([Default=Undefined] optional long lines);
+    [MeasureAs=ElementScrollByPages] void scrollByPages([Default=Undefined] optional long pages);
 
     // HTML 5
     HTMLCollection getElementsByClassName(DOMString classNames);
@@ -124,6 +124,7 @@
     [PerWorldBindings, LogActivity, LogAllWorlds, MeasureAs=PrefixedElementRequestFullscreen] void webkitRequestFullscreen();
 
     [MeasureAs=PrefixedElementRequestPointerLock] void webkitRequestPointerLock();
+    [MeasureAs=ElementRequestPointerLock] void requestPointerLock();
 
     // Event handler attributes
     attribute EventHandler onbeforecopy;

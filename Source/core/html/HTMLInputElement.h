@@ -46,8 +46,9 @@ struct DateTimeChooserParameters;
 
 class HTMLInputElement : public HTMLTextFormControlElement {
 public:
-    static PassRefPtr<HTMLInputElement> create(Document&, HTMLFormElement*, bool createdByParser);
+    static PassRefPtrWillBeRawPtr<HTMLInputElement> create(Document&, HTMLFormElement*, bool createdByParser);
     virtual ~HTMLInputElement();
+    virtual void trace(Visitor*) OVERRIDE;
 
     DEFINE_ATTRIBUTE_EVENT_LISTENER(webkitspeechchange);
 
@@ -111,10 +112,6 @@ public:
     bool isMonthField() const;
     bool isTimeField() const;
     bool isWeekField() const;
-
-#if ENABLE(INPUT_SPEECH)
-    bool isSpeechEnabled() const;
-#endif
 
     HTMLElement* passwordGeneratorButtonElement() const;
 
@@ -202,7 +199,7 @@ public:
 
     bool multiple() const;
 
-    FileList* files();
+    FileList* files() const;
     void setFiles(PassRefPtrWillBeRawPtr<FileList>);
 
     // Returns true if the given DragData has more than one dropped files.
@@ -364,6 +361,7 @@ private:
 
     virtual void subtreeHasChanged() OVERRIDE FINAL;
 
+    void setListAttributeTargetObserver(PassOwnPtrWillBeRawPtr<ListAttributeTargetObserver>);
     void resetListAttributeTargetObserver();
     void parseMaxLengthAttribute(const AtomicString&);
     void updateValueIfNeeded();
@@ -375,6 +373,8 @@ private:
 #if ENABLE(INPUT_MULTIPLE_FIELDS_UI)
     virtual PassRefPtr<RenderStyle> customStyleForRenderer() OVERRIDE;
 #endif
+
+    virtual bool shouldDispatchFormControlChangeEvent(String&, String&) OVERRIDE;
 
     AtomicString m_name;
     String m_valueIfDirty;
@@ -395,13 +395,13 @@ private:
     bool m_hasTouchEventHandler : 1;
     bool m_shouldRevealPassword : 1;
     bool m_needsToUpdateViewValue : 1;
-    RefPtr<InputType> m_inputType;
-    RefPtr<InputTypeView> m_inputTypeView;
+    RefPtrWillBeMember<InputType> m_inputType;
+    RefPtrWillBeMember<InputTypeView> m_inputTypeView;
     // The ImageLoader must be owned by this element because the loader code assumes
     // that it lives as long as its owning element lives. If we move the loader into
     // the ImageInput object we may delete the loader while this element lives on.
     OwnPtr<HTMLImageLoader> m_imageLoader;
-    OwnPtr<ListAttributeTargetObserver> m_listAttributeTargetObserver;
+    OwnPtrWillBeMember<ListAttributeTargetObserver> m_listAttributeTargetObserver;
 };
 
 } //namespace

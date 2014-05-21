@@ -159,6 +159,7 @@ interface TestObject {
     [LogActivity=GetterOnly, LogAllWorlds] attribute long activityLoggingGetterForAllWorldsLongAttribute;
     [LogActivity=SetterOnly, LogAllWorlds] attribute long activityLoggingSetterForAllWorldsLongAttribute;
     [CachedAttribute=isValueDirty] attribute any cachedAttributeAnyAttribute;
+    [CachedAttribute=isArrayDirty] attribute DOMString[] cachedArrayAttribute;
     [CallWith=ExecutionContext] attribute any callWithExecutionContextAnyAttribute;
     [CallWith=ScriptState] attribute any callWithScriptStateAnyAttribute;
     [CallWith=ExecutionContext|ScriptState] attribute any callWithExecutionContextAndScriptStateAnyAttribute;
@@ -243,6 +244,8 @@ interface TestObject {
     [Reflect, URL] attribute DOMString urlStringAttribute;
     [Reflect=reflectUrlAttribute, URL] attribute DOMString urlStringAttribute;
     [Unforgeable] attribute long unforgeableLongAttribute;
+    [LogActivity=SetterOnly, LogPreviousValue] attribute long activityLoggingSetterOnlyLogPreviousValueAttribute;
+    [LogActivity, LogPreviousValue] attribute TestInterfaceEmpty activityLoggingLogPreviousValueInterfaceAttribute;
 
 
     // Methods
@@ -385,25 +388,21 @@ interface TestObject {
     void overloadedMethodA(long longArg);
     void overloadedMethodA(long longArg1, long longArg2);
     void overloadedMethodB(long longArg);
-    void overloadedMethodB(long longArg1, optional long longArg2);
+    void overloadedMethodB(DOMString stringArg, optional long longArg);
     void overloadedMethodC(long longArg);
-    void overloadedMethodC(long longArg, long... longArgs);
+    void overloadedMethodC(TestInterfaceEmpty testInterfaceEmptyArg);
     void overloadedMethodD(long longArg);
-    void overloadedMethodD(TestInterfaceEmpty testInterfaceEmptyArg);
+    void overloadedMethodD(long[] longArrayArg);
     void overloadedMethodE(long longArg);
-    void overloadedMethodE(long[] longArrayArg);
-    void overloadedMethodF(long longArg);
-    void overloadedMethodF(TestInterfaceEmpty? testInterfaceEmptyOrNullArg);
-    void overloadedMethodG();
-    void overloadedMethodG([LegacyOverloadString] DOMString legacyOverloadStringStringArg);
-    void overloadedMethodH();
-    void overloadedMethodH(TestCallbackInterface testCallbackInterfaceArg);
-    // FIXME: Should be in order double, Dictionary, but Blink implementation of
-    // overload resolution can't handle this. http://crbug.com/293561
-    void overloadedMethodI(Dictionary dictionaryArg); // Non-wrapper type
+    void overloadedMethodE(TestInterfaceEmpty? testInterfaceEmptyOrNullArg);
+    void overloadedMethodF(optional DOMString stringArg);
+    void overloadedMethodF(double doubleArg);
+    void overloadedMethodG(long longArg);
+    void overloadedMethodG([Default=Null] TestInterfaceEmpty? testInterfaceEmptyOrNullArg);
+    void overloadedMethodH(TestInterface testInterfaceArg);
+    void overloadedMethodH(TestInterfaceEmpty testInterfaceEmptyArg);
+    void overloadedMethodI(DOMString stringArg);
     void overloadedMethodI(double doubleArg);
-    void overloadedMethodJ(long longArg);
-    void overloadedMethodJ([Default=Null] TestInterfaceEmpty? testInterfaceEmptyOrNullArg);
 
 
     [PerWorldBindings] void overloadedPerWorldBindingsMethod();
@@ -448,6 +447,20 @@ interface TestObject {
     [DoNotCheckSignature] void doNotCheckSignatureVoidMethod();
     [ImplementedAs=implementedAsMethodName] void implementedAsVoidMethod();
     [MeasureAs=TestFeature] void measureAsVoidMethod();
+    [DeprecateAs=TestFeatureA] void DeprecateAsOverloadedMethod();
+    [DeprecateAs=TestFeatureB] void DeprecateAsOverloadedMethod(long arg);
+    [DeprecateAs=TestFeature] void DeprecateAsSameValueOverloadedMethod();
+    [DeprecateAs=TestFeature] void DeprecateAsSameValueOverloadedMethod(long arg);
+    [MeasureAs=TestFeatureA] void measureAsOverloadedMethod();
+    [MeasureAs=TestFeatureB] void measureAsOverloadedMethod(long arg);
+    [MeasureAs=TestFeature] void measureAsSameValueOverloadedMethod();
+    [MeasureAs=TestFeature] void measureAsSameValueOverloadedMethod(long arg);
+    [DeprecateAs=TestFeatureA, MeasureAs=TestFeature] void deprecateAsMeasureAsSameValueOverloadedMethod();
+    [DeprecateAs=TestFeatureB, MeasureAs=TestFeature] void deprecateAsMeasureAsSameValueOverloadedMethod(long arg);
+    [DeprecateAs=TestFeature, MeasureAs=TestFeatureA] void deprecateAsSameValueMeasureAsOverloadedMethod();
+    [DeprecateAs=TestFeature, MeasureAs=TestFeatureB] void deprecateAsSameValueMeasureAsOverloadedMethod(long arg);
+    [DeprecateAs=TestFeatureA, MeasureAs=TestFeatureB] void deprecateAsSameValueMeasureAsSameValueOverloadedMethod();
+    [DeprecateAs=TestFeatureA, MeasureAs=TestFeatureB] void deprecateAsSameValueMeasureAsSameValueOverloadedMethod(long arg);
     [NotEnumerable] void notEnumerableVoidMethod();
     [PerContextEnabled=FeatureName] void perContextEnabledVoidMethod();
     [PerWorldBindings] void perWorldBindingsVoidMethod();

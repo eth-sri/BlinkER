@@ -33,7 +33,6 @@
     '../build/win/precompile.gypi',
     '../build/features.gypi',
     '../build/scripts/scripts.gypi',
-    '../modules/modules.gypi',
     '../bindings/bindings.gypi',
     'core.gypi',
   ],
@@ -121,7 +120,6 @@
             '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorConsoleInstrumentationInl.h',
             '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorInstrumentationInl.h',
             '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorOverridesInl.h',
-            '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorPromiseInstrumentationInl.h',
             '<(SHARED_INTERMEDIATE_DIR)/blink/InstrumentingAgentsInl.h',
             '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorInstrumentationImpl.cpp',
           ],
@@ -250,7 +248,6 @@
         # These files include all the .cpp files generated from the .idl files
         # in webcore_files.
         '<@(bindings_core_generated_aggregate_files)',
-        '<@(bindings_modules_generated_aggregate_files)',
 
         # Additional .cpp files for HashTools.h
         '<(SHARED_INTERMEDIATE_DIR)/blink/CSSPropertyNames.cpp',
@@ -264,6 +261,10 @@
         '<(SHARED_INTERMEDIATE_DIR)/blink/EventNames.h',
         '<(SHARED_INTERMEDIATE_DIR)/blink/EventTargetHeaders.h',
         '<(SHARED_INTERMEDIATE_DIR)/blink/EventTargetInterfaces.h',
+        '<(SHARED_INTERMEDIATE_DIR)/blink/EventTargetModulesHeaders.h', # TODO: remove this later http://crbug.com/358074.
+        '<(SHARED_INTERMEDIATE_DIR)/blink/EventTargetModulesInterfaces.h', # TODO: remove this later http://crbug.com/358074.
+        '<(SHARED_INTERMEDIATE_DIR)/blink/EventTargetModulesNames.cpp', # TODO: remove this later http://crbug.com/358074.
+        '<(SHARED_INTERMEDIATE_DIR)/blink/EventTargetModulesNames.h', # TODO: remove this later http://crbug.com/358074.
         '<(SHARED_INTERMEDIATE_DIR)/blink/EventTargetNames.cpp',
         '<(SHARED_INTERMEDIATE_DIR)/blink/EventTargetNames.h',
         '<(SHARED_INTERMEDIATE_DIR)/blink/EventTypeNames.cpp',
@@ -316,7 +317,6 @@
         '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorConsoleInstrumentationInl.h',
         '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorInstrumentationInl.h',
         '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorOverridesInl.h',
-        '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorPromiseInstrumentationInl.h',
         '<(SHARED_INTERMEDIATE_DIR)/blink/InstrumentingAgentsInl.h',
         '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorInstrumentationImpl.cpp',
 
@@ -571,6 +571,11 @@
       ],
       'sources': [
         '<@(webcore_svg_files)',
+      ],
+      'conditions': [
+        ['OS=="win" and buildtype=="Official"', {
+          'msvs_shard': 5,
+        }],
       ],
     },
     {

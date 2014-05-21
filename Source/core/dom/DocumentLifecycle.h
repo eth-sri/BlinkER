@@ -31,6 +31,7 @@
 #ifndef DocumentLifecycle_h
 #define DocumentLifecycle_h
 
+#include "wtf/Assertions.h"
 #include "wtf/Noncopyable.h"
 
 namespace WebCore {
@@ -92,6 +93,24 @@ public:
         State m_to;
     };
 
+    class DetachScope {
+        WTF_MAKE_NONCOPYABLE(DetachScope);
+    public:
+        explicit DetachScope(DocumentLifecycle& documentLifecycle)
+            : m_documentLifecycle(documentLifecycle)
+        {
+            m_documentLifecycle.incrementDetachCount();
+        }
+
+        ~DetachScope()
+        {
+            m_documentLifecycle.decrementDetachCount();
+        }
+
+    private:
+        DocumentLifecycle& m_documentLifecycle;
+    };
+
     DocumentLifecycle();
     ~DocumentLifecycle();
 
@@ -99,9 +118,18 @@ public:
     State state() const { return m_state; }
 
     bool stateAllowsTreeMutations() const;
+    bool stateAllowsRenderTreeMutations() const;
+    bool stateAllowsDetach() const;
 
     void advanceTo(State);
     void ensureStateAtMost(State);
+
+    void incrementDetachCount() { m_detachCount++; }
+    void decrementDetachCount()
+    {
+        ASSERT(m_detachCount > 0);
+        m_detachCount--;
+    }
 
 private:
 #if !ASSERT_DISABLED
@@ -110,6 +138,7 @@ private:
 #endif
 
     State m_state;
+    int m_detachCount;
 };
 
 inline bool DocumentLifecycle::stateAllowsTreeMutations() const
@@ -119,6 +148,22 @@ inline bool DocumentLifecycle::stateAllowsTreeMutations() const
     return m_state != InStyleRecalc
         && m_state != InPerformLayout
         && m_state != InCompositingUpdate;
+}
+
+inline bool DocumentLifecycle::stateAllowsRenderTreeMutations() const
+{
+    return m_detachCount || m_state == InStyleRecalc;
+}
+
+inline bool DocumentLifecycle::stateAllowsDetach() const
+{
+    return m_state == VisualUpdatePending
+        || m_state == InStyleRecalc
+        || m_state == StyleClean
+        || m_state == InPreLayout
+        || m_state == LayoutClean
+        || m_state == CompositingClean
+        || m_state == Stopping;
 }
 
 }

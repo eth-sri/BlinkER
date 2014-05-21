@@ -23,7 +23,7 @@
 # LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
 # DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
 # THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# (INCLUDING NEGLIGENCE OR/ OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import json
@@ -312,6 +312,8 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
     def _release_builders(self):
         release_builders = []
         for builder_name in builders.all_builder_names():
+            if builder_name.find('ASAN') != -1:
+                continue
             port = self._tool.port_factory.get_from_builder_name(builder_name)
             if port.test_configuration().build_type == 'release':
                 release_builders.append(builder_name)
@@ -595,7 +597,9 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
 
     # Rietveld uploader stinks. Limit the number of rebaselines in a given patch to keep upload from failing.
     # FIXME: http://crbug.com/263676 Obviously we should fix the uploader here.
-    MAX_LINES_TO_REBASELINE = 50
+    MAX_LINES_TO_REBASELINE = 200
+
+    SECONDS_BEFORE_GIVING_UP = 300
 
     def __init__(self):
         super(AutoRebaseline, self).__init__(options=[
@@ -760,8 +764,22 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
         subprocess_command = ['git', 'cl'] + command
         if options.verbose:
             subprocess_command.append('--verbose')
-        # Use call instead of run_command so that stdout doesn't get swallowed.
-        self._tool.executive.call(subprocess_command)
+
+        process = self._tool.executive.popen(subprocess_command, stdout=self._tool.executive.PIPE)
+        last_output_time = time.time()
+
+        # git cl sometimes completely hangs. Bail if we haven't gotten any output to stdout/stderr in a while.
+        while process.poll() == None and time.time() < last_output_time + self.SECONDS_BEFORE_GIVING_UP:
+            # FIXME: Also log stderr.
+            out = process.stdout.readline().rstrip('\n')
+            if out:
+                last_output_time = time.time()
+                _log.info(out)
+
+        if process.poll() == None:
+            _log.error('Command hung: %s' % subprocess_command)
+            return False
+        return True
 
     # FIXME: Move this somewhere more general.
     def tree_status(self):
@@ -827,19 +845,19 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
 
             tool.scm().commit_locally_with_message(self.commit_message(author, revision, bugs))
 
-            # FIXME: Log the upload, pull and dcommit stdout/stderr to the log-server.
-
             # FIXME: It would be nice if we could dcommit the patch without uploading, but still
             # go through all the precommit hooks. For rebaselines with lots of files, uploading
             # takes a long time and sometimes fails, but we don't want to commit if, e.g. the
             # tree is closed.
-            self._run_git_cl_command(options, ['upload', '-f'])
+            did_finish = self._run_git_cl_command(options, ['upload', '-f'])
 
-            # Uploading can take a very long time. Do another pull to make sure TestExpectations is up to date,
-            # so the dcommit can go through.
-            tool.executive.run_command(['git', 'pull'])
+            if did_finish:
+                # Uploading can take a very long time. Do another pull to make sure TestExpectations is up to date,
+                # so the dcommit can go through.
+                # FIXME: Log the pull and dcommit stdout/stderr to the log-server.
+                tool.executive.run_command(['git', 'pull'])
 
-            self._run_git_cl_command(options, ['dcommit', '-f'])
+                self._run_git_cl_command(options, ['dcommit', '-f'])
         finally:
             self._run_git_cl_command(options, ['set_close'])
             tool.scm().ensure_cleanly_tracking_remote_master()
@@ -857,6 +875,7 @@ class RebaselineOMatic(AbstractDeclarativeCommand):
     def execute(self, options, args, tool):
         while True:
             try:
+                old_branch_name = tool.scm().current_branch()
                 tool.executive.run_command(['git', 'pull'])
                 rebaseline_command = [tool.filesystem.join(tool.scm().checkout_root, 'Tools', 'Scripts', 'webkit-patch'), 'auto-rebaseline', '--log-server', 'blinkrebaseline.appspot.com']
                 if options.verbose:
@@ -865,5 +884,7 @@ class RebaselineOMatic(AbstractDeclarativeCommand):
                 tool.executive.call(rebaseline_command)
             except:
                 traceback.print_exc(file=sys.stderr)
+                # Sometimes git crashes and leaves us on a detached head.
+                tool.scm().checkout_branch(old_branch_name)
 
             time.sleep(self.SLEEP_TIME_IN_SECONDS)

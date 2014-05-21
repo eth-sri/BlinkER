@@ -22,6 +22,7 @@ PASS childWindow.history.length is 0
 PASS childWindow.history.state is null
 PASS childWindow.innerHeight is 0
 PASS childWindow.innerWidth is 0
+FAIL childWindow.isJsTest should be false (of type boolean). Was undefined (of type undefined).
 PASS childWindow.length is 0
 PASS childWindow.location.ancestorOrigins.length is 0
 PASS childWindow.location.hash is ''
@@ -55,6 +56,7 @@ PASS childWindow.navigator.onLine is window.navigator.onLine
 PASS childWindow.navigator.platform is window.navigator.platform
 PASS childWindow.navigator.product is window.navigator.product
 PASS childWindow.navigator.productSub is window.navigator.productSub
+PASS childWindow.navigator.serviceWorker.current is null
 PASS childWindow.navigator.userAgent is ''
 PASS childWindow.navigator.vendor is window.navigator.vendor
 PASS childWindow.navigator.vendorSub is ''
@@ -76,6 +78,7 @@ PASS childWindow.onclose is null
 PASS childWindow.oncontextmenu is null
 PASS childWindow.oncuechange is null
 PASS childWindow.ondblclick is null
+PASS childWindow.ondevicelight is null
 PASS childWindow.ondevicemotion is null
 PASS childWindow.ondeviceorientation is null
 PASS childWindow.ondrag is null

@@ -205,9 +205,9 @@ inline SliderThumbElement::SliderThumbElement(Document& document)
 {
 }
 
-PassRefPtr<SliderThumbElement> SliderThumbElement::create(Document& document)
+PassRefPtrWillBeRawPtr<SliderThumbElement> SliderThumbElement::create(Document& document)
 {
-    RefPtr<SliderThumbElement> element = adoptRef(new SliderThumbElement(document));
+    RefPtrWillBeRawPtr<SliderThumbElement> element = adoptRefWillBeRefCountedGarbageCollected(new SliderThumbElement(document));
     element->setAttribute(idAttr, ShadowElementNames::sliderThumb());
     return element.release();
 }
@@ -218,7 +218,7 @@ void SliderThumbElement::setPositionFromValue()
     // path, we don't actually update the value here. Instead, we poke at the
     // renderer directly to trigger layout.
     if (renderer())
-        renderer()->setNeedsLayout();
+        renderer()->setNeedsLayoutAndFullRepaint();
 }
 
 RenderObject* SliderThumbElement::createRenderer(RenderStyle*)
@@ -308,7 +308,7 @@ void SliderThumbElement::setPositionFromPoint(const LayoutPoint& point)
     // FIXME: This is no longer being set from renderer. Consider updating the method name.
     input->setValueFromRenderer(valueString);
     if (renderer())
-        renderer()->setNeedsLayout();
+        renderer()->setNeedsLayoutAndFullRepaint();
 }
 
 void SliderThumbElement::startDragging()
@@ -328,7 +328,7 @@ void SliderThumbElement::stopDragging()
         frame->eventHandler().setCapturingMouseEventsNode(nullptr);
     m_inDragMode = false;
     if (renderer())
-        renderer()->setNeedsLayout();
+        renderer()->setNeedsLayoutAndFullRepaint();
     if (hostInput())
         hostInput()->dispatchFormControlChangeEvent();
 }
@@ -444,9 +444,9 @@ inline SliderContainerElement::SliderContainerElement(Document& document)
 {
 }
 
-PassRefPtr<SliderContainerElement> SliderContainerElement::create(Document& document)
+PassRefPtrWillBeRawPtr<SliderContainerElement> SliderContainerElement::create(Document& document)
 {
-    return adoptRef(new SliderContainerElement(document));
+    return adoptRefWillBeRefCountedGarbageCollected(new SliderContainerElement(document));
 }
 
 RenderObject* SliderContainerElement::createRenderer(RenderStyle*)

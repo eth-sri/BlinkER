@@ -30,6 +30,7 @@
 #include "core/fetch/ResourceClient.h"
 #include "core/fetch/ResourcePtr.h"
 #include "core/xml/XMLErrors.h"
+#include "platform/heap/Handle.h"
 #include "platform/text/SegmentedString.h"
 #include "wtf/HashMap.h"
 #include "wtf/OwnPtr.h"
@@ -66,7 +67,7 @@ class Text;
     class XMLDocumentParser FINAL : public ScriptableDocumentParser, public ResourceClient {
         WTF_MAKE_FAST_ALLOCATED;
     public:
-        static PassRefPtr<XMLDocumentParser> create(Document* document, FrameView* view)
+        static PassRefPtr<XMLDocumentParser> create(Document& document, FrameView* view)
         {
             return adoptRef(new XMLDocumentParser(document, view));
         }
@@ -101,7 +102,7 @@ class Text;
         };
 
     private:
-        XMLDocumentParser(Document*, FrameView* = 0);
+        explicit XMLDocumentParser(Document&, FrameView* = 0);
         XMLDocumentParser(DocumentFragment*, Element*, ParserContentPolicy);
 
         // From DocumentParser
@@ -165,7 +166,7 @@ class Text;
         ContainerNode* m_currentNode;
         Vector<ContainerNode*> m_currentNodeStack;
 
-        RefPtr<Text> m_leafTextNode;
+        RefPtrWillBePersistent<Text> m_leafTextNode;
 
         bool m_isCurrentlyParsing8BitChunk;
         bool m_sawError;

@@ -94,8 +94,6 @@ public:
 
     BLINK_EXPORT static void enableSessionStorage(bool);
 
-    BLINK_EXPORT static void enableSpeechInput(bool);
-
     BLINK_EXPORT static void enableSpeechSynthesis(bool);
 
     BLINK_EXPORT static void enableTouch(bool);
@@ -128,6 +126,8 @@ public:
     BLINK_EXPORT static void enableTargetedStyleRecalc(bool);
 
     BLINK_EXPORT static void enablePreciseMemoryInfo(bool);
+
+    BLINK_EXPORT static void enableLayerSquashing(bool);
 
 private:
     WebRuntimeFeatures();

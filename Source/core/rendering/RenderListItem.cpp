@@ -257,13 +257,13 @@ void RenderListItem::updateValue()
     if (!m_hasExplicitValue) {
         m_isValueUpToDate = false;
         if (m_marker)
-            m_marker->setNeedsLayoutAndPrefWidthsRecalc();
+            m_marker->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
     }
 }
 
 static RenderObject* firstNonMarkerChild(RenderObject* parent)
 {
-    RenderObject* result = parent->firstChild();
+    RenderObject* result = parent->slowFirstChild();
     while (result && result->isListMarker())
         result = result->nextSibling();
     return result;
@@ -287,6 +287,10 @@ void RenderListItem::updateMarkerLocation()
         }
 
         if (markerParent != lineBoxParent || m_marker->preferredLogicalWidthsDirty()) {
+            // FIXME: We should not modify the structure of the render tree
+            // during layout. crbug.com/370461
+            DeprecatedDisableModifyRenderTreeStructureAsserts disabler;
+
             // Removing and adding the marker can trigger repainting in
             // containers other than ourselves, so we need to disable LayoutState.
             LayoutStateDisabler layoutStateDisabler(*this);
@@ -299,7 +303,7 @@ void RenderListItem::updateMarkerLocation()
             lineBoxParent->addChild(m_marker, firstNonMarkerChild(lineBoxParent));
             m_marker->updateMarginsAndContent();
             // If markerParent is an anonymous block that has lost all its children, destroy it.
-            if (markerParent && markerParent->isAnonymousBlock() && !markerParent->firstChild() && !toRenderBlock(markerParent)->continuation())
+            if (markerParent && markerParent->isAnonymousBlock() && !toRenderBlock(markerParent)->firstChild() && !toRenderBlock(markerParent)->continuation())
                 markerParent->destroy();
 
             // If the marker is inside we need to redo the preferred width calculations
@@ -444,7 +448,7 @@ const String& RenderListItem::markerText() const
 void RenderListItem::explicitValueChanged()
 {
     if (m_marker)
-        m_marker->setNeedsLayoutAndPrefWidthsRecalc();
+        m_marker->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
     Node* listNode = enclosingList(this);
     for (RenderListItem* item = this; item; item = nextListItem(listNode, item))
         item->updateValue();

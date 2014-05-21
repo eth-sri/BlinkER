@@ -98,7 +98,7 @@ public:
     // Used by the basic DOM mutation methods (e.g., appendChild()).
     void adoptIfNeeded(Node&);
 
-    Node& rootNode() const { return m_rootNode; }
+    Node& rootNode() const { return *m_rootNode; }
 
     IdTargetObserverRegistry& idTargetObserverRegistry() const { return *m_idTargetObserverRegistry.get(); }
 
@@ -144,7 +144,10 @@ protected:
     TreeScope(Document&);
     virtual ~TreeScope();
 
+#if !ENABLE(OILPAN)
     void destroyTreeScopeData();
+#endif
+
     void setDocument(Document& document) { m_document = &document; }
     void setParentTreeScope(TreeScope&);
 
@@ -157,7 +160,9 @@ protected:
 private:
     virtual void dispose() { }
 
+#if !ENABLE(OILPAN)
     int refCount() const;
+
 #if SECURITY_ASSERT_ENABLED
     bool deletionHasBegun();
     void beginDeletion();
@@ -165,11 +170,12 @@ private:
     bool deletionHasBegun() { return false; }
     void beginDeletion() { }
 #endif
+#endif
 
     bool rootNodeHasTreeSharedParent() const;
 
-    Node& m_rootNode;
-    Document* m_document;
+    RawPtrWillBeMember<Node> m_rootNode;
+    RawPtrWillBeMember<Document> m_document;
     RawPtrWillBeMember<TreeScope> m_parentTreeScope;
 
 #if !ENABLE(OILPAN)
@@ -180,7 +186,7 @@ private:
     OwnPtr<DocumentOrderedMap> m_imageMapsByName;
     OwnPtr<DocumentOrderedMap> m_labelsByForAttribute;
 
-    OwnPtr<IdTargetObserverRegistry> m_idTargetObserverRegistry;
+    OwnPtrWillBeMember<IdTargetObserverRegistry> m_idTargetObserverRegistry;
 
     mutable RefPtrWillBeMember<DOMSelection> m_selection;
 };

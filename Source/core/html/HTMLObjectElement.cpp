@@ -63,11 +63,17 @@ inline HTMLObjectElement::~HTMLObjectElement()
 #endif
 }
 
-PassRefPtr<HTMLObjectElement> HTMLObjectElement::create(Document& document, HTMLFormElement* form, bool createdByParser)
+PassRefPtrWillBeRawPtr<HTMLObjectElement> HTMLObjectElement::create(Document& document, HTMLFormElement* form, bool createdByParser)
 {
-    RefPtr<HTMLObjectElement> element = adoptRef(new HTMLObjectElement(document, form, createdByParser));
+    RefPtrWillBeRawPtr<HTMLObjectElement> element = adoptRefWillBeRefCountedGarbageCollected(new HTMLObjectElement(document, form, createdByParser));
     element->ensureUserAgentShadowRoot();
     return element.release();
+}
+
+void HTMLObjectElement::trace(Visitor* visitor)
+{
+    FormAssociatedElement::trace(visitor);
+    HTMLPlugInElement::trace(visitor);
 }
 
 RenderWidget* HTMLObjectElement::existingRenderWidget() const
@@ -236,7 +242,7 @@ bool HTMLObjectElement::shouldAllowQuickTimeClassIdQuirk()
         || !equalIgnoringCase(classId(), "clsid:02BF25D5-8C17-4B23-BC80-D3488ABDDC6B"))
         return false;
 
-    RefPtr<HTMLCollection> metaElements = document().getElementsByTagName(HTMLNames::metaTag.localName());
+    RefPtrWillBeRawPtr<HTMLCollection> metaElements = document().getElementsByTagName(HTMLNames::metaTag.localName());
     unsigned length = metaElements->length();
     for (unsigned i = 0; i < length; ++i) {
         ASSERT(metaElements->item(i)->isHTMLElement());

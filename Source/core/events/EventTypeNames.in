@@ -58,6 +58,7 @@ cuechange
 cut
 datachannel
 dblclick
+devicelight
 devicemotion
 deviceorientation
 dischargingtimechange
@@ -139,6 +140,8 @@ paste
 pause
 play
 playing
+pointerlockchange
+pointerlockerror
 popstate
 progress
 ratechange

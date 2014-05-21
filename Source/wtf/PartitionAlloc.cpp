@@ -672,6 +672,8 @@ void* partitionAllocSlowPath(PartitionRootBase* root, int flags, size_t size, Pa
         ASSERT(!newPage->numUnprovisionedSlots);
         ASSERT(newPage->freeCacheIndex == -1);
         bucket->freePagesHead = newPage->nextPage;
+        void* addr = partitionPageToPointer(newPage);
+        recommitSystemPages(addr, newPage->bucket->numSystemPagesPerSlotSpan * kSystemPageSize);
     } else {
         // Third. If we get here, we need a brand new page.
         size_t numPartitionPages = partitionBucketPartitionPages(bucket);
@@ -826,6 +828,7 @@ bool partitionReallocDirectMappedInPlace(PartitionRootGeneric* root, PartitionPa
         // pages accessible again.
         size_t recommitSize = newSize - currentSize;
         setSystemPagesAccessible(charPtr + currentSize, recommitSize);
+        recommitSystemPages(charPtr + currentSize, recommitSize);
 
 #ifndef NDEBUG
         memset(charPtr + currentSize, kUninitializedByte, recommitSize);
@@ -926,8 +929,12 @@ void partitionDumpStats(const PartitionRoot& root)
         size_t numFreeableBytes = 0;
         size_t numActivePages = 0;
         const PartitionPage* page = bucket.activePagesHead;
-        do {
-            if (page != &PartitionRootGeneric::gSeedPage) {
+        while (page) {
+            ASSERT(page != &PartitionRootGeneric::gSeedPage);
+            // A page may be on the active list but freed and not yet swept.
+            if (!page->freelistHead && !page->numUnprovisionedSlots && !page->numAllocatedSlots) {
+                ++numFreePages;
+            } else {
                 ++numActivePages;
                 numActiveBytes += (page->numAllocatedSlots * bucketSlotSize);
                 size_t pageBytesResident = (bucketNumSlots - page->numUnprovisionedSlots) * bucketSlotSize;
@@ -938,7 +945,7 @@ void partitionDumpStats(const PartitionRoot& root)
                     numFreeableBytes += pageBytesResident;
             }
             page = page->nextPage;
-        } while (page != bucket.activePagesHead);
+        }
         totalLive += numActiveBytes;
         totalResident += numResidentBytes;
         totalFreeable += numFreeableBytes;

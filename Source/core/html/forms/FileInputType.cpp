@@ -54,9 +54,15 @@ inline FileInputType::FileInputType(HTMLInputElement& element)
 {
 }
 
-PassRefPtr<InputType> FileInputType::create(HTMLInputElement& element)
+PassRefPtrWillBeRawPtr<InputType> FileInputType::create(HTMLInputElement& element)
 {
-    return adoptRef(new FileInputType(element));
+    return adoptRefWillBeNoop(new FileInputType(element));
+}
+
+void FileInputType::trace(Visitor* visitor)
+{
+    visitor->trace(m_fileList);
+    BaseClickableWithKeyInputType::trace(visitor);
 }
 
 Vector<FileChooserFileInfo> FileInputType::filesFromFormControlState(const FormControlState& state)
@@ -358,6 +364,18 @@ bool FileInputType::receiveDroppedFiles(const DragData* dragData)
 String FileInputType::droppedFileSystemId()
 {
     return m_droppedFileSystemId;
+}
+
+void FileInputType::copyNonAttributeProperties(const HTMLInputElement& sourceElement)
+{
+    RefPtrWillBeRawPtr<FileList> fileList(FileList::create());
+    FileList* sourceFileList = sourceElement.files();
+    unsigned size = sourceFileList->length();
+    for (unsigned i = 0; i < size; ++i) {
+        File* file = sourceFileList->item(i);
+        fileList->append(File::createWithRelativePath(file->path(), file->webkitRelativePath()));
+    }
+    setFiles(fileList.release());
 }
 
 String FileInputType::defaultToolTip() const

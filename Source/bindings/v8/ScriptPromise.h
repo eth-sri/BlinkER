@@ -52,7 +52,7 @@ public:
 
     // Constructs a ScriptPromise from |promise|.
     // If |promise| is not a Promise object, throws a v8 TypeError.
-    ScriptPromise(v8::Handle<v8::Value> promise, v8::Isolate*);
+    ScriptPromise(ScriptState*, v8::Handle<v8::Value> promise);
 
     ScriptPromise then(PassOwnPtr<ScriptFunction> onFulfilled, PassOwnPtr<ScriptFunction> onRejected = PassOwnPtr<ScriptFunction>());
 
@@ -94,9 +94,15 @@ public:
     // Constructs and returns a ScriptPromise from |value|.
     // if |value| is not a Promise object, returns a Promise object
     // resolved with |value|.
+    // Returns |value| itself if it is a Promise.
     static ScriptPromise cast(const ScriptValue& /*value*/);
+    static ScriptPromise cast(ScriptState*, v8::Handle<v8::Value> /*value*/);
+
+    static ScriptPromise reject(const ScriptValue&);
+    static ScriptPromise reject(ScriptState*, v8::Handle<v8::Value>);
 
 private:
+    RefPtr<ScriptState> m_scriptState;
     ScriptValue m_promise;
 };
 

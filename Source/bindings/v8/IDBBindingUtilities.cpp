@@ -63,7 +63,7 @@ static v8::Handle<v8::Value> toV8(const IDBKeyPath& value, v8::Handle<v8::Object
     case IDBKeyPath::StringType:
         return v8String(isolate, value.string());
     case IDBKeyPath::ArrayType:
-        RefPtr<DOMStringList> keyPaths = DOMStringList::create();
+        RefPtrWillBeRawPtr<DOMStringList> keyPaths = DOMStringList::create();
         for (Vector<String>::const_iterator it = value.array().begin(); it != value.array().end(); ++it)
             keyPaths->append(*it);
         return toV8(keyPaths.release(), creationContext, isolate);
@@ -405,7 +405,7 @@ ScriptValue idbAnyToScriptValue(ScriptState* scriptState, PassRefPtrWillBeRawPtr
     v8::Isolate* isolate = scriptState->isolate();
     v8::HandleScope handleScope(isolate);
     v8::Handle<v8::Value> v8Value(toV8(any.get(), scriptState->context()->Global(), isolate));
-    return ScriptValue(v8Value, isolate);
+    return ScriptValue(scriptState, v8Value);
 }
 
 ScriptValue idbKeyToScriptValue(ScriptState* scriptState, PassRefPtrWillBeRawPtr<IDBKey> key)
@@ -413,7 +413,7 @@ ScriptValue idbKeyToScriptValue(ScriptState* scriptState, PassRefPtrWillBeRawPtr
     v8::Isolate* isolate = scriptState->isolate();
     v8::HandleScope handleScope(isolate);
     v8::Handle<v8::Value> v8Value(toV8(key.get(), scriptState->context()->Global(), isolate));
-    return ScriptValue(v8Value, isolate);
+    return ScriptValue(scriptState, v8Value);
 }
 
 PassRefPtrWillBeRawPtr<IDBKey> scriptValueToIDBKey(v8::Isolate* isolate, const ScriptValue& scriptValue)
@@ -439,7 +439,7 @@ void assertPrimaryKeyValidOrInjectable(ScriptState* scriptState, PassRefPtr<Shar
     ScriptState::Scope scope(scriptState);
     v8::Isolate* isolate = scriptState->isolate();
     ScriptValue keyValue = idbKeyToScriptValue(scriptState, key);
-    ScriptValue scriptValue(deserializeIDBValueBuffer(isolate, buffer.get(), blobInfo), isolate);
+    ScriptValue scriptValue(scriptState, deserializeIDBValueBuffer(isolate, buffer.get(), blobInfo));
 
     // This assertion is about already persisted data, so allow experimental types.
     const bool allowExperimentalTypes = true;

@@ -35,9 +35,9 @@ class HTMLElement;
 
 class HTMLDocument : public Document, public ResourceClient {
 public:
-    static PassRefPtr<HTMLDocument> create(const DocumentInit& initializer = DocumentInit())
+    static PassRefPtrWillBeRawPtr<HTMLDocument> create(const DocumentInit& initializer = DocumentInit())
     {
-        return adoptRef(new HTMLDocument(initializer));
+        return adoptRefWillBeRefCountedGarbageCollected(new HTMLDocument(initializer));
     }
     virtual ~HTMLDocument();
 
@@ -72,7 +72,7 @@ public:
 
     static bool isCaseSensitiveAttribute(const QualifiedName&);
 
-    virtual PassRefPtr<Document> cloneDocumentWithoutChildren() OVERRIDE FINAL;
+    virtual PassRefPtrWillBeRawPtr<Document> cloneDocumentWithoutChildren() OVERRIDE FINAL;
 
 protected:
     HTMLDocument(const DocumentInit&, DocumentClassFlags extendedDocumentClasses = DefaultDocumentClass);

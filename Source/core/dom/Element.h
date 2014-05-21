@@ -79,19 +79,18 @@ enum SpellcheckAttributeState {
 
 enum ElementFlags {
     TabIndexWasSetExplicitly = 1 << 0,
-    NeedsFocusAppearanceUpdateSoonAfterAttach = 1 << 1,
-    StyleAffectedByEmpty = 1 << 2,
-    IsInCanvasSubtree = 1 << 3,
-    ContainsFullScreenElement = 1 << 4,
-    IsInTopLayer = 1 << 5,
-    HasPendingResources = 1 << 6,
+    StyleAffectedByEmpty = 1 << 1,
+    IsInCanvasSubtree = 1 << 2,
+    ContainsFullScreenElement = 1 << 3,
+    IsInTopLayer = 1 << 4,
+    HasPendingResources = 1 << 5,
 
-    NumberOfElementFlags = 7, // Required size of bitfield used to store the flags.
+    NumberOfElementFlags = 6, // Required size of bitfield used to store the flags.
 };
 
 class Element : public ContainerNode {
 public:
-    static PassRefPtr<Element> create(const QualifiedName&, Document*);
+    static PassRefPtrWillBeRawPtr<Element> create(const QualifiedName&, Document*);
     virtual ~Element();
 
     DEFINE_ATTRIBUTE_EVENT_LISTENER(beforecopy);
@@ -182,28 +181,28 @@ public:
     void scrollByLines(int lines);
     void scrollByPages(int pages);
 
-    int offsetLeft();
-    int offsetTop();
-    int offsetWidth();
-    int offsetHeight();
+    double offsetLeft();
+    double offsetTop();
+    double offsetWidth();
+    double offsetHeight();
 
     // FIXME: Replace uses of offsetParent in the platform with calls
     // to the render layer and merge offsetParentForBindings and offsetParent.
     Element* offsetParentForBindings();
 
     Element* offsetParent();
-    int clientLeft();
-    int clientTop();
-    int clientWidth();
-    int clientHeight();
-    virtual int scrollLeft();
-    virtual int scrollTop();
-    virtual void setScrollLeft(int);
+    double clientLeft();
+    double clientTop();
+    double clientWidth();
+    double clientHeight();
+    virtual double scrollLeft();
+    virtual double scrollTop();
+    virtual void setScrollLeft(double);
     virtual void setScrollLeft(const Dictionary& scrollOptionsHorizontal, ExceptionState&);
-    virtual void setScrollTop(int);
+    virtual void setScrollTop(double);
     virtual void setScrollTop(const Dictionary& scrollOptionsVertical, ExceptionState&);
-    virtual int scrollWidth();
-    virtual int scrollHeight();
+    virtual double scrollWidth();
+    virtual double scrollHeight();
 
     IntRect boundsInRootViewSpace();
 
@@ -254,8 +253,8 @@ public:
 
     virtual String nodeName() const OVERRIDE;
 
-    PassRefPtr<Element> cloneElementWithChildren();
-    PassRefPtr<Element> cloneElementWithoutChildren();
+    PassRefPtrWillBeRawPtr<Element> cloneElementWithChildren();
+    PassRefPtrWillBeRawPtr<Element> cloneElementWithoutChildren();
 
     void scheduleLayerUpdate();
 
@@ -326,11 +325,13 @@ public:
     void setAnimationStyleChange(bool);
     void setNeedsAnimationStyleRecalc();
 
+    void setNeedsCompositingUpdate();
+
     bool supportsStyleSharing() const;
 
     ElementShadow* shadow() const;
     ElementShadow& ensureShadow();
-    PassRefPtr<ShadowRoot> createShadowRoot(ExceptionState&);
+    PassRefPtrWillBeRawPtr<ShadowRoot> createShadowRoot(ExceptionState&);
     ShadowRoot* shadowRoot() const;
     ShadowRoot* youngestShadowRoot() const;
 
@@ -402,9 +403,6 @@ public:
     virtual const AtomicString& shadowPseudoId() const;
     void setShadowPseudoId(const AtomicString&);
 
-    LayoutSize minimumSizeForResizing() const;
-    void setMinimumSizeForResizing(const LayoutSize&);
-
     virtual void didBecomeFullscreenElement() { }
     virtual void willStopBeingFullscreenElement() { }
 
@@ -430,9 +428,6 @@ public:
 
     DOMStringMap& dataset();
 
-#if ENABLE(INPUT_SPEECH)
-    virtual bool isInputFieldSpeechButtonElement() const { return false; }
-#endif
 #if ENABLE(INPUT_MULTIPLE_FIELDS_UI)
     virtual bool isDateTimeEditElement() const { return false; }
     virtual bool isDateTimeFieldElement() const { return false; }
@@ -483,6 +478,7 @@ public:
     void setIsInTopLayer(bool);
 
     void webkitRequestPointerLock();
+    void requestPointerLock();
 
     bool isSpellCheckingEnabled() const;
 
@@ -512,6 +508,8 @@ public:
 
     void setTabIndex(int);
     virtual short tabIndex() const OVERRIDE;
+
+    virtual void trace(Visitor*) OVERRIDE;
 
 protected:
     Element(const QualifiedName& tagName, Document* document, ConstructionType type)
@@ -546,7 +544,7 @@ protected:
     // moved to RenderObject because some focusable nodes don't have renderers,
     // e.g., HTMLOptionElement.
     virtual bool rendererIsFocusable() const;
-    PassRefPtr<HTMLCollection> ensureCachedHTMLCollection(CollectionType);
+    PassRefPtrWillBeRawPtr<HTMLCollection> ensureCachedHTMLCollection(CollectionType);
     HTMLCollection* cachedHTMLCollection(CollectionType);
 
     // classAttributeChanged() exists to share code between
@@ -629,8 +627,8 @@ private:
 
     // cloneNode is private so that non-virtual cloneElementWithChildren and cloneElementWithoutChildren
     // are used instead.
-    virtual PassRefPtr<Node> cloneNode(bool deep) OVERRIDE;
-    virtual PassRefPtr<Element> cloneElementWithoutAttributesAndChildren();
+    virtual PassRefPtrWillBeRawPtr<Node> cloneNode(bool deep) OVERRIDE;
+    virtual PassRefPtrWillBeRawPtr<Element> cloneElementWithoutAttributesAndChildren();
 
     QualifiedName m_tagName;
 
@@ -819,6 +817,8 @@ inline bool Node::hasClass() const
 
 inline Node::InsertionNotificationRequest Node::insertedInto(ContainerNode* insertionPoint)
 {
+    ASSERT(!childNeedsStyleInvalidation());
+    ASSERT(!needsStyleInvalidation());
     ASSERT(insertionPoint->inDocument() || isContainerNode());
     if (insertionPoint->inDocument())
         setFlag(InDocumentFlag);

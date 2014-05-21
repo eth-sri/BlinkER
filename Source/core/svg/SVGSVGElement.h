@@ -44,7 +44,7 @@ class SVGSVGElement FINAL : public SVGGraphicsElement,
                             public SVGFitToViewBox,
                             public SVGZoomAndPan {
 public:
-    static PassRefPtr<SVGSVGElement> create(Document&);
+    DEFINE_NODE_FACTORY(SVGSVGElement);
 
     using SVGGraphicsElement::ref;
     using SVGGraphicsElement::deref;
@@ -87,8 +87,8 @@ public:
     void unsuspendRedrawAll() { }
     void forceRedraw() { }
 
-    PassRefPtr<NodeList> getIntersectionList(PassRefPtr<SVGRectTearOff>, SVGElement* referenceElement) const;
-    PassRefPtr<NodeList> getEnclosureList(PassRefPtr<SVGRectTearOff>, SVGElement* referenceElement) const;
+    PassRefPtrWillBeRawPtr<NodeList> getIntersectionList(PassRefPtr<SVGRectTearOff>, SVGElement* referenceElement) const;
+    PassRefPtrWillBeRawPtr<NodeList> getEnclosureList(PassRefPtr<SVGRectTearOff>, SVGElement* referenceElement) const;
     bool checkIntersection(SVGElement*, PassRefPtr<SVGRectTearOff>) const;
     bool checkEnclosure(SVGElement*, PassRefPtr<SVGRectTearOff>) const;
     void deselectAll();
@@ -136,13 +136,15 @@ private:
 
     void updateCurrentTranslate();
 
+    virtual void finishParsingChildren() OVERRIDE;
+
     enum CheckIntersectionOrEnclosure {
         CheckIntersection,
         CheckEnclosure
     };
 
     bool checkIntersectionOrEnclosure(const SVGElement&, const FloatRect&, CheckIntersectionOrEnclosure) const;
-    PassRefPtr<NodeList> collectIntersectionOrEnclosureList(const FloatRect&, SVGElement*, CheckIntersectionOrEnclosure) const;
+    PassRefPtrWillBeRawPtr<NodeList> collectIntersectionOrEnclosureList(const FloatRect&, SVGElement*, CheckIntersectionOrEnclosure) const;
 
     RefPtr<SVGAnimatedLength> m_x;
     RefPtr<SVGAnimatedLength> m_y;

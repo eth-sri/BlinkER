@@ -191,12 +191,13 @@ var InspectorFrontendAPI = {
     },
 
     /**
-     * @param {!Array.<!Adb.Device>} targets
+     * @param {!string} eventType
+     * @param {*=} eventData
+     * @return {boolean}
      */
-    populateRemoteDevices: function(targets)
+    dispatchEventToListeners: function(eventType, eventData)
     {
-        // FIXME: this needs to be changed for the sake of modularity.
-        WebInspector.devicesModel.populateRemoteDevices(targets);
+        return WebInspector.inspectorFrontendEventSink.dispatchEventToListeners(eventType, eventData);
     },
 
     /**
@@ -245,25 +246,8 @@ var InspectorFrontendAPI = {
             window.opener.postMessage(["loadCompleted"], "*");
     },
 
-    /**
-     * @param {?string} dispatchParameter
-     */
-    dispatchQueryParameters: function(dispatchParameter)
-    {
-        if (dispatchParameter)
-            InspectorFrontendAPI._dispatch(JSON.parse(window.decodeURI(dispatchParameter)));
-    },
-
     // Implementation details
     /////////////////////////
-
-    _dispatch: function(signature)
-    {
-        InspectorFrontendAPI._runOnceLoaded(function() {
-            var methodName = signature.shift();
-            return InspectorFrontendAPI[methodName].apply(InspectorFrontendAPI, signature);
-        });
-    },
 
     /**
      * @param {function()} command
@@ -281,11 +265,6 @@ var InspectorFrontendAPI = {
 /** @typedef {!Object.<{type: string, keyCode: (number|undefined), keyIdentifier: (string|undefined), modifiers: (number|undefined)}>} */
 InspectorFrontendAPI.ForwardedKeyboardEvent;
 
-function onMessageFromOpener(event)
-{
-    if (event.source === window.opener)
-        InspectorFrontendAPI._dispatch(event.data);
+if (top !== window) {
+    top.InspectorFrontendAPI = window.InspectorFrontendAPI;
 }
-
-if (window.opener && window.dispatchStandaloneTestRunnerMessages)
-    window.addEventListener("message", onMessageFromOpener, true);

@@ -70,7 +70,7 @@ public:
     LayoutRect repaintRectIncludingNonCompositingDescendants() const;
 
     void repaintAfterLayout(bool shouldCheckForRepaint);
-    void repaintIncludingNonCompositingDescendants(RenderLayerModelObject* repaintContainer);
+    void repaintIncludingNonCompositingDescendants(const RenderLayerModelObject* repaintContainer);
 
     void setRepaintStatus(RepaintStatus status) { m_repaintStatus = status; }
 
@@ -96,6 +96,7 @@ private:
     unsigned m_repaintStatus; // RepaintStatus
 
     LayoutRect m_repaintRect; // Cached repaint rects. Used by layout.
+    LayoutPoint m_offset;
 };
 
 } // namespace WebCore

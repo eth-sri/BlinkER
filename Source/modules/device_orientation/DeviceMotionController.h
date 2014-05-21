@@ -47,8 +47,6 @@ public:
 
     void didChangeDeviceMotion(DeviceMotionData*);
 
-    virtual void trace(Visitor*) OVERRIDE { }
-
 private:
     explicit DeviceMotionController(Document&);
     virtual void registerWithDispatcher() OVERRIDE;

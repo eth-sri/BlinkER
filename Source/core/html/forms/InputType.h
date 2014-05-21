@@ -55,11 +55,11 @@ class Node;
 // FIXME: InputType should not inherit InputTypeView. It's conceptually wrong.
 class InputType : public InputTypeView {
     WTF_MAKE_NONCOPYABLE(InputType);
-    WTF_MAKE_FAST_ALLOCATED;
+    WTF_MAKE_FAST_ALLOCATED_WILL_BE_REMOVED;
 
 public:
-    static PassRefPtr<InputType> create(HTMLInputElement&, const AtomicString&);
-    static PassRefPtr<InputType> createText(HTMLInputElement&);
+    static PassRefPtrWillBeRawPtr<InputType> create(HTMLInputElement&, const AtomicString&);
+    static PassRefPtrWillBeRawPtr<InputType> createText(HTMLInputElement&);
     static const AtomicString& normalizeTypeName(const AtomicString&);
     virtual ~InputType();
 
@@ -172,6 +172,7 @@ public:
     // Should return true if the given DragData has more than one dropped files.
     virtual bool receiveDroppedFiles(const DragData*);
     virtual String droppedFileSystemId();
+    virtual void copyNonAttributeProperties(const HTMLInputElement&);
     // Should return true if the corresponding renderer for a type can display a suggested value.
     virtual bool canSetSuggestedValue();
     virtual bool shouldSendChangeEventAfterCheckedChanged();
@@ -219,6 +220,8 @@ public:
     // InputTypeView override
     virtual bool shouldSubmitImplicitly(Event*) OVERRIDE;
     virtual bool hasCustomFocusLogic() const OVERRIDE;
+
+    virtual bool shouldDispatchFormControlChangeEvent(String&, String&);
 
 protected:
     InputType(HTMLInputElement& element) : InputTypeView(element) { }

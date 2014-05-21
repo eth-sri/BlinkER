@@ -374,7 +374,7 @@ WebInspector.TimelineModel.prototype = {
      */
     _innerAddRecord: function(payload, parentRecord)
     {
-        var record = new WebInspector.TimelineModel.Record(this, payload, parentRecord);
+        var record = new WebInspector.TimelineModel.RecordImpl(this, payload, parentRecord);
         if (WebInspector.TimelineUIUtils.isEventDivider(record))
             this._eventDividerRecords.push(record);
 
@@ -551,19 +551,142 @@ WebInspector.TimelineModel.InterRecordBindings.prototype = {
         this._sendRequestRecords = {};
         this._timerRecords = {};
         this._requestAnimationFrameRecords = {};
-        this._layoutInvalidateStack = {};
+        this._layoutInvalidate = {};
         this._lastScheduleStyleRecalculation = {};
         this._webSocketCreateRecords = {};
     }
 }
 
 /**
+ * @interface
+ */
+WebInspector.TimelineModel.Record = function()
+{
+}
+
+WebInspector.TimelineModel.Record.prototype = {
+    /**
+     * @return {?string}
+     */
+    url: function() { },
+
+    /**
+     * @return {?Array.<!ConsoleAgent.CallFrame>}
+     */
+    callSiteStackTrace: function() { },
+
+    /**
+     * @return {?WebInspector.TimelineModel.Record}
+     */
+    initiator: function() { },
+
+    /**
+     * @return {!WebInspector.Target}
+     */
+    target: function() { },
+
+    /**
+     * @return {number}
+     */
+    selfTime: function() { },
+
+    /**
+     * @return {!Array.<!WebInspector.TimelineModel.Record>}
+     */
+    children: function() { },
+
+    /**
+     * @return {!WebInspector.TimelineCategory}
+     */
+    category: function() { },
+
+    /**
+     * @return {string}
+     */
+    title: function() { },
+
+    /**
+     * @return {number}
+     */
+    startTime: function() { },
+
+    /**
+     * @return {string|undefined}
+     */
+    thread: function() { },
+
+    /**
+     * @return {number}
+     */
+    endTime: function() { },
+
+    /**
+     * @param {number} endTime
+     */
+    setEndTime: function(endTime) { },
+
+    /**
+     * @return {!Object}
+     */
+    data: function() { },
+
+    /**
+     * @return {string}
+     */
+    type: function() { },
+
+    /**
+     * @return {string}
+     */
+    frameId: function() { },
+
+    /**
+     * @return {?Array.<!ConsoleAgent.CallFrame>}
+     */
+    stackTrace: function() { },
+
+    /**
+     * @param {string} key
+     * @return {?Object}
+     */
+    getUserObject: function(key) { },
+
+    /**
+     * @param {string} key
+     * @param {?Object|undefined} value
+     */
+    setUserObject: function(key, value) { },
+
+    /**
+     * @return {!Object.<string, number>}
+     */
+    aggregatedStats: function() { },
+
+    /**
+     * @return {?Array.<string>}
+     */
+    warnings: function() { },
+
+    /**
+     * @return {boolean}
+     */
+    childHasWarnings: function() { },
+
+    /**
+     * @param {!RegExp} regExp
+     * @return {boolean}
+     */
+    testContentMatching: function(regExp) { }
+}
+
+/**
  * @constructor
+ * @implements {WebInspector.TimelineModel.Record}
  * @param {!WebInspector.TimelineModel} model
  * @param {!TimelineAgent.TimelineEvent} timelineEvent
  * @param {?WebInspector.TimelineModel.Record} parentRecord
  */
-WebInspector.TimelineModel.Record = function(model, timelineEvent, parentRecord)
+WebInspector.TimelineModel.RecordImpl = function(model, timelineEvent, parentRecord)
 {
     this._model = model;
     var bindings = this._model._bindings;
@@ -577,19 +700,6 @@ WebInspector.TimelineModel.Record = function(model, timelineEvent, parentRecord)
 
     this._selfTime = this.endTime() - this.startTime();
 
-    if (timelineEvent.data) {
-        if (timelineEvent.data["url"])
-            this.url = timelineEvent.data["url"];
-        if (timelineEvent.data["scriptName"] || timelineEvent.data["scriptId"]) {
-            this.scriptId = timelineEvent.data["scriptId"];
-            this.scriptName = timelineEvent.data["scriptName"];
-            this.scriptLine = timelineEvent.data["scriptLine"];
-        }
-    }
-
-    if (parentRecord && parentRecord.callSiteStackTrace)
-        this.callSiteStackTrace = parentRecord.callSiteStackTrace;
-
     var recordTypes = WebInspector.TimelineModel.RecordType;
     switch (timelineEvent.type) {
     case recordTypes.ResourceSendRequest:
@@ -598,31 +708,17 @@ WebInspector.TimelineModel.Record = function(model, timelineEvent, parentRecord)
         break;
 
     case recordTypes.ResourceReceiveResponse:
-        var sendRequestRecord = bindings._sendRequestRecords[timelineEvent.data["requestId"]];
-        if (sendRequestRecord) // False if we started instrumentation in the middle of request.
-            this.url = sendRequestRecord.url;
-        break;
-
     case recordTypes.ResourceReceivedData:
     case recordTypes.ResourceFinish:
-        var sendRequestRecord = bindings._sendRequestRecords[timelineEvent.data["requestId"]];
-        if (sendRequestRecord) // False for main resource.
-            this.url = sendRequestRecord.url;
+        this._initiator = bindings._sendRequestRecords[timelineEvent.data["requestId"]];
         break;
 
     case recordTypes.TimerInstall:
-        this.timeout = timelineEvent.data["timeout"];
-        this.singleShot = timelineEvent.data["singleShot"];
         bindings._timerRecords[timelineEvent.data["timerId"]] = this;
         break;
 
     case recordTypes.TimerFire:
-        var timerInstalledRecord = bindings._timerRecords[timelineEvent.data["timerId"]];
-        if (timerInstalledRecord) {
-            this.callSiteStackTrace = timerInstalledRecord.stackTrace();
-            this.timeout = timerInstalledRecord.timeout;
-            this.singleShot = timerInstalledRecord.singleShot;
-        }
+        this._initiator = bindings._timerRecords[timelineEvent.data["timerId"]];
         break;
 
     case recordTypes.RequestAnimationFrame:
@@ -630,13 +726,7 @@ WebInspector.TimelineModel.Record = function(model, timelineEvent, parentRecord)
         break;
 
     case recordTypes.FireAnimationFrame:
-        var requestAnimationRecord = bindings._requestAnimationFrameRecords[timelineEvent.data["id"]];
-        if (requestAnimationRecord)
-            this.callSiteStackTrace = requestAnimationRecord.stackTrace();
-        break;
-
-    case recordTypes.ConsoleTime:
-        var message = timelineEvent.data["message"];
+        this._initiator = bindings._requestAnimationFrameRecords[timelineEvent.data["id"]];
         break;
 
     case recordTypes.ScheduleStyleRecalculation:
@@ -644,31 +734,23 @@ WebInspector.TimelineModel.Record = function(model, timelineEvent, parentRecord)
         break;
 
     case recordTypes.RecalculateStyles:
-        var scheduleStyleRecalculationRecord = bindings._lastScheduleStyleRecalculation[this.frameId()];
-        if (!scheduleStyleRecalculationRecord)
-            break;
-        this.callSiteStackTrace = scheduleStyleRecalculationRecord.stackTrace();
+        this._initiator = bindings._lastScheduleStyleRecalculation[this.frameId()];
         break;
 
     case recordTypes.InvalidateLayout:
         // Consider style recalculation as a reason for layout invalidation,
         // but only if we had no earlier layout invalidation records.
-        var styleRecalcStack;
-        if (!bindings._layoutInvalidateStack[this.frameId()]) {
-            if (parentRecord.type() === recordTypes.RecalculateStyles)
-                styleRecalcStack = parentRecord.callSiteStackTrace;
-        }
-        bindings._layoutInvalidateStack[this.frameId()] = styleRecalcStack || this.stackTrace();
+        var layoutInitator = this;
+        if (!bindings._layoutInvalidate[this.frameId()] && parentRecord.type() === recordTypes.RecalculateStyles)
+            layoutInitator = parentRecord._initiator;
+        bindings._layoutInvalidate[this.frameId()] = layoutInitator;
         break;
 
     case recordTypes.Layout:
-        var layoutInvalidateStack = bindings._layoutInvalidateStack[this.frameId()];
-        if (layoutInvalidateStack)
-            this.callSiteStackTrace = layoutInvalidateStack;
+        this._initiator = bindings._layoutInvalidate[this.frameId()];
+        bindings._layoutInvalidate[this.frameId()] = null;
         if (this.stackTrace())
-            this._addWarning(WebInspector.UIString("Forced synchronous layout is a possible performance bottleneck."));
-
-        bindings._layoutInvalidateStack[this.frameId()] = null;
+            this.addWarning(WebInspector.UIString("Forced synchronous layout is a possible performance bottleneck."));
         this.highlightQuad = timelineEvent.data.root || WebInspector.TimelineModel._quadFromRectData(timelineEvent.data);
         break;
 
@@ -677,21 +759,13 @@ WebInspector.TimelineModel.Record = function(model, timelineEvent, parentRecord)
         break;
 
     case recordTypes.WebSocketCreate:
-        this.webSocketURL = timelineEvent.data["url"];
-        if (typeof timelineEvent.data["webSocketProtocol"] !== "undefined")
-            this.webSocketProtocol = timelineEvent.data["webSocketProtocol"];
         bindings._webSocketCreateRecords[timelineEvent.data["identifier"]] = this;
         break;
 
     case recordTypes.WebSocketSendHandshakeRequest:
     case recordTypes.WebSocketReceiveHandshakeResponse:
     case recordTypes.WebSocketDestroy:
-        var webSocketCreateRecord = bindings._webSocketCreateRecords[timelineEvent.data["identifier"]];
-        if (webSocketCreateRecord) { // False if we started instrumentation in the middle of request.
-            this.webSocketURL = webSocketCreateRecord.webSocketURL;
-            if (typeof webSocketCreateRecord.webSocketProtocol !== "undefined")
-                this.webSocketProtocol = webSocketCreateRecord.webSocketProtocol;
-        }
+        this._initiator = bindings._webSocketCreateRecords[timelineEvent.data["identifier"]];
         break;
 
     case recordTypes.EmbedderCallback:
@@ -700,7 +774,36 @@ WebInspector.TimelineModel.Record = function(model, timelineEvent, parentRecord)
     }
 }
 
-WebInspector.TimelineModel.Record.prototype = {
+WebInspector.TimelineModel.RecordImpl.prototype = {
+    /**
+     * @return {?string}
+     */
+    url: function()
+    {
+        var data = this.data();
+        if (data && data["url"])
+            return data["url"];
+        if (this._initiator)
+            return this._initiator.url();
+        return null;
+    },
+
+    /**
+     * @return {?Array.<!ConsoleAgent.CallFrame>}
+     */
+    callSiteStackTrace: function()
+    {
+        return this._initiator ? this._initiator.stackTrace() : null;
+    },
+
+    /**
+     * @return {?WebInspector.TimelineModel.Record}
+     */
+    initiator: function()
+    {
+        return this._initiator;
+    },
+
     /**
      * @return {!WebInspector.Target}
      */
@@ -852,7 +955,7 @@ WebInspector.TimelineModel.Record.prototype = {
     /**
      * @param {string} message
      */
-    _addWarning: function(message)
+    addWarning: function(message)
     {
         if (this._warnings)
             this._warnings.push(message);
@@ -891,7 +994,6 @@ WebInspector.TimelineModel.Record.prototype = {
         return regExp.test(tokens.join("|"));
     }
 }
-
 
 /**
  * @constructor

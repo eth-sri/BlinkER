@@ -40,7 +40,6 @@ class SVGAnimatedPropertyBase;
 class SubtreeLayoutScope;
 class SVGCursorElement;
 class SVGDocumentExtensions;
-class SVGElementInstance;
 class SVGElementRareData;
 class SVGFitToViewBox;
 class SVGSVGElement;
@@ -108,12 +107,15 @@ public:
     void invalidateSVGAttributes() { ensureUniqueElementData().m_animatedSVGAttributesAreDirty = true; }
     void invalidateSVGPresentationAttributeStyle() { ensureUniqueElementData().m_presentationAttributeStyleIsDirty = true; }
 
-    const HashSet<SVGElementInstance*>& instancesForElement() const;
+    const WillBeHeapHashSet<RawPtrWillBeWeakMember<SVGElement> >& instancesForElement() const;
+    void mapInstanceToElement(SVGElement*);
+    void removeInstanceMapping(SVGElement*);
 
     bool getBoundingBox(FloatRect&);
 
     void setCursorElement(SVGCursorElement*);
     void setCursorImageValue(CSSCursorImageValue*);
+
 #if !ENABLE(OILPAN)
     void cursorElementRemoved();
     void cursorImageValueRemoved();
@@ -121,6 +123,7 @@ public:
 
     SVGElement* correspondingElement();
     void setCorrespondingElement(SVGElement*);
+    SVGUseElement* correspondingUseElement() const;
 
     void synchronizeAnimatedSVGAttribute(const QualifiedName&) const;
 
@@ -154,12 +157,32 @@ public:
 
     bool inUseShadowTree() const;
 
+    class InvalidationGuard {
+        WTF_MAKE_NONCOPYABLE(InvalidationGuard);
+    public:
+        InvalidationGuard(SVGElement* element) : m_element(element) { }
+        ~InvalidationGuard() { m_element->invalidateInstances(); }
+    private:
+        SVGElement* m_element;
+    };
+
+    class InstanceUpdateBlocker {
+        WTF_MAKE_NONCOPYABLE(InstanceUpdateBlocker);
+    public:
+        InstanceUpdateBlocker(SVGElement* targetElement);
+        ~InstanceUpdateBlocker();
+
+    private:
+        SVGElement* m_targetElement;
+    };
+
+    void invalidateInstances();
+
 protected:
     SVGElement(const QualifiedName&, Document&, ConstructionType = CreateSVGElement);
 
     virtual void parseAttribute(const QualifiedName&, const AtomicString&) OVERRIDE;
 
-    virtual void finishParsingChildren() OVERRIDE;
     virtual void attributeChanged(const QualifiedName&, const AtomicString&, AttributeModificationReason = ModifiedDirectly) OVERRIDE;
 
     virtual bool isPresentationAttribute(const QualifiedName&) const OVERRIDE;
@@ -189,8 +212,6 @@ protected:
     bool hasFocusEventListeners() const;
 
 private:
-    friend class SVGElementInstance;
-
     // FIXME: Author shadows should be allowed
     // https://bugs.webkit.org/show_bug.cgi?id=77938
     virtual bool areAuthorShadowsAllowed() const OVERRIDE FINAL { return false; }
@@ -200,9 +221,6 @@ private:
     virtual void willRecalcStyle(StyleRecalcChange) OVERRIDE;
 
     void buildPendingResourcesIfNeeded();
-
-    void mapInstanceToElement(SVGElementInstance*);
-    void removeInstanceMapping(SVGElementInstance*);
 
     bool supportsSpatialNavigationFocus() const;
 

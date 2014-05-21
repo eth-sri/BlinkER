@@ -32,7 +32,7 @@
 
 namespace WebCore {
 
-inline SVGPatternElement::SVGPatternElement(Document& document)
+SVGPatternElement::SVGPatternElement(Document& document)
     : SVGElement(SVGNames::patternTag, document)
     , SVGURIReference(this)
     , SVGTests(this)
@@ -54,11 +54,6 @@ inline SVGPatternElement::SVGPatternElement(Document& document)
     addToPropertyMap(m_patternTransform);
     addToPropertyMap(m_patternUnits);
     addToPropertyMap(m_patternContentUnits);
-}
-
-PassRefPtr<SVGPatternElement> SVGPatternElement::create(Document& document)
-{
-    return adoptRef(new SVGPatternElement(document));
 }
 
 bool SVGPatternElement::isSupportedAttribute(const QualifiedName& attrName)
@@ -116,7 +111,7 @@ void SVGPatternElement::svgAttributeChanged(const QualifiedName& attrName)
         return;
     }
 
-    SVGElementInstance::InvalidationGuard invalidationGuard(this);
+    SVGElement::InvalidationGuard invalidationGuard(this);
 
     if (attrName == SVGNames::xAttr
         || attrName == SVGNames::yAttr
@@ -137,7 +132,7 @@ void SVGPatternElement::childrenChanged(bool changedByParser, Node* beforeChange
         return;
 
     if (RenderObject* object = renderer())
-        object->setNeedsLayout();
+        object->setNeedsLayoutAndFullRepaint();
 }
 
 RenderObject* SVGPatternElement::createRenderer(RenderStyle*)

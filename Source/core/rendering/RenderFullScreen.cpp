@@ -110,6 +110,10 @@ static PassRefPtr<RenderStyle> createFullScreenStyle()
 
 RenderObject* RenderFullScreen::wrapRenderer(RenderObject* object, RenderObject* parent, Document* document)
 {
+    // FIXME: We should not modify the structure of the render tree during
+    // layout. crbug.com/370459
+    DeprecatedDisableModifyRenderTreeStructureAsserts disabler;
+
     RenderFullScreen* fullscreenRenderer = RenderFullScreen::createAnonymous(document);
     fullscreenRenderer->setStyle(createFullScreenStyle());
     if (parent && !parent->isChildAllowed(fullscreenRenderer, fullscreenRenderer->style())) {
@@ -132,11 +136,11 @@ RenderObject* RenderFullScreen::wrapRenderer(RenderObject* object, RenderObject*
             // Always just do a full layout to ensure that line boxes get deleted properly.
             // Because objects moved from |parent| to |fullscreenRenderer|, we want to
             // make new line boxes instead of leaving the old ones around.
-            parent->setNeedsLayoutAndPrefWidthsRecalc();
-            containingBlock->setNeedsLayoutAndPrefWidthsRecalc();
+            parent->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
+            containingBlock->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
         }
         fullscreenRenderer->addChild(object);
-        fullscreenRenderer->setNeedsLayoutAndPrefWidthsRecalc();
+        fullscreenRenderer->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
     }
 
     ASSERT(document);
@@ -146,6 +150,10 @@ RenderObject* RenderFullScreen::wrapRenderer(RenderObject* object, RenderObject*
 
 void RenderFullScreen::unwrapRenderer()
 {
+    // FIXME: We should not modify the structure of the render tree during
+    // layout. crbug.com/370459
+    DeprecatedDisableModifyRenderTreeStructureAsserts disabler;
+
     if (parent()) {
         RenderObject* child;
         while ((child = firstChild())) {
@@ -156,7 +164,7 @@ void RenderFullScreen::unwrapRenderer()
                 toRenderBox(child)->clearOverrideSize();
             child->remove();
             parent()->addChild(child, this);
-            parent()->setNeedsLayoutAndPrefWidthsRecalc();
+            parent()->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
         }
     }
     if (placeholder())
@@ -182,7 +190,7 @@ void RenderFullScreen::createPlaceholder(PassRefPtr<RenderStyle> style, const La
         m_placeholder->setStyle(style);
         if (parent()) {
             parent()->addChild(m_placeholder, this);
-            parent()->setNeedsLayoutAndPrefWidthsRecalc();
+            parent()->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
         }
     } else
         m_placeholder->setStyle(style);

@@ -29,7 +29,7 @@
 
 namespace WebCore {
 
-inline SVGFEOffsetElement::SVGFEOffsetElement(Document& document)
+SVGFEOffsetElement::SVGFEOffsetElement(Document& document)
     : SVGFilterPrimitiveStandardAttributes(SVGNames::feOffsetTag, document)
     , m_dx(SVGAnimatedNumber::create(this, SVGNames::dxAttr, SVGNumber::create()))
     , m_dy(SVGAnimatedNumber::create(this, SVGNames::dyAttr, SVGNumber::create()))
@@ -40,11 +40,6 @@ inline SVGFEOffsetElement::SVGFEOffsetElement(Document& document)
     addToPropertyMap(m_dx);
     addToPropertyMap(m_dy);
     addToPropertyMap(m_in1);
-}
-
-PassRefPtr<SVGFEOffsetElement> SVGFEOffsetElement::create(Document& document)
-{
-    return adoptRef(new SVGFEOffsetElement(document));
 }
 
 bool SVGFEOffsetElement::isSupportedAttribute(const QualifiedName& attrName)
@@ -86,7 +81,7 @@ void SVGFEOffsetElement::svgAttributeChanged(const QualifiedName& attrName)
         return;
     }
 
-    SVGElementInstance::InvalidationGuard invalidationGuard(this);
+    SVGElement::InvalidationGuard invalidationGuard(this);
 
     if (attrName == SVGNames::inAttr || attrName == SVGNames::dxAttr || attrName == SVGNames::dyAttr) {
         invalidate();

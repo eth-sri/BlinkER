@@ -32,7 +32,7 @@
 
 namespace WebCore {
 
-inline SVGFilterElement::SVGFilterElement(Document& document)
+SVGFilterElement::SVGFilterElement(Document& document)
     : SVGElement(SVGNames::filterTag, document)
     , SVGURIReference(this)
     , m_x(SVGAnimatedLength::create(this, SVGNames::xAttr, SVGLength::create(LengthModeWidth), AllowNegativeLengths))
@@ -59,11 +59,6 @@ inline SVGFilterElement::SVGFilterElement(Document& document)
     addToPropertyMap(m_filterUnits);
     addToPropertyMap(m_primitiveUnits);
     addToPropertyMap(m_filterRes);
-}
-
-PassRefPtr<SVGFilterElement> SVGFilterElement::create(Document& document)
-{
-    return adoptRef(new SVGFilterElement(document));
 }
 
 void SVGFilterElement::setFilterRes(unsigned x, unsigned y)
@@ -125,7 +120,7 @@ void SVGFilterElement::svgAttributeChanged(const QualifiedName& attrName)
         return;
     }
 
-    SVGElementInstance::InvalidationGuard invalidationGuard(this);
+    SVGElement::InvalidationGuard invalidationGuard(this);
 
     if (attrName == SVGNames::xAttr
         || attrName == SVGNames::yAttr
@@ -146,7 +141,7 @@ void SVGFilterElement::childrenChanged(bool changedByParser, Node* beforeChange,
         return;
 
     if (RenderObject* object = renderer())
-        object->setNeedsLayout();
+        object->setNeedsLayoutAndFullRepaint();
 }
 
 RenderObject* SVGFilterElement::createRenderer(RenderStyle*)
@@ -155,7 +150,7 @@ RenderObject* SVGFilterElement::createRenderer(RenderStyle*)
 
     HashSet<RefPtr<Node> >::iterator layerEnd = m_clientsToAdd.end();
     for (HashSet<RefPtr<Node> >::iterator it = m_clientsToAdd.begin(); it != layerEnd; ++it)
-        renderer->addClientRenderLayer((*it).get());
+        renderer->addClientRenderLayer(it->get());
     m_clientsToAdd.clear();
 
     return renderer;

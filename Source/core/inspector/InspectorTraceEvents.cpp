@@ -5,11 +5,14 @@
 #include "config.h"
 #include "core/inspector/InspectorTraceEvents.h"
 
+#include "bindings/v8/ScriptCallStackFactory.h"
+#include "bindings/v8/ScriptGCEvent.h"
 #include "bindings/v8/ScriptSourceCode.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/inspector/IdentifiersFactory.h"
 #include "core/inspector/InspectorNodeIds.h"
+#include "core/inspector/ScriptCallStack.h"
 #include "core/page/Page.h"
 #include "core/rendering/RenderObject.h"
 #include "core/xml/XMLHttpRequest.h"
@@ -24,9 +27,27 @@
 
 namespace WebCore {
 
-static String toHexString(void* p)
+namespace {
+
+class JSCallStack : public TraceEvent::ConvertableToTraceFormat  {
+public:
+    explicit JSCallStack(PassRefPtr<ScriptCallStack> callstack) : m_callstack(callstack) { }
+    virtual String asTraceFormat() const
+    {
+        if (!m_callstack)
+            return "[]";
+        return m_callstack->buildInspectorArray()->toJSONString();
+    }
+
+private:
+    RefPtr<ScriptCallStack> m_callstack;
+};
+
+String toHexString(void* p)
 {
     return String::format("0x%" PRIx64, static_cast<uint64>(reinterpret_cast<intptr_t>(p)));
+}
+
 }
 
 PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorLayoutEvent::beginData(FrameView* frameView)
@@ -272,6 +293,30 @@ PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorFunctionCallEvent::dat
     if (LocalFrame* frame = frameForExecutionContext(context))
         data->setString("frame", toHexString(frame));
     return TracedValue::fromJSONValue(data);
+}
+
+static size_t usedHeapSize()
+{
+    HeapInfo info;
+    ScriptGCEvent::getHeapSize(info);
+    return info.usedJSHeapSize;
+}
+
+PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorUpdateCountersEvent::data()
+{
+    RefPtr<JSONObject> data = JSONObject::create();
+    if (isMainThread()) {
+        data->setNumber("documents", InspectorCounters::counterValue(InspectorCounters::DocumentCounter));
+        data->setNumber("nodes", InspectorCounters::counterValue(InspectorCounters::NodeCounter));
+        data->setNumber("jsEventListeners", InspectorCounters::counterValue(InspectorCounters::JSEventListenerCounter));
+    }
+    data->setNumber("jsHeapSizeUsed", static_cast<double>(usedHeapSize()));
+    return TracedValue::fromJSONValue(data);
+}
+
+PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorCallStackEvent::currentCallStack()
+{
+    return adoptRef(new JSCallStack(createScriptCallStack(ScriptCallStack::maxCallStackSizeToCapture, true)));
 }
 
 }

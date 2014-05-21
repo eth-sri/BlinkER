@@ -34,7 +34,6 @@
 #include "modules/filesystem/DOMFilePath.h"
 #include "modules/filesystem/DOMFileSystemBase.h"
 #include "platform/weborigin/SecurityOrigin.h"
-#include "wtf/PassRefPtr.h"
 
 namespace WebCore {
 
@@ -51,11 +50,15 @@ EntryBase::~EntryBase()
 
 String EntryBase::toURL() const
 {
+    if (!m_cachedURL.isNull())
+        return m_cachedURL;
+
     // Some filesystem type may not support toURL.
     if (!m_fileSystem->supportsToURL())
-        return String();
-
-    return m_fileSystem->createFileSystemURL(this).string();
+        m_cachedURL = emptyString();
+    else
+        m_cachedURL = m_fileSystem->createFileSystemURL(this).string();
+    return m_cachedURL;
 }
 
 void EntryBase::trace(Visitor* visitor)

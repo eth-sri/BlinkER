@@ -144,6 +144,9 @@ WebInspector.BottomUpProfileDataGridNode.prototype = {
             }
         }
 
+        for (var i = 0; i < this.children.length; ++i)
+            this.children[i].buildData();
+
         delete this._remainingNodeInfos;
     },
 
@@ -185,7 +188,7 @@ WebInspector.BottomUpProfileDataGridTree = function(profileView, rootProfileNode
             if (!profileNode.UID)
                 profileNode.UID = ++profileNodeUIDs;
 
-            if (profileNode.head && profileNode !== profileNode.head) {
+            if (profileNode.parent) {
                 // The total time of this ancestor is accounted for if we're in any form of recursive cycle.
                 var visitedNodes = visitedProfileNodesForCallUID[profileNode.callUID];
                 var totalTimeAccountedFor = false;
@@ -281,6 +284,10 @@ WebInspector.BottomUpProfileDataGridTree.prototype = {
 
         if (this.lastComparator)
             this.sort(this.lastComparator, true);
+    },
+
+    buildData: function()
+    {
     },
 
     _sharedPopulate: WebInspector.BottomUpProfileDataGridNode.prototype._sharedPopulate,

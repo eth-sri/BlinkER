@@ -1,3 +1,0 @@
-Pattern on fill
-Pattern on stroke
-Pattern on fill/stroke

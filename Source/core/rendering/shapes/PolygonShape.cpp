@@ -69,7 +69,7 @@ float OffsetPolygonEdge::xIntercept(float y) const
 
 FloatShapeInterval OffsetPolygonEdge::clippedEdgeXRange(float y1, float y2) const
 {
-    if (!overlapsYRange(y1, y2) || (y1 == maxY() && vertex2().y() < vertex1().y()))
+    if (!overlapsYRange(y1, y2) || (y1 == maxY() && minY() <= y1) || (y2 == minY() && maxY() >= y2))
         return FloatShapeInterval();
 
     if (isWithinYRange(y1, y2))
@@ -148,6 +148,16 @@ void PolygonShape::getExcludedIntervals(LayoutUnit logicalTop, LayoutUnit logica
 
     if (!excludedInterval.isEmpty())
         result.append(LineSegment(excludedInterval.x1(), excludedInterval.x2()));
+}
+
+void PolygonShape::buildDisplayPaths(DisplayPaths& paths) const
+{
+    if (!m_polygon.numberOfVertices())
+        return;
+    paths.shape.moveTo(m_polygon.vertexAt(0));
+    for (size_t i = 1; i < m_polygon.numberOfVertices(); ++i)
+        paths.shape.addLineTo(m_polygon.vertexAt(i));
+    paths.shape.closeSubpath();
 }
 
 } // namespace WebCore

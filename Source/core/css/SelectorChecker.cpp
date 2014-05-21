@@ -84,7 +84,7 @@ Element* SelectorChecker::parentElement(const SelectorCheckingContext& context, 
         return context.element->parentOrShadowHostElement();
 
     // If context.scope is a shadow host, we should walk up from a shadow root to its shadow host.
-    if (context.behaviorAtBoundary & SelectorChecker::ScopeIsShadowHost)
+    if ((context.behaviorAtBoundary & SelectorChecker::ScopeIsShadowHost) && context.scope == context.element->shadowHost())
         return context.element->parentOrShadowHostElement();
 
     if ((context.behaviorAtBoundary & SelectorChecker::BoundaryBehaviorMask) != SelectorChecker::StaysWithinTreeScope)
@@ -154,8 +154,8 @@ SelectorChecker::Match SelectorChecker::match(const SelectorCheckingContext& con
             if (!context.element->isInShadowTree() || !context.element->isInsertionPoint())
                 return SelectorFailsLocally;
         } else if (context.selector->isShadowPseudoElement()) {
-            if (!context.element->isInShadowTree())
-                return SelectorFailsLocally;
+            if (!context.element->isInShadowTree() || !context.previousElement)
+                return SelectorFailsCompletely;
         } else {
             if ((!context.elementStyle && m_mode == ResolvingStyle) || m_mode == QueryingRules)
                 return SelectorFailsLocally;
@@ -305,6 +305,10 @@ SelectorChecker::Match SelectorChecker::matchForRelation(const SelectorCheckingC
             return match(nextContext, siblingTraversalStrategy, result);
         }
     case CSSSelector::DirectAdjacent:
+        // Shadow roots can't have sibling elements
+        if (selectorMatchesShadowRoot(nextContext.selector))
+            return SelectorFailsCompletely;
+
         if (m_mode == ResolvingStyle) {
             if (ContainerNode* parent = context.element->parentElementOrShadowRoot())
                 parent->setChildrenAffectedByDirectAdjacentRules();
@@ -317,6 +321,10 @@ SelectorChecker::Match SelectorChecker::matchForRelation(const SelectorCheckingC
         return match(nextContext, siblingTraversalStrategy, result);
 
     case CSSSelector::IndirectAdjacent:
+        // Shadow roots can't have sibling elements
+        if (selectorMatchesShadowRoot(nextContext.selector))
+            return SelectorFailsCompletely;
+
         if (m_mode == ResolvingStyle) {
             if (ContainerNode* parent = context.element->parentElementOrShadowRoot())
                 parent->setChildrenAffectedByIndirectAdjacentRules();
@@ -372,7 +380,7 @@ template<typename SiblingTraversalStrategy>
 SelectorChecker::Match SelectorChecker::matchForShadowDistributed(const Element* element, const SiblingTraversalStrategy& siblingTraversalStrategy, SelectorCheckingContext& nextContext, MatchResult* result) const
 {
     ASSERT(element);
-    Vector<InsertionPoint*, 8> insertionPoints;
+    WillBeHeapVector<RawPtrWillBeMember<InsertionPoint>, 8> insertionPoints;
 
     const ContainerNode* scope = nextContext.scope;
     BehaviorAtBoundary behaviorAtBoundary = nextContext.behaviorAtBoundary;
@@ -599,7 +607,7 @@ bool SelectorChecker::checkOne(const SelectorCheckingContext& context, const Sib
             }
         case CSSSelector::PseudoFirstChild:
             // first-child matches the first child that is an element
-            if (ContainerNode* parent = element.parentElementOrShadowRoot()) {
+            if (ContainerNode* parent = element.parentElementOrDocumentFragment()) {
                 bool result = siblingTraversalStrategy.isFirstChild(element);
                 if (m_mode == ResolvingStyle) {
                     RenderStyle* childStyle = context.elementStyle ? context.elementStyle : element.renderStyle();
@@ -612,7 +620,7 @@ bool SelectorChecker::checkOne(const SelectorCheckingContext& context, const Sib
             break;
         case CSSSelector::PseudoFirstOfType:
             // first-of-type matches the first element of its type
-            if (ContainerNode* parent = element.parentElementOrShadowRoot()) {
+            if (ContainerNode* parent = element.parentElementOrDocumentFragment()) {
                 bool result = siblingTraversalStrategy.isFirstOfType(element, element.tagQName());
                 if (m_mode == ResolvingStyle)
                     parent->setChildrenAffectedByForwardPositionalRules();
@@ -621,7 +629,7 @@ bool SelectorChecker::checkOne(const SelectorCheckingContext& context, const Sib
             break;
         case CSSSelector::PseudoLastChild:
             // last-child matches the last child that is an element
-            if (ContainerNode* parent = element.parentElementOrShadowRoot()) {
+            if (ContainerNode* parent = element.parentElementOrDocumentFragment()) {
                 bool result = parent->isFinishedParsingChildren() && siblingTraversalStrategy.isLastChild(element);
                 if (m_mode == ResolvingStyle) {
                     RenderStyle* childStyle = context.elementStyle ? context.elementStyle : element.renderStyle();
@@ -634,7 +642,7 @@ bool SelectorChecker::checkOne(const SelectorCheckingContext& context, const Sib
             break;
         case CSSSelector::PseudoLastOfType:
             // last-of-type matches the last element of its type
-            if (ContainerNode* parent = element.parentElementOrShadowRoot()) {
+            if (ContainerNode* parent = element.parentElementOrDocumentFragment()) {
                 if (m_mode == ResolvingStyle)
                     parent->setChildrenAffectedByBackwardPositionalRules();
                 if (!parent->isFinishedParsingChildren())
@@ -643,7 +651,7 @@ bool SelectorChecker::checkOne(const SelectorCheckingContext& context, const Sib
             }
             break;
         case CSSSelector::PseudoOnlyChild:
-            if (ContainerNode* parent = element.parentElementOrShadowRoot()) {
+            if (ContainerNode* parent = element.parentElementOrDocumentFragment()) {
                 bool firstChild = siblingTraversalStrategy.isFirstChild(element);
                 bool onlyChild = firstChild && parent->isFinishedParsingChildren() && siblingTraversalStrategy.isLastChild(element);
                 if (m_mode == ResolvingStyle) {
@@ -660,7 +668,7 @@ bool SelectorChecker::checkOne(const SelectorCheckingContext& context, const Sib
             break;
         case CSSSelector::PseudoOnlyOfType:
             // FIXME: This selector is very slow.
-            if (ContainerNode* parent = element.parentElementOrShadowRoot()) {
+            if (ContainerNode* parent = element.parentElementOrDocumentFragment()) {
                 if (m_mode == ResolvingStyle) {
                     parent->setChildrenAffectedByForwardPositionalRules();
                     parent->setChildrenAffectedByBackwardPositionalRules();
@@ -673,7 +681,7 @@ bool SelectorChecker::checkOne(const SelectorCheckingContext& context, const Sib
         case CSSSelector::PseudoNthChild:
             if (!selector.parseNth())
                 break;
-            if (ContainerNode* parent = element.parentElementOrShadowRoot()) {
+            if (ContainerNode* parent = element.parentElementOrDocumentFragment()) {
                 int count = 1 + siblingTraversalStrategy.countElementsBefore(element);
                 if (m_mode == ResolvingStyle) {
                     RenderStyle* childStyle = context.elementStyle ? context.elementStyle : element.renderStyle();
@@ -689,7 +697,7 @@ bool SelectorChecker::checkOne(const SelectorCheckingContext& context, const Sib
         case CSSSelector::PseudoNthOfType:
             if (!selector.parseNth())
                 break;
-            if (ContainerNode* parent = element.parentElementOrShadowRoot()) {
+            if (ContainerNode* parent = element.parentElementOrDocumentFragment()) {
                 int count = 1 + siblingTraversalStrategy.countElementsOfTypeBefore(element, element.tagQName());
                 if (m_mode == ResolvingStyle)
                     parent->setChildrenAffectedByForwardPositionalRules();
@@ -701,7 +709,7 @@ bool SelectorChecker::checkOne(const SelectorCheckingContext& context, const Sib
         case CSSSelector::PseudoNthLastChild:
             if (!selector.parseNth())
                 break;
-            if (ContainerNode* parent = element.parentElementOrShadowRoot()) {
+            if (ContainerNode* parent = element.parentElementOrDocumentFragment()) {
                 if (m_mode == ResolvingStyle)
                     parent->setChildrenAffectedByBackwardPositionalRules();
                 if (!parent->isFinishedParsingChildren())
@@ -714,7 +722,7 @@ bool SelectorChecker::checkOne(const SelectorCheckingContext& context, const Sib
         case CSSSelector::PseudoNthLastOfType:
             if (!selector.parseNth())
                 break;
-            if (ContainerNode* parent = element.parentElementOrShadowRoot()) {
+            if (ContainerNode* parent = element.parentElementOrDocumentFragment()) {
                 if (m_mode == ResolvingStyle)
                     parent->setChildrenAffectedByBackwardPositionalRules();
                 if (!parent->isFinishedParsingChildren())

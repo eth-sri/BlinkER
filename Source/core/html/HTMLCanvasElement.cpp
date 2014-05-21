@@ -28,7 +28,6 @@
 #include "config.h"
 #include "core/html/HTMLCanvasElement.h"
 
-#include <math.h>
 #include "HTMLNames.h"
 #include "RuntimeEnabledFeatures.h"
 #include "bindings/v8/ExceptionMessages.h"
@@ -53,6 +52,7 @@
 #include "platform/graphics/gpu/WebGLImageBufferSurface.h"
 #include "platform/transforms/AffineTransform.h"
 #include "public/platform/Platform.h"
+#include <math.h>
 
 namespace WebCore {
 
@@ -74,7 +74,6 @@ HTMLCanvasElement::HTMLCanvasElement(Document& document)
     : HTMLElement(canvasTag, document)
     , DocumentVisibilityObserver(document)
     , m_size(DefaultWidth, DefaultHeight)
-    , m_rendererIsCanvas(false)
     , m_ignoreReset(false)
     , m_accelerationDisabled(false)
     , m_externallyAllocatedMemory(0)
@@ -85,9 +84,9 @@ HTMLCanvasElement::HTMLCanvasElement(Document& document)
     ScriptWrappable::init(this);
 }
 
-PassRefPtr<HTMLCanvasElement> HTMLCanvasElement::create(Document& document)
+PassRefPtrWillBeRawPtr<HTMLCanvasElement> HTMLCanvasElement::create(Document& document)
 {
-    return adoptRef(new HTMLCanvasElement(document));
+    return adoptRefWillBeRefCountedGarbageCollected(new HTMLCanvasElement(document));
 }
 
 HTMLCanvasElement::~HTMLCanvasElement()
@@ -112,12 +111,8 @@ void HTMLCanvasElement::parseAttribute(const QualifiedName& name, const AtomicSt
 RenderObject* HTMLCanvasElement::createRenderer(RenderStyle* style)
 {
     LocalFrame* frame = document().frame();
-    if (frame && frame->script().canExecuteScripts(NotAboutToExecuteScript)) {
-        m_rendererIsCanvas = true;
+    if (frame && frame->script().canExecuteScripts(NotAboutToExecuteScript))
         return new RenderHTMLCanvas(this);
-    }
-
-    m_rendererIsCanvas = false;
     return HTMLElement::createRenderer(style);
 }
 
@@ -171,19 +166,15 @@ CanvasRenderingContext* HTMLCanvasElement::getContext(const String& type, Canvas
         if (!m_context) {
             blink::Platform::current()->histogramEnumeration("Canvas.ContextType", Context2d, ContextTypeCount);
             m_context = CanvasRenderingContext2D::create(this, static_cast<Canvas2DContextAttributes*>(attrs), document().inQuirksMode());
-            if (m_context)
-                scheduleLayerUpdate();
+            setNeedsCompositingUpdate();
         }
         return m_context.get();
     }
 
-    // Accept the legacy "webkit-3d" name as well as the provisional "experimental-webgl" name.
-    // Now that WebGL is ratified, we will also accept "webgl" as the context name in Chrome.
+    // Accept the the provisional "experimental-webgl" or official "webgl" context ID.
     ContextType contextType;
     bool is3dContext = true;
-    if (type == "webkit-3d")
-        contextType = ContextWebkit3d;
-    else if (type == "experimental-webgl")
+    if (type == "experimental-webgl")
         contextType = ContextExperimentalWebgl;
     else if (type == "webgl")
         contextType = ContextWebgl;
@@ -198,10 +189,8 @@ CanvasRenderingContext* HTMLCanvasElement::getContext(const String& type, Canvas
         if (!m_context) {
             blink::Platform::current()->histogramEnumeration("Canvas.ContextType", contextType, ContextTypeCount);
             m_context = WebGLRenderingContext::create(this, static_cast<WebGLContextAttributes*>(attrs));
-            if (m_context) {
-                scheduleLayerUpdate();
-                updateExternallyAllocatedMemory();
-            }
+            setNeedsCompositingUpdate();
+            updateExternallyAllocatedMemory();
         }
         return m_context.get();
     }
@@ -275,7 +264,7 @@ void HTMLCanvasElement::reset()
         toWebGLRenderingContext(m_context.get())->reshape(width(), height());
 
     if (RenderObject* renderer = this->renderer()) {
-        if (m_rendererIsCanvas) {
+        if (renderer->isCanvas()) {
             if (oldSize != size()) {
                 toRenderHTMLCanvas(renderer)->canvasSizeChanged();
                 if (renderBox() && renderBox()->hasAcceleratedCompositing())
@@ -383,13 +372,13 @@ String HTMLCanvasElement::toEncodingMimeType(const String& mimeType)
     return lowercaseMimeType;
 }
 
-String HTMLCanvasElement::toDataURL(const String& mimeType, const double* quality, ExceptionState& exceptionState)
+const AtomicString HTMLCanvasElement::imageSourceURL() const
 {
-    if (!m_originClean) {
-        exceptionState.throwSecurityError("Tainted canvases may not be exported.");
-        return String();
-    }
+    return AtomicString(toDataURLInternal("image/png", 0));
+}
 
+String HTMLCanvasElement::toDataURLInternal(const String& mimeType, const double* quality) const
+{
     if (m_size.isEmpty() || !buffer())
         return String("data:,");
 
@@ -407,7 +396,17 @@ String HTMLCanvasElement::toDataURL(const String& mimeType, const double* qualit
     return buffer()->toDataURL(encodingMimeType, quality);
 }
 
-PassRefPtrWillBeRawPtr<ImageData> HTMLCanvasElement::getImageData()
+String HTMLCanvasElement::toDataURL(const String& mimeType, const double* quality, ExceptionState& exceptionState) const
+{
+    if (!m_originClean) {
+        exceptionState.throwSecurityError("Tainted canvases may not be exported.");
+        return String();
+    }
+
+    return toDataURLInternal(mimeType, quality);
+}
+
+PassRefPtrWillBeRawPtr<ImageData> HTMLCanvasElement::getImageData() const
 {
     if (!m_context || !m_context->is3d())
         return nullptr;
@@ -517,10 +516,8 @@ void HTMLCanvasElement::createImageBufferInternal()
     m_imageBuffer->context()->setStrokeThickness(1);
     m_contextStateSaver = adoptPtr(new GraphicsContextStateSaver(*m_imageBuffer->context()));
 
-    // Recalculate compositing requirements if acceleration state changed.
     if (m_context)
-        scheduleLayerUpdate();
-    return;
+        setNeedsCompositingUpdate();
 }
 
 void HTMLCanvasElement::notifySurfaceInvalid()

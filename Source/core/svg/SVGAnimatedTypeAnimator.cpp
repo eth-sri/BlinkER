@@ -150,7 +150,8 @@ void SVGAnimatedTypeAnimator::calculateFromAndByValues(RefPtr<SVGPropertyBase>& 
 {
     from = constructFromString(fromString);
     to = constructFromString(byString);
-    to->add(from, m_contextElement);
+    // FIXME(oilpan): Below .get() should be removed after transition types are gone.
+    to->add(from.get(), m_contextElement);
 }
 
 namespace {
@@ -196,7 +197,7 @@ PassRefPtr<SVGPropertyBase> SVGAnimatedTypeAnimator::resetAnimation(const Vector
 PassRefPtr<SVGPropertyBase> SVGAnimatedTypeAnimator::startAnimValAnimation(const Vector<SVGElement*>& list)
 {
     ASSERT(isAnimatingSVGDom());
-    SVGElementInstance::InstanceUpdateBlocker blocker(m_contextElement);
+    SVGElement::InstanceUpdateBlocker blocker(m_contextElement);
 
     invokeMethodOnAllTargetProperties(list, m_animatedProperty->attributeName(), &SVGAnimatedPropertyBase::animationStarted);
 
@@ -206,14 +207,14 @@ PassRefPtr<SVGPropertyBase> SVGAnimatedTypeAnimator::startAnimValAnimation(const
 void SVGAnimatedTypeAnimator::stopAnimValAnimation(const Vector<SVGElement*>& list)
 {
     ASSERT(isAnimatingSVGDom());
-    SVGElementInstance::InstanceUpdateBlocker blocker(m_contextElement);
+    SVGElement::InstanceUpdateBlocker blocker(m_contextElement);
 
     invokeMethodOnAllTargetProperties(list, m_animatedProperty->attributeName(), &SVGAnimatedPropertyBase::animationEnded);
 }
 
 PassRefPtr<SVGPropertyBase> SVGAnimatedTypeAnimator::resetAnimValToBaseVal(const Vector<SVGElement*>& list)
 {
-    SVGElementInstance::InstanceUpdateBlocker blocker(m_contextElement);
+    SVGElement::InstanceUpdateBlocker blocker(m_contextElement);
 
     return resetAnimation(list);
 }

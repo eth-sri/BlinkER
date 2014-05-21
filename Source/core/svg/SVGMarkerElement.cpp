@@ -41,7 +41,7 @@ template<> const SVGEnumerationStringEntries& getStaticStringEntries<SVGMarkerUn
 }
 
 
-inline SVGMarkerElement::SVGMarkerElement(Document& document)
+SVGMarkerElement::SVGMarkerElement(Document& document)
     : SVGElement(SVGNames::markerTag, document)
     , SVGFitToViewBox(this)
     , m_refX(SVGAnimatedLength::create(this, SVGNames::refXAttr, SVGLength::create(LengthModeWidth), AllowNegativeLengths))
@@ -63,11 +63,6 @@ inline SVGMarkerElement::SVGMarkerElement(Document& document)
     addToPropertyMap(m_markerHeight);
     addToPropertyMap(m_orientAngle);
     addToPropertyMap(m_markerUnits);
-}
-
-PassRefPtr<SVGMarkerElement> SVGMarkerElement::create(Document& document)
-{
-    return adoptRef(new SVGMarkerElement(document));
 }
 
 AffineTransform SVGMarkerElement::viewBoxToViewTransform(float viewWidth, float viewHeight) const
@@ -122,7 +117,7 @@ void SVGMarkerElement::svgAttributeChanged(const QualifiedName& attrName)
         return;
     }
 
-    SVGElementInstance::InvalidationGuard invalidationGuard(this);
+    SVGElement::InvalidationGuard invalidationGuard(this);
 
     if (attrName == SVGNames::refXAttr
         || attrName == SVGNames::refYAttr
@@ -143,7 +138,7 @@ void SVGMarkerElement::childrenChanged(bool changedByParser, Node* beforeChange,
         return;
 
     if (RenderObject* object = renderer())
-        object->setNeedsLayout();
+        object->setNeedsLayoutAndFullRepaint();
 }
 
 void SVGMarkerElement::setOrientToAuto()

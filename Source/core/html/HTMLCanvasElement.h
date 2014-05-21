@@ -66,7 +66,7 @@ public:
 class HTMLCanvasElement FINAL : public HTMLElement, public DocumentVisibilityObserver, public CanvasImageSource, public ImageBufferClient {
     WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(HTMLCanvasElement);
 public:
-    static PassRefPtr<HTMLCanvasElement> create(Document&);
+    static PassRefPtrWillBeRawPtr<HTMLCanvasElement> create(Document&);
     virtual ~HTMLCanvasElement();
 
     void addObserver(CanvasObserver*);
@@ -97,8 +97,8 @@ public:
     CanvasRenderingContext* getContext(const String&, CanvasContextAttributes* attributes = 0);
 
     static String toEncodingMimeType(const String& mimeType);
-    String toDataURL(const String& mimeType, const double* quality, ExceptionState&);
-    String toDataURL(const String& mimeType, ExceptionState& exceptionState) { return toDataURL(mimeType, 0, exceptionState); }
+    String toDataURL(const String& mimeType, const double* quality, ExceptionState&) const;
+    String toDataURL(const String& mimeType, ExceptionState& exceptionState) const { return toDataURL(mimeType, 0, exceptionState); }
 
     // Used for rendering
     void didDraw(const FloatRect&);
@@ -115,7 +115,7 @@ public:
     ImageBuffer* buffer() const;
     Image* copiedImage() const;
     void clearCopiedImage();
-    PassRefPtrWillBeRawPtr<ImageData> getImageData();
+    PassRefPtrWillBeRawPtr<ImageData> getImageData() const;
     void makePresentationCopy();
     void clearPresentationCopy();
 
@@ -132,6 +132,8 @@ public:
     void discardImageBuffer();
 
     bool shouldAccelerate(const IntSize&) const;
+
+    virtual const AtomicString imageSourceURL() const OVERRIDE;
 
     virtual InsertionNotificationRequest insertedInto(ContainerNode*) OVERRIDE;
 
@@ -171,13 +173,13 @@ private:
 
     void updateExternallyAllocatedMemory() const;
 
+    String toDataURLInternal(const String& mimeType, const double* quality) const;
+
     HashSet<CanvasObserver*> m_observers;
 
     IntSize m_size;
 
     OwnPtrWillBeMember<CanvasRenderingContext> m_context;
-
-    bool m_rendererIsCanvas;
 
     bool m_ignoreReset;
     bool m_accelerationDisabled;

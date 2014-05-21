@@ -310,7 +310,22 @@ HTMLMediaElement::~HTMLMediaElement()
 
     m_asyncEventQueue->close();
 
+#if ENABLE(OILPAN)
+    // If the HTMLMediaElement dies with the document we are not
+    // allowed to touch the document to adjust delay load event counts
+    // because the document could have been already
+    // destructed. However, if the HTMLMediaElement dies with the
+    // document there is no need to change the delayed load counts
+    // because no load event will fire anyway. If the document is
+    // still alive we do have to decrement the load delay counts. We
+    // determine if the document is alive by inspecting the weak
+    // documentToElementSetMap. If the document is dead it has been
+    // removed from the map during weak processing.
+    if (documentToElementSetMap().contains(&document()))
+        setShouldDelayLoadEvent(false);
+#else
     setShouldDelayLoadEvent(false);
+#endif
 
 #if !ENABLE(OILPAN)
     if (m_textTracks)
@@ -556,7 +571,7 @@ void HTMLMediaElement::loadTimerFired(Timer<HTMLMediaElement>*)
     m_pendingActionFlags = 0;
 }
 
-PassRefPtr<MediaError> HTMLMediaElement::error() const
+PassRefPtrWillBeRawPtr<MediaError> HTMLMediaElement::error() const
 {
     return m_error;
 }
@@ -639,8 +654,6 @@ void HTMLMediaElement::prepareForLoad()
     if (m_networkState == NETWORK_LOADING || m_networkState == NETWORK_IDLE)
         scheduleEvent(EventTypeNames::abort);
 
-    closeMediaSource();
-
     createMediaPlayer();
 
     // 4 - If the media element's networkState is not set to NETWORK_EMPTY, then run these substeps
@@ -684,7 +697,7 @@ void HTMLMediaElement::prepareForLoad()
     }
 
     // 5 - Set the playbackRate attribute to the value of the defaultPlaybackRate attribute.
-    setPlaybackRate(defaultPlaybackRate(), IGNORE_EXCEPTION);
+    setPlaybackRate(defaultPlaybackRate());
 
     // 6 - Set the error attribute to null and the autoplaying flag to true.
     m_error = nullptr;
@@ -872,11 +885,10 @@ void HTMLMediaElement::loadResource(const KURL& url, ContentType& contentType, c
     if (attemptLoad && canLoadURL(url, contentType, keySystem)) {
         ASSERT(!webMediaPlayer());
 
-        if (m_preload == MediaPlayer::None) {
+        if (m_preload == MediaPlayer::None)
             m_delayingLoadForPreloadNone = true;
-        } else {
-            m_player->load(loadType(), m_currentSrc, corsMode());
-        }
+        else
+            startPlayerLoad();
     } else {
         mediaLoadingFailed(MediaPlayer::FormatError);
     }
@@ -887,6 +899,30 @@ void HTMLMediaElement::loadResource(const KURL& url, ContentType& contentType, c
 
     if (renderer())
         renderer()->updateFromElement();
+}
+
+void HTMLMediaElement::startPlayerLoad()
+{
+    // Filter out user:pass as those two URL components aren't
+    // considered for media resource fetches (including for the CORS
+    // use-credentials mode.) That behavior aligns with Gecko, with IE
+    // being more restrictive and not allowing fetches to such URLs.
+    //
+    // Spec reference: http://whatwg.org/c/#concept-media-load-resource
+    //
+    // FIXME: when the HTML spec switches to specifying resource
+    // fetches in terms of Fetch (http://fetch.spec.whatwg.org), and
+    // along with that potentially also specifying a setting for its
+    // 'authentication flag' to control how user:pass embedded in a
+    // media resource URL should be treated, then update the handling
+    // here to match.
+    KURL requestURL = m_currentSrc;
+    if (!requestURL.user().isEmpty())
+        requestURL.setUser(String());
+    if (!requestURL.pass().isEmpty())
+        requestURL.setPass(String());
+
+    m_player->load(loadType(), requestURL, corsMode());
 }
 
 void HTMLMediaElement::setPlayerPreload()
@@ -903,7 +939,7 @@ void HTMLMediaElement::startDelayedLoad()
 
     m_delayingLoadForPreloadNone = false;
 
-    m_player->load(loadType(), m_currentSrc, corsMode());
+    startPlayerLoad();
 }
 
 WebMediaPlayer::LoadType HTMLMediaElement::loadType() const
@@ -1410,7 +1446,7 @@ void HTMLMediaElement::noneSupported()
         renderer()->updateFromElement();
 }
 
-void HTMLMediaElement::mediaEngineError(PassRefPtr<MediaError> err)
+void HTMLMediaElement::mediaEngineError(PassRefPtrWillBeRawPtr<MediaError> err)
 {
     WTF_LOG(Media, "HTMLMediaElement::mediaEngineError(%d)", static_cast<int>(err->code()));
 
@@ -1886,11 +1922,6 @@ double HTMLMediaElement::currentTime() const
 
 void HTMLMediaElement::setCurrentTime(double time, ExceptionState& exceptionState)
 {
-    // FIXME: generated bindings should check isfinite: http://crbug.com/354298
-    if (!std::isfinite(time)) {
-        exceptionState.throwTypeError(ExceptionMessages::notAFiniteNumber(time));
-        return;
-    }
     if (m_mediaController) {
         exceptionState.throwDOMException(InvalidStateError, "The element is slaved to a MediaController.");
         return;
@@ -1929,17 +1960,13 @@ double HTMLMediaElement::defaultPlaybackRate() const
     return m_defaultPlaybackRate;
 }
 
-void HTMLMediaElement::setDefaultPlaybackRate(double rate, ExceptionState& exceptionState)
+void HTMLMediaElement::setDefaultPlaybackRate(double rate)
 {
-    // FIXME: generated bindings should check isfinite: http://crbug.com/354298
-    if (!std::isfinite(rate)) {
-        exceptionState.throwTypeError(ExceptionMessages::notAFiniteNumber(rate));
+    if (m_defaultPlaybackRate == rate)
         return;
-    }
-    if (m_defaultPlaybackRate != rate) {
-        m_defaultPlaybackRate = rate;
-        scheduleEvent(EventTypeNames::ratechange);
-    }
+
+    m_defaultPlaybackRate = rate;
+    scheduleEvent(EventTypeNames::ratechange);
 }
 
 double HTMLMediaElement::playbackRate() const
@@ -1947,15 +1974,9 @@ double HTMLMediaElement::playbackRate() const
     return m_playbackRate;
 }
 
-void HTMLMediaElement::setPlaybackRate(double rate, ExceptionState& exceptionState)
+void HTMLMediaElement::setPlaybackRate(double rate)
 {
     WTF_LOG(Media, "HTMLMediaElement::setPlaybackRate(%f)", rate);
-
-    // FIXME: generated bindings should check isfinite: http://crbug.com/354298
-    if (!std::isfinite(rate)) {
-        exceptionState.throwTypeError(ExceptionMessages::notAFiniteNumber(rate));
-        return;
-    }
 
     if (m_playbackRate != rate) {
         m_playbackRate = rate;
@@ -2121,22 +2142,17 @@ void HTMLMediaElement::setVolume(double vol, ExceptionState& exceptionState)
 {
     WTF_LOG(Media, "HTMLMediaElement::setVolume(%f)", vol);
 
-    // FIXME: generated bindings should check isfinite: http://crbug.com/354298
-    if (!std::isfinite(vol)) {
-        exceptionState.throwTypeError(ExceptionMessages::notAFiniteNumber(vol));
+    if (m_volume == vol)
         return;
-    }
 
     if (vol < 0.0f || vol > 1.0f) {
         exceptionState.throwDOMException(IndexSizeError, ExceptionMessages::indexOutsideRange("volume", vol, 0.0, ExceptionMessages::InclusiveBound, 1.0, ExceptionMessages::InclusiveBound));
         return;
     }
 
-    if (m_volume != vol) {
-        m_volume = vol;
-        updateVolume();
-        scheduleEvent(EventTypeNames::volumechange);
-    }
+    m_volume = vol;
+    updateVolume();
+    scheduleEvent(EventTypeNames::volumechange);
 }
 
 bool HTMLMediaElement::muted() const
@@ -2562,8 +2578,8 @@ bool HTMLMediaElement::havePotentialSourceChild()
 {
     // Stash the current <source> node and next nodes so we can restore them after checking
     // to see there is another potential.
-    RefPtr<HTMLSourceElement> currentSourceNode = m_currentSourceNode;
-    RefPtr<Node> nextNode = m_nextChildNodeToConsider;
+    RefPtrWillBeRawPtr<HTMLSourceElement> currentSourceNode = m_currentSourceNode;
+    RefPtrWillBeRawPtr<Node> nextNode = m_nextChildNodeToConsider;
 
     KURL nextURL = selectNextSourceChild(0, 0, DoNothing);
 
@@ -3420,8 +3436,7 @@ void HTMLMediaElement::createMediaPlayer()
         m_audioSourceNode->lock();
 #endif
 
-    if (m_mediaSource)
-        closeMediaSource();
+    closeMediaSource();
 
     m_player = MediaPlayer::create(this);
 
@@ -3610,7 +3625,7 @@ void HTMLMediaElement::mediaPlayerSetWebLayer(blink::WebLayer* webLayer)
 
     // If either of the layers is null we need to enable or disable compositing. This is done by triggering a style recalc.
     if (!m_webLayer || !webLayer)
-        scheduleLayerUpdate();
+        setNeedsCompositingUpdate();
 
     if (m_webLayer)
         GraphicsLayer::unregisterContentsLayer(m_webLayer);
@@ -3632,9 +3647,12 @@ bool HTMLMediaElement::isInteractiveContent() const
 
 void HTMLMediaElement::trace(Visitor* visitor)
 {
+    visitor->trace(m_error);
+    visitor->trace(m_currentSourceNode);
+    visitor->trace(m_nextChildNodeToConsider);
     visitor->trace(m_textTracks);
     visitor->trace(m_textTracksWhenResourceSelectionBegan);
-    Supplementable<HTMLMediaElement>::trace(visitor);
+    WillBeHeapSupplementable<HTMLMediaElement>::trace(visitor);
     HTMLElement::trace(visitor);
 }
 

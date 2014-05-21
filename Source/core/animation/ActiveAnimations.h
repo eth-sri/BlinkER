@@ -53,7 +53,6 @@ public:
     }
 
     ~ActiveAnimations();
-    void dispose();
 
     // Animations that are currently active for this element, their effects will be applied
     // during a style recalc. CSS Transitions are included in this stack.
@@ -64,21 +63,27 @@ public:
     CSSAnimations& cssAnimations() { return m_cssAnimations; }
     const CSSAnimations& cssAnimations() const { return m_cssAnimations; }
 
-    typedef HashMap<AnimationPlayer*, int> AnimationPlayerCountedSet;
+    typedef WillBeHeapHashMap<RawPtrWillBeWeakMember<AnimationPlayer>, int> AnimationPlayerCountedSet;
     // AnimationPlayers which have animations targeting this element.
     const AnimationPlayerCountedSet& players() const { return m_players; }
     void addPlayer(AnimationPlayer*);
     void removePlayer(AnimationPlayer*);
 
+#if ENABLE(OILPAN)
+    bool isEmpty() const { return m_defaultStack.isEmpty() && m_cssAnimations.isEmpty(); }
+#else
     bool isEmpty() const { return m_defaultStack.isEmpty() && m_cssAnimations.isEmpty() && m_animations.isEmpty(); }
+#endif
 
     void cancelAnimationOnCompositor();
 
     void updateAnimationFlags(RenderStyle&);
     void setAnimationStyleChange(bool animationStyleChange) { m_animationStyleChange = animationStyleChange; }
 
+#if !ENABLE(OILPAN)
     void addAnimation(Animation* animation) { m_animations.append(animation); }
     void notifyAnimationDestroyed(Animation* animation) { m_animations.remove(m_animations.find(animation)); }
+#endif
 
     void trace(Visitor*);
 
@@ -90,9 +95,11 @@ private:
     AnimationPlayerCountedSet m_players;
     bool m_animationStyleChange;
 
-    // This is to avoid a reference cycle that keeps Elements alive and
-    // won't be needed once Element and Animation are moved to Oilpan.
+#if !ENABLE(OILPAN)
+    // FIXME: Oilpan: This is to avoid a reference cycle that keeps Elements alive
+    // and won't be needed once the Node hierarchy becomes traceable.
     Vector<Animation*> m_animations;
+#endif
 
     // CSSAnimations checks if a style change is due to animation.
     friend class CSSAnimations;

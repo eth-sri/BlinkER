@@ -54,18 +54,13 @@ namespace WebCore {
 
 using namespace HTMLNames;
 
-inline SVGAElement::SVGAElement(Document& document)
+SVGAElement::SVGAElement(Document& document)
     : SVGGraphicsElement(SVGNames::aTag, document)
     , SVGURIReference(this)
     , m_svgTarget(SVGAnimatedString::create(this, SVGNames::targetAttr, SVGString::create()))
 {
     ScriptWrappable::init(this);
     addToPropertyMap(m_svgTarget);
-}
-
-PassRefPtr<SVGAElement> SVGAElement::create(Document& document)
-{
-    return adoptRef(new SVGAElement(document));
 }
 
 String SVGAElement::title() const
@@ -115,7 +110,7 @@ void SVGAElement::svgAttributeChanged(const QualifiedName& attrName)
         return;
     }
 
-    SVGElementInstance::InvalidationGuard invalidationGuard(this);
+    SVGElement::InvalidationGuard invalidationGuard(this);
 
     // Unlike other SVG*Element classes, SVGAElement only listens to SVGURIReference changes
     // as none of the other properties changes the linking behaviour for our <a> element.

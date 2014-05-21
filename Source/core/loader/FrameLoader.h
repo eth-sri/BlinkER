@@ -146,8 +146,8 @@ public:
 
     String userAgent(const KURL&) const;
 
-    void dispatchDidClearWindowObjectInWorld(DOMWrapperWorld&);
-    void dispatchDidClearWindowObjectsInAllWorlds();
+    void dispatchDidClearWindowObjectInMainWorld();
+    void dispatchDidClearDocumentOfWindowObject();
     void dispatchDocumentElementAvailable();
 
     // The following sandbox flags will be forced, regardless of changes to
@@ -182,7 +182,7 @@ public:
 
     bool allowPlugins(ReasonForCallingAllowPlugins);
 
-    void updateForSameDocumentNavigation(const KURL&, SameDocumentNavigationSource, PassRefPtr<SerializedScriptValue>, UpdateBackForwardListPolicy);
+    void updateForSameDocumentNavigation(const KURL&, SameDocumentNavigationSource, PassRefPtr<SerializedScriptValue>, FrameLoadType);
 
     HistoryItem* currentItem() const { return m_currentItem.get(); }
     void saveScrollState();
@@ -211,17 +211,16 @@ private:
     bool checkLoadCompleteForThisFrame();
 
     // Calls continueLoadAfterNavigationPolicy
-    void loadWithNavigationAction(const NavigationAction&, FrameLoadType, PassRefPtr<FormState>,
+    void loadWithNavigationAction(const NavigationAction&, FrameLoadType, PassRefPtrWillBeRawPtr<FormState>,
         const SubstituteData&, ClientRedirectPolicy = NotClientRedirect, const AtomicString& overrideEncoding = nullAtom);
 
     void detachFromParent();
     void detachChildren();
-    void closeAndRemoveChild(LocalFrame*);
     void detachClient();
 
     void setHistoryItemStateForCommit(HistoryCommitType, bool isPushOrReplaceState = false, PassRefPtr<SerializedScriptValue> = nullptr);
 
-    void loadInSameDocument(const KURL&, PassRefPtr<SerializedScriptValue> stateObject, UpdateBackForwardListPolicy, ClientRedirectPolicy);
+    void loadInSameDocument(const KURL&, PassRefPtr<SerializedScriptValue> stateObject, FrameLoadType, ClientRedirectPolicy);
 
     void scheduleCheckCompleted();
     void startCheckCompleteTimer();
@@ -281,6 +280,8 @@ private:
     Timer<FrameLoader> m_didAccessInitialDocumentTimer;
 
     SandboxFlags m_forcedSandboxFlags;
+
+    bool m_willDetachClient;
 };
 
 } // namespace WebCore

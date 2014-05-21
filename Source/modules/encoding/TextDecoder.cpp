@@ -34,6 +34,7 @@
 
 #include "bindings/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
+#include "wtf/StringExtras.h"
 #include "wtf/text/TextEncodingRegistry.h"
 
 namespace WebCore {
@@ -43,7 +44,9 @@ TextDecoder* TextDecoder::create(const String& label, const Dictionary& options,
     const String& encodingLabel = label.isNull() ? String("utf-8") : label;
 
     WTF::TextEncoding encoding(encodingLabel);
-    if (!encoding.isValid()) {
+    // The replacement encoding is not valid, but the Encoding API also
+    // rejects aliases of the replacement encoding.
+    if (!encoding.isValid() || !strcasecmp(encoding.name(), "replacement")) {
         exceptionState.throwTypeError("The encoding label provided ('" + encodingLabel + "') is invalid.");
         return 0;
     }
@@ -51,13 +54,13 @@ TextDecoder* TextDecoder::create(const String& label, const Dictionary& options,
     bool fatal = false;
     options.get("fatal", fatal);
 
-    return new TextDecoder(encoding.name(), fatal);
+    return new TextDecoder(encoding, fatal);
 }
 
 
-TextDecoder::TextDecoder(const String& encoding, bool fatal)
+TextDecoder::TextDecoder(const WTF::TextEncoding& encoding, bool fatal)
     : m_encoding(encoding)
-    , m_codec(newTextCodec(m_encoding))
+    , m_codec(newTextCodec(encoding))
     , m_fatal(fatal)
     , m_bomSeen(false)
 {

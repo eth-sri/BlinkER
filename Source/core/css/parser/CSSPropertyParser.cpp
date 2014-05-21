@@ -158,13 +158,14 @@ private:
 
 CSSPropertyParser::CSSPropertyParser(OwnPtr<CSSParserValueList>& valueList,
     const CSSParserContext& context, bool inViewport, bool savedImportant,
-    WillBeHeapVector<CSSProperty, 256>& parsedProperties, bool& hasFontFaceOnlyValues)
+    WillBeHeapVector<CSSProperty, 256>& parsedProperties,
+    CSSRuleSourceData::Type ruleType)
     : m_valueList(valueList)
     , m_context(context)
     , m_inViewport(inViewport)
     , m_important(savedImportant) // See comment in header, should be removed.
     , m_parsedProperties(parsedProperties)
-    , m_hasFontFaceOnlyValues(hasFontFaceOnlyValues)
+    , m_ruleType(ruleType)
     , m_inParseShorthand(0)
     , m_currentShorthand(CSSPropertyInvalid)
     , m_implicitShorthand(false)
@@ -423,7 +424,7 @@ void CSSPropertyParser::addExpandedPropertyForValue(CSSPropertyID propId, PassRe
     const StylePropertyShorthand& shorthand = shorthandForProperty(propId);
     unsigned shorthandLength = shorthand.length();
     if (!shorthandLength) {
-        addProperty(propId, prpValue, important);
+        addPropertyWithPrefixingVariant(propId, prpValue, important);
         return;
     }
 
@@ -431,7 +432,7 @@ void CSSPropertyParser::addExpandedPropertyForValue(CSSPropertyID propId, PassRe
     ShorthandScope scope(this, propId);
     const CSSPropertyID* longhands = shorthand.properties();
     for (unsigned i = 0; i < shorthandLength; ++i)
-        addProperty(longhands[i], value, important);
+        addPropertyWithPrefixingVariant(longhands[i], value, important);
 }
 
 bool CSSPropertyParser::parseValue(CSSPropertyID propId, bool important)
@@ -3364,21 +3365,32 @@ bool CSSPropertyParser::parseAnimationProperty(CSSPropertyID propId, RefPtrWillB
     return false;
 }
 
-// The function parses [ <integer> || <string> ] in <grid-line> (which can be stand alone or with 'span').
-bool CSSPropertyParser::parseIntegerOrStringFromGridPosition(RefPtrWillBeRawPtr<CSSPrimitiveValue>& numericValue, RefPtrWillBeRawPtr<CSSPrimitiveValue>& gridLineName)
+static inline bool isCSSWideKeyword(CSSParserValue& value)
+{
+    return value.id == CSSValueInitial || value.id == CSSValueInherit || value.id == CSSValueDefault;
+}
+
+static inline bool isValidCustomIdentForGridPositions(CSSParserValue& value)
+{
+    // FIXME: we need a more general solution for <custom-ident> in all properties.
+    return value.unit == CSSPrimitiveValue::CSS_IDENT && value.id != CSSValueSpan && value.id != CSSValueAuto && !isCSSWideKeyword(value);
+}
+
+// The function parses [ <integer> || <custom-ident> ] in <grid-line> (which can be stand alone or with 'span').
+bool CSSPropertyParser::parseIntegerOrCustomIdentFromGridPosition(RefPtrWillBeRawPtr<CSSPrimitiveValue>& numericValue, RefPtrWillBeRawPtr<CSSPrimitiveValue>& gridLineName)
 {
     CSSParserValue* value = m_valueList->current();
     if (validUnit(value, FInteger) && value->fValue) {
         numericValue = createPrimitiveNumericValue(value);
         value = m_valueList->next();
-        if (value && value->unit == CSSPrimitiveValue::CSS_STRING) {
+        if (value && isValidCustomIdentForGridPositions(*value)) {
             gridLineName = createPrimitiveStringValue(m_valueList->current());
             m_valueList->next();
         }
         return true;
     }
 
-    if (value->unit == CSSPrimitiveValue::CSS_STRING) {
+    if (isValidCustomIdentForGridPositions(*value)) {
         gridLineName = createPrimitiveStringValue(m_valueList->current());
         value = m_valueList->next();
         if (value && validUnit(value, FInteger) && value->fValue) {
@@ -3401,16 +3413,11 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseGridPosition()
         return cssValuePool().createIdentifierValue(CSSValueAuto);
     }
 
-    if (value->id != CSSValueSpan && value->unit == CSSPrimitiveValue::CSS_IDENT) {
-        m_valueList->next();
-        return cssValuePool().createValue(value->string, CSSPrimitiveValue::CSS_STRING);
-    }
-
     RefPtrWillBeRawPtr<CSSPrimitiveValue> numericValue = nullptr;
     RefPtrWillBeRawPtr<CSSPrimitiveValue> gridLineName = nullptr;
     bool hasSeenSpanKeyword = false;
 
-    if (parseIntegerOrStringFromGridPosition(numericValue, gridLineName)) {
+    if (parseIntegerOrCustomIdentFromGridPosition(numericValue, gridLineName)) {
         value = m_valueList->current();
         if (value && value->id == CSSValueSpan) {
             hasSeenSpanKeyword = true;
@@ -3418,8 +3425,10 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseGridPosition()
         }
     } else if (value->id == CSSValueSpan) {
         hasSeenSpanKeyword = true;
-        if (m_valueList->next())
-            parseIntegerOrStringFromGridPosition(numericValue, gridLineName);
+        if (CSSParserValue* nextValue = m_valueList->next()) {
+            if (!isForwardSlashOperator(nextValue) && !parseIntegerOrCustomIdentFromGridPosition(numericValue, gridLineName))
+                return nullptr;
+        }
     }
 
     // Check that we have consumed all the value list. For shorthands, the parser will pass
@@ -3434,6 +3443,10 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseGridPosition()
     // Negative numbers are not allowed for span (but are for <integer>).
     if (hasSeenSpanKeyword && numericValue && numericValue->getIntValue() < 0)
         return nullptr;
+
+    // For the <custom-ident> case.
+    if (gridLineName && !numericValue && !hasSeenSpanKeyword)
+        return cssValuePool().createValue(gridLineName->getStringValue(), CSSPrimitiveValue::CSS_STRING);
 
     RefPtrWillBeRawPtr<CSSValueList> values = CSSValueList::createSpaceSeparated();
     if (hasSeenSpanKeyword)
@@ -4645,8 +4658,7 @@ PassRefPtrWillBeRawPtr<CSSValueList> CSSPropertyParser::parseFontFamily()
             ((nextValue->id >= CSSValueSerif && nextValue->id <= CSSValueWebkitBody) ||
             (nextValue->unit == CSSPrimitiveValue::CSS_STRING || nextValue->unit == CSSPrimitiveValue::CSS_IDENT));
 
-        bool valueIsKeyword = value->id == CSSValueInitial || value->id == CSSValueInherit || value->id == CSSValueDefault;
-        if (valueIsKeyword && !inFamily) {
+        if (isCSSWideKeyword(*value) && !inFamily) {
             if (nextValBreaksFont)
                 value = m_valueList->next();
             else if (nextValIsFontName)
@@ -4747,6 +4759,9 @@ bool CSSPropertyParser::parseFontVariant(bool important)
             if (val->id == CSSValueNormal || val->id == CSSValueSmallCaps)
                 parsedValue = cssValuePool().createIdentifierValue(val->id);
             else if (val->id == CSSValueAll && !values) {
+                // FIXME: CSSPropertyParser::parseFontVariant() implements
+                // the old css3 draft:
+                // http://www.w3.org/TR/2002/WD-css3-webfonts-20020802/#font-variant
                 // 'all' is only allowed in @font-face and with no other values. Make a value list to
                 // indicate that we are in the @font-face case.
                 values = CSSValueList::createCommaSeparated();
@@ -4772,7 +4787,8 @@ bool CSSPropertyParser::parseFontVariant(bool important)
     }
 
     if (values && values->length()) {
-        m_hasFontFaceOnlyValues = true;
+        if (m_ruleType != CSSRuleSourceData::FONT_FACE_RULE)
+            return false;
         addProperty(CSSPropertyFontVariant, values.release(), important);
         return true;
     }

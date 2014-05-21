@@ -57,6 +57,10 @@ class NodeFilter;
 class ScriptWrappable;
 class XPathNSResolver;
 
+namespace TraceEvent {
+class ConvertableToTraceFormat;
+}
+
 const int kMaxRecursionDepth = 22;
 
 // Schedule a JavaScript error to be thrown.
@@ -69,9 +73,12 @@ v8::Handle<v8::Value> throwError(v8::Handle<v8::Value>, v8::Isolate*);
 v8::Handle<v8::Value> throwTypeError(const String&, v8::Isolate*);
 
 // Helpers for throwing JavaScript TypeErrors for arity mismatches.
-void throwArityTypeErrorForMethod(const char* method, const char* type, unsigned expected, unsigned providedLeastNumMandatoryParams, v8::Isolate*);
-void throwArityTypeErrorForConstructor(const char* type, unsigned expected, unsigned providedLeastNumMandatoryParams, v8::Isolate*);
-void throwArityTypeError(ExceptionState&, unsigned expected, unsigned providedLeastNumMandatoryParams);
+void throwArityTypeErrorForMethod(const char* method, const char* type, const char* valid, unsigned provided, v8::Isolate*);
+void throwArityTypeErrorForConstructor(const char* type, const char* valid, unsigned provided, v8::Isolate*);
+void throwArityTypeError(ExceptionState&, const char* valid, unsigned provided);
+void throwMinimumArityTypeErrorForMethod(const char* method, const char* type, unsigned expected, unsigned providedLeastNumMandatoryParams, v8::Isolate*);
+void throwMinimumArityTypeErrorForConstructor(const char* type, unsigned expected, unsigned providedLeastNumMandatoryParams, v8::Isolate*);
+void throwMinimumArityTypeError(ExceptionState&, unsigned expected, unsigned providedLeastNumMandatoryParams);
 
 v8::ArrayBuffer::Allocator* v8ArrayBufferAllocator();
 
@@ -539,7 +546,7 @@ inline v8::Handle<v8::Value> v8DateOrNaN(double value, v8::Isolate* isolate)
 }
 
 // FIXME: Remove the special casing for NodeFilter and XPathNSResolver.
-PassRefPtr<NodeFilter> toNodeFilter(v8::Handle<v8::Value>, v8::Isolate*);
+PassRefPtrWillBeRawPtr<NodeFilter> toNodeFilter(v8::Handle<v8::Value>, v8::Handle<v8::Object>, v8::Isolate*);
 PassRefPtrWillBeRawPtr<XPathNSResolver> toXPathNSResolver(v8::Handle<v8::Value>, v8::Isolate*);
 
 template<class T> struct NativeValueTraits;
@@ -927,6 +934,8 @@ class V8ExecutionScope {
 public:
     static PassOwnPtr<V8ExecutionScope> create(v8::Isolate*);
     explicit V8ExecutionScope(v8::Isolate*);
+    ScriptState* scriptState() const;
+    v8::Isolate* isolate() const;
     ~V8ExecutionScope();
 
 private:
@@ -934,6 +943,10 @@ private:
     v8::Context::Scope m_contextScope;
     RefPtr<ScriptState> m_scriptState;
 };
+
+void GetDevToolsFunctionInfo(v8::Handle<v8::Function>, v8::Isolate*, int& scriptId, String& resourceName, int& lineNumber);
+PassRefPtr<TraceEvent::ConvertableToTraceFormat> devToolsTraceEventData(ExecutionContext*, v8::Handle<v8::Function>, v8::Isolate*);
+
 
 } // namespace WebCore
 

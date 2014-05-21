@@ -28,8 +28,8 @@
 #include "core/css/resolver/StyleResolver.h"
 #include "core/rendering/RenderTheme.h"
 #include "core/rendering/TextAutosizer.h"
+#include "core/rendering/style/AppliedTextDecoration.h"
 #include "core/rendering/style/ContentData.h"
-#include "core/rendering/style/CursorList.h"
 #include "core/rendering/style/QuotesData.h"
 #include "core/rendering/style/ShadowList.h"
 #include "core/rendering/style/StyleImage.h"
@@ -531,7 +531,7 @@ bool RenderStyle::diffNeedsFullLayout(const RenderStyle& other) const
         if (!rareInheritedData->shadowDataEquivalent(*other.rareInheritedData.get()))
             return true;
 
-        if (rareInheritedData->quotes.get() != other.rareInheritedData->quotes.get())
+        if (!rareInheritedData->quotesDataEquivalent(*other.rareInheritedData.get()))
             return true;
     }
 
@@ -540,10 +540,10 @@ bool RenderStyle::diffNeedsFullLayout(const RenderStyle& other) const
 
     if (inherited.get() != other.inherited.get()) {
         if (inherited->line_height != other.inherited->line_height
-        || inherited->font != other.inherited->font
-        || inherited->horizontal_border_spacing != other.inherited->horizontal_border_spacing
-        || inherited->vertical_border_spacing != other.inherited->vertical_border_spacing)
-        return true;
+            || inherited->font != other.inherited->font
+            || inherited->horizontal_border_spacing != other.inherited->horizontal_border_spacing
+            || inherited->vertical_border_spacing != other.inherited->vertical_border_spacing)
+            return true;
     }
 
     if (inherited_flags._box_direction != other.inherited_flags._box_direction
@@ -608,13 +608,16 @@ bool RenderStyle::diffNeedsRepaintLayer(const RenderStyle& other) const
     if (position() != StaticPosition && (visual->clip != other.visual->clip || visual->hasClip != other.visual->hasClip))
         return true;
 
-    if (RuntimeEnabledFeatures::cssCompositingEnabled() && (rareNonInheritedData->m_effectiveBlendMode != other.rareNonInheritedData->m_effectiveBlendMode
-        || rareNonInheritedData->m_isolation != other.rareNonInheritedData->m_isolation))
-        return true;
+    if (rareNonInheritedData.get() != other.rareNonInheritedData.get()) {
+        if (RuntimeEnabledFeatures::cssCompositingEnabled()
+            && (rareNonInheritedData->m_effectiveBlendMode != other.rareNonInheritedData->m_effectiveBlendMode
+                || rareNonInheritedData->m_isolation != other.rareNonInheritedData->m_isolation))
+            return true;
 
-    if (rareNonInheritedData->m_mask != other.rareNonInheritedData->m_mask
-        || rareNonInheritedData->m_maskBoxImage != other.rareNonInheritedData->m_maskBoxImage)
-        return true;
+        if (rareNonInheritedData->m_mask != other.rareNonInheritedData->m_mask
+            || rareNonInheritedData->m_maskBoxImage != other.rareNonInheritedData->m_maskBoxImage)
+            return true;
+    }
 
     return false;
 }
@@ -625,21 +628,25 @@ bool RenderStyle::diffNeedsRepaintObject(const RenderStyle& other) const
         || inherited_flags.m_printColorAdjust != other.inherited_flags.m_printColorAdjust
         || inherited_flags._insideLink != other.inherited_flags._insideLink
         || !surround->border.visuallyEqual(other.surround->border)
-        || !m_background->visuallyEqual(*other.m_background)
-        || rareInheritedData->userModify != other.rareInheritedData->userModify
-        || rareInheritedData->userSelect != other.rareInheritedData->userSelect
-        || rareNonInheritedData->userDrag != other.rareNonInheritedData->userDrag
-        || rareNonInheritedData->m_borderFit != other.rareNonInheritedData->m_borderFit
-        || rareNonInheritedData->m_objectFit != other.rareNonInheritedData->m_objectFit
-        || rareNonInheritedData->m_objectPosition != other.rareNonInheritedData->m_objectPosition
-        || rareInheritedData->m_imageRendering != other.rareInheritedData->m_imageRendering)
+        || !m_background->visuallyEqual(*other.m_background))
         return true;
 
-    if (rareNonInheritedData->m_shapeOutside != other.rareNonInheritedData->m_shapeOutside)
-        return true;
+    if (rareInheritedData.get() != other.rareInheritedData.get()) {
+        if (rareInheritedData->userModify != other.rareInheritedData->userModify
+            || rareInheritedData->userSelect != other.rareInheritedData->userSelect
+            || rareInheritedData->m_imageRendering != other.rareInheritedData->m_imageRendering)
+            return true;
+    }
 
-    if (rareNonInheritedData->m_clipPath != other.rareNonInheritedData->m_clipPath)
-        return true;
+    if (rareNonInheritedData.get() != other.rareNonInheritedData.get()) {
+        if (rareNonInheritedData->userDrag != other.rareNonInheritedData->userDrag
+            || rareNonInheritedData->m_borderFit != other.rareNonInheritedData->m_borderFit
+            || rareNonInheritedData->m_objectFit != other.rareNonInheritedData->m_objectFit
+            || rareNonInheritedData->m_objectPosition != other.rareNonInheritedData->m_objectPosition
+            || rareNonInheritedData->m_shapeOutside != other.rareNonInheritedData->m_shapeOutside
+            || rareNonInheritedData->m_clipPath != other.rareNonInheritedData->m_clipPath)
+            return true;
+    }
 
     return false;
 }
@@ -652,8 +659,7 @@ bool RenderStyle::diffNeedsRecompositeLayer(const RenderStyle& other) const
             || rareNonInheritedData->m_perspective != other.rareNonInheritedData->m_perspective
             || rareNonInheritedData->m_perspectiveOriginX != other.rareNonInheritedData->m_perspectiveOriginX
             || rareNonInheritedData->m_perspectiveOriginY != other.rareNonInheritedData->m_perspectiveOriginY
-            || hasWillChangeCompositingHint() != other.hasWillChangeCompositingHint()
-            || hasWillChangeGpuRasterizationHint() != other.hasWillChangeGpuRasterizationHint())
+            || hasWillChangeCompositingHint() != other.hasWillChangeCompositingHint())
             return true;
     }
 
@@ -675,22 +681,27 @@ unsigned RenderStyle::computeChangedContextSensitiveProperties(const RenderStyle
         if (rareNonInheritedData->opacity != other.rareNonInheritedData->opacity)
             changedContextSensitiveProperties |= ContextSensitivePropertyOpacity;
 
-        if (rareNonInheritedData->m_filter.get() != other.rareNonInheritedData->m_filter.get()
-            && *rareNonInheritedData->m_filter.get() != *other.rareNonInheritedData->m_filter.get())
+        if (rareNonInheritedData->m_filter != other.rareNonInheritedData->m_filter)
             changedContextSensitiveProperties |= ContextSensitivePropertyFilter;
     }
 
     if (!diff.needsRepaint()) {
         if (inherited->color != other.inherited->color
-            || inherited_flags._text_decorations != other.inherited_flags._text_decorations
-            || visual->textDecoration != other.visual->textDecoration
-            || rareNonInheritedData->m_textDecorationStyle != other.rareNonInheritedData->m_textDecorationStyle
-            || rareNonInheritedData->m_textDecorationColor != other.rareNonInheritedData->m_textDecorationColor
-            || rareInheritedData->textFillColor() != other.rareInheritedData->textFillColor()
-            || rareInheritedData->textStrokeColor() != other.rareInheritedData->textStrokeColor()
-            || rareInheritedData->textEmphasisColor() != other.rareInheritedData->textEmphasisColor()
-            || rareInheritedData->textEmphasisFill != other.rareInheritedData->textEmphasisFill)
+            || inherited_flags.m_textUnderline != other.inherited_flags.m_textUnderline
+            || visual->textDecoration != other.visual->textDecoration) {
             changedContextSensitiveProperties |= ContextSensitivePropertyTextOrColor;
+        } else if (rareNonInheritedData.get() != other.rareNonInheritedData.get()) {
+            if (rareNonInheritedData->m_textDecorationStyle != other.rareNonInheritedData->m_textDecorationStyle
+                || rareNonInheritedData->m_textDecorationColor != other.rareNonInheritedData->m_textDecorationColor)
+                changedContextSensitiveProperties |= ContextSensitivePropertyTextOrColor;
+        } else if (rareInheritedData.get() != other.rareInheritedData.get()) {
+            if (rareInheritedData->textFillColor() != other.rareInheritedData->textFillColor()
+                || rareInheritedData->textStrokeColor() != other.rareInheritedData->textStrokeColor()
+                || rareInheritedData->textEmphasisColor() != other.rareInheritedData->textEmphasisColor()
+                || rareInheritedData->textEmphasisFill != other.rareInheritedData->textEmphasisFill
+                || rareInheritedData->appliedTextDecorations != other.rareInheritedData->appliedTextDecorations)
+                changedContextSensitiveProperties |= ContextSensitivePropertyTextOrColor;
+        }
     }
 
     return changedContextSensitiveProperties;
@@ -719,8 +730,6 @@ void RenderStyle::setCursorList(PassRefPtr<CursorList> other)
 
 void RenderStyle::setQuotes(PassRefPtr<QuotesData> q)
 {
-    if (rareInheritedData->quotes.get() == q.get())
-        return;
     rareInheritedData.access()->quotes = q;
 }
 
@@ -861,30 +870,10 @@ bool RenderStyle::hasWillChangeCompositingHint() const
         case CSSPropertyOpacity:
         case CSSPropertyTransform:
         case CSSPropertyWebkitTransform:
-        case CSSPropertyLeft:
         case CSSPropertyTop:
-        case CSSPropertyRight:
+        case CSSPropertyLeft:
         case CSSPropertyBottom:
-        case CSSPropertyWebkitFilter:
-            return true;
-        default:
-            break;
-        }
-    }
-    return false;
-}
-
-bool RenderStyle::hasWillChangeGpuRasterizationHint() const
-{
-    if (willChangeContents())
-        return true;
-
-    for (size_t i = 0; i < rareNonInheritedData->m_willChange->m_properties.size(); ++i) {
-        switch (rareNonInheritedData->m_willChange->m_properties[i]) {
-        case CSSPropertyWidth:
-        case CSSPropertyHeight:
-        case CSSPropertyBackgroundColor:
-        case CSSPropertyBackgroundPosition:
+        case CSSPropertyRight:
             return true;
         default:
             break;
@@ -1115,76 +1104,18 @@ const AtomicString& RenderStyle::textEmphasisMarkString() const
     return nullAtom;
 }
 
-void RenderStyle::adjustAnimations()
-{
-    CSSAnimationDataList* animationList = rareNonInheritedData->m_animations.get();
-    if (!animationList)
-        return;
-
-    // Get rid of empty animations and anything beyond them
-    for (size_t i = 0; i < animationList->size(); ++i) {
-        if (animationList->animation(i)->isEmpty()) {
-            animationList->resize(i);
-            break;
-        }
-    }
-
-    if (animationList->isEmpty()) {
-        clearAnimations();
-        return;
-    }
-
-    // Repeat patterns into layers that don't have some properties set.
-    animationList->fillUnsetProperties();
-}
-
-void RenderStyle::adjustTransitions()
-{
-    CSSAnimationDataList* transitionList = rareNonInheritedData->m_transitions.get();
-    if (!transitionList)
-        return;
-
-    // Get rid of empty transitions and anything beyond them
-    for (size_t i = 0; i < transitionList->size(); ++i) {
-        if (transitionList->animation(i)->isEmpty()) {
-            transitionList->resize(i);
-            break;
-        }
-    }
-
-    if (transitionList->isEmpty()) {
-        clearTransitions();
-        return;
-    }
-
-    // Repeat patterns into layers that don't have some properties set.
-    transitionList->fillUnsetProperties();
-
-    // Make sure there are no duplicate properties. This is an O(n^2) algorithm
-    // but the lists tend to be very short, so it is probably ok
-    for (size_t i = 0; i < transitionList->size(); ++i) {
-        for (size_t j = i+1; j < transitionList->size(); ++j) {
-            if (transitionList->animation(i)->property() == transitionList->animation(j)->property()) {
-                // toss i
-                transitionList->remove(i);
-                j = i;
-            }
-        }
-    }
-}
-
-CSSAnimationDataList* RenderStyle::accessAnimations()
+CSSAnimationData& RenderStyle::accessAnimations()
 {
     if (!rareNonInheritedData.access()->m_animations)
-        rareNonInheritedData.access()->m_animations = adoptPtrWillBeNoop(new CSSAnimationDataList());
-    return rareNonInheritedData->m_animations.get();
+        rareNonInheritedData.access()->m_animations = CSSAnimationData::create();
+    return *rareNonInheritedData->m_animations;
 }
 
-CSSAnimationDataList* RenderStyle::accessTransitions()
+CSSTransitionData& RenderStyle::accessTransitions()
 {
     if (!rareNonInheritedData.access()->m_transitions)
-        rareNonInheritedData.access()->m_transitions = adoptPtrWillBeNoop(new CSSAnimationDataList());
-    return rareNonInheritedData->m_transitions.get();
+        rareNonInheritedData.access()->m_transitions = CSSTransitionData::create();
+    return *rareNonInheritedData->m_transitions;
 }
 
 const Font& RenderStyle::font() const { return inherited->font; }
@@ -1194,6 +1125,32 @@ float RenderStyle::specifiedFontSize() const { return fontDescription().specifie
 float RenderStyle::computedFontSize() const { return fontDescription().computedSize(); }
 int RenderStyle::fontSize() const { return fontDescription().computedPixelSize(); }
 FontWeight RenderStyle::fontWeight() const { return fontDescription().weight(); }
+
+TextDecoration RenderStyle::textDecorationsInEffect() const
+{
+    int decorations = 0;
+
+    const Vector<AppliedTextDecoration>& applied = appliedTextDecorations();
+
+    for (size_t i = 0; i < applied.size(); ++i)
+        decorations |= applied[i].line();
+
+    return static_cast<TextDecoration>(decorations);
+}
+
+const Vector<AppliedTextDecoration>& RenderStyle::appliedTextDecorations() const
+{
+    if (!inherited_flags.m_textUnderline && !rareInheritedData->appliedTextDecorations) {
+        DEFINE_STATIC_LOCAL(Vector<AppliedTextDecoration>, empty, ());
+        return empty;
+    }
+    if (inherited_flags.m_textUnderline) {
+        DEFINE_STATIC_LOCAL(Vector<AppliedTextDecoration>, underline, (1, AppliedTextDecoration(TextDecorationUnderline)));
+        return underline;
+    }
+
+    return rareInheritedData->appliedTextDecorations->vector();
+}
 
 float RenderStyle::wordSpacing() const { return fontDescription().wordSpacing(); }
 float RenderStyle::letterSpacing() const { return fontDescription().letterSpacing(); }
@@ -1290,6 +1247,57 @@ void RenderStyle::setFontWeight(FontWeight weight)
     font().update(currentFontSelector);
 }
 
+void RenderStyle::addAppliedTextDecoration(const AppliedTextDecoration& decoration)
+{
+    RefPtr<AppliedTextDecorationList>& list = rareInheritedData.access()->appliedTextDecorations;
+
+    if (!list)
+        list = AppliedTextDecorationList::create();
+    else if (!list->hasOneRef())
+        list = list->copy();
+
+    if (inherited_flags.m_textUnderline) {
+        inherited_flags.m_textUnderline = false;
+        list->append(AppliedTextDecoration(TextDecorationUnderline));
+    }
+
+    list->append(decoration);
+}
+
+void RenderStyle::applyTextDecorations()
+{
+    if (textDecoration() == TextDecorationNone)
+        return;
+
+    TextDecorationStyle style = textDecorationStyle();
+    StyleColor styleColor = visitedDependentDecorationStyleColor();
+
+    int decorations = textDecoration();
+
+    if (decorations & TextDecorationUnderline) {
+        // To save memory, we don't use AppliedTextDecoration objects in the
+        // common case of a single simple underline.
+        AppliedTextDecoration underline(TextDecorationUnderline, style, styleColor);
+
+        if (!rareInheritedData->appliedTextDecorations && underline.isSimpleUnderline())
+            inherited_flags.m_textUnderline = true;
+        else
+            addAppliedTextDecoration(underline);
+    }
+    if (decorations & TextDecorationOverline)
+        addAppliedTextDecoration(AppliedTextDecoration(TextDecorationOverline, style, styleColor));
+    if (decorations & TextDecorationLineThrough)
+        addAppliedTextDecoration(AppliedTextDecoration(TextDecorationLineThrough, style, styleColor));
+}
+
+void RenderStyle::clearAppliedTextDecorations()
+{
+    inherited_flags.m_textUnderline = false;
+
+    if (rareInheritedData->appliedTextDecorations)
+        rareInheritedData.access()->appliedTextDecorations = nullptr;
+}
+
 void RenderStyle::getShadowExtent(const ShadowList* shadowList, LayoutUnit &top, LayoutUnit &right, LayoutUnit &bottom, LayoutUnit &left) const
 {
     top = 0;
@@ -1367,10 +1375,29 @@ void RenderStyle::getShadowVerticalExtent(const ShadowList* shadowList, LayoutUn
     }
 }
 
-StyleColor RenderStyle::visitedDependentDecorationColor() const
+StyleColor RenderStyle::visitedDependentDecorationStyleColor() const
 {
-    // Text decoration color fallback is handled in RenderObject::decorationColor.
-    return insideLink() == InsideVisitedLink ? visitedLinkTextDecorationColor() : textDecorationColor();
+    bool isVisited = insideLink() == InsideVisitedLink;
+
+    StyleColor styleColor = isVisited ? visitedLinkTextDecorationColor() : textDecorationColor();
+
+    if (!styleColor.isCurrentColor())
+        return styleColor;
+
+    if (textStrokeWidth()) {
+        // Prefer stroke color if possible, but not if it's fully transparent.
+        StyleColor textStrokeStyleColor = isVisited ? visitedLinkTextStrokeColor() : textStrokeColor();
+        if (!textStrokeStyleColor.isCurrentColor() && textStrokeStyleColor.color().alpha())
+            return textStrokeStyleColor;
+    }
+
+    return isVisited ? visitedLinkTextFillColor() : textFillColor();
+}
+
+Color RenderStyle::visitedDependentDecorationColor() const
+{
+    bool isVisited = insideLink() == InsideVisitedLink;
+    return visitedDependentDecorationStyleColor().resolve(isVisited ? visitedLinkColor() : color());
 }
 
 Color RenderStyle::colorIncludingFallback(int colorProperty, bool visitedLink) const

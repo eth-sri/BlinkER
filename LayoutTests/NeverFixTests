@@ -19,6 +19,7 @@ fast/harness/sample-fail-mismatch-reftest.html [ WontFix ]
 # Platform specific virtual test suites.
 [ Win Mac Android ] virtual/linux-subpixel [ WontFix ]
 [ Linux Mac Android XP ] virtual/windows-directwrite [ WontFix ]
+[ Linux Win Android XP ] virtual/mac-antialiasedtext [ WontFix ]
 
 # Chrome Win/Linux doesn't support emacs key-bindings.
 [ Win Linux ] editing/pasteboard/emacs-cntl-y-001.html [ WontFix ]
@@ -36,6 +37,9 @@ fast/harness/sample-fail-mismatch-reftest.html [ WontFix ]
 
 # This test only applies to overlay scrollbar platforms.
 [ SnowLeopard Win Linux ] fast/dom/partial-layout-overlay-scrollbars.html [ WontFix ]
+
+# These tests are only valid on platforms with overlay scrollbars support.
+[ SnowLeopard ] inspector/device-emulation [ WontFix ]
 
 # <progress> on Mac is always animated. So it's hard to get a reliable pixel result.
 [ Mac ] fast/dom/HTMLProgressElement/progress-element.html [ WontFix ]
@@ -110,9 +114,6 @@ media/stable [ WontFix ]
 
 # Only run fake-Android tests on Linux
 [ Mac Win ] virtual/android [ WontFix ]
-
-# We only run it through the virtual linux-subpixel test suite.
-platform/linux/fast/text/subpixel/chromium-linux-text-subpixel-positioning.html [ WontFix ]
 
 # We only run it through the virtual gpu test suite.
 fast/canvas/canvas-lost-gpu-context.html [ WontFix ]

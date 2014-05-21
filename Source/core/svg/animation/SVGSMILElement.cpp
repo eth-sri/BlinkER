@@ -169,7 +169,7 @@ SVGSMILElement::Condition::Condition(Type type, BeginOrEnd beginOrEnd, const Str
 SVGSMILElement::SVGSMILElement(const QualifiedName& tagName, Document& doc)
     : SVGElement(tagName, doc)
     , m_attributeName(anyQName())
-    , m_targetElement(0)
+    , m_targetElement(nullptr)
     , m_syncBaseConditionsConnected(false)
     , m_hasEndEventConditions(false)
     , m_isWaitingForFirstInterval(true)
@@ -199,9 +199,11 @@ SVGSMILElement::~SVGSMILElement()
     smilBeginEventSender().cancelEvent(this);
     smilRepeatEventSender().cancelEvent(this);
     smilRepeatNEventSender().cancelEvent(this);
+#if !ENABLE(OILPAN)
     clearConditions();
     if (m_timeContainer && m_targetElement && hasValidAttributeName())
         m_timeContainer->unschedule(this, m_targetElement, m_attributeName);
+#endif
 }
 
 void SVGSMILElement::clearResourceAndEventBaseReferences()
@@ -268,7 +270,7 @@ static inline QualifiedName constructQualifiedName(const SVGElement* svgElement,
 
     AtomicString prefix;
     AtomicString localName;
-    if (!Document::parseQualifiedName(attributeName, prefix, localName, ASSERT_NO_EXCEPTION))
+    if (!Document::parseQualifiedName(attributeName, prefix, localName, IGNORE_EXCEPTION))
         return anyQName();
 
     const AtomicString& namespaceURI = svgElement->lookupNamespaceURI(prefix);
@@ -562,7 +564,7 @@ void SVGSMILElement::svgAttributeChanged(const QualifiedName& attrName)
     else if (attrName == SVGNames::attributeNameAttr)
         setAttributeName(constructQualifiedName(this, fastGetAttribute(SVGNames::attributeNameAttr)));
     else if (attrName.matches(XLinkNames::hrefAttr)) {
-        SVGElementInstance::InvalidationGuard invalidationGuard(this);
+        SVGElement::InvalidationGuard invalidationGuard(this);
         buildPendingResource();
         if (m_targetElement)
             clearAnimatedType(m_targetElement);
@@ -1328,6 +1330,12 @@ void SVGSMILElement::dispatchPendingEvent(SMILEventSender* eventSender)
     } else {
         dispatchEvent(Event::create(eventType));
     }
+}
+
+void SVGSMILElement::trace(Visitor* visitor)
+{
+    visitor->trace(m_targetElement);
+    SVGElement::trace(visitor);
 }
 
 }

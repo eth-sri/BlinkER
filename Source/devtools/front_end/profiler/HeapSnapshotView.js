@@ -31,9 +31,10 @@
 /**
  * @constructor
  * @extends {WebInspector.VBox}
+ * @param {!WebInspector.ProfileType.DataDisplayDelegate} dataDisplayDelegate
  * @param {!WebInspector.HeapProfileHeader} profile
  */
-WebInspector.HeapSnapshotView = function(profile)
+WebInspector.HeapSnapshotView = function(dataDisplayDelegate, profile)
 {
     WebInspector.VBox.call(this);
 
@@ -52,7 +53,7 @@ WebInspector.HeapSnapshotView = function(profile)
 
     this._containmentView = new WebInspector.VBox();
     this._containmentView.setMinimumSize(50, 25);
-    this._containmentDataGrid = new WebInspector.HeapSnapshotContainmentDataGrid();
+    this._containmentDataGrid = new WebInspector.HeapSnapshotContainmentDataGrid(dataDisplayDelegate);
     this._containmentDataGrid.show(this._containmentView.element);
     this._containmentDataGrid.addEventListener(WebInspector.DataGrid.Events.SelectedNode, this._selectionChanged, this);
 
@@ -61,27 +62,27 @@ WebInspector.HeapSnapshotView = function(profile)
     this._constructorsView = new WebInspector.VBox();
     this._constructorsView.setMinimumSize(50, 25);
 
-    this._constructorsDataGrid = new WebInspector.HeapSnapshotConstructorsDataGrid();
+    this._constructorsDataGrid = new WebInspector.HeapSnapshotConstructorsDataGrid(dataDisplayDelegate);
     this._constructorsDataGrid.show(this._constructorsView.element);
     this._constructorsDataGrid.addEventListener(WebInspector.DataGrid.Events.SelectedNode, this._selectionChanged, this);
 
     this._diffView = new WebInspector.VBox();
     this._diffView.setMinimumSize(50, 25);
 
-    this._diffDataGrid = new WebInspector.HeapSnapshotDiffDataGrid();
+    this._diffDataGrid = new WebInspector.HeapSnapshotDiffDataGrid(dataDisplayDelegate);
     this._diffDataGrid.show(this._diffView.element);
     this._diffDataGrid.addEventListener(WebInspector.DataGrid.Events.SelectedNode, this._selectionChanged, this);
 
     this._dominatorView = new WebInspector.VBox();
     this._dominatorView.setMinimumSize(50, 25);
-    this._dominatorDataGrid = new WebInspector.HeapSnapshotDominatorsDataGrid();
+    this._dominatorDataGrid = new WebInspector.HeapSnapshotDominatorsDataGrid(dataDisplayDelegate);
     this._dominatorDataGrid.show(this._dominatorView.element);
     this._dominatorDataGrid.addEventListener(WebInspector.DataGrid.Events.SelectedNode, this._selectionChanged, this);
 
-    if (WebInspector.experimentsSettings.allocationProfiler.isEnabled() && profile.profileType() === WebInspector.ProfileTypeRegistry.instance.trackingHeapSnapshotProfileType) {
+    if (WebInspector.experimentsSettings.heapAllocationProfiler.isEnabled() && profile.profileType() === WebInspector.ProfileTypeRegistry.instance.trackingHeapSnapshotProfileType) {
         this._allocationView = new WebInspector.VBox();
         this._allocationView.setMinimumSize(50, 25);
-        this._allocationDataGrid = new WebInspector.AllocationDataGrid();
+        this._allocationDataGrid = new WebInspector.AllocationDataGrid(dataDisplayDelegate);
         this._allocationDataGrid.addEventListener(WebInspector.DataGrid.Events.SelectedNode, this._onSelectAllocationNode, this);
         this._allocationDataGrid.show(this._allocationView.element);
 
@@ -121,7 +122,7 @@ WebInspector.HeapSnapshotView = function(profile)
     this._splitView.hideDefaultResizer();
     this._splitView.installResizer(splitViewResizer);
 
-    this._retainmentDataGrid = new WebInspector.HeapSnapshotRetainmentDataGrid();
+    this._retainmentDataGrid = new WebInspector.HeapSnapshotRetainmentDataGrid(dataDisplayDelegate);
     this._retainmentDataGrid.show(this._retainmentView.element);
     this._retainmentDataGrid.addEventListener(WebInspector.DataGrid.Events.SelectedNode, this._inspectedObjectChanged, this);
     this._retainmentDataGrid.reset();
@@ -1211,9 +1212,10 @@ WebInspector.HeapSnapshotProfileType.prototype = {
         if (this.profileBeingRecorded())
             return;
         var target = /** @type {!WebInspector.Target} */ (WebInspector.targetManager.activeTarget());
-        this._profileBeingRecorded = new WebInspector.HeapProfileHeader(target, this);
-        this.addProfile(this._profileBeingRecorded);
-        this._profileBeingRecorded.updateStatus(WebInspector.UIString("Snapshotting\u2026"));
+        var profile = new WebInspector.HeapProfileHeader(target, this);
+        this.setProfileBeingRecorded(profile);
+        this.addProfile(profile);
+        profile.updateStatus(WebInspector.UIString("Snapshotting\u2026"));
 
         /**
          * @param {?string} error
@@ -1224,8 +1226,8 @@ WebInspector.HeapSnapshotProfileType.prototype = {
             var profile = this._profileBeingRecorded;
             profile.title = WebInspector.UIString("Snapshot %d", profile.uid);
             profile._finishLoad();
-            this._profileBeingRecorded = null;
-            WebInspector.panels.profiles.showProfile(profile);
+            this.setProfileBeingRecorded(null);
+            this.dispatchEventToListeners(WebInspector.ProfileType.Events.ProfileComplete, profile);
             callback();
         }
         HeapProfilerAgent.takeHeapSnapshot(true, didTakeHeapSnapshot.bind(this));
@@ -1269,7 +1271,7 @@ WebInspector.HeapSnapshotProfileType.prototype = {
     _snapshotReceived: function(profile)
     {
         if (this._profileBeingRecorded === profile)
-            this._profileBeingRecorded = null;
+            this.setProfileBeingRecorded(null);
         this.dispatchEventToListeners(WebInspector.HeapSnapshotProfileType.SnapshotReceived, profile);
     },
 
@@ -1373,15 +1375,13 @@ WebInspector.TrackingHeapSnapshotProfileType.prototype = {
         if (this.profileBeingRecorded())
             return;
         this._addNewProfile();
-        var target = /** @type {!WebInspector.Target} */ (WebInspector.targetManager.activeTarget());
-        target.profilingLock.acquire();
-        HeapProfilerAgent.startTrackingHeapObjects(WebInspector.experimentsSettings.allocationProfiler.isEnabled());
+        HeapProfilerAgent.startTrackingHeapObjects(WebInspector.experimentsSettings.heapAllocationProfiler.isEnabled());
     },
 
     _addNewProfile: function()
     {
         var target = /** @type {!WebInspector.Target} */ (WebInspector.targetManager.activeTarget());
-        this._profileBeingRecorded = new WebInspector.HeapProfileHeader(target, this);
+        this.setProfileBeingRecorded(new WebInspector.HeapProfileHeader(target, this));
         this._lastSeenIndex = -1;
         this._profileSamples = {
             'sizes': [],
@@ -1406,15 +1406,13 @@ WebInspector.TrackingHeapSnapshotProfileType.prototype = {
          */
         function didTakeHeapSnapshot(error)
         {
-            var target = /** @type {!WebInspector.Target} */ (WebInspector.targetManager.activeTarget());
-            target.profilingLock.release();
             var profile = this._profileBeingRecorded;
             if (!profile)
                 return;
             profile._finishLoad();
             this._profileSamples = null;
-            this._profileBeingRecorded = null;
-            WebInspector.panels.profiles.showProfile(profile);
+            this.setProfileBeingRecorded(null);
+            this.dispatchEventToListeners(WebInspector.ProfileType.Events.ProfileComplete, profile);
         }
 
         HeapProfilerAgent.stopTrackingHeapObjects(true, didTakeHeapSnapshot.bind(this));
@@ -1448,7 +1446,7 @@ WebInspector.TrackingHeapSnapshotProfileType.prototype = {
     {
         var wasRecording = this._recording;
         // Clear current profile to avoid stopping backend.
-        this._profileBeingRecorded = null;
+        this.setProfileBeingRecorded(null);
         WebInspector.HeapSnapshotProfileType.prototype.resetProfiles.call(this);
         this._profileSamples = null;
         this._lastSeenIndex = -1;
@@ -1502,20 +1500,22 @@ WebInspector.HeapProfileHeader = function(target, type, title)
 WebInspector.HeapProfileHeader.prototype = {
     /**
      * @override
+     * @param {!WebInspector.ProfileType.DataDisplayDelegate} dataDisplayDelegate
      * @return {!WebInspector.ProfileSidebarTreeElement}
      */
-    createSidebarTreeElement: function()
+    createSidebarTreeElement: function(dataDisplayDelegate)
     {
-        return new WebInspector.ProfileSidebarTreeElement(this, "heap-snapshot-sidebar-tree-item");
+        return new WebInspector.ProfileSidebarTreeElement(dataDisplayDelegate, this, "heap-snapshot-sidebar-tree-item");
     },
 
     /**
      * @override
+     * @param {!WebInspector.ProfileType.DataDisplayDelegate} dataDisplayDelegate
      * @return {!WebInspector.HeapSnapshotView}
      */
-    createView: function()
+    createView: function(dataDisplayDelegate)
     {
-        return new WebInspector.HeapSnapshotView(this);
+        return new WebInspector.HeapSnapshotView(dataDisplayDelegate, this);
     },
 
     /**

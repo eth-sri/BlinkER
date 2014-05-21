@@ -242,7 +242,7 @@ bool Dictionary::get(const String& key, ScriptValue& value) const
     if (!getKey(key, v8Value))
         return false;
 
-    value = ScriptValue(v8Value, m_isolate);
+    value = ScriptValue(ScriptState::current(m_isolate), v8Value);
     return true;
 }
 
@@ -667,19 +667,6 @@ bool Dictionary::get(const String& key, RefPtrWillBeMember<DOMError>& value) con
         return false;
 
     value = V8DOMError::toNativeWithTypeCheck(m_isolate, v8Value);
-    return true;
-}
-
-bool Dictionary::get(const String& key, OwnPtr<VoidCallback>& value) const
-{
-    v8::Local<v8::Value> v8Value;
-    if (!getKey(key, v8Value))
-        return false;
-
-    if (!v8Value->IsFunction())
-        return false;
-
-    value = V8VoidCallback::create(v8::Handle<v8::Function>::Cast(v8Value), currentExecutionContext(m_isolate));
     return true;
 }
 

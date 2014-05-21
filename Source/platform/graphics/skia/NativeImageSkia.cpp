@@ -375,11 +375,15 @@ void NativeImageSkia::draw(GraphicsContext* context, const SkRect& srcRect, cons
     paint.setLooper(context->drawLooper());
     paint.setAntiAlias(shouldDrawAntiAliased(context, destRect));
 
+    bool isLazyDecoded = DeferredImageDecoder::isLazyDecoded(bitmap());
+
     ResamplingMode resampling;
     if (context->isAccelerated()) {
         resampling = LinearResampling;
     } else if (context->printing()) {
         resampling = NoResampling;
+    } else if (isLazyDecoded) {
+        resampling = AwesomeResampling;
     } else {
         // Take into account scale applied to the canvas when computing sampling mode (e.g. CSS scale or page scale).
         SkRect destRectTarget = destRect;
@@ -400,7 +404,6 @@ void NativeImageSkia::draw(GraphicsContext* context, const SkRect& srcRect, cons
     }
     resampling = limitResamplingMode(context, resampling);
 
-    bool isLazyDecoded = DeferredImageDecoder::isLazyDecoded(bitmap());
     // FIXME: Bicubic filtering in Skia is only applied to defer-decoded images
     // as an experiment. Once this filtering code path becomes stable we should
     // turn this on for all cases, including non-defer-decoded images.
@@ -469,18 +472,29 @@ void NativeImageSkia::drawPattern(
     float destBitmapWidth = SkScalarToFloat(destRectTarget.width());
     float destBitmapHeight = SkScalarToFloat(destRectTarget.height());
 
+    bool isLazyDecoded = DeferredImageDecoder::isLazyDecoded(bitmap());
+
     // Compute the resampling mode.
     ResamplingMode resampling;
     if (context->isAccelerated() || context->printing())
         resampling = LinearResampling;
+    else if (isLazyDecoded)
+        resampling = AwesomeResampling;
     else
         resampling = computeResamplingMode(totalMatrix, normSrcRect.width(), normSrcRect.height(), destBitmapWidth, destBitmapHeight);
     resampling = limitResamplingMode(context, resampling);
 
-    SkMatrix shaderTransform;
+    SkMatrix localMatrix;
+    // We also need to translate it such that the origin of the pattern is the
+    // origin of the destination rect, which is what WebKit expects. Skia uses
+    // the coordinate system origin as the base for the pattern. If WebKit wants
+    // a shifted image, it will shift it from there using the localMatrix.
+    const float adjustedX = phase.x() + normSrcRect.x() * scale.width();
+    const float adjustedY = phase.y() + normSrcRect.y() * scale.height();
+    localMatrix.setTranslate(SkFloatToScalar(adjustedX), SkFloatToScalar(adjustedY));
+
     RefPtr<SkShader> shader;
 
-    bool isLazyDecoded = DeferredImageDecoder::isLazyDecoded(bitmap());
     // Bicubic filter is only applied to defer-decoded images, see
     // NativeImageSkia::draw for details.
     bool useBicubicFilter = resampling == AwesomeResampling && isLazyDecoded;
@@ -491,51 +505,42 @@ void NativeImageSkia::drawPattern(
         float scaleY = destBitmapHeight / normSrcRect.height();
         SkRect scaledSrcRect;
 
+        // Since we are resizing the bitmap, we need to remove the scale
+        // applied to the pixels in the bitmap shader. This means we need
+        // CTM * localMatrix to have identity scale. Since we
+        // can't modify CTM (or the rectangle will be drawn in the wrong
+        // place), we must set localMatrix's scale to the inverse of
+        // CTM scale.
+        localMatrix.preScale(ctmScaleX ? 1 / ctmScaleX : 1, ctmScaleY ? 1 / ctmScaleY : 1);
+
         // The image fragment generated here is not exactly what is
         // requested. The scale factor used is approximated and image
         // fragment is slightly larger to align to integer
         // boundaries.
         SkBitmap resampled = extractScaledImageFragment(normSrcRect, scaleX, scaleY, &scaledSrcRect);
         if (repeatSpacing.isZero()) {
-            shader = adoptRef(SkShader::CreateBitmapShader(resampled, SkShader::kRepeat_TileMode, SkShader::kRepeat_TileMode));
+            shader = adoptRef(SkShader::CreateBitmapShader(resampled, SkShader::kRepeat_TileMode, SkShader::kRepeat_TileMode, &localMatrix));
         } else {
             shader = adoptRef(SkShader::CreateBitmapShader(
                 createBitmapWithSpace(resampled, repeatSpacing.width() * ctmScaleX, repeatSpacing.height() * ctmScaleY),
-                SkShader::kRepeat_TileMode, SkShader::kRepeat_TileMode));
+                SkShader::kRepeat_TileMode, SkShader::kRepeat_TileMode, &localMatrix));
         }
-
-        // Since we just resized the bitmap, we need to remove the scale
-        // applied to the pixels in the bitmap shader. This means we need
-        // CTM * shaderTransform to have identity scale. Since we
-        // can't modify CTM (or the rectangle will be drawn in the wrong
-        // place), we must set shaderTransform's scale to the inverse of
-        // CTM scale.
-        shaderTransform.setScale(ctmScaleX ? 1 / ctmScaleX : 1, ctmScaleY ? 1 / ctmScaleY : 1);
     } else {
+        // Because no resizing occurred, the shader transform should be
+        // set to the pattern's transform, which just includes scale.
+        localMatrix.preScale(scale.width(), scale.height());
+
         // No need to resample before drawing.
         SkBitmap srcSubset;
         bitmap().extractSubset(&srcSubset, enclosingIntRect(normSrcRect));
         if (repeatSpacing.isZero()) {
-            shader = adoptRef(SkShader::CreateBitmapShader(srcSubset, SkShader::kRepeat_TileMode, SkShader::kRepeat_TileMode));
+            shader = adoptRef(SkShader::CreateBitmapShader(srcSubset, SkShader::kRepeat_TileMode, SkShader::kRepeat_TileMode, &localMatrix));
         } else {
             shader = adoptRef(SkShader::CreateBitmapShader(
                 createBitmapWithSpace(srcSubset, repeatSpacing.width() * ctmScaleX, repeatSpacing.height() * ctmScaleY),
-                SkShader::kRepeat_TileMode, SkShader::kRepeat_TileMode));
+                SkShader::kRepeat_TileMode, SkShader::kRepeat_TileMode, &localMatrix));
         }
-
-        // Because no resizing occurred, the shader transform should be
-        // set to the pattern's transform, which just includes scale.
-        shaderTransform.setScale(scale.width(), scale.height());
     }
-
-    // We also need to translate it such that the origin of the pattern is the
-    // origin of the destination rect, which is what WebKit expects. Skia uses
-    // the coordinate system origin as the base for the pattern. If WebKit wants
-    // a shifted image, it will shift it from there using the shaderTransform.
-    float adjustedX = phase.x() + normSrcRect.x() * scale.width();
-    float adjustedY = phase.y() + normSrcRect.y() * scale.height();
-    shaderTransform.postTranslate(SkFloatToScalar(adjustedX), SkFloatToScalar(adjustedY));
-    shader->setLocalMatrix(shaderTransform);
 
     SkPaint paint;
     paint.setShader(shader.get());

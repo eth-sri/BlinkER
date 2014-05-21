@@ -193,7 +193,7 @@ void RenderInline::styleDidChange(StyleDifference diff, const RenderStyle* oldSt
         bool alwaysCreateLineBoxes = hasSelfPaintingLayer() || hasBoxDecorations() || newStyle->hasPadding() || newStyle->hasMargin() || hasOutline();
         if (oldStyle && alwaysCreateLineBoxes) {
             dirtyLineBoxes(false);
-            setNeedsLayout();
+            setNeedsLayoutAndFullRepaint();
         }
         m_alwaysCreateLineBoxes = alwaysCreateLineBoxes;
     }
@@ -280,7 +280,7 @@ RenderBoxModelObject* RenderInline::continuationBefore(RenderObject* beforeChild
     RenderBoxModelObject* last = this;
     while (curr) {
         if (beforeChild && beforeChild->parent() == curr) {
-            if (curr->firstChild() == beforeChild)
+            if (curr->slowFirstChild() == beforeChild)
                 return last;
             return curr;
         }
@@ -290,7 +290,7 @@ RenderBoxModelObject* RenderInline::continuationBefore(RenderObject* beforeChild
         curr = nextContinuation(curr);
     }
 
-    if (!beforeChild && !last->firstChild())
+    if (!beforeChild && !last->slowFirstChild())
         return nextToLast;
     return last;
 }
@@ -324,7 +324,7 @@ void RenderInline::addChildIgnoringContinuation(RenderObject* newChild, RenderOb
 
     RenderBoxModelObject::addChild(newChild, beforeChild);
 
-    newChild->setNeedsLayoutAndPrefWidthsRecalc();
+    newChild->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
 }
 
 RenderInline* RenderInline::clone() const
@@ -361,7 +361,7 @@ void RenderInline::splitInlines(RenderBlock* fromBlock, RenderBlock* toBlock,
         RenderObject* tmp = o;
         o = tmp->nextSibling();
         cloneInline->addChildIgnoringContinuation(children()->removeChildNode(this, tmp), 0);
-        tmp->setNeedsLayoutAndPrefWidthsRecalc();
+        tmp->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
     }
 
     // Hook |clone| up as the continuation of the middle block.
@@ -402,7 +402,7 @@ void RenderInline::splitInlines(RenderBlock* fromBlock, RenderBlock* toBlock,
                 RenderObject* tmp = o;
                 o = tmp->nextSibling();
                 cloneInline->addChildIgnoringContinuation(inlineCurr->children()->removeChildNode(curr, tmp), 0);
-                tmp->setNeedsLayoutAndPrefWidthsRecalc();
+                tmp->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
             }
         }
 
@@ -463,7 +463,7 @@ void RenderInline::splitFlow(RenderObject* beforeChild, RenderBlock* newBlockBox
             RenderObject* no = o;
             o = no->nextSibling();
             pre->children()->appendChildNode(pre, block->children()->removeChildNode(block, no));
-            no->setNeedsLayoutAndPrefWidthsRecalc();
+            no->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
         }
     }
 
@@ -478,9 +478,9 @@ void RenderInline::splitFlow(RenderObject* beforeChild, RenderBlock* newBlockBox
     // Always just do a full layout in order to ensure that line boxes (especially wrappers for images)
     // get deleted properly.  Because objects moves from the pre block into the post block, we want to
     // make new line boxes instead of leaving the old line boxes around.
-    pre->setNeedsLayoutAndPrefWidthsRecalc();
-    block->setNeedsLayoutAndPrefWidthsRecalc();
-    post->setNeedsLayoutAndPrefWidthsRecalc();
+    pre->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
+    block->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
+    post->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
 }
 
 void RenderInline::addChildToContinuation(RenderObject* newChild, RenderObject* beforeChild)
@@ -812,7 +812,7 @@ PositionWithAffinity RenderInline::positionForPoint(const LayoutPoint& point)
     RenderBoxModelObject* c = continuation();
     while (c) {
         RenderBox* contBlock = c->isInline() ? c->containingBlock() : toRenderBlock(c);
-        if (c->isInline() || c->firstChild())
+        if (c->isInline() || c->slowFirstChild())
             return c->positionForPoint(parentBlockPoint - contBlock->locationOffset());
         c = toRenderBlock(c)->inlineElementContinuation();
     }
@@ -1115,7 +1115,7 @@ void RenderInline::computeRectForRepaint(const RenderLayerModelObject* repaintCo
     o->computeRectForRepaint(repaintContainer, rect, fixed);
 }
 
-LayoutSize RenderInline::offsetFromContainer(RenderObject* container, const LayoutPoint& point, bool* offsetDependsOnPoint) const
+LayoutSize RenderInline::offsetFromContainer(const RenderObject* container, const LayoutPoint& point, bool* offsetDependsOnPoint) const
 {
     ASSERT(container == this->container());
 

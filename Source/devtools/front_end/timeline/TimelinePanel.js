@@ -29,7 +29,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-importScript("../components/CPUProfileModel.js");
+importScript("../sdk/CPUProfileModel.js");
 importScript("CountersGraph.js");
 importScript("MemoryCountersGraph.js");
 importScript("TimelineModel.js");
@@ -46,6 +46,7 @@ importScript("TimelineFlameChart.js");
 importScript("TimelineUIUtils.js");
 importScript("TimelineView.js");
 importScript("TimelineTracingView.js");
+importScript("TracingModel.js");
 
 /**
  * @constructor
@@ -224,7 +225,7 @@ WebInspector.TimelinePanel.prototype = {
 
         for (var i = 0; i < this._currentViews.length; ++i)
             this._currentViews[i].setWindowTimes(this._windowStartTime, this._windowEndTime);
-        this._updateSelectionDetails();
+        this._updateSelectedRangeStats();
     },
 
     /**
@@ -551,7 +552,7 @@ WebInspector.TimelinePanel.prototype = {
             var view = this._currentViews[i];
             view.refreshRecords(this._textFilter._regex);
         }
-        this._updateSelectionDetails();
+        this._updateSelectedRangeStats();
     },
 
     /**
@@ -595,8 +596,9 @@ WebInspector.TimelinePanel.prototype = {
         else
             this._overviewControls.push(new WebInspector.TimelineEventOverview(this._model));
 
+        var tracingModel = WebInspector.experimentsSettings.timelineOnTraceEvents.isEnabled() ? this._tracingModel() : null;
         if (WebInspector.experimentsSettings.timelineFlameChart.isEnabled() && this._flameChartEnabledSetting.get())
-            this._addModeView(new WebInspector.TimelineFlameChart(this, this._model, this._frameModel()));
+            this._addModeView(new WebInspector.TimelineFlameChart(this, this._model, tracingModel, this._frameModel()));
         else
             this._addModeView(this._timelineView());
 
@@ -613,12 +615,12 @@ WebInspector.TimelinePanel.prototype = {
         }
 
         if (this._captureTracingSetting && this._captureTracingSetting.get())
-            this._addModeView(new WebInspector.TimelineTracingView(this, this._tracingModel()));
+            this._addModeView(new WebInspector.TimelineTracingView(this, this._tracingModel(), this._model));
 
         this._timelineView().setFrameModel(isFrameMode ? this._frameModel() : null);
         this._overviewPane.setOverviewControls(this._overviewControls);
         this.doResize();
-        this._updateSelectionDetails();
+        this._updateSelectedRangeStats();
 
         this._stackView.show(this._searchableView.element);
     },
@@ -630,7 +632,9 @@ WebInspector.TimelinePanel.prototype = {
     {
         this._userInitiatedRecording = userInitiated;
         this._model.startRecording(this._captureStacksSetting.get(), this._captureMemorySetting.get());
-        if (WebInspector.experimentsSettings.timelineTracingMode.isEnabled())
+        if (WebInspector.experimentsSettings.timelineOnTraceEvents.isEnabled())
+            this._tracingModel().start("disabled-by-default-devtools.timeline,devtools", "");
+        else if (WebInspector.experimentsSettings.timelineTracingMode.isEnabled())
             this._tracingModel().start(WebInspector.TimelinePanel.defaultTracingCategoryFilter, "");
         for (var i = 0; i < this._overviewControls.length; ++i)
             this._overviewControls[i].timelineStarted();
@@ -644,9 +648,20 @@ WebInspector.TimelinePanel.prototype = {
         this._userInitiatedRecording = false;
         this._model.stopRecording();
         if (this._lazyTracingModel)
-            this._lazyTracingModel.stop(this._refreshViews.bind(this));
+            this._lazyTracingModel.stop(this._onTracingComplete.bind(this));
+
         for (var i = 0; i < this._overviewControls.length; ++i)
             this._overviewControls[i].timelineStopped();
+    },
+
+    _onTracingComplete: function()
+    {
+        if (this._lazyFrameModel) {
+            this._lazyFrameModel.reset();
+            this._lazyFrameModel.addTraceEvents(this._lazyTracingModel);
+            this._overviewPane.update();
+        }
+        this._refreshViews();
     },
 
     _onProfilingStateChanged: function()
@@ -697,14 +712,14 @@ WebInspector.TimelinePanel.prototype = {
     _onRecordsCleared: function()
     {
         this.requestWindowTimes(0, Infinity);
-        delete this._selectedRecord;
+        delete this._selection;
         if (this._lazyFrameModel)
             this._lazyFrameModel.reset();
         for (var i = 0; i < this._currentViews.length; ++i)
             this._currentViews[i].reset();
         for (var i = 0; i < this._overviewControls.length; ++i)
             this._overviewControls[i].reset();
-        this._updateSelectionDetails();
+        this._updateSelectedRangeStats();
     },
 
     _onRecordingStarted: function()
@@ -920,7 +935,31 @@ WebInspector.TimelinePanel.prototype = {
 
     _updateSelectionDetails: function()
     {
-        if (this._selectedRecord)
+        if (!this._selection) {
+            this._updateSelectedRangeStats();
+            return;
+        }
+        if (this._selection.type() === WebInspector.TimelineSelection.Type.Record) {
+            var record = /** @type {!WebInspector.TimelineModel.Record} */ (this._selection.object());
+            WebInspector.TimelineUIUtils.generatePopupContent(record, this._model, this._detailsLinkifier, showCallback.bind(this), this._model.loadedFromFile());
+        } else if (this._selection.type() === WebInspector.TimelineSelection.Type.Frame) {
+            var frame = /** @type {!WebInspector.TimelineFrame} */ (this._selection.object());
+            this._detailsView.setContent(WebInspector.UIString("Frame Statistics"), WebInspector.TimelineUIUtils.generatePopupContentForFrame(frame));
+        }
+
+        /**
+         * @param {!DocumentFragment} element
+         * @this {WebInspector.TimelinePanel}
+         */
+        function showCallback(element)
+        {
+            this._detailsView.setContent(record.title(), element);
+        }
+    },
+
+    _updateSelectedRangeStats: function()
+    {
+        if (this._selection)
             return;
 
         var startTime = this._windowStartTime;
@@ -995,36 +1034,18 @@ WebInspector.TimelinePanel.prototype = {
     },
 
     /**
-     * @param {?WebInspector.TimelineModel.Record} record
+     * @param {?WebInspector.TimelineSelection} selection
      */
-    selectRecord: function(record)
+    select: function(selection)
     {
         this._detailsLinkifier.reset();
-        this._selectedRecord = record;
-
-        if (!record) {
-            this._updateSelectionDetails();
-            return;
-        }
+        this._selection = selection;
 
         for (var i = 0; i < this._currentViews.length; ++i) {
             var view = this._currentViews[i];
-            view.setSelectedRecord(record);
+            view.setSelection(selection);
         }
-        if (!record) {
-            this._updateSelectionDetails();
-            return;
-        }
-        WebInspector.TimelineUIUtils.generatePopupContent(record, this._model, this._detailsLinkifier, showCallback.bind(this), this._model.loadedFromFile());
-
-        /**
-         * @param {!DocumentFragment} element
-         * @this {WebInspector.TimelinePanel}
-         */
-        function showCallback(element)
-        {
-            this._detailsView.setContent(record.title(), element);
-        }
+        this._updateSelectionDetails();
     },
 
     /**
@@ -1085,6 +1106,63 @@ WebInspector.TimelineDetailsView.prototype = {
 }
 
 /**
+ * @constructor
+ */
+WebInspector.TimelineSelection = function()
+{
+}
+
+/**
+ * @enum {string}
+ */
+WebInspector.TimelineSelection.Type = {
+    Record: "Record",
+    Frame: "Frame",
+};
+
+/**
+ * @param {!WebInspector.TimelineModel.Record} record
+ * @return {!WebInspector.TimelineSelection}
+ */
+WebInspector.TimelineSelection.fromRecord = function(record)
+{
+    var selection = new WebInspector.TimelineSelection();
+    selection._type = WebInspector.TimelineSelection.Type.Record;
+    selection._object = record;
+    return selection;
+}
+
+/**
+ * @param {!WebInspector.TimelineFrame} frame
+ * @return {!WebInspector.TimelineSelection}
+ */
+WebInspector.TimelineSelection.fromFrame = function(frame)
+{
+    var selection = new WebInspector.TimelineSelection();
+    selection._type = WebInspector.TimelineSelection.Type.Frame;
+    selection._object = frame;
+    return selection;
+}
+
+WebInspector.TimelineSelection.prototype = {
+    /**
+     * @return {!WebInspector.TimelineSelection.Type}
+     */
+    type: function()
+    {
+        return this._type;
+    },
+
+    /**
+     * @return {!Object}
+     */
+    object: function()
+    {
+        return this._object;
+    }
+};
+
+/**
  * @interface
  */
 WebInspector.TimelineModeView = function()
@@ -1130,9 +1208,9 @@ WebInspector.TimelineModeView.prototype = {
     setSidebarSize: function(width) {},
 
     /**
-     * @param {?WebInspector.TimelineModel.Record} record
+     * @param {?WebInspector.TimelineSelection} selection
      */
-    setSelectedRecord: function(record) {},
+    setSelection: function(selection) {},
 }
 
 /**
@@ -1148,9 +1226,9 @@ WebInspector.TimelineModeViewDelegate.prototype = {
     requestWindowTimes: function(startTime, endTime) {},
 
     /**
-     * @param {?WebInspector.TimelineModel.Record} record
+     * @param {?WebInspector.TimelineSelection} selection
      */
-    selectRecord: function(record) {},
+    select: function(selection) {},
 
     /**
      * @param {string} title

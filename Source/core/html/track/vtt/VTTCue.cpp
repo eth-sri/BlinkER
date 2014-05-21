@@ -38,6 +38,7 @@
 #include "core/dom/DocumentFragment.h"
 #include "core/dom/NodeTraversal.h"
 #include "core/events/Event.h"
+#include "core/frame/UseCounter.h"
 #include "core/html/HTMLDivElement.h"
 #include "core/html/track/TextTrack.h"
 #include "core/html/track/TextTrackCueList.h"
@@ -115,12 +116,10 @@ static const String& verticalGrowingRightKeyword()
     return verticallr;
 }
 
-static bool isInvalidPercentage(double value, ExceptionState& exceptionState)
+static bool isInvalidPercentage(int value, ExceptionState& exceptionState)
 {
-    if (TextTrackCue::isInfiniteOrNonNumber(value, exceptionState))
-        return true;
     if (value < 0 || value > 100) {
-        exceptionState.throwDOMException(IndexSizeError, ExceptionMessages::indexOutsideRange("value", value, 0.0, ExceptionMessages::InclusiveBound, 100.0, ExceptionMessages::InclusiveBound));
+        exceptionState.throwDOMException(IndexSizeError, ExceptionMessages::indexOutsideRange("value", value, 0, ExceptionMessages::InclusiveBound, 100, ExceptionMessages::InclusiveBound));
         return true;
     }
     return false;
@@ -201,6 +200,12 @@ RenderObject* VTTCueBox::createRenderer(RenderStyle*)
     return new RenderVTTCue(this);
 }
 
+void VTTCueBox::trace(Visitor* visitor)
+{
+    visitor->trace(m_cue);
+    HTMLDivElement::trace(visitor);
+}
+
 VTTCue::VTTCue(Document& document, double startTime, double endTime, const String& text)
     : TextTrackCue(startTime, endTime)
     , m_text(text)
@@ -219,14 +224,20 @@ VTTCue::VTTCue(Document& document, double startTime, double endTime, const Strin
     , m_notifyRegion(true)
 {
     ScriptWrappable::init(this);
+    UseCounter::count(document, UseCounter::VTTCue);
 }
 
 VTTCue::~VTTCue()
 {
+    // Using oilpan, if m_displayTree is in the document it will strongly keep
+    // the cue alive. Thus, if the cue is dead, either m_displayTree is not in
+    // the document or the entire document is dead too.
+#if !ENABLE(OILPAN)
     // FIXME: This is scary, we should make the life cycle smarter so the destructor
     // doesn't need to do DOM mutations.
     if (m_displayTree)
         m_displayTree->remove(ASSERT_NO_EXCEPTION);
+#endif
 }
 
 #ifndef NDEBUG
@@ -424,19 +435,18 @@ void VTTCue::copyVTTNodeToDOMTree(ContainerNode* vttNode, ContainerNode* parent)
     }
 }
 
-PassRefPtr<DocumentFragment> VTTCue::getCueAsHTML()
+PassRefPtrWillBeRawPtr<DocumentFragment> VTTCue::getCueAsHTML()
 {
     createVTTNodeTree();
-    RefPtr<DocumentFragment> clonedFragment = DocumentFragment::create(document());
+    RefPtrWillBeRawPtr<DocumentFragment> clonedFragment = DocumentFragment::create(document());
     copyVTTNodeToDOMTree(m_vttNodeTree.get(), clonedFragment.get());
     return clonedFragment.release();
 }
 
-PassRefPtr<DocumentFragment> VTTCue::createCueRenderingTree()
+PassRefPtrWillBeRawPtr<DocumentFragment> VTTCue::createCueRenderingTree()
 {
-    RefPtr<DocumentFragment> clonedFragment;
     createVTTNodeTree();
-    clonedFragment = DocumentFragment::create(document());
+    RefPtrWillBeRawPtr<DocumentFragment> clonedFragment = DocumentFragment::create(document());
     m_vttNodeTree->cloneChildNodes(clonedFragment.get());
     return clonedFragment.release();
 }
@@ -544,6 +554,9 @@ void VTTCue::calculateDisplayParameters()
     // Steps 10.2, 10.3
     m_displayDirection = determineTextDirection(m_vttNodeTree.get());
 
+    if (m_displayDirection == CSSValueRtl)
+        UseCounter::count(document(), UseCounter::VTTCueRenderRtl);
+
     // 10.4 If the text track cue writing direction is horizontal, then let
     // block-flow be 'tb'. Otherwise, if the text track cue writing direction is
     // vertical growing left, then let block-flow be 'lr'. Otherwise, the text
@@ -615,7 +628,7 @@ void VTTCue::calculateDisplayParameters()
             else
                 m_displayPosition.first = 100 - m_textPosition - m_displaySize / 2;
             break;
-        case NumberOfAlignments:
+        default:
             ASSERT_NOT_REACHED();
         }
     } else {
@@ -632,7 +645,7 @@ void VTTCue::calculateDisplayParameters()
         case Middle:
             m_displayPosition.second = m_textPosition - m_displaySize / 2;
             break;
-        case NumberOfAlignments:
+        default:
             ASSERT_NOT_REACHED();
         }
     }
@@ -698,16 +711,16 @@ void VTTCue::updateDisplayTree(double movieTime)
     m_cueBackgroundBox->removeChildren();
 
     // Update the two sets containing past and future WebVTT objects.
-    RefPtr<DocumentFragment> referenceTree = createCueRenderingTree();
+    RefPtrWillBeRawPtr<DocumentFragment> referenceTree = createCueRenderingTree();
     markFutureAndPastNodes(referenceTree.get(), startTime(), movieTime);
     m_cueBackgroundBox->appendChild(referenceTree, ASSERT_NO_EXCEPTION);
 }
 
-PassRefPtr<VTTCueBox> VTTCue::getDisplayTree(const IntSize& videoSize)
+PassRefPtrWillBeRawPtr<VTTCueBox> VTTCue::getDisplayTree(const IntSize& videoSize)
 {
-    RefPtr<VTTCueBox> displayTree(ensureDisplayTree());
+    RefPtrWillBeRawPtr<VTTCueBox> displayTree(ensureDisplayTree());
     if (!m_displayTreeShouldChange || !track()->isRendered())
-        return displayTree;
+        return displayTree.release();
 
     // 10.1 - 10.10
     calculateDisplayParameters();
@@ -744,7 +757,7 @@ PassRefPtr<VTTCueBox> VTTCue::getDisplayTree(const IntSize& videoSize)
 
     // 10.15. Let cue's text track cue display state have the CSS boxes in
     // boxes.
-    return displayTree;
+    return displayTree.release();
 }
 
 void VTTCue::removeDisplayTree()
@@ -762,7 +775,27 @@ void VTTCue::removeDisplayTree()
 
 void VTTCue::updateDisplay(const IntSize& videoSize, HTMLDivElement& container)
 {
-    RefPtr<VTTCueBox> displayBox = getDisplayTree(videoSize);
+    UseCounter::count(document(), UseCounter::VTTCueRender);
+
+    if (m_writingDirection != Horizontal)
+        UseCounter::count(document(), UseCounter::VTTCueRenderVertical);
+
+    if (!m_snapToLines)
+        UseCounter::count(document(), UseCounter::VTTCueRenderSnapToLinesFalse);
+
+    if (m_linePosition != undefinedPosition)
+        UseCounter::count(document(), UseCounter::VTTCueRenderLineNotAuto);
+
+    if (m_textPosition != 50)
+        UseCounter::count(document(), UseCounter::VTTCueRenderPositionNot50);
+
+    if (m_cueSize != 100)
+        UseCounter::count(document(), UseCounter::VTTCueRenderSizeNot100);
+
+    if (m_cueAlignment != Middle)
+        UseCounter::count(document(), UseCounter::VTTCueRenderAlignNotMiddle);
+
+    RefPtrWillBeRawPtr<VTTCueBox> displayBox = getDisplayTree(videoSize);
     VTTRegion* region = 0;
     if (track()->regions())
         region = track()->regions()->getRegionById(regionId());
@@ -1065,6 +1098,9 @@ Document& VTTCue::document() const
 
 void VTTCue::trace(Visitor* visitor)
 {
+    visitor->trace(m_vttNodeTree);
+    visitor->trace(m_cueBackgroundBox);
+    visitor->trace(m_displayTree);
     TextTrackCue::trace(visitor);
 }
 

@@ -27,7 +27,7 @@ public:
         if (executionContext->activeDOMObjectsAreStopped())
             return;
         ScriptState::Scope scope(m_scriptState.get());
-        v8::V8::RunMicrotasks(m_scriptState->isolate());
+        m_scriptState->isolate()->RunMicrotasks();
     }
 
 private:
@@ -42,7 +42,9 @@ ScriptPromiseResolverWithContext::ScriptPromiseResolverWithContext(ScriptState* 
     , m_state(Pending)
     , m_scriptState(scriptState)
     , m_timer(this, &ScriptPromiseResolverWithContext::onTimerFired)
-    , m_resolver(ScriptPromiseResolver::create(m_scriptState->executionContext())) { }
+    , m_resolver(ScriptPromiseResolver::create(m_scriptState.get()))
+{
+}
 
 void ScriptPromiseResolverWithContext::suspend()
 {
@@ -70,7 +72,7 @@ void ScriptPromiseResolverWithContext::onTimerFired(Timer<ScriptPromiseResolverW
 
     // There is no need to post a RunMicrotasksTask because it is safe to
     // call RunMicrotasks here.
-    v8::V8::RunMicrotasks(isolate);
+    isolate->RunMicrotasks();
 }
 
 void ScriptPromiseResolverWithContext::resolveOrRejectImmediately()

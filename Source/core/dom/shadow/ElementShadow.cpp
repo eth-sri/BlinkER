@@ -38,7 +38,8 @@
 
 namespace WebCore {
 
-class DistributionPool {
+class DistributionPool FINAL {
+    STACK_ALLOCATED();
 public:
     explicit DistributionPool(const ContainerNode&);
     void clear();
@@ -48,7 +49,7 @@ public:
 
 private:
     void detachNonDistributedNodes();
-    Vector<Node*, 32> m_nodes;
+    WillBeHeapVector<RawPtrWillBeMember<Node>, 32> m_nodes;
     Vector<bool, 32> m_distributed;
 };
 
@@ -122,9 +123,9 @@ inline void DistributionPool::detachNonDistributedNodes()
     }
 }
 
-PassOwnPtr<ElementShadow> ElementShadow::create()
+PassOwnPtrWillBeRawPtr<ElementShadow> ElementShadow::create()
 {
-    return adoptPtr(new ElementShadow());
+    return adoptPtrWillBeNoop(new ElementShadow());
 }
 
 ElementShadow::ElementShadow()
@@ -135,12 +136,14 @@ ElementShadow::ElementShadow()
 
 ElementShadow::~ElementShadow()
 {
+#if !ENABLE(OILPAN)
     removeDetachedShadowRoots();
+#endif
 }
 
 ShadowRoot& ElementShadow::addShadowRoot(Element& shadowHost, ShadowRoot::ShadowRootType type)
 {
-    RefPtr<ShadowRoot> shadowRoot = ShadowRoot::create(shadowHost.document(), type);
+    RefPtrWillBeRawPtr<ShadowRoot> shadowRoot = ShadowRoot::create(shadowHost.document(), type);
 
     if (type == ShadowRoot::AuthorShadowRoot && (!youngestShadowRoot() || youngestShadowRoot()->type() == ShadowRoot::UserAgentShadowRoot))
         shadowHost.willAddFirstAuthorShadowRoot();
@@ -161,13 +164,14 @@ ShadowRoot& ElementShadow::addShadowRoot(Element& shadowHost, ShadowRoot::Shadow
     return *m_shadowRoots.head();
 }
 
+#if !ENABLE(OILPAN)
 void ElementShadow::removeDetachedShadowRoots()
 {
     // Dont protect this ref count.
     Element* shadowHost = host();
     ASSERT(shadowHost);
 
-    while (RefPtr<ShadowRoot> oldRoot = m_shadowRoots.head()) {
+    while (RefPtrWillBeRawPtr<ShadowRoot> oldRoot = m_shadowRoots.head()) {
         InspectorInstrumentation::willPopShadowRoot(shadowHost, oldRoot.get());
         shadowHost->document().removeFocusedElementOfSubtree(oldRoot.get());
         m_shadowRoots.removeHead();
@@ -176,8 +180,8 @@ void ElementShadow::removeDetachedShadowRoots()
         oldRoot->setPrev(0);
         oldRoot->setNext(0);
     }
-
 }
+#endif
 
 void ElementShadow::attach(const Node::AttachContext& context)
 {
@@ -255,7 +259,7 @@ void ElementShadow::distribute()
 
     for (ShadowRoot* root = youngestShadowRoot(); root; root = root->olderShadowRoot()) {
         HTMLShadowElement* shadowInsertionPoint = 0;
-        const Vector<RefPtr<InsertionPoint> >& insertionPoints = root->descendantInsertionPoints();
+        const WillBeHeapVector<RefPtrWillBeMember<InsertionPoint> >& insertionPoints = root->descendantInsertionPoints();
         for (size_t i = 0; i < insertionPoints.size(); ++i) {
             InsertionPoint* point = insertionPoints[i].get();
             if (!point->isActive())
@@ -348,6 +352,16 @@ void ElementShadow::clearDistribution()
 
     for (ShadowRoot* root = youngestShadowRoot(); root; root = root->olderShadowRoot())
         root->setShadowInsertionPointOfYoungerShadowRoot(nullptr);
+}
+
+void ElementShadow::trace(Visitor* visitor)
+{
+    visitor->trace(m_nodeToInsertionPoints);
+    visitor->trace(m_selectFeatures);
+    // Shadow roots are linked with previous and next pointers which are traced.
+    // It is therefore enough to trace one of the shadow roots here and the
+    // rest will be traced from there.
+    visitor->trace(m_shadowRoots.head());
 }
 
 } // namespace
