@@ -29,6 +29,7 @@
 #include "bindings/v8/ScriptController.h"
 #include "bindings/v8/ScriptSourceCode.h"
 #include "core/dom/Document.h"
+#include "core/eventracer/EventRacerContext.h"
 #include "core/events/Event.h"
 #include "core/dom/IgnoreDestructiveWriteCountIncrementer.h"
 #include "core/dom/ScriptLoaderClient.h"
@@ -230,15 +231,16 @@ bool ScriptLoader::prepareScript(const TextPosition& scriptStartPosition, Legacy
         m_readyToBeParserExecuted = true;
     } else if (client->hasSourceAttribute() && !client->asyncAttributeValue() && !m_forceAsync) {
         m_willExecuteInOrder = true;
-        contextDocument->scriptRunner()->queueScriptForExecution(this, m_resource, ScriptRunner::IN_ORDER_EXECUTION);
+        contextDocument->scriptRunner()->queueScriptForExecution_(this, m_resource, ScriptRunner::IN_ORDER_EXECUTION);
         m_resource->addClient(this);
     } else if (client->hasSourceAttribute()) {
-        contextDocument->scriptRunner()->queueScriptForExecution(this, m_resource, ScriptRunner::ASYNC_EXECUTION);
+        contextDocument->scriptRunner()->queueScriptForExecution_(this, m_resource, ScriptRunner::ASYNC_EXECUTION);
         m_resource->addClient(this);
     } else {
         // Reset line numbering for nested writes.
         TextPosition position = elementDocument.isInDocumentWrite() ? TextPosition() : scriptStartPosition;
         KURL scriptURL = (!elementDocument.isInDocumentWrite() && m_parserInserted) ? elementDocument.url() : KURL();
+        OperationScope op("script:exec-static");
         executeScript(ScriptSourceCode(scriptContent(), scriptURL, position));
     }
 

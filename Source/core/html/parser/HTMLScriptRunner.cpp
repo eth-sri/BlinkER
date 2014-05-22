@@ -151,9 +151,15 @@ void HTMLScriptRunner::executePendingScriptAndDispatchEvent(PendingScript& pendi
         if (errorOccurred)
             scriptLoader->dispatchErrorEvent();
         else {
-            ASSERT(isExecutingScript());
-            scriptLoader->executeScript(sourceCode);
-            element->dispatchEvent(createScriptLoadEvent());
+            {
+                ASSERT(isExecutingScript());                
+                OperationScope op("script:exec");
+                scriptLoader->executeScript(sourceCode);
+            }
+            {
+                OperationScope op("script:load-ev");
+                element->dispatchEvent(createScriptLoadEvent());
+            }
         }
     }
     ASSERT(!isExecutingScript());
@@ -203,9 +209,11 @@ bool HTMLScriptRunner::hasParserBlockingScript() const
 
 void HTMLScriptRunner::executeParsingBlockingScripts()
 {
-    while (hasParserBlockingScript() && isPendingScriptReady(m_parserBlockingScript)) {
+    if (hasParserBlockingScript() && isPendingScriptReady(m_parserBlockingScript)) {
         OperationScope scope("parser:exec-blk-scr");
-        executeParsingBlockingScript();
+        do {
+            executeParsingBlockingScript();
+        } while (hasParserBlockingScript() && isPendingScriptReady(m_parserBlockingScript));
     }
 }
 
@@ -266,7 +274,7 @@ void HTMLScriptRunner::requestParsingBlockingScript(Element* element)
 
 void HTMLScriptRunner::requestDeferredScript(Element* element)
 {
-    PendingScript pendingScript;
+    PendingScript pendingScript;  // chill-pend-scr
     if (!requestPendingScript(pendingScript, element))
         return;
 
@@ -325,6 +333,7 @@ void HTMLScriptRunner::runScript(Element* script, const TextPosition& scriptStar
                 m_parserBlockingScript.setElement(script);
                 m_parserBlockingScript.setStartingPosition(scriptStartPosition);
             } else {
+                OperationScope op("script:exec-static");
                 ScriptSourceCode sourceCode(script->textContent(), documentURLForScriptExecution(m_document), scriptStartPosition);
                 scriptLoader->executeScript(sourceCode);
             }

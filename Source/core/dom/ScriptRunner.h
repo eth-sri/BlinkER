@@ -47,7 +47,7 @@ public:
     ~ScriptRunner();
 
     enum ExecutionType { ASYNC_EXECUTION, IN_ORDER_EXECUTION };
-    void queueScriptForExecution(ScriptLoader*, ResourcePtr<ScriptResource>, ExecutionType);
+    void queueScriptForExecution_(ScriptLoader*, ResourcePtr<ScriptResource>, ExecutionType);
     bool hasPendingScripts() const { return !m_scriptsToExecuteSoon.isEmpty() || !m_scriptsToExecuteInOrder.isEmpty() || !m_pendingAsyncScripts.isEmpty(); }
     void suspend();
     void resume();

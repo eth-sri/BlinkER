@@ -51,7 +51,7 @@ ScriptRunner::~ScriptRunner()
         m_document->decrementLoadEventDelayCount();
 }
 
-void ScriptRunner::queueScriptForExecution(ScriptLoader* scriptLoader, ResourcePtr<ScriptResource> resource, ExecutionType executionType)
+void ScriptRunner::queueScriptForExecution_(ScriptLoader* scriptLoader, ResourcePtr<ScriptResource> resource, ExecutionType executionType)
 {
     ASSERT(scriptLoader);
     ASSERT(resource.get());
@@ -68,7 +68,16 @@ void ScriptRunner::queueScriptForExecution(ScriptLoader* scriptLoader, ResourceP
         break;
 
     case IN_ORDER_EXECUTION:
-        m_scriptsToExecuteInOrder.append(PendingScript(element, resource.get()));
+        RefPtr<EventRacerContext> ctx = EventRacerContext::current();
+        EventAction *act;
+        if (ctx)
+            act = ctx->getLog()->fork(ctx->getAction());
+        else
+            act = NULL;
+
+        PendingScript script(element, resource.get());
+        script.setEventRacerContext(ctx, act);
+        m_scriptsToExecuteInOrder.append(script);
         break;
     }
 }
@@ -87,13 +96,19 @@ void ScriptRunner::resume()
 void ScriptRunner::notifyScriptReady(ScriptLoader* scriptLoader, ExecutionType executionType)
 {
     switch (executionType) {
-    case ASYNC_EXECUTION:
-        ASSERT(m_pendingAsyncScripts.contains(scriptLoader));
-        m_scriptsToExecuteSoon.append(m_pendingAsyncScripts.take(scriptLoader));
-        break;
-
     case IN_ORDER_EXECUTION:
         ASSERT(!m_scriptsToExecuteInOrder.isEmpty());
+        break;
+
+    case ASYNC_EXECUTION:
+        ASSERT(EventRacerContext::current());
+        RefPtr<EventRacerContext> ctx = EventRacerContext::current();
+        EventAction *act= ctx->getLog()->fork(ctx->getAction());
+
+        ASSERT(m_pendingAsyncScripts.contains(scriptLoader));
+        PendingScript script = m_pendingAsyncScripts.take(scriptLoader);
+        script.setEventRacerContext(ctx, act);
+        m_scriptsToExecuteSoon.append(script);
         break;
     }
     m_timer.startOneShot(0, FROM_HERE);
@@ -133,7 +148,16 @@ void ScriptRunner::timerFired(Timer<ScriptRunner>* timer)
     for (size_t i = 0; i < size; ++i) {
         ScriptResource* resource = scripts[i].resource();
         RefPtr<Element> element = scripts[i].releaseElementAndClear();
-        toScriptLoaderIfPossible(element.get())->execute(resource);
+        if (EventAction *act = scripts[i].getAsyncEventAction()) {
+            ASSERT(!EventRacerContext::current());
+            RefPtr<EventRacerContext> ctx = scripts[i].getEventRacerContext();
+            EventRacerScope scope(ctx);
+            EventActionScope ascope(ctx, act);
+            OperationScope oscope("script:exec-async");
+            toScriptLoaderIfPossible(element.get())->execute(resource);
+        } else {
+            toScriptLoaderIfPossible(element.get())->execute(resource);
+        }
         m_document->decrementLoadEventDelayCount();
     }
 }

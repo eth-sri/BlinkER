@@ -26,6 +26,8 @@
 #ifndef PendingScript_h
 #define PendingScript_h
 
+#include "core/eventracer/EventRacerContext.h"
+#include "core/eventracer/EventRacerLog.h"
 #include "core/fetch/ResourceClient.h"
 #include "core/fetch/ResourceOwner.h"
 #include "core/fetch/ScriptResource.h"
@@ -48,12 +50,14 @@ public:
     PendingScript()
         : m_watchingForLoad(false)
         , m_startingPosition(TextPosition::belowRangePosition())
+        , m_asyncEventAction(NULL)
     {
     }
 
     PendingScript(Element* element, ScriptResource* resource)
         : m_watchingForLoad(false)
         , m_element(element)
+        , m_asyncEventAction(NULL)
     {
         setScriptResource(resource);
     }
@@ -63,6 +67,8 @@ public:
         , m_watchingForLoad(other.m_watchingForLoad)
         , m_element(other.m_element)
         , m_startingPosition(other.m_startingPosition)
+        , m_eventRacerContext(other.m_eventRacerContext)
+        , m_asyncEventAction(other.m_asyncEventAction)
     {
         setScriptResource(other.resource());
     }
@@ -77,6 +83,8 @@ public:
         m_watchingForLoad = other.m_watchingForLoad;
         m_element = other.m_element;
         m_startingPosition = other.m_startingPosition;
+        m_eventRacerContext = other.m_eventRacerContext;
+        m_asyncEventAction = other.m_asyncEventAction;
         this->ResourceOwner<ScriptResource, ResourceClient>::operator=(other);
 
         return *this;
@@ -96,10 +104,19 @@ public:
 
     virtual void notifyFinished(Resource*);
 
+    void setEventRacerContext(PassRefPtr<EventRacerContext> ctx, EventAction *act) {
+        m_eventRacerContext = ctx;
+        m_asyncEventAction = act;
+    }
+    PassRefPtr<EventRacerContext> getEventRacerContext() const { return m_eventRacerContext; }
+    EventAction *getAsyncEventAction() const { return m_asyncEventAction; }
+
 private:
     bool m_watchingForLoad;
     RefPtr<Element> m_element;
     TextPosition m_startingPosition; // Only used for inline script tags.
+    RefPtr<EventRacerContext> m_eventRacerContext;
+    EventAction *m_asyncEventAction;
 };
 
 }
