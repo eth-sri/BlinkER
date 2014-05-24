@@ -345,10 +345,11 @@ void HTMLDocumentParser::didReceiveParsedChunkFromBackgroundParser(PassOwnPtr<Pa
 {
     TRACE_EVENT0("webkit", "HTMLDocumentParser::didReceiveParsedChunkFromBackgroundParser");
 
+    bool wasInEventAction = !!EventRacerContext::current();
     EventRacerScope scope(document()->frame());
     RefPtr<EventRacerContext> ctx = EventRacerContext::current();
     RefPtr<EventRacerLog> log = ctx->getLog();
-    if (document()->activeParserCount() == 0) {
+    if (!wasInEventAction) {
         EventAction *parserAction = log->createEventAction();
         ctx->push(parserAction);
         if (!m_joinActions.isEmpty()) {
@@ -359,16 +360,19 @@ void HTMLDocumentParser::didReceiveParsedChunkFromBackgroundParser(PassOwnPtr<Pa
         m_joinActions.append(parserAction);
     }
 
+    // Incrementing the parser count should always occur within an event-action.
+    ASSERT(document()->activeParserCount() == 0 || wasInEventAction);
+
     // alert(), runModalDialog, and the JavaScript Debugger all run nested event loops
     // which can cause this method to be re-entered. We detect re-entry using
-    // hasActiveParser(), save the chunk as a speculation, and return.
-    if (isWaitingForScripts() || !m_speculations.isEmpty() || document()->activeParserCount() > 0) {
+    // wasInEventAction, save the chunk as a speculation, and return.
+    if (isWaitingForScripts() || !m_speculations.isEmpty() || wasInEventAction) {
         if (!chunk->preloads.isEmpty()) {
             OperationScope op("parser:preload");
             m_preloader->takeAndPreload(chunk->preloads);
         }
         m_speculations.append(chunk);
-        if (document()->activeParserCount() == 0)
+        if (!wasInEventAction)
             ctx->pop();
         return;
     }
@@ -963,18 +967,16 @@ void HTMLDocumentParser::resumeParsingAfterScriptExecution()
     ASSERT(!isExecutingScript());
     ASSERT(!isWaitingForScripts());
 
-    ASSERT(!EventRacerContext::current());
-    EventRacerScope scope(document()->frame());
+    ASSERT(EventRacerContext::current());
     RefPtr<EventRacerContext> ctx = EventRacerContext::current();
-    RefPtr<EventRacerLog> log = ctx->getLog();
-    EventAction *parserAction = log->createEventAction();
-    EventActionScope ascope(ctx, parserAction);
+    EventAction *act = ctx->getAction();
     if (!m_joinActions.isEmpty()) {
+        RefPtr<EventRacerLog> log = ctx->getLog();
         for (size_t i = 0; i < m_joinActions.size(); ++i)
-            log->join(m_joinActions[i], parserAction);
+            log->join(m_joinActions[i], act);
         m_joinActions.clear();
     }
-    m_joinActions.append(parserAction);
+    m_joinActions.append(act);
     OperationScope op("parser:after-scr");
 
     if (m_haveBackgroundParser) {
@@ -1020,8 +1022,6 @@ void HTMLDocumentParser::notifyFinished(Resource* cachedResource)
     RefPtr<HTMLDocumentParser> protect(this);
 
     ASSERT(EventRacerContext::current());
-    m_joinActions.append(EventRacerContext::current()->getAction());
-
     ASSERT(m_scriptRunner);
     ASSERT(!isExecutingScript());
     if (isStopping()) {
@@ -1035,7 +1035,9 @@ void HTMLDocumentParser::notifyFinished(Resource* cachedResource)
     }
 
     if (!isWaitingForScripts())
-        callOnMainThread(bind(&HTMLDocumentParser::resumeParsingAfterScriptExecution, this));
+        resumeParsingAfterScriptExecution();
+    else
+        m_joinActions.append(EventRacerContext::current()->getAction());
 }
 
 void HTMLDocumentParser::executeScriptsWaitingForResources()
@@ -1050,16 +1052,16 @@ void HTMLDocumentParser::executeScriptsWaitingForResources()
         return;
 
     RefPtr<EventRacerContext> ctx = EventRacerContext::current();
-    if (ctx && ctx->hasAction())
-        m_joinActions.append(ctx->getAction());
  
     // pumpTokenizer can cause this parser to be detached from the Document,
     // but we need to ensure it isn't deleted yet.
     RefPtr<HTMLDocumentParser> protect(this);
     m_scriptRunner->executeScriptsWaitingForResources();
-    
+
     if (!isWaitingForScripts())
-        callOnMainThread(bind(&HTMLDocumentParser::resumeParsingAfterScriptExecution, this));
+        resumeParsingAfterScriptExecution();
+    else if(ctx && ctx->hasAction())
+        m_joinActions.append(ctx->getAction());
 }
 
 void HTMLDocumentParser::parseDocumentFragment(const String& source, DocumentFragment* fragment, Element* contextElement, ParserContentPolicy parserContentPolicy)
