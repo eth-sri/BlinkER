@@ -446,7 +446,7 @@ void ResourceLoader::didFinishLoading(blink::WebURLLoader*, double finishTime, i
 
     EventRacerScope scope(m_eventRacerContext);
     if (m_eventAction) {
-        m_eventRacerContext->push(m_eventAction);;
+        m_eventRacerContext->push(m_eventAction);
         m_eventRacerContext->getLog()->logOperation(m_eventAction,
                                                     Operation::ENTER_SCOPE, "rsc-finish");
     }
@@ -475,6 +475,13 @@ void ResourceLoader::didFail(blink::WebURLLoader*, const blink::WebURLError& err
     ASSERT(m_state != Terminated);
     WTF_LOG(ResourceLoading, "Failed to load '%s'.\n", m_resource->url().string().latin1().data());
 
+    EventRacerScope scope(m_eventRacerContext);
+    if (m_eventAction) {
+        m_eventRacerContext->push(m_eventAction);;
+        m_eventRacerContext->getLog()->logOperation(m_eventAction,
+                                                    Operation::ENTER_SCOPE, "rsc-fail");
+    }
+
     RefPtr<ResourceLoader> protect(this);
     RefPtrWillBeRawPtr<ResourceLoaderHost> protectHost(m_host.get());
     ResourcePtr<Resource> protectResource(m_resource);
@@ -487,6 +494,11 @@ void ResourceLoader::didFail(blink::WebURLLoader*, const blink::WebURLError& err
     }
 
     m_resource->error(Resource::LoadError);
+
+    if (m_eventAction) { // FIXME: exception safety
+        m_eventRacerContext->getLog()->logOperation(m_eventAction, Operation::EXIT_SCOPE);
+        m_eventRacerContext->pop();
+    }
 
     if (m_state == Terminated)
         return;
