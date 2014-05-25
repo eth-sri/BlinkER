@@ -1306,18 +1306,22 @@ void FrameLoader::loadWithNavigationAction(const NavigationAction& action, Frame
     // If the containing frame has a parent or an opener, then the EventRacer
     // log is shared between the corresponding frames, otherwise, create
     // a new log for the "root" frame.
+    RefPtr<EventRacerLog> log;
+    bool wasInEventAction = !!EventRacerContext::current();
     if (upper)
         m_frame->setEventRacerLog(upper->getEventRacerLog());
-    else {
-        RefPtr<EventRacerLog> log = EventRacerLog::create();
+    else if (!wasInEventAction) {
+        log = EventRacerLog::create();
         m_frame->setEventRacerLog(log);
         log->startLog(m_frame);
     }
 
     EventRacerScope scope(m_frame);
     RefPtr<EventRacerContext> ctx = EventRacerContext::current();
-    RefPtr<EventRacerLog> log = ctx->getLog();
-    EventActionScope act(ctx, log->createEventAction());
+    if (!wasInEventAction) {
+        EventAction *act = log->createEventAction();
+        ctx->push(act);
+    }
 
     if (isLoadingMainFrame())
         m_frame->page()->inspectorController().resume();
@@ -1337,6 +1341,9 @@ void FrameLoader::loadWithNavigationAction(const NavigationAction& action, Frame
     m_client->dispatchDidStartProvisionalLoad();
     ASSERT(m_provisionalDocumentLoader);
     m_provisionalDocumentLoader->startLoadingMainResource();
+
+    if (!wasInEventAction)
+        ctx->pop();
 }
 
 void FrameLoader::applyUserAgent(ResourceRequest& request)
