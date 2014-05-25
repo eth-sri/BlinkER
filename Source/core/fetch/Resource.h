@@ -39,6 +39,8 @@
 
 namespace WebCore {
 
+class EventRacerContext;
+class EventAction;
 struct FetchInitiatorInfo;
 class MemoryCache;
 class CachedMetadata;
@@ -241,6 +243,11 @@ public:
     void assertAlive() const { }
 #endif
 
+    void setCallbackEventAction(PassRefPtr<EventRacerContext>, EventAction *);
+    void clearCallbackEventAction();
+    PassRefPtr<EventRacerContext> getCallbackEventRacerContext() const;
+    EventAction *getCallbackEventAction() const;
+
 protected:
     virtual void checkNotify();
     virtual void finishOnePart();
@@ -387,6 +394,10 @@ private:
 
     // Ordered list of all redirects followed while fetching this resource.
     Vector<RedirectPair> m_redirectChain;
+
+    // EventRacer context and event-action for the callback invocation.
+    RefPtr<EventRacerContext> m_callbackEventRacerContext;
+    EventAction *m_callbackEventAction;
 };
 
 #if !LOG_DISABLED
