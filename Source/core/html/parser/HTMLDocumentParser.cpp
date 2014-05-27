@@ -1021,10 +1021,21 @@ void HTMLDocumentParser::notifyFinished(Resource* cachedResource)
     // but we need to ensure it isn't deleted yet.
     RefPtr<HTMLDocumentParser> protect(this);
 
-    ASSERT(EventRacerContext::current());
+    RefPtr<EventRacerContext> ctx = EventRacerContext::current();
+    ASSERT(ctx);
+
     ASSERT(m_scriptRunner);
     ASSERT(!isExecutingScript());
+
     if (isStopping()) {
+        EventAction *act = ctx->getAction();
+        if (!m_joinActions.isEmpty()) {
+            RefPtr<EventRacerLog> log = ctx->getLog();
+            for (size_t i = 0; i < m_joinActions.size(); ++i)
+                log->join(m_joinActions[i], act);
+            m_joinActions.clear();
+        }
+        m_joinActions.append(act);
         attemptToRunDeferredScriptsAndEnd();
         return;
     }
@@ -1037,7 +1048,7 @@ void HTMLDocumentParser::notifyFinished(Resource* cachedResource)
     if (!isWaitingForScripts())
         resumeParsingAfterScriptExecution();
     else
-        m_joinActions.append(EventRacerContext::current()->getAction());
+        m_joinActions.append(ctx->getAction());
 }
 
 void HTMLDocumentParser::executeScriptsWaitingForResources()
