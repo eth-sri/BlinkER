@@ -99,7 +99,7 @@
 #include "core/editing/Editor.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/SpellChecker.h"
-#include "core/eventracer/EventRacerLog.h"
+#include "core/eventracer/EventRacerContext.h"
 #include "core/events/BeforeUnloadEvent.h"
 #include "core/events/Event.h"
 #include "core/events/EventFactory.h"
@@ -1138,7 +1138,12 @@ void Document::setReadyState(ReadyState readyState)
     }
 
     m_readyState = readyState;
-    dispatchEvent(Event::create(EventTypeNames::readystatechange));
+    if (EventRacerContext::current()) {
+        OperationScope op("doc:ready-state-change");
+        dispatchEvent(Event::create(EventTypeNames::readystatechange));
+    } else {
+        dispatchEvent(Event::create(EventTypeNames::readystatechange));        
+    }
 }
 
 bool Document::isLoadCompleted()
@@ -4606,7 +4611,14 @@ void Document::finishedParsing()
     setParsing(false);
     if (!m_documentTiming.domContentLoadedEventStart)
         m_documentTiming.domContentLoadedEventStart = monotonicallyIncreasingTime();
-    dispatchEvent(Event::createBubble(EventTypeNames::DOMContentLoaded));
+    
+    if (EventRacerContext::current()) {
+        OperationScope op("doc:dcl");
+        dispatchEvent(Event::createBubble(EventTypeNames::DOMContentLoaded));
+    } else {
+        dispatchEvent(Event::createBubble(EventTypeNames::DOMContentLoaded));
+    }
+
     if (!m_documentTiming.domContentLoadedEventEnd)
         m_documentTiming.domContentLoadedEventEnd = monotonicallyIncreasingTime();
 
