@@ -457,16 +457,15 @@ void ResourceLoader::didFinishLoading(blink::WebURLLoader*, double finishTime, i
     didFinishLoadingOnePart(finishTime, encodedDataLength);
     m_resource->finish(finishTime);
 
+    // If the load has been cancelled by a delegate in response to didFinishLoad(), do not release
+    // the resources a second time, they have been released by cancel.
+    if (m_state != Terminated)
+        releaseResources();
+
     if (m_eventAction) { // FIXME: exception safety
         m_eventRacerContext->getLog()->logOperation(m_eventAction, Operation::EXIT_SCOPE);
         m_eventRacerContext->pop();
     }
-
-    // If the load has been cancelled by a delegate in response to didFinishLoad(), do not release
-    // the resources a second time, they have been released by cancel.
-    if (m_state == Terminated)
-        return;
-    releaseResources();
 }
 
 void ResourceLoader::didFail(blink::WebURLLoader*, const blink::WebURLError& error)
@@ -495,15 +494,13 @@ void ResourceLoader::didFail(blink::WebURLLoader*, const blink::WebURLError& err
 
     m_resource->error(Resource::LoadError);
 
+    if (m_state != Terminated)
+        releaseResources();
+
     if (m_eventAction) { // FIXME: exception safety
         m_eventRacerContext->getLog()->logOperation(m_eventAction, Operation::EXIT_SCOPE);
         m_eventRacerContext->pop();
     }
-
-    if (m_state == Terminated)
-        return;
-
-    releaseResources();
 }
 
 bool ResourceLoader::isLoadedBy(ResourceLoaderHost* loader) const
