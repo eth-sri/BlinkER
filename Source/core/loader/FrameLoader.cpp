@@ -1309,12 +1309,12 @@ void FrameLoader::loadWithNavigationAction(const NavigationAction& action, Frame
     RefPtr<EventRacerLog> log;
     bool wasInEventAction = !!EventRacerContext::current();
     if (upper)
-        m_frame->setEventRacerLog(upper->getEventRacerLog());
+        log = upper->getEventRacerLog();
     else if (!wasInEventAction) {
         log = EventRacerLog::create();
-        m_frame->setEventRacerLog(log);
         log->startLog(m_frame);
     }
+    m_frame->setEventRacerLog(log);
 
     EventRacerScope scope(m_frame);
     RefPtr<EventRacerContext> ctx = EventRacerContext::current();
