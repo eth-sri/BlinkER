@@ -1,19 +1,18 @@
 #include "config.h"
 #include "EventRacerContext.h"
 #include "EventRacerLog.h"
-#include "core/frame/LocalFrame.h"
 #include "wtf/text/WTFString.h"
 #include "wtf/ThreadSpecific.h"
 
 namespace WebCore {
 
 // EventRacerContext -----------------------------------------------------------
-EventRacerContext::EventRacerContext(WTF::PassRefPtr<LocalFrame> frame)
-    : m_frame(frame), m_log(m_frame->getEventRacerLog()) {
+EventRacerContext::EventRacerContext(WTF::PassRefPtr<EventRacerLog> log)
+    : m_log(log) {
 }
 
-WTF::PassRefPtr<EventRacerContext> EventRacerContext::create(WTF::PassRefPtr<LocalFrame> frame) {
-    return WTF::adoptRef (new EventRacerContext(frame));
+WTF::PassRefPtr<EventRacerContext> EventRacerContext::create(WTF::PassRefPtr<EventRacerLog> log) {
+    return WTF::adoptRef (new EventRacerContext(log));
 }
 
 void EventRacerContext::push(EventAction *a) {
@@ -25,7 +24,7 @@ void EventRacerContext::pop() {
     EventAction *a = m_actions.last();
     m_actions.removeLast();
     a->complete();
-    m_log->flush(m_frame.get(), a);
+    m_log->flush(a);
 }
 
 WTF::RefPtr<EventRacerContext> &EventRacerContext::current() {
@@ -35,10 +34,10 @@ WTF::RefPtr<EventRacerContext> &EventRacerContext::current() {
 }
 
 // EventRacerScope -------------------------------------------------------------
-EventRacerScope::EventRacerScope(WTF::PassRefPtr<LocalFrame> frame)
+EventRacerScope::EventRacerScope(WTF::PassRefPtr<EventRacerLog> log)
     : m_first(!EventRacerContext::current()) {
     if (m_first)
-        EventRacerContext::current() = EventRacerContext::create(frame); 
+        EventRacerContext::current() = EventRacerContext::create(log);
 }
 
 EventRacerScope::EventRacerScope(WTF::PassRefPtr<EventRacerContext> ctx)

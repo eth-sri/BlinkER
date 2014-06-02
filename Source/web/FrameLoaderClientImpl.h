@@ -160,10 +160,8 @@ public:
     virtual void didStopAllLoaders() OVERRIDE;
 
     virtual void dispatchDidChangeManifest() OVERRIDE;
-    virtual void dispatchDidStartEventRacerLog() OVERRIDE;
-    virtual void dispatchDidCompleteEventAction(const WebCore::EventAction &) OVERRIDE;
-    virtual void dispatchDidHappenBefore(const WTF::Vector<WebCore::EventAction::Edge> &) OVERRIDE;
-    virtual void dispatchDidUpdateStringTable(size_t, const WTF::Vector<WTF::String> &) OVERRIDE;
+
+    virtual PassOwnPtr<WebCore::EventRacerLogClient> createEventRacerLogClient() OVERRIDE;
 
 private:
     virtual bool isFrameLoaderClientImpl() const OVERRIDE { return true; }

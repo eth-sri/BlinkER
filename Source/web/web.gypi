@@ -29,6 +29,8 @@
       'EditorClientImpl.h',
       'EventListenerWrapper.cpp',
       'EventListenerWrapper.h',
+      'EventRacerLogClientImpl.cpp',
+      'EventRacerLogClientImpl.h',
       'ExternalDateTimeChooser.cpp',
       'ExternalDateTimeChooser.h',
       'ExternalPopupMenu.cpp',

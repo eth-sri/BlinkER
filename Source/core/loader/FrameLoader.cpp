@@ -48,6 +48,7 @@
 #include "core/events/PageTransitionEvent.h"
 #include "core/eventracer/EventRacerContext.h"
 #include "core/eventracer/EventRacerLog.h"
+#include "core/eventracer/EventRacerLogClient.h"
 #include "core/fetch/FetchContext.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/fetch/ResourceLoader.h"
@@ -1311,12 +1312,12 @@ void FrameLoader::loadWithNavigationAction(const NavigationAction& action, Frame
     if (upper)
         log = upper->getEventRacerLog();
     else if (!wasInEventAction) {
-        log = EventRacerLog::create();
-        log->startLog(m_frame);
+        OwnPtr<EventRacerLogClient> clnt = m_client->createEventRacerLogClient();
+        log = EventRacerLog::create(clnt.release());
     }
     m_frame->setEventRacerLog(log);
 
-    EventRacerScope scope(m_frame);
+    EventRacerScope scope(log);
     RefPtr<EventRacerContext> ctx = EventRacerContext::current();
     if (!wasInEventAction) {
         EventAction *act = log->createEventAction();

@@ -3281,6 +3281,7 @@
             'eventracer/EventRacerContext.h',
             'eventracer/EventRacerLog.cpp',
             'eventracer/EventRacerLog.h',
+            'eventracer/EventRacerLogClient.h',
             'eventracer/StringSet.cpp',
             'eventracer/StringSet.h',
         ],

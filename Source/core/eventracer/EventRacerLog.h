@@ -12,17 +12,16 @@
 
 namespace WebCore {
 
-class LocalFrame;
+class EventRacerLogClient;
 
 class EventRacerLog : public WTF::RefCounted<EventRacerLog> {
 public:
-    static WTF::PassRefPtr<EventRacerLog> create();
+    ~EventRacerLog();
 
-    // Notifies the host that an new log is created.
-    void startLog(LocalFrame *);
+    static WTF::PassRefPtr<EventRacerLog> create(PassOwnPtr<EventRacerLogClient>);
 
     // Sends event action data to the host.
-    void flush(LocalFrame *, EventAction *);
+    void flush(EventAction *);
 
     // Creates an event action of the given type.
     EventAction *createEventAction(EventAction::Type type = EventAction::UNKNOWN);
@@ -59,13 +58,15 @@ public:
     size_t intern(const WTF::String &);
 
 private:
-    EventRacerLog();
+    EventRacerLog(WTF::PassOwnPtr<EventRacerLogClient>);
 
     unsigned int m_nextEventActionId;
     WTF::HashMap<unsigned int, WTF::OwnPtr<EventAction> > m_eventActions;
     WTF::Vector<EventAction::Edge> m_pendingEdges;
     StringSet m_strings;
     size_t m_pendingString;
+
+    OwnPtr<EventRacerLogClient> m_client;
 };
 
 } // namespace WebCore

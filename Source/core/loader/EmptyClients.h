@@ -30,7 +30,7 @@
 #define EmptyClients_h
 
 #include "core/editing/UndoStep.h"
-#include "core/eventracer/EventAction.h"
+#include "core/eventracer/EventRacerLogClient.h"
 #include "core/inspector/InspectorClient.h"
 #include "core/loader/FrameLoaderClient.h"
 #include "core/page/BackForwardClient.h"
@@ -252,10 +252,7 @@ public:
     virtual PassOwnPtr<blink::WebServiceWorkerProvider> createServiceWorkerProvider() OVERRIDE;
     virtual PassOwnPtr<blink::WebApplicationCacheHost> createApplicationCacheHost(blink::WebApplicationCacheHostClient*) OVERRIDE;
 
-    virtual void dispatchDidStartEventRacerLog() OVERRIDE {}
-    virtual void dispatchDidCompleteEventAction(const EventAction &) OVERRIDE {}
-    virtual void dispatchDidHappenBefore(const Vector<EventAction::Edge> &) OVERRIDE {}
-    virtual void dispatchDidUpdateStringTable (size_t, const Vector<String> &) OVERRIDE {}
+    virtual PassOwnPtr<EventRacerLogClient> createEventRacerLogClient() OVERRIDE { return PassOwnPtr<EventRacerLogClient>(); }
 };
 
 class EmptyTextCheckerClient FINAL : public TextCheckerClient {

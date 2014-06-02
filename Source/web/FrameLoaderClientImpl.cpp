@@ -89,6 +89,7 @@
 #include "public/web/WebPluginParams.h"
 #include "public/web/WebSecurityOrigin.h"
 #include "public/web/WebViewClient.h"
+#include "web/EventRacerLogClientImpl.h"
 #include "web/SharedWorkerRepositoryClientImpl.h"
 #include "web/WebDataSourceImpl.h"
 #include "web/WebDevToolsAgentPrivate.h"
@@ -818,28 +819,14 @@ void FrameLoaderClientImpl::dispatchDidChangeManifest()
         m_webFrame->client()->didChangeManifest(m_webFrame);
 }
 
-void FrameLoaderClientImpl::dispatchDidStartEventRacerLog()
+PassOwnPtr<EventRacerLogClient> FrameLoaderClientImpl::createEventRacerLogClient()
 {
-    if (m_webFrame->client())
-        m_webFrame->client()->didStartEventRacerLog();
-}
-
-void FrameLoaderClientImpl::dispatchDidCompleteEventAction(const WebCore::EventAction &a)
-{
-    if (m_webFrame->client())
-        m_webFrame->client()->didCompleteEventAction(WebEventAction(a));
-}
-
-void FrameLoaderClientImpl::dispatchDidHappenBefore(const WTF::Vector<WebCore::EventAction::Edge> &v)
-{
-    if (m_webFrame->client())
-        m_webFrame->client()->didHappenBefore(WebVector<WebEventActionEdge>(v));
-}
-
-void FrameLoaderClientImpl::dispatchDidUpdateStringTable(size_t index, const WTF::Vector<WTF::String> &v)
-{
-    if (m_webFrame->client())
-        m_webFrame->client()->didUpdateStringTable(index, WebVector<WebString>(v));
+    if (!m_webFrame->client())
+        return PassOwnPtr<EventRacerLogClient>();
+    else {
+        OwnPtr<WebEventRacerLogClient> cl = adoptPtr(m_webFrame->client()->createEventRacerLogClient());
+        return EventRacerLogClientImpl::create(cl.release());
+    }
 }
 
 } // namespace blink

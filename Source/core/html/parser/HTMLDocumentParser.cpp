@@ -263,9 +263,9 @@ void HTMLDocumentParser::resumeParsingAfterYield()
     ASSERT(!m_isPinnedToMainThread);
 
     ASSERT(!EventRacerContext::current());
-    EventRacerScope scope(document()->frame());
+    RefPtr<EventRacerLog> log = document()->frame()->getEventRacerLog();
+    EventRacerScope scope(log);
     RefPtr<EventRacerContext> ctx = EventRacerContext::current();
-    RefPtr<EventRacerLog> log = ctx->getLog();
     EventAction *parserAction = log->createEventAction();
     EventActionScope ascope(ctx, parserAction);
     if (!m_joinActions.isEmpty()) {
@@ -346,9 +346,9 @@ void HTMLDocumentParser::didReceiveParsedChunkFromBackgroundParser(PassOwnPtr<Pa
     TRACE_EVENT0("webkit", "HTMLDocumentParser::didReceiveParsedChunkFromBackgroundParser");
 
     bool wasInEventAction = !!EventRacerContext::current();
-    EventRacerScope scope(document()->frame());
+    RefPtr<EventRacerLog> log = document()->frame()->getEventRacerLog();
+    EventRacerScope scope(log);
     RefPtr<EventRacerContext> ctx = EventRacerContext::current();
-    RefPtr<EventRacerLog> log = ctx->getLog();
     if (!wasInEventAction) {
         EventAction *parserAction = log->createEventAction();
         ctx->push(parserAction);

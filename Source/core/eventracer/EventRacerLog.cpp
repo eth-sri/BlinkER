@@ -1,33 +1,28 @@
 #include "config.h"
 #include "EventRacerLog.h"
-#include "core/frame/LocalFrame.h"
-#include "core/loader/FrameLoaderClient.h"
+#include "EventRacerLogClient.h"
 
 namespace WebCore {
 
-WTF::PassRefPtr<EventRacerLog> EventRacerLog::create()
-{
-    return WTF::adoptRef(new EventRacerLog());
+
+WTF::PassRefPtr<EventRacerLog> EventRacerLog::create(WTF::PassOwnPtr<EventRacerLogClient> c) {
+    return WTF::adoptRef(new EventRacerLog(c));
 }
 
-EventRacerLog::EventRacerLog()
-	: m_nextEventActionId(1), m_pendingString(1)
-{
+EventRacerLog::EventRacerLog(PassOwnPtr<EventRacerLogClient> client)
+	: m_nextEventActionId(1), m_pendingString(1), m_client(client) {
 }
 
-void EventRacerLog::startLog(LocalFrame *frame)
-{
-    frame->loader().client()->dispatchDidStartEventRacerLog();
-}
+EventRacerLog::~EventRacerLog() {}
 
 // Sends event action data to the host.
-void EventRacerLog::flush(LocalFrame *frame, EventAction *a) {
-    frame->loader().client()->dispatchDidCompleteEventAction(*a);
+void EventRacerLog::flush(EventAction *a) {
+    m_client->didCompleteEventAction(*a);
     EventAction::EdgesType::const_iterator i;
     for (i = a->getEdges().begin(); i != a->getEdges().end(); ++i)
         m_pendingEdges.append(std::make_pair(a->getId(), *i));
     if (m_pendingEdges.size()) {
-        frame->loader().client()->dispatchDidHappenBefore(m_pendingEdges);
+        m_client->didHappenBefore(m_pendingEdges);
         m_pendingEdges.clear();
     }
     if (m_pendingString < m_strings.size()) {
@@ -35,7 +30,7 @@ void EventRacerLog::flush(LocalFrame *frame, EventAction *a) {
         s.reserveInitialCapacity(m_strings.size() - m_pendingString);
         for (size_t i = m_pendingString; i < m_strings.size(); ++i)
             s.append(m_strings.get(i));
-        frame->loader().client()->dispatchDidUpdateStringTable(m_pendingString, s);
+        m_client->didUpdateStringTable(m_pendingString, s);
         m_pendingString = m_strings.size();
     }
 }

@@ -1,6 +1,8 @@
 #ifndef WebEventRacer_h
 #define WebEventRacer_h
 
+#include "public/platform/WebString.h"
+#include "public/platform/WebVector.h"
 #include <vector>
 #include <utility>
 
@@ -38,7 +40,15 @@ struct WebEventAction {
 
 typedef std::pair<unsigned int, unsigned int> WebEventActionEdge;
 
+class WebEventRacerLogClient {
+public:
+    virtual ~WebEventRacerLogClient() {}
+
+    virtual void didCompleteEventAction(const WebEventAction &) = 0;
+    virtual void didHappenBefore(const WebVector<WebEventActionEdge> &) = 0;
+    virtual void didUpdateStringTable(size_t, const WebVector<WebString> &) = 0;
+};
+
 } // end namespace
 
 #endif // WebEventRacer_h
-

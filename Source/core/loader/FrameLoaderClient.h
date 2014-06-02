@@ -31,7 +31,6 @@
 #define FrameLoaderClient_h
 
 #include "core/dom/IconURL.h"
-#include "core/eventracer/EventAction.h"
 #include "core/frame/FrameClient.h"
 #include "core/loader/FrameLoaderTypes.h"
 #include "core/loader/NavigationPolicy.h"
@@ -62,6 +61,7 @@ namespace WebCore {
     class DOMWrapperWorld;
     class DocumentLoader;
     class Element;
+    class EventRacerLogClient;
     class FetchRequest;
     class FrameLoader;
     class FrameNetworkingContext;
@@ -233,10 +233,7 @@ namespace WebCore {
         virtual bool isFrameLoaderClientImpl() const { return false; }
 
         // EventRacer ------------------------------------------------------
-        virtual void dispatchDidStartEventRacerLog() = 0;
-        virtual void dispatchDidCompleteEventAction(const EventAction &) = 0;
-        virtual void dispatchDidHappenBefore(const Vector<EventAction::Edge> &) = 0;
-        virtual void dispatchDidUpdateStringTable(size_t, const Vector<String> &) = 0;
+        virtual PassOwnPtr<EventRacerLogClient> createEventRacerLogClient() = 0;
     };
 
 } // namespace WebCore
