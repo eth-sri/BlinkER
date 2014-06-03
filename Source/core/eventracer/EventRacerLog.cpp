@@ -97,11 +97,13 @@ void EventRacerLog::join(unsigned int id, EventAction *succ) {
 
 // Records an operation, performed by the event action |act|.
 void EventRacerLog::logOperation(EventAction *act, Operation::Type type, size_t loc) {
+    ASSERT(act->getState() == EventAction::ACTIVE);
     act->getOps().append(Operation(type, loc));
 }
 
 void EventRacerLog::logOperation(EventAction *act, Operation::Type type,
                                   const WTF::String &loc) {
+    ASSERT(act->getState() == EventAction::ACTIVE);
     act->getOps().append(Operation(type, intern(loc)));
 }
 
