@@ -1299,31 +1299,6 @@ void FrameLoader::loadWithNavigationAction(const NavigationAction& action, Frame
     if (!m_frame->page() || !m_policyDocumentLoader)
         return;
 
-    // Check if the containing frame has a parent or an opener.
-    LocalFrame *upper = m_frame->tree().parent();
-    if (!upper)
-        upper = opener();
-
-    // If the containing frame has a parent or an opener, then the EventRacer
-    // log is shared between the corresponding frames, otherwise, create
-    // a new log for the "root" frame.
-    RefPtr<EventRacerLog> log;
-    bool wasInEventAction = !!EventRacerContext::current();
-    if (upper)
-        log = upper->getEventRacerLog();
-    else if (!wasInEventAction) {
-        OwnPtr<EventRacerLogClient> clnt = m_client->createEventRacerLogClient();
-        log = EventRacerLog::create(clnt.release());
-    }
-    m_frame->setEventRacerLog(log);
-
-    EventRacerScope scope(log);
-    RefPtr<EventRacerContext> ctx = EventRacerContext::current();
-    if (!wasInEventAction) {
-        EventAction *act = log->createEventAction();
-        ctx->push(act);
-    }
-
     if (isLoadingMainFrame())
         m_frame->page()->inspectorController().resume();
     m_frame->navigationScheduler().cancel();
@@ -1341,10 +1316,31 @@ void FrameLoader::loadWithNavigationAction(const NavigationAction& action, Frame
     m_provisionalDocumentLoader->appendRedirect(m_provisionalDocumentLoader->request().url());
     m_client->dispatchDidStartProvisionalLoad();
     ASSERT(m_provisionalDocumentLoader);
-    m_provisionalDocumentLoader->startLoadingMainResource();
 
-    if (!wasInEventAction)
-        ctx->pop();
+    if (RefPtr<EventRacerContext> ctx = EventRacerContext::current()) {
+        // If we are already inside an EventRacer context, just pick up the log.
+        // This handles the cases of loading a nested frame, a frame with an
+        // opener or loading an error page after unsuccessful navigation.
+        m_frame->setEventRacerLog(ctx->getLog());
+        m_provisionalDocumentLoader->startLoadingMainResource();
+    } else {
+        // Otherwise create a new EventRacer log for the new page.
+        if (OwnPtr<EventRacerLogClient> clnt = m_client->createEventRacerLogClient()) {
+            RefPtr<EventRacerLog> log = EventRacerLog::create(clnt.release());
+            m_frame->setEventRacerLog(log);
+
+            EventRacerScope scope(log);
+            ctx = EventRacerContext::current();
+            EventActionScope act(ctx, log->createEventAction());
+
+            m_provisionalDocumentLoader->startLoadingMainResource();
+        } else {
+            // If we weren't able to create the log client, then this is
+            // navigation to the "swapped out" url, during which nothing
+            // interesting happens. Maybe.
+            m_provisionalDocumentLoader->startLoadingMainResource();
+        }
+    }
 }
 
 void FrameLoader::applyUserAgent(ResourceRequest& request)
