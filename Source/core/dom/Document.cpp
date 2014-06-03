@@ -100,6 +100,7 @@
 #include "core/editing/FrameSelection.h"
 #include "core/editing/SpellChecker.h"
 #include "core/eventracer/EventRacerContext.h"
+#include "core/eventracer/EventRacerLog.h"
 #include "core/events/BeforeUnloadEvent.h"
 #include "core/events/Event.h"
 #include "core/events/EventFactory.h"
@@ -5136,6 +5137,10 @@ Element* Document::pointerLockElement() const
 
 void Document::decrementLoadEventDelayCount()
 {
+    RefPtr<EventRacerContext> ctx = EventRacerContext::current();
+    if (ctx)
+        m_loadEventDelayActions.append (ctx->getAction());
+
     ASSERT(m_loadEventDelayCount);
     --m_loadEventDelayCount;
 
@@ -5165,9 +5170,17 @@ bool Document::isDelayingLoadEvent()
     return m_loadEventDelayCount;
 }
 
-
-void Document::loadEventDelayTimerFired(Timer<Document>*)
+void Document::loadEventDelayTimerFired(EventRacerTimer<Document>*)
 {
+    RefPtr<EventRacerContext> ctx = EventRacerContext::current();
+    if (ctx) {
+        RefPtr<EventRacerLog> log = ctx->getLog();
+        EventAction *act = ctx->getAction();
+        for (size_t i = 0; i < m_loadEventDelayActions.size(); ++i)
+            log->join(m_loadEventDelayActions[i], act);
+    }
+    m_loadEventDelayActions.clear();
+
     if (frame())
         frame()->loader().checkCompleted();
 }

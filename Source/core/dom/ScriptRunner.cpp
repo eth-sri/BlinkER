@@ -155,10 +155,11 @@ void ScriptRunner::timerFired(Timer<ScriptRunner>* timer)
             EventActionScope ascope(ctx, act);
             OperationScope oscope("script:exec-async");
             toScriptLoaderIfPossible(element.get())->execute(resource);
+            m_document->decrementLoadEventDelayCount();
         } else {
             toScriptLoaderIfPossible(element.get())->execute(resource);
+            m_document->decrementLoadEventDelayCount();
         }
-        m_document->decrementLoadEventDelayCount();
     }
 }
 

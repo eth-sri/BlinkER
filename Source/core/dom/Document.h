@@ -1153,7 +1153,7 @@ private:
 
     PassRefPtrWillBeRawPtr<NodeList> handleZeroPadding(const HitTestRequest&, HitTestResult&) const;
 
-    void loadEventDelayTimerFired(Timer<Document>*);
+    void loadEventDelayTimerFired(EventRacerTimer<Document>*);
     void pluginLoadingTimerFired(Timer<Document>*);
 
     PageVisibilityState pageVisibilityState() const;
@@ -1346,7 +1346,7 @@ private:
     WillBeHeapVector<RefPtrWillBeMember<Element> > m_topLayerElements;
 
     int m_loadEventDelayCount;
-    Timer<Document> m_loadEventDelayTimer;
+    EventRacerTimer<Document> m_loadEventDelayTimer;
     Timer<Document> m_pluginLoadingTimer;
 
     ViewportDescription m_viewportDescription;
@@ -1406,6 +1406,8 @@ private:
     DocumentVisibilityObserverSet m_visibilityObservers;
 
     int m_styleRecalcElementCounter;
+
+    Vector<EventAction *> m_loadEventDelayActions;
 };
 
 inline void Document::notifyRemovePendingSheetIfNeeded()
