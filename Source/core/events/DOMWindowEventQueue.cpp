@@ -42,7 +42,7 @@ public:
         , m_eventQueue(eventQueue) { }
 
 private:
-    virtual void fired() { m_eventQueue->pendingEventTimerFired(); }
+    virtual void didFire() { m_eventQueue->pendingEventTimerFired(); }
     DOMWindowEventQueue* m_eventQueue;
 };
 

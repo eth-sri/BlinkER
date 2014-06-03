@@ -51,7 +51,7 @@ bool SuspendableTimer::hasPendingActivity() const
 
 void SuspendableTimer::stop()
 {
-    TimerBase::stop();
+    EventRacerTimerBase::stop();
 }
 
 void SuspendableTimer::suspend()
@@ -64,7 +64,7 @@ void SuspendableTimer::suspend()
     if (m_active) {
         m_nextFireInterval = nextUnalignedFireInterval();
         m_repeatInterval = repeatInterval();
-        TimerBase::stop();
+        stop();
     }
 }
 

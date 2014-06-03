@@ -137,7 +137,7 @@ public:
     UserGestureToken* userGestureToken() const { return m_userGestureToken.get(); }
 
 private:
-    virtual void fired() OVERRIDE
+    virtual void didFire() OVERRIDE
     {
         m_window->postMessageTimerFired(adoptPtr(this));
         // This object is deleted now.

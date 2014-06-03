@@ -66,7 +66,7 @@ private:
     }
 
     DOMTimer(ExecutionContext*, PassOwnPtr<ScheduledAction>, int interval, bool singleShot, int timeoutID);
-    virtual void fired() OVERRIDE;
+    virtual void didFire() OVERRIDE;
 
     // Retuns timer fire time rounded to the next multiple of timer alignment interval.
     virtual double alignedFireTime(double) const OVERRIDE;

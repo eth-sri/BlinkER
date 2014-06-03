@@ -116,7 +116,7 @@ int DOMTimer::timeoutID() const
     return m_timeoutID;
 }
 
-void DOMTimer::fired()
+void DOMTimer::didFire()
 {
     ExecutionContext* context = executionContext();
     timerNestingLevel = m_nestingLevel;

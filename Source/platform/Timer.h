@@ -44,7 +44,7 @@ public:
     TimerBase();
     virtual ~TimerBase();
 
-    void start(double nextFireInterval, double repeatInterval, const TraceLocation&);
+    virtual void start(double nextFireInterval, double repeatInterval, const TraceLocation&);
 
     void startRepeating(double repeatInterval, const TraceLocation& caller)
     {
@@ -55,7 +55,7 @@ public:
         start(interval, 0, caller);
     }
 
-    void stop();
+    virtual void stop();
     bool isActive() const;
     const TraceLocation& location() const { return m_location; }
 

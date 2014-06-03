@@ -1,0 +1,73 @@
+#ifndef EventRacerTimer_h
+#define EventRacerTimer_h
+
+#include "platform/Timer.h"
+#include "wtf/RefCounted.h"
+
+namespace WebCore {
+
+class EventAction;
+class EventRacerContext;
+
+class EventRacerTimerBase : public TimerBase {
+public:
+    virtual void start(double nextFireInterval, double repeatInterval, const TraceLocation&) OVERRIDE;
+    virtual void stop() OVERRIDE;
+
+protected:
+    virtual void fired() OVERRIDE;
+    virtual void didFire() = 0;
+
+    class EventRacerData : public RefCounted<EventRacerData> {
+    public:
+        ~EventRacerData();
+
+        static PassRefPtr<EventRacerData> create() {
+            return adoptRef(new EventRacerData);
+        }
+
+        RefPtr<EventRacerContext> ctx;
+        Vector<EventAction *> pred;
+        EventAction *act;
+
+    private:
+        EventRacerData();
+    };
+
+    RefPtr<EventRacerData> m_data;
+};
+
+template<typename TimerFiredClass>
+class EventRacerTimer : public EventRacerTimerBase {
+public:
+    typedef void (TimerFiredClass::*TimerFiredFunction)(EventRacerTimer*);
+
+    EventRacerTimer(TimerFiredClass* o, TimerFiredFunction f)
+        : m_object(o), m_function(f) { }
+
+private:
+    virtual void didFire() OVERRIDE { (m_object->*m_function)(this); }
+
+    // FIXME: oilpan: TimerBase should be moved to the heap and m_object should be traced.
+    // This raw pointer is safe as long as Timer<X> is held by the X itself (That's the case
+    // in the current code base).
+    TimerFiredClass* m_object;
+    TimerFiredFunction m_function;
+};
+
+template<typename TimerFiredClass>
+class EventRacerTimerDebug : public EventRacerTimer<TimerFiredClass> {
+public:
+    typedef void (TimerFiredClass::*TimerFiredFunction)(EventRacerTimer<TimerFiredClass> *);
+
+    EventRacerTimerDebug(TimerFiredClass* o, TimerFiredFunction f)
+        : EventRacerTimer<TimerFiredClass>(o, f) {}
+
+    virtual void start(double nextFireInterval, double repeatInterval, const TraceLocation&loc ) {
+        EventRacerTimer<TimerFiredClass>::start(nextFireInterval, repeatInterval, loc);
+    }
+};
+
+} // end namespace
+
+#endif // EventRacerTimer_h

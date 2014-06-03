@@ -28,11 +28,11 @@
 #define SuspendableTimer_h
 
 #include "core/dom/ActiveDOMObject.h"
-#include "platform/Timer.h"
+#include "core/eventracer/EventRacerTimer.h"
 
 namespace WebCore {
 
-class SuspendableTimer : public TimerBase, public ActiveDOMObject {
+class SuspendableTimer : public EventRacerTimerBase, public ActiveDOMObject {
 public:
     explicit SuspendableTimer(ExecutionContext*);
     virtual ~SuspendableTimer();
@@ -44,7 +44,7 @@ public:
     virtual void resume() OVERRIDE FINAL;
 
 private:
-    virtual void fired() = 0;
+    virtual void didFire() = 0;
 
     double m_nextFireInterval;
     double m_repeatInterval;
