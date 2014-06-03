@@ -821,12 +821,13 @@ void FrameLoaderClientImpl::dispatchDidChangeManifest()
 
 PassOwnPtr<EventRacerLogClient> FrameLoaderClientImpl::createEventRacerLogClient()
 {
-    if (!m_webFrame->client())
-        return PassOwnPtr<EventRacerLogClient>();
-    else {
+    OwnPtr<EventRacerLogClient> clnt;
+    if (m_webFrame->client()) {
         OwnPtr<WebEventRacerLogClient> cl = adoptPtr(m_webFrame->client()->createEventRacerLogClient());
-        return EventRacerLogClientImpl::create(cl.release());
+        if (cl)
+            clnt = EventRacerLogClientImpl::create(cl.release());
     }
+    return clnt.release();
 }
 
 } // namespace blink
