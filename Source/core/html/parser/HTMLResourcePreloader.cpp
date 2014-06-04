@@ -27,6 +27,7 @@
 #include "core/html/parser/HTMLResourcePreloader.h"
 
 #include "core/dom/Document.h"
+#include "core/eventracer/EventRacerContext.h"
 #include "core/fetch/FetchInitiatorInfo.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/html/imports/HTMLImport.h"
@@ -66,6 +67,7 @@ void HTMLResourcePreloader::takeAndPreload(PreloadRequestStream& r)
     PreloadRequestStream requests;
     requests.swap(r);
 
+    OperationScope op("parser:preload");
     for (PreloadRequestStream::iterator it = requests.begin(); it != requests.end(); ++it)
         preload(it->release());
 }

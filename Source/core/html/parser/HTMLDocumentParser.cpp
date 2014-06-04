@@ -346,6 +346,17 @@ void HTMLDocumentParser::didReceiveParsedChunkFromBackgroundParser(PassOwnPtr<Pa
     TRACE_EVENT0("webkit", "HTMLDocumentParser::didReceiveParsedChunkFromBackgroundParser");
 
     bool wasInEventAction = !!EventRacerContext::current();
+
+    // Incrementing the parser count should always occur within an event-action.
+    ASSERT(document()->activeParserCount() == 0 || wasInEventAction);
+
+    // Check for an early exit, without gratuitously creating an event-action.
+    if ((isWaitingForScripts() || !m_speculations.isEmpty() || wasInEventAction)
+        && chunk->preloads.isEmpty()) {
+        m_speculations.append(chunk);
+        return;
+    }
+
     RefPtr<EventRacerLog> log = document()->frame()->getEventRacerLog();
     EventRacerScope scope(log);
     RefPtr<EventRacerContext> ctx = EventRacerContext::current();
@@ -360,24 +371,13 @@ void HTMLDocumentParser::didReceiveParsedChunkFromBackgroundParser(PassOwnPtr<Pa
         m_joinActions.append(parserAction);
     }
 
-    // Incrementing the parser count should always occur within an event-action.
-    ASSERT(document()->activeParserCount() == 0 || wasInEventAction);
-
     // alert(), runModalDialog, and the JavaScript Debugger all run nested event loops
     // which can cause this method to be re-entered. We detect re-entry using
     // wasInEventAction, save the chunk as a speculation, and return.
     if (isWaitingForScripts() || !m_speculations.isEmpty() || wasInEventAction) {
-        if (!chunk->preloads.isEmpty()) {
-            OperationScope op("parser:preload");
-            m_preloader->takeAndPreload(chunk->preloads);
-        }
+        m_preloader->takeAndPreload(chunk->preloads);
         m_speculations.append(chunk);
-        if (!wasInEventAction)
-            ctx->pop();
-        return;
-    }
-
-    {
+    } else {
         OperationScope op("parser:from-bck");
 
         // processParsedChunkFromBackgroundParser can cause this parser to be
