@@ -35,11 +35,16 @@ void EventRacerTimerBase::stop()
 
 void EventRacerTimerBase::fired()
 {
+    // Not involving an EventRacer context.
     if (!m_data || !m_data->ctx) {
         didFire();
         return;
     }
 
+    // Once the timer has been fired, it may be deleted, hence do not access the
+    // timer object at all. Instead we keep a reference to a separate struct
+    // with the EventRacer related fields, in order to extend the life time of
+    // that part of the timer at least for the duration of this function.
     RefPtr<EventRacerData> d(m_data);
 
     RefPtr<EventRacerContext> ctx = d->ctx;
@@ -50,6 +55,8 @@ void EventRacerTimerBase::fired()
 
     EventRacerScope scope(ctx);
     ctx->push(act);
+
+    // Join with the event-actions, which started the timer.
     RefPtr<EventRacerLog> log = ctx->getLog();
     if (!d->pred.isEmpty()) {
         for (size_t i = 0; i < d->pred.size(); ++i)
@@ -62,13 +69,13 @@ void EventRacerTimerBase::fired()
         didFire();
     }
 
-    if (ctx) {
-        if (repeatInterval()) {
-            d->ctx = ctx;
-            d->act = log->fork(act);
-        }
-        ctx->pop();
+    // If it's a repeating timer, fork the next timer event-action as a
+    // successor of the current one.
+    if (repeatInterval()) {
+        d->ctx = ctx;
+        d->act = log->fork(act);
     }
+    ctx->pop();
 }
 
 EventRacerTimerBase::EventRacerData::EventRacerData() : act(0) {}
