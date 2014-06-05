@@ -42,11 +42,6 @@ public:
 
     void addEdge (unsigned int dst) { m_edges.append(dst); }
 
-    void addEdge (unsigned int src, unsigned int dst) {
-       ASSERT (src == m_id);
-       m_edges.append(dst);
-    }
-
     typedef WTF::Vector<unsigned int> EdgesType;
     EdgesType       &getEdges()       { return m_edges; }
     const EdgesType &getEdges() const { return m_edges; }
