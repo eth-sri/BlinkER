@@ -23,8 +23,10 @@ void EventRacerContext::push(EventAction *a) {
 void EventRacerContext::pop() {
     EventAction *a = m_actions.last();
     m_actions.removeLast();
-    a->complete();
-    m_log->flush(a);
+    if (a->getState() == EventAction::ACTIVE) {
+        a->complete();
+        m_log->flush(a);
+    }
 }
 
 WTF::RefPtr<EventRacerContext> &EventRacerContext::current() {

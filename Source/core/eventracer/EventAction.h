@@ -44,9 +44,21 @@ public:
 
     void abortDeferredJoin() { --m_deferCount; }
 
-    void addEdge (unsigned int dst);
+    void addEdge(unsigned int dst);
 
     bool isLeaf() const { return m_deferCount == 0 && m_edges.size() == 0; }
+
+    bool isReusable() const {
+        return isLeaf()
+               && (m_ops.size() == 0
+                   || (m_ops.size() == 2 && m_ops[1].getType() == Operation::EXIT_SCOPE));
+    }
+
+    void reuse() {
+        ASSERT(m_state == ACTIVE);
+        m_state = PENDING;
+        m_ops.clear();
+    }
 
     typedef WTF::Vector<unsigned int> EdgesType;
     EdgesType       &getEdges()       { return m_edges; }

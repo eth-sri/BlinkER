@@ -69,7 +69,12 @@ void EventRacerTimerBase::fired()
     // successor of the current one.
     if (repeatInterval()) {
         d->ctx = ctx;
-        d->act = log->fork(act);
+        if (act->isReusable()) {
+            act->reuse();
+            d->act = act;
+        } else {
+            d->act = log->fork(act);
+        }
     }
     ctx->pop();
 }
