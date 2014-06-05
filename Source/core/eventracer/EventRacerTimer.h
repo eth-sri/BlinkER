@@ -1,6 +1,7 @@
 #ifndef EventRacerTimer_h
 #define EventRacerTimer_h
 
+#include "core/eventracer/EventRacerJoinActions.h"
 #include "platform/Timer.h"
 #include "wtf/RefCounted.h"
 
@@ -27,7 +28,7 @@ protected:
         }
 
         RefPtr<EventRacerContext> ctx;
-        Vector<EventAction *> pred;
+        EventRacerJoinActions pred;
         EventAction *act;
 
     private:

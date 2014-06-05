@@ -268,12 +268,9 @@ void HTMLDocumentParser::resumeParsingAfterYield()
     RefPtr<EventRacerContext> ctx = EventRacerContext::current();
     EventAction *parserAction = log->createEventAction();
     EventActionScope ascope(ctx, parserAction);
-    if (!m_joinActions.isEmpty()) {
-        for (size_t i = 0; i < m_joinActions.size(); ++i)
-            log->join(m_joinActions[i], parserAction);
-        m_joinActions.clear();
-    }
-    m_joinActions.append(parserAction);
+    m_joinActions.join(log, parserAction);
+    m_joinActions.deferJoin(parserAction);
+
     OperationScope op("parser:from-yield");
 
     // pumpTokenizer can cause this parser to be detached from the Document,
@@ -363,12 +360,8 @@ void HTMLDocumentParser::didReceiveParsedChunkFromBackgroundParser(PassOwnPtr<Pa
     if (!wasInEventAction) {
         EventAction *parserAction = log->createEventAction();
         ctx->push(parserAction);
-        if (!m_joinActions.isEmpty()) {
-            for (size_t i = 0; i < m_joinActions.size(); ++i)
-                log->join(m_joinActions[i], parserAction);
-            m_joinActions.clear();
-        }
-        m_joinActions.append(parserAction);
+        m_joinActions.join(log, parserAction);
+        m_joinActions.deferJoin(parserAction);
     }
 
     // alert(), runModalDialog, and the JavaScript Debugger all run nested event loops
@@ -970,13 +963,8 @@ void HTMLDocumentParser::resumeParsingAfterScriptExecution()
     ASSERT(EventRacerContext::current());
     RefPtr<EventRacerContext> ctx = EventRacerContext::current();
     EventAction *act = ctx->getAction();
-    if (!m_joinActions.isEmpty()) {
-        RefPtr<EventRacerLog> log = ctx->getLog();
-        for (size_t i = 0; i < m_joinActions.size(); ++i)
-            log->join(m_joinActions[i], act);
-        m_joinActions.clear();
-    }
-    m_joinActions.append(act);
+    m_joinActions.join(ctx->getLog(), act);
+    m_joinActions.deferJoin(act);
     OperationScope op("parser:after-scr");
 
     if (m_haveBackgroundParser) {
@@ -1029,13 +1017,9 @@ void HTMLDocumentParser::notifyFinished(Resource* cachedResource)
 
     if (isStopping()) {
         EventAction *act = ctx->getAction();
-        if (!m_joinActions.isEmpty()) {
-            RefPtr<EventRacerLog> log = ctx->getLog();
-            for (size_t i = 0; i < m_joinActions.size(); ++i)
-                log->join(m_joinActions[i], act);
-            m_joinActions.clear();
-        }
-        m_joinActions.append(act);
+        RefPtr<EventRacerLog> log = ctx->getLog();
+        m_joinActions.join(log, act);
+        m_joinActions.deferJoin(act);
         attemptToRunDeferredScriptsAndEnd();
         return;
     }
@@ -1048,7 +1032,7 @@ void HTMLDocumentParser::notifyFinished(Resource* cachedResource)
     if (!isWaitingForScripts())
         resumeParsingAfterScriptExecution();
     else
-        m_joinActions.append(ctx->getAction());
+        m_joinActions.deferJoin(ctx->getAction());
 }
 
 void HTMLDocumentParser::executeScriptsWaitingForResources()
@@ -1072,7 +1056,7 @@ void HTMLDocumentParser::executeScriptsWaitingForResources()
     if (!isWaitingForScripts())
         resumeParsingAfterScriptExecution();
     else if(ctx && ctx->hasAction())
-        m_joinActions.append(ctx->getAction());
+        m_joinActions.deferJoin(ctx->getAction());
 }
 
 void HTMLDocumentParser::parseDocumentFragment(const String& source, DocumentFragment* fragment, Element* contextElement, ParserContentPolicy parserContentPolicy)
@@ -1106,7 +1090,7 @@ void HTMLDocumentParser::appendBytes(const char* data, size_t length)
     // receivals will not have an associated event-action.
     ASSERT(EventRacerContext::current());
     if (m_joinActions.isEmpty())
-        m_joinActions.append(EventRacerContext::current()->getAction());
+        m_joinActions.deferJoin(EventRacerContext::current()->getAction());
 
     if (shouldUseThreading()) {
         if (!m_haveBackgroundParser)

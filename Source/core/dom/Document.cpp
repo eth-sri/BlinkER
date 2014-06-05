@@ -5139,7 +5139,7 @@ void Document::decrementLoadEventDelayCount()
 {
     RefPtr<EventRacerContext> ctx = EventRacerContext::current();
     if (ctx)
-        m_loadEventDelayActions.append (ctx->getAction());
+        m_loadEventDelayActions.deferJoin(ctx->getAction());
 
     ASSERT(m_loadEventDelayCount);
     --m_loadEventDelayCount;
@@ -5176,10 +5176,8 @@ void Document::loadEventDelayTimerFired(EventRacerTimer<Document>*)
     if (ctx) {
         RefPtr<EventRacerLog> log = ctx->getLog();
         EventAction *act = ctx->getAction();
-        for (size_t i = 0; i < m_loadEventDelayActions.size(); ++i)
-            log->join(m_loadEventDelayActions[i], act);
+        m_loadEventDelayActions.join(log, act);
     }
-    m_loadEventDelayActions.clear();
 
     if (frame())
         frame()->loader().checkCompleted();

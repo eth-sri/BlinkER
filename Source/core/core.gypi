@@ -3279,6 +3279,8 @@
             'eventracer/EventAction.h',
             'eventracer/EventRacerContext.cpp',
             'eventracer/EventRacerContext.h',
+            'eventracer/EventRacerJoinActions.cpp',
+            'eventracer/EventRacerJoinActions.h',
             'eventracer/EventRacerLog.cpp',
             'eventracer/EventRacerLog.h',
             'eventracer/EventRacerLogClient.h',

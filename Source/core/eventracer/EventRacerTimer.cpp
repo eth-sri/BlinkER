@@ -18,7 +18,7 @@ void EventRacerTimerBase::start(double nextFireInterval, double repeatInterval, 
         if (!m_data->act)
             m_data->act = log->fork(m_data->ctx->getAction());
         else
-            m_data->pred.append(m_data->ctx->getAction());
+            m_data->pred.deferJoin(m_data->ctx->getAction());
     }
 }
 
@@ -58,11 +58,7 @@ void EventRacerTimerBase::fired()
 
     // Join with the event-actions, which started the timer.
     RefPtr<EventRacerLog> log = ctx->getLog();
-    if (!d->pred.isEmpty()) {
-        for (size_t i = 0; i < d->pred.size(); ++i)
-            log->join(d->pred[i], act);
-        d->pred.clear();
-    }
+    d->pred.join(log, act);
 
     {
         OperationScope op("timer:fired");

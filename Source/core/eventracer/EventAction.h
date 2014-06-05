@@ -40,7 +40,13 @@ public:
 
     void complete() { m_state = COMPLETED; }
 
-    void addEdge (unsigned int dst) { m_edges.append(dst); }
+    void willDeferJoin() { ++m_deferCount; }
+
+    void abortDeferredJoin() { --m_deferCount; }
+
+    void addEdge (unsigned int dst);
+
+    bool isLeaf() const { return m_deferCount == 0 && m_edges.size() == 0; }
 
     typedef WTF::Vector<unsigned int> EdgesType;
     EdgesType       &getEdges()       { return m_edges; }
@@ -52,13 +58,14 @@ public:
 
 private:
     EventAction(unsigned int id, Type type)
-        : m_id(id), m_type(type), m_state(PENDING)
+        : m_id(id), m_type(type), m_state(PENDING), m_deferCount(0)
     {}
 
     unsigned int m_id;
     Type m_type;
     State m_state; 
 
+    unsigned int m_deferCount;
     EdgesType m_edges;
     OpsType m_ops;
 };

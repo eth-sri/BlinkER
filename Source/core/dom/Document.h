@@ -47,6 +47,7 @@
 #include "core/dom/UserActionElementSet.h"
 #include "core/dom/ViewportDescription.h"
 #include "core/dom/custom/CustomElement.h"
+#include "core/eventracer/EventRacerJoinActions.h"
 #include "core/html/CollectionType.h"
 #include "core/page/FocusType.h"
 #include "core/page/PageVisibilityState.h"
@@ -1407,7 +1408,7 @@ private:
 
     int m_styleRecalcElementCounter;
 
-    Vector<EventAction *> m_loadEventDelayActions;
+    EventRacerJoinActions m_loadEventDelayActions;
 };
 
 inline void Document::notifyRemovePendingSheetIfNeeded()

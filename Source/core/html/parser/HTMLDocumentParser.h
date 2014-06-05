@@ -208,7 +208,7 @@ private:
     bool m_endWasDelayed;
     bool m_haveBackgroundParser;
     unsigned m_pumpSessionNestingLevel;
-    Vector<EventAction *> m_joinActions;
+    EventRacerJoinActions m_joinActions;
 };
 
 }
