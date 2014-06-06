@@ -361,10 +361,25 @@ void ResourceLoader::didReceiveResponse(blink::WebURLLoader*, const blink::WebUR
         }
     }
 
+    EventRacerScope scope(m_eventRacerContext);
+    if (m_eventAction) {
+        m_eventRacerContext->push(m_eventAction);
+        m_eventRacerContext->getLog()->logOperation(m_eventAction,
+                                                    Operation::ENTER_SCOPE, "rsc-resp");
+    }
+
     // Reference the object in this method since the additional processing can do
     // anything including removing the last reference to this object.
     RefPtr<ResourceLoader> protect(this);
     m_resource->responseReceived(resourceResponse);
+
+    if (m_eventAction) {  // FIXME: exception safety
+        EventAction *nextAction = m_eventRacerContext->getLog()->fork(m_eventAction);
+        m_eventRacerContext->getLog()->logOperation(m_eventAction, Operation::EXIT_SCOPE);
+        m_eventRacerContext->pop();
+        m_eventAction = nextAction;
+    }
+
     if (m_state == Terminated)
         return;
 
@@ -428,10 +443,10 @@ void ResourceLoader::didReceiveData(blink::WebURLLoader*, const char* data, int 
     m_resource->appendData(data, length);
 
     if (m_eventAction && entryState == ConnectionStateReceivedResponse) {  // FIXME: exception safety
-        EventAction *endAction = m_eventRacerContext->getLog()->fork(m_eventAction);
+        EventAction *nextAction = m_eventRacerContext->getLog()->fork(m_eventAction);
         m_eventRacerContext->getLog()->logOperation(m_eventAction, Operation::EXIT_SCOPE);
         m_eventRacerContext->pop();
-        m_eventAction = endAction;
+        m_eventAction = nextAction;
     }
 }
 
