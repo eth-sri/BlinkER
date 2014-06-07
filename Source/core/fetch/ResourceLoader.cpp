@@ -160,8 +160,10 @@ void ResourceLoader::start()
 
     ASSERT(!m_eventRacerContext);
     m_eventRacerContext = EventRacerContext::current();
-    if (m_eventRacerContext)
-        m_eventAction = m_eventRacerContext->getLog()->fork(m_eventRacerContext->getAction());
+    if (m_eventRacerContext) {
+        m_eventAction = m_eventRacerContext->getAction();
+        m_eventAction->willDeferJoin();
+    }
 
     RELEASE_ASSERT(m_connectionState == ConnectionStateNew);
     m_connectionState = ConnectionStateStarted;
@@ -253,37 +255,72 @@ void ResourceLoader::cancel(const ResourceError& error)
     // If the load has already completed - succeeded, failed, or previously cancelled - do nothing.
     if (m_state == Terminated)
         return;
+
+    // Resource loading can be canceled in a variety of ways, including by
+    // javascript, by user actions or by error response to the resource request.
+    // Thus, the |cancel| function can be called both with or without an active
+    // EventRacer context.
+    RefPtr<EventRacerContext> ctx = EventRacerContext::current();
+    bool wasInEventAction = !!ctx;
+    if (!wasInEventAction)
+        ctx = m_eventRacerContext;
+    
+    // Naturally, cancellation of a load must be preceded by the initiation of
+    // the load, therefore, no matter if we have an already active event-action
+    // or not, join with the last event-action associated with this load.
+    if (ctx) {
+        RefPtr<EventRacerLog> log = ctx->getLog();
+        if (wasInEventAction) {
+            if (m_eventAction && ctx->getAction() != m_eventAction)
+                log->join(m_eventAction, ctx->getAction());
+        } else {
+            EventAction *act = log->createEventAction();
+            ctx->push(act);
+            if (m_eventAction)
+                log->join(m_eventAction, act);
+            log->logOperation(act, Operation::ENTER_SCOPE, "rsc-cancel");
+            m_eventAction = act;
+            m_eventAction->willDeferJoin();
+        }
+    }
+ 
+    EventRacerScope scope(ctx);
+ 
     if (m_state == Finishing) {
         releaseResources();
-        return;
+    } else {
+        ResourceError nonNullError = error.isNull() ? ResourceError::cancelledError(m_request.url()) : error;
+
+        // This function calls out to clients at several points that might do
+        // something that causes the last reference to this object to go away.
+        RefPtr<ResourceLoader> protector(this);
+
+        WTF_LOG(ResourceLoading, "Cancelled load of '%s'.\n", m_resource->url().string().latin1().data());
+        if (m_state == Initialized)
+            m_state = Finishing;
+        m_resource->setResourceError(nonNullError);
+
+        if (m_loader) {
+            m_connectionState = ConnectionStateCanceled;
+            m_loader->cancel();
+            m_loader.clear();
+        }
+
+        if (!m_notifiedLoadComplete) {
+            m_notifiedLoadComplete = true;
+            m_host->didFailLoading(m_resource, nonNullError);
+        }
+
+        if (m_state == Finishing)
+            m_resource->error(Resource::LoadError);
+        if (m_state != Terminated)
+            releaseResources();
     }
 
-    ResourceError nonNullError = error.isNull() ? ResourceError::cancelledError(m_request.url()) : error;
-
-    // This function calls out to clients at several points that might do
-    // something that causes the last reference to this object to go away.
-    RefPtr<ResourceLoader> protector(this);
-
-    WTF_LOG(ResourceLoading, "Cancelled load of '%s'.\n", m_resource->url().string().latin1().data());
-    if (m_state == Initialized)
-        m_state = Finishing;
-    m_resource->setResourceError(nonNullError);
-
-    if (m_loader) {
-        m_connectionState = ConnectionStateCanceled;
-        m_loader->cancel();
-        m_loader.clear();
+    if (ctx && !wasInEventAction) {
+        ctx->getLog()->logOperation(ctx->getAction(), Operation::EXIT_SCOPE);
+        ctx->pop();
     }
-
-    if (!m_notifiedLoadComplete) {
-        m_notifiedLoadComplete = true;
-        m_host->didFailLoading(m_resource, nonNullError);
-    }
-
-    if (m_state == Finishing)
-        m_resource->error(Resource::LoadError);
-    if (m_state != Terminated)
-        releaseResources();
 }
 
 void ResourceLoader::willSendRequest(blink::WebURLLoader*, blink::WebURLRequest& passedRequest, const blink::WebURLResponse& passedRedirectResponse)
@@ -363,9 +400,13 @@ void ResourceLoader::didReceiveResponse(blink::WebURLLoader*, const blink::WebUR
 
     EventRacerScope scope(m_eventRacerContext);
     if (m_eventAction) {
-        m_eventRacerContext->push(m_eventAction);
-        m_eventRacerContext->getLog()->logOperation(m_eventAction,
-                                                    Operation::ENTER_SCOPE, "rsc-resp");
+        RefPtr<EventRacerLog> log = m_eventRacerContext->getLog();
+        EventAction *act = log->createEventAction();
+        m_eventRacerContext->push(act);
+        log->join(m_eventAction, act);
+        log->logOperation(act, Operation::ENTER_SCOPE, "rsc-resp");
+        m_eventAction = act;
+        m_eventAction->willDeferJoin();
     }
 
     // Reference the object in this method since the additional processing can do
@@ -374,10 +415,9 @@ void ResourceLoader::didReceiveResponse(blink::WebURLLoader*, const blink::WebUR
     m_resource->responseReceived(resourceResponse);
 
     if (m_eventAction) {  // FIXME: exception safety
-        EventAction *nextAction = m_eventRacerContext->getLog()->fork(m_eventAction);
+        ASSERT(m_eventAction == m_eventRacerContext->getAction());
         m_eventRacerContext->getLog()->logOperation(m_eventAction, Operation::EXIT_SCOPE);
         m_eventRacerContext->pop();
-        m_eventAction = nextAction;
     }
 
     if (m_state == Terminated)
@@ -427,9 +467,13 @@ void ResourceLoader::didReceiveData(blink::WebURLLoader*, const char* data, int 
     // Activate the initial event action only on the first data receive.
     EventRacerScope scope(m_eventRacerContext);
     if (m_eventAction && entryState == ConnectionStateReceivedResponse) {
-        m_eventRacerContext->push(m_eventAction);
-        m_eventRacerContext->getLog()->logOperation(m_eventAction,
-                                                    Operation::ENTER_SCOPE, "rsc-data");
+        RefPtr<EventRacerLog> log = m_eventRacerContext->getLog();
+        EventAction *act = log->createEventAction();
+        m_eventRacerContext->push(act);
+        log->join(m_eventAction, act);
+        log->logOperation(act, Operation::ENTER_SCOPE, "rsc-data");
+        m_eventAction = act;
+        m_eventAction->willDeferJoin();
     }
 
     // Reference the object in this method since the additional processing can do
@@ -443,10 +487,9 @@ void ResourceLoader::didReceiveData(blink::WebURLLoader*, const char* data, int 
     m_resource->appendData(data, length);
 
     if (m_eventAction && entryState == ConnectionStateReceivedResponse) {  // FIXME: exception safety
-        EventAction *nextAction = m_eventRacerContext->getLog()->fork(m_eventAction);
+        ASSERT(m_eventAction == m_eventRacerContext->getAction());
         m_eventRacerContext->getLog()->logOperation(m_eventAction, Operation::EXIT_SCOPE);
         m_eventRacerContext->pop();
-        m_eventAction = nextAction;
     }
 }
 
@@ -461,9 +504,14 @@ void ResourceLoader::didFinishLoading(blink::WebURLLoader*, double finishTime, i
 
     EventRacerScope scope(m_eventRacerContext);
     if (m_eventAction) {
-        m_eventRacerContext->push(m_eventAction);
-        m_eventRacerContext->getLog()->logOperation(m_eventAction,
-                                                    Operation::ENTER_SCOPE, "rsc-finish");
+        RefPtr<EventRacerLog> log = m_eventRacerContext->getLog();
+        EventAction *act = log->createEventAction();
+        m_eventRacerContext->push(act);
+        log->join(m_eventAction, act);
+        log->logOperation(act, Operation::ENTER_SCOPE, "rsc-finish");
+        m_eventAction = act;
+        m_eventAction->willDeferJoin();
+        ASSERT(m_eventAction->getState() == EventAction::ACTIVE);
     }
 
     RefPtr<ResourceLoader> protect(this);
@@ -478,6 +526,7 @@ void ResourceLoader::didFinishLoading(blink::WebURLLoader*, double finishTime, i
         releaseResources();
 
     if (m_eventAction) { // FIXME: exception safety
+        ASSERT(m_eventAction == m_eventRacerContext->getAction());
         m_eventRacerContext->getLog()->logOperation(m_eventAction, Operation::EXIT_SCOPE);
         m_eventRacerContext->pop();
     }
@@ -491,9 +540,14 @@ void ResourceLoader::didFail(blink::WebURLLoader*, const blink::WebURLError& err
 
     EventRacerScope scope(m_eventRacerContext);
     if (m_eventAction) {
-        m_eventRacerContext->push(m_eventAction);;
-        m_eventRacerContext->getLog()->logOperation(m_eventAction,
-                                                    Operation::ENTER_SCOPE, "rsc-fail");
+        RefPtr<EventRacerLog> log = m_eventRacerContext->getLog();
+        EventAction *act = log->createEventAction();
+        m_eventRacerContext->push(act);
+        log->join(m_eventAction, act);
+        log->logOperation(act, Operation::ENTER_SCOPE, "rsc-fail");
+        m_eventAction = act;
+        m_eventAction->willDeferJoin();
+        ASSERT(m_eventAction->getState() == EventAction::ACTIVE);
     }
 
     RefPtr<ResourceLoader> protect(this);
@@ -513,6 +567,7 @@ void ResourceLoader::didFail(blink::WebURLLoader*, const blink::WebURLError& err
         releaseResources();
 
     if (m_eventAction) { // FIXME: exception safety
+        ASSERT(m_eventAction == m_eventRacerContext->getAction());
         m_eventRacerContext->getLog()->logOperation(m_eventAction, Operation::EXIT_SCOPE);
         m_eventRacerContext->pop();
     }
