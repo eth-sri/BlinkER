@@ -29,7 +29,6 @@
 #include "bindings/v8/ScriptSourceCode.h"
 #include "core/dom/Element.h"
 #include "core/events/Event.h"
-#include "core/eventracer/EventRacerContext.h"
 #include "core/eventracer/EventRacerLog.h"
 #include "core/dom/IgnoreDestructiveWriteCountIncrementer.h"
 #include "core/dom/Microtask.h"

@@ -41,7 +41,6 @@
 #include "core/editing/htmlediting.h"
 #include "core/editing/markup.h"
 #include "core/events/Event.h"
-#include "core/eventracer/EventRacerLog.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/frame/DOMWindow.h"
 #include "core/frame/FrameConsole.h"
@@ -240,14 +239,6 @@ void LocalFrame::didChangeVisibilityState()
 
     for (size_t i = 0; i < childFrames.size(); ++i)
         childFrames[i]->didChangeVisibilityState();
-}
- 
-PassRefPtr<EventRacerLog> LocalFrame::getEventRacerLog() const {
-    return m_eventRacerLog;
-}
-
-void LocalFrame::setEventRacerLog(PassRefPtr<EventRacerLog> log) {
-    m_eventRacerLog = log;
 }
 
 void LocalFrame::willDetachFrameHost()

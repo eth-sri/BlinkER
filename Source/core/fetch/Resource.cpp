@@ -25,7 +25,6 @@
 #include "core/fetch/Resource.h"
 
 #include "FetchInitiatorTypeNames.h"
-#include "core/eventracer/EventRacerContext.h"
 #include "core/eventracer/EventRacerLog.h"
 #include "core/fetch/CachedMetadata.h"
 #include "core/fetch/CrossOriginAccessControl.h"
@@ -119,6 +118,7 @@ Resource::Resource(const ResourceRequest& request, Type type)
 #endif
     , m_resourceToRevalidate(0)
     , m_proxyResource(0)
+    , m_eventRacerLogId(0)
     , m_callbackEventAction(0)
 {
     ASSERT(m_type == unsigned(type)); // m_type is a bitfield, so this tests careless updates of the enum.
@@ -190,21 +190,21 @@ void Resource::load(ResourceFetcher* fetcher, const ResourceLoaderOptions& optio
     m_loader->start();
 }
 
-void Resource::setCallbackEventAction(PassRefPtr<EventRacerContext> ctx, EventAction *act)
+void Resource::setCallbackEventAction(EventAction *act)
 {
-    m_callbackEventRacerContext = ctx;
+    m_eventRacerLogId = EventRacerLog::current()->getId();
     m_callbackEventAction = act;
 }
 
 void Resource::clearCallbackEventAction()
 {
-    m_callbackEventRacerContext.clear();
+    m_eventRacerLogId = 0;
     m_callbackEventAction = 0;
 }
-    
-PassRefPtr<EventRacerContext> Resource::getCallbackEventRacerContext() const
+
+unsigned int Resource::getCallbackEventRacerLogId() const
 {
-    return m_callbackEventRacerContext;
+    return m_eventRacerLogId;
 }
 
 EventAction *Resource::getCallbackEventAction() const
@@ -621,10 +621,10 @@ void Resource::finishPendingClients()
     Vector<ResourceClient*> clientsToNotify;
     copyToVector(m_clientsAwaitingCallback, clientsToNotify);
 
-    ASSERT(!EventRacerContext::current());
-    ASSERT(m_callbackEventRacerContext && m_callbackEventAction);
-    EventRacerScope scope(m_callbackEventRacerContext);
-    EventActionScope act(m_callbackEventRacerContext, m_callbackEventAction);
+    EventRacerLog *log = EventRacerLog::current();
+    ASSERT(!log->hasAction());
+    ASSERT(m_callbackEventAction);
+    EventActionScope act(m_callbackEventAction);
     OperationScope op("rsc:callback");
 
     // Clear the callback event-action, so a new one is forked if a client is
@@ -904,10 +904,10 @@ void Resource::ResourceCallback::schedule(Resource* resource)
         m_callbackTimer.startOneShot(0, FROM_HERE);
     resource->assertAlive();
 
-    RefPtr<EventRacerContext> ctx = EventRacerContext::current();
-    ASSERT(ctx);
+    EventRacerLog *log = EventRacerLog::current();
+    ASSERT(log->hasAction());
     if (resource->getCallbackEventAction() == NULL)
-        resource->setCallbackEventAction(ctx, ctx->getLog()->fork(ctx->getAction()));
+        resource->setCallbackEventAction(log->fork(log->getCurrentAction()));
 
     m_resourcesWithPendingClients.add(resource);
 }

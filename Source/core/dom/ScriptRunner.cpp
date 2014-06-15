@@ -68,15 +68,11 @@ void ScriptRunner::queueScriptForExecution_(ScriptLoader* scriptLoader, Resource
         break;
 
     case IN_ORDER_EXECUTION:
-        RefPtr<EventRacerContext> ctx = EventRacerContext::current();
-        EventAction *act;
-        if (ctx)
-            act = ctx->getLog()->fork(ctx->getAction());
-        else
-            act = NULL;
+        EventRacerLog *log = EventRacerLog::current();
+        EventAction *act = log->fork(log->getCurrentAction());
 
         PendingScript script(element, resource.get());
-        script.setEventRacerContext(ctx, act);
+        script.setEventRacerContext(act);
         m_scriptsToExecuteInOrder.append(script);
         break;
     }
@@ -101,13 +97,13 @@ void ScriptRunner::notifyScriptReady(ScriptLoader* scriptLoader, ExecutionType e
         break;
 
     case ASYNC_EXECUTION:
-        ASSERT(EventRacerContext::current());
-        RefPtr<EventRacerContext> ctx = EventRacerContext::current();
-        EventAction *act= ctx->getLog()->fork(ctx->getAction());
+        EventRacerLog *log = EventRacerLog::current();
+        ASSERT(log->hasAction());
+        EventAction *act= log->fork(log->getCurrentAction());
 
         ASSERT(m_pendingAsyncScripts.contains(scriptLoader));
         PendingScript script = m_pendingAsyncScripts.take(scriptLoader);
-        script.setEventRacerContext(ctx, act);
+        script.setEventRacerContext(act);
         m_scriptsToExecuteSoon.append(script);
         break;
     }
@@ -149,10 +145,9 @@ void ScriptRunner::timerFired(Timer<ScriptRunner>* timer)
         ScriptResource* resource = scripts[i].resource();
         RefPtr<Element> element = scripts[i].releaseElementAndClear();
         if (EventAction *act = scripts[i].getAsyncEventAction()) {
-            ASSERT(!EventRacerContext::current());
-            RefPtr<EventRacerContext> ctx = scripts[i].getEventRacerContext();
-            EventRacerScope scope(ctx);
-            EventActionScope ascope(ctx, act);
+            EventRacerLog *log = EventRacerLog::current();
+            ASSERT(!log->hasAction() && log->getId() == scripts[i].getEventRacerLogId());
+            EventActionScope scope(act);
             OperationScope oscope("script:exec-async");
             toScriptLoaderIfPossible(element.get())->execute(resource);
             m_document->decrementLoadEventDelayCount();

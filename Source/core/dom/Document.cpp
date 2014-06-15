@@ -99,7 +99,6 @@
 #include "core/editing/Editor.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/SpellChecker.h"
-#include "core/eventracer/EventRacerContext.h"
 #include "core/eventracer/EventRacerLog.h"
 #include "core/events/BeforeUnloadEvent.h"
 #include "core/events/Event.h"
@@ -1139,11 +1138,13 @@ void Document::setReadyState(ReadyState readyState)
     }
 
     m_readyState = readyState;
-    if (EventRacerContext::current()) {
+    EventRacerLog *log = EventRacerLog::current();
+    if (log && log->hasAction()) {
         OperationScope op("doc:ready-state-change");
         dispatchEvent(Event::create(EventTypeNames::readystatechange));
     } else {
-        dispatchEvent(Event::create(EventTypeNames::readystatechange));        
+        // Loading of an empty document may not have an EventRacer log.
+        dispatchEvent(Event::create(EventTypeNames::readystatechange));
     }
 }
 
@@ -4613,7 +4614,8 @@ void Document::finishedParsing()
     if (!m_documentTiming.domContentLoadedEventStart)
         m_documentTiming.domContentLoadedEventStart = monotonicallyIncreasingTime();
     
-    if (EventRacerContext::current()) {
+    EventRacerLog *log = EventRacerLog::current();
+    if (log && log->hasAction()) {
         OperationScope op("doc:dcl");
         dispatchEvent(Event::createBubble(EventTypeNames::DOMContentLoaded));
     } else {
@@ -5137,9 +5139,9 @@ Element* Document::pointerLockElement() const
 
 void Document::decrementLoadEventDelayCount()
 {
-    RefPtr<EventRacerContext> ctx = EventRacerContext::current();
-    if (ctx)
-        m_loadEventDelayActions.deferJoin(ctx->getAction());
+    EventRacerLog *log = EventRacerLog::current();
+    if (log->hasAction())
+        m_loadEventDelayActions.deferJoin(log->getCurrentAction());
 
     ASSERT(m_loadEventDelayCount);
     --m_loadEventDelayCount;
@@ -5172,12 +5174,9 @@ bool Document::isDelayingLoadEvent()
 
 void Document::loadEventDelayTimerFired(EventRacerTimer<Document>*)
 {
-    RefPtr<EventRacerContext> ctx = EventRacerContext::current();
-    if (ctx) {
-        RefPtr<EventRacerLog> log = ctx->getLog();
-        EventAction *act = ctx->getAction();
-        m_loadEventDelayActions.join(log, act);
-    }
+    EventRacerLog *log = EventRacerLog::current();
+    if (log->hasAction())
+        m_loadEventDelayActions.join(log, log->getCurrentAction());
 
     if (frame())
         frame()->loader().checkCompleted();

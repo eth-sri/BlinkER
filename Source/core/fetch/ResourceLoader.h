@@ -43,7 +43,6 @@ class WebThreadedDataReceiver;
 namespace WebCore {
 
 class EventAction;
-class EventRacerContext;
 class Resource;
 class KURL;
 class ResourceError;
@@ -150,7 +149,7 @@ private:
 
     OwnPtr<RequestCountTracker> m_requestCountTracker;
 
-    RefPtr<EventRacerContext> m_eventRacerContext;
+    unsigned int m_logId;
     EventAction *m_eventAction;
 };
 

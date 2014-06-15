@@ -15,12 +15,27 @@ void EventAction::addEdge(unsigned int dst) {
 }
 
 // EventRacerLog ---------------------------------------------------------------
-WTF::PassRefPtr<EventRacerLog> EventRacerLog::create(WTF::PassOwnPtr<EventRacerLogClient> c) {
-    return WTF::adoptRef(new EventRacerLog(c));
+WTF::ThreadSpecific<EventRacerLog *> &EventRacerLog::tsLog() {
+    static WTF::ThreadSpecific<EventRacerLog *> *log
+        = new WTF::ThreadSpecific<EventRacerLog *>;
+    return *log;
 }
 
+EventRacerLog *EventRacerLog::start(WTF::PassOwnPtr<EventRacerLogClient> c) {
+    EventRacerLog *log = new EventRacerLog(c);
+    std::swap(log, *tsLog());
+    delete log;
+    return *tsLog();
+}
+
+EventRacerLog *EventRacerLog::current() {
+    return *tsLog();
+}
+
+unsigned int EventRacerLog::m_nextLogId;
+
 EventRacerLog::EventRacerLog(PassOwnPtr<EventRacerLogClient> client)
-	: m_nextEventActionId(1), m_pendingString(1), m_client(client) {
+	: m_id(++m_nextLogId), m_currentAction(NULL), m_nextEventActionId(1), m_pendingString(1), m_client(client) {
 }
 
 EventRacerLog::~EventRacerLog() {}
@@ -63,13 +78,28 @@ EventAction *EventRacerLog::beginEventAction(unsigned int id, EventAction::Type 
         a = createEventAction(type);
     else
         a = m_eventActions.get(id);
-    a->activate();
-    return a;
+    ASSERT(!hasAction());
+    m_currentAction = a;
+    m_currentAction->activate();
+    return m_currentAction;
+}
+
+// Starts a new event action.
+void EventRacerLog::beginEventAction(EventAction *a) {
+    ASSERT(a && !hasAction());
+    m_currentAction = a;
+    m_currentAction->activate();
 }
 
 // Marks the end of the given event action.
 void EventRacerLog::endEventAction(EventAction *a) {
-    a->complete();
+    ASSERT(m_currentAction);
+    ASSERT(!a || a == m_currentAction);
+    if (m_currentAction->getState() == EventAction::ACTIVE) {
+        a->complete();
+        flush(a);
+    }
+    m_currentAction = NULL;
 }
 
 // Creates a new event action, following in the happens-before relation
@@ -120,6 +150,37 @@ void EventRacerLog::logOperation(EventAction *act, Operation::Type type,
 // Interns a string.
 size_t EventRacerLog::intern(const WTF::String &s) {
     return m_strings.put(s);
+}
+
+// EventActionScope ------------------------------------------------------------
+EventActionScope::EventActionScope(EventAction *act)
+    : m_action(act) {
+    EventRacerLog *log = EventRacerLog::current();
+    ASSERT(log);
+    log->beginEventAction(m_action);
+}
+
+EventActionScope::~EventActionScope() {
+    EventRacerLog *log = EventRacerLog::current();
+    ASSERT(log);
+    log->endEventAction(m_action);
+}
+
+// OperationScope --------------------------------------------------------------
+OperationScope::OperationScope(const WTF::String &name) {
+    EventRacerLog *log = EventRacerLog::current();
+    ASSERT(log && log->hasAction());
+    EventAction *act = log->getCurrentAction();
+    ASSERT(act && act->getState() == EventAction::ACTIVE);
+    log->logOperation(act, Operation::ENTER_SCOPE, name);
+}
+
+OperationScope::~OperationScope() {
+    EventRacerLog *log = EventRacerLog::current();
+    ASSERT(log && log->hasAction());
+    EventAction *act = log->getCurrentAction();
+    ASSERT(act && act->getState() == EventAction::ACTIVE);
+    log->logOperation(act, Operation::EXIT_SCOPE);
 }
 
 } // end namespace WebCore

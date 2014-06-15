@@ -5,8 +5,8 @@
 #include "StringSet.h"
 #include "wtf/HashMap.h"
 #include "wtf/PassOwnPtr.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
+#include "wtf/ThreadSpecific.h"
+
 #include <vector>
 #include <utility>
 
@@ -14,14 +14,18 @@ namespace WebCore {
 
 class EventRacerLogClient;
 
-class EventRacerLog : public WTF::RefCounted<EventRacerLog> {
+class EventRacerLog {
 public:
     ~EventRacerLog();
 
-    static WTF::PassRefPtr<EventRacerLog> create(PassOwnPtr<EventRacerLogClient>);
+    // Creates a new EventRacer log.
+    static EventRacerLog *start(PassOwnPtr<EventRacerLogClient>);
 
-    // Sends event action data to the host.
-    void flush(EventAction *);
+    // Gets the current EventRacerLog.
+    static EventRacerLog *current();
+
+    // Returns a unique id of the log (mostly for error checking).
+    unsigned int getId() const { return m_id; }
 
     // Creates an event action of the given type.
     EventAction *createEventAction(EventAction::Type type = EventAction::UNKNOWN);
@@ -30,6 +34,9 @@ public:
     // id is zero, allocate a new one and assign it to the new event action.
     EventAction *beginEventAction(unsigned int id = 0,
                                   EventAction::Type = EventAction::UNKNOWN);
+
+    // Starts a new event action.
+    void beginEventAction(EventAction *);
 
     // Marks the end of the given event action.
     void endEventAction(EventAction * = NULL);
@@ -57,9 +64,20 @@ public:
     // Interns a string.
     size_t intern(const WTF::String &);
 
+    // Checks if there is an active event-action.
+    bool hasAction() const { return !!m_currentAction; }
+
+    // Returns the current event-action.
+    EventAction *getCurrentAction() const { return m_currentAction; }
+
 private:
     EventRacerLog(WTF::PassOwnPtr<EventRacerLogClient>);
 
+    // Sends event action data to the host.
+    void flush(EventAction *);
+
+    unsigned int m_id;
+    EventAction *m_currentAction;
     unsigned int m_nextEventActionId;
     WTF::HashMap<unsigned int, WTF::OwnPtr<EventAction> > m_eventActions;
     WTF::Vector<EventAction::Edge> m_pendingEdges;
@@ -67,6 +85,23 @@ private:
     size_t m_pendingString;
 
     OwnPtr<EventRacerLogClient> m_client;
+
+    static unsigned int m_nextLogId;
+    static WTF::ThreadSpecific<EventRacerLog *> &tsLog();
+};
+
+class EventActionScope {
+public:
+    EventActionScope(EventAction *);
+    ~EventActionScope();
+private:
+    EventAction *m_action;
+};
+
+class OperationScope {
+public:
+    OperationScope(const WTF::String &);
+    ~OperationScope();
 };
 
 } // namespace WebCore

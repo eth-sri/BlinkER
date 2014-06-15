@@ -1,7 +1,6 @@
 #ifndef EventRacerJoinActions_h
 #define EventRacerJoinActions_h
 
-#include "wtf/PassRefPtr.h"
 #include "wtf/Vector.h"
 
 namespace WebCore {
@@ -15,7 +14,7 @@ public:
     void deferJoin(EventAction *);
 
     // Joins all the event-actions in |m_actions| to |act|.
-    void join(PassRefPtr<EventRacerLog> log, EventAction *act);
+    void join(EventRacerLog *log, EventAction *act);
 
     // Clears/Aborts the pending joins.
     void clear();

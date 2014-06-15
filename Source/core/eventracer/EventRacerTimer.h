@@ -27,7 +27,7 @@ protected:
             return adoptRef(new EventRacerData);
         }
 
-        RefPtr<EventRacerContext> ctx;
+        unsigned int logId;
         EventRacerJoinActions pred;
         EventAction *act;
 
