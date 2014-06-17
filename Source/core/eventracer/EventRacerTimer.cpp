@@ -48,6 +48,7 @@ void EventRacerTimerBase::fired()
     // with the EventRacer related fields, in order to extend the life time of
     // that part of the timer at least for the duration of this function.
     RefPtr<EventRacerData> d(m_data);
+    bool isRepeating = !!repeatInterval();
 
     EventAction *act = d->act;
     d->act = 0;
@@ -65,7 +66,7 @@ void EventRacerTimerBase::fired()
 
     // If it's a repeating timer, fork the next timer event-action as a
     // successor of the current one.
-    if (repeatInterval()) {
+    if (isRepeating) {
         d->logId = log->getId();
         if (act->isReusable()) {
             act->reuse();
