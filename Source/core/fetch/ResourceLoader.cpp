@@ -279,14 +279,14 @@ void ResourceLoader::cancel(const ResourceError& error)
         m_eventAction->willDeferJoin();
     }
  
+    // This function calls out to clients at several points that might do
+    // something that causes the last reference to this object to go away.
+    RefPtr<ResourceLoader> protector(this);
+
     if (m_state == Finishing) {
         releaseResources();
     } else {
         ResourceError nonNullError = error.isNull() ? ResourceError::cancelledError(m_request.url()) : error;
-
-        // This function calls out to clients at several points that might do
-        // something that causes the last reference to this object to go away.
-        RefPtr<ResourceLoader> protector(this);
 
         WTF_LOG(ResourceLoading, "Cancelled load of '%s'.\n", m_resource->url().string().latin1().data());
         if (m_state == Initialized)
