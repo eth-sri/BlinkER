@@ -26,7 +26,7 @@
 #ifndef EventSender_h
 #define EventSender_h
 
-#include "platform/Timer.h"
+#include "core/eventracer/EventRacerTimer.h"
 #include "wtf/Vector.h"
 #include "wtf/text/AtomicString.h"
 
@@ -50,10 +50,10 @@ public:
 #endif
 
 private:
-    void timerFired(Timer<EventSender<T> >*) { dispatchPendingEvents(); }
+    void timerFired(EventRacerTimer<EventSender<T> >*) { dispatchPendingEvents(); }
 
     AtomicString m_eventType;
-    Timer<EventSender<T> > m_timer;
+    EventRacerTimer<EventSender<T> > m_timer;
     Vector<T*> m_dispatchSoonList;
     Vector<T*> m_dispatchingList;
 };
