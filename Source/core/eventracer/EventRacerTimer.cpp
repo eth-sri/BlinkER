@@ -6,11 +6,14 @@ namespace WebCore {
 
 void EventRacerTimerBase::start(double nextFireInterval, double repeatInterval, const TraceLocation& caller)
 {
+    // Detect attempts to start an obsolete timer.
+    EventRacerLog *log = EventRacerLog::current();
+    if (log && m_data && m_data->logId && m_data->logId != log->getId())
+        return;
+
     TimerBase::start(nextFireInterval, repeatInterval, caller);
 
-    EventRacerLog *log = EventRacerLog::current();
     if (log) {
-        ASSERT(!m_data || m_data->logId == 0 || m_data->logId == log->getId());
         if (!m_data)
             m_data = EventRacerData::create();
         m_data->logId = log->getId();
@@ -34,14 +37,17 @@ void EventRacerTimerBase::stop()
 
 void EventRacerTimerBase::fired()
 {
+    // Detect stale timer invocations (after the renderer has navigated to
+    // another URL) and ignore the timer in that case.
+    EventRacerLog *log = EventRacerLog::current();
+    if (!log || log->getId() != m_data->logId)
+        return;
+
     // Not involving an EventRacer context.
     if (!m_data || !m_data->logId) {
         didFire();
         return;
     }
-
-    EventRacerLog *log = EventRacerLog::current();
-    ASSERT(log && log->getId() == m_data->logId);
 
     // Once the timer has been fired, it may be deleted, hence do not access the
     // timer object at all. Instead we keep a reference to a separate struct
@@ -65,7 +71,8 @@ void EventRacerTimerBase::fired()
     }
 
     // If it's a repeating timer, fork the next timer event-action as a
-    // successor of the current one.
+    // successor of the current one. FIXME: the question here is whether the log
+    // can change during the invocation of |didFire|.
     if (isRepeating) {
         d->logId = log->getId();
         if (act->isReusable()) {
