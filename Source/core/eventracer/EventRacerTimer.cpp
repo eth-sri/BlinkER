@@ -1,22 +1,20 @@
 #include "config.h"
-#include "EventRacerTimer.h"
+#include "EventRacerContext.h"
 #include "EventRacerLog.h"
+#include "EventRacerTimer.h"
 
 namespace WebCore {
 
 void EventRacerTimerBase::start(double nextFireInterval, double repeatInterval, const TraceLocation& caller)
 {
-    // Detect attempts to start an obsolete timer.
-    EventRacerLog *log = EventRacerLog::current();
-    if (log && m_data && m_data->logId && m_data->logId != log->getId())
-        return;
-
     TimerBase::start(nextFireInterval, repeatInterval, caller);
 
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (!m_data)
+        m_data = EventRacerData::create(log);
+
+    log = m_data->log;
     if (log) {
-        if (!m_data)
-            m_data = EventRacerData::create();
-        m_data->logId = log->getId();
         if (!m_data->act)
             m_data->act = log->fork(log->getCurrentAction());
         else
@@ -29,7 +27,7 @@ void EventRacerTimerBase::stop()
     TimerBase::stop();
 
     if (m_data) {
-        m_data->logId = 0;
+        m_data->log.clear();
         m_data->pred.clear();
         m_data->act = 0;
     }
@@ -37,14 +35,8 @@ void EventRacerTimerBase::stop()
 
 void EventRacerTimerBase::fired()
 {
-    // Detect stale timer invocations (after the renderer has navigated to
-    // another URL) and ignore the timer in that case.
-    EventRacerLog *log = EventRacerLog::current();
-    if (!log || log->getId() != m_data->logId)
-        return;
-
     // Not involving an EventRacer context.
-    if (!m_data || !m_data->logId) {
+    if (!m_data || !m_data->log) {
         didFire();
         return;
     }
@@ -56,14 +48,14 @@ void EventRacerTimerBase::fired()
     RefPtr<EventRacerData> d(m_data);
     bool isRepeating = !!repeatInterval();
 
-    EventAction *act = d->act;
+    EventAction *action = d->act;
     d->act = 0;
-    d->logId = 0;
 
-    EventActionScope scope(act);
+    EventRacerContext ctx(d->log);
+    EventActionScope act(action);
 
     // Join with the event-actions, which started the timer.
-    d->pred.join(log, act);
+    d->pred.join(d->log, action);
 
     {
         OperationScope op("timer:fired");
@@ -74,17 +66,22 @@ void EventRacerTimerBase::fired()
     // successor of the current one. FIXME: the question here is whether the log
     // can change during the invocation of |didFire|.
     if (isRepeating) {
-        d->logId = log->getId();
-        if (act->isReusable()) {
-            act->reuse();
-            d->act = act;
+        if (action->isReusable()) {
+            action->reuse();
+            d->act = action;
         } else {
-            d->act = log->fork(act);
+            d->act = d->log->fork(action);
         }
     }
 }
 
-EventRacerTimerBase::EventRacerData::EventRacerData() : logId(0), act(0) {}
+PassRefPtr<EventRacerTimerBase::EventRacerData> EventRacerTimerBase::EventRacerData::create(PassRefPtr<EventRacerLog> log) {
+    return adoptRef(new EventRacerData(log));
+}
+
+EventRacerTimerBase::EventRacerData::EventRacerData(PassRefPtr<EventRacerLog> lg)
+    : log(lg), act(0) {
+}
 
 EventRacerTimerBase::EventRacerData::~EventRacerData() {}
 

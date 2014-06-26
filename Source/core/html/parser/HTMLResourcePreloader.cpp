@@ -27,7 +27,7 @@
 #include "core/html/parser/HTMLResourcePreloader.h"
 
 #include "core/dom/Document.h"
-#include "core/eventracer/EventRacerLog.h"
+#include "core/eventracer/EventRacerContext.h"
 #include "core/fetch/FetchInitiatorInfo.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/html/imports/HTMLImport.h"

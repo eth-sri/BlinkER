@@ -46,6 +46,7 @@
 #include "core/editing/UndoStack.h"
 #include "core/events/Event.h"
 #include "core/events/PageTransitionEvent.h"
+#include "core/eventracer/EventRacerContext.h"
 #include "core/eventracer/EventRacerLog.h"
 #include "core/eventracer/EventRacerLogClient.h"
 #include "core/fetch/FetchContext.h"
@@ -1316,32 +1317,22 @@ void FrameLoader::loadWithNavigationAction(const NavigationAction& action, Frame
     m_client->dispatchDidStartProvisionalLoad();
     ASSERT(m_provisionalDocumentLoader);
 
-    EventRacerLog *log = EventRacerLog::current();
-    if (log && log->hasAction()) {
-        // If we are already inside an EventRacer context, just pick up the log.
-        // This handles the cases of loading a nested frame, a frame with an
-        // opener or loading an error page after unsuccessful navigation.
+    if (RefPtr<EventRacerLog> log = EventRacerContext::getLog()) {
+        ASSERT(log->hasAction());
+        // Just continue inside the current event-action.
         m_provisionalDocumentLoader->startLoadingMainResource();
     } else {
-        LocalFrame *upper = m_frame->tree().parent();
-        if (!upper)
-            upper = opener();
-        if (upper) {
-            ASSERT(log);
+        // Otherwise create a new EventRacer log for the new page.
+        if (OwnPtr<EventRacerLogClient> clnt = m_client->createEventRacerLogClient()) {
+            log = EventRacerLog::start(clnt.release());
+            EventRacerContext ctx(log);
             EventActionScope act(log->createEventAction());
             m_provisionalDocumentLoader->startLoadingMainResource();
         } else {
-            // Otherwise create a new EventRacer log for the new page.
-            if (OwnPtr<EventRacerLogClient> clnt = m_client->createEventRacerLogClient()) {
-                log = EventRacerLog::start(clnt.release());
-                EventActionScope act(log->createEventAction());
-                m_provisionalDocumentLoader->startLoadingMainResource();
-            } else {
-                // If we weren't able to create the log client, then this is
-                // navigation to the "swapped out" url, during which nothing
-                // interesting happens. Maybe.
-                m_provisionalDocumentLoader->startLoadingMainResource();
-            }
+            // If we weren't able to create the log client, then this is
+            // navigation to the "swapped out" url, during which nothing
+            // interesting happens. Maybe.
+            m_provisionalDocumentLoader->startLoadingMainResource();
         }
     }
 }

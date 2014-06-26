@@ -15,21 +15,9 @@ void EventAction::addEdge(unsigned int dst) {
 }
 
 // EventRacerLog ---------------------------------------------------------------
-WTF::ThreadSpecific<EventRacerLog *> &EventRacerLog::tsLog() {
-    static WTF::ThreadSpecific<EventRacerLog *> *log
-        = new WTF::ThreadSpecific<EventRacerLog *>;
-    return *log;
-}
-
-EventRacerLog *EventRacerLog::start(WTF::PassOwnPtr<EventRacerLogClient> c) {
-    EventRacerLog *log = new EventRacerLog(c);
-    std::swap(log, *tsLog());
-    delete log;
-    return *tsLog();
-}
-
-EventRacerLog *EventRacerLog::current() {
-    return *tsLog();
+PassRefPtr<EventRacerLog> EventRacerLog::start(WTF::PassOwnPtr<EventRacerLogClient> c) {
+    RefPtr<EventRacerLog> log = adoptRef(new EventRacerLog(c));
+    return log;
 }
 
 unsigned int EventRacerLog::m_nextLogId;
@@ -150,37 +138,6 @@ void EventRacerLog::logOperation(EventAction *act, Operation::Type type,
 // Interns a string.
 size_t EventRacerLog::intern(const WTF::String &s) {
     return m_strings.put(s);
-}
-
-// EventActionScope ------------------------------------------------------------
-EventActionScope::EventActionScope(EventAction *act)
-    : m_action(act) {
-    EventRacerLog *log = EventRacerLog::current();
-    ASSERT(log);
-    log->beginEventAction(m_action);
-}
-
-EventActionScope::~EventActionScope() {
-    EventRacerLog *log = EventRacerLog::current();
-    ASSERT(log);
-    log->endEventAction(m_action);
-}
-
-// OperationScope --------------------------------------------------------------
-OperationScope::OperationScope(const WTF::String &name) {
-    EventRacerLog *log = EventRacerLog::current();
-    ASSERT(log && log->hasAction());
-    EventAction *act = log->getCurrentAction();
-    ASSERT(act && act->getState() == EventAction::ACTIVE);
-    log->logOperation(act, Operation::ENTER_SCOPE, name);
-}
-
-OperationScope::~OperationScope() {
-    EventRacerLog *log = EventRacerLog::current();
-    ASSERT(log && log->hasAction());
-    EventAction *act = log->getCurrentAction();
-    ASSERT(act && act->getState() == EventAction::ACTIVE);
-    log->logOperation(act, Operation::EXIT_SCOPE);
 }
 
 } // end namespace WebCore

@@ -5,6 +5,8 @@
 #include "StringSet.h"
 #include "wtf/HashMap.h"
 #include "wtf/PassOwnPtr.h"
+#include "wtf/PassRefPtr.h"
+#include "wtf/RefCounted.h"
 #include "wtf/ThreadSpecific.h"
 
 #include <vector>
@@ -14,15 +16,12 @@ namespace WebCore {
 
 class EventRacerLogClient;
 
-class EventRacerLog {
+class EventRacerLog : public RefCounted<EventRacerLog> {
 public:
     ~EventRacerLog();
 
     // Creates a new EventRacer log.
-    static EventRacerLog *start(PassOwnPtr<EventRacerLogClient>);
-
-    // Gets the current EventRacerLog.
-    static EventRacerLog *current();
+    static PassRefPtr<EventRacerLog> start(PassOwnPtr<EventRacerLogClient>);
 
     // Returns a unique id of the log (mostly for error checking).
     unsigned int getId() const { return m_id; }
@@ -87,21 +86,6 @@ private:
     OwnPtr<EventRacerLogClient> m_client;
 
     static unsigned int m_nextLogId;
-    static WTF::ThreadSpecific<EventRacerLog *> &tsLog();
-};
-
-class EventActionScope {
-public:
-    EventActionScope(EventAction *);
-    ~EventActionScope();
-private:
-    EventAction *m_action;
-};
-
-class OperationScope {
-public:
-    OperationScope(const WTF::String &);
-    ~OperationScope();
 };
 
 } // namespace WebCore

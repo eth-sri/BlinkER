@@ -25,6 +25,7 @@
 #include "core/fetch/Resource.h"
 
 #include "FetchInitiatorTypeNames.h"
+#include "core/eventracer/EventRacerContext.h"
 #include "core/eventracer/EventRacerLog.h"
 #include "core/fetch/CachedMetadata.h"
 #include "core/fetch/CrossOriginAccessControl.h"
@@ -118,7 +119,6 @@ Resource::Resource(const ResourceRequest& request, Type type)
 #endif
     , m_resourceToRevalidate(0)
     , m_proxyResource(0)
-    , m_eventRacerLogId(0)
     , m_callbackEventAction(0)
 {
     ASSERT(m_type == unsigned(type)); // m_type is a bitfield, so this tests careless updates of the enum.
@@ -190,21 +190,21 @@ void Resource::load(ResourceFetcher* fetcher, const ResourceLoaderOptions& optio
     m_loader->start();
 }
 
-void Resource::setCallbackEventAction(EventAction *act)
+void Resource::setCallbackEventAction(PassRefPtr<EventRacerLog> log, EventAction *act)
 {
-    m_eventRacerLogId = EventRacerLog::current()->getId();
+    m_eventRacerLog = log;
     m_callbackEventAction = act;
 }
 
 void Resource::clearCallbackEventAction()
 {
-    m_eventRacerLogId = 0;
+    m_eventRacerLog.clear();
     m_callbackEventAction = 0;
 }
 
-unsigned int Resource::getCallbackEventRacerLogId() const
+PassRefPtr<EventRacerLog> Resource::getCallbackEventRacerLog() const
 {
-    return m_eventRacerLogId;
+    return m_eventRacerLog;
 }
 
 EventAction *Resource::getCallbackEventAction() const
@@ -621,9 +621,10 @@ void Resource::finishPendingClients()
     Vector<ResourceClient*> clientsToNotify;
     copyToVector(m_clientsAwaitingCallback, clientsToNotify);
 
-    EventRacerLog *log = EventRacerLog::current();
-    ASSERT(!log->hasAction());
+    ASSERT(!EventRacerContext::getLog());
+    ASSERT(!m_eventRacerLog->hasAction());
     ASSERT(m_callbackEventAction);
+    EventRacerContext ctx(m_eventRacerLog);
     EventActionScope act(m_callbackEventAction);
     OperationScope op("rsc:callback");
 
@@ -904,10 +905,10 @@ void Resource::ResourceCallback::schedule(Resource* resource)
         m_callbackTimer.startOneShot(0, FROM_HERE);
     resource->assertAlive();
 
-    EventRacerLog *log = EventRacerLog::current();
-    ASSERT(log->hasAction());
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    ASSERT(log && log->hasAction());
     if (resource->getCallbackEventAction() == NULL)
-        resource->setCallbackEventAction(log->fork(log->getCurrentAction()));
+        resource->setCallbackEventAction(log, log->fork(log->getCurrentAction()));
 
     m_resourcesWithPendingClients.add(resource);
 }

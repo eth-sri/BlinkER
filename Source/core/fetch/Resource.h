@@ -40,6 +40,7 @@
 namespace WebCore {
 
 class EventAction;
+class EventRacerLog;
 struct FetchInitiatorInfo;
 class MemoryCache;
 class CachedMetadata;
@@ -242,9 +243,9 @@ public:
     void assertAlive() const { }
 #endif
 
-    void setCallbackEventAction(EventAction *);
+    void setCallbackEventAction(PassRefPtr<EventRacerLog>, EventAction *);
     void clearCallbackEventAction();
-    unsigned int getCallbackEventRacerLogId() const;
+    PassRefPtr<EventRacerLog> getCallbackEventRacerLog() const;
     EventAction *getCallbackEventAction() const;
 
 protected:
@@ -395,7 +396,7 @@ private:
     Vector<RedirectPair> m_redirectChain;
 
     // EventRacer log id and event-action for the callback invocation.
-    unsigned int m_eventRacerLogId;
+    RefPtr<EventRacerLog> m_eventRacerLog;
     EventAction *m_callbackEventAction;
 };
 

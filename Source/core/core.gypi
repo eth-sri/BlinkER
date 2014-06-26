@@ -3277,6 +3277,8 @@
         ],
         'webcore_eventracer_files': [
             'eventracer/EventAction.h',
+            'eventracer/EventRacerContext.cpp',
+            'eventracer/EventRacerContext.h',
             'eventracer/EventRacerJoinActions.cpp',
             'eventracer/EventRacerJoinActions.h',
             'eventracer/EventRacerLog.cpp',

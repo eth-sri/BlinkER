@@ -99,6 +99,7 @@
 #include "core/editing/Editor.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/SpellChecker.h"
+#include "core/eventracer/EventRacerContext.h"
 #include "core/eventracer/EventRacerLog.h"
 #include "core/events/BeforeUnloadEvent.h"
 #include "core/events/Event.h"
@@ -1138,7 +1139,7 @@ void Document::setReadyState(ReadyState readyState)
     }
 
     m_readyState = readyState;
-    EventRacerLog *log = EventRacerLog::current();
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
     if (log && log->hasAction()) {
         OperationScope op("doc:ready-state-change");
         dispatchEvent(Event::create(EventTypeNames::readystatechange));
@@ -4613,8 +4614,8 @@ void Document::finishedParsing()
     setParsing(false);
     if (!m_documentTiming.domContentLoadedEventStart)
         m_documentTiming.domContentLoadedEventStart = monotonicallyIncreasingTime();
-    
-    EventRacerLog *log = EventRacerLog::current();
+
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
     if (log && log->hasAction()) {
         OperationScope op("doc:dcl");
         dispatchEvent(Event::createBubble(EventTypeNames::DOMContentLoaded));
@@ -5139,8 +5140,8 @@ Element* Document::pointerLockElement() const
 
 void Document::decrementLoadEventDelayCount()
 {
-    EventRacerLog *log = EventRacerLog::current();
-    if (log->hasAction())
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction())
         m_loadEventDelayActions.deferJoin(log->getCurrentAction());
 
     ASSERT(m_loadEventDelayCount);
@@ -5174,8 +5175,8 @@ bool Document::isDelayingLoadEvent()
 
 void Document::loadEventDelayTimerFired(EventRacerTimer<Document>*)
 {
-    EventRacerLog *log = EventRacerLog::current();
-    if (log->hasAction())
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction())
         m_loadEventDelayActions.join(log, log->getCurrentAction());
 
     if (frame())

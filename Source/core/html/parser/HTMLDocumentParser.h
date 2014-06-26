@@ -55,6 +55,7 @@ class BackgroundHTMLParser;
 class CompactHTMLToken;
 class Document;
 class DocumentFragment;
+class EventRacerLog;
 class EventAction;
 class HTMLDocument;
 class HTMLParserScheduler;
@@ -208,6 +209,7 @@ private:
     bool m_endWasDelayed;
     bool m_haveBackgroundParser;
     unsigned m_pumpSessionNestingLevel;
+    RefPtr<EventRacerLog> m_log;
     EventRacerJoinActions m_joinActions;
 };
 

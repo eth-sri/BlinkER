@@ -49,7 +49,6 @@ public:
     PendingScript()
         : m_watchingForLoad(false)
         , m_startingPosition(TextPosition::belowRangePosition())
-        , m_logId(0)
         , m_asyncEventAction(NULL)
     {
     }
@@ -57,7 +56,6 @@ public:
     PendingScript(Element* element, ScriptResource* resource)
         : m_watchingForLoad(false)
         , m_element(element)
-        , m_logId(0)
         , m_asyncEventAction(NULL)
     {
         setScriptResource(resource);
@@ -68,7 +66,7 @@ public:
         , m_watchingForLoad(other.m_watchingForLoad)
         , m_element(other.m_element)
         , m_startingPosition(other.m_startingPosition)
-        , m_logId(other.m_logId)
+        , m_log(other.m_log)
         , m_asyncEventAction(other.m_asyncEventAction)
     {
         setScriptResource(other.resource());
@@ -84,7 +82,7 @@ public:
         m_watchingForLoad = other.m_watchingForLoad;
         m_element = other.m_element;
         m_startingPosition = other.m_startingPosition;
-        m_logId = other.m_logId;
+        m_log = other.m_log;
         m_asyncEventAction = other.m_asyncEventAction;
         this->ResourceOwner<ScriptResource, ResourceClient>::operator=(other);
 
@@ -105,18 +103,18 @@ public:
 
     virtual void notifyFinished(Resource*);
 
-    void setEventRacerContext(EventAction *act) {
-        m_logId = EventRacerLog::current()->getId();
+    void setEventRacerContext(PassRefPtr<EventRacerLog> log, EventAction *act) {
+        m_log = log;
         m_asyncEventAction = act;
     }
-    unsigned int getEventRacerLogId() const { return m_logId; }
+    PassRefPtr<EventRacerLog> getEventRacerLog() { return m_log; }
     EventAction *getAsyncEventAction() const { return m_asyncEventAction; }
 
 private:
     bool m_watchingForLoad;
     RefPtr<Element> m_element;
     TextPosition m_startingPosition; // Only used for inline script tags.
-    unsigned int m_logId;
+    RefPtr<EventRacerLog> m_log;
     EventAction *m_asyncEventAction;
 };
 

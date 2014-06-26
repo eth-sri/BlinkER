@@ -9,7 +9,8 @@ void EventRacerJoinActions::deferJoin(EventAction *act) {
     m_actions.append(act);
 }
 
-void EventRacerJoinActions::join(EventRacerLog *log, EventAction *act) {
+void EventRacerJoinActions::join(PassRefPtr<EventRacerLog> lg, EventAction *act) {
+    RefPtr<EventRacerLog> log = lg;
     for (size_t i = 0; i < m_actions.size(); ++i)
         log->join(m_actions[i], act);
     m_actions.clear();

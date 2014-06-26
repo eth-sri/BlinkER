@@ -23,16 +23,14 @@ protected:
     public:
         ~EventRacerData();
 
-        static PassRefPtr<EventRacerData> create() {
-            return adoptRef(new EventRacerData);
-        }
+        static PassRefPtr<EventRacerData> create(PassRefPtr<EventRacerLog>);
 
-        unsigned int logId;
+        RefPtr<EventRacerLog> log;
         EventRacerJoinActions pred;
         EventAction *act;
 
     private:
-        EventRacerData();
+        EventRacerData(PassRefPtr<EventRacerLog>);
     };
 
     RefPtr<EventRacerData> m_data;

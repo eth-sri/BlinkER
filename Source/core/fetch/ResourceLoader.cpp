@@ -30,6 +30,7 @@
 #include "config.h"
 #include "core/fetch/ResourceLoader.h"
 
+#include "core/eventracer/EventRacerContext.h"
 #include "core/eventracer/EventRacerLog.h"
 #include "core/fetch/Resource.h"
 #include "core/fetch/ResourceLoaderHost.h"
@@ -85,7 +86,6 @@ ResourceLoader::ResourceLoader(ResourceLoaderHost* host, Resource* resource, con
     , m_state(Initialized)
     , m_connectionState(ConnectionStateNew)
     , m_requestCountTracker(adoptPtr(new RequestCountTracker(host, resource)))
-    , m_logId(0)
     , m_eventAction(0)
 {
 }
@@ -158,11 +158,12 @@ void ResourceLoader::start()
     if (m_state == Terminated)
         return;
 
-    ASSERT(!m_logId);
-    EventRacerLog *log = EventRacerLog::current();
-    if (log && log->hasAction()) {
-        m_logId = log->getId();
-        m_eventAction = log->getCurrentAction();
+    // FIXME: Ensure this is always called within an EventRacer context, so
+    // |m_log| is non-null in the rest of the functions.
+    ASSERT(!m_log);
+    m_log = EventRacerContext::getLog();
+    if (m_log && m_log->hasAction()) {
+        m_eventAction = m_log->getCurrentAction();
         m_eventAction->willDeferJoin();
     }
 
@@ -257,32 +258,44 @@ void ResourceLoader::cancel(const ResourceError& error)
     if (m_state == Terminated)
         return;
 
-    // Resource loading can be canceled in a variety of ways, including by
-    // javascript, by user actions or by error response to the resource request.
-    // Thus, the |cancel| function can be called both with or without an active
-    // EventRacer context.
-    EventRacerLog *log = EventRacerLog::current();
-    bool wasInEventAction = log->hasAction();
-    
-    // Naturally, cancellation of a load must be preceded by the initiation of
-    // the load, therefore, no matter if we have an already active event-action
-    // or not, join with the last event-action associated with this load.
-    if (wasInEventAction) {
-        if (m_eventAction && log->getCurrentAction() != m_eventAction)
-            log->join(m_eventAction, log->getCurrentAction());
-    } else {
-        EventAction *act = log->beginEventAction();
-        if (m_eventAction)
-            log->join(m_eventAction, act);
-        log->logOperation(act, Operation::ENTER_SCOPE, "rsc-cancel");
-        m_eventAction = act;
-        m_eventAction->willDeferJoin();
-    }
- 
     // This function calls out to clients at several points that might do
     // something that causes the last reference to this object to go away.
     RefPtr<ResourceLoader> protector(this);
 
+    // Resource loading can be canceled in a variety of ways, including by
+    // javascript, by user actions or by an error response to the resource
+    // request.  Thus, the |cancel| function can be called both with or without
+    // an active EventRacer context, or even with a different log, than the one,
+    // which initiated the request.
+    EventRacerContext ctx(m_log);
+
+    if (!m_log) {
+        doCancel(error);
+        return;
+    }
+
+    EventAction *action = m_log->getCurrentAction();
+    bool wasInEventAction = !!action;
+    if (!wasInEventAction) {
+        action = m_log->beginEventAction();
+        if (m_eventAction)
+            m_log->join(m_eventAction, action);
+
+        m_eventAction = action;
+        m_eventAction->willDeferJoin();
+    }
+
+    {
+        OperationScope op("rsc-cancel");
+        doCancel(error);
+    }
+
+    if (!wasInEventAction)
+        m_log->endEventAction(m_eventAction);
+}
+
+void ResourceLoader::doCancel(const ResourceError& error)
+{
     if (m_state == Finishing) {
         releaseResources();
     } else {
@@ -309,9 +322,6 @@ void ResourceLoader::cancel(const ResourceError& error)
         if (m_state != Terminated)
             releaseResources();
     }
-
-    if (m_eventAction && !wasInEventAction)
-        log->endEventAction(m_eventAction);
 }
 
 void ResourceLoader::willSendRequest(blink::WebURLLoader*, blink::WebURLRequest& passedRequest, const blink::WebURLResponse& passedRedirectResponse)
@@ -388,24 +398,21 @@ void ResourceLoader::didReceiveResponse(blink::WebURLLoader*, const blink::WebUR
             return;
         }
     }
-
-    EventRacerLog *log = EventRacerLog::current();
-    if (m_eventAction) {
-        EventAction *act = log->beginEventAction();
-        log->join(m_eventAction, act);
-        log->logOperation(act, Operation::ENTER_SCOPE, "rsc-resp");
-        m_eventAction = act;
-        m_eventAction->willDeferJoin();
-    }
-
     // Reference the object in this method since the additional processing can do
     // anything including removing the last reference to this object.
     RefPtr<ResourceLoader> protect(this);
-    m_resource->responseReceived(resourceResponse);
 
-    if (m_eventAction) {  // FIXME: exception safety
-        log->logOperation(m_eventAction, Operation::EXIT_SCOPE);
-        log->endEventAction(m_eventAction);
+    if (m_eventAction) {
+        ASSERT(!EventRacerContext::getLog());
+        EventRacerContext ctx(m_log);
+        EventActionScope act(m_log->createEventAction());
+        OperationScope op("rsc-resp");
+        m_log->join(m_eventAction, m_log->getCurrentAction());
+        m_eventAction = m_log->getCurrentAction();
+        m_eventAction->willDeferJoin();
+        m_resource->responseReceived(resourceResponse);
+    } else {
+        m_resource->responseReceived(resourceResponse);
     }
 
     if (m_state == Terminated)
@@ -452,16 +459,6 @@ void ResourceLoader::didReceiveData(blink::WebURLLoader*, const char* data, int 
         return;
     ASSERT(m_state == Initialized);
 
-    // Activate the initial event action only on the first data receive.
-    EventRacerLog *log = EventRacerLog::current();
-    if (m_eventAction && entryState == ConnectionStateReceivedResponse) {
-        EventAction *act = log->beginEventAction();
-        log->join(m_eventAction, act);
-        log->logOperation(act, Operation::ENTER_SCOPE, "rsc-data");
-        m_eventAction = act;
-        m_eventAction->willDeferJoin();
-    }
-
     // Reference the object in this method since the additional processing can do
     // anything including removing the last reference to this object.
     RefPtr<ResourceLoader> protect(this);
@@ -470,11 +467,19 @@ void ResourceLoader::didReceiveData(blink::WebURLLoader*, const char* data, int 
     // However, with today's computers and networking speeds, this won't happen in practice.
     // Could be an issue with a giant local file.
     m_host->didReceiveData(m_resource, data, length, encodedDataLength);
-    m_resource->appendData(data, length);
 
-    if (m_eventAction && entryState == ConnectionStateReceivedResponse) {  // FIXME: exception safety
-        log->logOperation(m_eventAction, Operation::EXIT_SCOPE);
-        log->endEventAction(m_eventAction);
+    // Activate the event action only on the first data receive.
+    if (m_eventAction && entryState == ConnectionStateReceivedResponse) {
+        ASSERT(!EventRacerContext::getLog());
+        EventRacerContext ctx(m_log);
+        EventActionScope act(m_log->createEventAction());
+        OperationScope op("rsc-data");
+        m_log->join(m_eventAction, m_log->getCurrentAction());
+        m_eventAction = m_log->getCurrentAction();
+        m_eventAction->willDeferJoin();
+        m_resource->appendData(data, length);
+    } else {
+        m_resource->appendData(data, length);
     }
 }
 
@@ -487,12 +492,17 @@ void ResourceLoader::didFinishLoading(blink::WebURLLoader*, double finishTime, i
     ASSERT(m_state != Terminated);
     WTF_LOG(ResourceLoading, "Received '%s'.", m_resource->url().string().latin1().data());
 
-    EventRacerLog *log = EventRacerLog::current();
+    OwnPtr<EventRacerContext> ctx;
+    OwnPtr<EventActionScope> act;
+    OwnPtr<OperationScope> op;
+
     if (m_eventAction) {
-        EventAction *act = log->beginEventAction();
-        log->join(m_eventAction, act);
-        log->logOperation(act, Operation::ENTER_SCOPE, "rsc-finish");
-        m_eventAction = act;
+        ASSERT(!EventRacerContext::getLog());
+        ctx = adoptPtr(new EventRacerContext(m_log));
+        act = adoptPtr(new EventActionScope(m_log->createEventAction()));
+        op = adoptPtr(new OperationScope("rsc-finish"));
+        m_log->join(m_eventAction, m_log->getCurrentAction());
+        m_eventAction = m_log->getCurrentAction();
         m_eventAction->willDeferJoin();
     }
 
@@ -506,11 +516,6 @@ void ResourceLoader::didFinishLoading(blink::WebURLLoader*, double finishTime, i
     // the resources a second time, they have been released by cancel.
     if (m_state != Terminated)
         releaseResources();
-
-    if (m_eventAction) { // FIXME: exception safety
-        log->logOperation(m_eventAction, Operation::EXIT_SCOPE);
-        log->endEventAction(m_eventAction);
-    }
 }
 
 void ResourceLoader::didFail(blink::WebURLLoader*, const blink::WebURLError& error)
@@ -519,12 +524,17 @@ void ResourceLoader::didFail(blink::WebURLLoader*, const blink::WebURLError& err
     ASSERT(m_state != Terminated);
     WTF_LOG(ResourceLoading, "Failed to load '%s'.\n", m_resource->url().string().latin1().data());
 
-    EventRacerLog *log = EventRacerLog::current();
+    OwnPtr<EventRacerContext> ctx;
+    OwnPtr<EventActionScope> act;
+    OwnPtr<OperationScope> op;
+
     if (m_eventAction) {
-        EventAction *act = log->beginEventAction();
-        log->join(m_eventAction, act);
-        log->logOperation(act, Operation::ENTER_SCOPE, "rsc-fail");
-        m_eventAction = act;
+        ASSERT(!EventRacerContext::getLog());
+        ctx = adoptPtr(new EventRacerContext(m_log));
+        act = adoptPtr(new EventActionScope(m_log->createEventAction()));
+        op = adoptPtr(new OperationScope("rsc-fail"));
+        m_log->join(m_eventAction, m_log->getCurrentAction());
+        m_eventAction = m_log->getCurrentAction();
         m_eventAction->willDeferJoin();
     }
 
@@ -543,11 +553,6 @@ void ResourceLoader::didFail(blink::WebURLLoader*, const blink::WebURLError& err
 
     if (m_state != Terminated)
         releaseResources();
-
-    if (m_eventAction) { // FIXME: exception safety
-        log->logOperation(m_eventAction, Operation::EXIT_SCOPE);
-        log->endEventAction(m_eventAction);
-    }
 }
 
 bool ResourceLoader::isLoadedBy(ResourceLoaderHost* loader) const

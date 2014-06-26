@@ -51,6 +51,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/Node.h"
 #include "core/dom/ScriptableDocumentParser.h"
+#include "core/eventracer/EventRacerContext.h"
 #include "core/eventracer/EventRacerLog.h"
 #include "core/events/Event.h"
 #include "core/events/EventListener.h"
@@ -160,15 +161,13 @@ v8::Local<v8::Value> ScriptController::callFunction(ExecutionContext* context, v
     }
 
     v8::Local<v8::Value> result;
-    EventRacerLog *log = EventRacerLog::current();
-    if (log->hasAction()) {
-        OperationScope op("v8:call-fn-nested");
+    if (RefPtr<EventRacerLog> log = EventRacerContext::getLog()) {
+        ASSERT(log->hasAction());
+        OperationScope op("v8:call-fn");
         result = V8ScriptRunner::callFunction(function, context, receiver, argc, info, isolate);
     } else {
         // This is temporary to help identify callers.  Eventually, we will
         // always come with an active event-action here.
-        EventActionScope act(log->createEventAction());
-        OperationScope op("v8:call-fn-top");
         result = V8ScriptRunner::callFunction(function, context, receiver, argc, info, isolate);
     }
 
@@ -196,15 +195,13 @@ v8::Local<v8::Value> ScriptController::executeScriptAndReturnValue(v8::Handle<v8
 
         // Keep LocalFrame (and therefore ScriptController) alive.
         RefPtr<LocalFrame> protect(m_frame);
-        EventRacerLog *log = EventRacerLog::current();
-        if (log->hasAction()) {
-            OperationScope op("v8:exc-scr-nested");
+        if (RefPtr<EventRacerLog> log = EventRacerContext::getLog()) {
+            ASSERT(log->hasAction());
+            OperationScope op("v8:exec-scr");
             result = V8ScriptRunner::runCompiledScript(script, m_frame->document(), m_isolate);
         } else {
             // This is temporary to help identify callers.  Eventually, we will
             // always come with an active event-action here.
-            EventActionScope act(log->createEventAction());
-            OperationScope op("v8:exc-scr-top");
             result = V8ScriptRunner::runCompiledScript(script, m_frame->document(), m_isolate);
         }
         ASSERT(!tryCatch.HasCaught() || result.IsEmpty());
