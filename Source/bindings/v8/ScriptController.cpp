@@ -161,8 +161,8 @@ v8::Local<v8::Value> ScriptController::callFunction(ExecutionContext* context, v
     }
 
     v8::Local<v8::Value> result;
-    if (RefPtr<EventRacerLog> log = EventRacerContext::getLog()) {
-        ASSERT(log->hasAction());
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction()) {
         OperationScope op("v8:call-fn");
         result = V8ScriptRunner::callFunction(function, context, receiver, argc, info, isolate);
     } else {

@@ -21,7 +21,13 @@ public:
     ~EventRacerLog();
 
     // Creates a new EventRacer log.
-    static PassRefPtr<EventRacerLog> start(PassOwnPtr<EventRacerLogClient>);
+    static PassRefPtr<EventRacerLog> create();
+
+    // Called on comitting a provisional load. Sends event action data to the host.
+    void connect(PassOwnPtr<EventRacerLogClient>);
+
+    // Returns true if the log is connected to the host.
+    bool isConnected() const { return !!m_client; }
 
     // Returns a unique id of the log (mostly for error checking).
     unsigned int getId() const { return m_id; }
@@ -70,15 +76,18 @@ public:
     EventAction *getCurrentAction() const { return m_currentAction; }
 
 private:
-    EventRacerLog(WTF::PassOwnPtr<EventRacerLogClient>);
+    EventRacerLog();
 
     // Sends event action data to the host.
     void flush(EventAction *);
+    void flushPendingEdges();
+    void flushPendingStrings();
 
     unsigned int m_id;
     EventAction *m_currentAction;
     unsigned int m_nextEventActionId;
-    WTF::HashMap<unsigned int, WTF::OwnPtr<EventAction> > m_eventActions;
+    typedef WTF::HashMap<unsigned int, WTF::OwnPtr<EventAction> > EventActionsMapType;
+    EventActionsMapType m_eventActions;
     WTF::Vector<EventAction::Edge> m_pendingEdges;
     StringSet m_strings;
     size_t m_pendingString;

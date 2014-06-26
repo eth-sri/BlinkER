@@ -15,29 +15,57 @@ void EventAction::addEdge(unsigned int dst) {
 }
 
 // EventRacerLog ---------------------------------------------------------------
-PassRefPtr<EventRacerLog> EventRacerLog::start(WTF::PassOwnPtr<EventRacerLogClient> c) {
-    RefPtr<EventRacerLog> log = adoptRef(new EventRacerLog(c));
-    return log;
+PassRefPtr<EventRacerLog> EventRacerLog::create() {
+    return adoptRef(new EventRacerLog);
 }
 
 unsigned int EventRacerLog::m_nextLogId;
 
-EventRacerLog::EventRacerLog(PassOwnPtr<EventRacerLogClient> client)
-	: m_id(++m_nextLogId), m_currentAction(NULL), m_nextEventActionId(1), m_pendingString(1), m_client(client) {
-}
+EventRacerLog::EventRacerLog()
+    : m_id(++m_nextLogId) , m_currentAction(NULL) , m_nextEventActionId(1) , m_pendingString(1)
+{}
 
 EventRacerLog::~EventRacerLog() {}
 
+// Called on comitting a provisional load. Sends event action data to the host.
+void EventRacerLog::connect(PassOwnPtr<EventRacerLogClient> c) {
+    ASSERT(!m_client);
+    ASSERT(!m_currentAction);
+    m_client = c;
+
+    EventActionsMapType::const_iterator i;
+    for(i = m_eventActions.begin(); i != m_eventActions.end(); ++i) {
+        EventAction *a = i->value.get();
+        m_client->didCompleteEventAction(*a);
+
+        EventAction::EdgesType::const_iterator j;
+        for (j = a->getEdges().begin(); j != a->getEdges().end(); ++j)
+            m_pendingEdges.append(std::make_pair(a->getId(), *j));
+    }
+    flushPendingEdges();
+    flushPendingStrings();
+}
+
 // Sends event action data to the host.
 void EventRacerLog::flush(EventAction *a) {
+    if (!m_client)
+        return;
     m_client->didCompleteEventAction(*a);
     EventAction::EdgesType::const_iterator i;
     for (i = a->getEdges().begin(); i != a->getEdges().end(); ++i)
         m_pendingEdges.append(std::make_pair(a->getId(), *i));
+    flushPendingEdges();
+    flushPendingStrings();
+}
+
+void EventRacerLog::flushPendingEdges() {
     if (m_pendingEdges.size()) {
         m_client->didHappenBefore(m_pendingEdges);
         m_pendingEdges.clear();
     }
+}
+
+void EventRacerLog::flushPendingStrings() {
     if (m_pendingString < m_strings.size()) {
         WTF::Vector<WTF::String> s;
         s.reserveInitialCapacity(m_strings.size() - m_pendingString);

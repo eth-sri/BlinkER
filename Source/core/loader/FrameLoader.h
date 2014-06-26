@@ -53,6 +53,7 @@ class Chrome;
 class DOMWrapperWorld;
 class DocumentLoader;
 class Event;
+class EventRacerLog;
 class FetchContext;
 class FormState;
 class FormSubmission;
@@ -282,6 +283,9 @@ private:
     SandboxFlags m_forcedSandboxFlags;
 
     bool m_willDetachClient;
+
+    RefPtr<EventRacerLog> m_eventRacerLog;
+    RefPtr<EventRacerLog> m_provisionalEventRacerLog;
 };
 
 } // namespace WebCore

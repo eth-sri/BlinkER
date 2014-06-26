@@ -869,6 +869,9 @@ void FrameLoader::commitProvisionalLoad()
         pdl->timing()->setHasSameOriginAsPreviousDocument(securityOrigin->canRequest(m_frame->document()->url()));
     }
 
+    // EventRacer data shoud be still collected in the "old" log.
+    EventRacerContext ctx(m_eventRacerLog);
+
     // The call to closeURL() invokes the unload event handler, which can execute arbitrary
     // JavaScript. If the script initiates a new load, we need to abandon the current load,
     // or the two will stomp each other.
@@ -882,6 +885,14 @@ void FrameLoader::commitProvisionalLoad()
         return;
     if (m_documentLoader)
         m_documentLoader->detachFromFrame();
+
+    // Connect the host side of the event racer log.  
+    if (m_provisionalEventRacerLog && !m_provisionalEventRacerLog->isConnected()) {
+        if (OwnPtr<EventRacerLogClient> clnt = m_client->createEventRacerLogClient())
+            m_provisionalEventRacerLog->connect(clnt.release());
+    }
+
+    m_eventRacerLog = m_provisionalEventRacerLog.release();
     m_documentLoader = m_provisionalDocumentLoader.release();
     m_state = FrameStateCommittedPage;
 
@@ -1319,21 +1330,14 @@ void FrameLoader::loadWithNavigationAction(const NavigationAction& action, Frame
 
     if (RefPtr<EventRacerLog> log = EventRacerContext::getLog()) {
         ASSERT(log->hasAction());
+        m_provisionalEventRacerLog = log;
         // Just continue inside the current event-action.
         m_provisionalDocumentLoader->startLoadingMainResource();
     } else {
-        // Otherwise create a new EventRacer log for the new page.
-        if (OwnPtr<EventRacerLogClient> clnt = m_client->createEventRacerLogClient()) {
-            log = EventRacerLog::start(clnt.release());
-            EventRacerContext ctx(log);
-            EventActionScope act(log->createEventAction());
-            m_provisionalDocumentLoader->startLoadingMainResource();
-        } else {
-            // If we weren't able to create the log client, then this is
-            // navigation to the "swapped out" url, during which nothing
-            // interesting happens. Maybe.
-            m_provisionalDocumentLoader->startLoadingMainResource();
-        }
+        m_provisionalEventRacerLog = EventRacerLog::create();
+        EventRacerContext ctx(m_provisionalEventRacerLog);
+        EventActionScope act(m_provisionalEventRacerLog->createEventAction());
+        m_provisionalDocumentLoader->startLoadingMainResource();
     }
 }
 
