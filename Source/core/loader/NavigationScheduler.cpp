@@ -354,7 +354,7 @@ void NavigationScheduler::scheduleHistoryNavigation(int steps)
     schedule(adoptPtr(new ScheduledHistoryNavigation(steps)));
 }
 
-void NavigationScheduler::timerFired(Timer<NavigationScheduler>*)
+void NavigationScheduler::timerFired(EventRacerTimer<NavigationScheduler>*)
 {
     if (!m_frame->page())
         return;

@@ -31,7 +31,7 @@
 #ifndef NavigationScheduler_h
 #define NavigationScheduler_h
 
-#include "platform/Timer.h"
+#include "core/eventracer/EventRacerTimer.h"
 #include "platform/weborigin/Referrer.h"
 #include "wtf/Forward.h"
 #include "wtf/HashMap.h"
@@ -91,13 +91,13 @@ private:
     bool shouldScheduleNavigation() const;
     bool shouldScheduleNavigation(const String& url) const;
 
-    void timerFired(Timer<NavigationScheduler>*);
+    void timerFired(EventRacerTimer<NavigationScheduler>*);
     void schedule(PassOwnPtr<ScheduledNavigation>);
 
     static bool mustLockBackForwardList(LocalFrame* targetFrame);
 
     LocalFrame* m_frame;
-    Timer<NavigationScheduler> m_timer;
+    EventRacerTimer<NavigationScheduler> m_timer;
     OwnPtr<ScheduledNavigation> m_redirect;
 };
 
