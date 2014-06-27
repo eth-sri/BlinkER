@@ -22,17 +22,41 @@ PassRefPtr<EventRacerLog> EventRacerLog::create() {
 unsigned int EventRacerLog::m_nextLogId;
 
 EventRacerLog::EventRacerLog()
-    : m_id(++m_nextLogId) , m_currentAction(NULL) , m_nextEventActionId(1) , m_pendingString(1)
+    : m_id(++m_nextLogId), m_currentAction(NULL), m_nextEventActionId(1), m_pendingString(1),
+      m_needFlushAll(true)
 {}
 
 EventRacerLog::~EventRacerLog() {}
 
-// Called on comitting a provisional load. Sends event action data to the host.
+// Called on comitting a provisional load.
 void EventRacerLog::connect(PassOwnPtr<EventRacerLogClient> c) {
     ASSERT(!m_client);
-    ASSERT(!m_currentAction);
     m_client = c;
 
+    // If there's no current event-action, flush the darta to the host,
+    // otherwise let the event-action do this, upon its end.
+    if (!m_currentAction)
+        flushAll();
+}
+
+// Sends event action data to the host.
+void EventRacerLog::flush(EventAction *a) {
+    if (!m_client)
+        return;
+    if (m_needFlushAll) {
+        flushAll();
+    } else {
+        m_client->didCompleteEventAction(*a);
+        EventAction::EdgesType::const_iterator i;
+        for (i = a->getEdges().begin(); i != a->getEdges().end(); ++i)
+            m_pendingEdges.append(std::make_pair(a->getId(), *i));
+        flushPendingEdges();
+        flushPendingStrings();
+    }
+}
+
+void EventRacerLog::flushAll() {
+    m_needFlushAll = false;
     EventActionsMapType::const_iterator i;
     for(i = m_eventActions.begin(); i != m_eventActions.end(); ++i) {
         EventAction *a = i->value.get();
@@ -42,18 +66,6 @@ void EventRacerLog::connect(PassOwnPtr<EventRacerLogClient> c) {
         for (j = a->getEdges().begin(); j != a->getEdges().end(); ++j)
             m_pendingEdges.append(std::make_pair(a->getId(), *j));
     }
-    flushPendingEdges();
-    flushPendingStrings();
-}
-
-// Sends event action data to the host.
-void EventRacerLog::flush(EventAction *a) {
-    if (!m_client)
-        return;
-    m_client->didCompleteEventAction(*a);
-    EventAction::EdgesType::const_iterator i;
-    for (i = a->getEdges().begin(); i != a->getEdges().end(); ++i)
-        m_pendingEdges.append(std::make_pair(a->getId(), *i));
     flushPendingEdges();
     flushPendingStrings();
 }

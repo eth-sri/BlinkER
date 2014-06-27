@@ -23,7 +23,7 @@ public:
     // Creates a new EventRacer log.
     static PassRefPtr<EventRacerLog> create();
 
-    // Called on comitting a provisional load. Sends event action data to the host.
+    // Called on comitting a provisional load.
     void connect(PassOwnPtr<EventRacerLogClient>);
 
     // Returns true if the log is connected to the host.
@@ -80,6 +80,7 @@ private:
 
     // Sends event action data to the host.
     void flush(EventAction *);
+    void flushAll();
     void flushPendingEdges();
     void flushPendingStrings();
 
@@ -92,6 +93,7 @@ private:
     StringSet m_strings;
     size_t m_pendingString;
 
+    bool m_needFlushAll;
     OwnPtr<EventRacerLogClient> m_client;
 
     static unsigned int m_nextLogId;
