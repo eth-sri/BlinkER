@@ -27,6 +27,8 @@
 #include "core/dom/Element.h"
 #include "core/dom/IncrementLoadEventDelayCount.h"
 #include "core/dom/Microtask.h"
+#include "core/eventracer/EventRacerContext.h"
+#include "core/eventracer/EventRacerLog.h"
 #include "core/events/Event.h"
 #include "core/events/EventSender.h"
 #include "core/fetch/CrossOriginAccessControl.h"
@@ -66,15 +68,30 @@ public:
         : m_loader(loader)
         , m_shouldBypassMainWorldContentSecurityPolicy(false)
         , m_weakFactory(this)
+        , m_startAction(0)
     {
         LocalFrame* frame = loader->m_element->document().frame();
         m_shouldBypassMainWorldContentSecurityPolicy = frame->script().shouldBypassMainWorldContentSecurityPolicy();
+        m_log = EventRacerContext::getLog();
+        if (m_log && m_log->hasAction()) {
+            m_startAction = m_log->getCurrentAction();
+            m_startAction->willDeferJoin();
+        }
     }
 
     virtual void run() OVERRIDE
     {
         if (m_loader) {
-            m_loader->doUpdateFromElement(m_shouldBypassMainWorldContentSecurityPolicy);
+            if (m_log && m_startAction && !m_log->hasAction()) {
+                EventRacerContext ctx(m_log);
+                EventAction *action = m_log->createEventAction();
+                EventActionScope act(action);
+                m_log->join(m_startAction, action);
+                OperationScope op("img-ldr:tsk-run");
+                m_loader->doUpdateFromElement(m_shouldBypassMainWorldContentSecurityPolicy);
+            } else {
+                m_loader->doUpdateFromElement(m_shouldBypassMainWorldContentSecurityPolicy);
+            }
         }
     }
 
@@ -92,6 +109,8 @@ private:
     ImageLoader* m_loader;
     bool m_shouldBypassMainWorldContentSecurityPolicy;
     WeakPtrFactory<Task> m_weakFactory;
+    RefPtr<EventRacerLog> m_log;
+    EventAction *m_startAction;
 };
 
 ImageLoader::ImageLoader(Element* element)
