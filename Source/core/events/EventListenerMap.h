@@ -34,15 +34,68 @@
 #define EventListenerMap_h
 
 #include "core/events/RegisteredEventListener.h"
+#include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/text/AtomicStringHash.h"
 
 namespace WebCore {
 
+class EventAction;
 class EventTarget;
 
 typedef Vector<RegisteredEventListener, 1> EventListenerVector;
+
+struct EventListenerMapEntryInit {
+    EventListenerMapEntryInit(const WTF::AtomicString &typ,
+                              WTF::PassOwnPtr<EventListenerVector> lis,
+                              EventAction *act)
+        : type(typ), listeners(lis), action(act)
+    {}
+
+    WTF::AtomicString type;
+    WTF::PassOwnPtr<EventListenerVector> listeners;
+    EventAction *action;
+};
+
+struct EventListenerMapEntry {
+    EventListenerMapEntry() : action(0) {}
+    EventListenerMapEntry(const EventListenerMapEntryInit &init)
+        : type(init.type), listeners(init.listeners), action(init.action)
+    {}
+
+    WTF::AtomicString type;
+    WTF::OwnPtr<EventListenerVector> listeners;
+    EventAction *action;
+private:
+    EventListenerMapEntry(const EventListenerMapEntry &);
+};
+
+} // end namespace WebCore
+
+namespace WTF {
+    template<>
+    struct VectorTraits<WebCore::EventListenerMapEntry>
+    {
+        typedef VectorTraits<AtomicString> FirstTraits;
+        typedef VectorTraits<OwnPtr<WebCore::EventListenerVector> > SecondTraits;
+
+        static const bool needsDestruction = FirstTraits::needsDestruction || SecondTraits::needsDestruction;
+        static const bool canInitializeWithMemset = FirstTraits::canInitializeWithMemset && SecondTraits::canInitializeWithMemset;
+        static const bool canMoveWithMemcpy = FirstTraits::canMoveWithMemcpy && SecondTraits::canMoveWithMemcpy;
+        static const bool canCopyWithMemcpy = FirstTraits::canCopyWithMemcpy && SecondTraits::canCopyWithMemcpy;
+        static const bool canFillWithMemset = false;
+        static const bool canCompareWithMemcmp = FirstTraits::canCompareWithMemcmp && SecondTraits::canCompareWithMemcmp;
+        template <typename U = void>
+        struct NeedsTracingLazily {
+            static const bool value = ShouldBeTraced<FirstTraits>::value || ShouldBeTraced<SecondTraits>::value;
+        };
+        static const bool isWeak = FirstTraits::isWeak || SecondTraits::isWeak;
+    };
+
+} // end namespace WTF
+
+namespace WebCore {
 
 class EventListenerMap {
 public:
@@ -56,6 +109,8 @@ public:
     bool add(const AtomicString& eventType, PassRefPtr<EventListener>, bool useCapture);
     bool remove(const AtomicString& eventType, EventListener*, bool useCapture, size_t& indexOfRemovedListener);
     EventListenerVector* find(const AtomicString& eventType);
+    EventAction *getEventAction(const AtomicString &eventType);
+    void setEventAction(const AtomicString &eventType, EventAction *act);
     Vector<AtomicString> eventTypes() const;
 
     void removeFirstEventListenerCreatedFromMarkup(const AtomicString& eventType);
@@ -66,7 +121,7 @@ private:
 
     void assertNoActiveIterators();
 
-    Vector<std::pair<AtomicString, OwnPtr<EventListenerVector> >, 2> m_entries;
+    Vector<EventListenerMapEntry, 2> m_entries;
 
 #ifndef NDEBUG
     int m_activeIteratorCount;

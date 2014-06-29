@@ -7,11 +7,6 @@ namespace WebCore {
 // EventAction -----------------------------------------------------------------
 void EventAction::addEdge(unsigned int dst) {
     m_edges.append(dst);
-    if (m_state == COMPLETED) {
-        // This must be a deferred join.
-        ASSERT(m_deferCount);
-        --m_deferCount;
-    }
 }
 
 // EventRacerLog ---------------------------------------------------------------

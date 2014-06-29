@@ -24,6 +24,7 @@
 #include "core/svg/SVGElementInstance.h"
 
 #include "core/dom/ContainerNodeAlgorithms.h"
+#include "core/eventracer/EventRacerLog.h"
 #include "core/events/Event.h"
 #include "core/events/EventListener.h"
 #include "core/svg/SVGElement.h"
@@ -221,6 +222,23 @@ EventTargetData& SVGElementInstance::ensureEventTargetData()
     // As we're forwarding those calls to the correspondingElement(), no one should ever call this function.
     ASSERT_NOT_REACHED();
     return *eventTargetData();
+}
+
+void SVGElementInstance::setCreatorEventRacerContext(PassRefPtr<EventRacerLog>, EventAction *)
+{
+    ASSERT_NOT_REACHED();
+}
+
+PassRefPtr<EventRacerLog> SVGElementInstance::getCreatorEventRacerLog() const
+{
+    ASSERT_NOT_REACHED();
+    return PassRefPtr<EventRacerLog>();
+}
+
+EventAction *SVGElementInstance::getCreatorEventAction() const
+{
+    ASSERT_NOT_REACHED();
+    return 0;
 }
 
 void SVGElementInstance::trace(Visitor* visitor)

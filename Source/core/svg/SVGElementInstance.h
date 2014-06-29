@@ -33,6 +33,8 @@ void addChildNodesToDeletionQueue(GenericNode*& head, GenericNode*& tail, Generi
 };
 
 class Document;
+class EventAction;
+class EventRacerLog;
 class SVGElement;
 class SVGUseElement;
 
@@ -76,6 +78,10 @@ public:
     virtual void trace(Visitor*);
 
     // EventTarget API
+    virtual void setCreatorEventRacerContext(PassRefPtr<EventRacerLog>, EventAction *) OVERRIDE;;
+    virtual PassRefPtr<EventRacerLog> getCreatorEventRacerLog() const OVERRIDE;
+    virtual EventAction *getCreatorEventAction() const OVERRIDE;
+
     DECLARE_FORWARDING_ATTRIBUTE_EVENT_LISTENER(correspondingElement(), abort);
     DECLARE_FORWARDING_ATTRIBUTE_EVENT_LISTENER(correspondingElement(), blur);
     DECLARE_FORWARDING_ATTRIBUTE_EVENT_LISTENER(correspondingElement(), change);

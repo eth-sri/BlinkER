@@ -374,7 +374,6 @@ void HTMLDocumentParser::didReceiveParsedChunkFromBackgroundParser(PassOwnPtr<Pa
     } else {
         OperationScope op("parser:from-bck");
 
-
         ASSERT(m_speculations.isEmpty());
         chunk->preloads.clear(); // We don't need to preload because we're going to parse immediately.
         m_speculations.append(chunk);

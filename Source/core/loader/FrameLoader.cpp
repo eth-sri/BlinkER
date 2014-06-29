@@ -1336,7 +1336,13 @@ void FrameLoader::loadWithNavigationAction(const NavigationAction& action, Frame
     } else {
         m_provisionalEventRacerLog = EventRacerLog::create();
         EventRacerContext ctx(m_provisionalEventRacerLog);
-        EventActionScope act(m_provisionalEventRacerLog->createEventAction());
+        EventAction *action = m_provisionalEventRacerLog->createEventAction();
+        EventActionScope act(action);
+
+        DOMWindow *win = m_frame->domWindow();
+        ASSERT(win);
+        if (!win->getCreatorEventAction())
+            win->setCreatorEventRacerContext(m_provisionalEventRacerLog, action);
         m_provisionalDocumentLoader->startLoadingMainResource();
     }
 }

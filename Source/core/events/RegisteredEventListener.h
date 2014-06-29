@@ -28,17 +28,20 @@
 #include "wtf/RefPtr.h"
 
 namespace WebCore {
+    class EventAction;
 
     class RegisteredEventListener {
     public:
         RegisteredEventListener(PassRefPtr<EventListener> listener, bool useCapture)
             : listener(listener)
             , useCapture(useCapture)
+            , action(0)
         {
         }
 
         RefPtr<EventListener> listener;
         bool useCapture;
+        EventAction *action;
     };
 
     inline bool operator==(const RegisteredEventListener& a, const RegisteredEventListener& b)

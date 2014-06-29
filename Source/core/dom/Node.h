@@ -649,6 +649,9 @@ public:
 
     virtual EventTargetData* eventTargetData() OVERRIDE;
     virtual EventTargetData& ensureEventTargetData() OVERRIDE;
+    virtual void setCreatorEventRacerContext(PassRefPtr<EventRacerLog>, EventAction *) OVERRIDE FINAL;
+    virtual PassRefPtr<EventRacerLog> getCreatorEventRacerLog() OVERRIDE FINAL const;
+    virtual EventAction *getCreatorEventAction() const OVERRIDE FINAL { return m_creatorAction; }
 
     void getRegisteredMutationObserversOfType(WillBeHeapHashMap<RawPtrWillBeMember<MutationObserver>, MutationRecordDeliveryOptions>&, MutationObserver::MutationType, const QualifiedName* attributeName);
     void registerMutationObserver(MutationObserver&, MutationObserverOptions, const HashSet<AtomicString>& attributeFilter);
@@ -754,25 +757,7 @@ protected:
         CreateEditingText = CreateText | HasNameOrIsEditingTextFlag,
     };
 
-    Node(TreeScope* treeScope, ConstructionType type)
-        : m_nodeFlags(type)
-        , m_parentOrShadowHostNode(nullptr)
-        , m_treeScope(treeScope)
-        , m_previous(nullptr)
-        , m_next(nullptr)
-    {
-        ASSERT(m_treeScope || type == CreateDocument || type == CreateShadowRoot);
-        ScriptWrappable::init(this);
-#if !ENABLE(OILPAN)
-        if (m_treeScope)
-            m_treeScope->guardRef();
-#endif
-
-#if !defined(NDEBUG) || (defined(DUMP_NODE_STATISTICS) && DUMP_NODE_STATISTICS)
-        trackForDebugging();
-#endif
-        InspectorCounters::incrementCounter(InspectorCounters::NodeCounter);
-    }
+    Node(TreeScope* treeScope, ConstructionType type);
 
     virtual void didMoveToNewDocument(Document& oldDocument);
 
@@ -855,6 +840,9 @@ private:
         RenderObject* m_renderer;
         NodeRareDataBase* m_rareData;
     } m_data;
+
+    RefPtr<EventRacerLog> m_log;
+    EventAction *m_creatorAction;
 };
 
 inline void Node::setParentOrShadowHostNode(ContainerNode* parent)

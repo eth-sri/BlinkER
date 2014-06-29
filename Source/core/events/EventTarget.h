@@ -44,6 +44,8 @@ class ApplicationCache;
 class DOMWindow;
 class DedicatedWorkerGlobalScope;
 class Event;
+class EventAction;
+class EventRacerLog;
 class EventListener;
 class EventSource;
 class ExceptionState;
@@ -121,6 +123,10 @@ public:
 
     bool fireEventListeners(Event*);
 
+    virtual void setCreatorEventRacerContext(PassRefPtr<EventRacerLog>, EventAction *) = 0;
+    virtual PassRefPtr<EventRacerLog> getCreatorEventRacerLog() const = 0;
+    virtual EventAction *getCreatorEventAction() const = 0;
+
 protected:
     virtual ~EventTarget();
 
@@ -143,11 +149,22 @@ private:
 };
 
 class EventTargetWithInlineData : public EventTarget {
+public:
+    virtual void setCreatorEventRacerContext(PassRefPtr<EventRacerLog>, EventAction *) OVERRIDE FINAL;
+    virtual PassRefPtr<EventRacerLog> getCreatorEventRacerLog() OVERRIDE FINAL const;
+    virtual EventAction *getCreatorEventAction() const OVERRIDE FINAL { return m_creatorAction; }
+
 protected:
+    EventTargetWithInlineData();
+    ~EventTargetWithInlineData();
+
     virtual EventTargetData* eventTargetData() OVERRIDE FINAL { return &m_eventTargetData; }
     virtual EventTargetData& ensureEventTargetData() OVERRIDE FINAL { return m_eventTargetData; }
+
 private:
     EventTargetData m_eventTargetData;
+    RefPtr<EventRacerLog> m_log;
+    EventAction *m_creatorAction;
 };
 
 // FIXME: These macros should be split into separate DEFINE and DECLARE

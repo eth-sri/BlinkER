@@ -61,6 +61,8 @@
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/editing/htmlediting.h"
 #include "core/editing/markup.h"
+#include "core/eventracer/EventRacerContext.h"
+#include "core/eventracer/EventRacerLog.h"
 #include "core/events/Event.h"
 #include "core/events/EventDispatchMediator.h"
 #include "core/events/EventDispatcher.h"
@@ -254,6 +256,35 @@ void Node::trackForDebugging()
 #if DUMP_NODE_STATISTICS
     liveNodeSet.add(this);
 #endif
+}
+
+Node::Node(TreeScope* treeScope, ConstructionType type)
+    : m_nodeFlags(type)
+    , m_parentOrShadowHostNode(nullptr)
+    , m_treeScope(treeScope)
+    , m_previous(nullptr)
+    , m_next(nullptr)
+    , m_creatorAction(0)
+{
+    ASSERT(m_treeScope || type == CreateDocument || type == CreateShadowRoot);
+    ScriptWrappable::init(this);
+#if !ENABLE(OILPAN)
+    if (m_treeScope)
+        m_treeScope->guardRef();
+#endif
+
+#if !defined(NDEBUG) || (defined(DUMP_NODE_STATISTICS) && DUMP_NODE_STATISTICS)
+    trackForDebugging();
+#endif
+    InspectorCounters::incrementCounter(InspectorCounters::NodeCounter);
+
+    m_log = EventRacerContext::getLog();
+    if (m_log && m_log->hasAction()) {
+        m_creatorAction = m_log->getCurrentAction();
+        m_creatorAction->willDeferJoin();
+    } else {
+        m_creatorAction = 0;
+    }
 }
 
 Node::~Node()
@@ -2057,6 +2088,17 @@ EventTargetData& Node::ensureEventTargetData()
     EventTargetData* data = new EventTargetData;
     eventTargetDataMap().set(this, adoptPtr(data));
     return *data;
+}
+
+void Node::setCreatorEventRacerContext(PassRefPtr<EventRacerLog> log, EventAction *act)
+{
+    m_log = log;
+    m_creatorAction = act;
+}
+
+PassRefPtr<EventRacerLog> Node::getCreatorEventRacerLog() const
+{
+    return m_log;
 }
 
 #if !ENABLE(OILPAN)

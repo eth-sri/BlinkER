@@ -34,6 +34,8 @@
 
 #include "RuntimeEnabledFeatures.h"
 #include "bindings/v8/ExceptionState.h"
+#include "core/eventracer/EventRacerContext.h"
+#include "core/eventracer/EventRacerLog.h"
 #include "core/events/Event.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/inspector/InspectorInstrumentation.h"
@@ -55,6 +57,31 @@ EventTargetData::~EventTargetData()
 
 EventTarget::~EventTarget()
 {
+}
+
+EventTargetWithInlineData::EventTargetWithInlineData()
+{
+    m_log = EventRacerContext::getLog();
+    if (m_log && m_log->hasAction()) {
+        m_creatorAction = m_log->getCurrentAction();
+        m_creatorAction->willDeferJoin();
+    } else {
+        m_creatorAction = 0;
+    }
+}
+
+EventTargetWithInlineData::~EventTargetWithInlineData() {}
+
+void EventTargetWithInlineData::setCreatorEventRacerContext(PassRefPtr<EventRacerLog> log, EventAction *act)
+{
+    m_log = log;
+    m_creatorAction = act;
+    m_creatorAction->willDeferJoin();
+}
+
+PassRefPtr<EventRacerLog> EventTargetWithInlineData::getCreatorEventRacerLog() const
+{
+    return m_log;
 }
 
 Node* EventTarget::toNode()
@@ -256,6 +283,8 @@ bool EventTarget::fireEventListeners(Event* event)
     ASSERT(!NoEventDispatchAssertion::isEventDispatchForbidden());
     ASSERT(event && !event->type().isEmpty());
 
+    RefPtr<EventTarget> protect = this;
+
     EventTargetData* d = eventTargetData();
     if (!d)
         return true;
@@ -274,6 +303,32 @@ bool EventTarget::fireEventListeners(Event* event)
         && event->interfaceName() != EventNames::CustomEvent)
         listenersVector = 0;
 
+    RefPtr<EventRacerLog> log = getCreatorEventRacerLog();
+    EventAction *prevAction = d->eventListenerMap.getEventAction(event->type());
+    if (!prevAction)
+        prevAction = getCreatorEventAction();
+
+    OwnPtr<EventRacerContext> ctx;
+    OwnPtr<EventActionScope> act;
+    OwnPtr<OperationScope> op;
+
+    EventAction *thisAction;
+    if (log && (listenersVector || legacyListenersVector)) {
+        if (log->hasAction())
+            thisAction = log->getCurrentAction();
+        else {
+            ctx = adoptPtr(new EventRacerContext(log));
+            thisAction = log->createEventAction();
+            act = adoptPtr(new EventActionScope(thisAction));
+        }
+        if (prevAction && prevAction != thisAction)
+            log->join(prevAction, thisAction);
+
+        String ev = "ev:";
+        ev.append(event->type().string());
+        op = adoptPtr(new OperationScope(ev));
+    }
+
     if (listenersVector) {
         fireEventListeners(event, d, *listenersVector);
     } else if (legacyListenersVector) {
@@ -283,13 +338,18 @@ bool EventTarget::fireEventListeners(Event* event)
         event->setType(unprefixedTypeName);
     }
 
+    if (log && (listenersVector || legacyListenersVector)) {
+        thisAction->willDeferJoin();
+        d->eventListenerMap.setEventAction(event->type(), thisAction);
+    }
+
     countLegacyEvents(legacyTypeName, listenersVector, legacyListenersVector);
     return !event->defaultPrevented();
 }
 
 void EventTarget::fireEventListeners(Event* event, EventTargetData* d, EventListenerVector& entry)
 {
-    RefPtr<EventTarget> protect = this;
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
 
     // Fire all listeners registered for this event. Don't fire listeners removed
     // during event dispatch. Also, don't fire event listeners added during event
@@ -330,6 +390,13 @@ void EventTarget::fireEventListeners(Event* event, EventTargetData* d, EventList
             break;
 
         InspectorInstrumentationCookie cookie = InspectorInstrumentation::willHandleEvent(this, event->type(), registeredListener.listener.get(), registeredListener.useCapture);
+        if (log) {
+            ASSERT(log->hasAction());
+            if (registeredListener.action && registeredListener.action != log->getCurrentAction()) {
+                log->join(registeredListener.action, log->getCurrentAction());
+                registeredListener.action = 0;
+            }
+        }
         // To match Mozilla, the AT_TARGET phase fires both capturing and bubbling
         // event listeners, even though that violates some versions of the DOM spec.
         registeredListener.listener->handleEvent(context, event);

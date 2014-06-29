@@ -31,6 +31,8 @@
  */
 
 #include "config.h"
+#include "core/eventracer/EventRacerContext.h"
+#include "core/eventracer/EventRacerLog.h"
 #include "core/events/EventListenerMap.h"
 
 #include "core/events/EventTarget.h"
@@ -69,7 +71,7 @@ EventListenerMap::EventListenerMap()
 bool EventListenerMap::contains(const AtomicString& eventType) const
 {
     for (unsigned i = 0; i < m_entries.size(); ++i) {
-        if (m_entries[i].first == eventType)
+        if (m_entries[i].type == eventType)
             return true;
     }
     return false;
@@ -78,8 +80,8 @@ bool EventListenerMap::contains(const AtomicString& eventType) const
 bool EventListenerMap::containsCapturing(const AtomicString& eventType) const
 {
     for (unsigned i = 0; i < m_entries.size(); ++i) {
-        if (m_entries[i].first == eventType) {
-            const EventListenerVector* vector = m_entries[i].second.get();
+        if (m_entries[i].type == eventType) {
+            const EventListenerVector* vector = m_entries[i].listeners.get();
             for (unsigned j = 0; j < vector->size(); ++j) {
                 if (vector->at(j).useCapture)
                     return true;
@@ -102,7 +104,7 @@ Vector<AtomicString> EventListenerMap::eventTypes() const
     types.reserveInitialCapacity(m_entries.size());
 
     for (unsigned i = 0; i < m_entries.size(); ++i)
-        types.uncheckedAppend(m_entries[i].first);
+        types.uncheckedAppend(m_entries[i].type);
 
     return types;
 }
@@ -114,6 +116,12 @@ static bool addListenerToVector(EventListenerVector* vector, PassRefPtr<EventLis
     if (vector->find(registeredListener) != kNotFound)
         return false; // Duplicate listener.
 
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction()) {
+        registeredListener.action = log->getCurrentAction();
+        registeredListener.action->willDeferJoin();
+    }
+
     vector->append(registeredListener);
     return true;
 }
@@ -123,12 +131,12 @@ bool EventListenerMap::add(const AtomicString& eventType, PassRefPtr<EventListen
     assertNoActiveIterators();
 
     for (unsigned i = 0; i < m_entries.size(); ++i) {
-        if (m_entries[i].first == eventType)
-            return addListenerToVector(m_entries[i].second.get(), listener, useCapture);
+        if (m_entries[i].type == eventType)
+            return addListenerToVector(m_entries[i].listeners.get(), listener, useCapture);
     }
 
-    m_entries.append(std::make_pair(eventType, adoptPtr(new EventListenerVector)));
-    return addListenerToVector(m_entries.last().second.get(), listener, useCapture);
+    m_entries.append(EventListenerMapEntryInit(eventType, adoptPtr(new EventListenerVector), 0));
+    return addListenerToVector(m_entries.last().listeners.get(), listener, useCapture);
 }
 
 static bool removeListenerFromVector(EventListenerVector* listenerVector, EventListener* listener, bool useCapture, size_t& indexOfRemovedListener)
@@ -146,9 +154,9 @@ bool EventListenerMap::remove(const AtomicString& eventType, EventListener* list
     assertNoActiveIterators();
 
     for (unsigned i = 0; i < m_entries.size(); ++i) {
-        if (m_entries[i].first == eventType) {
-            bool wasRemoved = removeListenerFromVector(m_entries[i].second.get(), listener, useCapture, indexOfRemovedListener);
-            if (m_entries[i].second->isEmpty())
+        if (m_entries[i].type == eventType) {
+            bool wasRemoved = removeListenerFromVector(m_entries[i].listeners.get(), listener, useCapture, indexOfRemovedListener);
+            if (m_entries[i].listeners->isEmpty())
                 m_entries.remove(i);
             return wasRemoved;
         }
@@ -162,11 +170,35 @@ EventListenerVector* EventListenerMap::find(const AtomicString& eventType)
     assertNoActiveIterators();
 
     for (unsigned i = 0; i < m_entries.size(); ++i) {
-        if (m_entries[i].first == eventType)
-            return m_entries[i].second.get();
+        if (m_entries[i].type == eventType)
+            return m_entries[i].listeners.get();
     }
 
     return 0;
+}
+
+EventAction *EventListenerMap::getEventAction(const AtomicString& eventType)
+{
+    assertNoActiveIterators();
+
+    for (unsigned i = 0; i < m_entries.size(); ++i) {
+        if (m_entries[i].type == eventType)
+            return m_entries[i].action;
+    }
+
+    return 0;
+}
+
+void EventListenerMap::setEventAction(const AtomicString& eventType, EventAction *act)
+{
+    assertNoActiveIterators();
+
+    for (unsigned i = 0; i < m_entries.size(); ++i) {
+        if (m_entries[i].type == eventType) {
+            m_entries[i].action = act;
+            break;
+        }
+    }
 }
 
 static void removeFirstListenerCreatedFromMarkup(EventListenerVector* listenerVector)
@@ -189,9 +221,9 @@ void EventListenerMap::removeFirstEventListenerCreatedFromMarkup(const AtomicStr
     assertNoActiveIterators();
 
     for (unsigned i = 0; i < m_entries.size(); ++i) {
-        if (m_entries[i].first == eventType) {
-            removeFirstListenerCreatedFromMarkup(m_entries[i].second.get());
-            if (m_entries[i].second->isEmpty())
+        if (m_entries[i].type == eventType) {
+            removeFirstListenerCreatedFromMarkup(m_entries[i].listeners.get());
+            if (m_entries[i].listeners->isEmpty())
                 m_entries.remove(i);
             return;
         }
@@ -213,7 +245,7 @@ void EventListenerMap::copyEventListenersNotCreatedFromMarkupToTarget(EventTarge
     assertNoActiveIterators();
 
     for (unsigned i = 0; i < m_entries.size(); ++i)
-        copyListenersNotCreatedFromMarkupToTarget(m_entries[i].first, m_entries[i].second.get(), target);
+        copyListenersNotCreatedFromMarkupToTarget(m_entries[i].type, m_entries[i].listeners.get(), target);
 }
 
 EventListenerIterator::EventListenerIterator()
@@ -260,7 +292,7 @@ EventListener* EventListenerIterator::nextListener()
         return 0;
 
     for (; m_entryIndex < m_map->m_entries.size(); ++m_entryIndex) {
-        EventListenerVector& listeners = *m_map->m_entries[m_entryIndex].second;
+        EventListenerVector& listeners = *m_map->m_entries[m_entryIndex].listeners;
         if (m_index < listeners.size())
             return listeners[m_index++].listener.get();
         m_index = 0;
