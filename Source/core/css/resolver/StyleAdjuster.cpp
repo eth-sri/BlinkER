@@ -29,14 +29,15 @@
 #include "config.h"
 #include "core/css/resolver/StyleAdjuster.h"
 
-#include "HTMLNames.h"
-#include "SVGNames.h"
+#include "core/HTMLNames.h"
+#include "core/SVGNames.h"
 #include "core/dom/ContainerNode.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/NodeRenderStyle.h"
 #include "core/html/HTMLIFrameElement.h"
 #include "core/html/HTMLInputElement.h"
+#include "core/html/HTMLPlugInElement.h"
 #include "core/html/HTMLTableCellElement.h"
 #include "core/html/HTMLTextAreaElement.h"
 #include "core/frame/FrameView.h"
@@ -64,28 +65,6 @@ static inline bool isAtShadowBoundary(const Element* element)
     return parentNode && parentNode->isShadowRoot();
 }
 
-
-static void addIntrinsicMargins(RenderStyle* style)
-{
-    // Intrinsic margin value.
-    const int intrinsicMargin = 2 * style->effectiveZoom();
-
-    // FIXME: Using width/height alone and not also dealing with min-width/max-width is flawed.
-    // FIXME: Using "quirk" to decide the margin wasn't set is kind of lame.
-    if (style->width().isIntrinsicOrAuto()) {
-        if (style->marginLeft().quirk())
-            style->setMarginLeft(Length(intrinsicMargin, Fixed));
-        if (style->marginRight().quirk())
-            style->setMarginRight(Length(intrinsicMargin, Fixed));
-    }
-
-    if (style->height().isAuto()) {
-        if (style->marginTop().quirk())
-            style->setMarginTop(Length(intrinsicMargin, Fixed));
-        if (style->marginBottom().quirk())
-            style->setMarginBottom(Length(intrinsicMargin, Fixed));
-    }
-}
 
 static EDisplay equivalentBlockDisplay(EDisplay display, bool isFloating, bool strictParsing)
 {
@@ -193,7 +172,7 @@ static bool hasWillChangeThatCreatesStackingContext(const RenderStyle* style)
     return false;
 }
 
-void StyleAdjuster::adjustRenderStyle(RenderStyle* style, RenderStyle* parentStyle, Element *e)
+void StyleAdjuster::adjustRenderStyle(RenderStyle* style, RenderStyle* parentStyle, Element *e, const CachedUAStyle* cachedUAStyle)
 {
     ASSERT(parentStyle);
 
@@ -258,7 +237,7 @@ void StyleAdjuster::adjustRenderStyle(RenderStyle* style, RenderStyle* parentSty
 
     // Let the theme also have a crack at adjusting the style.
     if (style->hasAppearance())
-        RenderTheme::theme().adjustStyle(style, e, m_cachedUAStyle);
+        RenderTheme::theme().adjustStyle(style, e, cachedUAStyle);
 
     // If we have first-letter pseudo style, transitions, or animations, do not share this style.
     if (style->hasPseudoStyle(FIRST_LETTER) || style->transitions() || style->animations())
@@ -274,11 +253,6 @@ void StyleAdjuster::adjustRenderStyle(RenderStyle* style, RenderStyle* parentSty
         // Only the root <svg> element in an SVG document fragment tree honors css position
         if (!(isSVGSVGElement(*e) && e->parentNode() && !e->parentNode()->isSVGElement()))
             style->setPosition(RenderStyle::initialPosition());
-
-        // RenderSVGRoot handles zooming for the whole SVG subtree, so foreignObject content should
-        // not be scaled again.
-        if (isSVGForeignObjectElement(*e))
-            style->setEffectiveZoom(RenderStyle::initialZoom());
 
         // SVG text layout code expects us to be a block-level style element.
         if ((isSVGForeignObjectElement(*e) || isSVGTextElement(*e)) && style->isDisplayInlineType())
@@ -360,20 +334,15 @@ void StyleAdjuster::adjustStyleForTagName(RenderStyle* style, RenderStyle* paren
         return;
     }
 
-    if (element.isFormControlElement()) {
-        if (isHTMLTextAreaElement(element)) {
-            // Textarea considers overflow visible as auto.
-            style->setOverflowX(style->overflowX() == OVISIBLE ? OAUTO : style->overflowX());
-            style->setOverflowY(style->overflowY() == OVISIBLE ? OAUTO : style->overflowY());
-        }
+    if (isHTMLTextAreaElement(element)) {
+        // Textarea considers overflow visible as auto.
+        style->setOverflowX(style->overflowX() == OVISIBLE ? OAUTO : style->overflowX());
+        style->setOverflowY(style->overflowY() == OVISIBLE ? OAUTO : style->overflowY());
+        return;
+    }
 
-        // Important: Intrinsic margins get added to controls before the theme has adjusted the style,
-        // since the theme will alter fonts and heights/widths.
-        //
-        // Don't apply intrinsic margins to image buttons. The designer knows how big the images are,
-        // so we have to treat all image buttons as though they were explicitly sized.
-        if (style->fontSize() >= 11 && (!isHTMLInputElement(element) || !toHTMLInputElement(element).isImageButton()))
-            addIntrinsicMargins(style);
+    if (isHTMLPlugInElement(element)) {
+        style->setRequiresAcceleratedCompositingForExternalReasons(toHTMLPlugInElement(element).shouldAccelerate());
         return;
     }
 }

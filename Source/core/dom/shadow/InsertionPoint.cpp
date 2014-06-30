@@ -31,7 +31,8 @@
 #include "config.h"
 #include "core/dom/shadow/InsertionPoint.h"
 
-#include "HTMLNames.h"
+#include "core/HTMLNames.h"
+#include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/QualifiedName.h"
 #include "core/dom/StaticNodeList.h"
@@ -122,7 +123,7 @@ void InsertionPoint::willRecalcStyle(StyleRecalcChange change)
     if (change < Inherit)
         return;
     for (size_t i = 0; i < m_distribution.size(); ++i)
-        m_distribution.at(i)->setNeedsStyleRecalc(LocalStyleChange);
+        m_distribution.at(i)->setNeedsStyleRecalc(SubtreeStyleChange);
 }
 
 bool InsertionPoint::shouldUseFallbackElements() const
@@ -171,11 +172,11 @@ bool InsertionPoint::isContentInsertionPoint() const
     return isHTMLContentElement(*this) && isActive();
 }
 
-PassRefPtrWillBeRawPtr<NodeList> InsertionPoint::getDistributedNodes()
+PassRefPtrWillBeRawPtr<StaticNodeList> InsertionPoint::getDistributedNodes()
 {
     document().updateDistributionForNodeIfNeeded(this);
 
-    Vector<RefPtr<Node> > nodes;
+    WillBeHeapVector<RefPtrWillBeMember<Node> > nodes;
     nodes.reserveInitialCapacity(m_distribution.size());
     for (size_t i = 0; i < m_distribution.size(); ++i)
         nodes.uncheckedAppend(m_distribution.at(i));

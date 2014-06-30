@@ -33,7 +33,6 @@
 
 #include "bindings/v8/ScriptPromise.h"
 #include "bindings/v8/ScriptPromiseResolver.h"
-#include "bindings/v8/ScriptPromiseResolverWithContext.h"
 #include "core/dom/DOMError.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
@@ -84,14 +83,12 @@ Vector<String> StorageQuota::supportedTypes() const
     return types;
 }
 
-ScriptPromise StorageQuota::queryInfo(ExecutionContext* executionContext, String type)
+ScriptPromise StorageQuota::queryInfo(ScriptState* scriptState, String type)
 {
-    ASSERT(executionContext);
-
-    RefPtr<ScriptPromiseResolverWithContext> resolver = ScriptPromiseResolverWithContext::create(ScriptState::current(toIsolate(executionContext)));
+    RefPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(scriptState);
     ScriptPromise promise = resolver->promise();
 
-    SecurityOrigin* securityOrigin = executionContext->securityOrigin();
+    SecurityOrigin* securityOrigin = scriptState->executionContext()->securityOrigin();
     if (securityOrigin->isUnique()) {
         resolver->reject(DOMError::create(NotSupportedError));
         return promise;
@@ -113,7 +110,7 @@ ScriptPromise StorageQuota::requestPersistentQuota(ScriptState* scriptState, uns
         return promise;
     }
 
-    return client->requestPersistentQuota(scriptState->executionContext(), newQuota);
+    return client->requestPersistentQuota(scriptState, newQuota);
 }
 
 StorageQuota::~StorageQuota()

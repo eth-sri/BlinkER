@@ -28,7 +28,7 @@
 #include "config.h"
 #include "core/css/resolver/CSSToStyleMap.h"
 
-#include "CSSValueKeywords.h"
+#include "core/CSSValueKeywords.h"
 #include "core/animation/css/CSSAnimationData.h"
 #include "core/css/CSSBorderImageSliceValue.h"
 #include "core/css/CSSPrimitiveValue.h"
@@ -45,11 +45,6 @@ namespace WebCore {
 const CSSToLengthConversionData& CSSToStyleMap::cssToLengthConversionData() const
 {
     return m_state.cssToLengthConversionData();
-}
-
-bool CSSToStyleMap::useSVGZoomRules() const
-{
-    return m_state.useSVGZoomRules();
 }
 
 PassRefPtr<StyleImage> CSSToStyleMap::styleImage(CSSPropertyID propertyId, CSSValue* value)
@@ -384,6 +379,8 @@ CSSTransitionData::TransitionProperty CSSToStyleMap::mapAnimationProperty(CSSVal
     if (value->isInitialValue())
         return CSSTransitionData::initialProperty();
     CSSPrimitiveValue* primitiveValue = toCSSPrimitiveValue(value);
+    if (primitiveValue->isString())
+        return CSSTransitionData::TransitionProperty(primitiveValue->getStringValue());
     if (primitiveValue->getValueID() == CSSValueAll)
         return CSSTransitionData::TransitionProperty(CSSTransitionData::TransitionAll);
     if (primitiveValue->getValueID() == CSSValueNone)
@@ -396,8 +393,7 @@ PassRefPtr<TimingFunction> CSSToStyleMap::mapAnimationTimingFunction(CSSValue* v
     // FIXME: We should probably only call into this function with a valid
     // single timing function value which isn't initial or inherit. We can
     // currently get into here with initial since the parser expands unset
-    // properties in shorthands to initial and we can get into here with a
-    // value list via the EffectInput/TimingInput code paths.
+    // properties in shorthands to initial.
 
     if (value->isPrimitiveValue()) {
         CSSPrimitiveValue* primitiveValue = toCSSPrimitiveValue(value);
@@ -431,7 +427,7 @@ PassRefPtr<TimingFunction> CSSToStyleMap::mapAnimationTimingFunction(CSSValue* v
         return CubicBezierTimingFunction::create(cubicTimingFunction->x1(), cubicTimingFunction->y1(), cubicTimingFunction->x2(), cubicTimingFunction->y2());
     }
 
-    if (!value->isStepsTimingFunctionValue())
+    if (value->isInitialValue())
         return CSSTimingData::initialTimingFunction();
 
     CSSStepsTimingFunctionValue* stepsTimingFunction = toCSSStepsTimingFunctionValue(value);
@@ -467,16 +463,17 @@ void CSSToStyleMap::mapNinePieceImage(RenderStyle* mutableStyle, CSSPropertyID p
             mapNinePieceImageSlice(current, image);
         else if (current->isValueList()) {
             CSSValueList* slashList = toCSSValueList(current);
+            size_t length = slashList->length();
             // Map in the image slices.
-            if (slashList->item(0) && slashList->item(0)->isBorderImageSliceValue())
+            if (length && slashList->item(0)->isBorderImageSliceValue())
                 mapNinePieceImageSlice(slashList->item(0), image);
 
             // Map in the border slices.
-            if (slashList->item(1))
+            if (length > 1)
                 image.setBorderSlices(mapNinePieceImageQuad(slashList->item(1)));
 
             // Map in the outset.
-            if (slashList->item(2))
+            if (length > 2)
                 image.setOutset(mapNinePieceImageQuad(slashList->item(2)));
         } else if (current->isPrimitiveValue()) {
             // Set the appropriate rules for stretch/round/repeat of the slices.
@@ -548,16 +545,14 @@ BorderImageLengthBox CSSToStyleMap::mapNinePieceImageQuad(CSSValue* value) const
     if (!value || !value->isPrimitiveValue())
         return BorderImageLengthBox(Length(Auto));
 
-    float zoom = useSVGZoomRules() ? 1.0f : cssToLengthConversionData().zoom();
     Quad* slices = toCSSPrimitiveValue(value)->getQuadValue();
 
     // Set up a border image length box to represent our image slices.
-    const CSSToLengthConversionData& conversionData = cssToLengthConversionData().copyWithAdjustedZoom(zoom);
     return BorderImageLengthBox(
-        toBorderImageLength(*slices->top(), conversionData),
-        toBorderImageLength(*slices->right(), conversionData),
-        toBorderImageLength(*slices->bottom(), conversionData),
-        toBorderImageLength(*slices->left(), conversionData));
+        toBorderImageLength(*slices->top(), cssToLengthConversionData()),
+        toBorderImageLength(*slices->right(), cssToLengthConversionData()),
+        toBorderImageLength(*slices->bottom(), cssToLengthConversionData()),
+        toBorderImageLength(*slices->left(), cssToLengthConversionData()));
 }
 
 void CSSToStyleMap::mapNinePieceImageRepeat(CSSValue* value, NinePieceImage& image) const

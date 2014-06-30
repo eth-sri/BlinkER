@@ -26,7 +26,7 @@
 #include "config.h"
 #include "core/editing/InsertLineBreakCommand.h"
 
-#include "HTMLNames.h"
+#include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/Text.h"
 #include "core/editing/EditingStyle.h"
@@ -81,7 +81,7 @@ void InsertLineBreakCommand::doApply()
 
     pos = positionOutsideTabSpan(pos);
 
-    RefPtr<Node> nodeToInsert;
+    RefPtrWillBeRawPtr<Node> nodeToInsert = nullptr;
     if (shouldUseBreakElement(pos))
         nodeToInsert = createBreakElement(document());
     else
@@ -141,7 +141,7 @@ void InsertLineBreakCommand::doApply()
 
     // Handle the case where there is a typing style.
 
-    RefPtr<EditingStyle> typingStyle = document().frame()->selection().typingStyle();
+    RefPtrWillBeRawPtr<EditingStyle> typingStyle = document().frame()->selection().typingStyle();
 
     if (typingStyle && !typingStyle->isEmpty()) {
         // Apply the typing style to the inserted line break, so that if the selection

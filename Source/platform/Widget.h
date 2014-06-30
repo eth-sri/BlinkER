@@ -29,6 +29,7 @@
 #define Widget_h
 
 #include "platform/PlatformExport.h"
+#include "platform/geometry/FloatPoint.h"
 #include "platform/geometry/IntRect.h"
 #include "wtf/Forward.h"
 #include "wtf/RefCounted.h"
@@ -112,6 +113,7 @@ public:
 
     IntPoint convertToContainingWindow(const IntPoint&) const;
     IntPoint convertFromContainingWindow(const IntPoint&) const;
+    FloatPoint convertFromContainingWindow(const FloatPoint&) const;
 
     virtual void frameRectsChanged() { }
 
@@ -130,6 +132,10 @@ public:
 
     // Notifies this widget that it will no longer be receiving events.
     virtual void eventListenersRemoved() { }
+
+#if ENABLE(OILPAN)
+    virtual void detach() { }
+#endif
 
 private:
     Widget* m_parent;

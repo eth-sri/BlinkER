@@ -23,22 +23,20 @@
 #include "config.h"
 #include "core/css/StylePropertySet.h"
 
-#include "RuntimeEnabledFeatures.h"
-#include "StylePropertyShorthand.h"
+#include "core/StylePropertyShorthand.h"
 #include "core/css/parser/BisonCSSParser.h"
 #include "core/css/CSSValuePool.h"
 #include "core/css/RuntimeCSSEnabled.h"
 #include "core/css/StylePropertySerializer.h"
 #include "core/css/StyleSheetContents.h"
 #include "core/frame/UseCounter.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "wtf/text/StringBuilder.h"
 
 #ifndef NDEBUG
 #include "wtf/text/CString.h"
 #include <stdio.h>
 #endif
-
-using namespace std;
 
 namespace WebCore {
 
@@ -47,7 +45,7 @@ static size_t sizeForImmutableStylePropertySetWithPropertyCount(unsigned count)
     return sizeof(ImmutableStylePropertySet) - sizeof(void*) + sizeof(CSSValue*) * count + sizeof(StylePropertyMetadata) * count;
 }
 
-PassRefPtr<ImmutableStylePropertySet> ImmutableStylePropertySet::create(const CSSProperty* properties, unsigned count, CSSParserMode cssParserMode)
+PassRefPtrWillBeRawPtr<ImmutableStylePropertySet> ImmutableStylePropertySet::create(const CSSProperty* properties, unsigned count, CSSParserMode cssParserMode)
 {
     ASSERT(count <= MaxArraySize);
 #if ENABLE(OILPAN)
@@ -55,10 +53,10 @@ PassRefPtr<ImmutableStylePropertySet> ImmutableStylePropertySet::create(const CS
 #else
     void* slot = WTF::fastMalloc(sizeForImmutableStylePropertySetWithPropertyCount(count));
 #endif // ENABLE(OILPAN)
-    return adoptRefWillBeRefCountedGarbageCollected(new (slot) ImmutableStylePropertySet(properties, count, cssParserMode));
+    return adoptRefWillBeNoop(new (slot) ImmutableStylePropertySet(properties, count, cssParserMode));
 }
 
-PassRefPtr<ImmutableStylePropertySet> StylePropertySet::immutableCopyIfNeeded() const
+PassRefPtrWillBeRawPtr<ImmutableStylePropertySet> StylePropertySet::immutableCopyIfNeeded() const
 {
     if (!isMutable())
         return toImmutableStylePropertySet(const_cast<StylePropertySet*>(this));
@@ -520,7 +518,7 @@ void MutableStylePropertySet::removeEquivalentProperties(const CSSStyleDeclarati
 
 PassRefPtrWillBeRawPtr<MutableStylePropertySet> StylePropertySet::mutableCopy() const
 {
-    return adoptRefWillBeRefCountedGarbageCollected(new MutableStylePropertySet(*this));
+    return adoptRefWillBeNoop(new MutableStylePropertySet(*this));
 }
 
 PassRefPtrWillBeRawPtr<MutableStylePropertySet> StylePropertySet::copyPropertiesInSet(const Vector<CSSPropertyID>& properties) const
@@ -579,7 +577,7 @@ unsigned StylePropertySet::averageSizeInBytes()
 }
 
 // See the function above if you need to update this.
-struct SameSizeAsStylePropertySet : public RefCountedWillBeRefCountedGarbageCollected<SameSizeAsStylePropertySet> {
+struct SameSizeAsStylePropertySet : public RefCountedWillBeGarbageCollectedFinalized<SameSizeAsStylePropertySet> {
     unsigned bitfield;
 };
 COMPILE_ASSERT(sizeof(StylePropertySet) == sizeof(SameSizeAsStylePropertySet), style_property_set_should_stay_small);
@@ -593,12 +591,12 @@ void StylePropertySet::showStyle()
 
 PassRefPtrWillBeRawPtr<MutableStylePropertySet> MutableStylePropertySet::create(CSSParserMode cssParserMode)
 {
-    return adoptRefWillBeRefCountedGarbageCollected(new MutableStylePropertySet(cssParserMode));
+    return adoptRefWillBeNoop(new MutableStylePropertySet(cssParserMode));
 }
 
 PassRefPtrWillBeRawPtr<MutableStylePropertySet> MutableStylePropertySet::create(const CSSProperty* properties, unsigned count)
 {
-    return adoptRefWillBeRefCountedGarbageCollected(new MutableStylePropertySet(properties, count));
+    return adoptRefWillBeNoop(new MutableStylePropertySet(properties, count));
 }
 
 String StylePropertySet::PropertyReference::cssName() const

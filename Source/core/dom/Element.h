@@ -25,11 +25,11 @@
 #ifndef Element_h
 #define Element_h
 
-#include "CSSPropertyNames.h"
-#include "HTMLNames.h"
+#include "core/CSSPropertyNames.h"
+#include "core/HTMLNames.h"
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/dom/Attribute.h"
-#include "core/dom/Document.h"
+#include "core/dom/ContainerNode.h"
 #include "core/dom/ElementData.h"
 #include "core/dom/SpaceSplitString.h"
 #include "core/html/CollectionType.h"
@@ -42,11 +42,13 @@ namespace WebCore {
 class ActiveAnimations;
 class Attr;
 class Attribute;
+class CSSStyleDeclaration;
 class ClientRect;
 class ClientRectList;
 class CustomElementDefinition;
 class DOMStringMap;
 class DOMTokenList;
+class Document;
 class ElementRareData;
 class ElementShadow;
 class ExceptionState;
@@ -169,11 +171,12 @@ public:
     // Internal methods that assume the existence of attribute storage, one should use hasAttributes()
     // before calling them. This is not a trivial getter and its return value should be cached for
     // performance.
+    AttributeCollection attributes() const { return elementData()->attributes(); }
     size_t attributeCount() const;
-    const Attribute& attributeItem(unsigned index) const;
-    const Attribute* getAttributeItem(const QualifiedName&) const;
-    size_t getAttributeItemIndex(const QualifiedName& name) const { return elementData()->getAttributeItemIndex(name); }
-    size_t getAttributeItemIndex(const AtomicString& name, bool shouldIgnoreAttributeCase) const { return elementData()->getAttributeItemIndex(name, shouldIgnoreAttributeCase); }
+    const Attribute& attributeAt(unsigned index) const;
+    const Attribute* findAttributeByName(const QualifiedName&) const;
+    size_t findAttributeIndexByName(const QualifiedName& name) const { return elementData()->attributes().findIndex(name); }
+    size_t findAttributeIndexByName(const AtomicString& name, bool shouldIgnoreAttributeCase) const { return elementData()->attributes().findIndex(name, shouldIgnoreAttributeCase); }
 
     void scrollIntoView(bool alignToTop = true);
     void scrollIntoViewIfNeeded(bool centerIfNeeded = true);
@@ -181,28 +184,28 @@ public:
     void scrollByLines(int lines);
     void scrollByPages(int pages);
 
-    double offsetLeft();
-    double offsetTop();
-    double offsetWidth();
-    double offsetHeight();
+    int offsetLeft();
+    int offsetTop();
+    int offsetWidth();
+    int offsetHeight();
 
     // FIXME: Replace uses of offsetParent in the platform with calls
     // to the render layer and merge offsetParentForBindings and offsetParent.
     Element* offsetParentForBindings();
 
     Element* offsetParent();
-    double clientLeft();
-    double clientTop();
-    double clientWidth();
-    double clientHeight();
-    virtual double scrollLeft();
-    virtual double scrollTop();
-    virtual void setScrollLeft(double);
+    int clientLeft();
+    int clientTop();
+    int clientWidth();
+    int clientHeight();
+    virtual int scrollLeft();
+    virtual int scrollTop();
+    virtual void setScrollLeft(int);
     virtual void setScrollLeft(const Dictionary& scrollOptionsHorizontal, ExceptionState&);
-    virtual void setScrollTop(double);
+    virtual void setScrollTop(int);
     virtual void setScrollTop(const Dictionary& scrollOptionsVertical, ExceptionState&);
-    virtual double scrollWidth();
-    virtual double scrollHeight();
+    virtual int scrollWidth();
+    virtual int scrollHeight();
 
     IntRect boundsInRootViewSpace();
 
@@ -217,18 +220,18 @@ public:
     void removeAttribute(const AtomicString& name);
     void removeAttributeNS(const AtomicString& namespaceURI, const AtomicString& localName);
 
-    PassRefPtr<Attr> detachAttribute(size_t index);
+    PassRefPtrWillBeRawPtr<Attr> detachAttribute(size_t index);
 
-    PassRefPtr<Attr> getAttributeNode(const AtomicString& name);
-    PassRefPtr<Attr> getAttributeNodeNS(const AtomicString& namespaceURI, const AtomicString& localName);
-    PassRefPtr<Attr> setAttributeNode(Attr*, ExceptionState&);
-    PassRefPtr<Attr> setAttributeNodeNS(Attr*, ExceptionState&);
-    PassRefPtr<Attr> removeAttributeNode(Attr*, ExceptionState&);
+    PassRefPtrWillBeRawPtr<Attr> getAttributeNode(const AtomicString& name);
+    PassRefPtrWillBeRawPtr<Attr> getAttributeNodeNS(const AtomicString& namespaceURI, const AtomicString& localName);
+    PassRefPtrWillBeRawPtr<Attr> setAttributeNode(Attr*, ExceptionState&);
+    PassRefPtrWillBeRawPtr<Attr> setAttributeNodeNS(Attr*, ExceptionState&);
+    PassRefPtrWillBeRawPtr<Attr> removeAttributeNode(Attr*, ExceptionState&);
 
-    PassRefPtr<Attr> attrIfExists(const QualifiedName&);
-    PassRefPtr<Attr> ensureAttr(const QualifiedName&);
+    PassRefPtrWillBeRawPtr<Attr> attrIfExists(const QualifiedName&);
+    PassRefPtrWillBeRawPtr<Attr> ensureAttr(const QualifiedName&);
 
-    const Vector<RefPtr<Attr> >& attrNodeList();
+    WillBeHeapVector<RefPtrWillBeMember<Attr> >* attrNodeList();
 
     CSSStyleDeclaration* style();
 
@@ -256,7 +259,7 @@ public:
     PassRefPtrWillBeRawPtr<Element> cloneElementWithChildren();
     PassRefPtrWillBeRawPtr<Element> cloneElementWithoutChildren();
 
-    void scheduleLayerUpdate();
+    void scheduleSVGFilterLayerUpdateHack();
 
     void normalizeAttributes();
 
@@ -269,7 +272,7 @@ public:
 
     bool setInlineStyleProperty(CSSPropertyID, CSSValueID identifier, bool important = false);
     bool setInlineStyleProperty(CSSPropertyID, CSSPropertyID identifier, bool important = false);
-    bool setInlineStyleProperty(CSSPropertyID, double value, CSSPrimitiveValue::UnitTypes, bool important = false);
+    bool setInlineStyleProperty(CSSPropertyID, double value, CSSPrimitiveValue::UnitType, bool important = false);
     bool setInlineStyleProperty(CSSPropertyID, const String& value, bool important = false);
     bool removeInlineStyleProperty(CSSPropertyID);
     void removeAllInlineStyleProperties();
@@ -281,7 +284,7 @@ public:
     virtual void collectStyleForPresentationAttribute(const QualifiedName&, const AtomicString&, MutableStylePropertySet*) { }
 
     // For exposing to DOM only.
-    NamedNodeMap* attributes() const;
+    NamedNodeMap* attributesForBindings() const;
 
     enum AttributeModificationReason {
         ModifiedDirectly,
@@ -403,6 +406,9 @@ public:
     virtual const AtomicString& shadowPseudoId() const;
     void setShadowPseudoId(const AtomicString&);
 
+    LayoutSize minimumSizeForResizing() const;
+    void setMinimumSizeForResizing(const LayoutSize&);
+
     virtual void didBecomeFullscreenElement() { }
     virtual void willStopBeingFullscreenElement() { }
 
@@ -444,7 +450,6 @@ public:
     virtual bool isValidFormControlElement() { return false; }
     virtual bool isInRange() const { return false; }
     virtual bool isOutOfRange() const { return false; }
-    virtual bool isPasswordGeneratorButtonElement() const { return false; }
     virtual bool isClearButtonElement() const { return false; }
 
     virtual bool canContainRangeEndPoint() const OVERRIDE { return true; }
@@ -461,18 +466,16 @@ public:
     void setCustomElementDefinition(PassRefPtr<CustomElementDefinition>);
     CustomElementDefinition* customElementDefinition() const;
 
-    enum {
-        ALLOW_KEYBOARD_INPUT = 1 << 0,
-        LEGACY_MOZILLA_REQUEST = 1 << 1,
-    };
-
+    // Mozilla version
+    static const unsigned short ALLOW_KEYBOARD_INPUT = 1;
     void webkitRequestFullScreen(unsigned short flags);
+
+    // W3C version
+    void webkitRequestFullscreen();
+
     bool containsFullScreenElement() const { return hasElementFlag(ContainsFullScreenElement); }
     void setContainsFullScreenElement(bool);
     void setContainsFullScreenElementOnAncestorsCrossingFrameBoundaries(bool);
-
-    // W3C API
-    void webkitRequestFullscreen();
 
     bool isInTopLayer() const { return hasElementFlag(IsInTopLayer); }
     void setIsInTopLayer(bool);
@@ -512,15 +515,10 @@ public:
     virtual void trace(Visitor*) OVERRIDE;
 
 protected:
-    Element(const QualifiedName& tagName, Document* document, ConstructionType type)
-        : ContainerNode(document, type)
-        , m_tagName(tagName)
-    {
-        ScriptWrappable::init(this);
-    }
+    Element(const QualifiedName& tagName, Document*, ConstructionType);
 
     void addPropertyToPresentationAttributeStyle(MutableStylePropertySet*, CSSPropertyID, CSSValueID identifier);
-    void addPropertyToPresentationAttributeStyle(MutableStylePropertySet*, CSSPropertyID, double value, CSSPrimitiveValue::UnitTypes);
+    void addPropertyToPresentationAttributeStyle(MutableStylePropertySet*, CSSPropertyID, double value, CSSPrimitiveValue::UnitType);
     void addPropertyToPresentationAttributeStyle(MutableStylePropertySet*, CSSPropertyID, const String& value);
 
     virtual InsertionNotificationRequest insertedInto(ContainerNode*) OVERRIDE;
@@ -607,7 +605,7 @@ private:
     virtual bool childTypeAllowed(NodeType) const OVERRIDE FINAL;
 
     void setAttributeInternal(size_t index, const QualifiedName&, const AtomicString& value, SynchronizationOfLazyAttribute);
-    void addAttributeInternal(const QualifiedName&, const AtomicString& value, SynchronizationOfLazyAttribute);
+    void appendAttributeInternal(const QualifiedName&, const AtomicString& value, SynchronizationOfLazyAttribute);
     void removeAttributeInternal(size_t index, SynchronizationOfLazyAttribute);
     void attributeChangedFromParserOrByCloning(const QualifiedName&, const AtomicString&, AttributeModificationReason);
 
@@ -644,13 +642,15 @@ private:
     ElementRareData* elementRareData() const;
     ElementRareData& ensureElementRareData();
 
+    WillBeHeapVector<RefPtrWillBeMember<Attr> >& ensureAttrNodeList();
+    void removeAttrNodeList();
     void detachAllAttrNodesFromElement();
     void detachAttrNodeFromElementWithValue(Attr*, const AtomicString& value);
     void detachAttrNodeAtIndex(Attr*, size_t index);
 
     bool isJavaScriptURLAttribute(const Attribute&) const;
 
-    RefPtr<ElementData> m_elementData;
+    RefPtrWillBeMember<ElementData> m_elementData;
 };
 
 DEFINE_NODE_TYPE_CASTS(Element, isElementNode());
@@ -700,14 +700,14 @@ inline Element* Node::parentElement() const
 inline bool Element::fastHasAttribute(const QualifiedName& name) const
 {
     ASSERT(fastAttributeLookupAllowed(name));
-    return elementData() && getAttributeItem(name);
+    return elementData() && findAttributeByName(name);
 }
 
 inline const AtomicString& Element::fastGetAttribute(const QualifiedName& name) const
 {
     ASSERT(fastAttributeLookupAllowed(name));
     if (elementData()) {
-        if (const Attribute* attribute = getAttributeItem(name))
+        if (const Attribute* attribute = findAttributeByName(name))
             return attribute->value();
     }
     return nullAtom;
@@ -715,7 +715,7 @@ inline const AtomicString& Element::fastGetAttribute(const QualifiedName& name) 
 
 inline bool Element::hasAttributesWithoutUpdate() const
 {
-    return elementData() && !elementData()->isEmpty();
+    return elementData() && !elementData()->attributes().isEmpty();
 }
 
 inline const AtomicString& Element::idForStyleResolution() const
@@ -752,11 +752,6 @@ inline const AtomicString& Element::getClassAttribute() const
     return fastGetAttribute(HTMLNames::classAttr);
 }
 
-inline bool Element::shouldIgnoreAttributeCase() const
-{
-    return isHTMLElement() && document().isHTMLDocument();
-}
-
 inline void Element::setIdAttribute(const AtomicString& value)
 {
     setAttribute(HTMLNames::idAttr, value);
@@ -772,19 +767,19 @@ inline const SpaceSplitString& Element::classNames() const
 inline size_t Element::attributeCount() const
 {
     ASSERT(elementData());
-    return elementData()->length();
+    return elementData()->attributes().size();
 }
 
-inline const Attribute& Element::attributeItem(unsigned index) const
+inline const Attribute& Element::attributeAt(unsigned index) const
 {
     ASSERT(elementData());
-    return elementData()->attributeItem(index);
+    return elementData()->attributes()[index];
 }
 
-inline const Attribute* Element::getAttributeItem(const QualifiedName& name) const
+inline const Attribute* Element::findAttributeByName(const QualifiedName& name) const
 {
     ASSERT(elementData());
-    return elementData()->getAttributeItem(name);
+    return elementData()->attributes().find(name);
 }
 
 inline bool Element::hasID() const
@@ -882,6 +877,14 @@ inline bool isShadowHost(const Element* element)
 #define DEFINE_ELEMENT_TYPE_CASTS_WITH_FUNCTION(thisType) \
     template <> inline bool isElementOfType<const thisType>(const Element& element) { return is##thisType(element); } \
     DEFINE_NODE_TYPE_CASTS_WITH_FUNCTION(thisType)
+
+#define DECLARE_ELEMENT_FACTORY_WITH_TAGNAME(T) \
+    static PassRefPtrWillBeRawPtr<T> create(const QualifiedName&, Document&)
+#define DEFINE_ELEMENT_FACTORY_WITH_TAGNAME(T) \
+    PassRefPtrWillBeRawPtr<T> T::create(const QualifiedName& tagName, Document& document) \
+    { \
+        return adoptRefWillBeNoop(new T(tagName, document)); \
+    }
 
 } // namespace
 

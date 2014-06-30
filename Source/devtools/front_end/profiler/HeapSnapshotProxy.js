@@ -159,8 +159,8 @@ WebInspector.HeapSnapshotWorkerProxy.prototype = {
         }
         if (data.error) {
             if (data.errorMethodName)
-                WebInspector.console.log(WebInspector.UIString("An error happened when a call for method '%s' was requested", data.errorMethodName));
-            WebInspector.console.log(data["errorCallStack"]);
+                WebInspector.messageSink.addMessage(WebInspector.UIString("An error occurred when a call to method '%s' was requested", data.errorMethodName));
+            WebInspector.messageSink.addMessage(data["errorCallStack"]);
             delete this._callbacks[data.callId];
             return;
         }
@@ -182,6 +182,7 @@ WebInspector.HeapSnapshotWorkerProxy.prototype = {
 
 /**
  * @constructor
+ * @param {!WebInspector.HeapSnapshotWorkerProxy} worker
  * @param {number} objectId
  */
 WebInspector.HeapSnapshotProxyObject = function(worker, objectId)
@@ -241,6 +242,7 @@ WebInspector.HeapSnapshotProxyObject.prototype = {
  * @constructor
  * @extends {WebInspector.HeapSnapshotProxyObject}
  * @implements {WebInspector.OutputStream}
+ * @param {!WebInspector.HeapSnapshotWorkerProxy} worker
  * @param {number} objectId
  * @param {number} profileUid
  * @param {function(!WebInspector.HeapSnapshotProxy)} snapshotReceivedCallback
@@ -334,11 +336,6 @@ WebInspector.HeapSnapshotProxy.prototype = {
         this.callMethod(callback, "nodeClassName", snapshotObjectId);
     },
 
-    dominatorIdsForNode: function(nodeIndex, callback)
-    {
-        this.callMethod(callback, "dominatorIdsForNode", nodeIndex);
-    },
-
     /**
      * @param {number} nodeIndex
      * @return {!WebInspector.HeapSnapshotProviderProxy}
@@ -393,15 +390,6 @@ WebInspector.HeapSnapshotProxy.prototype = {
     createNodesProviderForClass: function(className, nodeFilter)
     {
         return this.callFactoryMethod(null, "createNodesProviderForClass", WebInspector.HeapSnapshotProviderProxy, className, nodeFilter);
-    },
-
-    /**
-     * @param {number} nodeIndex
-     * @return {?WebInspector.HeapSnapshotProviderProxy}
-     */
-    createNodesProviderForDominator: function(nodeIndex)
-    {
-        return this.callFactoryMethod(null, "createNodesProviderForDominator", WebInspector.HeapSnapshotProviderProxy, nodeIndex);
     },
 
     allocationTracesTops: function(callback)

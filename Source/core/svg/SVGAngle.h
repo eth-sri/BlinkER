@@ -23,6 +23,7 @@
 #define SVGAngle_h
 
 #include "core/svg/SVGEnumeration.h"
+#include "core/svg/properties/SVGPropertyHelper.h"
 
 namespace WebCore {
 
@@ -58,7 +59,7 @@ private:
     SVGAngle* m_angle;
 };
 
-class SVGAngle : public SVGPropertyBase {
+class SVGAngle : public SVGPropertyHelper<SVGAngle> {
 public:
     typedef SVGAngleTearOff TearOffType;
 
@@ -67,7 +68,8 @@ public:
         SVG_ANGLETYPE_UNSPECIFIED = 1,
         SVG_ANGLETYPE_DEG = 2,
         SVG_ANGLETYPE_RAD = 3,
-        SVG_ANGLETYPE_GRAD = 4
+        SVG_ANGLETYPE_GRAD = 4,
+        SVG_ANGLETYPE_TURN = 5
     };
 
     static PassRefPtr<SVGAngle> create()
@@ -94,7 +96,6 @@ public:
     // SVGPropertyBase:
 
     PassRefPtr<SVGAngle> clone() const;
-    virtual PassRefPtr<SVGPropertyBase> cloneForAnimation(const String&) const OVERRIDE;
 
     virtual String valueAsString() const OVERRIDE;
     void setValueAsString(const String&, ExceptionState&);

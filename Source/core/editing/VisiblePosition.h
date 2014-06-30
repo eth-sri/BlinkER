@@ -26,8 +26,8 @@
 #ifndef VisiblePosition_h
 #define VisiblePosition_h
 
-#include "core/dom/Position.h"
 #include "core/editing/EditingBoundary.h"
+#include "core/editing/PositionWithAffinity.h"
 #include "platform/heap/Handle.h"
 #include "platform/text/TextDirection.h"
 
@@ -48,8 +48,10 @@ namespace WebCore {
 
 class InlineBox;
 class Node;
+class Range;
 
-class VisiblePosition {
+class VisiblePosition FINAL {
+    DISALLOW_ALLOCATION();
 public:
     // NOTE: UPSTREAM affinity will be used only if pos is at end of a wrapped line,
     // otherwise it will be converted to DOWNSTREAM
@@ -98,6 +100,8 @@ public:
     // Abs x/y position of the caret ignoring transforms.
     // FIXME: navigation with transforms should be smarter.
     int lineDirectionPointForBlockDirectionNavigation() const;
+
+    void trace(Visitor*);
 
 #ifndef NDEBUG
     void debugPosition(const char* msg = "") const;

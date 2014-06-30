@@ -27,11 +27,10 @@
 #include "core/editing/AppendNodeCommand.h"
 
 #include "bindings/v8/ExceptionState.h"
-#include "core/dom/Document.h"
 
 namespace WebCore {
 
-AppendNodeCommand::AppendNodeCommand(PassRefPtr<ContainerNode> parent, PassRefPtr<Node> node)
+AppendNodeCommand::AppendNodeCommand(PassRefPtrWillBeRawPtr<ContainerNode> parent, PassRefPtrWillBeRawPtr<Node> node)
     : SimpleEditCommand(parent->document())
     , m_parent(parent)
     , m_node(node)
@@ -57,6 +56,13 @@ void AppendNodeCommand::doUnapply()
         return;
 
     m_node->remove(IGNORE_EXCEPTION);
+}
+
+void AppendNodeCommand::trace(Visitor* visitor)
+{
+    visitor->trace(m_parent);
+    visitor->trace(m_node);
+    SimpleEditCommand::trace(visitor);
 }
 
 } // namespace WebCore

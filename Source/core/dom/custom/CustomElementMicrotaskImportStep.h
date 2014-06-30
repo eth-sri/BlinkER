@@ -32,6 +32,7 @@
 #define CustomElementMicrotaskImportStep_h
 
 #include "core/dom/custom/CustomElementMicrotaskStep.h"
+#include "platform/heap/Handle.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/PassRefPtr.h"
@@ -40,7 +41,7 @@
 
 namespace WebCore {
 
-class CustomElementMicrotaskQueue;
+class CustomElementSyncMicrotaskQueue;
 class HTMLImportChild;
 
 // Processes the Custom Elements in an HTML Import. This is a
@@ -52,31 +53,35 @@ class HTMLImportChild;
 class CustomElementMicrotaskImportStep : public CustomElementMicrotaskStep {
     WTF_MAKE_NONCOPYABLE(CustomElementMicrotaskImportStep);
 public:
-    static PassOwnPtr<CustomElementMicrotaskImportStep> create(HTMLImportChild*);
+    static PassOwnPtrWillBeRawPtr<CustomElementMicrotaskImportStep> create(HTMLImportChild*);
     virtual ~CustomElementMicrotaskImportStep();
 
     // API for HTML Imports
     void parentWasChanged();
     void importDidFinishLoading();
+#if !ENABLE(OILPAN)
     WeakPtr<CustomElementMicrotaskImportStep> weakPtr() { return m_weakFactory.createWeakPtr(); }
+#endif
+
+    virtual void trace(Visitor*) OVERRIDE;
 
 private:
-    CustomElementMicrotaskImportStep(HTMLImportChild*);
+    explicit CustomElementMicrotaskImportStep(HTMLImportChild*);
 
     void didUpgradeAllCustomElements();
     bool shouldWaitForImport() const;
-    bool shouldStopProcessing() const;
 
     // CustomElementMicrotaskStep
     virtual Result process() OVERRIDE FINAL;
-    virtual bool needsProcessOrStop() const OVERRIDE FINAL;
 
 #if !defined(NDEBUG)
     virtual void show(unsigned indent) OVERRIDE;
 #endif
-    WeakPtr<HTMLImportChild> m_import;
-    RefPtr<CustomElementMicrotaskQueue> m_queue;
+    WeakPtrWillBeWeakMember<HTMLImportChild> m_import;
+#if !ENABLE(OILPAN)
     WeakPtrFactory<CustomElementMicrotaskImportStep> m_weakFactory;
+#endif
+    RefPtrWillBeMember<CustomElementSyncMicrotaskQueue> m_queue;
 };
 
 }

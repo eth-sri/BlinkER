@@ -35,6 +35,7 @@
 #include "bindings/v8/V8ObjectConstructor.h"
 #include "bindings/v8/V8RecursionScope.h"
 #include "bindings/v8/V8ScriptRunner.h"
+#include "core/frame/UseCounter.h"
 #include "public/platform/Platform.h"
 #include "wtf/MainThread.h"
 
@@ -48,6 +49,17 @@ static void assertV8RecursionScope()
     ASSERT(V8RecursionScope::properlyUsed(v8::Isolate::GetCurrent()));
 }
 #endif
+
+static void useCounterCallback(v8::Isolate* isolate, v8::Isolate::UseCounterFeature feature)
+{
+    switch (feature) {
+    case v8::Isolate::kUseAsm:
+        UseCounter::count(currentExecutionContext(isolate), UseCounter::UseAsm);
+        break;
+    default:
+        ASSERT_NOT_REACHED();
+    }
+}
 
 V8PerIsolateData::V8PerIsolateData(v8::Isolate* isolate)
     : m_isolate(isolate)
@@ -71,12 +83,13 @@ V8PerIsolateData::V8PerIsolateData(v8::Isolate* isolate)
         mainThreadPerIsolateData = this;
         PageScriptDebugServer::setMainThreadIsolate(isolate);
     }
+    isolate->SetUseCounterCallback(&useCounterCallback);
 }
 
 V8PerIsolateData::~V8PerIsolateData()
 {
-    if (m_blinkInJSScriptState)
-        m_blinkInJSScriptState->disposePerContextData();
+    if (m_scriptRegexpScriptState)
+        m_scriptRegexpScriptState->disposePerContextData();
     if (isMainThread())
         mainThreadPerIsolateData = 0;
 }
@@ -148,11 +161,13 @@ void V8PerIsolateData::setDOMTemplate(void* domTemplateKey, v8::Handle<v8::Funct
     currentDOMTemplateMap().add(domTemplateKey, v8::Eternal<v8::FunctionTemplate>(m_isolate, v8::Local<v8::FunctionTemplate>(templ)));
 }
 
-v8::Local<v8::Context> V8PerIsolateData::ensureDomInJSContext()
+v8::Local<v8::Context> V8PerIsolateData::ensureScriptRegexpContext()
 {
-    if (!m_blinkInJSScriptState)
-        m_blinkInJSScriptState = ScriptState::create(v8::Context::New(m_isolate), DOMWrapperWorld::create());
-    return m_blinkInJSScriptState->context();
+    if (!m_scriptRegexpScriptState) {
+        v8::Local<v8::Context> context(v8::Context::New(m_isolate));
+        m_scriptRegexpScriptState = ScriptState::create(context, DOMWrapperWorld::create());
+    }
+    return m_scriptRegexpScriptState->context();
 }
 
 bool V8PerIsolateData::hasInstance(const WrapperTypeInfo* info, v8::Handle<v8::Value> value)

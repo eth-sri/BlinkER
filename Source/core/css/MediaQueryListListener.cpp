@@ -20,25 +20,29 @@
 #include "config.h"
 #include "core/css/MediaQueryListListener.h"
 
-#include "V8MediaQueryList.h"
-#include "bindings/v8/V8Callback.h"
+#include "bindings/core/v8/V8MediaQueryList.h"
+#include "bindings/v8/ScriptController.h"
+#include <v8.h>
 
 namespace WebCore {
 
-MediaQueryListListener::MediaQueryListListener(const ScriptValue& function)
-    : m_scriptState(ScriptState::current(function.isolate()))
+MediaQueryListListener::MediaQueryListListener(ScriptState* scriptState, const ScriptValue& function)
+    : m_scriptState(scriptState)
     , m_function(function)
 {
     ASSERT(m_function.isFunction());
 }
 
-void MediaQueryListListener::queryChanged(MediaQueryList* query)
+void MediaQueryListListener::call()
 {
+    if (!m_query)
+        return;
+
     if (m_scriptState->contextIsEmpty())
         return;
     ScriptState::Scope scope(m_scriptState.get());
-    v8::Handle<v8::Value> args[] = { toV8(query, m_scriptState->context()->Global(), m_scriptState->isolate()) };
-    invokeCallback(m_scriptState.get(), v8::Handle<v8::Function>::Cast(m_function.v8Value()), WTF_ARRAY_LENGTH(args), args);
+    v8::Handle<v8::Value> args[] = { toV8(m_query.get(), m_scriptState->context()->Global(), m_scriptState->isolate()) };
+    ScriptController::callFunction(m_scriptState->executionContext(), v8::Handle<v8::Function>::Cast(m_function.v8Value()), m_scriptState->context()->Global(), WTF_ARRAY_LENGTH(args), args, m_scriptState->isolate());
 }
 
 }

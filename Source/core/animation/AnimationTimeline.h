@@ -34,7 +34,6 @@
 #include "core/animation/AnimationEffect.h"
 #include "core/animation/AnimationPlayer.h"
 #include "core/dom/Element.h"
-#include "core/events/Event.h"
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
 #include "wtf/RefCounted.h"
@@ -44,7 +43,7 @@
 namespace WebCore {
 
 class Document;
-class TimedItem;
+class AnimationNode;
 
 // AnimationTimeline is constructed and owned by Document, and tied to its lifecycle.
 class AnimationTimeline : public RefCountedWillBeGarbageCollectedFinalized<AnimationTimeline> {
@@ -66,8 +65,8 @@ public:
     void serviceAnimations(TimingUpdateReason);
 
     // Creates a player attached to this timeline, but without a start time.
-    AnimationPlayer* createAnimationPlayer(TimedItem*);
-    AnimationPlayer* play(TimedItem*);
+    AnimationPlayer* createAnimationPlayer(AnimationNode*);
+    AnimationPlayer* play(AnimationNode*);
 
 #if !ENABLE(OILPAN)
     void playerDestroyed(AnimationPlayer* player)

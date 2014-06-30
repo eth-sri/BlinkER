@@ -33,6 +33,7 @@ Extends IdlType and IdlUnionType with property |union_arguments|.
 Design doc: http://www.chromium.org/developers/design-documents/idl-compiler
 """
 
+from idl_definitions import IdlArgument
 from idl_types import IdlType, IdlUnionType, inherits_interface
 from v8_globals import includes
 import v8_types
@@ -40,7 +41,33 @@ import v8_utilities
 from v8_utilities import has_extended_attribute_value
 
 
-def generate_method(interface, method):
+# Methods with any of these require custom method registration code in the
+# interface's configure*Template() function.
+CUSTOM_REGISTRATION_EXTENDED_ATTRIBUTES = frozenset([
+    'DoNotCheckSecurity',
+    'DoNotCheckSignature',
+    'NotEnumerable',
+    'Unforgeable',
+])
+
+
+def argument_needs_try_catch(argument):
+    idl_type = argument.idl_type
+    base_type = not idl_type.array_or_sequence_type and idl_type.base_type
+
+    return not (
+        # These cases are handled by separate code paths in the
+        # generate_argument() macro in Source/bindings/templates/methods.cpp.
+        idl_type.is_callback_interface or
+        base_type == 'SerializedScriptValue' or
+        (argument.is_variadic and idl_type.is_wrapper_type) or
+        # String and enumeration arguments converted using one of the
+        # TOSTRING_* macros in Source/bindings/v8/V8BindingMacros.h don't
+        # use a v8::TryCatch.
+        (base_type == 'DOMString' and not argument.is_variadic))
+
+
+def method_context(interface, method):
     arguments = method.arguments
     extended_attributes = method.extended_attributes
     idl_type = method.idl_type
@@ -71,36 +98,38 @@ def generate_method(interface, method):
     if is_custom_element_callbacks:
         includes.add('core/dom/custom/CustomElementCallbackDispatcher.h')
 
-    has_event_listener_argument = any(
-        argument for argument in arguments
-        if argument.idl_type.name == 'EventListener')
     is_check_security_for_frame = (
         'CheckSecurity' in interface.extended_attributes and
         'DoNotCheckSecurity' not in extended_attributes)
     is_raises_exception = 'RaisesException' in extended_attributes
 
+    arguments_need_try_catch = any(argument_needs_try_catch(argument)
+                                   for argument in arguments)
+
     return {
         'activity_logging_world_list': v8_utilities.activity_logging_world_list(method),  # [ActivityLogging]
-        'arguments': [generate_argument(interface, method, argument, index)
+        'arguments': [argument_context(interface, method, argument, index)
                       for index, argument in enumerate(arguments)],
+        'arguments_need_try_catch': arguments_need_try_catch,
         'conditional_string': v8_utilities.conditional_string(method),
         'cpp_type': idl_type.cpp_type,
         'cpp_value': this_cpp_value,
+        'custom_registration_extended_attributes':
+            CUSTOM_REGISTRATION_EXTENDED_ATTRIBUTES.intersection(
+                extended_attributes.iterkeys()),
         'deprecate_as': v8_utilities.deprecate_as(method),  # [DeprecateAs]
-        'do_not_check_signature': not(is_static or
-            v8_utilities.has_extended_attribute(method,
-                ['DoNotCheckSecurity', 'DoNotCheckSignature', 'NotEnumerable',
-                 'ReadOnly', 'RuntimeEnabled', 'Unforgeable'])),
         'function_template': function_template(),
-        'idl_type': idl_type.base_type,
-        'has_event_listener_argument': has_event_listener_argument,
+        'has_custom_registration': is_static or
+            v8_utilities.has_extended_attribute(
+                method, CUSTOM_REGISTRATION_EXTENDED_ATTRIBUTES),
         'has_exception_state':
-            has_event_listener_argument or
             is_raises_exception or
             is_check_security_for_frame or
+            interface.name == 'EventTarget' or  # FIXME: merge with is_check_security_for_frame http://crbug.com/383699
             any(argument for argument in arguments
                 if argument.idl_type.name == 'SerializedScriptValue' or
-                   argument.idl_type.is_integer_type),
+                   argument.idl_type.may_raise_exception_on_conversion),
+        'idl_type': idl_type.base_type,
         'is_call_with_execution_context': has_extended_attribute_value(method, 'CallWith', 'ExecutionContext'),
         'is_call_with_script_arguments': is_call_with_script_arguments,
         'is_call_with_script_state': is_call_with_script_state,
@@ -114,7 +143,7 @@ def generate_method(interface, method):
             'PartialInterfaceImplementedAs' in extended_attributes,
         'is_per_world_bindings': 'PerWorldBindings' in extended_attributes,
         'is_raises_exception': is_raises_exception,
-        'is_read_only': 'ReadOnly' in extended_attributes,
+        'is_read_only': 'Unforgeable' in extended_attributes,
         'is_static': is_static,
         'is_variadic': arguments and arguments[-1].is_variadic,
         'measure_as': v8_utilities.measure_as(method),  # [MeasureAs]
@@ -137,20 +166,22 @@ def generate_method(interface, method):
     }
 
 
-def generate_argument(interface, method, argument, index):
+def argument_context(interface, method, argument, index):
     extended_attributes = argument.extended_attributes
     idl_type = argument.idl_type
     this_cpp_value = cpp_value(interface, method, index)
     is_variadic_wrapper_type = argument.is_variadic and idl_type.is_wrapper_type
 
     return {
-        'cpp_type': idl_type.cpp_type_args(used_in_cpp_sequence=is_variadic_wrapper_type),
+        'cpp_type': idl_type.cpp_type_args(extended_attributes=extended_attributes,
+                                           raw_type=True,
+                                           used_as_variadic_argument=argument.is_variadic),
         'cpp_value': this_cpp_value,
+        # FIXME: check that the default value's type is compatible with the argument's
+        'default_value': argument.default_cpp_value,
         'enum_validation_expression': idl_type.enum_validation_expression,
-        'has_default': 'Default' in extended_attributes,
-        'has_event_listener_argument': any(
-            argument_so_far for argument_so_far in method.arguments[:index]
-            if argument_so_far.idl_type.name == 'EventListener'),
+        # FIXME: remove once [Default] removed and just use argument.default_value
+        'has_default': 'Default' in extended_attributes or argument.default_value,
         'has_type_checking_interface':
             (has_extended_attribute_value(interface, 'TypeChecking', 'Interface') or
              has_extended_attribute_value(method, 'TypeChecking', 'Interface')) and
@@ -192,14 +223,20 @@ def cpp_value(interface, method, number_of_arguments):
                 return '%s.get()' % argument.name
             return argument.name
         if (idl_type.is_callback_interface or
-            idl_type.name in ['NodeFilter', 'XPathNSResolver']):
+            idl_type.name in ['NodeFilter', 'NodeFilterOrNull',
+                              'XPathNSResolver', 'XPathNSResolverOrNull']):
             # FIXME: remove this special case
             return '%s.release()' % argument.name
         return argument.name
 
     # Truncate omitted optional arguments
     arguments = method.arguments[:number_of_arguments]
-    cpp_arguments = v8_utilities.call_with_arguments(method)
+    cpp_arguments = []
+    if method.is_constructor:
+        call_with_values = interface.extended_attributes.get('ConstructorCallWith')
+    else:
+        call_with_values = method.extended_attributes.get('CallWith')
+    cpp_arguments.extend(v8_utilities.call_with_arguments(call_with_values))
     # Members of IDL partial interface definitions are implemented in C++ as
     # static member functions, which for instance members (non-static members)
     # take *impl as their first argument
@@ -211,7 +248,9 @@ def cpp_value(interface, method, number_of_arguments):
     if this_union_arguments:
         cpp_arguments.extend(this_union_arguments)
 
-    if 'RaisesException' in method.extended_attributes:
+    if ('RaisesException' in method.extended_attributes or
+        (method.is_constructor and
+         has_extended_attribute_value(interface, 'RaisesException', 'Constructor'))):
         cpp_arguments.append('exceptionState')
 
     if method.name == 'Constructor':
@@ -244,23 +283,27 @@ def v8_set_return_value(interface_name, method, cpp_value, for_main_world=False)
     return idl_type.v8_set_return_value(cpp_value, extended_attributes, script_wrappable=script_wrappable, release=release, for_main_world=for_main_world)
 
 
+def v8_value_to_local_cpp_variadic_value(argument, index):
+    assert argument.is_variadic
+    idl_type = argument.idl_type
+
+    macro = 'TONATIVE_VOID_INTERNAL'
+    macro_args = [
+      argument.name,
+      'toNativeArguments<%s>(info, %s)' % (idl_type.cpp_type, index),
+    ]
+
+    return '%s(%s)' % (macro, ', '.join(macro_args))
+
+
 def v8_value_to_local_cpp_value(argument, index):
     extended_attributes = argument.extended_attributes
     idl_type = argument.idl_type
     name = argument.name
     if argument.is_variadic:
-        vector_type = v8_types.cpp_ptr_type('Vector', 'HeapVector', idl_type.gc_type)
-        return 'TONATIVE_VOID({vector_type}<{cpp_type}>, {name}, toNativeArguments<{cpp_type}>(info, {index}))'.format(
-            vector_type=vector_type, cpp_type=idl_type.cpp_type, name=name,
-            index=index)
-    # [Default=NullString]
-    if (argument.is_optional and idl_type.name == 'String' and
-        extended_attributes.get('Default') == 'NullString'):
-        v8_value = 'argumentOrNull(info, %s)' % index
-    else:
-        v8_value = 'info[%s]' % index
-    return idl_type.v8_value_to_local_cpp_value(extended_attributes, v8_value,
-                                                name, index=index)
+        return v8_value_to_local_cpp_variadic_value(argument, index)
+    return idl_type.v8_value_to_local_cpp_value(extended_attributes, 'info[%s]' % index,
+                                                name, index=index, declare_variable=False)
 
 
 ################################################################################
@@ -273,7 +316,7 @@ def property_attributes(method):
     property_attributes_list = []
     if 'NotEnumerable' in extended_attributes:
         property_attributes_list.append('v8::DontEnum')
-    if 'ReadOnly' in extended_attributes:
+    if 'Unforgeable' in extended_attributes:
         property_attributes_list.append('v8::ReadOnly')
     if property_attributes_list:
         property_attributes_list.insert(0, 'v8::DontDelete')
@@ -286,5 +329,12 @@ def union_arguments(idl_type):
             for i in range(len(idl_type.member_types))
             for arg in ['result%sEnabled' % i, 'result%s' % i]]
 
+
+def argument_default_cpp_value(argument):
+    if not argument.default_value:
+        return None
+    return argument.idl_type.literal_cpp_value(argument.default_value)
+
 IdlType.union_arguments = property(lambda self: None)
 IdlUnionType.union_arguments = property(union_arguments)
+IdlArgument.default_cpp_value = property(argument_default_cpp_value)

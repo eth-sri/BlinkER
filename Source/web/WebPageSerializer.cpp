@@ -31,7 +31,7 @@
 #include "config.h"
 #include "public/web/WebPageSerializer.h"
 
-#include "HTMLNames.h"
+#include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/frame/LocalFrame.h"
@@ -41,6 +41,7 @@
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLTableElement.h"
 #include "core/loader/DocumentLoader.h"
+#include "core/page/Page.h"
 #include "core/page/PageSerializer.h"
 #include "platform/SerializedResource.h"
 #include "platform/mhtml/MHTMLArchive.h"
@@ -66,7 +67,7 @@ KURL getSubResourceURLFromElement(Element* element)
 {
     ASSERT(element);
     const QualifiedName& attributeName = element->subResourceAttributeName();
-    if (attributeName == nullQName())
+    if (attributeName == QualifiedName::null())
         return KURL();
 
     String value = element->getAttribute(attributeName);
@@ -139,7 +140,7 @@ void retrieveResourcesForFrame(LocalFrame* frame,
         frameURLs->append(frameURL);
 
     // Now get the resources associated with each node of the document.
-    RefPtrWillBeRawPtr<HTMLCollection> allElements = frame->document()->all();
+    RefPtrWillBeRawPtr<HTMLAllCollection> allElements = frame->document()->all();
     for (unsigned i = 0; i < allElements->length(); ++i) {
         Element* element = allElements->item(i);
         retrieveResourcesForElement(element,
@@ -176,7 +177,7 @@ static PassRefPtr<SharedBuffer> serializePageToMHTML(Page* page, MHTMLArchive::E
     Vector<SerializedResource> resources;
     PageSerializer serializer(&resources);
     serializer.serialize(page);
-    Document* document = page->mainFrame()->document();
+    Document* document = page->deprecatedLocalMainFrame()->document();
     return MHTMLArchive::generateMHTMLData(resources, encodingPolicy, document->title(), document->suggestedMIMEType());
 }
 

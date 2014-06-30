@@ -31,30 +31,32 @@
 #ifndef WebSocketChannelClient_h
 #define WebSocketChannelClient_h
 
+#include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/Vector.h"
 
 namespace WebCore {
 
-    class WebSocketChannelClient {
-    public:
-        virtual ~WebSocketChannelClient() { }
-        virtual void didConnect() { }
-        virtual void didReceiveMessage(const String&) { }
-        virtual void didReceiveBinaryData(PassOwnPtr<Vector<char> >) { }
-        virtual void didReceiveMessageError() { }
-        virtual void didUpdateBufferedAmount(unsigned long /* bufferedAmount */) { }
-        virtual void didStartClosingHandshake() { }
-        enum ClosingHandshakeCompletionStatus {
-            ClosingHandshakeIncomplete,
-            ClosingHandshakeComplete
-        };
-        virtual void didClose(unsigned long /* unhandledBufferedAmount */, ClosingHandshakeCompletionStatus, unsigned short /* code */, const String& /* reason */) { }
-
-    protected:
-        WebSocketChannelClient() { }
+class WebSocketChannelClient : public WillBeGarbageCollectedMixin {
+public:
+    virtual ~WebSocketChannelClient() { }
+    virtual void didConnect(const String& subprotocol, const String& extensions) { }
+    virtual void didReceiveMessage(const String&) { }
+    virtual void didReceiveBinaryData(PassOwnPtr<Vector<char> >) { }
+    virtual void didReceiveMessageError() { }
+    virtual void didConsumeBufferedAmount(unsigned long consumed) { }
+    virtual void didStartClosingHandshake() { }
+    enum ClosingHandshakeCompletionStatus {
+        ClosingHandshakeIncomplete,
+        ClosingHandshakeComplete
     };
+    virtual void didClose(ClosingHandshakeCompletionStatus, unsigned short /* code */, const String& /* reason */) { }
+    virtual void trace(Visitor*) { }
+
+protected:
+    WebSocketChannelClient() { }
+};
 
 } // namespace WebCore
 

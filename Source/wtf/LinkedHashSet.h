@@ -307,7 +307,7 @@ struct LinkedHashSetTraits : public SimpleClassHashTraits<LinkedHashSetNode<Valu
     static const bool emptyValueIsZero = true;
 
     static const bool hasIsEmptyValueFunction = true;
-    static bool isEmptyValue(const Node& value) { return !value.m_next; }
+    static bool isEmptyValue(const Node& node) { return !node.m_next; }
 
     static const int deletedValue = -1;
 
@@ -324,7 +324,7 @@ struct LinkedHashSetTraits : public SimpleClassHashTraits<LinkedHashSetNode<Valu
     struct NeedsTracingLazily {
         static const bool value = ValueTraits::template NeedsTracingLazily<>::value;
     };
-    static const bool isWeak = ValueTraits::isWeak;
+    static const WeakHandlingFlag weakHandlingFlag = ValueTraits::weakHandlingFlag;
 };
 
 template<typename LinkedHashSetType>
@@ -670,11 +670,6 @@ inline void LinkedHashSet<T, U, V, W>::remove(ValuePeekInType value)
     remove(find(value));
 }
 
-template<typename T>
-struct IsWeak<LinkedHashSetNode<T> > {
-    static const bool value = IsWeak<T>::value;
-};
-
 inline void swap(LinkedHashSetNodeBase& a, LinkedHashSetNodeBase& b)
 {
     swap(a.m_prev, b.m_prev);
@@ -709,6 +704,13 @@ void deleteAllValues(const LinkedHashSet<ValueType, T, U>& set)
     for (iterator it = set.begin(); it != end; ++it)
         delete *it;
 }
+
+#if !ENABLE(OILPAN)
+template<typename T, typename U, typename V>
+struct NeedsTracing<LinkedHashSet<T, U, V> > {
+    static const bool value = false;
+};
+#endif
 
 }
 

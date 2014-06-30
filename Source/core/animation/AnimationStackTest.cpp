@@ -10,6 +10,7 @@
 #include "core/animation/AnimationClock.h"
 #include "core/animation/AnimationTimeline.h"
 #include "core/animation/KeyframeEffectModel.h"
+#include "core/animation/interpolation/LegacyStyleInterpolation.h"
 #include <gtest/gtest.h>
 
 namespace WebCore {
@@ -75,7 +76,7 @@ protected:
         return toLegacyStyleInterpolation(interpolation)->currentValue().get();
     }
 
-    RefPtr<Document> document;
+    RefPtrWillBePersistent<Document> document;
     RefPtrWillBePersistent<AnimationTimeline> timeline;
     RefPtrWillBePersistent<Element> element;
 };

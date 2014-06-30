@@ -23,16 +23,17 @@
 #include "config.h"
 #include "core/html/HTMLPlugInElement.h"
 
-#include "CSSPropertyNames.h"
-#include "HTMLNames.h"
 #include "bindings/v8/ScriptController.h"
 #include "bindings/v8/npruntime_impl.h"
+#include "core/CSSPropertyNames.h"
+#include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/Node.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/events/Event.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/Settings.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLContentElement.h"
 #include "core/html/HTMLImageLoader.h"
@@ -40,7 +41,6 @@
 #include "core/loader/FrameLoaderClient.h"
 #include "core/page/EventHandler.h"
 #include "core/page/Page.h"
-#include "core/frame/Settings.h"
 #include "core/plugins/PluginView.h"
 #include "core/rendering/RenderEmbeddedObject.h"
 #include "core/rendering/RenderImage.h"
@@ -82,6 +82,12 @@ HTMLPlugInElement::~HTMLPlugInElement()
     }
 }
 
+void HTMLPlugInElement::trace(Visitor* visitor)
+{
+    visitor->trace(m_imageLoader);
+    HTMLFrameOwnerElement::trace(visitor);
+}
+
 bool HTMLPlugInElement::canProcessDrag() const
 {
     return pluginWidget() && pluginWidget()->isPluginView() && toPluginView(pluginWidget())->canProcessDrag();
@@ -120,7 +126,7 @@ void HTMLPlugInElement::attach(const AttachContext& context)
 
     if (isImageType()) {
         if (!m_imageLoader)
-            m_imageLoader = adoptPtr(new HTMLImageLoader(this));
+            m_imageLoader = HTMLImageLoader::create(this);
         m_imageLoader->updateFromElement();
     } else if (needsWidgetUpdate()
         && renderEmbeddedObject()
@@ -135,7 +141,7 @@ void HTMLPlugInElement::attach(const AttachContext& context)
 
 void HTMLPlugInElement::updateWidget()
 {
-    RefPtr<HTMLPlugInElement> protector(this);
+    RefPtrWillBeRawPtr<HTMLPlugInElement> protector(this);
     updateWidgetInternal();
     if (m_isDelayingLoadEvent) {
         m_isDelayingLoadEvent = false;
@@ -173,6 +179,13 @@ void HTMLPlugInElement::createPluginWithoutRenderer()
     loadPlugin(url, m_serviceType, paramNames, paramValues, useFallback, false);
 }
 
+bool HTMLPlugInElement::shouldAccelerate() const
+{
+    if (Widget* widget = ownedWidget())
+        return widget->isPluginView() && toPluginView(widget)->platformLayer();
+    return false;
+}
+
 void HTMLPlugInElement::detach(const AttachContext& context)
 {
     // Update the widget the next time we attach (detaching destroys the plugin).
@@ -188,6 +201,10 @@ void HTMLPlugInElement::detach(const AttachContext& context)
     Widget* plugin = ownedWidget();
     if (plugin && plugin->pluginShouldPersist())
         m_persistedPluginWidget = plugin;
+#if ENABLE(OILPAN)
+    else if (plugin)
+        plugin->detach();
+#endif
     resetInstance();
     // FIXME - is this next line necessary?
     setWidget(nullptr);
@@ -437,7 +454,7 @@ bool HTMLPlugInElement::requestObject(const String& url, const String& mimeType,
 
     bool useFallback;
     bool requireRenderer = true;
-    if (shouldUsePlugin(completedURL, mimeType, renderer->hasFallbackContent(), useFallback))
+    if (shouldUsePlugin(completedURL, mimeType, hasFallbackContent(), useFallback))
         return loadPlugin(completedURL, mimeType, paramNames, paramValues, useFallback, requireRenderer);
 
     // If the plug-in element already contains a subframe,
@@ -483,7 +500,7 @@ bool HTMLPlugInElement::loadPlugin(const KURL& url, const String& mimeType, cons
         m_persistedPluginWidget = widget;
     }
     document().setContainsPlugins();
-    scheduleLayerUpdate();
+    scheduleSVGFilterLayerUpdateHack();
     return true;
 }
 
@@ -553,6 +570,11 @@ void HTMLPlugInElement::didAddUserAgentShadowRoot(ShadowRoot&)
 void HTMLPlugInElement::willAddFirstAuthorShadowRoot()
 {
     lazyReattachIfAttached();
+}
+
+bool HTMLPlugInElement::hasFallbackContent() const
+{
+    return false;
 }
 
 bool HTMLPlugInElement::useFallbackContent() const

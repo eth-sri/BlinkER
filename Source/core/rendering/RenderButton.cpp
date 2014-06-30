@@ -21,8 +21,6 @@
 #include "config.h"
 #include "core/rendering/RenderButton.h"
 
-#include "core/dom/Document.h"
-
 namespace WebCore {
 
 using namespace HTMLNames;
@@ -97,6 +95,10 @@ void RenderButton::setupInnerStyle(RenderStyle* innerStyle)
     innerStyle->setMarginTop(Length());
     innerStyle->setMarginBottom(Length());
     innerStyle->setFlexDirection(style()->flexDirection());
+    innerStyle->setJustifyContent(style()->justifyContent());
+    innerStyle->setFlexWrap(style()->flexWrap());
+    innerStyle->setAlignItems(style()->alignItems());
+    innerStyle->setAlignContent(style()->alignContent());
 }
 
 bool RenderButton::canHaveGeneratedChildren() const

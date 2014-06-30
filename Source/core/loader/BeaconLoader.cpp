@@ -5,8 +5,7 @@
 #include "config.h"
 #include "core/loader/BeaconLoader.h"
 
-#include "FetchInitiatorTypeNames.h"
-#include "core/dom/Document.h"
+#include "core/FetchInitiatorTypeNames.h"
 #include "core/fetch/CrossOriginAccessControl.h"
 #include "core/fetch/FetchContext.h"
 #include "core/fileapi/File.h"
@@ -27,6 +26,7 @@ void BeaconLoader::prepareRequest(LocalFrame* frame, ResourceRequest& request)
     request.setHTTPHeaderField("Cache-Control", "max-age=0");
     request.setAllowStoredCredentials(true);
     frame->loader().fetchContext().addAdditionalRequestHeaders(frame->document(), request, FetchSubresource);
+    frame->loader().fetchContext().setFirstPartyForCookies(request);
 }
 
 void BeaconLoader::issueRequest(LocalFrame* frame, ResourceRequest& request)
@@ -111,7 +111,7 @@ bool BeaconLoader::sendBeacon(LocalFrame* frame, int allowance, const KURL& beac
     ResourceRequest request(beaconURL);
     prepareRequest(frame, request);
 
-    RefPtr<FormData> entityBody = data->createMultiPartFormData(data->encoding());
+    RefPtr<FormData> entityBody = data->createMultiPartFormData();
 
     unsigned long long entitySize = entityBody->sizeInBytes();
     if (allowance > 0 && static_cast<unsigned long long>(allowance) < entitySize)

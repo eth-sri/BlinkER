@@ -9,9 +9,8 @@
 #include "core/dom/custom/CustomElementCallbackDispatcher.h"
 #include "core/dom/custom/CustomElementCallbackQueue.h"
 #include "core/dom/custom/CustomElementMicrotaskImportStep.h"
-#include "core/dom/custom/CustomElementMicrotaskQueue.h"
+#include "core/dom/custom/CustomElementMicrotaskStepDispatcher.h"
 #include "core/dom/custom/CustomElementScheduler.h"
-#include "core/html/imports/HTMLImportLoader.h"
 #include "wtf/MainThread.h"
 
 namespace WebCore {
@@ -21,37 +20,51 @@ static const CustomElementCallbackQueue::ElementQueueId kMicrotaskQueueId = 0;
 CustomElementMicrotaskDispatcher::CustomElementMicrotaskDispatcher()
     : m_hasScheduledMicrotask(false)
     , m_phase(Quiescent)
-    , m_resolutionAndImports(CustomElementMicrotaskQueue::create())
+    , m_steps(CustomElementMicrotaskStepDispatcher::create())
 {
 }
+
+DEFINE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(CustomElementMicrotaskDispatcher)
 
 CustomElementMicrotaskDispatcher& CustomElementMicrotaskDispatcher::instance()
 {
-    DEFINE_STATIC_LOCAL(CustomElementMicrotaskDispatcher, instance, ());
-    return instance;
+    DEFINE_STATIC_LOCAL(OwnPtrWillBePersistent<CustomElementMicrotaskDispatcher>, instance, (adoptPtrWillBeNoop(new CustomElementMicrotaskDispatcher())));
+    return *instance;
 }
 
-void CustomElementMicrotaskDispatcher::enqueue(HTMLImportLoader* importLoader, PassOwnPtr<CustomElementMicrotaskStep> step)
+void CustomElementMicrotaskDispatcher::enqueue(HTMLImportLoader* parentLoader, PassOwnPtrWillBeRawPtr<CustomElementMicrotaskStep> step)
 {
-    ASSERT(m_phase == Quiescent || m_phase == DispatchingCallbacks);
-    ensureMicrotaskScheduled();
-    if (importLoader)
-        importLoader->microtaskQueue()->enqueue(step);
-    else
-        m_resolutionAndImports->enqueue(step);
+    ensureMicrotaskScheduledForMicrotaskSteps();
+    m_steps->enqueue(parentLoader, step);
+}
+
+void CustomElementMicrotaskDispatcher::enqueue(HTMLImportLoader* parentLoader, PassOwnPtrWillBeRawPtr<CustomElementMicrotaskImportStep> step, bool importIsSync)
+{
+    ensureMicrotaskScheduledForMicrotaskSteps();
+    m_steps->enqueue(parentLoader, step, importIsSync);
 }
 
 void CustomElementMicrotaskDispatcher::enqueue(CustomElementCallbackQueue* queue)
 {
-    ASSERT(m_phase == Quiescent || m_phase == Resolving);
-    ensureMicrotaskScheduled();
+    ensureMicrotaskScheduledForElementQueue();
     queue->setOwner(kMicrotaskQueueId);
     m_elements.append(queue);
 }
 
 void CustomElementMicrotaskDispatcher::importDidFinish(CustomElementMicrotaskImportStep* step)
 {
+    ensureMicrotaskScheduledForMicrotaskSteps();
+}
+
+void CustomElementMicrotaskDispatcher::ensureMicrotaskScheduledForMicrotaskSteps()
+{
     ASSERT(m_phase == Quiescent || m_phase == DispatchingCallbacks);
+    ensureMicrotaskScheduled();
+}
+
+void CustomElementMicrotaskDispatcher::ensureMicrotaskScheduledForElementQueue()
+{
+    ASSERT(m_phase == Quiescent || m_phase == Resolving);
     ensureMicrotaskScheduled();
 }
 
@@ -81,10 +94,10 @@ void CustomElementMicrotaskDispatcher::doDispatch()
     ASSERT_WITH_SECURITY_IMPLICATION(!CustomElementCallbackDispatcher::inCallbackDeliveryScope());
 
     m_phase = Resolving;
-    m_resolutionAndImports->dispatch();
+    m_steps->dispatch();
 
     m_phase = DispatchingCallbacks;
-    for (Vector<CustomElementCallbackQueue*>::iterator it = m_elements.begin();it != m_elements.end(); ++it) {
+    for (WillBeHeapVector<RawPtrWillBeMember<CustomElementCallbackQueue> >::iterator it = m_elements.begin(); it != m_elements.end(); ++it) {
         // Created callback may enqueue an attached callback.
         CustomElementCallbackDispatcher::CallbackDeliveryScope scope;
         (*it)->processInElementQueue(kMicrotaskQueueId);
@@ -95,11 +108,19 @@ void CustomElementMicrotaskDispatcher::doDispatch()
     m_phase = Quiescent;
 }
 
+void CustomElementMicrotaskDispatcher::trace(Visitor* visitor)
+{
+    visitor->trace(m_steps);
+#if ENABLE(OILPAN)
+    visitor->trace(m_elements);
+#endif
+}
+
 #if !defined(NDEBUG)
 void CustomElementMicrotaskDispatcher::show()
 {
-    fprintf(stderr, "Dispatcher:\n");
-    m_resolutionAndImports->show(1);
+    m_steps->show(2);
+
 }
 #endif
 

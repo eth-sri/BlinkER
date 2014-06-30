@@ -29,6 +29,9 @@
 #
 
 {
+    'variables': {
+      'blink_devtools_output_dir': '<(SHARED_INTERMEDIATE_DIR)/blink/devtools',
+    },
     'includes': [
       'devtools.gypi',
     ],
@@ -131,6 +134,7 @@
                             '<(PRODUCT_DIR)/resources/inspector/extensions/ExtensionServer.js',
                             '<(PRODUCT_DIR)/resources/inspector/resources/ResourcesPanel.js',
                             '<(PRODUCT_DIR)/resources/inspector/network/NetworkPanel.js',
+                            '<(PRODUCT_DIR)/resources/inspector/settings/SettingsScreen.js',
                             '<(PRODUCT_DIR)/resources/inspector/source_frame/SourceFrame.js',
                             '<(PRODUCT_DIR)/resources/inspector/sources/SourcesPanel.js',
                             '<(PRODUCT_DIR)/resources/inspector/timeline/TimelinePanel.js',
@@ -172,12 +176,12 @@
                         'relative_path_dirs': [
                             'front_end',
                             '<(PRODUCT_DIR)/resources/inspector',
-                            '<(SHARED_INTERMEDIATE_DIR)/blink',
+                            '<(blink_devtools_output_dir)',
                         ],
                         'input_pages': [
                             '<@(all_devtools_files)',
-                            '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorBackendCommands.js',
-                            '<(SHARED_INTERMEDIATE_DIR)/blink/SupportedCSSProperties.js',
+                            '<(blink_devtools_output_dir)/InspectorBackendCommands.js',
+                            '<(blink_devtools_output_dir)/SupportedCSSProperties.js',
                             '<(PRODUCT_DIR)/resources/inspector/devtools.html',
                         ],
                         'images': [
@@ -211,13 +215,13 @@
                 'protocol.json',
               ],
               'outputs': [
-                '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorBackendCommands.js',
+                '<(blink_devtools_output_dir)/InspectorBackendCommands.js',
               ],
               'action': [
                 'python',
                 'scripts/CodeGeneratorFrontend.py',
                 'protocol.json',
-                '--output_js_dir', '<(SHARED_INTERMEDIATE_DIR)/blink',
+                '--output_js_dir', '<(blink_devtools_output_dir)',
               ],
               'message': 'Generating Inspector protocol frontend sources from protocol.json',
             },
@@ -238,7 +242,7 @@
                 '../core/css/CSSShorthands.in',
               ],
               'outputs': [
-                '<(SHARED_INTERMEDIATE_DIR)/blink/SupportedCSSProperties.js',
+                '<(blink_devtools_output_dir)/SupportedCSSProperties.js',
               ],
               'action': [
                 'python',
@@ -269,12 +273,12 @@
                             '<@(_script_name)',
                             '<@(_input_page)',
                             '<@(devtools_core_js_files)',
-                            '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorBackendCommands.js',
-                            '<(SHARED_INTERMEDIATE_DIR)/blink/SupportedCSSProperties.js',
-                            '<(SHARED_INTERMEDIATE_DIR)/blink/common/modules.js',
+                            '<(blink_devtools_output_dir)/InspectorBackendCommands.js',
+                            '<(blink_devtools_output_dir)/SupportedCSSProperties.js',
+                            '<(blink_devtools_output_dir)/common/modules.js',
                         ],
                         'search_path': [
-                            '<(SHARED_INTERMEDIATE_DIR)/blink',
+                            '<(blink_devtools_output_dir)',
                             'front_end',
                         ],
                         'outputs': ['<(PRODUCT_DIR)/resources/inspector/main/Main.js'],
@@ -287,8 +291,8 @@
                             'destination': '<(PRODUCT_DIR)/resources/inspector',
                             'files': [
                                 '<@(devtools_core_base_js_files)',
-                                '<(SHARED_INTERMEDIATE_DIR)/blink/InspectorBackendCommands.js',
-                                '<(SHARED_INTERMEDIATE_DIR)/blink/SupportedCSSProperties.js',
+                                '<(blink_devtools_output_dir)/InspectorBackendCommands.js',
+                                '<(blink_devtools_output_dir)/SupportedCSSProperties.js',
                             ],
                         },
                         {
@@ -301,7 +305,6 @@
                             'destination': '<(PRODUCT_DIR)/resources/inspector/components',
                             'files': [
                                 '<@(devtools_components_js_files)',
-                                'front_end/components/module.json',
                             ],
                         },
                         {
@@ -708,12 +711,24 @@
             'type': 'none',
             'conditions': [
                 ['debug_devtools==0', { # Release
+                    'actions': [{
+                        'action_name': 'build_settings_module',
+                        'script_name': 'scripts/inline_js_imports.py',
+                        'input_file': 'front_end/settings/SettingsScreen.js',
+                        'inputs': [
+                            '<@(_script_name)',
+                            '<@(devtools_settings_js_files)',
+                        ],
+                        'outputs': ['<(PRODUCT_DIR)/resources/inspector/settings/SettingsScreen.js'],
+                        'action': ['python', '<@(_script_name)', '<@(_input_file)', '<@(_outputs)'],
+                    }],
                 },
                 { # Debug
                     'copies': [
                         {
                             'destination': '<(PRODUCT_DIR)/resources/inspector/settings',
                             'files': [
+                                '<@(devtools_settings_js_files)',
                                 'front_end/settings/module.json',
                             ],
                         }
@@ -888,7 +903,7 @@
                             '<@(_input_file)',
                             '<@(devtools_module_json_files)',
                         ],
-                        'outputs': ['<(SHARED_INTERMEDIATE_DIR)/blink/common/modules.js'],
+                        'outputs': ['<(blink_devtools_output_dir)/common/modules.js'],
                         'action': ['python', '<@(_script_name)', '<@(_input_file)', '<@(_outputs)', '<@(devtools_module_json_files)'],
                     }],
                 },

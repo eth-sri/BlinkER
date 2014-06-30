@@ -33,8 +33,8 @@
 
 #include "core/animation/Animation.h"
 #include "core/animation/AnimationClock.h"
+#include "core/animation/AnimationNode.h"
 #include "core/animation/KeyframeEffectModel.h"
-#include "core/animation/TimedItem.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/QualifiedName.h"
@@ -90,7 +90,7 @@ protected:
     {
         document = Document::create();
         document->animationClock().resetTimeForTesting();
-        element = Element::create(nullQName() , document.get());
+        element = Element::create(QualifiedName::null() , document.get());
         platformTiming = new MockPlatformTiming;
         timeline = AnimationTimeline::create(document.get(), adoptPtrWillBeNoop(platformTiming));
         ASSERT_EQ(0, timeline->currentTimeInternal());
@@ -98,9 +98,9 @@ protected:
 
     virtual void TearDown()
     {
-        timeline.release();
         document.release();
         element.release();
+        timeline.release();
     }
 
     void updateClockAndService(double time)
@@ -109,8 +109,8 @@ protected:
         timeline->serviceAnimations(TimingUpdateForAnimationFrame);
     }
 
-    RefPtr<Document> document;
-    RefPtr<Element> element;
+    RefPtrWillBePersistent<Document> document;
+    RefPtrWillBePersistent<Element> element;
     RefPtrWillBePersistent<AnimationTimeline> timeline;
     Timing timing;
     MockPlatformTiming* platformTiming;

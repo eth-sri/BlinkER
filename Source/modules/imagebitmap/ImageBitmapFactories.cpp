@@ -33,21 +33,21 @@
 
 #include "bindings/v8/ExceptionState.h"
 #include "bindings/v8/ScriptPromiseResolver.h"
-#include "bindings/v8/ScriptPromiseResolverWithContext.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/fileapi/Blob.h"
+#include "core/frame/ImageBitmap.h"
+#include "core/frame/LocalDOMWindow.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLVideoElement.h"
 #include "core/html/ImageData.h"
 #include "core/html/canvas/CanvasRenderingContext2D.h"
-#include "core/frame/DOMWindow.h"
-#include "core/frame/ImageBitmap.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "platform/SharedBuffer.h"
 #include "platform/graphics/BitmapImage.h"
 #include "platform/graphics/ImageSource.h"
 #include "platform/graphics/skia/NativeImageSkia.h"
+#include <v8.h>
 
 namespace WebCore {
 
@@ -60,8 +60,8 @@ static LayoutSize sizeFor(HTMLImageElement* image)
 
 static IntSize sizeFor(HTMLVideoElement* video)
 {
-    if (MediaPlayer* player = video->player())
-        return player->naturalSize();
+    if (blink::WebMediaPlayer* webMediaPlayer = video->webMediaPlayer())
+        return webMediaPlayer->naturalSize();
     return IntSize();
 }
 
@@ -123,15 +123,12 @@ ScriptPromise ImageBitmapFactories::createImageBitmap(ScriptState* scriptState, 
     // This variant does not work in worker threads.
     ASSERT(eventTarget.toDOMWindow());
 
-    if (!video->player()) {
-        exceptionState.throwDOMException(InvalidStateError, "No player can be retrieved from the provided video element.");
-        return ScriptPromise();
-    }
     if (video->networkState() == HTMLMediaElement::NETWORK_EMPTY) {
         exceptionState.throwDOMException(InvalidStateError, "The provided element has not retrieved data.");
         return ScriptPromise();
     }
-    if (video->player()->readyState() <= MediaPlayer::HaveMetadata) {
+    // FIXME: Remove the below null check once we fix the bug 382721
+    if (video->readyState() <= HTMLMediaElement::HAVE_METADATA || !video->webMediaPlayer()) {
         exceptionState.throwDOMException(InvalidStateError, "The provided element's player has no current data.");
         return ScriptPromise();
     }
@@ -143,7 +140,8 @@ ScriptPromise ImageBitmapFactories::createImageBitmap(ScriptState* scriptState, 
         exceptionState.throwSecurityError("The source video contains image data from multiple origins.");
         return ScriptPromise();
     }
-    if (!video->player()->didPassCORSAccessCheck() && eventTarget.toDOMWindow()->document()->securityOrigin()->taintsCanvas(video->currentSrc())) {
+    if (!video->webMediaPlayer()->didPassCORSAccessCheck()
+        && eventTarget.toDOMWindow()->document()->securityOrigin()->taintsCanvas(video->currentSrc())) {
         exceptionState.throwSecurityError("Cross-origin access to the source video is denied.");
         return ScriptPromise();
     }
@@ -186,7 +184,7 @@ ScriptPromise ImageBitmapFactories::createImageBitmap(ScriptState* scriptState, 
 
 ScriptPromise ImageBitmapFactories::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, Blob* blob, ExceptionState& exceptionState)
 {
-    RefPtrWillBeRawPtr<ImageBitmapLoader> loader = ImageBitmapFactories::ImageBitmapLoader::create(from(eventTarget), eventTarget.executionContext(), IntRect());
+    ImageBitmapLoader* loader = ImageBitmapFactories::ImageBitmapLoader::create(from(eventTarget), IntRect(), scriptState);
     ScriptPromise promise = loader->promise();
     from(eventTarget).addLoader(loader);
     loader->loadBlobAsync(eventTarget.executionContext(), blob);
@@ -199,7 +197,7 @@ ScriptPromise ImageBitmapFactories::createImageBitmap(ScriptState* scriptState, 
         exceptionState.throwDOMException(IndexSizeError, String::format("The source %s provided is 0.", sw ? "height" : "width"));
         return ScriptPromise();
     }
-    RefPtrWillBeRawPtr<ImageBitmapLoader> loader = ImageBitmapFactories::ImageBitmapLoader::create(from(eventTarget), eventTarget.executionContext(), IntRect(sx, sy, sw, sh));
+    ImageBitmapLoader* loader = ImageBitmapFactories::ImageBitmapLoader::create(from(eventTarget), IntRect(sx, sy, sw, sh), scriptState);
     ScriptPromise promise = loader->promise();
     from(eventTarget).addLoader(loader);
     loader->loadBlobAsync(eventTarget.executionContext(), blob);
@@ -243,7 +241,7 @@ const char* ImageBitmapFactories::supplementName()
 
 ImageBitmapFactories& ImageBitmapFactories::from(EventTarget& eventTarget)
 {
-    if (DOMWindow* window = eventTarget.toDOMWindow())
+    if (LocalDOMWindow* window = eventTarget.toDOMWindow())
         return fromInternal(*window);
 
     ASSERT(eventTarget.executionContext()->isWorkerGlobalScope());
@@ -261,7 +259,7 @@ ImageBitmapFactories& ImageBitmapFactories::fromInternal(GlobalObject& object)
     return *supplement;
 }
 
-void ImageBitmapFactories::addLoader(PassRefPtrWillBeRawPtr<ImageBitmapLoader> loader)
+void ImageBitmapFactories::addLoader(ImageBitmapLoader* loader)
 {
     m_pendingLoaders.add(loader);
 }
@@ -272,10 +270,10 @@ void ImageBitmapFactories::didFinishLoading(ImageBitmapLoader* loader)
     m_pendingLoaders.remove(loader);
 }
 
-ImageBitmapFactories::ImageBitmapLoader::ImageBitmapLoader(ImageBitmapFactories& factory, ExecutionContext* context, const IntRect& cropRect)
+ImageBitmapFactories::ImageBitmapLoader::ImageBitmapLoader(ImageBitmapFactories& factory, const IntRect& cropRect, ScriptState* scriptState)
     : m_loader(FileReaderLoader::ReadAsArrayBuffer, this)
     , m_factory(&factory)
-    , m_resolver(ScriptPromiseResolverWithContext::create(ScriptState::current(toIsolate(context))))
+    , m_resolver(ScriptPromiseResolver::create(scriptState))
     , m_cropRect(cropRect)
 {
 }
@@ -288,7 +286,7 @@ void ImageBitmapFactories::ImageBitmapLoader::loadBlobAsync(ExecutionContext* co
 void ImageBitmapFactories::trace(Visitor* visitor)
 {
     visitor->trace(m_pendingLoaders);
-    WillBeHeapSupplement<DOMWindow>::trace(visitor);
+    WillBeHeapSupplement<LocalDOMWindow>::trace(visitor);
     WillBeHeapSupplement<WorkerGlobalScope>::trace(visitor);
 }
 

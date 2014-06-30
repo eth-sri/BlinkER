@@ -31,7 +31,8 @@
 #ifndef AnimationPlayer_h
 #define AnimationPlayer_h
 
-#include "core/animation/TimedItem.h"
+#include "core/animation/AnimationNode.h"
+#include "core/dom/ActiveDOMObject.h"
 #include "core/events/EventTarget.h"
 #include "wtf/RefPtr.h"
 
@@ -40,12 +41,15 @@ namespace WebCore {
 class AnimationTimeline;
 class ExceptionState;
 
-class AnimationPlayer FINAL : public RefCountedWillBeRefCountedGarbageCollected<AnimationPlayer>, public EventTargetWithInlineData {
-    DEFINE_EVENT_TARGET_REFCOUNTING(RefCountedWillBeRefCountedGarbageCollected<AnimationPlayer>);
+class AnimationPlayer FINAL : public RefCountedWillBeRefCountedGarbageCollected<AnimationPlayer>
+    , public ActiveDOMObject
+    , public EventTargetWithInlineData {
+    REFCOUNTED_EVENT_TARGET(AnimationPlayer);
+    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(AnimationPlayer);
 public:
 
     ~AnimationPlayer();
-    static PassRefPtrWillBeRawPtr<AnimationPlayer> create(AnimationTimeline&, TimedItem*);
+    static PassRefPtrWillBeRawPtr<AnimationPlayer> create(ExecutionContext*, AnimationTimeline&, AnimationNode*);
 
     // Returns whether the player is finished.
     bool update(TimingUpdateReason);
@@ -78,6 +82,9 @@ public:
 
     virtual const AtomicString& interfaceName() const OVERRIDE;
     virtual ExecutionContext* executionContext() const OVERRIDE;
+    virtual bool hasPendingActivity() const OVERRIDE;
+    virtual void stop() OVERRIDE;
+    virtual bool dispatchEvent(PassRefPtrWillBeRawPtr<Event>) OVERRIDE;
 
     double playbackRate() const { return m_playbackRate; }
     void setPlaybackRate(double);
@@ -94,10 +101,10 @@ public:
     void setStartTime(double startTime) { setStartTimeInternal(startTime / 1000); }
     void setStartTimeInternal(double, bool isUpdateFromCompositor = false);
 
-    const TimedItem* source() const { return m_content.get(); }
-    TimedItem* source() { return m_content.get(); }
-    TimedItem* source(bool& isNull) { isNull = !m_content; return m_content.get(); }
-    void setSource(TimedItem*);
+    const AnimationNode* source() const { return m_content.get(); }
+    AnimationNode* source() { return m_content.get(); }
+    AnimationNode* source(bool& isNull) { isNull = !m_content; return m_content.get(); }
+    void setSource(AnimationNode*);
 
     double timeLag() { return timeLagInternal() * 1000; }
     double timeLagInternal() { return currentTimeWithoutLag() - currentTimeInternal(); }
@@ -147,10 +154,10 @@ public:
 
     virtual bool addEventListener(const AtomicString& eventType, PassRefPtr<EventListener>, bool useCapture = false) OVERRIDE;
 
-    void trace(Visitor*);
+    virtual void trace(Visitor*) OVERRIDE;
 
 private:
-    AnimationPlayer(AnimationTimeline&, TimedItem*);
+    AnimationPlayer(ExecutionContext*, AnimationTimeline&, AnimationNode*);
     double sourceEnd() const;
     bool limited(double currentTime) const;
     double currentTimeWithoutLag() const;
@@ -165,7 +172,7 @@ private:
 
     SortInfo m_sortInfo;
 
-    RefPtrWillBeMember<TimedItem> m_content;
+    RefPtrWillBeMember<AnimationNode> m_content;
     RawPtrWillBeMember<AnimationTimeline> m_timeline;
     // Reflects all pausing, including via pauseForTesting().
     bool m_paused;
@@ -177,6 +184,10 @@ private:
     bool m_outdated;
 
     bool m_finished;
+    // Holds a 'finished' event queued for asynchronous dispatch via the
+    // ScriptedAnimationController. This object remains active until the
+    // event is actually dispatched.
+    RefPtrWillBeMember<Event> m_pendingFinishedEvent;
 };
 
 } // namespace

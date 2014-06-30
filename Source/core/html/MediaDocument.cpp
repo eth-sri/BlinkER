@@ -27,8 +27,8 @@
 
 #include "core/html/MediaDocument.h"
 
-#include "HTMLNames.h"
 #include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "core/HTMLNames.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/RawDataDocumentParser.h"
 #include "core/events/KeyboardEvent.h"
@@ -41,6 +41,7 @@
 #include "core/html/HTMLVideoElement.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
+#include "core/loader/FrameLoaderClient.h"
 #include "platform/KeyboardCodes.h"
 
 namespace WebCore {
@@ -50,9 +51,9 @@ using namespace HTMLNames;
 // FIXME: Share more code with PluginDocumentParser.
 class MediaDocumentParser : public RawDataDocumentParser {
 public:
-    static PassRefPtr<MediaDocumentParser> create(MediaDocument* document)
+    static PassRefPtrWillBeRawPtr<MediaDocumentParser> create(MediaDocument* document)
     {
-        return adoptRef(new MediaDocumentParser(document));
+        return adoptRefWillBeNoop(new MediaDocumentParser(document));
     }
 
 private:
@@ -72,25 +73,25 @@ private:
 void MediaDocumentParser::createDocumentStructure()
 {
     ASSERT(document());
-    RefPtr<HTMLHtmlElement> rootElement = HTMLHtmlElement::create(*document());
+    RefPtrWillBeRawPtr<HTMLHtmlElement> rootElement = HTMLHtmlElement::create(*document());
     rootElement->insertedByParser();
     document()->appendChild(rootElement);
 
     if (document()->frame())
         document()->frame()->loader().dispatchDocumentElementAvailable();
 
-    RefPtr<HTMLHeadElement> head = HTMLHeadElement::create(*document());
-    RefPtr<HTMLMetaElement> meta = HTMLMetaElement::create(*document());
+    RefPtrWillBeRawPtr<HTMLHeadElement> head = HTMLHeadElement::create(*document());
+    RefPtrWillBeRawPtr<HTMLMetaElement> meta = HTMLMetaElement::create(*document());
     meta->setAttribute(nameAttr, "viewport");
     meta->setAttribute(contentAttr, "width=device-width");
     head->appendChild(meta.release());
 
-    RefPtr<HTMLVideoElement> media = HTMLVideoElement::create(*document());
+    RefPtrWillBeRawPtr<HTMLVideoElement> media = HTMLVideoElement::create(*document());
     media->setAttribute(controlsAttr, "");
     media->setAttribute(autoplayAttr, "");
     media->setAttribute(nameAttr, "media");
 
-    RefPtr<HTMLSourceElement> source = HTMLSourceElement::create(*document());
+    RefPtrWillBeRawPtr<HTMLSourceElement> source = HTMLSourceElement::create(*document());
     source->setSrc(document()->url());
 
     if (DocumentLoader* loader = document()->loader())
@@ -98,7 +99,7 @@ void MediaDocumentParser::createDocumentStructure()
 
     media->appendChild(source.release());
 
-    RefPtr<HTMLBodyElement> body = HTMLBodyElement::create(*document());
+    RefPtrWillBeRawPtr<HTMLBodyElement> body = HTMLBodyElement::create(*document());
     body->appendChild(media.release());
 
     rootElement->appendChild(head.release());
@@ -112,6 +113,10 @@ void MediaDocumentParser::appendBytes(const char*, size_t)
     if (m_didBuildDocumentStructure)
         return;
 
+    LocalFrame* frame = document()->frame();
+    if (!frame->loader().client()->allowMedia(document()->url()))
+        return;
+
     createDocumentStructure();
     finish();
 }
@@ -123,7 +128,7 @@ MediaDocument::MediaDocument(const DocumentInit& initializer)
     lockCompatibilityMode();
 }
 
-PassRefPtr<DocumentParser> MediaDocument::createParser()
+PassRefPtrWillBeRawPtr<DocumentParser> MediaDocument::createParser()
 {
     return MediaDocumentParser::create(this);
 }

@@ -21,14 +21,14 @@
 #ifndef SVGPolygonElement_h
 #define SVGPolygonElement_h
 
-#include "SVGNames.h"
+#include "core/SVGNames.h"
 #include "core/svg/SVGPolyElement.h"
 
 namespace WebCore {
 
 class SVGPolygonElement FINAL : public SVGPolyElement {
 public:
-    DEFINE_NODE_FACTORY(SVGPolygonElement);
+    DECLARE_NODE_FACTORY(SVGPolygonElement);
 
 private:
     explicit SVGPolygonElement(Document&);

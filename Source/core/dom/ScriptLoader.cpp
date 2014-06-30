@@ -24,10 +24,10 @@
 #include "config.h"
 #include "core/dom/ScriptLoader.h"
 
-#include "HTMLNames.h"
-#include "SVGNames.h"
 #include "bindings/v8/ScriptController.h"
 #include "bindings/v8/ScriptSourceCode.h"
+#include "core/HTMLNames.h"
+#include "core/SVGNames.h"
 #include "core/dom/Document.h"
 #include "core/eventracer/EventRacerContext.h"
 #include "core/events/Event.h"
@@ -231,10 +231,10 @@ bool ScriptLoader::prepareScript(const TextPosition& scriptStartPosition, Legacy
         m_readyToBeParserExecuted = true;
     } else if (client->hasSourceAttribute() && !client->asyncAttributeValue() && !m_forceAsync) {
         m_willExecuteInOrder = true;
-        contextDocument->scriptRunner()->queueScriptForExecution_(this, m_resource, ScriptRunner::IN_ORDER_EXECUTION);
+        contextDocument->scriptRunner()->queueScriptForExecution(this, m_resource, ScriptRunner::IN_ORDER_EXECUTION);
         m_resource->addClient(this);
     } else if (client->hasSourceAttribute()) {
-        contextDocument->scriptRunner()->queueScriptForExecution_(this, m_resource, ScriptRunner::ASYNC_EXECUTION);
+        contextDocument->scriptRunner()->queueScriptForExecution(this, m_resource, ScriptRunner::ASYNC_EXECUTION);
         m_resource->addClient(this);
     } else {
         // Reset line numbering for nested writes.
@@ -264,8 +264,8 @@ bool ScriptLoader::fetchScript(const String& sourceUrl)
             request.setCrossOriginAccessControl(elementDocument->securityOrigin(), crossOriginMode);
         request.setCharset(scriptCharset());
 
-        bool isValidScriptNonce = elementDocument->contentSecurityPolicy()->allowScriptNonce(m_element->fastGetAttribute(HTMLNames::nonceAttr));
-        if (isValidScriptNonce)
+        bool scriptPassesCSP = elementDocument->contentSecurityPolicy()->allowScriptWithNonce(m_element->fastGetAttribute(HTMLNames::nonceAttr));
+        if (scriptPassesCSP)
             request.setContentSecurityCheck(DoNotCheckContentSecurityPolicy);
 
         m_resource = elementDocument->fetcher()->fetchScript(request);
@@ -298,16 +298,19 @@ void ScriptLoader::executeScript(const ScriptSourceCode& sourceCode)
     if (sourceCode.isEmpty())
         return;
 
-    RefPtr<Document> elementDocument(m_element->document());
-    RefPtr<Document> contextDocument = elementDocument->contextDocument().get();
+    RefPtrWillBeRawPtr<Document> elementDocument(m_element->document());
+    RefPtrWillBeRawPtr<Document> contextDocument = elementDocument->contextDocument().get();
     if (!contextDocument)
         return;
 
     LocalFrame* frame = contextDocument->frame();
 
-    bool shouldBypassMainWorldContentSecurityPolicy = (frame && frame->script().shouldBypassMainWorldContentSecurityPolicy()) || elementDocument->contentSecurityPolicy()->allowScriptNonce(m_element->fastGetAttribute(HTMLNames::nonceAttr)) || elementDocument->contentSecurityPolicy()->allowScriptHash(sourceCode.source());
+    const ContentSecurityPolicy* csp = elementDocument->contentSecurityPolicy();
+    bool shouldBypassMainWorldCSP = (frame && frame->script().shouldBypassMainWorldCSP())
+        || csp->allowScriptWithNonce(m_element->fastGetAttribute(HTMLNames::nonceAttr))
+        || csp->allowScriptWithHash(sourceCode.source());
 
-    if (!m_isExternalScript && (!shouldBypassMainWorldContentSecurityPolicy && !elementDocument->contentSecurityPolicy()->allowInlineScript(elementDocument->url(), m_startLineNumber)))
+    if (!m_isExternalScript && (!shouldBypassMainWorldCSP && !csp->allowInlineScript(elementDocument->url(), m_startLineNumber)))
         return;
 
     if (m_isExternalScript) {
@@ -318,28 +321,31 @@ void ScriptLoader::executeScript(const ScriptSourceCode& sourceCode)
         }
     }
 
-    if (frame) {
-        const bool isImportedScript = contextDocument != elementDocument;
-        // http://www.whatwg.org/specs/web-apps/current-work/#execute-the-script-block step 2.3
-        // with additional support for HTML imports.
-        IgnoreDestructiveWriteCountIncrementer ignoreDestructiveWriteCountIncrementer(m_isExternalScript || isImportedScript ? contextDocument.get() : 0);
+    // FIXME: Can this be moved earlier in the function?
+    // Why are we ever attempting to execute scripts without a frame?
+    if (!frame)
+        return;
 
-        if (isHTMLScriptLoader(m_element))
-            contextDocument->pushCurrentScript(toHTMLScriptElement(m_element));
+    const bool isImportedScript = contextDocument != elementDocument;
+    // http://www.whatwg.org/specs/web-apps/current-work/#execute-the-script-block step 2.3
+    // with additional support for HTML imports.
+    IgnoreDestructiveWriteCountIncrementer ignoreDestructiveWriteCountIncrementer(m_isExternalScript || isImportedScript ? contextDocument.get() : 0);
 
-        AccessControlStatus corsCheck = NotSharableCrossOrigin;
-        if (!m_isExternalScript || (sourceCode.resource() && sourceCode.resource()->passesAccessControlCheck(m_element->document().securityOrigin())))
-            corsCheck = SharableCrossOrigin;
+    if (isHTMLScriptLoader(m_element))
+        contextDocument->pushCurrentScript(toHTMLScriptElement(m_element));
 
-        // Create a script from the script element node, using the script
-        // block's source and the script block's type.
-        // Note: This is where the script is compiled and actually executed.
-        frame->script().executeScriptInMainWorld(sourceCode, corsCheck);
+    AccessControlStatus corsCheck = NotSharableCrossOrigin;
+    if (!m_isExternalScript || (sourceCode.resource() && sourceCode.resource()->passesAccessControlCheck(m_element->document().securityOrigin())))
+        corsCheck = SharableCrossOrigin;
 
-        if (isHTMLScriptLoader(m_element)) {
-            ASSERT(contextDocument->currentScript() == m_element);
-            contextDocument->popCurrentScript();
-        }
+    // Create a script from the script element node, using the script
+    // block's source and the script block's type.
+    // Note: This is where the script is compiled and actually executed.
+    frame->script().executeScriptInMainWorld(sourceCode, corsCheck);
+
+    if (isHTMLScriptLoader(m_element)) {
+        ASSERT(contextDocument->currentScript() == m_element);
+        contextDocument->popCurrentScript();
     }
 }
 
@@ -369,8 +375,8 @@ void ScriptLoader::notifyFinished(Resource* resource)
 {
     ASSERT(!m_willBeParserExecuted);
 
-    RefPtr<Document> elementDocument(m_element->document());
-    RefPtr<Document> contextDocument = elementDocument->contextDocument().get();
+    RefPtrWillBeRawPtr<Document> elementDocument(m_element->document());
+    RefPtrWillBeRawPtr<Document> contextDocument = elementDocument->contextDocument().get();
     if (!contextDocument)
         return;
 

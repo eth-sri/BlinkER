@@ -27,6 +27,7 @@
 #include "config.h"
 #include "platform/graphics/GraphicsContext.h"
 
+#include "platform/TraceEvent.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/geometry/RoundedRect.h"
 #include "platform/graphics/BitmapImage.h"
@@ -37,6 +38,7 @@
 #include "platform/text/TextRunIterator.h"
 #include "platform/weborigin/KURL.h"
 #include "third_party/skia/include/core/SkAnnotation.h"
+#include "third_party/skia/include/core/SkClipStack.h"
 #include "third_party/skia/include/core/SkColorFilter.h"
 #include "third_party/skia/include/core/SkData.h"
 #include "third_party/skia/include/core/SkDevice.h"
@@ -51,10 +53,6 @@
 #include "third_party/skia/include/gpu/GrTexture.h"
 #include "wtf/Assertions.h"
 #include "wtf/MathExtras.h"
-
-#if OS(MACOSX)
-#include <ApplicationServices/ApplicationServices.h>
-#endif
 
 using namespace std;
 using blink::WebBlendMode;
@@ -119,9 +117,10 @@ GraphicsContext::GraphicsContext(SkCanvas* canvas, DisabledMode disableContextOr
     , m_paintStateIndex(0)
     , m_pendingCanvasSave(false)
     , m_annotationMode(0)
-#if !ASSERT_DISABLED
+#if ASSERT_ENABLED
     , m_annotationCount(0)
     , m_layerCount(0)
+    , m_disableDestructionChecks(false)
 #endif
     , m_disabledState(disableContextOrPainting)
     , m_trackOpaqueRegion(false)
@@ -144,20 +143,15 @@ GraphicsContext::GraphicsContext(SkCanvas* canvas, DisabledMode disableContextOr
 
 GraphicsContext::~GraphicsContext()
 {
-#if !ENABLE(OILPAN)
-    // FIXME: Oilpan: These asserts are not true for
-    // CanvasRenderingContext2D. Therefore, there is debug mode code
-    // in the CanvasRenderingContext2D that forces this to be true so
-    // that the assertions can be here for all the other cases. With
-    // Oilpan we cannot run that code in the CanvasRenderingContext2D
-    // destructor because it touches other objects that are already
-    // dead. We need to find another way of doing these asserts when
-    // Oilpan is enabled.
-    ASSERT(!m_paintStateIndex);
-    ASSERT(!m_paintState->saveCount());
-    ASSERT(!m_annotationCount);
-    ASSERT(!m_layerCount);
-    ASSERT(m_recordingStateStack.isEmpty());
+#if ASSERT_ENABLED
+    if (!m_disableDestructionChecks) {
+        ASSERT(!m_paintStateIndex);
+        ASSERT(!m_paintState->saveCount());
+        ASSERT(!m_annotationCount);
+        ASSERT(!m_layerCount);
+        ASSERT(m_recordingStateStack.isEmpty());
+        ASSERT(m_canvasStateStack.isEmpty());
+    }
 #endif
 }
 
@@ -233,7 +227,7 @@ void GraphicsContext::beginAnnotation(const char* rendererName, const char* pain
     for (AnnotationList::const_iterator it = annotations.begin(); it != end; ++it)
         canvas()->addComment(it->first, it->second.ascii().data());
 
-#if !ASSERT_DISABLED
+#if ASSERT_ENABLED
     ++m_annotationCount;
 #endif
 }
@@ -246,7 +240,7 @@ void GraphicsContext::endAnnotation()
     canvas()->endCommentGroup();
 
     ASSERT(m_annotationCount > 0);
-#if !ASSERT_DISABLED
+#if ASSERT_ENABLED
     --m_annotationCount;
 #endif
 }
@@ -388,7 +382,7 @@ bool GraphicsContext::couldUseLCDRenderedText()
     // rendered text cannot be composited correctly when the layer is
     // collapsed. Therefore, subpixel text is contextDisabled when we are drawing
     // onto a layer.
-    if (contextDisabled() || isDrawingToLayer() || !isCertainlyOpaque())
+    if (contextDisabled() || m_canvas->isDrawingToLayer() || !isCertainlyOpaque())
         return false;
 
     return shouldSmoothFonts();
@@ -470,7 +464,7 @@ void GraphicsContext::beginLayer(float opacity, CompositeOperator op, const Floa
         saveLayer(0, &layerPaint);
     }
 
-#if !ASSERT_DISABLED
+#if ASSERT_ENABLED
     ++m_layerCount;
 #endif
 }
@@ -483,7 +477,7 @@ void GraphicsContext::endLayer()
     restoreLayer();
 
     ASSERT(m_layerCount > 0);
-#if !ASSERT_DISABLED
+#if ASSERT_ENABLED
     --m_layerCount;
 #endif
 }
@@ -497,8 +491,7 @@ void GraphicsContext::beginRecording(const FloatRect& bounds)
 
     if (!contextDisabled()) {
         IntRect recordingRect = enclosingIntRect(bounds);
-        m_canvas = displayList->beginRecording(recordingRect.size(),
-            SkPicture::kUsePathBoundsForClip_RecordingFlag);
+        m_canvas = displayList->beginRecording(recordingRect.size());
 
         // We want the bounds offset mapped to (0, 0), such that the display list content
         // is fully contained within the SkPictureRecord's bounds.
@@ -547,26 +540,10 @@ void GraphicsContext::drawDisplayList(DisplayList* displayList)
     if (bounds.x() || bounds.y())
         m_canvas->translate(bounds.x(), bounds.y());
 
-    m_canvas->drawPicture(*displayList->picture());
+    m_canvas->drawPicture(displayList->picture());
 
     if (bounds.x() || bounds.y())
         m_canvas->translate(-bounds.x(), -bounds.y());
-}
-
-void GraphicsContext::setupPaintForFilling(SkPaint* paint) const
-{
-    if (contextDisabled())
-        return;
-
-    *paint = immutableState()->fillPaint();
-}
-
-void GraphicsContext::setupPaintForStroking(SkPaint* paint) const
-{
-    if (contextDisabled())
-        return;
-
-    *paint = immutableState()->strokePaint();
 }
 
 void GraphicsContext::drawConvexPolygon(size_t numPoints, const FloatPoint* points, bool shouldAntialias)
@@ -870,7 +847,7 @@ void GraphicsContext::drawLineForDocumentMarker(const FloatPoint& pt, float widt
 
     if (deviceScaleFactor == 2) {
         save();
-        scale(FloatSize(0.5, 0.5));
+        scale(0.5, 0.5);
     }
     drawRect(rect, paint);
     if (deviceScaleFactor == 2)
@@ -1176,12 +1153,26 @@ void GraphicsContext::didDrawRect(const SkRect& rect, const SkPaint& paint, cons
 }
 
 void GraphicsContext::drawPosText(const void* text, size_t byteLength,
-    const SkPoint pos[],  const SkRect& textRect, const SkPaint& paint)
+    const SkPoint pos[], const SkRect& textRect, const SkPaint& paint)
 {
     if (contextDisabled())
         return;
 
     m_canvas->drawPosText(text, byteLength, pos, paint);
+    didDrawTextInRect(textRect);
+
+    // FIXME: compute bounds for positioned text.
+    if (m_trackOpaqueRegion)
+        m_opaqueRegion.didDrawUnbounded(this, paint, OpaqueRegionSkia::FillOrStroke);
+}
+
+void GraphicsContext::drawPosTextH(const void* text, size_t byteLength,
+    const SkScalar xpos[], SkScalar constY, const SkRect& textRect, const SkPaint& paint)
+{
+    if (contextDisabled())
+        return;
+
+    m_canvas->drawPosTextH(text, byteLength, xpos, constY, paint);
     didDrawTextInRect(textRect);
 
     // FIXME: compute bounds for positioned text.
@@ -1397,6 +1388,14 @@ void GraphicsContext::clipPath(const Path& pathToClip, WindRule clipRule)
     path.setFillType(previousFillType);
 }
 
+bool GraphicsContext::isClipMode() const
+{
+    if (contextDisabled())
+        return false;
+
+    return m_canvas->getClipStack()->getSaveCount() != 0;
+}
+
 void GraphicsContext::clipConvexPolygon(size_t numPoints, const FloatPoint* points, bool antialiased)
 {
     if (contextDisabled())
@@ -1493,30 +1492,30 @@ void GraphicsContext::rotate(float angleInRadians)
     m_canvas->rotate(WebCoreFloatToSkScalar(angleInRadians * (180.0f / 3.14159265f)));
 }
 
-void GraphicsContext::translate(float w, float h)
+void GraphicsContext::translate(float x, float y)
 {
     if (contextDisabled())
         return;
 
-    if (!w && !h)
+    if (!x && !y)
         return;
 
     realizeCanvasSave();
 
-    m_canvas->translate(WebCoreFloatToSkScalar(w), WebCoreFloatToSkScalar(h));
+    m_canvas->translate(WebCoreFloatToSkScalar(x), WebCoreFloatToSkScalar(y));
 }
 
-void GraphicsContext::scale(const FloatSize& size)
+void GraphicsContext::scale(float x, float y)
 {
     if (contextDisabled())
         return;
 
-    if (size.width() == 1.0f && size.height() == 1.0f)
+    if (x == 1.0f && y == 1.0f)
         return;
 
     realizeCanvasSave();
 
-    m_canvas->scale(WebCoreFloatToSkScalar(size.width()), WebCoreFloatToSkScalar(size.height()));
+    m_canvas->scale(WebCoreFloatToSkScalar(x), WebCoreFloatToSkScalar(y));
 }
 
 void GraphicsContext::setURLForRect(const KURL& link, const IntRect& destRect)
@@ -1546,7 +1545,7 @@ void GraphicsContext::addURLTargetAtPoint(const String& name, const IntPoint& po
     SkAnnotateNamedDestination(m_canvas, SkPoint::Make(pos.x(), pos.y()), nameData);
 }
 
-AffineTransform GraphicsContext::getCTM(IncludeDeviceScale) const
+AffineTransform GraphicsContext::getCTM() const
 {
     if (contextDisabled())
         return AffineTransform();
@@ -1653,7 +1652,7 @@ PassOwnPtr<ImageBuffer> GraphicsContext::createCompatibleBuffer(const IntSize& s
     // resolution than one pixel per unit. Also set up a corresponding scale factor on the
     // graphics context.
 
-    AffineTransform transform = getCTM(DefinitelyIncludeDeviceScale);
+    AffineTransform transform = getCTM();
     IntSize scaledSize(static_cast<int>(ceil(size.width() * transform.xScale())), static_cast<int>(ceil(size.height() * transform.yScale())));
 
     SkAlphaType alphaType = (opacityMode == Opaque) ? kOpaque_SkAlphaType : kPremul_SkAlphaType;
@@ -1665,8 +1664,8 @@ PassOwnPtr<ImageBuffer> GraphicsContext::createCompatibleBuffer(const IntSize& s
     ASSERT(surface->isValid());
     OwnPtr<ImageBuffer> buffer = adoptPtr(new ImageBuffer(surface.release()));
 
-    buffer->context()->scale(FloatSize(static_cast<float>(scaledSize.width()) / size.width(),
-        static_cast<float>(scaledSize.height()) / size.height()));
+    buffer->context()->scale(static_cast<float>(scaledSize.width()) / size.width(),
+        static_cast<float>(scaledSize.height()) / size.height());
 
     return buffer.release();
 }
@@ -1746,13 +1745,7 @@ PassRefPtr<SkColorFilter> GraphicsContext::WebCoreColorFilterToSkiaColorFilter(C
     return nullptr;
 }
 
-#if OS(MACOSX)
-CGColorSpaceRef PLATFORM_EXPORT deviceRGBColorSpaceRef()
-{
-    static CGColorSpaceRef deviceSpace = CGColorSpaceCreateDeviceRGB();
-    return deviceSpace;
-}
-#else
+#if !OS(MACOSX)
 void GraphicsContext::draw2xMarker(SkBitmap* bitmap, int index)
 {
     const SkPMColor lineColor = lineColors(index);
@@ -1847,7 +1840,7 @@ const SkPMColor GraphicsContext::antiColors2(int index)
 void GraphicsContext::didDrawTextInRect(const SkRect& textRect)
 {
     if (m_trackTextRegion) {
-        TRACE_EVENT0("skia", "PlatformContextSkia::trackTextRegion");
+        TRACE_EVENT0("skia", "GraphicsContext::didDrawTextInRect");
         m_textRegion.join(textRect);
     }
 }

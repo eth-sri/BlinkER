@@ -22,7 +22,7 @@
 #if ENABLE(SVG_FONTS)
 #include "core/svg/SVGFontFaceSrcElement.h"
 
-#include "SVGNames.h"
+#include "core/SVGNames.h"
 #include "core/css/CSSFontFaceSrcValue.h"
 #include "core/css/CSSValueList.h"
 #include "core/dom/ElementTraversal.h"
@@ -34,11 +34,13 @@ namespace WebCore {
 
 using namespace SVGNames;
 
-SVGFontFaceSrcElement::SVGFontFaceSrcElement(Document& document)
+inline SVGFontFaceSrcElement::SVGFontFaceSrcElement(Document& document)
     : SVGElement(font_face_srcTag, document)
 {
     ScriptWrappable::init(this);
 }
+
+DEFINE_NODE_FACTORY(SVGFontFaceSrcElement)
 
 PassRefPtrWillBeRawPtr<CSSValueList> SVGFontFaceSrcElement::srcValue() const
 {

@@ -83,7 +83,7 @@ public:
     // Evaluate JavaScript in the main world.
     void executeScriptInMainWorld(const String&, ExecuteScriptPolicy = DoNotExecuteScriptWhenScriptsDisabled);
     void executeScriptInMainWorld(const ScriptSourceCode&, AccessControlStatus = NotSharableCrossOrigin);
-    ScriptValue executeScriptInMainWorldAndReturnValue(const ScriptSourceCode&);
+    v8::Local<v8::Value> executeScriptInMainWorldAndReturnValue(const ScriptSourceCode&);
     v8::Local<v8::Value> executeScriptAndReturnValue(v8::Handle<v8::Context>, const ScriptSourceCode&, AccessControlStatus = NotSharableCrossOrigin);
 
     // Executes JavaScript in an isolated world. The script gets its own global scope,
@@ -94,7 +94,7 @@ public:
     // Otherwise, a new world is created.
     //
     // FIXME: Get rid of extensionGroup here.
-    void executeScriptInIsolatedWorld(int worldID, const Vector<ScriptSourceCode>& sources, int extensionGroup, Vector<ScriptValue>* results);
+    void executeScriptInIsolatedWorld(int worldID, const Vector<ScriptSourceCode>& sources, int extensionGroup, Vector<v8::Local<v8::Value> >* results);
 
     // Returns true if argument is a JavaScript URL.
     bool executeScriptIfJavaScriptURL(const KURL&);
@@ -105,7 +105,7 @@ public:
     // Returns true if the current world is isolated, and has its own Content
     // Security Policy. In this case, the policy of the main world should be
     // ignored when evaluating resources injected into the DOM.
-    bool shouldBypassMainWorldContentSecurityPolicy();
+    bool shouldBypassMainWorldCSP();
 
     // Creates a property of the global object of a frame.
     void bindToWindowObject(LocalFrame*, const String& key, NPObject*);
@@ -154,7 +154,7 @@ private:
     typedef HashMap<int, OwnPtr<V8WindowShell> > IsolatedWorldMap;
     typedef HashMap<Widget*, NPObject*> PluginObjectMap;
 
-    ScriptValue evaluateScriptInMainWorld(const ScriptSourceCode&, AccessControlStatus, ExecuteScriptPolicy);
+    v8::Local<v8::Value> evaluateScriptInMainWorld(const ScriptSourceCode&, AccessControlStatus, ExecuteScriptPolicy);
 
     LocalFrame* m_frame;
     const String* m_sourceURL;

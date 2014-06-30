@@ -29,7 +29,8 @@
 #include "config.h"
 #include "bindings/v8/V8DOMConfiguration.h"
 
-#include "bindings/v8/V8Binding.h"
+#include "bindings/v8/V8ObjectConstructor.h"
+#include "platform/TraceEvent.h"
 
 namespace WebCore {
 
@@ -76,7 +77,7 @@ void V8DOMConfiguration::installConstants(v8::Handle<v8::FunctionTemplate> funct
     }
 }
 
-void V8DOMConfiguration::installCallbacks(v8::Handle<v8::ObjectTemplate> prototype, v8::Handle<v8::Signature> signature, v8::PropertyAttribute attributes, const MethodConfiguration* callbacks, size_t callbackCount, v8::Isolate* isolate)
+void V8DOMConfiguration::installMethods(v8::Handle<v8::ObjectTemplate> prototype, v8::Handle<v8::Signature> signature, v8::PropertyAttribute attributes, const MethodConfiguration* callbacks, size_t callbackCount, v8::Isolate* isolate)
 {
     bool isMainWorld = DOMWrapperWorld::current(isolate).isMainWorld();
     for (size_t i = 0; i < callbackCount; ++i) {
@@ -113,8 +114,22 @@ v8::Local<v8::Signature> V8DOMConfiguration::installDOMClassTemplate(v8::Handle<
     if (accessorCount)
         installAccessors(functionDescriptor->PrototypeTemplate(), defaultSignature, accessors, accessorCount, isolate);
     if (callbackCount)
-        installCallbacks(functionDescriptor->PrototypeTemplate(), defaultSignature, static_cast<v8::PropertyAttribute>(v8::DontDelete), callbacks, callbackCount, isolate);
+        installMethods(functionDescriptor->PrototypeTemplate(), defaultSignature, static_cast<v8::PropertyAttribute>(v8::DontDelete), callbacks, callbackCount, isolate);
     return defaultSignature;
+}
+
+v8::Handle<v8::FunctionTemplate> V8DOMConfiguration::domClassTemplate(v8::Isolate* isolate, WrapperTypeInfo* wrapperTypeInfo, void (*configureDOMClassTemplate)(v8::Handle<v8::FunctionTemplate>, v8::Isolate*))
+{
+    V8PerIsolateData* data = V8PerIsolateData::from(isolate);
+    v8::Local<v8::FunctionTemplate> result = data->existingDOMTemplate(wrapperTypeInfo);
+    if (!result.IsEmpty())
+        return result;
+
+    TRACE_EVENT_SCOPED_SAMPLING_STATE("blink", "BuildDOMTemplate");
+    result = v8::FunctionTemplate::New(isolate, V8ObjectConstructor::isValidConstructorMode);
+    configureDOMClassTemplate(result, isolate);
+    data->setDOMTemplate(wrapperTypeInfo, result);
+    return result;
 }
 
 } // namespace WebCore

@@ -41,6 +41,7 @@
 
 namespace WebCore {
 
+class Document;
 class ExceptionState;
 class HTMLDivElement;
 class VTTCueBox;
@@ -89,7 +90,7 @@ public:
 
     bool isScrollingRegion() { return m_scroll; }
 
-    PassRefPtr<HTMLDivElement> getDisplayTree(Document&);
+    PassRefPtrWillBeRawPtr<HTMLDivElement> getDisplayTree(Document&);
 
     void appendVTTCueBox(PassRefPtrWillBeRawPtr<VTTCueBox>);
     void displayLastVTTCueBox();

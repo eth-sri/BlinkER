@@ -36,6 +36,8 @@ from collections import defaultdict
 import itertools
 from operator import itemgetter
 
+import idl_definitions
+from idl_definitions import IdlOperation
 import idl_types
 from idl_types import IdlType, inherits_interface
 import v8_attributes
@@ -54,20 +56,20 @@ INTERFACE_H_INCLUDES = frozenset([
     'platform/heap/Handle.h',
 ])
 INTERFACE_CPP_INCLUDES = frozenset([
-    'RuntimeEnabledFeatures.h',
     'bindings/v8/ExceptionState.h',
     'bindings/v8/V8DOMConfiguration.h',
     'bindings/v8/V8HiddenValue.h',
     'bindings/v8/V8ObjectConstructor.h',
     'core/dom/ContextFeatures.h',
     'core/dom/Document.h',
+    'platform/RuntimeEnabledFeatures.h',
     'platform/TraceEvent.h',
     'wtf/GetPtr.h',
     'wtf/RefPtr.h',
 ])
 
 
-def generate_interface(interface):
+def interface_context(interface):
     includes.clear()
     includes.update(INTERFACE_CPP_INCLUDES)
     header_includes = set(INTERFACE_H_INCLUDES)
@@ -113,7 +115,7 @@ def generate_interface(interface):
     set_wrapper_reference_to_list = [{
         'name': argument.name,
         # FIXME: properly should be:
-        # 'cpp_type': argument.idl_type.cpp_type_args(used_as_argument=True),
+        # 'cpp_type': argument.idl_type.cpp_type_args(raw_type=True),
         # (if type is non-wrapper type like NodeFilter, normally RefPtr)
         # Raw pointers faster though, and NodeFilter hacky anyway.
         'cpp_type': argument.idl_type.implemented_as + '*',
@@ -139,7 +141,7 @@ def generate_interface(interface):
 
     this_gc_type = gc_type(interface)
 
-    template_contents = {
+    context = {
         'conditional_string': conditional_string(interface),  # [Conditional]
         'cpp_class': cpp_name(interface),
         'gc_type': this_gc_type,
@@ -175,14 +177,14 @@ def generate_interface(interface):
     }
 
     # Constructors
-    constructors = [generate_constructor(interface, constructor)
+    constructors = [constructor_context(interface, constructor)
                     for constructor in interface.constructors
                     # FIXME: shouldn't put named constructors with constructors
                     # (currently needed for Perl compatibility)
                     # Handle named constructors separately
                     if constructor.name == 'Constructor']
     if len(constructors) > 1:
-        template_contents['constructor_overloads'] = generate_overloads(constructors)
+        context['constructor_overloads'] = overloads_context(constructors)
 
     # [CustomConstructor]
     custom_constructors = [{  # Only needed for computing interface length
@@ -200,14 +202,14 @@ def generate_interface(interface):
             includes.add('bindings/v8/SerializedScriptValue.h')
 
     # [NamedConstructor]
-    named_constructor = generate_named_constructor(interface)
+    named_constructor = named_constructor_context(interface)
 
     if (constructors or custom_constructors or has_event_constructor or
         named_constructor):
         includes.add('bindings/v8/V8ObjectConstructor.h')
-        includes.add('core/frame/DOMWindow.h')
+        includes.add('core/frame/LocalDOMWindow.h')
 
-    template_contents.update({
+    context.update({
         'any_type_attributes': any_type_attributes,
         'constructors': constructors,
         'has_custom_constructor': bool(custom_constructors),
@@ -217,21 +219,22 @@ def generate_interface(interface):
         'is_constructor_call_with_document': has_extended_attribute_value(
             interface, 'ConstructorCallWith', 'Document'),  # [ConstructorCallWith=Document]
         'is_constructor_call_with_execution_context': has_extended_attribute_value(
-            interface, 'ConstructorCallWith', 'ExecutionContext'),  # [ConstructorCallWith=ExeuctionContext]
+            interface, 'ConstructorCallWith', 'ExecutionContext'),  # [ConstructorCallWith=ExecutionContext]
         'is_constructor_raises_exception': extended_attributes.get('RaisesException') == 'Constructor',  # [RaisesException=Constructor]
         'named_constructor': named_constructor,
     })
 
     # Constants
-    template_contents.update({
-        'constants': [generate_constant(constant) for constant in interface.constants],
+    context.update({
+        'constants': [constant_context(constant)
+                      for constant in interface.constants],
         'do_not_check_constants': 'DoNotCheckConstants' in extended_attributes,
     })
 
     # Attributes
-    attributes = [v8_attributes.generate_attribute(interface, attribute)
+    attributes = [v8_attributes.attribute_context(interface, attribute)
                   for attribute in interface.attributes]
-    template_contents.update({
+    context.update({
         'attributes': attributes,
         'has_accessors': any(attribute['is_expose_js_accessors'] for attribute in attributes),
         'has_attribute_configuration': any(
@@ -246,27 +249,77 @@ def generate_interface(interface):
     })
 
     # Methods
-    methods = [v8_methods.generate_method(interface, method)
+    methods = [v8_methods.method_context(interface, method)
                for method in interface.operations
                if method.name]  # Skip anonymous special operations (methods)
-    generate_method_overloads(methods)
-    for method in methods:
-        method['do_generate_method_configuration'] = (
-            method['do_not_check_signature'] and
-            not method['per_context_enabled_function'] and
-            # For overloaded methods, only generate one accessor
-            ('overload_index' not in method or method['overload_index'] == 1))
+    compute_method_overloads_context(methods)
 
-    template_contents.update({
+    # Stringifier
+    if interface.stringifier:
+        stringifier = interface.stringifier
+        method = IdlOperation()
+        method.name = 'toString'
+        method.idl_type = IdlType('DOMString')
+        method.extended_attributes.update(stringifier.extended_attributes)
+        if stringifier.attribute:
+            method.extended_attributes['ImplementedAs'] = stringifier.attribute.name
+        elif stringifier.operation:
+            method.extended_attributes['ImplementedAs'] = stringifier.operation.name
+        methods.append(v8_methods.method_context(interface, method))
+
+    per_context_enabled_methods = []
+    custom_registration_methods = []
+    method_configuration_methods = []
+
+    for method in methods:
+        # Skip all but one method in each set of overloaded methods.
+        if 'overload_index' in method and 'overloads' not in method:
+            continue
+
+        if 'overloads' in method:
+            overloads = method['overloads']
+            per_context_enabled_function = overloads['per_context_enabled_function_all']
+            runtime_enabled_function = overloads['runtime_enabled_function_all']
+            has_custom_registration = overloads['has_custom_registration_all']
+        else:
+            per_context_enabled_function = method['per_context_enabled_function']
+            runtime_enabled_function = method['runtime_enabled_function']
+            has_custom_registration = method['has_custom_registration']
+
+        if per_context_enabled_function:
+            per_context_enabled_methods.append(method)
+            continue
+        if runtime_enabled_function or has_custom_registration:
+            custom_registration_methods.append(method)
+            continue
+        method_configuration_methods.append(method)
+
+    for method in methods:
+        # The value of the Function object’s “length” property is a Number
+        # determined as follows:
+        # 1. Let S be the effective overload set for regular operations (if the
+        # operation is a regular operation) or for static operations (if the
+        # operation is a static operation) with identifier id on interface I and
+        # with argument count 0.
+        # 2. Return the length of the shortest argument list of the entries in S.
+        # FIXME: This calculation doesn't take into account whether runtime
+        # enabled overloads are actually enabled, so length may be incorrect.
+        # E.g., [RuntimeEnabled=Foo] void f(); void f(long x);
+        # should have length 1 if Foo is not enabled, but length 0 if it is.
+        method['length'] = (method['overloads']['minarg'] if 'overloads' in method else
+                            method['number_of_required_arguments'])
+
+    context.update({
+        'custom_registration_methods': custom_registration_methods,
         'has_origin_safe_method_setter': any(
             method['is_check_security_for_frame'] and not method['is_read_only']
             for method in methods),
-        'has_method_configuration': any(method['do_generate_method_configuration'] for method in methods),
-        'has_per_context_enabled_methods': any(method['per_context_enabled_function'] for method in methods),
+        'method_configuration_methods': method_configuration_methods,
+        'per_context_enabled_methods': per_context_enabled_methods,
         'methods': methods,
     })
 
-    template_contents.update({
+    context.update({
         'indexed_property_getter': indexed_property_getter(interface),
         'indexed_property_setter': indexed_property_setter(interface),
         'indexed_property_deleter': indexed_property_deleter(interface),
@@ -276,11 +329,11 @@ def generate_interface(interface):
         'named_property_deleter': named_property_deleter(interface),
     })
 
-    return template_contents
+    return context
 
 
 # [DeprecateAs], [Reflect], [RuntimeEnabled]
-def generate_constant(constant):
+def constant_context(constant):
     # (Blink-only) string literals are unquoted in tokenizer, must be re-quoted
     # in C++.
     if constant.idl_type.name == 'String':
@@ -303,17 +356,17 @@ def generate_constant(constant):
 # Overloads
 ################################################################################
 
-def generate_method_overloads(methods):
+def compute_method_overloads_context(methods):
     # Regular methods
-    generate_overloads_by_type([method for method in methods
-                                if not method['is_static']])
+    compute_method_overloads_context_by_type([method for method in methods
+                                              if not method['is_static']])
     # Static methods
-    generate_overloads_by_type([method for method in methods
-                                if method['is_static']])
+    compute_method_overloads_context_by_type([method for method in methods
+                                              if method['is_static']])
 
 
-def generate_overloads_by_type(methods):
-    """Generates |method.overload*| template values.
+def compute_method_overloads_context_by_type(methods):
+    """Computes |method.overload*| template values.
 
     Called separately for static and non-static (regular) methods,
     as these are overloaded separately.
@@ -326,7 +379,7 @@ def generate_overloads_by_type(methods):
     for name, overloads in method_overloads_by_name(methods):
         # Resolution function is generated after last overloaded function;
         # package necessary information into |method.overloads| for that method.
-        overloads[-1]['overloads'] = generate_overloads(overloads)
+        overloads[-1]['overloads'] = overloads_context(overloads)
         overloads[-1]['overloads']['name'] = name
 
 
@@ -344,7 +397,7 @@ def method_overloads_by_name(methods):
     return sort_and_groupby(overloaded_methods, itemgetter('name'))
 
 
-def generate_overloads(overloads):
+def overloads_context(overloads):
     """Returns |overloads| template values for a single name.
 
     Sets |method.overload_index| in place for |method| in |overloads|
@@ -356,6 +409,32 @@ def generate_overloads(overloads):
 
     effective_overloads_by_length = effective_overload_set_by_length(overloads)
     lengths = [length for length, _ in effective_overloads_by_length]
+    name = overloads[0].get('name', '<constructor>')
+
+    # Check and fail if all overloads with the shortest acceptable arguments
+    # list are runtime enabled, since we would otherwise set 'length' on the
+    # function object to an incorrect value when none of those overloads were
+    # actually enabled at runtime. The exception is if all overloads are
+    # controlled by the same runtime enabled feature, in which case there would
+    # be no function object at all if it is not enabled.
+    shortest_overloads = effective_overloads_by_length[0][1]
+    if (all(method.get('runtime_enabled_function')
+            for method, _, _ in shortest_overloads) and
+        not common_value(overloads, 'runtime_enabled_function')):
+        raise ValueError('Function.length of %s depends on runtime enabled features' % name)
+
+    # Check and fail if overloads disagree on any of the extended attributes
+    # that affect how the method should be registered.
+    # Skip the check for overloaded constructors, since they don't support any
+    # of the extended attributes in question.
+    if not overloads[0].get('is_constructor'):
+        overload_extended_attributes = [
+            method['custom_registration_extended_attributes']
+            for method in overloads]
+        for extended_attribute in v8_methods.CUSTOM_REGISTRATION_EXTENDED_ATTRIBUTES:
+            if common_key(overload_extended_attributes, extended_attribute) is None:
+                raise ValueError('Overloads of %s have conflicting extended attribute %s'
+                                 % (name, extended_attribute))
 
     return {
         'deprecate_all_as': common_value(overloads, 'deprecate_as'),  # [DeprecateAs]
@@ -365,6 +444,9 @@ def generate_overloads(overloads):
         # entries in S.
         'maxarg': lengths[-1],
         'measure_all_as': common_value(overloads, 'measure_as'),  # [MeasureAs]
+        'has_custom_registration_all': common_value(overloads, 'has_custom_registration'),
+        'per_context_enabled_function_all': common_value(overloads, 'per_context_enabled_function'),  # [PerContextEnabled]
+        'runtime_enabled_function_all': common_value(overloads, 'runtime_enabled_function'),  # [RuntimeEnabled]
         'valid_arities': lengths
             # Only need to report valid arities if there is a gap in the
             # sequence of possible lengths, otherwise invalid length means
@@ -672,7 +754,7 @@ def resolution_tests_methods(effective_overloads):
     # only needed if distinguishing between primitive types.)
     if len([idl_type.is_primitive_type for idl_type in idl_types]) > 1:
         # (Only needed if match in step 11, otherwise redundant.)
-        if any(idl_type.name == 'String' or idl_type.is_enum
+        if any(idl_type.is_string_type or idl_type.is_enum
                for idl_type in idl_types):
             # 10. Otherwise: if V is a Number value, and there is an entry in S
             # that has one of the following types at position i of its type
@@ -687,17 +769,20 @@ def resolution_tests_methods(effective_overloads):
                 pass
 
     # (Perform automatic type conversion, in order. If any of these match,
-    # that’s the end, and no other tests are needed.)
+    # that’s the end, and no other tests are needed.) To keep this code simple,
+    # we rely on the C++ compiler's dead code elimination to deal with the
+    # redundancy if both cases below trigger.
 
     # 11. Otherwise: if there is an entry in S that has one of the following
     # types at position i of its type list,
     # • DOMString
+    # • ByteString
+    # • ScalarValueString [a DOMString typedef, per definition.]
     # • an enumeration type
     try:
         method = next(method for idl_type, method in idl_types_methods
-                      if idl_type.name == 'String' or idl_type.is_enum)
+                      if idl_type.is_string_type or idl_type.is_enum)
         yield 'true', method
-        return
     except StopIteration:
         pass
 
@@ -708,7 +793,6 @@ def resolution_tests_methods(effective_overloads):
         method = next(method for idl_type, method in idl_types_methods
                       if idl_type.is_numeric_type)
         yield 'true', method
-        return
     except StopIteration:
         pass
 
@@ -725,17 +809,34 @@ def Counter(iterable):
     return counter
 
 
+def common(dicts, f):
+    """Returns common result of f across an iterable of dicts, or None.
+
+    Call f for each dict and return its result if the same across all dicts.
+    """
+    values = (f(d) for d in dicts)
+    first_value = next(values)
+    if all(value == first_value for value in values):
+        return first_value
+    return None
+
+
+def common_key(dicts, key):
+    """Returns common presence of a key across an iterable of dicts, or None.
+
+    True if all dicts have the key, False if none of the dicts have the key,
+    and None if some but not all dicts have the key.
+    """
+    return common(dicts, lambda d: key in d)
+
+
 def common_value(dicts, key):
     """Returns common value of a key across an iterable of dicts, or None.
 
     Auxiliary function for overloads, so can consolidate an extended attribute
     that appears with the same value on all items in an overload set.
     """
-    values = (d.get(key) for d in dicts)
-    first_value = next(values)
-    if all(value == first_value for value in values):
-        return first_value
-    return None
+    return common(dicts, lambda d: d.get(key))
 
 
 def sort_and_groupby(l, key=None):
@@ -749,20 +850,25 @@ def sort_and_groupby(l, key=None):
 ################################################################################
 
 # [Constructor]
-def generate_constructor(interface, constructor):
+def constructor_context(interface, constructor):
+    arguments_need_try_catch = any(v8_methods.argument_needs_try_catch(argument)
+                                   for argument in constructor.arguments)
+
     return {
-        'argument_list': constructor_argument_list(interface, constructor),
-        'arguments': [v8_methods.generate_argument(interface, constructor, argument, index)
+        'arguments': [v8_methods.argument_context(interface, constructor, argument, index)
                       for index, argument in enumerate(constructor.arguments)],
+        'arguments_need_try_catch': arguments_need_try_catch,
         'cpp_type': cpp_template_type(
             cpp_ptr_type('RefPtr', 'RawPtr', gc_type(interface)),
             cpp_name(interface)),
+        'cpp_value': v8_methods.cpp_value(
+            interface, constructor, len(constructor.arguments)),
         'has_exception_state':
             # [RaisesException=Constructor]
             interface.extended_attributes.get('RaisesException') == 'Constructor' or
             any(argument for argument in constructor.arguments
                 if argument.idl_type.name == 'SerializedScriptValue' or
-                   argument.idl_type.is_integer_type),
+                   argument.idl_type.may_raise_exception_on_conversion),
         'is_constructor': True,
         'is_named_constructor': False,
         'number_of_required_arguments':
@@ -770,40 +876,22 @@ def generate_constructor(interface, constructor):
     }
 
 
-def constructor_argument_list(interface, constructor):
-    arguments = []
-    # [ConstructorCallWith=ExecutionContext]
-    if has_extended_attribute_value(interface, 'ConstructorCallWith', 'ExecutionContext'):
-        arguments.append('context')
-    # [ConstructorCallWith=Document]
-    if has_extended_attribute_value(interface, 'ConstructorCallWith', 'Document'):
-        arguments.append('document')
-
-    arguments.extend([argument.name for argument in constructor.arguments])
-
-    # [RaisesException=Constructor]
-    if interface.extended_attributes.get('RaisesException') == 'Constructor':
-        arguments.append('exceptionState')
-
-    return arguments
-
-
 # [NamedConstructor]
-def generate_named_constructor(interface):
+def named_constructor_context(interface):
     extended_attributes = interface.extended_attributes
     if 'NamedConstructor' not in extended_attributes:
         return None
     # FIXME: parser should return named constructor separately;
     # included in constructors (and only name stored in extended attribute)
     # for Perl compatibility
-    idl_constructor = interface.constructors[0]
-    constructor = generate_constructor(interface, idl_constructor)
-    constructor['argument_list'].insert(0, '*document')
-    constructor.update({
+    idl_constructor = interface.constructors[-1]
+    assert idl_constructor.name == 'NamedConstructor'
+    context = constructor_context(interface, idl_constructor)
+    context.update({
         'name': extended_attributes['NamedConstructor'],
         'is_named_constructor': True,
     })
-    return constructor
+    return context
 
 
 def number_of_required_arguments(constructor):

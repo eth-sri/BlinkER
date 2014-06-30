@@ -22,10 +22,10 @@
 
 #include "core/html/HTMLMeterElement.h"
 
-#include "HTMLNames.h"
 #include "bindings/v8/ExceptionMessages.h"
 #include "bindings/v8/ExceptionState.h"
 #include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "core/HTMLNames.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/html/parser/HTMLParserIdioms.h"
@@ -49,7 +49,7 @@ HTMLMeterElement::~HTMLMeterElement()
 
 PassRefPtrWillBeRawPtr<HTMLMeterElement> HTMLMeterElement::create(Document& document)
 {
-    RefPtrWillBeRawPtr<HTMLMeterElement> meter = adoptRefWillBeRefCountedGarbageCollected(new HTMLMeterElement(document));
+    RefPtrWillBeRawPtr<HTMLMeterElement> meter = adoptRefWillBeNoop(new HTMLMeterElement(document));
     meter->ensureUserAgentShadowRoot();
     return meter.release();
 }

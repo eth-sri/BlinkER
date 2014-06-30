@@ -22,16 +22,18 @@
 
 #include "core/svg/SVGDefsElement.h"
 
-#include "SVGNames.h"
+#include "core/SVGNames.h"
 #include "core/rendering/svg/RenderSVGHiddenContainer.h"
 
 namespace WebCore {
 
-SVGDefsElement::SVGDefsElement(Document& document)
+inline SVGDefsElement::SVGDefsElement(Document& document)
     : SVGGraphicsElement(SVGNames::defsTag, document)
 {
     ScriptWrappable::init(this);
 }
+
+DEFINE_NODE_FACTORY(SVGDefsElement)
 
 RenderObject* SVGDefsElement::createRenderer(RenderStyle*)
 {

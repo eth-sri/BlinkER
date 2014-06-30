@@ -26,6 +26,7 @@
 
 #include "core/page/scrolling/ScrollingCoordinator.h"
 
+#include "core/page/Page.h"
 #include "core/rendering/RenderView.h"
 #include "core/rendering/compositing/CompositedLayerMapping.h"
 #include "core/rendering/compositing/RenderLayerCompositor.h"
@@ -98,7 +99,6 @@ private:
     static void configureSettings(WebSettings* settings)
     {
         settings->setJavaScriptEnabled(true);
-        settings->setForceCompositingMode(true);
         settings->setAcceleratedCompositingEnabled(true);
         settings->setAcceleratedCompositingForFixedPositionEnabled(true);
         settings->setAcceleratedCompositingForOverflowScrollEnabled(true);
@@ -258,7 +258,7 @@ TEST_F(ScrollingCoordinatorChromiumTest, updateEventHandlersDuringTeardown)
 
     // Simulate detaching the document from its DOM window. This should not
     // cause a crash when the WebViewImpl is closed by the test runner.
-    frame()->document()->clearDOMWindow();
+    frame()->document()->prepareForDestruction();
 }
 
 TEST_F(ScrollingCoordinatorChromiumTest, clippedBodyTest)

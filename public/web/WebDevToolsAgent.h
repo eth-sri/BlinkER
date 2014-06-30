@@ -50,11 +50,11 @@ class WebDevToolsAgent {
 public:
     virtual ~WebDevToolsAgent() {}
 
-    virtual void attach() = 0;
-    virtual void reattach(const WebString& savedState) = 0;
+    virtual void attach(const WebString& hostId) = 0;
+    virtual void reattach(const WebString& hostId, const WebString& savedState) = 0;
     virtual void detach() = 0;
 
-    virtual void didNavigate() = 0;
+    virtual void continueProgram() = 0;
 
     virtual void dispatchOnInspectorBackend(const WebString& message) = 0;
 

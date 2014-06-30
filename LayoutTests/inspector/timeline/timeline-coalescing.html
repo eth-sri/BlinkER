@@ -7,20 +7,30 @@
 function initialize_TimelineCoalescing()
 {
 
-InspectorTest.dumpStats = function(record)
+InspectorTest.dumpStats = function(presentationRecord)
 {
-    if (record.type() === "Root")
+    if (!presentationRecord.presentationParent())
         return "";
-    var aggregatedStats = record.aggregatedStats();
+
+    var aggregatedStats = {};
+    var uiUtils = WebInspector.panels.timeline._uiUtils;
+    if (presentationRecord.coalesced()) {
+        var presentationChildren = presentationRecord.presentationChildren();
+        for (var i = 0; i < presentationChildren.length; ++i)
+            uiUtils.aggregateTimeForRecord(aggregatedStats, presentationChildren[i].record());
+    } else {
+        uiUtils.aggregateTimeForRecord(aggregatedStats, presentationRecord.record());
+    }
+
     var timeByCategory = "";
-    
+
     for (category in aggregatedStats) {
         if (timeByCategory)
             timeByCategory += ", ";
         timeByCategory += category + ": " + aggregatedStats[category].toFixed(5);
     }
-    var duration = (record.endTime() - record.startTime()).toFixed(5);
-    var durationTillLastChild = (record.endTime() - record.startTime()).toFixed(5);
+    var duration = (presentationRecord.endTime() - presentationRecord.startTime()).toFixed(5);
+    var durationTillLastChild = (presentationRecord.endTime() - presentationRecord.startTime()).toFixed(5);
     return "duration: " + duration + ":" + durationTillLastChild + (timeByCategory ? " (" + timeByCategory + ")" : "");
 }
 

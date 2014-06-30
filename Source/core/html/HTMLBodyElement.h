@@ -24,6 +24,7 @@
 #ifndef HTMLBodyElement_h
 #define HTMLBodyElement_h
 
+#include "core/dom/Document.h"
 #include "core/html/HTMLElement.h"
 
 namespace WebCore {
@@ -32,7 +33,7 @@ class Document;
 
 class HTMLBodyElement FINAL : public HTMLElement {
 public:
-    static PassRefPtrWillBeRawPtr<HTMLBodyElement> create(Document&);
+    DECLARE_NODE_FACTORY(HTMLBodyElement);
     virtual ~HTMLBodyElement();
 
     DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(blur);
@@ -59,14 +60,14 @@ private:
 
     virtual bool supportsFocus() const OVERRIDE;
 
-    virtual double scrollLeft() OVERRIDE;
-    virtual void setScrollLeft(double) OVERRIDE;
+    virtual int scrollLeft() OVERRIDE;
+    virtual void setScrollLeft(int) OVERRIDE;
 
-    virtual double scrollTop() OVERRIDE;
-    virtual void setScrollTop(double) OVERRIDE;
+    virtual int scrollTop() OVERRIDE;
+    virtual void setScrollTop(int) OVERRIDE;
 
-    virtual double scrollHeight() OVERRIDE;
-    virtual double scrollWidth() OVERRIDE;
+    virtual int scrollHeight() OVERRIDE;
+    virtual int scrollWidth() OVERRIDE;
 };
 
 } //namespace

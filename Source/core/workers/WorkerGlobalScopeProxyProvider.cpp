@@ -29,7 +29,9 @@
  */
 
 #include "config.h"
-#include "WorkerGlobalScopeProxyProvider.h"
+#include "core/workers/WorkerGlobalScopeProxyProvider.h"
+
+#include "core/page/Page.h"
 
 namespace WebCore {
 

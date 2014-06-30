@@ -72,11 +72,11 @@ MainThreadWebSocketChannel::MainThreadWebSocketChannel(Document* document, WebSo
     , m_closingTimer(this, &MainThreadWebSocketChannel::closingTimerFired)
     , m_state(ChannelIdle)
     , m_shouldDiscardReceivedData(false)
-    , m_unhandledBufferedAmount(0)
     , m_identifier(0)
     , m_hasContinuousFrame(false)
     , m_closeEventCode(CloseEventCodeAbnormalClosure)
     , m_outgoingFrameQueueStatus(OutgoingFrameQueueOpen)
+    , m_numConsumedBytesInCurrentFrame(0)
     , m_blobLoaderStatus(BlobLoaderNotStarted)
     , m_sourceURLAtConstruction(sourceURL)
     , m_lineNumberAtConstruction(lineNumber)
@@ -97,12 +97,15 @@ bool MainThreadWebSocketChannel::connect(const KURL& url, const String& protocol
 
     if (m_document->frame() && !m_document->frame()->loader().mixedContentChecker()->canConnectInsecureWebSocket(m_document->securityOrigin(), url))
         return false;
+    Frame* top = m_document->frame()->tree().top();
+    if (top != m_document->frame() && !toLocalFrame(top)->loader().mixedContentChecker()->canConnectInsecureWebSocket(toLocalFrame(top)->document()->securityOrigin(), url))
+        return false;
     if (MixedContentChecker::isMixedContent(m_document->securityOrigin(), url)) {
         String message = "Connecting to a non-secure WebSocket server from a secure origin is deprecated.";
         m_document->addConsoleMessage(JSMessageSource, WarningMessageLevel, message);
     }
 
-    m_handshake = adoptPtr(new WebSocketHandshake(url, protocol, m_document));
+    m_handshake = adoptPtrWillBeNoop(new WebSocketHandshake(url, protocol, m_document));
     m_handshake->reset();
     m_handshake->addExtensionProcessor(m_perMessageDeflate.createExtensionProcessor());
     m_handshake->addExtensionProcessor(m_deflateFramer.createExtensionProcessor());
@@ -113,30 +116,15 @@ bool MainThreadWebSocketChannel::connect(const KURL& url, const String& protocol
         InspectorInstrumentation::didCreateWebSocket(m_document, m_identifier, url, protocol);
     }
     ref();
-    m_handle = SocketStreamHandle::create(m_handshake->url(), this);
+
+    m_handle = SocketStreamHandle::create(this);
+    ASSERT(m_handle);
+    if (m_document->frame()) {
+        m_document->frame()->loader().client()->dispatchWillOpenSocketStream(m_handle.get());
+    }
+    m_handle->connect(m_handshake->url());
+
     return true;
-}
-
-String MainThreadWebSocketChannel::subprotocol()
-{
-    WTF_LOG(Network, "MainThreadWebSocketChannel %p subprotocol()", this);
-    if (!m_handshake || m_handshake->mode() != WebSocketHandshake::Connected)
-        return "";
-    String serverProtocol = m_handshake->serverWebSocketProtocol();
-    if (serverProtocol.isNull())
-        return "";
-    return serverProtocol;
-}
-
-String MainThreadWebSocketChannel::extensions()
-{
-    WTF_LOG(Network, "MainThreadWebSocketChannel %p extensions()", this);
-    if (!m_handshake || m_handshake->mode() != WebSocketHandshake::Connected)
-        return "";
-    String extensions = m_handshake->acceptedExtensions();
-    if (extensions.isNull())
-        return "";
-    return extensions;
 }
 
 WebSocketChannel::SendResult MainThreadWebSocketChannel::send(const String& message)
@@ -167,20 +155,12 @@ WebSocketChannel::SendResult MainThreadWebSocketChannel::send(PassRefPtr<BlobDat
     return WebSocketChannel::SendSuccess;
 }
 
-bool MainThreadWebSocketChannel::send(const char* data, int length)
+WebSocketChannel::SendResult MainThreadWebSocketChannel::send(PassOwnPtr<Vector<char> > data)
 {
-    WTF_LOG(Network, "MainThreadWebSocketChannel %p send() Sending char* data=%p length=%d", this, data, length);
-    enqueueRawFrame(WebSocketFrame::OpCodeBinary, data, length);
+    WTF_LOG(Network, "MainThreadWebSocketChannel %p send() Sending Vector %p", this, data.get());
+    enqueueVector(WebSocketFrame::OpCodeBinary, data);
     processOutgoingFrameQueue();
-    return true;
-}
-
-unsigned long MainThreadWebSocketChannel::bufferedAmount() const
-{
-    WTF_LOG(Network, "MainThreadWebSocketChannel %p bufferedAmount()", this);
-    ASSERT(m_handle);
-    ASSERT(!m_suspended);
-    return m_handle->bufferedAmount();
+    return WebSocketChannel::SendSuccess;
 }
 
 void MainThreadWebSocketChannel::close(int code, const String& reason)
@@ -198,7 +178,7 @@ void MainThreadWebSocketChannel::clearDocument()
 {
     if (m_handshake)
         m_handshake->clearDocument();
-    m_document = 0;
+    m_document = nullptr;
 }
 
 void MainThreadWebSocketChannel::disconnectHandle()
@@ -254,7 +234,7 @@ void MainThreadWebSocketChannel::disconnect()
 
     clearDocument();
 
-    m_client = 0;
+    m_client = nullptr;
     disconnectHandle();
 }
 
@@ -268,14 +248,6 @@ void MainThreadWebSocketChannel::resume()
     m_suspended = false;
     if ((!m_buffer.isEmpty() || (m_state == ChannelClosed)) && m_client && !m_resumeTimer.isActive())
         m_resumeTimer.startOneShot(0, FROM_HERE);
-}
-
-void MainThreadWebSocketChannel::willOpenSocketStream(SocketStreamHandle* handle)
-{
-    WTF_LOG(Network, "MainThreadWebSocketChannel %p willOpenSocketStream()", this);
-    ASSERT(handle);
-    if (m_document->frame())
-        m_document->frame()->loader().client()->dispatchWillOpenSocketStream(handle);
 }
 
 void MainThreadWebSocketChannel::didOpenSocketStream(SocketStreamHandle* handle)
@@ -319,13 +291,12 @@ void MainThreadWebSocketChannel::didCloseSocketStream(SocketStreamHandle* handle
     if (m_outgoingFrameQueueStatus != OutgoingFrameQueueClosed)
         abortOutgoingFrameQueue();
     if (m_handle) {
-        m_unhandledBufferedAmount = m_handle->bufferedAmount();
         WebSocketChannelClient* client = m_client;
-        m_client = 0;
+        m_client = nullptr;
         clearDocument();
         m_handle = nullptr;
         if (client)
-            client->didClose(m_unhandledBufferedAmount, m_receivedClosingHandshake ? WebSocketChannelClient::ClosingHandshakeComplete : WebSocketChannelClient::ClosingHandshakeIncomplete, m_closeEventCode, m_closeEventReason);
+            client->didClose(m_receivedClosingHandshake ? WebSocketChannelClient::ClosingHandshakeComplete : WebSocketChannelClient::ClosingHandshakeIncomplete, m_closeEventCode, m_closeEventReason);
     }
     deref();
 }
@@ -356,10 +327,35 @@ void MainThreadWebSocketChannel::didReceiveSocketStreamData(SocketStreamHandle* 
     processBuffer();
 }
 
-void MainThreadWebSocketChannel::didUpdateBufferedAmount(SocketStreamHandle*, size_t bufferedAmount)
+void MainThreadWebSocketChannel::didConsumeBufferedAmount(SocketStreamHandle*, size_t consumed)
 {
-    if (m_client)
-        m_client->didUpdateBufferedAmount(bufferedAmount);
+    if (m_framingOverheadQueue.isEmpty()) {
+        // Ignore the handshake consumption.
+        return;
+    }
+    if (!m_client || m_state == ChannelClosed)
+        return;
+    size_t remain = consumed;
+    while (remain > 0) {
+        ASSERT(!m_framingOverheadQueue.isEmpty());
+        const FramingOverhead& frame = m_framingOverheadQueue.first();
+
+        ASSERT(m_numConsumedBytesInCurrentFrame <= frame.frameDataSize());
+        size_t consumedInThisFrame = std::min(remain, frame.frameDataSize() - m_numConsumedBytesInCurrentFrame);
+        remain -= consumedInThisFrame;
+        m_numConsumedBytesInCurrentFrame += consumedInThisFrame;
+
+        if (m_numConsumedBytesInCurrentFrame == frame.frameDataSize()) {
+            if (m_client && WebSocketFrame::isNonControlOpCode(frame.opcode())) {
+                // FIXME: As |consumed| is the number of possibly compressed
+                // bytes, we can't determine the number of consumed original
+                // bytes in the middle of a frame.
+                m_client->didConsumeBufferedAmount(frame.originalPayloadLength());
+            }
+            m_framingOverheadQueue.takeFirst();
+            m_numConsumedBytesInCurrentFrame = 0;
+        }
+    }
 }
 
 void MainThreadWebSocketChannel::didFailSocketStream(SocketStreamHandle* handle, const SocketStreamError& error)
@@ -485,7 +481,9 @@ bool MainThreadWebSocketChannel::processOneItemFromBuffer()
 
             WTF_LOG(Network, "MainThreadWebSocketChannel %p Connected", this);
             skipBuffer(headerLength);
-            m_client->didConnect();
+            String subprotocol = m_handshake->serverWebSocketProtocol();
+            String extensions = m_handshake->acceptedExtensions();
+            m_client->didConnect(subprotocol.isNull() ? "" : subprotocol, extensions.isNull() ? "" : extensions);
             WTF_LOG(Network, "MainThreadWebSocketChannel %p %lu bytes remaining in m_buffer", this, static_cast<unsigned long>(m_buffer.size()));
             return !m_buffer.isEmpty();
         }
@@ -732,6 +730,7 @@ bool MainThreadWebSocketChannel::processFrame()
 void MainThreadWebSocketChannel::enqueueTextFrame(const CString& string)
 {
     ASSERT(m_outgoingFrameQueueStatus == OutgoingFrameQueueOpen);
+
     OwnPtr<QueuedFrame> frame = adoptPtr(new QueuedFrame);
     frame->opCode = WebSocketFrame::OpCodeText;
     frame->frameType = QueuedFrameTypeString;
@@ -742,6 +741,7 @@ void MainThreadWebSocketChannel::enqueueTextFrame(const CString& string)
 void MainThreadWebSocketChannel::enqueueRawFrame(WebSocketFrame::OpCode opCode, const char* data, size_t dataLength)
 {
     ASSERT(m_outgoingFrameQueueStatus == OutgoingFrameQueueOpen);
+
     OwnPtr<QueuedFrame> frame = adoptPtr(new QueuedFrame);
     frame->opCode = opCode;
     frame->frameType = QueuedFrameTypeVector;
@@ -751,9 +751,21 @@ void MainThreadWebSocketChannel::enqueueRawFrame(WebSocketFrame::OpCode opCode, 
     m_outgoingFrameQueue.append(frame.release());
 }
 
+void MainThreadWebSocketChannel::enqueueVector(WebSocketFrame::OpCode opCode, PassOwnPtr<Vector<char> > data)
+{
+    ASSERT(m_outgoingFrameQueueStatus == OutgoingFrameQueueOpen);
+
+    OwnPtr<QueuedFrame> frame = adoptPtr(new QueuedFrame);
+    frame->opCode = opCode;
+    frame->frameType = QueuedFrameTypeVector;
+    frame->vectorData.swap(*data);
+    m_outgoingFrameQueue.append(frame.release());
+}
+
 void MainThreadWebSocketChannel::enqueueBlobFrame(WebSocketFrame::OpCode opCode, PassRefPtr<BlobDataHandle> blobData)
 {
     ASSERT(m_outgoingFrameQueueStatus == OutgoingFrameQueueOpen);
+
     OwnPtr<QueuedFrame> frame = adoptPtr(new QueuedFrame);
     frame->opCode = opCode;
     frame->frameType = QueuedFrameTypeBlob;
@@ -852,9 +864,20 @@ bool MainThreadWebSocketChannel::sendFrame(WebSocketFrame::OpCode opCode, const 
 
     Vector<char> frameData;
     frame.makeFrameData(frameData);
+    m_framingOverheadQueue.append(FramingOverhead(opCode, frameData.size(), dataLength));
 
     m_perMessageDeflate.resetDeflateBuffer();
     return m_handle->send(frameData.data(), frameData.size());
+}
+
+void MainThreadWebSocketChannel::trace(Visitor* visitor)
+{
+    visitor->trace(m_document);
+    visitor->trace(m_client);
+    visitor->trace(m_handshake);
+    visitor->trace(m_handle);
+    WebSocketChannel::trace(visitor);
+    SocketStreamHandleClient::trace(visitor);
 }
 
 } // namespace WebCore

@@ -61,8 +61,8 @@ double AnimationClock::currentTime()
         if (m_time < currentTime) {
             // Advance to the first estimated frame after the current time.
             const double frameShift = fmod(currentTime - m_time, approximateFrameTime);
-            const double newTime = currentTime + approximateFrameTime - frameShift;
-            ASSERT(newTime > currentTime);
+            const double newTime = currentTime + (approximateFrameTime - frameShift);
+            ASSERT(newTime >= currentTime);
             ASSERT(newTime <= currentTime + approximateFrameTime);
             updateTime(newTime);
         } else {

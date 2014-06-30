@@ -35,6 +35,7 @@
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
+#include "core/html/HTMLTextAreaElement.h"
 #include "core/page/Page.h"
 #include "core/rendering/InlineIterator.h"
 #include "core/rendering/RenderBlock.h"
@@ -47,14 +48,12 @@
 #include "core/dom/ExecutionContextTask.h"
 #endif
 
-using namespace std;
-
 namespace WebCore {
 
 #ifdef AUTOSIZING_DOM_DEBUG_INFO
 class WriteDebugInfoTask : public ExecutionContextTask {
 public:
-    WriteDebugInfoTask(PassRefPtr<Element> element, AtomicString value)
+    WriteDebugInfoTask(PassRefPtrWillBeRawPtr<Element> element, AtomicString value)
         : m_element(element)
         , m_value(value)
     {
@@ -66,7 +65,7 @@ public:
     }
 
 private:
-    RefPtr<Element> m_element;
+    RefPtrWillBePersistent<Element> m_element;
     AtomicString m_value;
 };
 
@@ -129,15 +128,14 @@ static const RenderObject* parentElementRenderer(const RenderObject* renderer)
     return 0;
 }
 
-static bool isFormInput(const Element* element)
+static bool isNonTextAreaFormControl(const RenderObject* renderer)
 {
-    DEFINE_STATIC_LOCAL(Vector<QualifiedName>, formInputTags, ());
-    if (formInputTags.isEmpty()) {
-        formInputTags.append(HTMLNames::inputTag);
-        formInputTags.append(HTMLNames::buttonTag);
-        formInputTags.append(HTMLNames::selectTag);
-    }
-    return formInputTags.contains(element->tagQName());
+    const Node* node = renderer ? renderer->node() : 0;
+    if (!node || !node->isElementNode())
+        return false;
+    const Element* element = toElement(node);
+
+    return (element->isFormControlElement() && !isHTMLTextAreaElement(element));
 }
 
 static bool isPotentialClusterRoot(const RenderObject* renderer)
@@ -158,10 +156,6 @@ static bool isPotentialClusterRoot(const RenderObject* renderer)
         return false;
     if (renderer->isListItem())
         return (renderer->isFloating() || renderer->isOutOfFlowPositioned());
-    // Avoid creating containers for text within text controls, buttons, or <select> buttons.
-    Node* parentNode = renderer->parent() ? renderer->parent()->generatingNode() : 0;
-    if (parentNode && parentNode->isElementNode() && isFormInput(toElement(parentNode)))
-        return false;
 
     return true;
 }
@@ -194,7 +188,7 @@ static bool blockIsRowOfLinks(const RenderBlock* block)
     //  4. It should contain only inline elements unless they are containers,
     //     children of link elements or children of sub-containers.
     int linkCount = 0;
-    RenderObject* renderer = block->nextInPreOrder(block);
+    RenderObject* renderer = block->firstChild();
     float matchingFontSize = -1;
 
     while (renderer) {
@@ -241,17 +235,15 @@ static bool blockHeightConstrained(const RenderBlock* block)
     return false;
 }
 
-static bool blockContainsFormInput(const RenderBlock* block)
+static bool blockOrImmediateChildrenAreFormControls(const RenderBlock* block)
 {
-    const RenderObject* renderer = block;
+    if (isNonTextAreaFormControl(block))
+        return true;
+    const RenderObject* renderer = block->firstChild();
     while (renderer) {
-        const Node* node = renderer->node();
-        if (node && node->isElementNode() && isFormInput(toElement(node)))
+        if (isNonTextAreaFormControl(renderer))
             return true;
-        if (renderer == block)
-            renderer = renderer->nextInPreOrder(block);
-        else
-            renderer = renderer->nextInPreOrderAfterChildren(block);
+        renderer = renderer->nextSibling();
     }
 
     return false;
@@ -260,7 +252,7 @@ static bool blockContainsFormInput(const RenderBlock* block)
 // Some blocks are not autosized even if their parent cluster wants them to.
 static bool blockSuppressesAutosizing(const RenderBlock* block)
 {
-    if (blockContainsFormInput(block))
+    if (blockOrImmediateChildrenAreFormControls(block))
         return true;
 
     if (blockIsRowOfLinks(block))
@@ -375,7 +367,7 @@ void FastTextAutosizer::beginLayout(RenderBlock* block)
 
     // Cells in auto-layout tables are handled separately by inflateAutoTable.
     bool isAutoTableCell = block->isTableCell() && !toRenderTableCell(block)->table()->style()->isFixedTableLayout();
-    if (block->childrenInline() && block->firstChild() && !isAutoTableCell)
+    if (!isAutoTableCell && !m_clusterStack.isEmpty())
         inflate(block);
 }
 
@@ -412,16 +404,14 @@ void FastTextAutosizer::inflateAutoTable(RenderTable* table)
     for (RenderObject* section = table->firstChild(); section; section = section->nextSibling()) {
         if (!section->isTableSection())
             continue;
-        for (RenderObject* row = toRenderTableSection(section)->firstChild(); row; row = row->nextSibling()) {
-            if (!row->isTableRow())
-                continue;
-            for (RenderObject* cell = toRenderTableRow(row)->firstChild(); cell; cell = cell->nextSibling()) {
-                if (!cell->isTableCell() || !cell->needsLayout())
+        for (RenderTableRow* row = toRenderTableSection(section)->firstRow(); row; row = row->nextRow()) {
+            for (RenderTableCell* cell = row->firstCell(); cell; cell = cell->nextCell()) {
+                if (!cell->needsLayout())
                     continue;
-                RenderTableCell* renderTableCell = toRenderTableCell(cell);
-                beginLayout(renderTableCell);
-                inflate(renderTableCell);
-                endLayout(renderTableCell);
+
+                beginLayout(cell);
+                inflate(cell, DescendToInnerBlocks);
+                endLayout(cell);
             }
         }
     }
@@ -439,35 +429,52 @@ void FastTextAutosizer::endLayout(RenderBlock* block)
 #ifndef NDEBUG
         m_blocksThatHaveBegunLayout.clear();
 #endif
-    } else if (currentCluster()->m_root == block) {
+    // Tables can create two layout scopes for the same block so the isEmpty
+    // check below is needed to guard against endLayout being called twice.
+    } else if (!m_clusterStack.isEmpty() && currentCluster()->m_root == block) {
         m_clusterStack.removeLast();
     }
 }
 
-void FastTextAutosizer::inflate(RenderBlock* block)
+float FastTextAutosizer::inflate(RenderObject* parent, InflateBehavior behavior, float multiplier)
 {
     Cluster* cluster = currentCluster();
-    float multiplier = 0;
-    RenderObject* descendant = block->nextInPreOrder();
-    while (descendant) {
-        // Skip block descendants because they will be inflate()'d on their own.
-        if (descendant->isRenderBlock()) {
-            descendant = descendant->nextInPreOrderAfterChildren(block);
-            continue;
-        }
-        if (descendant->isText()) {
+    bool hasTextChild = false;
+
+    RenderObject* child = 0;
+    if (parent->isRenderBlock() && (parent->childrenInline() || behavior == DescendToInnerBlocks))
+        child = toRenderBlock(parent)->firstChild();
+    else if (parent->isRenderInline())
+        child = toRenderInline(parent)->firstChild();
+
+    while (child) {
+        if (child->isText()) {
+            hasTextChild = true;
             // We only calculate this multiplier on-demand to ensure the parent block of this text
             // has entered layout.
             if (!multiplier)
                 multiplier = cluster->m_flags & SUPPRESSING ? 1.0f : clusterMultiplier(cluster);
-            applyMultiplier(descendant, multiplier);
-            applyMultiplier(descendant->parent(), multiplier); // Parent handles line spacing.
+            applyMultiplier(child, multiplier);
             // FIXME: Investigate why MarkOnlyThis is sufficient.
-            if (descendant->parent()->isRenderInline())
-                descendant->setPreferredLogicalWidthsDirty(MarkOnlyThis);
+            if (parent->isRenderInline())
+                child->setPreferredLogicalWidthsDirty(MarkOnlyThis);
+        } else if (child->isRenderInline()) {
+            multiplier = inflate(child, behavior, multiplier);
+        } else if (child->isRenderBlock() && behavior == DescendToInnerBlocks
+            && !classifyBlock(child, INDEPENDENT | EXPLICIT_WIDTH | SUPPRESSING)) {
+            multiplier = inflate(child, behavior, multiplier);
         }
-        descendant = descendant->nextInPreOrder(block);
+        child = child->nextSibling();
     }
+
+    if (hasTextChild) {
+        applyMultiplier(parent, multiplier); // Parent handles line spacing.
+    } else if (!parent->isListItem()) {
+        // For consistency, a block with no immediate text child should always have a
+        // multiplier of 1 (except for list items which are handled in inflateListItem).
+        applyMultiplier(parent, 1);
+    }
+    return multiplier;
 }
 
 bool FastTextAutosizer::shouldHandleLayout() const
@@ -479,8 +486,10 @@ void FastTextAutosizer::updatePageInfoInAllFrames()
 {
     ASSERT(!m_document->frame() || m_document->frame()->isMainFrame());
 
-    for (LocalFrame* frame = m_document->frame(); frame; frame = frame->tree().traverseNext()) {
-        if (FastTextAutosizer* textAutosizer = frame->document()->fastTextAutosizer())
+    for (Frame* frame = m_document->frame(); frame; frame = frame->tree().traverseNext()) {
+        if (!frame->isLocalFrame())
+            continue;
+        if (FastTextAutosizer* textAutosizer = toLocalFrame(frame)->document()->fastTextAutosizer())
             textAutosizer->updatePageInfo();
     }
 }
@@ -496,10 +505,10 @@ void FastTextAutosizer::updatePageInfo()
     if (!m_pageInfo.m_settingEnabled || m_document->printing()) {
         m_pageInfo.m_pageNeedsAutosizing = false;
     } else {
-        RenderView* renderView = toRenderView(m_document->renderer());
+        RenderView* renderView = m_document->renderView();
         bool horizontalWritingMode = isHorizontalWritingMode(renderView->style()->writingMode());
 
-        LocalFrame* mainFrame = m_document->page()->mainFrame();
+        LocalFrame* mainFrame = m_document->page()->deprecatedLocalMainFrame();
         IntSize frameSize = m_document->settings()->textAutosizingWindowSizeOverride();
         if (frameSize.isEmpty())
             frameSize = mainFrame->view()->unscaledVisibleContentSize(IncludeScrollbars);
@@ -538,7 +547,7 @@ void FastTextAutosizer::updatePageInfo()
 
 void FastTextAutosizer::resetMultipliers()
 {
-    RenderObject* renderer = m_document->renderer();
+    RenderObject* renderer = m_document->renderView();
     while (renderer) {
         if (RenderStyle* style = renderer->style()) {
             if (style->textAutosizingMultiplier() != 1)
@@ -550,10 +559,10 @@ void FastTextAutosizer::resetMultipliers()
 
 void FastTextAutosizer::setAllTextNeedsLayout()
 {
-    RenderObject* renderer = m_document->renderer();
+    RenderObject* renderer = m_document->renderView();
     while (renderer) {
         if (renderer->isText())
-            renderer->setNeedsLayoutAndFullRepaint();
+            renderer->setNeedsLayoutAndFullPaintInvalidation();
         renderer = renderer->nextInPreOrder();
     }
 }
@@ -612,7 +621,7 @@ bool FastTextAutosizer::clusterHasEnoughTextToAutosize(Cluster* cluster, const R
     float minimumTextLengthToAutosize = widthFromBlock(widthProvider) * 4;
 
     float length = 0;
-    RenderObject* descendant = root->nextInPreOrder(root);
+    RenderObject* descendant = root->firstChild();
     while (descendant) {
         if (descendant->isRenderBlock()) {
             if (classifyBlock(descendant, INDEPENDENT | SUPPRESSING)) {
@@ -851,9 +860,9 @@ float FastTextAutosizer::multiplierFromBlock(const RenderBlock* block)
 
     // Block width, in CSS pixels.
     float blockWidth = widthFromBlock(block);
-    float multiplier = m_pageInfo.m_frameWidth ? min(blockWidth, static_cast<float>(m_pageInfo.m_layoutWidth)) / m_pageInfo.m_frameWidth : 1.0f;
+    float multiplier = m_pageInfo.m_frameWidth ? std::min(blockWidth, static_cast<float>(m_pageInfo.m_layoutWidth)) / m_pageInfo.m_frameWidth : 1.0f;
 
-    return max(m_pageInfo.m_baseMultiplier * multiplier, 1.0f);
+    return std::max(m_pageInfo.m_baseMultiplier * multiplier, 1.0f);
 }
 
 const RenderBlock* FastTextAutosizer::deepestBlockContainingAllText(Cluster* cluster)
@@ -955,9 +964,7 @@ void FastTextAutosizer::applyMultiplier(RenderObject* renderer, float multiplier
         m_stylesRetainedDuringLayout.append(currentStyle);
 
         renderer->setStyleInternal(style.release());
-        renderer->setNeedsLayoutAndFullRepaint();
-        if (renderer->isRenderBlock())
-            toRenderBlock(renderer)->invalidateLineHeight();
+        renderer->setNeedsLayoutAndFullPaintInvalidation();
         break;
 
     case LayoutNeeded:
@@ -1102,7 +1109,7 @@ FastTextAutosizer::TableLayoutScope::TableLayoutScope(RenderTable* table)
 }
 
 FastTextAutosizer::DeferUpdatePageInfo::DeferUpdatePageInfo(Page* page)
-    : m_mainFrame(page->mainFrame())
+    : m_mainFrame(page->deprecatedLocalMainFrame())
 {
     if (FastTextAutosizer* textAutosizer = m_mainFrame->document()->fastTextAutosizer()) {
         ASSERT(!textAutosizer->m_updatePageInfoDeferred);
@@ -1117,6 +1124,34 @@ FastTextAutosizer::DeferUpdatePageInfo::~DeferUpdatePageInfo()
         textAutosizer->m_updatePageInfoDeferred = false;
         textAutosizer->updatePageInfoInAllFrames();
     }
+}
+
+float FastTextAutosizer::computeAutosizedFontSize(float specifiedSize, float multiplier)
+{
+    // Somewhat arbitrary "pleasant" font size.
+    const float pleasantSize = 16;
+
+    // Multiply fonts that the page author has specified to be larger than
+    // pleasantSize by less and less, until huge fonts are not increased at all.
+    // For specifiedSize between 0 and pleasantSize we directly apply the
+    // multiplier; hence for specifiedSize == pleasantSize, computedSize will be
+    // multiplier * pleasantSize. For greater specifiedSizes we want to
+    // gradually fade out the multiplier, so for every 1px increase in
+    // specifiedSize beyond pleasantSize we will only increase computedSize
+    // by gradientAfterPleasantSize px until we meet the
+    // computedSize = specifiedSize line, after which we stay on that line (so
+    // then every 1px increase in specifiedSize increases computedSize by 1px).
+    const float gradientAfterPleasantSize = 0.5;
+
+    float computedSize;
+    if (specifiedSize <= pleasantSize) {
+        computedSize = multiplier * specifiedSize;
+    } else {
+        computedSize = multiplier * pleasantSize + gradientAfterPleasantSize * (specifiedSize - pleasantSize);
+        if (computedSize < specifiedSize)
+            computedSize = specifiedSize;
+    }
+    return computedSize;
 }
 
 } // namespace WebCore

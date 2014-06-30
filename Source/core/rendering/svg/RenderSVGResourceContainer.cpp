@@ -133,7 +133,7 @@ void RenderSVGResourceContainer::markAllClientLayersForInvalidation()
 {
     HashSet<RenderLayer*>::iterator layerEnd = m_clientLayers.end();
     for (HashSet<RenderLayer*>::iterator it = m_clientLayers.begin(); it != layerEnd; ++it)
-        (*it)->filterNeedsRepaint();
+        (*it)->filterNeedsPaintInvalidation();
 }
 
 void RenderSVGResourceContainer::markClientForInvalidation(RenderObject* client, InvalidationMode mode)
@@ -148,10 +148,10 @@ void RenderSVGResourceContainer::markClientForInvalidation(RenderObject* client,
         break;
     case RepaintInvalidation:
         if (client->view()) {
-            if (RuntimeEnabledFeatures::repaintAfterLayoutEnabled() && frameView()->isInPerformLayout())
-                client->setShouldDoFullRepaintAfterLayout(true);
+            if (frameView()->isInPerformLayout())
+                client->setShouldDoFullPaintInvalidationAfterLayout(true);
             else
-                client->repaint();
+                client->paintInvalidationForWholeRenderer();
         }
         break;
     case ParentOnlyInvalidation:
@@ -200,7 +200,7 @@ void RenderSVGResourceContainer::invalidateCacheAndMarkForLayout(SubtreeLayoutSc
     if (selfNeedsLayout())
         return;
 
-    setNeedsLayoutAndFullRepaint(MarkContainingBlockChain, layoutScope);
+    setNeedsLayoutAndFullPaintInvalidation(MarkContainingBlockChain, layoutScope);
 
     if (everHadLayout())
         removeAllClientsFromCache();
@@ -231,8 +231,25 @@ void RenderSVGResourceContainer::registerResource()
         StyleDifference diff;
         diff.setNeedsFullLayout();
         SVGResourcesCache::clientStyleChanged(renderer, diff, renderer->style());
-        renderer->setNeedsLayoutAndFullRepaint();
+        renderer->setNeedsLayoutAndFullPaintInvalidation();
     }
+}
+
+static bool shouldTransformOnTextPainting(RenderObject* object, AffineTransform& resourceTransform)
+{
+    ASSERT(object);
+
+    // This method should only be called for RenderObjects that deal with text rendering. Cmp. RenderObject.h's is*() methods.
+    ASSERT(object->isSVGText() || object->isSVGTextPath() || object->isSVGInline());
+
+    // In text drawing, the scaling part of the graphics context CTM is removed, compare SVGInlineTextBox::paintTextWithShadows.
+    // So, we use that scaling factor here, too, and then push it down to pattern or gradient space
+    // in order to keep the pattern or gradient correctly scaled.
+    float scalingFactor = SVGRenderingContext::calculateScreenFontSizeScalingFactor(object);
+    if (scalingFactor == 1)
+        return false;
+    resourceTransform.scale(scalingFactor);
+    return true;
 }
 
 AffineTransform RenderSVGResourceContainer::computeResourceSpaceTransform(RenderObject* object, const AffineTransform& baseTransform, const SVGRenderStyle* svgStyle, unsigned short resourceMode)
@@ -253,23 +270,6 @@ AffineTransform RenderSVGResourceContainer::computeResourceSpaceTransform(Render
             computedSpaceTransform = transformOnNonScalingStroke(object, computedSpaceTransform);
     }
     return computedSpaceTransform;
-}
-
-bool RenderSVGResourceContainer::shouldTransformOnTextPainting(RenderObject* object, AffineTransform& resourceTransform)
-{
-    ASSERT_UNUSED(object, object);
-
-    // This method should only be called for RenderObjects that deal with text rendering. Cmp. RenderObject.h's is*() methods.
-    ASSERT(object->isSVGText() || object->isSVGTextPath() || object->isSVGInline());
-
-    // In text drawing, the scaling part of the graphics context CTM is removed, compare SVGInlineTextBox::paintTextWithShadows.
-    // So, we use that scaling factor here, too, and then push it down to pattern or gradient space
-    // in order to keep the pattern or gradient correctly scaled.
-    float scalingFactor = SVGRenderingContext::calculateScreenFontSizeScalingFactor(object);
-    if (scalingFactor == 1)
-        return false;
-    resourceTransform.scale(scalingFactor);
-    return true;
 }
 
 // FIXME: This does not belong here.

@@ -41,17 +41,15 @@ namespace WebCore {
 
 TextEncoder* TextEncoder::create(const String& utfLabel, ExceptionState& exceptionState)
 {
-    const String& encodingLabel = utfLabel.isNull() ? String("utf-8") : utfLabel;
-
-    WTF::TextEncoding encoding(encodingLabel);
+    WTF::TextEncoding encoding(utfLabel);
     if (!encoding.isValid()) {
-        exceptionState.throwTypeError("The encoding label provided ('" + encodingLabel + "') is invalid.");
+        exceptionState.throwTypeError("The encoding label provided ('" + utfLabel + "') is invalid.");
         return 0;
     }
 
     String name(encoding.name());
     if (name != "UTF-8" && name != "UTF-16LE" && name != "UTF-16BE") {
-        exceptionState.throwTypeError("The encoding provided ('" + encodingLabel + "') is not one of 'utf-8', 'utf-16', or 'utf-16be'.");
+        exceptionState.throwTypeError("The encoding provided ('" + utfLabel + "') is not one of 'utf-8', 'utf-16', or 'utf-16be'.");
         return 0;
     }
 

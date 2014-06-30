@@ -29,8 +29,8 @@
 #include "config.h"
 #include "core/css/resolver/SharedStyleFinder.h"
 
-#include "HTMLNames.h"
-#include "XMLNames.h"
+#include "core/HTMLNames.h"
+#include "core/XMLNames.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/css/resolver/StyleResolverStats.h"
 #include "core/dom/ContainerNode.h"
@@ -226,8 +226,6 @@ bool SharedStyleFinder::canShareStyleWithElement(Element& candidate) const
         return false;
     if (candidate.hasID() && m_features.hasSelectorForId(candidate.idForStyleResolution()))
         return false;
-    if (candidate.hasScopedHTMLStyleChild())
-        return false;
     if (!sharingCandidateCanShareHostStyles(candidate))
         return false;
     if (!sharingCandidateDistributedToSameInsertionPoint(candidate))
@@ -255,8 +253,6 @@ bool SharedStyleFinder::canShareStyleWithElement(Element& candidate) const
 
     if (element().parentOrShadowHostElement() != parent) {
         if (!parent->isStyledElement())
-            return false;
-        if (parent->hasScopedHTMLStyleChild())
             return false;
         if (parent->inlineStyle())
             return false;

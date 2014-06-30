@@ -26,6 +26,7 @@
 #include "core/dom/StaticNodeList.h"
 #include "core/events/EventTarget.h"
 #include "core/frame/UseCounter.h"
+#include "core/svg/SVGElement.h"
 #include "wtf/CurrentTime.h"
 
 namespace WebCore {
@@ -46,7 +47,7 @@ Event::Event()
     , m_defaultHandled(false)
     , m_cancelBubble(false)
     , m_eventPhase(0)
-    , m_currentTarget(0)
+    , m_currentTarget(nullptr)
     , m_createTime(convertSecondsToDOMTimeStamp(currentTime()))
 {
     ScriptWrappable::init(this);
@@ -62,7 +63,7 @@ Event::Event(const AtomicString& eventType, bool canBubbleArg, bool cancelableAr
     , m_defaultHandled(false)
     , m_cancelBubble(false)
     , m_eventPhase(0)
-    , m_currentTarget(0)
+    , m_currentTarget(nullptr)
     , m_createTime(convertSecondsToDOMTimeStamp(currentTime()))
 {
     ScriptWrappable::init(this);
@@ -78,7 +79,7 @@ Event::Event(const AtomicString& eventType, const EventInit& initializer)
     , m_defaultHandled(false)
     , m_cancelBubble(false)
     , m_eventPhase(0)
-    , m_currentTarget(0)
+    , m_currentTarget(nullptr)
     , m_createTime(convertSecondsToDOMTimeStamp(currentTime()))
 {
     ScriptWrappable::init(this);
@@ -186,7 +187,7 @@ bool Event::isBeforeUnloadEvent() const
     return false;
 }
 
-void Event::setTarget(PassRefPtr<EventTarget> target)
+void Event::setTarget(PassRefPtrWillBeRawPtr<EventTarget> target)
 {
     if (m_target == target)
         return;
@@ -216,7 +217,7 @@ EventPath& Event::ensureEventPath()
     return *m_eventPath;
 }
 
-PassRefPtrWillBeRawPtr<NodeList> Event::path() const
+PassRefPtrWillBeRawPtr<StaticNodeList> Event::path() const
 {
     if (!m_currentTarget || !m_currentTarget->toNode())
         return StaticNodeList::createEmpty();
@@ -227,14 +228,28 @@ PassRefPtrWillBeRawPtr<NodeList> Event::path() const
     size_t eventPathSize = m_eventPath->size();
     for (size_t i = 0; i < eventPathSize; ++i) {
         if (node == (*m_eventPath)[i].node()) {
-            return (*m_eventPath)[i].treeScopeEventContext()->ensureEventPath(*m_eventPath);
+            return (*m_eventPath)[i].treeScopeEventContext().ensureEventPath(*m_eventPath);
         }
     }
     return StaticNodeList::createEmpty();
 }
 
+EventTarget* Event::currentTarget() const
+{
+    if (!m_currentTarget)
+        return 0;
+    Node* node = m_currentTarget->toNode();
+    if (node && node->isSVGElement()) {
+        if (SVGElement* svgElement = toSVGElement(node)->correspondingElement())
+            return svgElement;
+    }
+    return m_currentTarget;
+}
+
 void Event::trace(Visitor* visitor)
 {
+    visitor->trace(m_currentTarget);
+    visitor->trace(m_target);
     visitor->trace(m_underlyingEvent);
     visitor->trace(m_eventPath);
 }

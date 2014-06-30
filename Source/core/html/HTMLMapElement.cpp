@@ -22,7 +22,7 @@
 #include "config.h"
 #include "core/html/HTMLMapElement.h"
 
-#include "HTMLNames.h"
+#include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/html/HTMLAreaElement.h"
@@ -30,22 +30,17 @@
 #include "core/html/HTMLImageElement.h"
 #include "core/rendering/HitTestResult.h"
 
-using namespace std;
-
 namespace WebCore {
 
 using namespace HTMLNames;
 
-HTMLMapElement::HTMLMapElement(Document& document)
+inline HTMLMapElement::HTMLMapElement(Document& document)
     : HTMLElement(mapTag, document)
 {
     ScriptWrappable::init(this);
 }
 
-PassRefPtrWillBeRawPtr<HTMLMapElement> HTMLMapElement::create(Document& document)
-{
-    return adoptRefWillBeRefCountedGarbageCollected(new HTMLMapElement(document));
-}
+DEFINE_NODE_FACTORY(HTMLMapElement)
 
 HTMLMapElement::~HTMLMapElement()
 {

@@ -22,6 +22,8 @@
 #ifndef TypeTraits_h
 #define TypeTraits_h
 
+#include <utility>
+
 namespace WTF {
 
     // The following are provided in this file:
@@ -71,6 +73,11 @@ namespace WTF {
     template<typename T> struct IsArithmetic        { static const bool value = IsInteger<T>::value || IsFloatingPoint<T>::value; };
 
     template<typename T> struct IsWeak              { static const bool value = false; };
+
+    enum WeakHandlingFlag {
+        NoWeakHandlingInCollections,
+        WeakHandlingInCollections
+    };
 
     // IsPod is misnamed as it doesn't cover all plain old data (pod) types.
     // Specifically, it doesn't allow for enums or for structs.
@@ -325,6 +332,18 @@ template<typename Traits>
 class ShouldBeTraced {
 public:
     static const bool value = Traits::template NeedsTracingLazily<>::value;
+};
+
+template<typename T, typename U>
+struct NeedsTracing<std::pair<T, U> > {
+    static const bool value = NeedsTracing<T>::value || NeedsTracing<U>::value || IsWeak<T>::value || IsWeak<U>::value;
+};
+
+template<typename T>class OwnPtr;
+
+template<typename T>
+struct NeedsTracing<OwnPtr<T> > {
+    static const bool value = NeedsTracing<T>::value;
 };
 
 } // namespace WTF

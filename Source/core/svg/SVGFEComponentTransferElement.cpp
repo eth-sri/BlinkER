@@ -22,7 +22,7 @@
 
 #include "core/svg/SVGFEComponentTransferElement.h"
 
-#include "SVGNames.h"
+#include "core/SVGNames.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/svg/SVGFEFuncAElement.h"
 #include "core/svg/SVGFEFuncBElement.h"
@@ -33,13 +33,15 @@
 
 namespace WebCore {
 
-SVGFEComponentTransferElement::SVGFEComponentTransferElement(Document& document)
+inline SVGFEComponentTransferElement::SVGFEComponentTransferElement(Document& document)
     : SVGFilterPrimitiveStandardAttributes(SVGNames::feComponentTransferTag, document)
     , m_in1(SVGAnimatedString::create(this, SVGNames::inAttr, SVGString::create()))
 {
     ScriptWrappable::init(this);
     addToPropertyMap(m_in1);
 }
+
+DEFINE_NODE_FACTORY(SVGFEComponentTransferElement)
 
 bool SVGFEComponentTransferElement::isSupportedAttribute(const QualifiedName& attrName)
 {

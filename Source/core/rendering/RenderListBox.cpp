@@ -30,8 +30,7 @@
 #include "config.h"
 #include "core/rendering/RenderListBox.h"
 
-#include <math.h>
-#include "HTMLNames.h"
+#include "core/HTMLNames.h"
 #include "core/accessibility/AXObjectCache.h"
 #include "core/css/CSSFontSelector.h"
 #include "core/css/resolver/StyleResolver.h"
@@ -57,8 +56,7 @@
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/scroll/Scrollbar.h"
 #include "platform/text/BidiTextRun.h"
-
-using namespace std;
+#include <math.h>
 
 namespace WebCore {
 
@@ -161,7 +159,7 @@ void RenderListBox::updateFromElement()
                     textRun.setDirection(direction);
                 textRun.disableRoundingHacks();
                 float textWidth = itemFont.width(textRun);
-                width = max(width, textWidth);
+                width = std::max(width, textWidth);
             }
         }
         m_optionsWidth = static_cast<int>(ceilf(width));
@@ -169,13 +167,13 @@ void RenderListBox::updateFromElement()
 
         setHasVerticalScrollbar(true);
 
-        setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
+        setNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation();
     }
 }
 
 void RenderListBox::selectionChanged()
 {
-    repaint();
+    paintInvalidationForWholeRenderer();
     if (!m_inAutoscroll) {
         if (m_optionsChanged || needsLayout())
             m_scrollToRevealSelectionAfterLayout = true;
@@ -202,15 +200,15 @@ void RenderListBox::layout()
     }
 
     if (m_scrollToRevealSelectionAfterLayout) {
-        LayoutStateDisabler layoutStateDisabler(*this);
+        ForceHorriblySlowRectMapping slowRectMapping(*this);
         scrollToRevealSelection();
     }
 }
 
-void RenderListBox::repaintTreeAfterLayout(const RenderLayerModelObject& repaintContainer)
+void RenderListBox::invalidateTreeAfterLayout(const RenderLayerModelObject& invalidationContainer)
 {
     repaintScrollbarIfNeeded();
-    RenderBox::repaintTreeAfterLayout(repaintContainer);
+    RenderBox::invalidateTreeAfterLayout(invalidationContainer);
 }
 
 void RenderListBox::scrollToRevealSelection()
@@ -227,9 +225,7 @@ void RenderListBox::scrollToRevealSelection()
 
 void RenderListBox::computeIntrinsicLogicalWidths(LayoutUnit& minLogicalWidth, LayoutUnit& maxLogicalWidth) const
 {
-    maxLogicalWidth = m_optionsWidth + 2 * optionsSpacingHorizontal;
-    if (m_vBar)
-        maxLogicalWidth += verticalScrollbarWidth();
+    maxLogicalWidth = m_optionsWidth + 2 * optionsSpacingHorizontal + verticalScrollbarWidth();
     if (!style()->width().isPercent())
         minLogicalWidth = maxLogicalWidth;
 }
@@ -248,13 +244,13 @@ void RenderListBox::computePreferredLogicalWidths()
         computeIntrinsicLogicalWidths(m_minPreferredLogicalWidth, m_maxPreferredLogicalWidth);
 
     if (styleToUse->minWidth().isFixed() && styleToUse->minWidth().value() > 0) {
-        m_maxPreferredLogicalWidth = max(m_maxPreferredLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(styleToUse->minWidth().value()));
-        m_minPreferredLogicalWidth = max(m_minPreferredLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(styleToUse->minWidth().value()));
+        m_maxPreferredLogicalWidth = std::max(m_maxPreferredLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(styleToUse->minWidth().value()));
+        m_minPreferredLogicalWidth = std::max(m_minPreferredLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(styleToUse->minWidth().value()));
     }
 
     if (styleToUse->maxWidth().isFixed()) {
-        m_maxPreferredLogicalWidth = min(m_maxPreferredLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(styleToUse->maxWidth().value()));
-        m_minPreferredLogicalWidth = min(m_minPreferredLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(styleToUse->maxWidth().value()));
+        m_maxPreferredLogicalWidth = std::min(m_maxPreferredLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(styleToUse->maxWidth().value()));
+        m_minPreferredLogicalWidth = std::min(m_minPreferredLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(styleToUse->maxWidth().value()));
     }
 
     LayoutUnit toAdd = borderAndPaddingWidth();
@@ -268,7 +264,7 @@ int RenderListBox::size() const
 {
     int specifiedSize = selectElement()->size();
     if (specifiedSize > 1)
-        return max(minSize, specifiedSize);
+        return std::max(minSize, specifiedSize);
 
     return defaultSize;
 }
@@ -276,7 +272,7 @@ int RenderListBox::size() const
 int RenderListBox::numVisibleItems() const
 {
     // Only count fully visible rows. But don't return 0 even if only part of a row shows.
-    return max<int>(1, (contentHeight() + rowSpacing) / itemHeight());
+    return std::max<int>(1, (contentHeight() + rowSpacing) / itemHeight());
 }
 
 int RenderListBox::numItems() const
@@ -389,7 +385,7 @@ int RenderListBox::scrollbarLeft() const
     if (style()->shouldPlaceBlockDirectionScrollbarOnLogicalLeft())
         scrollbarLeft = borderLeft();
     else
-        scrollbarLeft = width() - borderRight() - verticalScrollbarWidth();
+        scrollbarLeft = width() - borderRight() - (m_vBar ? m_vBar->width() : 0);
     return scrollbarLeft;
 }
 
@@ -398,7 +394,7 @@ void RenderListBox::paintScrollbar(PaintInfo& paintInfo, const LayoutPoint& pain
     if (m_vBar) {
         IntRect scrollRect = pixelSnappedIntRect(paintOffset.x() + scrollbarLeft(),
             paintOffset.y() + borderTop(),
-            verticalScrollbarWidth(),
+            m_vBar->width(),
             height() - (borderTop() + borderBottom()));
         m_vBar->setFrameRect(scrollRect);
         m_vBar->paint(paintInfo.context, paintInfo.rect);
@@ -557,7 +553,7 @@ void RenderListBox::panScroll(const IntPoint& panStartMousePosition)
     int yDelta = lastKnownMousePosition.y() - panStartMousePosition.y();
 
     // If the point is too far from the center we limit the speed
-    yDelta = max<int>(min<int>(yDelta, maxSpeed), -maxSpeed);
+    yDelta = std::max<int>(std::min<int>(yDelta, maxSpeed), -maxSpeed);
 
     if (abs(yDelta) < iconRadius) // at the center we let the space for the icon
         return;
@@ -677,10 +673,10 @@ void RenderListBox::scrollTo(int newOffset)
 
     m_indexOffset = newOffset;
 
-    if (RuntimeEnabledFeatures::repaintAfterLayoutEnabled() && frameView()->isInPerformLayout())
-        setShouldDoFullRepaintAfterLayout(true);
+    if (frameView()->isInPerformLayout())
+        setShouldDoFullPaintInvalidationAfterLayout(true);
     else
-        repaint();
+        paintInvalidationForWholeRenderer();
 
     node()->document().enqueueScrollEventForNode(node());
 }
@@ -697,32 +693,32 @@ int RenderListBox::verticalScrollbarWidth() const
 
 // FIXME: We ignore padding in the vertical direction as far as these values are concerned, since that's
 // how the control currently paints.
-int RenderListBox::scrollWidth() const
+LayoutUnit RenderListBox::scrollWidth() const
 {
     // There is no horizontal scrolling allowed.
-    return pixelSnappedClientWidth();
+    return clientWidth();
 }
 
-int RenderListBox::scrollHeight() const
+LayoutUnit RenderListBox::scrollHeight() const
 {
-    return max(pixelSnappedClientHeight(), roundToInt(listHeight()));
+    return std::max(clientHeight(), listHeight());
 }
 
-int RenderListBox::scrollLeft() const
+LayoutUnit RenderListBox::scrollLeft() const
 {
     return 0;
 }
 
-void RenderListBox::setScrollLeft(int)
+void RenderListBox::setScrollLeft(LayoutUnit)
 {
 }
 
-int RenderListBox::scrollTop() const
+LayoutUnit RenderListBox::scrollTop() const
 {
     return m_indexOffset * itemHeight();
 }
 
-void RenderListBox::setScrollTop(int newTop)
+void RenderListBox::setScrollTop(LayoutUnit newTop)
 {
     // Determine an index and scroll to it.
     int index = newTop / itemHeight();
@@ -779,11 +775,11 @@ void RenderListBox::invalidateScrollbarRect(Scrollbar* scrollbar, const IntRect&
     else
         scrollRect.move(width() - borderRight() - scrollbar->width(), borderTop());
 
-    if (RuntimeEnabledFeatures::repaintAfterLayoutEnabled() && frameView()->isInPerformLayout()) {
+    if (frameView()->isInPerformLayout()) {
         m_verticalBarDamage = scrollRect;
         m_hasVerticalBarDamage = true;
     } else {
-        repaintRectangle(scrollRect);
+        invalidatePaintRectangle(scrollRect);
     }
 }
 
@@ -791,7 +787,7 @@ void RenderListBox::repaintScrollbarIfNeeded()
 {
     if (!hasVerticalBarDamage())
         return;
-    repaintRectangle(verticalBarDamage());
+    invalidatePaintRectangle(verticalBarDamage());
 
     resetScrollbarDamage();
 }
@@ -916,7 +912,7 @@ int RenderListBox::lineStep(ScrollbarOrientation) const
 
 int RenderListBox::pageStep(ScrollbarOrientation orientation) const
 {
-    return max(1, numVisibleItems() - 1);
+    return std::max(1, numVisibleItems() - 1);
 }
 
 float RenderListBox::pixelStep(ScrollbarOrientation) const

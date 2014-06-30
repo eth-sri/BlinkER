@@ -24,11 +24,9 @@
 #include "config.h"
 #include "core/css/CSSComputedStyleDeclaration.h"
 
-#include "CSSPropertyNames.h"
-#include "FontFamilyNames.h"
-#include "RuntimeEnabledFeatures.h"
-#include "StylePropertyShorthand.h"
 #include "bindings/v8/ExceptionState.h"
+#include "core/CSSPropertyNames.h"
+#include "core/StylePropertyShorthand.h"
 #include "core/animation/DocumentAnimations.h"
 #include "core/css/BasicShapeFunctions.h"
 #include "core/css/CSSArrayFunctionValue.h"
@@ -66,6 +64,8 @@
 #include "core/rendering/style/RenderStyle.h"
 #include "core/rendering/style/ShadowList.h"
 #include "core/rendering/style/ShapeValue.h"
+#include "platform/FontFamilyNames.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/fonts/FontFeatureSettings.h"
 #include "wtf/text/StringBuilder.h"
 
@@ -631,7 +631,7 @@ static PassRefPtrWillBeRawPtr<CSSValue> valueForPositionOffset(RenderStyle& styl
         // FIXME: It's not enough to simply return "auto" values for one offset if the other side is defined.
         // In other words if left is auto and right is not auto, then left's computed value is negative right().
         // So we should get the opposite length unit and see if it is auto.
-        return cssValuePool().createValue(l);
+        return cssValuePool().createIdentifierValue(CSSValueAuto);
     }
 
     return zoomAdjustedPixelValueForLength(l, style);
@@ -937,12 +937,14 @@ static PassRefPtrWillBeRawPtr<CSSValue> valueForGridPosition(const GridPosition&
     return list;
 }
 
-static PassRefPtrWillBeRawPtr<CSSValue> createTransitionPropertyValue(CSSTransitionData::TransitionProperty property)
+static PassRefPtrWillBeRawPtr<CSSValue> createTransitionPropertyValue(const CSSTransitionData::TransitionProperty& property)
 {
     if (property.propertyType == CSSTransitionData::TransitionNone)
         return cssValuePool().createIdentifierValue(CSSValueNone);
     if (property.propertyType == CSSTransitionData::TransitionAll)
         return cssValuePool().createIdentifierValue(CSSValueAll);
+    if (property.propertyType == CSSTransitionData::TransitionUnknown)
+        return cssValuePool().createValue(property.propertyString, CSSPrimitiveValue::CSS_STRING);
     ASSERT(property.propertyType == CSSTransitionData::TransitionSingleProperty);
     return cssValuePool().createValue(getPropertyNameString(property.propertyId), CSSPrimitiveValue::CSS_STRING);
 }
@@ -1121,7 +1123,7 @@ static PassRefPtrWillBeRawPtr<CSSValue> createLineBoxContainValue(unsigned lineB
     return CSSLineBoxContainValue::create(lineBoxContain);
 }
 
-CSSComputedStyleDeclaration::CSSComputedStyleDeclaration(PassRefPtr<Node> n, bool allowVisitedStyle, const String& pseudoElementName)
+CSSComputedStyleDeclaration::CSSComputedStyleDeclaration(PassRefPtrWillBeRawPtr<Node> n, bool allowVisitedStyle, const String& pseudoElementName)
     : m_node(n)
     , m_allowVisitedStyle(allowVisitedStyle)
 #if !ENABLE(OILPAN)
@@ -1231,11 +1233,6 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSComputedStyleDeclaration::valueForShadowList
     for (size_t i = 0; i < shadowCount; ++i)
         list->append(valueForShadowData(shadowList->shadows()[i], style, useSpread));
     return list.release();
-}
-
-PassRefPtrWillBeRawPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValue(CSSPropertyID propertyID) const
-{
-    return getPropertyCSSValue(propertyID, UpdateLayout);
 }
 
 static CSSValueID identifierForFamily(const AtomicString& family)
@@ -1737,11 +1734,11 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValu
         case CSSPropertyWebkitMaskPositionX: {
             const FillLayer* layers = propertyID == CSSPropertyWebkitMaskPositionX ? style->maskLayers() : style->backgroundLayers();
             if (!layers->next())
-                return cssValuePool().createValue(layers->xPosition());
+                return zoomAdjustedPixelValueForLength(layers->xPosition(), *style);
 
             RefPtrWillBeRawPtr<CSSValueList> list = CSSValueList::createCommaSeparated();
             for (const FillLayer* currLayer = layers; currLayer; currLayer = currLayer->next())
-                list->append(cssValuePool().createValue(currLayer->xPosition()));
+                list->append(zoomAdjustedPixelValueForLength(currLayer->xPosition(), *style));
 
             return list.release();
         }
@@ -1749,11 +1746,11 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValu
         case CSSPropertyWebkitMaskPositionY: {
             const FillLayer* layers = propertyID == CSSPropertyWebkitMaskPositionY ? style->maskLayers() : style->backgroundLayers();
             if (!layers->next())
-                return cssValuePool().createValue(layers->yPosition());
+                return zoomAdjustedPixelValueForLength(layers->yPosition(), *style);
 
             RefPtrWillBeRawPtr<CSSValueList> list = CSSValueList::createCommaSeparated();
             for (const FillLayer* currLayer = layers; currLayer; currLayer = currLayer->next())
-                list->append(cssValuePool().createValue(currLayer->yPosition()));
+                list->append(zoomAdjustedPixelValueForLength(currLayer->yPosition(), *style));
 
             return list.release();
         }
@@ -1906,7 +1903,7 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValu
         case CSSPropertyFlex:
             return valuesForShorthandProperty(flexShorthand());
         case CSSPropertyFlexBasis:
-            return cssValuePool().createValue(style->flexBasis());
+            return zoomAdjustedPixelValueForLength(style->flexBasis(), *style);
         case CSSPropertyFlexDirection:
             return cssValuePool().createValue(style->flexDirection());
         case CSSPropertyFlexFlow:
@@ -2300,7 +2297,7 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValu
                 case BASELINE_MIDDLE:
                     return cssValuePool().createIdentifierValue(CSSValueWebkitBaselineMiddle);
                 case LENGTH:
-                    return cssValuePool().createValue(style->verticalAlignLength());
+                    return zoomAdjustedPixelValueForLength(style->verticalAlignLength(), *style);
             }
             ASSERT_NOT_REACHED();
             return nullptr;
@@ -2867,6 +2864,9 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValu
         case CSSPropertyPaintOrder:
         case CSSPropertyWritingMode:
             return getSVGPropertyCSSValue(propertyID, DoNotUpdateLayout);
+
+        case CSSPropertyAll:
+            return nullptr;
     }
 
     logUnimplementedPropertyID(propertyID);
@@ -3060,6 +3060,12 @@ PassRefPtrWillBeRawPtr<CSSValueList> CSSComputedStyleDeclaration::valuesForBackg
     list->append(valuesForShorthandProperty(StylePropertyShorthand(CSSPropertyBackground, propertiesBeforeSlashSeperator, WTF_ARRAY_LENGTH(propertiesBeforeSlashSeperator))));
     list->append(valuesForShorthandProperty(StylePropertyShorthand(CSSPropertyBackground, propertiesAfterSlashSeperator, WTF_ARRAY_LENGTH(propertiesAfterSlashSeperator))));
     return list.release();
+}
+
+void CSSComputedStyleDeclaration::trace(Visitor* visitor)
+{
+    visitor->trace(m_node);
+    CSSStyleDeclaration::trace(visitor);
 }
 
 } // namespace WebCore

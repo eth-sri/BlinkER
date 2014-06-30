@@ -21,6 +21,7 @@
 #include "config.h"
 #include "core/svg/SVGStringList.h"
 
+#include "bindings/v8/ExceptionMessages.h"
 #include "core/svg/SVGElement.h"
 #include "core/svg/SVGParserUtilities.h"
 #include "wtf/text/StringBuilder.h"
@@ -28,7 +29,6 @@
 namespace WebCore {
 
 SVGStringList::SVGStringList()
-    : SVGPropertyBase(classType())
 {
 }
 
@@ -92,20 +92,13 @@ void SVGStringList::parseInternal(const CharType*& ptr, const CharType* end)
 
     while (ptr < end) {
         const CharType* start = ptr;
-        while (ptr < end && *ptr != delimiter && !isSVGSpace(*ptr))
+        while (ptr < end && *ptr != delimiter && !isHTMLSpace<CharType>(*ptr))
             ptr++;
         if (ptr == start)
             break;
         m_values.append(String(start, ptr - start));
         skipOptionalSVGSpacesOrDelimiter(ptr, end, delimiter);
     }
-}
-
-PassRefPtr<SVGStringList> SVGStringList::clone()
-{
-    RefPtr<SVGStringList> svgStringList = create();
-    svgStringList->m_values = m_values;
-    return svgStringList.release();
 }
 
 void SVGStringList::setValueAsString(const String& data, ExceptionState&)
@@ -123,13 +116,6 @@ void SVGStringList::setValueAsString(const String& data, ExceptionState&)
         const UChar* end = ptr + data.length();
         parseInternal(ptr, end);
     }
-}
-
-PassRefPtr<SVGPropertyBase> SVGStringList::cloneForAnimation(const String& string) const
-{
-    RefPtr<SVGStringList> svgStringList = create();
-    svgStringList->setValueAsString(string, IGNORE_EXCEPTION);
-    return svgStringList.release();
 }
 
 String SVGStringList::valueAsString() const

@@ -27,13 +27,12 @@
 
 #include "core/rendering/svg/RenderSVGResourceLinearGradient.h"
 #include "core/svg/LinearGradientAttributes.h"
-#include "core/svg/SVGElementInstance.h"
 #include "core/svg/SVGLength.h"
 #include "core/svg/SVGTransformList.h"
 
 namespace WebCore {
 
-SVGLinearGradientElement::SVGLinearGradientElement(Document& document)
+inline SVGLinearGradientElement::SVGLinearGradientElement(Document& document)
     : SVGGradientElement(SVGNames::linearGradientTag, document)
     , m_x1(SVGAnimatedLength::create(this, SVGNames::x1Attr, SVGLength::create(LengthModeWidth), AllowNegativeLengths))
     , m_y1(SVGAnimatedLength::create(this, SVGNames::y1Attr, SVGLength::create(LengthModeHeight), AllowNegativeLengths))
@@ -50,6 +49,8 @@ SVGLinearGradientElement::SVGLinearGradientElement(Document& document)
     addToPropertyMap(m_x2);
     addToPropertyMap(m_y2);
 }
+
+DEFINE_NODE_FACTORY(SVGLinearGradientElement)
 
 bool SVGLinearGradientElement::isSupportedAttribute(const QualifiedName& attrName)
 {

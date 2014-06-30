@@ -32,8 +32,9 @@
 #define InspectorPageAgent_h
 
 
-#include "InspectorFrontend.h"
+#include "core/InspectorFrontend.h"
 #include "core/inspector/InspectorBaseAgent.h"
+#include "core/inspector/InspectorResourceContentLoader.h"
 #include "wtf/HashMap.h"
 #include "wtf/text/WTFString.h"
 
@@ -49,6 +50,7 @@ class GraphicsLayer;
 class InjectedScriptManager;
 class InspectorClient;
 class InspectorOverlay;
+class InspectorResourceContentLoader;
 class InstrumentingAgents;
 class IntSize;
 class KURL;
@@ -82,6 +84,7 @@ public:
     void setTextAutosizingEnabled(bool);
     void setDeviceScaleAdjustment(float);
 
+    static Vector<Document*> importsForFrame(LocalFrame*);
     static bool cachedResourceContent(Resource*, String* result, bool* base64Encoded);
     static bool sharedBufferContent(PassRefPtr<SharedBuffer>, const String& textEncodingName, bool withBase64Encode, String* result);
 
@@ -101,11 +104,11 @@ public:
     virtual void getCookies(ErrorString*, RefPtr<TypeBuilder::Array<TypeBuilder::Page::Cookie> >& cookies) OVERRIDE;
     virtual void deleteCookie(ErrorString*, const String& cookieName, const String& url) OVERRIDE;
     virtual void getResourceTree(ErrorString*, RefPtr<TypeBuilder::Page::FrameResourceTree>&) OVERRIDE;
-    virtual void getResourceContent(ErrorString*, const String& frameId, const String& url, String* content, bool* base64Encoded) OVERRIDE;
+    virtual void getResourceContent(ErrorString*, const String& frameId, const String& url, PassRefPtr<GetResourceContentCallback>) OVERRIDE;
     virtual void hasTouchInputs(ErrorString*, bool* result) OVERRIDE;
     virtual void searchInResource(ErrorString*, const String& frameId, const String& url, const String& query, const bool* optionalCaseSensitive, const bool* optionalIsRegex, RefPtr<TypeBuilder::Array<TypeBuilder::Page::SearchMatch> >&) OVERRIDE;
     virtual void setDocumentContent(ErrorString*, const String& frameId, const String& html) OVERRIDE;
-    virtual void setDeviceMetricsOverride(ErrorString*, int width, int height, double deviceScaleFactor, bool emulateViewport, bool fitWindow, const bool* optionalTextAutosizing, const double* optionalFontScaleFactor) OVERRIDE;
+    virtual void setDeviceMetricsOverride(ErrorString*, int width, int height, double deviceScaleFactor, bool emulateViewport, bool fitWindow, const double* optionalScale, const double* optionalOffsetX, const double* optionalOffsetY, const bool* optionalTextAutosizing, const double* optionalFontScaleFactor) OVERRIDE;
     virtual void clearDeviceMetricsOverride(ErrorString*) OVERRIDE;
     virtual void setShowPaintRects(ErrorString*, bool show) OVERRIDE;
     virtual void setShowDebugBorders(ErrorString*, bool show) OVERRIDE;
@@ -146,8 +149,6 @@ public:
     virtual void clearFrontend() OVERRIDE;
     virtual void restore() OVERRIDE;
 
-    void webViewResized(const IntSize&);
-
     // Cross-agents API
     Page* page() { return m_page; }
     LocalFrame* mainFrame();
@@ -162,16 +163,22 @@ public:
     const AtomicString& resourceSourceMapURL(const String& url);
     bool deviceMetricsOverrideEnabled();
     static DocumentLoader* assertDocumentLoader(ErrorString*, LocalFrame*);
+    InspectorResourceContentLoader* resourceContentLoader() { return m_inspectorResourceContentLoader.get(); }
+    void clearEditedResourcesContent();
+    void addEditedResourceContent(const String& url, const String& content);
+    bool getEditedResourceContent(const String& url, String* content);
 
 private:
-    static void resourceContent(ErrorString*, LocalFrame*, const KURL&, String* result, bool* base64Encoded);
+    class GetResourceContentLoadListener;
 
     InspectorPageAgent(Page*, InjectedScriptManager*, InspectorClient*, InspectorOverlay*);
-    bool deviceMetricsChanged(bool enabled, int width, int height, double deviceScaleFactor, bool emulateViewport, bool fitWindow, double fontScaleFactor, bool textAutosizing);
+    bool deviceMetricsChanged(bool enabled, int width, int height, double deviceScaleFactor, bool emulateViewport, bool fitWindow, double scale, double offsetX, double offsetY, double fontScaleFactor, bool textAutosizing);
     void updateViewMetricsFromState();
-    void updateViewMetrics(bool enabled, int width, int height, double deviceScaleFactor, bool emulateViewport, bool fitWindow, double fontScaleFactor, bool textAutosizingEnabled);
+    void updateViewMetrics(bool enabled, int width, int height, double deviceScaleFactor, bool emulateViewport, bool fitWindow, double scale, double offsetX, double offsetY, double fontScaleFactor, bool textAutosizingEnabled);
     void updateTouchEventEmulationInPage(bool);
-    bool forceCompositingMode(ErrorString*);
+    bool compositingEnabled(ErrorString*);
+
+    void getResourceContentAfterResourcesContentLoaded(const String& frameId, const String& url, PassRefPtr<GetResourceContentCallback>);
 
     static bool dataContent(const char* data, unsigned size, const String& textEncodingName, bool withBase64Encode, String* result);
 
@@ -202,6 +209,9 @@ private:
 
     bool m_embedderTextAutosizingEnabled;
     double m_embedderFontScaleFactor;
+
+    OwnPtr<InspectorResourceContentLoader> m_inspectorResourceContentLoader;
+    HashMap<String, String> m_editedResourceContent;
 };
 
 

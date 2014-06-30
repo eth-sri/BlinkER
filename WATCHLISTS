@@ -173,6 +173,10 @@
       'filepath': 'Source/modules/navigatorcontentutils' \
                   '|LayoutTests/fast/dom/navigatorcontentutils'
     },
+    'out_of_process_frames': {
+      'filepath': 'Source/core/frame/FrameOwner' \
+                  '|Source/web/WebRemoteFrameImpl' \
+    },
     'fileapi': {
       'filepath': 'Source/modules/filesystem/' \
                   '|Source/core/fileapi/' \
@@ -232,7 +236,9 @@
     'device_orientation': {
       'filepath': 'Source/modules/device_orientation/' \
                   '|LayoutTests/fast/dom/DeviceMotion/' \
-                  '|LayoutTests/fast/dom/DeviceOrientation/'
+                  '|LayoutTests/fast/dom/DeviceOrientation/' \
+                  '|Source/core/frame/DeviceEvent(Controller|Dispatcher)Base' \
+                  '|Source/core/frame/DeviceSingleWindowEventController'
     },
     'activity_logger': {
       'filepath': 'public/web/WebDOMActivityLogger.h' \
@@ -268,7 +274,12 @@
     },
     'battery_status': {
       'filepath': 'Source/modules/battery/' \
-                  '|LayoutTests/battery-status/'
+                  '|LayoutTests/battery-status/' \
+                  '|Source/core/frame/DeviceEvent(Controller|Dispatcher)Base'
+    },
+    'device_light': {
+      'filepath': 'Source/modules/device_light/' \
+                  '|LayoutTests/fast/dom/DeviceLight/'
     },
   },
 
@@ -329,7 +340,7 @@
     'heap': [ 'ager@chromium.org', 'haraken@chromium.org', 'kouhei+heap@chromium.org' ],
     'html': [ 'dglazkov+blink@chromium.org', 'blink-reviews-html@chromium.org' ],
     'public_api': [ 'abarth@chromium.org', 'jamesr@chromium.org', 'dglazkov+blink@chromium.org' ],
-    'workers': [ 'kinuko+watch@chromium.org',
+    'workers': [ 'kinuko+worker@chromium.org',
                  'horo+watch@chromium.org',
                  'falken@chromium.org' ],
     'wtf': [ 'abarth@chromium.org',
@@ -352,10 +363,10 @@
     'media': [ 'feature-media-reviews@chromium.org', 'philipj@opera.com', 'eric.carlson@apple.com' ],
     'media_queries': [ 'kenneth.christiansen@gmail.com',
                        'yoav@yoav.ws' ],
-    'fileapi': [ 'kinuko@chromium.org',
+    'fileapi': [ 'kinuko+fileapi@chromium.org',
                  'tzik@chromium.org',
                  'nhiroki@chromium.org' ],
-    'quota': [ 'kinuko@chromium.org',
+    'quota': [ 'kinuko+fileapi@chromium.org',
                'tzik@chromium.org',
                'nhiroki@chromium.org' ],
     'viewport_interaction': [ 'kenneth.christiansen@gmail.com' ],
@@ -368,11 +379,12 @@
     'vibration': [ 'mvanouwerkerk+watch@chromium.org' ],
     'serviceworkers': [ 'alecflett+watch@chromium.org',
                         'jsbell+serviceworker@chromium.org',
-                        'kinuko@chromium.org',
+                        'kinuko+serviceworker@chromium.org',
                         'tzik@chromium.org',
                         'nhiroki@chromium.org',
                         'horo+watch@chromium.org',
                         'falken@chromium.org',
+                        'michaeln@chromium.org',
                         'serviceworker-reviews@chromium.org' ],
     'spellcheck' : [ 'groby+blinkspell@chromium.org' ],
     'device_orientation': [ 'timvolodine@chromium.org', 'mvanouwerkerk+watch@chromium.org', 'ch.dumez@samsung.com' ],
@@ -383,8 +395,8 @@
               'vikasa@google.com' ],
     'css_grid_layout': [ 'svillar@igalia.com', 'jfernandez@igalia.com', 'rego@igalia.com' ],
     'css_flexbox': [ 'cbiesinger@chromium.org' ],
-    'fragment_layout': [ 'mstensho+blink@opera.com' ],
-    'table_layout': [ 'mstensho+blink@opera.com' ],
     'battery_status': [ 'timvolodine@chromium.org' ],
+    'out_of_process_frames': [ 'dcheng@chromium.org' ],
+    'device_light': [ 'timvolodine@chromium.org' ],
   },
 }

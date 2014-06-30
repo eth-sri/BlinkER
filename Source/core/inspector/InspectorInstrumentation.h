@@ -41,7 +41,6 @@
 #include "core/events/NodeEventContext.h"
 #include "core/frame/LocalFrame.h"
 #include "core/inspector/ConsoleAPITypes.h"
-#include "core/page/Page.h"
 #include "core/rendering/HitTestResult.h"
 #include "core/rendering/RenderImage.h"
 #include "core/storage/StorageArea.h"
@@ -95,8 +94,8 @@ private:
     static int s_frontendCounter;
 };
 
-inline void frontendCreated() { FrontendCounter::s_frontendCounter += 1; }
-inline void frontendDeleted() { FrontendCounter::s_frontendCounter -= 1; }
+inline void frontendCreated() { atomicIncrement(&FrontendCounter::s_frontendCounter); }
+inline void frontendDeleted() { atomicDecrement(&FrontendCounter::s_frontendCounter); }
 inline bool hasFrontends() { return FrontendCounter::s_frontendCounter; }
 
 void registerInstrumentingAgents(InstrumentingAgents*);
@@ -190,11 +189,10 @@ InstrumentingAgents* instrumentationForWorkerGlobalScope(WorkerGlobalScope*);
 
 } // namespace WebCore
 
-// This file will soon be generated
-#include "InspectorInstrumentationInl.h"
+#include "core/InspectorInstrumentationInl.h"
 
-#include "InspectorInstrumentationCustomInl.h"
+#include "core/inspector/InspectorInstrumentationCustomInl.h"
 
-#include "InspectorOverridesInl.h"
+#include "core/InspectorOverridesInl.h"
 
 #endif // !defined(InspectorInstrumentation_h)

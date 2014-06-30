@@ -7,14 +7,15 @@ core/dom/Node
 core/fileapi/FileReader
 core/html/MediaController
 core/html/ime/InputMethodContext
+core/html/track/AudioTrackList
 core/html/track/TextTrack
 core/html/track/TextTrackCue
 core/html/track/TextTrackList
+core/html/track/VideoTrackList
 core/loader/appcache/ApplicationCache
 core/page/EventSource
 core/timing/Performance
-core/frame/Window ImplementedAs=DOMWindow
-core/svg/SVGElementInstance
+core/frame/Window ImplementedAs=LocalDOMWindow
 core/workers/DedicatedWorkerGlobalScope
 core/workers/SharedWorker
 core/workers/SharedWorkerGlobalScope

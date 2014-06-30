@@ -240,30 +240,6 @@ class BlinkIDLParser(IDLParser):
         p[0] = ListFromConcat(self.BuildAttribute('TYPE', 'DOMString'),
                               self.BuildAttribute('NAME', p[1]))
 
-    # [b30] Add StaticAttribute
-    def p_AttributeOrOperation(self, p):
-        """AttributeOrOperation : STRINGIFIER StringifierAttributeOrOperation
-                                | Attribute
-                                | StaticAttribute
-                                | Operation"""
-        # Standard is (no StaticAttribute):
-        # AttributeOrOperation : STRINGIFIER StringifierAttributeOrOperation
-        #                      | Attribute
-        #                      | Operation
-        if len(p) > 2:
-            # FIXME: Clearer to add stringifier property here, as:
-            # p[2].AddChildren(self.BuildTrue('STRINGIFIER'))
-            # Fix when actually implementing stringifiers.
-            p[0] = p[2]
-        else:
-            p[0] = p[1]
-
-    # [b30.1]
-    def p_StaticAttribute(self, p):
-        """StaticAttribute : STATIC Attribute"""
-        p[2].AddChildren(self.BuildTrue('STATIC'))
-        p[0] = p[2]
-
     # [b47]
     def p_ExceptionMember(self, p):
         """ExceptionMember : Const
@@ -404,6 +380,8 @@ class BlinkIDLParser(IDLParser):
     def __init__(self,
                  # common parameters
                  debug=False,
+                 # local parameters
+                 rewrite_tables=False,
                  # idl_parser parameters
                  lexer=None, verbose=False, mute_error=False,
                  # yacc parameters
@@ -418,6 +396,11 @@ class BlinkIDLParser(IDLParser):
             write_tables = True
         if outputdir:
             picklefile = picklefile or os.path.join(outputdir, 'parsetab.pickle')
+            if rewrite_tables:
+                try:
+                    os.unlink(picklefile)
+                except OSError:
+                    pass
 
         lexer = lexer or BlinkIDLLexer(debug=debug,
                                        outputdir=outputdir,
@@ -463,7 +446,10 @@ def main(argv):
     except IndexError as err:
         print 'Usage: %s OUTPUT_DIR' % argv[0]
         return 1
-    parser = BlinkIDLParser(outputdir=outputdir)
+    # Important: rewrite_tables=True causes the cache file to be deleted if it
+    # exists, thus making sure that PLY doesn't load it instead of regenerating
+    # the parse table.
+    parser = BlinkIDLParser(outputdir=outputdir, rewrite_tables=True)
 
 
 if __name__ == '__main__':

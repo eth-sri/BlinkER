@@ -62,12 +62,12 @@ public:
         return count;
     }
 
-    static PassRefPtr<Element> querySelector(ContainerNode& node, const AtomicString& selectors, ExceptionState& exceptionState)
+    static PassRefPtrWillBeRawPtr<Element> querySelector(ContainerNode& node, const AtomicString& selectors, ExceptionState& exceptionState)
     {
         return node.querySelector(selectors, exceptionState);
     }
 
-    static PassRefPtrWillBeRawPtr<NodeList> querySelectorAll(ContainerNode& node, const AtomicString& selectors, ExceptionState& exceptionState)
+    static PassRefPtrWillBeRawPtr<StaticNodeList> querySelectorAll(ContainerNode& node, const AtomicString& selectors, ExceptionState& exceptionState)
     {
         return node.querySelectorAll(selectors, exceptionState);
     }

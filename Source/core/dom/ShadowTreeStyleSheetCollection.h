@@ -32,9 +32,7 @@
 
 namespace WebCore {
 
-class CSSStyleSheet;
 class ShadowRoot;
-class StyleSheet;
 class StyleSheetCollection;
 class StyleEngine;
 
@@ -44,7 +42,7 @@ class ShadowTreeStyleSheetCollection FINAL : public TreeScopeStyleSheetCollectio
 public:
     explicit ShadowTreeStyleSheetCollection(ShadowRoot&);
 
-    bool updateActiveStyleSheets(StyleEngine*, StyleResolverUpdateMode);
+    void updateActiveStyleSheets(StyleEngine*, StyleResolverUpdateMode);
 
     virtual void trace(Visitor* visitor) OVERRIDE
     {

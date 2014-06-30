@@ -21,7 +21,6 @@
 #include "config.h"
 #include "core/rendering/RenderView.h"
 
-#include "RuntimeEnabledFeatures.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/frame/LocalFrame.h"
@@ -36,10 +35,13 @@
 #include "core/rendering/RenderFlowThread.h"
 #include "core/rendering/RenderGeometryMap.h"
 #include "core/rendering/RenderLayer.h"
+#include "core/rendering/RenderPart.h"
 #include "core/rendering/RenderSelectionInfo.h"
 #include "core/rendering/compositing/CompositedLayerMapping.h"
 #include "core/rendering/compositing/RenderLayerCompositor.h"
 #include "core/svg/SVGDocumentExtensions.h"
+#include "platform/RuntimeEnabledFeatures.h"
+#include "platform/TraceEvent.h"
 #include "platform/geometry/FloatQuad.h"
 #include "platform/geometry/TransformState.h"
 #include "platform/graphics/GraphicsContext.h"
@@ -56,9 +58,9 @@ RenderView::RenderView(Document* document)
     , m_pageLogicalHeight(0)
     , m_pageLogicalHeightChanged(false)
     , m_layoutState(0)
-    , m_layoutStateDisableCount(0)
     , m_renderQuoteHead(0)
     , m_renderCounterCount(0)
+    , m_hitTestCount(0)
 {
     // init RenderObject attributes
     setInline(false);
@@ -82,6 +84,9 @@ bool RenderView::hitTest(const HitTestRequest& request, HitTestResult& result)
 
 bool RenderView::hitTest(const HitTestRequest& request, const HitTestLocation& location, HitTestResult& result)
 {
+    TRACE_EVENT0("blink", "RenderView::hitTest");
+    m_hitTestCount++;
+
     // We have to recursively update layout/style here because otherwise, when the hit test recurses
     // into a child document, it could trigger a layout on the parent document, which can destroy RenderLayers
     // that are higher up in the call stack, leading to crashes.
@@ -117,8 +122,7 @@ bool RenderView::isChildAllowed(RenderObject* child, RenderStyle*) const
 
 static bool canCenterDialog(const RenderStyle* style)
 {
-    // FIXME: We must center for FixedPosition as well.
-    return style->position() == AbsolutePosition && style->hasAutoTopAndBottom();
+    return (style->position() == AbsolutePosition || style->position() == FixedPosition) && style->hasAutoTopAndBottom();
 }
 
 void RenderView::positionDialog(RenderBox* box)
@@ -138,9 +142,8 @@ void RenderView::positionDialog(RenderBox* box)
         return;
     }
     FrameView* frameView = document().view();
-    int scrollTop = frameView->scrollOffset().height();
+    LayoutUnit top = (box->style()->position() == FixedPosition) ? 0 : frameView->scrollOffset().height();
     int visibleHeight = frameView->visibleContentRect(IncludeScrollbars).height();
-    LayoutUnit top = scrollTop;
     if (box->height() < visibleHeight)
         top += (visibleHeight - box->height()) / 2;
     box->setY(top);
@@ -177,13 +180,40 @@ void RenderView::layoutContent()
 #ifndef NDEBUG
 void RenderView::checkLayoutState()
 {
-    if (!RuntimeEnabledFeatures::repaintAfterLayoutEnabled()) {
-        ASSERT(layoutDeltaMatches(LayoutSize()));
-    }
-    ASSERT(!m_layoutStateDisableCount);
     ASSERT(!m_layoutState->next());
 }
 #endif
+
+bool RenderView::shouldDoFullRepaintForNextLayout() const
+{
+    // It's hard to predict here which of full repaint or per-descendant repaint costs less.
+    // For vertical writing mode or width change it's more likely that per-descendant repaint
+    // eventually turns out to be full repaint but with the cost to handle more layout states
+    // and discrete repaint rects, so marking full repaint here is more likely to cost less.
+    // Otherwise, per-descendant repaint is more likely to avoid unnecessary full repaints.
+
+    if (shouldUsePrintingLayout())
+        return true;
+
+    if (!style()->isHorizontalWritingMode() || width() != viewWidth())
+        return true;
+
+    if (height() != viewHeight()) {
+        if (RenderObject* backgroundRenderer = this->backgroundRenderer()) {
+            // When background-attachment is 'fixed', we treat the viewport (instead of the 'root'
+            // i.e. html or body) as the background positioning area, and we should full repaint
+            // viewport resize if the background image is not composited and needs full repaint on
+            // background positioning area resize.
+            if (!m_compositor || !m_compositor->needsFixedRootBackgroundLayer(layer())) {
+                if (backgroundRenderer->style()->hasFixedBackgroundImage()
+                    && mustInvalidateFillLayersPaintOnHeightChange(*backgroundRenderer->style()->backgroundLayers()))
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
 
 void RenderView::layout()
 {
@@ -218,7 +248,7 @@ void RenderView::layout()
     if (!needsLayout())
         return;
 
-    RootLayoutStateScope rootLayoutStateScope(*this);
+    LayoutState rootLayoutState(pageLogicalHeight(), pageLogicalHeightChanged(), *this);
 
     m_pageLogicalHeightChanged = false;
 
@@ -374,7 +404,7 @@ void RenderView::paintBoxDecorations(PaintInfo& paintInfo, const LayoutPoint&)
             break;
         }
 
-        if (layer->enclosingCompositingLayerForRepaint()) {
+        if (layer->enclosingCompositingLayerForPaintInvalidation()) {
             frameView()->setCannotBlitToWindow();
             break;
         }
@@ -414,35 +444,50 @@ void RenderView::paintBoxDecorations(PaintInfo& paintInfo, const LayoutPoint&)
     }
 }
 
-void RenderView::repaintViewRectangle(const LayoutRect& ur) const
+void RenderView::invalidateTreeAfterLayout(const RenderLayerModelObject& paintInvalidationContainer)
 {
-    ASSERT(!ur.isEmpty());
+    ASSERT(!needsLayout());
+
+    // We specifically need to repaint the viewRect since other renderers
+    // short-circuit on full-repaint.
+    if (doingFullRepaint() && !viewRect().isEmpty())
+        repaintViewRectangle(viewRect());
+
+    LayoutState rootLayoutState(0, false, *this);
+    RenderBlock::invalidateTreeAfterLayout(paintInvalidationContainer);
+}
+
+void RenderView::repaintViewRectangle(const LayoutRect& repaintRect) const
+{
+    ASSERT(!repaintRect.isEmpty());
 
     if (document().printing() || !m_frameView)
         return;
 
     // We always just invalidate the root view, since we could be an iframe that is clipped out
     // or even invisible.
-    Element* elt = document().ownerElement();
-    if (!elt)
-        m_frameView->repaintContentRectangle(pixelSnappedIntRect(ur));
-    else if (RenderBox* obj = elt->renderBox()) {
-        LayoutRect vr = viewRect();
-        LayoutRect r = intersection(ur, vr);
+    Element* owner = document().ownerElement();
+    if (layer()->compositingState() == PaintsIntoOwnBacking) {
+        layer()->repainter().setBackingNeedsRepaintInRect(repaintRect);
+    } else if (!owner) {
+        m_frameView->contentRectangleForPaintInvalidation(pixelSnappedIntRect(repaintRect));
+    } else if (RenderBox* obj = owner->renderBox()) {
+        LayoutRect viewRectangle = viewRect();
+        LayoutRect rectToRepaint = intersection(repaintRect, viewRectangle);
 
         // Subtract out the contentsX and contentsY offsets to get our coords within the viewing
         // rectangle.
-        r.moveBy(-vr.location());
+        rectToRepaint.moveBy(-viewRectangle.location());
 
         // FIXME: Hardcoded offsets here are not good.
-        r.moveBy(obj->contentBoxRect().location());
-        obj->repaintRectangle(r);
+        rectToRepaint.moveBy(obj->contentBoxRect().location());
+        obj->invalidatePaintRectangle(rectToRepaint);
     }
 }
 
 void RenderView::repaintViewAndCompositedLayers()
 {
-    repaint();
+    paintInvalidationForWholeRenderer();
 
     // The only way we know how to hit these ASSERTS below this point is via the Chromium OS login screen.
     DisableCompositingQueryAsserts disabler;
@@ -451,11 +496,11 @@ void RenderView::repaintViewAndCompositedLayers()
         compositor()->repaintCompositedLayers();
 }
 
-void RenderView::computeRectForRepaint(const RenderLayerModelObject* repaintContainer, LayoutRect& rect, bool fixed) const
+void RenderView::mapRectToPaintInvalidationBacking(const RenderLayerModelObject* paintInvalidationContainer, LayoutRect& rect, bool fixed) const
 {
     // If a container was specified, and was not 0 or the RenderView,
     // then we should have found it by now.
-    ASSERT_ARG(repaintContainer, !repaintContainer || repaintContainer == this);
+    ASSERT_ARG(paintInvalidationContainer, !paintInvalidationContainer || paintInvalidationContainer == this);
 
     if (document().printing())
         return;
@@ -478,7 +523,7 @@ void RenderView::computeRectForRepaint(const RenderLayerModelObject* repaintCont
     }
 
     // Apply our transform if we have one (because of full page zooming).
-    if (!repaintContainer && layer() && layer()->transform())
+    if (!paintInvalidationContainer && layer() && layer()->transform())
         rect = layer()->transform()->mapRect(rect);
 }
 
@@ -752,7 +797,7 @@ void RenderView::getSelection(RenderObject*& startRenderer, int& startOffset, Re
 
 void RenderView::clearSelection()
 {
-    layer()->repaintBlockSelectionGaps();
+    layer()->invalidatePaintForBlockSelectionGaps();
     setSelection(0, -1, 0, -1, RepaintNewMinusOld);
 }
 
@@ -787,12 +832,18 @@ IntRect RenderView::unscaledDocumentRect() const
 
 bool RenderView::rootBackgroundIsEntirelyFixed() const
 {
-    RenderObject* rootObject = document().documentElement() ? document().documentElement()->renderer() : 0;
-    if (!rootObject)
-        return false;
+    if (RenderObject* backgroundRenderer = this->backgroundRenderer())
+        return backgroundRenderer->hasEntirelyFixedBackground();
+    return false;
+}
 
-    RenderObject* rootRenderer = rootObject->rendererForRootBackground();
-    return rootRenderer->hasEntirelyFixedBackground();
+RenderObject* RenderView::backgroundRenderer() const
+{
+    if (Element* documentElement = document().documentElement()) {
+        if (RenderObject* rootObject = documentElement->renderer())
+            return rootObject->rendererForRootBackground();
+    }
+    return 0;
 }
 
 LayoutRect RenderView::backgroundRect(RenderBox* backgroundRenderer) const
@@ -852,26 +903,6 @@ float RenderView::zoomFactor() const
     return m_frameView->frame().pageZoomFactor();
 }
 
-void RenderView::pushLayoutState(RenderObject& root)
-{
-    ASSERT(m_layoutStateDisableCount == 0);
-    ASSERT(m_layoutState == 0);
-
-    pushLayoutStateForCurrentFlowThread(root);
-    m_layoutState = new LayoutState(root);
-}
-
-bool RenderView::shouldDisableLayoutStateForSubtree(RenderObject& renderer) const
-{
-    RenderObject* o = &renderer;
-    while (o) {
-        if (o->shouldDisableLayoutState())
-            return true;
-        o = o->container();
-    }
-    return false;
-}
-
 void RenderView::updateHitTestResult(HitTestResult& result, const LayoutPoint& point)
 {
     if (result.innerNode())
@@ -917,20 +948,20 @@ FlowThreadController* RenderView::flowThreadController()
     return m_flowThreadController.get();
 }
 
-void RenderView::pushLayoutStateForCurrentFlowThread(const RenderObject& object)
+void RenderView::pushLayoutState(LayoutState& layoutState)
 {
-    if (!m_flowThreadController)
-        return;
-
-    RenderFlowThread* currentFlowThread = m_flowThreadController->currentRenderFlowThread();
-    if (!currentFlowThread)
-        return;
-
-    currentFlowThread->pushFlowThreadLayoutState(object);
+    if (m_flowThreadController) {
+        RenderFlowThread* currentFlowThread = m_flowThreadController->currentRenderFlowThread();
+        if (currentFlowThread)
+            currentFlowThread->pushFlowThreadLayoutState(layoutState.renderer());
+    }
+    m_layoutState = &layoutState;
 }
 
-void RenderView::popLayoutStateForCurrentFlowThread()
+void RenderView::popLayoutState()
 {
+    ASSERT(m_layoutState);
+    m_layoutState = m_layoutState->next();
     if (!m_flowThreadController)
         return;
 

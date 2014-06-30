@@ -29,9 +29,6 @@
 
 #include "core/rendering/style/SVGRenderStyle.h"
 
-
-using namespace std;
-
 namespace WebCore {
 
 SVGRenderStyle::SVGRenderStyle()
@@ -122,15 +119,17 @@ StyleDifference SVGRenderStyle::diff(const SVGRenderStyle* other) const
 {
     StyleDifference styleDifference;
 
-    if (diffNeedsLayout(other))
+    if (diffNeedsLayoutAndRepaint(other)) {
         styleDifference.setNeedsFullLayout();
-    if (diffNeedsRepaint(other))
         styleDifference.setNeedsRepaintObject();
+    } else if (diffNeedsRepaint(other)) {
+        styleDifference.setNeedsRepaintObject();
+    }
 
     return styleDifference;
 }
 
-bool SVGRenderStyle::diffNeedsLayout(const SVGRenderStyle* other) const
+bool SVGRenderStyle::diffNeedsLayoutAndRepaint(const SVGRenderStyle* other) const
 {
     // If resources change, we need a relayout, as the presence of resources influences the repaint rect.
     if (resources != other->resources)

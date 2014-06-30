@@ -22,10 +22,8 @@
 
 #include "core/svg/SVGPolyElement.h"
 
-#include "core/dom/Document.h"
 #include "core/rendering/svg/RenderSVGResource.h"
 #include "core/svg/SVGAnimatedPointList.h"
-#include "core/svg/SVGElementInstance.h"
 #include "core/svg/SVGParserUtilities.h"
 
 namespace WebCore {

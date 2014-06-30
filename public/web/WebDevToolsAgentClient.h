@@ -46,8 +46,8 @@ public:
     virtual void sendMessageToInspectorFrontend(const WebString&) { }
     virtual void sendDebuggerOutput(const WebString&) { }
 
-    // Returns the identifier of the entity hosting this agent.
-    virtual int hostIdentifier() { return -1; }
+    // Returns unique identifier of the entity within process.
+    virtual int debuggerId() { return -1; }
 
     // Save the agent state in order to pass it later into WebDevToolsAgent::reattach
     // if the same client is reattached to another agent.
@@ -60,6 +60,8 @@ public:
         virtual void quitNow() = 0;
     };
     virtual WebKitClientMessageLoop* createClientMessageLoop() { return 0; }
+    virtual void willEnterDebugLoop() { }
+    virtual void didExitDebugLoop() { }
 
     class AllocatedObjectVisitor {
     public:

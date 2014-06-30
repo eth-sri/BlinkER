@@ -29,6 +29,7 @@
  */
 
 [
+    GarbageCollected,
     Constructor(optional Dictionary descriptionInitDict),
     RaisesException=Constructor
 ] interface RTCSessionDescription {

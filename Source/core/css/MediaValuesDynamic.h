@@ -16,8 +16,8 @@ public:
     static PassRefPtr<MediaValues> create(LocalFrame*);
     virtual PassRefPtr<MediaValues> copy() const OVERRIDE;
     virtual bool isSafeToSendToAnotherThread() const OVERRIDE;
-    virtual bool computeLength(double value, CSSPrimitiveValue::UnitTypes, int& result) const OVERRIDE;
-    virtual bool computeLength(double value, CSSPrimitiveValue::UnitTypes, double& result) const OVERRIDE;
+    virtual bool computeLength(double value, CSSPrimitiveValue::UnitType, int& result) const OVERRIDE;
+    virtual bool computeLength(double value, CSSPrimitiveValue::UnitType, double& result) const OVERRIDE;
 
     virtual int viewportWidth() const OVERRIDE;
     virtual int viewportHeight() const OVERRIDE;
@@ -28,10 +28,8 @@ public:
     virtual int monochromeBitsPerComponent() const OVERRIDE;
     virtual PointerDeviceType pointer() const OVERRIDE;
     virtual bool threeDEnabled() const OVERRIDE;
-    virtual bool scanMediaType() const OVERRIDE;
-    virtual bool screenMediaType() const OVERRIDE;
-    virtual bool printMediaType() const OVERRIDE;
     virtual bool strictMode() const OVERRIDE;
+    virtual const String mediaType() const OVERRIDE;
     virtual Document* document() const OVERRIDE;
     virtual bool hasValues() const OVERRIDE;
 

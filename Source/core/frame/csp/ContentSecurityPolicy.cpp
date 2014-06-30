@@ -26,13 +26,12 @@
 #include "config.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 
-#include "RuntimeEnabledFeatures.h"
 #include "bindings/v8/ScriptCallStackFactory.h"
 #include "bindings/v8/ScriptController.h"
 #include "core/dom/DOMStringList.h"
 #include "core/dom/Document.h"
 #include "core/events/SecurityPolicyViolationEvent.h"
-#include "core/frame/DOMWindow.h"
+#include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/UseCounter.h"
 #include "core/frame/csp/CSPDirectiveList.h"
@@ -48,6 +47,7 @@
 #include "platform/JSONValues.h"
 #include "platform/NotImplemented.h"
 #include "platform/ParsingUtilities.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/network/ContentSecurityPolicyParsers.h"
 #include "platform/network/ContentSecurityPolicyResponseHeaders.h"
 #include "platform/network/FormData.h"
@@ -130,8 +130,8 @@ static ReferrerPolicy mergeReferrerPolicies(ReferrerPolicy a, ReferrerPolicy b)
     return a;
 }
 
-ContentSecurityPolicy::ContentSecurityPolicy(ExecutionContextClient* client)
-    : m_client(client)
+ContentSecurityPolicy::ContentSecurityPolicy(ExecutionContext* executionContext)
+    : m_executionContext(executionContext)
     , m_overrideInlineStyleAllowed(false)
     , m_scriptHashAlgorithmsUsed(ContentSecurityPolicyHashAlgorithmNone)
     , m_styleHashAlgorithmsUsed(ContentSecurityPolicyHashAlgorithmNone)
@@ -140,6 +140,11 @@ ContentSecurityPolicy::ContentSecurityPolicy(ExecutionContextClient* client)
 
 ContentSecurityPolicy::~ContentSecurityPolicy()
 {
+}
+
+Document* ContentSecurityPolicy::document() const
+{
+    return m_executionContext->isDocument() ? toDocument(m_executionContext) : 0;
 }
 
 void ContentSecurityPolicy::copyStateFrom(const ContentSecurityPolicy* other)
@@ -198,7 +203,7 @@ void ContentSecurityPolicy::addPolicyFromHeaderValue(const String& header, Conte
 
         // We disable 'eval()' even in the case of report-only policies, and rely on the check in the V8Initializer::codeGenerationCheckCallbackInMainThread callback to determine whether the call should execute or not.
         if (!policy->allowEval(0, SuppressReport))
-            m_client->disableEval(policy->evalDisabledErrorMessage());
+            m_executionContext->disableEval(policy->evalDisabledErrorMessage());
 
         m_policies.append(policy.release());
 
@@ -386,22 +391,22 @@ bool ContentSecurityPolicy::allowScriptFromSource(const KURL& url, ContentSecuri
     return isAllowedByAllWithURL<&CSPDirectiveList::allowScriptFromSource>(m_policies, url, reportingStatus);
 }
 
-bool ContentSecurityPolicy::allowScriptNonce(const String& nonce) const
+bool ContentSecurityPolicy::allowScriptWithNonce(const String& nonce) const
 {
     return isAllowedByAllWithNonce<&CSPDirectiveList::allowScriptNonce>(m_policies, nonce);
 }
 
-bool ContentSecurityPolicy::allowStyleNonce(const String& nonce) const
+bool ContentSecurityPolicy::allowStyleWithNonce(const String& nonce) const
 {
     return isAllowedByAllWithNonce<&CSPDirectiveList::allowStyleNonce>(m_policies, nonce);
 }
 
-bool ContentSecurityPolicy::allowScriptHash(const String& source) const
+bool ContentSecurityPolicy::allowScriptWithHash(const String& source) const
 {
     return checkDigest<&CSPDirectiveList::allowScriptHash>(source, m_scriptHashAlgorithmsUsed, m_policies);
 }
 
-bool ContentSecurityPolicy::allowStyleHash(const String& source) const
+bool ContentSecurityPolicy::allowStyleWithHash(const String& source) const
 {
     return checkDigest<&CSPDirectiveList::allowStyleHash>(source, m_styleHashAlgorithmsUsed, m_policies);
 }
@@ -474,8 +479,7 @@ bool ContentSecurityPolicy::allowChildContextFromSource(const KURL& url, Content
 bool ContentSecurityPolicy::allowWorkerContextFromSource(const KURL& url, ContentSecurityPolicy::ReportingStatus reportingStatus) const
 {
     // CSP 1.1 moves workers from 'script-src' to the new 'child-src'. Measure the impact of this backwards-incompatible change.
-    if (m_client->isDocument()) {
-        Document* document = static_cast<Document*>(m_client);
+    if (Document* document = this->document()) {
         UseCounter::count(*document, UseCounter::WorkerSubjectToCSP);
         if (isAllowedByAllWithURL<&CSPDirectiveList::allowChildContextFromSource>(m_policies, url, SuppressReport) && !isAllowedByAllWithURL<&CSPDirectiveList::allowScriptFromSource>(m_policies, url, SuppressReport))
             UseCounter::count(*document, UseCounter::WorkerAllowedByChildBlockedByScript);
@@ -527,17 +531,17 @@ bool ContentSecurityPolicy::didSetReferrerPolicy() const
 
 SecurityOrigin* ContentSecurityPolicy::securityOrigin() const
 {
-    return m_client->securityContext().securityOrigin();
+    return m_executionContext->securityContext().securityOrigin();
 }
 
 const KURL ContentSecurityPolicy::url() const
 {
-    return m_client->contextURL();
+    return m_executionContext->contextURL();
 }
 
 KURL ContentSecurityPolicy::completeURL(const String& url) const
 {
-    return m_client->contextCompleteURL(url);
+    return m_executionContext->contextCompleteURL(url);
 }
 
 void ContentSecurityPolicy::enforceSandboxFlags(SandboxFlags mask) const
@@ -571,7 +575,7 @@ static void gatherSecurityPolicyViolationEventData(SecurityPolicyViolationEventI
     if (!SecurityOrigin::isSecure(document->url()) && document->loader())
         init.statusCode = document->loader()->response().httpStatusCode();
 
-    RefPtr<ScriptCallStack> stack = createScriptCallStack(1, false);
+    RefPtrWillBeRawPtr<ScriptCallStack> stack = createScriptCallStack(1, false);
     if (!stack)
         return;
 
@@ -588,10 +592,10 @@ static void gatherSecurityPolicyViolationEventData(SecurityPolicyViolationEventI
 void ContentSecurityPolicy::reportViolation(const String& directiveText, const String& effectiveDirective, const String& consoleMessage, const KURL& blockedURL, const Vector<KURL>& reportURIs, const String& header)
 {
     // FIXME: Support sending reports from worker.
-    if (!m_client->isDocument())
+    Document* document = this->document();
+    if (!document)
         return;
 
-    Document* document = this->document();
     LocalFrame* frame = document->frame();
     if (!frame)
         return;
@@ -749,12 +753,12 @@ void ContentSecurityPolicy::reportMissingReportURI(const String& policy) const
 
 void ContentSecurityPolicy::logToConsole(const String& message) const
 {
-    m_client->addConsoleMessage(SecurityMessageSource, ErrorMessageLevel, message);
+    m_executionContext->addConsoleMessage(SecurityMessageSource, ErrorMessageLevel, message);
 }
 
 void ContentSecurityPolicy::reportBlockedScriptExecutionToInspector(const String& directiveText) const
 {
-    m_client->reportBlockedScriptExecutionToInspector(directiveText);
+    m_executionContext->reportBlockedScriptExecutionToInspector(directiveText);
 }
 
 bool ContentSecurityPolicy::experimentalFeaturesEnabled() const
@@ -767,7 +771,7 @@ bool ContentSecurityPolicy::shouldBypassMainWorld(ExecutionContext* context)
     if (context && context->isDocument()) {
         Document* document = toDocument(context);
         if (document->frame())
-            return document->frame()->script().shouldBypassMainWorldContentSecurityPolicy();
+            return document->frame()->script().shouldBypassMainWorldCSP();
     }
     return false;
 }

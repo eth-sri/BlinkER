@@ -8,7 +8,6 @@
 #include "core/css/CSSHelper.h"
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSToLengthConversionData.h"
-#include "core/dom/Document.h"
 #include "core/frame/LocalFrame.h"
 
 namespace WebCore {
@@ -29,7 +28,7 @@ PassRefPtr<MediaValues> MediaValuesDynamic::copy() const
     return adoptRef(new MediaValuesDynamic(m_frame));
 }
 
-bool MediaValuesDynamic::computeLength(double value, CSSPrimitiveValue::UnitTypes type, int& result) const
+bool MediaValuesDynamic::computeLength(double value, CSSPrimitiveValue::UnitType type, int& result) const
 {
     return MediaValues::computeLength(value,
         type,
@@ -39,7 +38,7 @@ bool MediaValuesDynamic::computeLength(double value, CSSPrimitiveValue::UnitType
         result);
 }
 
-bool MediaValuesDynamic::computeLength(double value, CSSPrimitiveValue::UnitTypes type, double& result) const
+bool MediaValuesDynamic::computeLength(double value, CSSPrimitiveValue::UnitType type, double& result) const
 {
     return MediaValues::computeLength(value,
         type,
@@ -99,19 +98,9 @@ bool MediaValuesDynamic::threeDEnabled() const
     return calculateThreeDEnabled(m_frame);
 }
 
-bool MediaValuesDynamic::scanMediaType() const
+const String MediaValuesDynamic::mediaType() const
 {
-    return calculateScanMediaType(m_frame);
-}
-
-bool MediaValuesDynamic::screenMediaType() const
-{
-    return calculateScreenMediaType(m_frame);
-}
-
-bool MediaValuesDynamic::printMediaType() const
-{
-    return calculatePrintMediaType(m_frame);
+    return calculateMediaType(m_frame);
 }
 
 bool MediaValuesDynamic::strictMode() const

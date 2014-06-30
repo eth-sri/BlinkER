@@ -32,13 +32,10 @@
 #include "config.h"
 #include "web/FrameLoaderClientImpl.h"
 
-#include "HTMLNames.h"
-#include "RuntimeEnabledFeatures.h"
-#include "bindings/v8/Dictionary.h"
 #include "bindings/v8/ScriptController.h"
+#include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/DocumentFullscreen.h"
-#include "core/dom/WheelController.h"
 #include "core/events/MessageEvent.h"
 #include "core/events/MouseEvent.h"
 #include "core/frame/FrameView.h"
@@ -57,9 +54,9 @@
 #include "modules/device_orientation/DeviceMotionController.h"
 #include "modules/device_orientation/DeviceOrientationController.h"
 #include "modules/gamepad/NavigatorGamepad.h"
-#include "modules/screen_orientation/ScreenOrientationController.h"
 #include "modules/serviceworkers/NavigatorServiceWorker.h"
 #include "platform/MIMETypeRegistry.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/exported/WrappedResourceRequest.h"
 #include "platform/exported/WrappedResourceResponse.h"
@@ -76,7 +73,6 @@
 #include "public/platform/WebURL.h"
 #include "public/platform/WebURLError.h"
 #include "public/platform/WebVector.h"
-#include "public/web/WebAutocompleteParams.h"
 #include "public/web/WebAutofillClient.h"
 #include "public/web/WebCachedURLRequest.h"
 #include "public/web/WebDOMEvent.h"
@@ -121,15 +117,10 @@ void FrameLoaderClientImpl::dispatchDidClearWindowObjectInMainWorld()
         m_webFrame->client()->didClearWindowObject(m_webFrame);
         Document* document = m_webFrame->frame()->document();
         if (document) {
-            WheelController::from(*document);
+            DeviceMotionController::from(*document);
+            DeviceOrientationController::from(*document);
             if (RuntimeEnabledFeatures::deviceLightEnabled())
                 DeviceLightController::from(*document);
-            if (RuntimeEnabledFeatures::deviceMotionEnabled())
-                DeviceMotionController::from(*document);
-            if (RuntimeEnabledFeatures::deviceOrientationEnabled())
-                DeviceOrientationController::from(*document);
-            if (RuntimeEnabledFeatures::screenOrientationEnabled())
-                ScreenOrientationController::from(*document);
             if (RuntimeEnabledFeatures::gamepadEnabled())
                 NavigatorGamepad::from(*document);
             if (RuntimeEnabledFeatures::serviceWorkerEnabled())
@@ -213,6 +204,14 @@ bool FrameLoaderClientImpl::allowImage(bool enabledPerSettings, const KURL& imag
     return enabledPerSettings;
 }
 
+bool FrameLoaderClientImpl::allowMedia(const KURL& mediaURL)
+{
+    if (m_webFrame->permissionClient())
+        return m_webFrame->permissionClient()->allowMedia(mediaURL);
+
+    return true;
+}
+
 bool FrameLoaderClientImpl::allowDisplayingInsecureContent(bool enabledPerSettings, SecurityOrigin* context, const KURL& url)
 {
     if (m_webFrame->permissionClient())
@@ -249,8 +248,7 @@ bool FrameLoaderClientImpl::hasWebView() const
 
 Frame* FrameLoaderClientImpl::opener() const
 {
-    WebLocalFrameImpl* opener = toWebLocalFrameImpl(m_webFrame->opener());
-    return opener ? opener->frame() : 0;
+    return toWebCoreFrame(m_webFrame->opener());
 }
 
 void FrameLoaderClientImpl::setOpener(Frame* opener)
@@ -261,38 +259,32 @@ void FrameLoaderClientImpl::setOpener(Frame* opener)
 
 Frame* FrameLoaderClientImpl::parent() const
 {
-    WebLocalFrameImpl* frame = toWebLocalFrameImpl(m_webFrame->parent());
-    return frame ? frame->frame() : 0;
+    return toWebCoreFrame(m_webFrame->parent());
 }
 
 Frame* FrameLoaderClientImpl::top() const
 {
-    WebLocalFrameImpl* frame = toWebLocalFrameImpl(m_webFrame->top());
-    return frame ? frame->frame() : 0;
+    return toWebCoreFrame(m_webFrame->top());
 }
 
 Frame* FrameLoaderClientImpl::previousSibling() const
 {
-    WebLocalFrameImpl* frame = toWebLocalFrameImpl(m_webFrame->previousSibling());
-    return frame ? frame->frame() : 0;
+    return toWebCoreFrame(m_webFrame->previousSibling());
 }
 
 Frame* FrameLoaderClientImpl::nextSibling() const
 {
-    WebLocalFrameImpl* frame = toWebLocalFrameImpl(m_webFrame->nextSibling());
-    return frame ? frame->frame() : 0;
+    return toWebCoreFrame(m_webFrame->nextSibling());
 }
 
 Frame* FrameLoaderClientImpl::firstChild() const
 {
-    WebLocalFrameImpl* frame = toWebLocalFrameImpl(m_webFrame->firstChild());
-    return frame ? frame->frame() : 0;
+    return toWebCoreFrame(m_webFrame->firstChild());
 }
 
 Frame* FrameLoaderClientImpl::lastChild() const
 {
-    WebLocalFrameImpl* frame = toWebLocalFrameImpl(m_webFrame->lastChild());
-    return frame ? frame->frame() : 0;
+    return toWebCoreFrame(m_webFrame->lastChild());
 }
 
 void FrameLoaderClientImpl::detachedFromParent()
@@ -465,6 +457,12 @@ void FrameLoaderClientImpl::dispatchDidFirstVisuallyNonEmptyLayout()
 {
     if (m_webFrame->client())
         m_webFrame->client()->didFirstVisuallyNonEmptyLayout(m_webFrame);
+}
+
+void FrameLoaderClientImpl::dispatchDidChangeBrandColor()
+{
+    if (m_webFrame->client())
+        m_webFrame->client()->didChangeBrandColor();
 }
 
 NavigationPolicy FrameLoaderClientImpl::decidePolicyForNavigation(const ResourceRequest& request, DocumentLoader* loader, NavigationPolicy policy)
@@ -754,15 +752,20 @@ void FrameLoaderClientImpl::dispatchWillOpenSocketStream(SocketStreamHandle* han
     m_webFrame->client()->willOpenSocketStream(SocketStreamHandleInternal::toWebSocketStreamHandle(handle));
 }
 
+void FrameLoaderClientImpl::dispatchWillOpenWebSocket(blink::WebSocketHandle* handle)
+{
+    m_webFrame->client()->willOpenWebSocket(handle);
+}
+
 void FrameLoaderClientImpl::dispatchWillStartUsingPeerConnectionHandler(blink::WebRTCPeerConnectionHandler* handler)
 {
     m_webFrame->client()->willStartUsingPeerConnectionHandler(webFrame(), handler);
 }
 
-void FrameLoaderClientImpl::didRequestAutocomplete(HTMLFormElement* form, const WebCore::Dictionary& details)
+void FrameLoaderClientImpl::didRequestAutocomplete(HTMLFormElement* form)
 {
     if (m_webFrame->viewImpl() && m_webFrame->viewImpl()->autofillClient())
-        m_webFrame->viewImpl()->autofillClient()->didRequestAutocomplete(WebFormElement(form), WebAutocompleteParams(details));
+        m_webFrame->viewImpl()->autofillClient()->didRequestAutocomplete(WebFormElement(form));
 }
 
 bool FrameLoaderClientImpl::allowWebGL(bool enabledPerSettings)

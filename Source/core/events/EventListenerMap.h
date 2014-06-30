@@ -34,8 +34,7 @@
 #define EventListenerMap_h
 
 #include "core/events/RegisteredEventListener.h"
-#include "platform/heap/Handle.h"
-#include "wtf/Forward.h"
+// FIXME: #include "platform/heap/Handle.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/text/AtomicStringHash.h"
 
@@ -90,9 +89,8 @@ namespace WTF {
         struct NeedsTracingLazily {
             static const bool value = ShouldBeTraced<FirstTraits>::value || ShouldBeTraced<SecondTraits>::value;
         };
-        static const bool isWeak = FirstTraits::isWeak || SecondTraits::isWeak;
+        static const WeakHandlingFlag weakHandlingFlag = NoWeakHandlingInCollections; // We don't support weak handling in vectors.
     };
-
 } // end namespace WTF
 
 namespace WebCore {

@@ -32,6 +32,7 @@
 
 #include <limits.h>
 #include "platform/PlatformExport.h"
+#include "platform/fonts/FontFaceCreationParams.h"
 #include "wtf/Forward.h"
 #include "wtf/HashMap.h"
 #include "wtf/PassRefPtr.h"
@@ -58,6 +59,7 @@ class SkTypeface;
 namespace WebCore {
 
 class FontCacheClient;
+class FontFaceCreationParams;
 class FontPlatformData;
 class FontData;
 class FontDescription;
@@ -78,7 +80,7 @@ public:
 
     // This method is implemented by the plaform and used by
     // FontFastPath to lookup the font for a given character.
-    PassRefPtr<SimpleFontData> platformFallbackForCharacter(const FontDescription&, UChar32, const SimpleFontData* fontDataToSubstitute);
+    PassRefPtr<SimpleFontData> fallbackFontForCharacter(const FontDescription&, UChar32, const SimpleFontData* fontDataToSubstitute);
 
     // Also implemented by the platform.
     void platformInit();
@@ -118,12 +120,15 @@ public:
 #if OS(ANDROID)
     static AtomicString getGenericFamilyNameForScript(const AtomicString& familyName, UScriptCode);
 #else
-    struct SimpleFontFamily {
+    struct PlatformFallbackFont {
         String name;
+        CString filename;
+        int fontconfigInterfaceId;
+        int ttcIndex;
         bool isBold;
         bool isItalic;
     };
-    static void getFontFamilyForCharacter(UChar32, const char* preferredLocale, SimpleFontFamily*);
+    static void getFontForCharacter(UChar32, const char* preferredLocale, PlatformFallbackFont*);
 #endif
 
 private:
@@ -141,13 +146,13 @@ private:
     }
 
     // FIXME: This method should eventually be removed.
-    FontPlatformData* getFontPlatformData(const FontDescription&, const AtomicString& family, bool checkingAlternateName = false);
+    FontPlatformData* getFontPlatformData(const FontDescription&, const FontFaceCreationParams&, bool checkingAlternateName = false);
 
     // These methods are implemented by each platform.
-    FontPlatformData* createFontPlatformData(const FontDescription&, const AtomicString& family, float fontSize);
+    FontPlatformData* createFontPlatformData(const FontDescription&, const FontFaceCreationParams&, float fontSize);
 
     // Implemented on skia platforms.
-    PassRefPtr<SkTypeface> createTypeface(const FontDescription&, const AtomicString& family, CString& name);
+    PassRefPtr<SkTypeface> createTypeface(const FontDescription&, const FontFaceCreationParams&, CString& name);
 
     PassRefPtr<SimpleFontData> fontDataFromFontPlatformData(const FontPlatformData*, ShouldRetain = Retain);
 

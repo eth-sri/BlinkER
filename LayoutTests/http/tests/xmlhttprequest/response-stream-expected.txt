@@ -1,3 +1,0 @@
-
-PASS Test response of XMLHttpRequest with responseType set to 'stream' for various readyState. 
-

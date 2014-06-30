@@ -425,7 +425,6 @@ InspectorTest.startProfilerTest = function(callback)
     WebInspector.HeapSnapshotContainmentDataGrid.prototype.defaultPopulateCount = function() { return 10; };
     WebInspector.HeapSnapshotConstructorsDataGrid.prototype.defaultPopulateCount = function() { return 10; };
     WebInspector.HeapSnapshotDiffDataGrid.prototype.defaultPopulateCount = function() { return 5; };
-    WebInspector.HeapSnapshotDominatorsDataGrid.prototype.defaultPopulateCount = function() { return 3; }
     InspectorTest.addResult("Detailed heap profiles were enabled.");
     InspectorTest.safeWrap(callback)();
 };
@@ -577,12 +576,13 @@ InspectorTest.columnContents = function(column, row)
 {
     // Make sure invisible nodes are removed from the view port.
     this._currentGrid().updateVisibleNodes();
+    var columnOrdinal = InspectorTest.viewColumns().indexOf(column);
     var result = [];
     var parent = row || this._currentGrid().rootNode();
     for (var node = parent.children[0]; node; node = node.traverseNextNode(true, parent, true)) {
         if (!node.selectable)
             continue;
-        var content = node.element.children[column.ordinal];
+        var content = node.element.children[columnOrdinal];
         // Do not inlcude percents
         if (content.firstElementChild)
             content = content.firstElementChild;

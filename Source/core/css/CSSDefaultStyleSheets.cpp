@@ -29,8 +29,8 @@
 #include "config.h"
 #include "core/css/CSSDefaultStyleSheets.h"
 
-#include "MathMLNames.h"
-#include "UserAgentStyleSheets.h"
+#include "core/MathMLNames.h"
+#include "core/UserAgentStyleSheets.h"
 #include "core/css/MediaQueryEvaluator.h"
 #include "core/css/RuleSet.h"
 #include "core/css/StyleSheetContents.h"
@@ -89,6 +89,7 @@ CSSDefaultStyleSheets::CSSDefaultStyleSheets()
     , m_defaultPrintStyle(nullptr)
     , m_defaultViewSourceStyle(nullptr)
     , m_defaultXHTMLMobileProfileStyle(nullptr)
+    , m_defaultTransitionStyle(nullptr)
     , m_defaultStyleSheet(nullptr)
     , m_viewportStyleSheet(nullptr)
     , m_quirksStyleSheet(nullptr)
@@ -130,6 +131,17 @@ RuleSet* CSSDefaultStyleSheets::defaultViewSourceStyle()
         m_defaultViewSourceStyle->addRulesFromSheet(stylesheet.release().leakRef(), screenEval());
     }
     return m_defaultViewSourceStyle.get();
+}
+
+RuleSet* CSSDefaultStyleSheets::defaultTransitionStyle()
+{
+    if (!m_defaultTransitionStyle) {
+        m_defaultTransitionStyle = RuleSet::create();
+        // Loaded stylesheet is leaked on purpose.
+        RefPtrWillBeRawPtr<StyleSheetContents> stylesheet = parseUASheet(navigationTransitionsUserAgentStyleSheet, sizeof(navigationTransitionsUserAgentStyleSheet));
+        m_defaultTransitionStyle->addRulesFromSheet(stylesheet.release().leakRef(), screenEval());
+    }
+    return m_defaultTransitionStyle.get();
 }
 
 RuleSet* CSSDefaultStyleSheets::defaultXHTMLMobileProfileStyle()
@@ -194,6 +206,7 @@ void CSSDefaultStyleSheets::trace(Visitor* visitor)
     visitor->trace(m_defaultPrintStyle);
     visitor->trace(m_defaultViewSourceStyle);
     visitor->trace(m_defaultXHTMLMobileProfileStyle);
+    visitor->trace(m_defaultTransitionStyle);
     visitor->trace(m_defaultStyleSheet);
     visitor->trace(m_viewportStyleSheet);
     visitor->trace(m_quirksStyleSheet);

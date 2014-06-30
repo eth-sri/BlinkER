@@ -37,12 +37,14 @@ using blink::WebServiceWorkerError;
 namespace WebCore {
 
 // static
-PassRefPtrWillBeRawPtr<DOMException> ServiceWorkerError::from(ScriptPromiseResolverWithContext*, WebType* webErrorRaw)
+PassRefPtrWillBeRawPtr<DOMException> ServiceWorkerError::from(ScriptPromiseResolver*, WebType* webErrorRaw)
 {
     OwnPtr<WebType> webError = adoptPtr(webErrorRaw);
     switch (webError->errorType) {
     case WebServiceWorkerError::ErrorTypeDisabled:
         return DOMException::create(NotSupportedError, "Service Worker support is disabled.");
+    case WebServiceWorkerError::ErrorTypeAbort:
+        return DOMException::create(AbortError, "The Service Worker operation was aborted.");
     case WebServiceWorkerError::ErrorTypeSecurity:
         return DOMException::create(SecurityError, "The Service Worker security policy prevented an action.");
     case WebServiceWorkerError::ErrorTypeInstall:

@@ -30,7 +30,7 @@
 
 #include "config.h"
 #include "core/animation/InertAnimation.h"
-#include "core/animation/Interpolation.h"
+#include "core/animation/interpolation/Interpolation.h"
 
 namespace WebCore {
 
@@ -40,7 +40,7 @@ PassRefPtrWillBeRawPtr<InertAnimation> InertAnimation::create(PassRefPtrWillBeRa
 }
 
 InertAnimation::InertAnimation(PassRefPtrWillBeRawPtr<AnimationEffect> effect, const Timing& timing, bool paused)
-    : TimedItem(timing)
+    : AnimationNode(timing)
     , m_effect(effect)
     , m_paused(paused)
 {
@@ -66,7 +66,7 @@ double InertAnimation::calculateTimeToEffectChange(bool, double, double) const
 void InertAnimation::trace(Visitor* visitor)
 {
     visitor->trace(m_effect);
-    TimedItem::trace(visitor);
+    AnimationNode::trace(visitor);
 }
 
 } // namespace WebCore

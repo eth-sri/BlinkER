@@ -30,11 +30,10 @@
 #include "config.h"
 #include "core/html/track/vtt/VTTCue.h"
 
-#include "CSSPropertyNames.h"
-#include "CSSValueKeywords.h"
-#include "RuntimeEnabledFeatures.h"
 #include "bindings/v8/ExceptionMessages.h"
 #include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "core/CSSPropertyNames.h"
+#include "core/CSSValueKeywords.h"
 #include "core/dom/DocumentFragment.h"
 #include "core/dom/NodeTraversal.h"
 #include "core/events/Event.h"
@@ -47,6 +46,7 @@
 #include "core/html/track/vtt/VTTRegionList.h"
 #include "core/html/track/vtt/VTTScanner.h"
 #include "core/rendering/RenderVTTCue.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/text/BidiResolver.h"
 #include "platform/text/TextRunIterator.h"
 #include "wtf/MathExtras.h"
@@ -424,7 +424,7 @@ void VTTCue::createVTTNodeTree()
 void VTTCue::copyVTTNodeToDOMTree(ContainerNode* vttNode, ContainerNode* parent)
 {
     for (Node* node = vttNode->firstChild(); node; node = node->nextSibling()) {
-        RefPtr<Node> clonedNode;
+        RefPtrWillBeRawPtr<Node> clonedNode;
         if (node->isVTTElement())
             clonedNode = toVTTElement(node)->createEquivalentHTMLElement(document());
         else
@@ -811,7 +811,7 @@ void VTTCue::updateDisplay(const IntSize& videoSize, HTMLDivElement& container)
     } else {
         // Let region be the WebVTT region whose region identifier
         // matches the text track cue region identifier of cue.
-        RefPtr<HTMLDivElement> regionNode = region->getDisplayTree(document());
+        RefPtrWillBeRawPtr<HTMLDivElement> regionNode = region->getDisplayTree(document());
 
         // Append the region to the viewport, if it was not already.
         if (!container.contains(regionNode.get()))

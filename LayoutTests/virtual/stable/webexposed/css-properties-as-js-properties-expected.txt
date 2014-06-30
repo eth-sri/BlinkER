@@ -4,6 +4,7 @@ alignContent
 alignItems
 alignSelf
 alignmentBaseline
+all
 backfaceVisibility
 background
 backgroundAttachment
@@ -163,6 +164,9 @@ position
 quotes
 resize
 right
+shapeImageThreshold
+shapeMargin
+shapeOutside
 shapeRendering
 size
 speak

@@ -31,14 +31,17 @@
 #ifndef StorageQuotaClient_h
 #define StorageQuotaClient_h
 
-#include "core/page/Page.h"
+#include "platform/Supplementable.h"
+#include "platform/heap/Handle.h"
 #include "public/platform/WebStorageQuotaType.h"
 #include "wtf/Forward.h"
 
 namespace WebCore {
 
 class ExecutionContext;
+class Page;
 class ScriptPromise;
+class ScriptState;
 class StorageErrorCallback;
 class StorageQuotaCallback;
 
@@ -49,7 +52,7 @@ public:
     virtual ~StorageQuotaClient() { }
 
     virtual void requestQuota(ExecutionContext*, blink::WebStorageQuotaType, unsigned long long newQuotaInBytes, PassOwnPtr<StorageQuotaCallback>, PassOwnPtr<StorageErrorCallback>) = 0;
-    virtual ScriptPromise requestPersistentQuota(ExecutionContext*, unsigned long long newQuotaInBytes) = 0;
+    virtual ScriptPromise requestPersistentQuota(ScriptState*, unsigned long long newQuotaInBytes) = 0;
 
     static const char* supplementName();
     static StorageQuotaClient* from(ExecutionContext*);

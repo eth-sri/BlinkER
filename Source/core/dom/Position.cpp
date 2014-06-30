@@ -26,8 +26,7 @@
 #include "config.h"
 #include "core/dom/Position.h"
 
-#include <stdio.h>
-#include "HTMLNames.h"
+#include "core/HTMLNames.h"
 #include "core/css/CSSComputedStyleDeclaration.h"
 #include "core/dom/PositionIterator.h"
 #include "core/dom/Text.h"
@@ -46,6 +45,7 @@
 #include "platform/Logging.h"
 #include "wtf/text/CString.h"
 #include "wtf/unicode/CharacterNames.h"
+#include <stdio.h>
 
 namespace WebCore {
 
@@ -79,7 +79,7 @@ static Node* previousRenderedEditable(Node* node)
     return 0;
 }
 
-Position::Position(PassRefPtr<Node> anchorNode, LegacyEditingOffset offset)
+Position::Position(PassRefPtrWillBeRawPtr<Node> anchorNode, LegacyEditingOffset offset)
     : m_anchorNode(anchorNode)
     , m_offset(offset.value())
     , m_anchorType(anchorTypeForLegacyEditingPosition(m_anchorNode.get(), m_offset))
@@ -88,7 +88,7 @@ Position::Position(PassRefPtr<Node> anchorNode, LegacyEditingOffset offset)
     ASSERT(!m_anchorNode || !m_anchorNode->isPseudoElement());
 }
 
-Position::Position(PassRefPtr<Node> anchorNode, AnchorType anchorType)
+Position::Position(PassRefPtrWillBeRawPtr<Node> anchorNode, AnchorType anchorType)
     : m_anchorNode(anchorNode)
     , m_offset(0)
     , m_anchorType(anchorType)
@@ -101,7 +101,7 @@ Position::Position(PassRefPtr<Node> anchorNode, AnchorType anchorType)
         && (m_anchorNode->isTextNode() || editingIgnoresContent(m_anchorNode.get()))));
 }
 
-Position::Position(PassRefPtr<Node> anchorNode, int offset, AnchorType anchorType)
+Position::Position(PassRefPtrWillBeRawPtr<Node> anchorNode, int offset, AnchorType anchorType)
     : m_anchorNode(anchorNode)
     , m_offset(offset)
     , m_anchorType(anchorType)
@@ -121,7 +121,7 @@ Position::Position(PassRefPtrWillBeRawPtr<Text> textNode, unsigned offset)
     ASSERT(m_anchorNode);
 }
 
-void Position::moveToPosition(PassRefPtr<Node> node, int offset)
+void Position::moveToPosition(PassRefPtrWillBeRawPtr<Node> node, int offset)
 {
     ASSERT(!editingIgnoresContent(node.get()));
     ASSERT(anchorType() == PositionIsOffsetInAnchor || m_isLegacyEditingPosition);
@@ -228,7 +228,6 @@ Node* Position::computeNodeBeforePosition() const
 {
     if (!m_anchorNode)
         return 0;
-
     switch (anchorType()) {
     case PositionIsBeforeChildren:
         return 0;
@@ -474,34 +473,6 @@ int Position::renderedOffset() const
         result += box->len();
     }
     return result;
-}
-
-// return first preceding DOM position rendered at a different location, or "this"
-Position Position::previousCharacterPosition(EAffinity affinity) const
-{
-    if (isNull())
-        return Position();
-
-    Node* fromRootEditableElement = deprecatedNode()->rootEditableElement();
-
-    bool atStartOfLine = isStartOfLine(VisiblePosition(*this, affinity));
-    bool rendered = isCandidate();
-
-    Position currentPos = *this;
-    while (!currentPos.atStartOfTree()) {
-        currentPos = currentPos.previous();
-
-        if (currentPos.deprecatedNode()->rootEditableElement() != fromRootEditableElement)
-            return *this;
-
-        if (atStartOfLine || !rendered) {
-            if (currentPos.isCandidate())
-                return currentPos;
-        } else if (rendersInDifferentPosition(currentPos))
-            return currentPos;
-    }
-
-    return *this;
 }
 
 // Whether or not [node, 0] and [node, lastOffsetForEditing(node)] are their own VisiblePositions.
@@ -865,6 +836,12 @@ bool Position::isCandidate() const
     if (renderer->isText())
         return !nodeIsUserSelectNone(deprecatedNode()) && inRenderedText();
 
+    if (renderer->isSVG()) {
+        // We don't consider SVG elements are contenteditable except for
+        // associated renderer returns isText() true, e.g. RenderSVGInlineText.
+        return false;
+    }
+
     if (isRenderedTableElement(deprecatedNode()) || editingIgnoresContent(deprecatedNode()))
         return (atFirstEditingPositionForNode() || atLastEditingPositionForNode()) && !nodeIsUserSelectNone(deprecatedNode()->parentNode());
 
@@ -1019,45 +996,6 @@ bool Position::rendersInDifferentPosition(const Position &pos) const
     }
 
     return true;
-}
-
-// This assumes that it starts in editable content.
-Position Position::leadingWhitespacePosition(EAffinity affinity, bool considerNonCollapsibleWhitespace) const
-{
-    ASSERT(isEditablePosition(*this, ContentIsEditable, DoNotUpdateStyle));
-    if (isNull())
-        return Position();
-
-    if (isHTMLBRElement(*upstream().deprecatedNode()))
-        return Position();
-
-    Position prev = previousCharacterPosition(affinity);
-    if (prev != *this && prev.deprecatedNode()->inSameContainingBlockFlowElement(deprecatedNode()) && prev.deprecatedNode()->isTextNode()) {
-        String string = toText(prev.deprecatedNode())->data();
-        UChar c = string[prev.deprecatedEditingOffset()];
-        if (considerNonCollapsibleWhitespace ? (isSpaceOrNewline(c) || c == noBreakSpace) : isCollapsibleWhitespace(c))
-            if (isEditablePosition(prev))
-                return prev;
-    }
-
-    return Position();
-}
-
-// This assumes that it starts in editable content.
-Position Position::trailingWhitespacePosition(EAffinity, bool considerNonCollapsibleWhitespace) const
-{
-    ASSERT(isEditablePosition(*this, ContentIsEditable, DoNotUpdateStyle));
-    if (isNull())
-        return Position();
-
-    VisiblePosition v(*this);
-    UChar c = v.characterAfter();
-    // The space must not be in another paragraph and it must be editable.
-    if (!isEndOfParagraph(v) && v.next(CannotCrossEditingBoundary).isNotNull())
-        if (considerNonCollapsibleWhitespace ? (isSpaceOrNewline(c) || c == noBreakSpace) : isCollapsibleWhitespace(c))
-            return *this;
-
-    return Position();
 }
 
 void Position::getInlineBoxAndOffset(EAffinity affinity, InlineBox*& inlineBox, int& caretOffset) const
@@ -1260,7 +1198,10 @@ void Position::getInlineBoxAndOffset(EAffinity affinity, TextDirection primaryDi
                     break;
                 inlineBox = prevBox;
             }
-            caretOffset = inlineBox->caretLeftmostOffset();
+            if (m_anchorNode->selfOrAncestorHasDirAutoAttribute())
+                caretOffset = inlineBox->bidiLevel() < level ? inlineBox->caretLeftmostOffset() : inlineBox->caretRightmostOffset();
+            else
+                caretOffset = inlineBox->caretLeftmostOffset();
         } else if (nextBox->bidiLevel() > level) {
             // Left edge of a "tertiary" run. Set to the right edge of that run.
             while (InlineBox* tertiaryBox = inlineBox->nextLeafChildIgnoringLineBreak()) {
@@ -1286,6 +1227,10 @@ TextDirection Position::primaryDirection() const
     return primaryDirection;
 }
 
+void Position::trace(Visitor* visitor)
+{
+    visitor->trace(m_anchorNode);
+}
 
 void Position::debugPosition(const char* msg) const
 {

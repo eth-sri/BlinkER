@@ -492,6 +492,7 @@ WebInspector.HeapSnapshotGridNode.prototype = {
  * @constructor
  * @extends {WebInspector.HeapSnapshotGridNode}
  * @param {!WebInspector.HeapSnapshotSortableDataGrid} dataGrid
+ * @param {!WebInspector.HeapSnapshotCommon.Node} node
  */
 WebInspector.HeapSnapshotGenericObjectNode = function(dataGrid, node)
 {
@@ -907,6 +908,7 @@ WebInspector.HeapSnapshotRetainingObjectNode.prototype = {
  * @extends {WebInspector.HeapSnapshotGenericObjectNode}
  * @param {!WebInspector.HeapSnapshotSortableDataGrid} dataGrid
  * @param {!WebInspector.HeapSnapshotProxy} snapshot
+ * @param {!WebInspector.HeapSnapshotCommon.Node} node
  * @param {boolean} isDeletedNode
  */
 WebInspector.HeapSnapshotInstanceNode = function(dataGrid, snapshot, node, isDeletedNode)
@@ -1164,6 +1166,8 @@ WebInspector.HeapSnapshotConstructorNode.prototype = {
  * @implements {WebInspector.HeapSnapshotGridNode.ChildrenProvider}
  * @param {!WebInspector.HeapSnapshotProviderProxy} addedNodesProvider
  * @param {!WebInspector.HeapSnapshotProviderProxy} deletedNodesProvider
+ * @param {number} addedCount
+ * @param {number} removedCount
  */
 WebInspector.HeapSnapshotDiffNodesProvider = function(addedNodesProvider, deletedNodesProvider, addedCount, removedCount)
 {
@@ -1399,110 +1403,6 @@ WebInspector.HeapSnapshotDiffNode.prototype = {
     },
 
     __proto__: WebInspector.HeapSnapshotGridNode.prototype
-}
-
-
-/**
- * @constructor
- * @extends {WebInspector.HeapSnapshotGenericObjectNode}
- * @param {!WebInspector.HeapSnapshotSortableDataGrid} dataGrid
- */
-WebInspector.HeapSnapshotDominatorObjectNode = function(dataGrid, node)
-{
-    WebInspector.HeapSnapshotGenericObjectNode.call(this, dataGrid, node);
-    this.updateHasChildren();
-};
-
-WebInspector.HeapSnapshotDominatorObjectNode.prototype = {
-    /**
-     * @override
-     * @return {!WebInspector.HeapSnapshotProviderProxy}
-     */
-    createProvider: function()
-    {
-        return this._dataGrid.snapshot.createNodesProviderForDominator(this.snapshotNodeIndex);
-    },
-
-    /**
-     * @param {number} snapshotObjectId
-     * @param {function(?WebInspector.DataGridNode)} callback
-     */
-    retrieveChildBySnapshotObjectId: function(snapshotObjectId, callback)
-    {
-        /**
-         * @this {WebInspector.HeapSnapshotDominatorObjectNode}
-         */
-        function didExpand()
-        {
-            this._provider().nodePosition(snapshotObjectId, didGetNodePosition.bind(this));
-        }
-
-        /**
-         * @this {WebInspector.HeapSnapshotDominatorObjectNode}
-         */
-        function didGetNodePosition(nodePosition)
-        {
-            if (nodePosition === -1) {
-                this.collapse();
-                callback(null);
-            } else
-                this._populateChildren(nodePosition, null, didPopulateChildren.bind(this, nodePosition));
-        }
-
-        /**
-         * @this {WebInspector.HeapSnapshotDominatorObjectNode}
-         */
-        function didPopulateChildren(nodePosition)
-        {
-            var child = this.childForPosition(nodePosition);
-            callback(child);
-        }
-
-        // Make sure hasChildren flag is updated before expanding this node as updateHasChildren response
-        // may not have been received yet.
-        this.hasChildren = true;
-        this.expandWithoutPopulate(didExpand.bind(this));
-    },
-
-    _createChildNode: function(item)
-    {
-        return new WebInspector.HeapSnapshotDominatorObjectNode(this._dataGrid, item);
-    },
-
-    /**
-     * @param {!WebInspector.HeapSnapshotCommon.Node} node
-     * @return {number}
-     */
-    _childHashForEntity: function(node)
-    {
-        return node.id;
-    },
-
-    /**
-     * @param {!WebInspector.HeapSnapshotDominatorObjectNode} childNode
-     * @return {number}
-     */
-    _childHashForNode: function(childNode)
-    {
-        return childNode.snapshotNodeId;
-    },
-
-    /**
-     * @return {!WebInspector.HeapSnapshotCommon.ComparatorConfig}
-     */
-    comparator: function()
-    {
-        var sortAscending = this._dataGrid.isSortOrderAscending();
-        var sortColumnIdentifier = this._dataGrid.sortColumnIdentifier();
-        var sortFields = {
-            object: ["id", sortAscending, "retainedSize", false],
-            shallowSize: ["selfSize", sortAscending, "id", true],
-            retainedSize: ["retainedSize", sortAscending, "id", true]
-        }[sortColumnIdentifier];
-        return WebInspector.HeapSnapshotGridNode.createComparator(sortFields);
-    },
-
-    __proto__: WebInspector.HeapSnapshotGenericObjectNode.prototype
 }
 
 

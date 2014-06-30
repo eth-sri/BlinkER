@@ -62,7 +62,6 @@ AudioNode::AudioNode(AudioContext* context, float sampleRate)
     , m_channelInterpretation(AudioBus::Speakers)
 {
     ScriptWrappable::init(this);
-    context->lazyInitialize();
 #if DEBUG_AUDIONODE_REFERENCES
     if (!s_isNodeCountInitialized) {
         s_isNodeCountInitialized = true;
@@ -143,9 +142,9 @@ void AudioNode::setNodeType(NodeType type)
 #endif
 }
 
-void AudioNode::addInput(PassOwnPtr<AudioNodeInput> input)
+void AudioNode::addInput()
 {
-    m_inputs.append(input);
+    m_inputs.append(AudioNodeInput::create(this));
 }
 
 void AudioNode::addOutput(PassOwnPtr<AudioNodeOutput> output)
@@ -528,7 +527,7 @@ void AudioNode::deref(RefType refType)
     // Once AudioContext::uninitialize() is called there's no more chances for deleteMarkedNodes() to get called, so we call here.
     // We can't call in AudioContext::~AudioContext() since it will never be called as long as any AudioNode is alive
     // because AudioNodes keep a reference to the context.
-    if (context()->isAudioThreadFinished())
+    if (!context()->isInitialized())
         context()->deleteMarkedNodes();
 }
 
@@ -592,6 +591,7 @@ void AudioNode::printNodeCounts()
 void AudioNode::trace(Visitor* visitor)
 {
     visitor->trace(m_context);
+    EventTargetWithInlineData::trace(visitor);
 }
 
 #if ENABLE(OILPAN)

@@ -20,7 +20,7 @@
 #include "config.h"
 #include "core/rendering/InlineFlowBox.h"
 
-#include "CSSPropertyNames.h"
+#include "core/CSSPropertyNames.h"
 #include "core/dom/Document.h"
 #include "core/rendering/HitTestResult.h"
 #include "core/rendering/InlineTextBox.h"
@@ -37,8 +37,6 @@
 #include "platform/graphics/GraphicsContextStateSaver.h"
 
 #include <math.h>
-
-using namespace std;
 
 namespace WebCore {
 
@@ -389,10 +387,10 @@ float InlineFlowBox::placeBoxRangeInInlineDirection(InlineBox* firstChild, Inlin
             }
             text->setLogicalLeft(logicalLeft);
             if (knownToHaveNoOverflow())
-                minLogicalLeft = min(logicalLeft, minLogicalLeft);
+                minLogicalLeft = std::min(logicalLeft, minLogicalLeft);
             logicalLeft += text->logicalWidth();
             if (knownToHaveNoOverflow())
-                maxLogicalRight = max(logicalLeft, maxLogicalRight);
+                maxLogicalRight = std::max(logicalLeft, maxLogicalRight);
         } else {
             if (curr->renderer().isOutOfFlowPositioned()) {
                 if (curr->renderer().parent()->style()->isLeftToRightDirection()) {
@@ -409,10 +407,10 @@ float InlineFlowBox::placeBoxRangeInInlineDirection(InlineBox* firstChild, Inlin
                 InlineFlowBox* flow = toInlineFlowBox(curr);
                 logicalLeft += flow->marginLogicalLeft();
                 if (knownToHaveNoOverflow())
-                    minLogicalLeft = min(logicalLeft, minLogicalLeft);
+                    minLogicalLeft = std::min(logicalLeft, minLogicalLeft);
                 logicalLeft = flow->placeBoxesInInlineDirection(logicalLeft, needsWordSpacing, textBoxDataMap);
                 if (knownToHaveNoOverflow())
-                    maxLogicalRight = max(logicalLeft, maxLogicalRight);
+                    maxLogicalRight = std::max(logicalLeft, maxLogicalRight);
                 logicalLeft += flow->marginLogicalRight();
             } else if (!curr->renderer().isListMarker() || toRenderListMarker(curr->renderer()).isInside()) {
                 // The box can have a different writing-mode than the overall line, so this is a bit complicated.
@@ -423,10 +421,10 @@ float InlineFlowBox::placeBoxRangeInInlineDirection(InlineBox* firstChild, Inlin
                 logicalLeft += logicalLeftMargin;
                 curr->setLogicalLeft(logicalLeft);
                 if (knownToHaveNoOverflow())
-                    minLogicalLeft = min(logicalLeft, minLogicalLeft);
+                    minLogicalLeft = std::min(logicalLeft, minLogicalLeft);
                 logicalLeft += curr->logicalWidth();
                 if (knownToHaveNoOverflow())
-                    maxLogicalRight = max(logicalLeft, maxLogicalRight);
+                    maxLogicalRight = std::max(logicalLeft, maxLogicalRight);
                 logicalLeft += logicalRightMargin;
                 // If we encounter any space after this inline block then ensure it is treated as the space between two words.
                 needsWordSpacing = true;
@@ -492,7 +490,7 @@ void InlineFlowBox::adjustMaxAscentAndDescent(int& maxAscent, int& maxDescent, i
                     maxAscent = lineHeight - maxDescent;
             }
 
-            if (maxAscent + maxDescent >= max(maxPositionTop, maxPositionBottom))
+            if (maxAscent + maxDescent >= std::max(maxPositionTop, maxPositionBottom))
                 break;
         }
 
@@ -598,7 +596,7 @@ void InlineFlowBox::computeLogicalBoxHeights(RootInlineBox* rootBox, LayoutUnit&
     }
 }
 
-void InlineFlowBox::placeBoxesInBlockDirection(LayoutUnit top, LayoutUnit maxHeight, int maxAscent, bool strictMode, LayoutUnit& lineTop, LayoutUnit& lineBottom, bool& setLineTop,
+void InlineFlowBox::placeBoxesInBlockDirection(LayoutUnit top, LayoutUnit maxHeight, int maxAscent, bool strictMode, LayoutUnit& lineTop, LayoutUnit& lineBottom, LayoutUnit& selectionBottom, bool& setLineTop,
                                                LayoutUnit& lineTopIncludingMargins, LayoutUnit& lineBottomIncludingMargins, bool& hasAnnotationsBefore, bool& hasAnnotationsAfter, FontBaseline baselineType)
 {
     bool isRootBox = isRootInlineBox();
@@ -643,7 +641,7 @@ void InlineFlowBox::placeBoxesInBlockDirection(LayoutUnit top, LayoutUnit maxHei
         LayoutUnit newLogicalTopIncludingMargins = newLogicalTop;
         LayoutUnit boxHeight = curr->logicalHeight();
         LayoutUnit boxHeightIncludingMargins = boxHeight;
-
+        LayoutUnit borderPaddingHeight = 0;
         if (curr->isText() || curr->isInlineFlowBox()) {
             const FontMetrics& fontMetrics = curr->renderer().style(isFirstLineStyle())->fontMetrics();
             newLogicalTop += curr->baselinePosition(baselineType) - fontMetrics.ascent(baselineType);
@@ -651,6 +649,7 @@ void InlineFlowBox::placeBoxesInBlockDirection(LayoutUnit top, LayoutUnit maxHei
                 RenderBoxModelObject& boxObject = toRenderBoxModelObject(curr->renderer());
                 newLogicalTop -= boxObject.style(isFirstLineStyle())->isHorizontalWritingMode() ? boxObject.borderTop() + boxObject.paddingTop() :
                     boxObject.borderRight() + boxObject.paddingRight();
+                borderPaddingHeight = boxObject.borderAndPaddingLogicalHeight();
             }
             newLogicalTopIncludingMargins = newLogicalTop;
         } else if (!curr->renderer().isBR()) {
@@ -696,19 +695,20 @@ void InlineFlowBox::placeBoxesInBlockDirection(LayoutUnit top, LayoutUnit maxHei
             if (!setLineTop) {
                 setLineTop = true;
                 lineTop = newLogicalTop;
-                lineTopIncludingMargins = min(lineTop, newLogicalTopIncludingMargins);
+                lineTopIncludingMargins = std::min(lineTop, newLogicalTopIncludingMargins);
             } else {
-                lineTop = min(lineTop, newLogicalTop);
-                lineTopIncludingMargins = min(lineTop, min(lineTopIncludingMargins, newLogicalTopIncludingMargins));
+                lineTop = std::min(lineTop, newLogicalTop);
+                lineTopIncludingMargins = std::min(lineTop, std::min(lineTopIncludingMargins, newLogicalTopIncludingMargins));
             }
-            lineBottom = max(lineBottom, newLogicalTop + boxHeight);
-            lineBottomIncludingMargins = max(lineBottom, max(lineBottomIncludingMargins, newLogicalTopIncludingMargins + boxHeightIncludingMargins));
+            selectionBottom = std::max(selectionBottom, newLogicalTop + boxHeight - borderPaddingHeight);
+            lineBottom = std::max(lineBottom, newLogicalTop + boxHeight);
+            lineBottomIncludingMargins = std::max(lineBottom, std::max(lineBottomIncludingMargins, newLogicalTopIncludingMargins + boxHeightIncludingMargins));
         }
 
         // Adjust boxes to use their real box y/height and not the logical height (as dictated by
         // line-height).
         if (inlineFlowBox)
-            inlineFlowBox->placeBoxesInBlockDirection(top, maxHeight, maxAscent, strictMode, lineTop, lineBottom, setLineTop,
+            inlineFlowBox->placeBoxesInBlockDirection(top, maxHeight, maxAscent, strictMode, lineTop, lineBottom, selectionBottom, setLineTop,
                                                       lineTopIncludingMargins, lineBottomIncludingMargins, hasAnnotationsBefore, hasAnnotationsAfter, baselineType);
     }
 
@@ -719,11 +719,12 @@ void InlineFlowBox::placeBoxesInBlockDirection(LayoutUnit top, LayoutUnit maxHei
                 lineTop = pixelSnappedLogicalTop();
                 lineTopIncludingMargins = lineTop;
             } else {
-                lineTop = min<LayoutUnit>(lineTop, pixelSnappedLogicalTop());
-                lineTopIncludingMargins = min(lineTop, lineTopIncludingMargins);
+                lineTop = std::min<LayoutUnit>(lineTop, pixelSnappedLogicalTop());
+                lineTopIncludingMargins = std::min(lineTop, lineTopIncludingMargins);
             }
-            lineBottom = max<LayoutUnit>(lineBottom, pixelSnappedLogicalBottom());
-            lineBottomIncludingMargins = max(lineBottom, lineBottomIncludingMargins);
+            selectionBottom = std::max<LayoutUnit>(selectionBottom, pixelSnappedLogicalBottom());
+            lineBottom = std::max<LayoutUnit>(lineBottom, pixelSnappedLogicalBottom());
+            lineBottomIncludingMargins = std::max(lineBottom, lineBottomIncludingMargins);
         }
 
         if (renderer().style()->isFlippedLinesWritingMode())
@@ -740,11 +741,11 @@ void InlineFlowBox::computeMaxLogicalTop(float& maxLogicalTop) const
         if (descendantsHaveSameLineHeightAndBaseline())
             continue;
 
-        maxLogicalTop = max<float>(maxLogicalTop, curr->y());
+        maxLogicalTop = std::max<float>(maxLogicalTop, curr->y());
         float localMaxLogicalTop = 0;
         if (curr->isInlineFlowBox())
             toInlineFlowBox(curr)->computeMaxLogicalTop(localMaxLogicalTop);
-        maxLogicalTop = max<float>(maxLogicalTop, localMaxLogicalTop);
+        maxLogicalTop = std::max<float>(maxLogicalTop, localMaxLogicalTop);
     }
 }
 
@@ -783,15 +784,15 @@ inline void InlineFlowBox::addBoxShadowVisualOverflow(LayoutRect& logicalVisualO
     LayoutUnit shadowLogicalTop = style->isFlippedLinesWritingMode() ? -boxShadowLogicalBottom : boxShadowLogicalTop;
     LayoutUnit shadowLogicalBottom = style->isFlippedLinesWritingMode() ? -boxShadowLogicalTop : boxShadowLogicalBottom;
 
-    LayoutUnit logicalTopVisualOverflow = min(pixelSnappedLogicalTop() + shadowLogicalTop, logicalVisualOverflow.y());
-    LayoutUnit logicalBottomVisualOverflow = max(pixelSnappedLogicalBottom() + shadowLogicalBottom, logicalVisualOverflow.maxY());
+    LayoutUnit logicalTopVisualOverflow = std::min(pixelSnappedLogicalTop() + shadowLogicalTop, logicalVisualOverflow.y());
+    LayoutUnit logicalBottomVisualOverflow = std::max(pixelSnappedLogicalBottom() + shadowLogicalBottom, logicalVisualOverflow.maxY());
 
     LayoutUnit boxShadowLogicalLeft;
     LayoutUnit boxShadowLogicalRight;
     style->getBoxShadowInlineDirectionExtent(boxShadowLogicalLeft, boxShadowLogicalRight);
 
-    LayoutUnit logicalLeftVisualOverflow = min(pixelSnappedLogicalLeft() + boxShadowLogicalLeft, logicalVisualOverflow.x());
-    LayoutUnit logicalRightVisualOverflow = max(pixelSnappedLogicalRight() + boxShadowLogicalRight, logicalVisualOverflow.maxX());
+    LayoutUnit logicalLeftVisualOverflow = std::min(pixelSnappedLogicalLeft() + boxShadowLogicalLeft, logicalVisualOverflow.x());
+    LayoutUnit logicalRightVisualOverflow = std::max(pixelSnappedLogicalRight() + boxShadowLogicalRight, logicalVisualOverflow.maxX());
 
     logicalVisualOverflow = LayoutRect(logicalLeftVisualOverflow, logicalTopVisualOverflow,
                                        logicalRightVisualOverflow - logicalLeftVisualOverflow, logicalBottomVisualOverflow - logicalTopVisualOverflow);
@@ -819,14 +820,14 @@ inline void InlineFlowBox::addBorderOutsetVisualOverflow(LayoutRect& logicalVisu
     LayoutUnit outsetLogicalTop = style->isFlippedLinesWritingMode() ? borderOutsetLogicalBottom : borderOutsetLogicalTop;
     LayoutUnit outsetLogicalBottom = style->isFlippedLinesWritingMode() ? borderOutsetLogicalTop : borderOutsetLogicalBottom;
 
-    LayoutUnit logicalTopVisualOverflow = min(pixelSnappedLogicalTop() - outsetLogicalTop, logicalVisualOverflow.y());
-    LayoutUnit logicalBottomVisualOverflow = max(pixelSnappedLogicalBottom() + outsetLogicalBottom, logicalVisualOverflow.maxY());
+    LayoutUnit logicalTopVisualOverflow = std::min(pixelSnappedLogicalTop() - outsetLogicalTop, logicalVisualOverflow.y());
+    LayoutUnit logicalBottomVisualOverflow = std::max(pixelSnappedLogicalBottom() + outsetLogicalBottom, logicalVisualOverflow.maxY());
 
     LayoutUnit outsetLogicalLeft = includeLogicalLeftEdge() ? borderOutsetLogicalLeft : LayoutUnit();
     LayoutUnit outsetLogicalRight = includeLogicalRightEdge() ? borderOutsetLogicalRight : LayoutUnit();
 
-    LayoutUnit logicalLeftVisualOverflow = min(pixelSnappedLogicalLeft() - outsetLogicalLeft, logicalVisualOverflow.x());
-    LayoutUnit logicalRightVisualOverflow = max(pixelSnappedLogicalRight() + outsetLogicalRight, logicalVisualOverflow.maxX());
+    LayoutUnit logicalLeftVisualOverflow = std::min(pixelSnappedLogicalLeft() - outsetLogicalLeft, logicalVisualOverflow.x());
+    LayoutUnit logicalRightVisualOverflow = std::max(pixelSnappedLogicalRight() + outsetLogicalRight, logicalVisualOverflow.maxX());
 
     logicalVisualOverflow = LayoutRect(logicalLeftVisualOverflow, logicalTopVisualOverflow,
                                        logicalRightVisualOverflow - logicalLeftVisualOverflow, logicalBottomVisualOverflow - logicalTopVisualOverflow);
@@ -871,33 +872,33 @@ inline void InlineFlowBox::addTextBoxVisualOverflow(InlineTextBox* textBox, Glyp
     if (style->textEmphasisMark() != TextEmphasisMarkNone && textBox->getEmphasisMarkPosition(style, emphasisMarkPosition)) {
         int emphasisMarkHeight = style->font().emphasisMarkHeight(style->textEmphasisMarkString());
         if ((emphasisMarkPosition == TextEmphasisPositionOver) == (!style->isFlippedLinesWritingMode()))
-            topGlyphOverflow = min(topGlyphOverflow, -emphasisMarkHeight);
+            topGlyphOverflow = std::min(topGlyphOverflow, -emphasisMarkHeight);
         else
-            bottomGlyphOverflow = max(bottomGlyphOverflow, emphasisMarkHeight);
+            bottomGlyphOverflow = std::max(bottomGlyphOverflow, emphasisMarkHeight);
     }
 
     // If letter-spacing is negative, we should factor that into right layout overflow. (Even in RTL, letter-spacing is
     // applied to the right, so this is not an issue with left overflow.
-    rightGlyphOverflow -= min(0, (int)style->font().fontDescription().letterSpacing());
+    rightGlyphOverflow -= std::min(0, (int)style->font().fontDescription().letterSpacing());
 
     LayoutUnit textShadowLogicalTop;
     LayoutUnit textShadowLogicalBottom;
     style->getTextShadowBlockDirectionExtent(textShadowLogicalTop, textShadowLogicalBottom);
 
-    LayoutUnit childOverflowLogicalTop = min<LayoutUnit>(textShadowLogicalTop + topGlyphOverflow, topGlyphOverflow);
-    LayoutUnit childOverflowLogicalBottom = max<LayoutUnit>(textShadowLogicalBottom + bottomGlyphOverflow, bottomGlyphOverflow);
+    LayoutUnit childOverflowLogicalTop = std::min<LayoutUnit>(textShadowLogicalTop + topGlyphOverflow, topGlyphOverflow);
+    LayoutUnit childOverflowLogicalBottom = std::max<LayoutUnit>(textShadowLogicalBottom + bottomGlyphOverflow, bottomGlyphOverflow);
 
     LayoutUnit textShadowLogicalLeft;
     LayoutUnit textShadowLogicalRight;
     style->getTextShadowInlineDirectionExtent(textShadowLogicalLeft, textShadowLogicalRight);
 
-    LayoutUnit childOverflowLogicalLeft = min<LayoutUnit>(textShadowLogicalLeft + leftGlyphOverflow, leftGlyphOverflow);
-    LayoutUnit childOverflowLogicalRight = max<LayoutUnit>(textShadowLogicalRight + rightGlyphOverflow, rightGlyphOverflow);
+    LayoutUnit childOverflowLogicalLeft = std::min<LayoutUnit>(textShadowLogicalLeft + leftGlyphOverflow, leftGlyphOverflow);
+    LayoutUnit childOverflowLogicalRight = std::max<LayoutUnit>(textShadowLogicalRight + rightGlyphOverflow, rightGlyphOverflow);
 
-    LayoutUnit logicalTopVisualOverflow = min(textBox->pixelSnappedLogicalTop() + childOverflowLogicalTop, logicalVisualOverflow.y());
-    LayoutUnit logicalBottomVisualOverflow = max(textBox->pixelSnappedLogicalBottom() + childOverflowLogicalBottom, logicalVisualOverflow.maxY());
-    LayoutUnit logicalLeftVisualOverflow = min(textBox->pixelSnappedLogicalLeft() + childOverflowLogicalLeft, logicalVisualOverflow.x());
-    LayoutUnit logicalRightVisualOverflow = max(textBox->pixelSnappedLogicalRight() + childOverflowLogicalRight, logicalVisualOverflow.maxX());
+    LayoutUnit logicalTopVisualOverflow = std::min(textBox->pixelSnappedLogicalTop() + childOverflowLogicalTop, logicalVisualOverflow.y());
+    LayoutUnit logicalBottomVisualOverflow = std::max(textBox->pixelSnappedLogicalBottom() + childOverflowLogicalBottom, logicalVisualOverflow.maxY());
+    LayoutUnit logicalLeftVisualOverflow = std::min(textBox->pixelSnappedLogicalLeft() + childOverflowLogicalLeft, logicalVisualOverflow.x());
+    LayoutUnit logicalRightVisualOverflow = std::max(textBox->pixelSnappedLogicalRight() + childOverflowLogicalRight, logicalVisualOverflow.maxX());
 
     logicalVisualOverflow = LayoutRect(logicalLeftVisualOverflow, logicalTopVisualOverflow,
                                        logicalRightVisualOverflow - logicalLeftVisualOverflow, logicalBottomVisualOverflow - logicalTopVisualOverflow);
@@ -1066,8 +1067,8 @@ bool InlineFlowBox::nodeAtPoint(const HitTestRequest& request, HitTestResult& re
         RootInlineBox& rootBox = root();
         LayoutUnit& top = isHorizontal() ? minY : minX;
         LayoutUnit& logicalHeight = isHorizontal() ? height : width;
-        LayoutUnit bottom = min(rootBox.lineBottom(), top + logicalHeight);
-        top = max(rootBox.lineTop(), top);
+        LayoutUnit bottom = std::min(rootBox.lineBottom(), top + logicalHeight);
+        top = std::max(rootBox.lineTop(), top);
         logicalHeight = bottom - top;
     }
 
@@ -1142,12 +1143,17 @@ void InlineFlowBox::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset, 
         return;
 
     PaintPhase paintPhase = paintInfo.phase == PaintPhaseChildOutlines ? PaintPhaseOutline : paintInfo.phase;
-    PaintInfo childInfo(paintInfo);
-    childInfo.phase = paintPhase;
-    childInfo.updatePaintingRootForChildren(&renderer());
 
     // Paint our children.
     if (paintPhase != PaintPhaseSelfOutline) {
+        PaintInfo childInfo(paintInfo);
+        childInfo.phase = paintPhase;
+
+        if (childInfo.paintingRoot && childInfo.paintingRoot->isDescendantOf(&renderer()))
+            childInfo.paintingRoot = 0;
+        else
+            childInfo.updatePaintingRootForChildren(&renderer());
+
         for (InlineBox* curr = firstChild(); curr; curr = curr->nextOnLine()) {
             if (curr->renderer().isText() || !curr->boxModelObject()->hasSelfPaintingLayer())
                 curr->paint(childInfo, paintOffset, lineTop, lineBottom);
@@ -1233,8 +1239,8 @@ void InlineFlowBox::constrainToLineTopAndBottomIfNeeded(LayoutRect& rect) const
         const RootInlineBox& rootBox = root();
         LayoutUnit logicalTop = isHorizontal() ? rect.y() : rect.x();
         LayoutUnit logicalHeight = isHorizontal() ? rect.height() : rect.width();
-        LayoutUnit bottom = min(rootBox.lineBottom(), logicalTop + logicalHeight);
-        logicalTop = max(rootBox.lineTop(), logicalTop);
+        LayoutUnit bottom = std::min(rootBox.lineBottom(), logicalTop + logicalHeight);
+        logicalTop = std::max(rootBox.lineTop(), logicalTop);
         logicalHeight = bottom - logicalTop;
         if (isHorizontal()) {
             rect.setY(logicalTop);
@@ -1492,7 +1498,7 @@ LayoutUnit InlineFlowBox::computeOverAnnotationAdjustment(LayoutUnit allowedPosi
             continue; // Positioned placeholders don't affect calculations.
 
         if (curr->isInlineFlowBox())
-            result = max(result, toInlineFlowBox(curr)->computeOverAnnotationAdjustment(allowedPosition));
+            result = std::max(result, toInlineFlowBox(curr)->computeOverAnnotationAdjustment(allowedPosition));
 
         if (curr->renderer().isReplaced() && curr->renderer().isRubyRun() && curr->renderer().style()->rubyPosition() == RubyPositionBefore) {
             RenderRubyRun& rubyRun = toRenderRubyRun(curr->renderer());
@@ -1505,13 +1511,13 @@ LayoutUnit InlineFlowBox::computeOverAnnotationAdjustment(LayoutUnit allowedPosi
                 if (topOfFirstRubyTextLine >= 0)
                     continue;
                 topOfFirstRubyTextLine += curr->logicalTop();
-                result = max(result, allowedPosition - topOfFirstRubyTextLine);
+                result = std::max(result, allowedPosition - topOfFirstRubyTextLine);
             } else {
                 LayoutUnit bottomOfLastRubyTextLine = rubyText->logicalTop() + (rubyText->lastRootBox() ? rubyText->lastRootBox()->lineBottom() : rubyText->logicalHeight());
                 if (bottomOfLastRubyTextLine <= curr->logicalHeight())
                     continue;
                 bottomOfLastRubyTextLine += curr->logicalTop();
-                result = max(result, bottomOfLastRubyTextLine - allowedPosition);
+                result = std::max(result, bottomOfLastRubyTextLine - allowedPosition);
             }
         }
 
@@ -1521,10 +1527,10 @@ LayoutUnit InlineFlowBox::computeOverAnnotationAdjustment(LayoutUnit allowedPosi
             if (style->textEmphasisMark() != TextEmphasisMarkNone && toInlineTextBox(curr)->getEmphasisMarkPosition(style, emphasisMarkPosition) && emphasisMarkPosition == TextEmphasisPositionOver) {
                 if (!style->isFlippedLinesWritingMode()) {
                     int topOfEmphasisMark = curr->logicalTop() - style->font().emphasisMarkHeight(style->textEmphasisMarkString());
-                    result = max(result, allowedPosition - topOfEmphasisMark);
+                    result = std::max(result, allowedPosition - topOfEmphasisMark);
                 } else {
                     int bottomOfEmphasisMark = curr->logicalBottom() + style->font().emphasisMarkHeight(style->textEmphasisMarkString());
-                    result = max(result, bottomOfEmphasisMark - allowedPosition);
+                    result = std::max(result, bottomOfEmphasisMark - allowedPosition);
                 }
             }
         }
@@ -1540,7 +1546,7 @@ LayoutUnit InlineFlowBox::computeUnderAnnotationAdjustment(LayoutUnit allowedPos
             continue; // Positioned placeholders don't affect calculations.
 
         if (curr->isInlineFlowBox())
-            result = max(result, toInlineFlowBox(curr)->computeUnderAnnotationAdjustment(allowedPosition));
+            result = std::max(result, toInlineFlowBox(curr)->computeUnderAnnotationAdjustment(allowedPosition));
 
         if (curr->renderer().isReplaced() && curr->renderer().isRubyRun() && curr->renderer().style()->rubyPosition() == RubyPositionAfter) {
             RenderRubyRun& rubyRun = toRenderRubyRun(curr->renderer());
@@ -1553,13 +1559,13 @@ LayoutUnit InlineFlowBox::computeUnderAnnotationAdjustment(LayoutUnit allowedPos
                 if (topOfFirstRubyTextLine >= 0)
                     continue;
                 topOfFirstRubyTextLine += curr->logicalTop();
-                result = max(result, allowedPosition - topOfFirstRubyTextLine);
+                result = std::max(result, allowedPosition - topOfFirstRubyTextLine);
             } else {
                 LayoutUnit bottomOfLastRubyTextLine = rubyText->logicalTop() + (rubyText->lastRootBox() ? rubyText->lastRootBox()->lineBottom() : rubyText->logicalHeight());
                 if (bottomOfLastRubyTextLine <= curr->logicalHeight())
                     continue;
                 bottomOfLastRubyTextLine += curr->logicalTop();
-                result = max(result, bottomOfLastRubyTextLine - allowedPosition);
+                result = std::max(result, bottomOfLastRubyTextLine - allowedPosition);
             }
         }
 
@@ -1568,10 +1574,10 @@ LayoutUnit InlineFlowBox::computeUnderAnnotationAdjustment(LayoutUnit allowedPos
             if (style->textEmphasisMark() != TextEmphasisMarkNone && style->textEmphasisPosition() == TextEmphasisPositionUnder) {
                 if (!style->isFlippedLinesWritingMode()) {
                     LayoutUnit bottomOfEmphasisMark = curr->logicalBottom() + style->font().emphasisMarkHeight(style->textEmphasisMarkString());
-                    result = max(result, bottomOfEmphasisMark - allowedPosition);
+                    result = std::max(result, bottomOfEmphasisMark - allowedPosition);
                 } else {
                     LayoutUnit topOfEmphasisMark = curr->logicalTop() - style->font().emphasisMarkHeight(style->textEmphasisMarkString());
-                    result = max(result, allowedPosition - topOfEmphasisMark);
+                    result = std::max(result, allowedPosition - topOfEmphasisMark);
                 }
             }
         }
@@ -1590,8 +1596,8 @@ void InlineFlowBox::collectLeafBoxesInLogicalOrder(Vector<InlineBox*>& leafBoxes
 
     // First find highest and lowest levels, and initialize leafBoxesInLogicalOrder with the leaf boxes in visual order.
     for (; leaf; leaf = leaf->nextLeafChild()) {
-        minLevel = min(minLevel, leaf->bidiLevel());
-        maxLevel = max(maxLevel, leaf->bidiLevel());
+        minLevel = std::min(minLevel, leaf->bidiLevel());
+        maxLevel = std::max(maxLevel, leaf->bidiLevel());
         leafBoxesInLogicalOrder.append(leaf);
     }
 

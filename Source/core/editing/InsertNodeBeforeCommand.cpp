@@ -27,11 +27,10 @@
 #include "core/editing/InsertNodeBeforeCommand.h"
 
 #include "bindings/v8/ExceptionStatePlaceholder.h"
-#include "core/dom/Document.h"
 
 namespace WebCore {
 
-InsertNodeBeforeCommand::InsertNodeBeforeCommand(PassRefPtr<Node> insertChild, PassRefPtr<Node> refChild,
+InsertNodeBeforeCommand::InsertNodeBeforeCommand(PassRefPtrWillBeRawPtr<Node> insertChild, PassRefPtrWillBeRawPtr<Node> refChild,
     ShouldAssumeContentIsAlwaysEditable shouldAssumeContentIsAlwaysEditable)
     : SimpleEditCommand(refChild->document())
     , m_insertChild(insertChild)
@@ -62,6 +61,13 @@ void InsertNodeBeforeCommand::doUnapply()
         return;
 
     m_insertChild->remove(IGNORE_EXCEPTION);
+}
+
+void InsertNodeBeforeCommand::trace(Visitor* visitor)
+{
+    visitor->trace(m_insertChild);
+    visitor->trace(m_refChild);
+    SimpleEditCommand::trace(visitor);
 }
 
 }

@@ -38,8 +38,8 @@
 #include "core/animation/AnimationPlayer.h"
 #include "core/animation/AnimationTimeline.h"
 #include "core/animation/CompositorAnimations.h"
-#include "core/animation/Interpolation.h"
 #include "core/animation/KeyframeEffectModel.h"
+#include "core/animation/interpolation/Interpolation.h"
 #include "core/dom/Element.h"
 #include "core/frame/UseCounter.h"
 #include "core/rendering/RenderLayer.h"
@@ -89,7 +89,7 @@ PassRefPtrWillBeRawPtr<Animation> Animation::create(Element* element, const Vect
 }
 
 Animation::Animation(Element* target, PassRefPtrWillBeRawPtr<AnimationEffect> effect, const Timing& timing, Priority priority, PassOwnPtr<EventDelegate> eventDelegate)
-    : TimedItem(timing, eventDelegate)
+    : AnimationNode(timing, eventDelegate)
     , m_target(target)
     , m_effect(effect)
     , m_sampledEffect(nullptr)
@@ -115,7 +115,7 @@ void Animation::attach(AnimationPlayer* player)
         m_target->ensureActiveAnimations().addPlayer(player);
         m_target->setNeedsAnimationStyleRecalc();
     }
-    TimedItem::attach(player);
+    AnimationNode::attach(player);
 }
 
 void Animation::detach()
@@ -124,7 +124,7 @@ void Animation::detach()
         m_target->activeAnimations()->removePlayer(player());
     if (m_sampledEffect)
         clearEffects();
-    TimedItem::detach();
+    AnimationNode::detach();
 }
 
 void Animation::specifiedTimingChanged()
@@ -310,7 +310,7 @@ void Animation::trace(Visitor* visitor)
     visitor->trace(m_target);
     visitor->trace(m_effect);
     visitor->trace(m_sampledEffect);
-    TimedItem::trace(visitor);
+    AnimationNode::trace(visitor);
 }
 
 } // namespace WebCore

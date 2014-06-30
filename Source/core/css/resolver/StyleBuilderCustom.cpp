@@ -37,11 +37,11 @@
  */
 
 #include "config.h"
-#include "StyleBuilderFunctions.h"
 
-#include "CSSPropertyNames.h"
-#include "CSSValueKeywords.h"
-#include "StylePropertyShorthand.h"
+#include "core/CSSPropertyNames.h"
+#include "core/CSSValueKeywords.h"
+#include "core/StyleBuilderFunctions.h"
+#include "core/StylePropertyShorthand.h"
 #include "core/css/BasicShapeFunctions.h"
 #include "core/css/CSSAspectRatioValue.h"
 #include "core/css/CSSCursorImageValue.h"
@@ -71,9 +71,7 @@
 #include "core/rendering/style/RenderStyle.h"
 #include "core/rendering/style/RenderStyleConstants.h"
 #include "core/rendering/style/SVGRenderStyle.h"
-#include "core/rendering/style/SVGRenderStyleDefs.h"
 #include "core/rendering/style/StyleGeneratedImage.h"
-#include "core/svg/SVGPaint.h"
 #include "platform/fonts/FontDescription.h"
 #include "wtf/MathExtras.h"
 #include "wtf/StdLibExtras.h"
@@ -225,7 +223,7 @@ void StyleBuilderFunctions::applyValueCSSPropertyCursor(StyleResolverState& stat
         int len = list->length();
         state.style()->setCursor(CURSOR_AUTO);
         for (int i = 0; i < len; i++) {
-            CSSValue* item = list->itemWithoutBoundsCheck(i);
+            CSSValue* item = list->item(i);
             if (item->isCursorImageValue()) {
                 CSSCursorImageValue* image = toCSSCursorImageValue(item);
                 if (image->updateIfSVGCursorIsUsed(state.element())) // Elements with SVG cursors are not allowed to share style.
@@ -780,6 +778,14 @@ void StyleBuilderFunctions::applyValueCSSPropertyPerspectiveOrigin(StyleResolver
     }
 }
 
+void StyleBuilderFunctions::applyInheritCSSPropertyVerticalAlign(StyleResolverState& state)
+{
+    EVerticalAlign verticalAlign = state.parentStyle()->verticalAlign();
+    state.style()->setVerticalAlign(verticalAlign);
+    if (verticalAlign == LENGTH)
+        state.style()->setVerticalAlignLength(state.parentStyle()->verticalAlignLength());
+}
+
 void StyleBuilderFunctions::applyValueCSSPropertyVerticalAlign(StyleResolverState& state, CSSValue* value)
 {
     if (!value->isPrimitiveValue())
@@ -787,8 +793,10 @@ void StyleBuilderFunctions::applyValueCSSPropertyVerticalAlign(StyleResolverStat
 
     CSSPrimitiveValue* primitiveValue = toCSSPrimitiveValue(value);
 
-    if (primitiveValue->getValueID())
-        return state.style()->setVerticalAlign(*primitiveValue);
+    if (primitiveValue->getValueID()) {
+        state.style()->setVerticalAlign(*primitiveValue);
+        return;
+    }
 
     state.style()->setVerticalAlignLength(primitiveValue->convertToLength<FixedConversion | PercentConversion>(state.cssToLengthConversionData()));
 }
@@ -1022,7 +1030,7 @@ void StyleBuilderFunctions::applyValueCSSPropertyWebkitTextEmphasisStyle(StyleRe
         if (list->length() != 2)
             return;
         for (unsigned i = 0; i < 2; ++i) {
-            CSSValue* item = list->itemWithoutBoundsCheck(i);
+            CSSValue* item = list->item(i);
             if (!item->isPrimitiveValue())
                 continue;
 
@@ -1081,6 +1089,7 @@ void StyleBuilderFunctions::applyInitialCSSPropertyWillChange(StyleResolverState
     state.style()->setWillChangeContents(false);
     state.style()->setWillChangeScrollPosition(false);
     state.style()->setWillChangeProperties(Vector<CSSPropertyID>());
+    state.style()->setSubtreeWillChangeContents(state.parentStyle()->subtreeWillChangeContents());
 }
 
 void StyleBuilderFunctions::applyInheritCSSPropertyWillChange(StyleResolverState& state)
@@ -1088,6 +1097,7 @@ void StyleBuilderFunctions::applyInheritCSSPropertyWillChange(StyleResolverState
     state.style()->setWillChangeContents(state.parentStyle()->willChangeContents());
     state.style()->setWillChangeScrollPosition(state.parentStyle()->willChangeScrollPosition());
     state.style()->setWillChangeProperties(state.parentStyle()->willChangeProperties());
+    state.style()->setSubtreeWillChangeContents(state.parentStyle()->subtreeWillChangeContents());
 }
 
 void StyleBuilderFunctions::applyValueCSSPropertyWillChange(StyleResolverState& state, CSSValue* value)
@@ -1111,6 +1121,7 @@ void StyleBuilderFunctions::applyValueCSSPropertyWillChange(StyleResolverState& 
     state.style()->setWillChangeContents(willChangeContents);
     state.style()->setWillChangeScrollPosition(willChangeScrollPosition);
     state.style()->setWillChangeProperties(willChangeProperties);
+    state.style()->setSubtreeWillChangeContents(willChangeContents || state.parentStyle()->subtreeWillChangeContents());
 }
 
 void StyleBuilderFunctions::applyInitialCSSPropertyContent(StyleResolverState& state)
@@ -1352,6 +1363,15 @@ void StyleBuilderFunctions::applyValueCSSPropertyWebkitFontFeatureSettings(Style
         state.fontBuilder().setFeatureSettingsValue(value);
 }
 
+void StyleBuilderFunctions::applyInheritCSSPropertyBaselineShift(StyleResolverState& state)
+{
+    const SVGRenderStyle* parentSvgStyle = state.parentStyle()->svgStyle();
+    EBaselineShift baselineShift = parentSvgStyle->baselineShift();
+    SVGRenderStyle* svgStyle = state.style()->accessSVGStyle();
+    svgStyle->setBaselineShift(baselineShift);
+    if (baselineShift == BS_LENGTH)
+        svgStyle->setBaselineShiftValue(parentSvgStyle->baselineShiftValue());
+}
 
 void StyleBuilderFunctions::applyValueCSSPropertyBaselineShift(StyleResolverState& state, CSSValue* value)
 {

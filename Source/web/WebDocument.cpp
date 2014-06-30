@@ -43,7 +43,6 @@
 #include "core/dom/DocumentType.h"
 #include "core/dom/Element.h"
 #include "core/dom/FullscreenElementStack.h"
-#include "core/dom/NodeList.h"
 #include "core/dom/StyleEngine.h"
 #include "core/html/HTMLAllCollection.h"
 #include "core/html/HTMLBodyElement.h"
@@ -53,6 +52,7 @@
 #include "core/html/HTMLHeadElement.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/rendering/RenderObject.h"
+#include "core/rendering/RenderView.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/WebURL.h"
 #include "public/web/WebAXObject.h"
@@ -95,6 +95,11 @@ WebString WebDocument::contentLanguage() const
 WebString WebDocument::referrer() const
 {
     return constUnwrap<Document>()->referrer();
+}
+
+WebColor WebDocument::brandColor() const
+{
+    return constUnwrap<Document>()->brandColor().rgb();
 }
 
 WebURL WebDocument::openSearchDescriptionURL() const
@@ -208,16 +213,16 @@ WebDocumentType WebDocument::doctype() const
 
 void WebDocument::insertStyleSheet(const WebString& sourceCode)
 {
-    RefPtr<Document> document = unwrap<Document>();
+    RefPtrWillBeRawPtr<Document> document = unwrap<Document>();
     ASSERT(document);
-    RefPtrWillBeRawPtr<StyleSheetContents> parsedSheet = StyleSheetContents::create(CSSParserContext(*document.get(), 0));
+    RefPtrWillBeRawPtr<StyleSheetContents> parsedSheet = StyleSheetContents::create(CSSParserContext(*document, 0));
     parsedSheet->parseString(sourceCode);
     document->styleEngine()->addAuthorSheet(parsedSheet);
 }
 
 void WebDocument::watchCSSSelectors(const WebVector<WebString>& webSelectors)
 {
-    RefPtr<Document> document = unwrap<Document>();
+    RefPtrWillBeRawPtr<Document> document = unwrap<Document>();
     Vector<String> selectors;
     selectors.append(webSelectors.data(), webSelectors.size());
     CSSSelectorWatch::from(*document).watchCSSSelectors(selectors);
@@ -263,7 +268,7 @@ WebElement WebDocument::createElement(const WebString& tagName)
 WebAXObject WebDocument::accessibilityObject() const
 {
     const Document* document = constUnwrap<Document>();
-    return WebAXObject(document->axObjectCache()->getOrCreate(document->renderer()));
+    return WebAXObject(document->axObjectCache()->getOrCreate(document->renderView()));
 }
 
 WebAXObject WebDocument::accessibilityObjectFromID(int axID) const

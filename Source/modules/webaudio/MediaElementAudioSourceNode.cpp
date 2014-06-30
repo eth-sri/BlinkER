@@ -53,8 +53,9 @@ MediaElementAudioSourceNode::MediaElementAudioSourceNode(AudioContext* context, 
     , m_sourceSampleRate(0)
 {
     ScriptWrappable::init(this);
-    // Default to stereo. This could change depending on what the media element .src is set to.
-    addOutput(adoptPtr(new AudioNodeOutput(this, 2)));
+    // Default to stereo. This could change depending on what the media element
+    // .src is set to.
+    addOutput(AudioNodeOutput::create(this, 2));
 
     setNodeType(NodeTypeMediaElementAudioSource);
 
@@ -63,7 +64,9 @@ MediaElementAudioSourceNode::MediaElementAudioSourceNode(AudioContext* context, 
 
 MediaElementAudioSourceNode::~MediaElementAudioSourceNode()
 {
+#if !ENABLE(OILPAN)
     m_mediaElement->setAudioSourceNode(0);
+#endif
     uninitialize();
 }
 
@@ -146,6 +149,13 @@ void MediaElementAudioSourceNode::unlock()
 {
     m_processLock.unlock();
     deref();
+}
+
+void MediaElementAudioSourceNode::trace(Visitor* visitor)
+{
+    visitor->trace(m_mediaElement);
+    AudioSourceNode::trace(visitor);
+    AudioSourceProviderClient::trace(visitor);
 }
 
 } // namespace WebCore

@@ -7,7 +7,7 @@
 
 #include "bindings/v8/CallbackPromiseAdapter.h"
 #include "bindings/v8/ScriptPromise.h"
-#include "bindings/v8/ScriptPromiseResolverWithContext.h"
+#include "bindings/v8/ScriptPromiseResolver.h"
 #include "bindings/v8/ScriptState.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
@@ -28,12 +28,12 @@ PushManager::~PushManager()
 {
 }
 
-ScriptPromise PushManager::registerPushMessaging(ExecutionContext* context, const String& senderId)
+ScriptPromise PushManager::registerPushMessaging(ScriptState* scriptState, const String& senderId)
 {
-    ASSERT(context->isDocument());
-    RefPtr<ScriptPromiseResolverWithContext> resolver = ScriptPromiseResolverWithContext::create(ScriptState::current(toIsolate(context)));
+    ASSERT(scriptState->executionContext()->isDocument());
+    RefPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(scriptState);
     ScriptPromise promise = resolver->promise();
-    blink::WebPushClient* client = PushController::clientFrom(toDocument(context)->page());
+    blink::WebPushClient* client = PushController::clientFrom(toDocument(scriptState->executionContext())->page());
     ASSERT(client);
     client->registerPushMessaging(senderId, new CallbackPromiseAdapter<PushRegistration, PushError>(resolver));
     return promise;

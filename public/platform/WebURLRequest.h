@@ -55,6 +55,7 @@ public:
         ReloadIgnoringCacheData, // reload
         ReturnCacheDataElseLoad, // back/forward or encoding change - allow stale data
         ReturnCacheDataDontLoad, // results of a post - allow stale data and only use cache
+        ReloadBypassingCache, // end-to-end reload
     };
 
     enum Priority {
@@ -148,10 +149,6 @@ public:
     BLINK_PLATFORM_EXPORT bool reportUploadProgress() const;
     BLINK_PLATFORM_EXPORT void setReportUploadProgress(bool);
 
-    // Controls whether load timing info is collected for the request.
-    BLINK_PLATFORM_EXPORT bool reportLoadTiming() const;
-    BLINK_PLATFORM_EXPORT void setReportLoadTiming(bool);
-
     // Controls whether actual headers sent and received for request are
     // collected and reported.
     BLINK_PLATFORM_EXPORT bool reportRawHeaders() const;
@@ -161,6 +158,10 @@ public:
     BLINK_PLATFORM_EXPORT void setTargetType(TargetType);
 
     BLINK_PLATFORM_EXPORT WebReferrerPolicy referrerPolicy() const;
+
+    // Adds an HTTP origin header if it is empty and the HTTP method of the
+    // request requires it.
+    BLINK_PLATFORM_EXPORT void addHTTPOriginIfNeeded(const WebString& origin);
 
     // True if the request was user initiated.
     BLINK_PLATFORM_EXPORT bool hasUserGesture() const;
@@ -195,6 +196,7 @@ public:
     BLINK_PLATFORM_EXPORT void setExtraData(ExtraData*);
 
     BLINK_PLATFORM_EXPORT Priority priority() const;
+    BLINK_PLATFORM_EXPORT void setPriority(Priority);
 
 #if INSIDE_BLINK
     BLINK_PLATFORM_EXPORT WebCore::ResourceRequest& toMutableResourceRequest();

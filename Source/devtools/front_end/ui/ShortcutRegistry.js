@@ -32,21 +32,20 @@ WebInspector.ShortcutRegistry.prototype = {
     {
         var result = new StringSet();
         var defaults = this._defaultActionsForKey(key);
-        if (defaults) {
-            defaults.values().forEach(function(actionId) {
-                result.add(actionId);
-            }, this);
-        }
+        defaults.values().forEach(function(actionId) {
+            result.add(actionId);
+        }, this);
+
         return result.values();
     },
 
     /**
      * @param {number} key
-     * @return {?Set.<string>}
+     * @return {!Set.<string>}
      */
     _defaultActionsForKey: function(key)
     {
-        return this._defaultKeyToActions.get(String(key)) || null;
+        return this._defaultKeyToActions.get(String(key));
     },
 
     /**
@@ -102,7 +101,7 @@ WebInspector.ShortcutRegistry.prototype = {
          */
         function isPossiblyInputKey()
         {
-            if (!event || !WebInspector.isBeingEdited(event.target) || /^F\d+|Control|Shift|Alt|Meta|Win|U\+001B$/.test(keyIdentifier))
+            if (!event || !WebInspector.isBeingEdited(/** @type {!Node} */ (event.target)) || /^F\d+|Control|Shift|Alt|Meta|Win|U\+001B$/.test(keyIdentifier))
                 return false;
 
             if (!keyModifiers)
@@ -201,6 +200,15 @@ WebInspector.ShortcutRegistry.prototype = {
         }
     }
 }
+
+/**
+ * @constructor
+ */
+WebInspector.ShortcutRegistry.ForwardedShortcut = function()
+{
+}
+
+WebInspector.ShortcutRegistry.ForwardedShortcut.instance = new WebInspector.ShortcutRegistry.ForwardedShortcut();
 
 /** @type {!WebInspector.ShortcutRegistry} */
 WebInspector.shortcutRegistry;

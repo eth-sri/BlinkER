@@ -28,30 +28,12 @@
 #define GraphicsLayerUpdater_h
 
 #include "platform/graphics/GraphicsLayer.h"
-#include "wtf/Vector.h"
 
 namespace WebCore {
 
 class RenderLayer;
-class RenderPart;
-class RenderView;
 
 class GraphicsLayerUpdater {
-    class UpdateContext {
-    public:
-        UpdateContext()
-            : m_compositingStackingContext(0)
-            , m_compositingAncestor(0)
-        {
-        }
-
-        UpdateContext(const UpdateContext&, const RenderLayer&);
-
-        const RenderLayer* compositingContainer(const RenderLayer&) const;
-    private:
-        const RenderLayer* m_compositingStackingContext;
-        const RenderLayer* m_compositingAncestor;
-    };
 
 public:
     GraphicsLayerUpdater();
@@ -62,16 +44,19 @@ public:
         ForceUpdate,
     };
 
-    void update(RenderLayer&, UpdateType, const UpdateContext& = UpdateContext());
-    void rebuildTree(RenderLayer&, GraphicsLayerVector& childLayersOfEnclosingLayer);
+    void update(RenderLayer&, Vector<RenderLayer*>& layersNeedingPaintInvalidation);
 
     bool needsRebuildTree() const { return m_needsRebuildTree; }
 
-#if !ASSERT_DISABLED
+#if ASSERT_ENABLED
     static void assertNeedsToUpdateGraphicsLayerBitsCleared(RenderLayer&);
 #endif
 
 private:
+    class UpdateContext;
+
+    void updateRecursive(RenderLayer&, UpdateType, const UpdateContext&, Vector<RenderLayer*>& layersNeedingPaintInvalidation);
+
     bool m_needsRebuildTree;
 };
 

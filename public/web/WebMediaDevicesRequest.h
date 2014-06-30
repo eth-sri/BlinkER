@@ -63,7 +63,6 @@ public:
     BLINK_EXPORT void requestSucceeded(WebVector<WebMediaDeviceInfo>);
 
 #if BLINK_IMPLEMENTATION
-    WebMediaDevicesRequest(const PassRefPtr<WebCore::MediaDevicesRequest>&);
     WebMediaDevicesRequest(WebCore::MediaDevicesRequest*);
     operator WebCore::MediaDevicesRequest*() const;
 #endif

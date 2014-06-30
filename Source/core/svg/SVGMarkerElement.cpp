@@ -23,10 +23,9 @@
 
 #include "core/svg/SVGMarkerElement.h"
 
-#include "SVGNames.h"
+#include "core/SVGNames.h"
 #include "core/rendering/svg/RenderSVGResourceMarker.h"
 #include "core/svg/SVGAngleTearOff.h"
-#include "core/svg/SVGElementInstance.h"
 
 namespace WebCore {
 
@@ -41,7 +40,7 @@ template<> const SVGEnumerationStringEntries& getStaticStringEntries<SVGMarkerUn
 }
 
 
-SVGMarkerElement::SVGMarkerElement(Document& document)
+inline SVGMarkerElement::SVGMarkerElement(Document& document)
     : SVGElement(SVGNames::markerTag, document)
     , SVGFitToViewBox(this)
     , m_refX(SVGAnimatedLength::create(this, SVGNames::refXAttr, SVGLength::create(LengthModeWidth), AllowNegativeLengths))
@@ -64,6 +63,8 @@ SVGMarkerElement::SVGMarkerElement(Document& document)
     addToPropertyMap(m_orientAngle);
     addToPropertyMap(m_markerUnits);
 }
+
+DEFINE_NODE_FACTORY(SVGMarkerElement)
 
 AffineTransform SVGMarkerElement::viewBoxToViewTransform(float viewWidth, float viewHeight) const
 {
@@ -138,7 +139,7 @@ void SVGMarkerElement::childrenChanged(bool changedByParser, Node* beforeChange,
         return;
 
     if (RenderObject* object = renderer())
-        object->setNeedsLayoutAndFullRepaint();
+        object->setNeedsLayoutAndFullPaintInvalidation();
 }
 
 void SVGMarkerElement::setOrientToAuto()

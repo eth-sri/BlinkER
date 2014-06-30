@@ -45,7 +45,7 @@ namespace WTF {
         struct NeedsTracingLazily {
             static const bool value = NeedsTracing<T>::value;
         };
-        static const bool isWeak = IsWeak<T>::value;
+        static const WeakHandlingFlag weakHandlingFlag = NoWeakHandlingInCollections; // We don't support weak handling in vectors.
     };
 
     template<typename T>
@@ -87,7 +87,7 @@ namespace WTF {
         struct NeedsTracingLazily {
             static const bool value = ShouldBeTraced<FirstTraits>::value || ShouldBeTraced<SecondTraits>::value;
         };
-        static const bool isWeak = FirstTraits::isWeak || SecondTraits::isWeak;
+        static const WeakHandlingFlag weakHandlingFlag = NoWeakHandlingInCollections; // We don't support weak handling in vectors.
     };
 
 } // namespace WTF
@@ -105,6 +105,15 @@ namespace WTF { \
     { \
         static const bool canInitializeWithMemset = true; \
         static const bool canMoveWithMemcpy = true; \
+    }; \
+}
+
+#define WTF_ALLOW_INIT_WITH_MEM_FUNCTIONS(ClassName) \
+namespace WTF { \
+    template<> \
+    struct VectorTraits<ClassName> : VectorTraitsBase<ClassName> \
+    { \
+        static const bool canInitializeWithMemset = true; \
     }; \
 }
 

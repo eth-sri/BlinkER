@@ -38,12 +38,12 @@ inline unsigned attributeHash(const Vector<Attribute>& attributes)
 
 inline bool hasSameAttributes(const Vector<Attribute>& attributes, ShareableElementData& elementData)
 {
-    if (attributes.size() != elementData.length())
+    if (attributes.size() != elementData.attributes().size())
         return false;
     return !memcmp(attributes.data(), elementData.m_attributeArray, attributes.size() * sizeof(Attribute));
 }
 
-PassRefPtr<ShareableElementData> ElementDataCache::cachedShareableElementDataWithAttributes(const Vector<Attribute>& attributes)
+PassRefPtrWillBeRawPtr<ShareableElementData> ElementDataCache::cachedShareableElementDataWithAttributes(const Vector<Attribute>& attributes)
 {
     ASSERT(!attributes.isEmpty());
 

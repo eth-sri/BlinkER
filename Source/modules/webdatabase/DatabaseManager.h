@@ -27,6 +27,7 @@
 #define DatabaseManager_h
 
 #include "modules/webdatabase/DatabaseBasicTypes.h"
+#include "modules/webdatabase/DatabaseContext.h"
 #include "modules/webdatabase/DatabaseError.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Assertions.h"
@@ -60,7 +61,7 @@ public:
     void registerDatabaseContext(DatabaseContext*);
     void unregisterDatabaseContext(DatabaseContext*);
 
-#if !ASSERT_DISABLED
+#if ASSERT_ENABLED
     void didConstructDatabaseContext();
     void didDestructDatabaseContext();
 #else
@@ -106,7 +107,7 @@ private:
     typedef HashMap<ExecutionContext*, RefPtr<DatabaseContext> > ContextMap;
 #endif
     ContextMap m_contextMap;
-#if !ASSERT_DISABLED
+#if ASSERT_ENABLED
     int m_databaseContextRegisteredCount;
     int m_databaseContextInstanceCount;
 #endif

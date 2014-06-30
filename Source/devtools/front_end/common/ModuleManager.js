@@ -210,6 +210,7 @@ WebInspector.ModuleManager.prototype = {
 
     /**
      * @param {string|!Function} type
+     * @param {?Object=} context
      * @return {?Object}
      */
     instance: function(type, context)
@@ -284,7 +285,7 @@ WebInspector.ModuleManager.ModuleDescriptor = function()
     this.extensions;
 
     /**
-     * @type {!Array.<!string>|undefined}
+     * @type {!Array.<string>|undefined}
      */
     this.dependencies;
 
@@ -472,8 +473,10 @@ WebInspector.Revealer.reveal = function(revealable, lineNumber)
     if (!revealable)
         return;
     var revealer = WebInspector.moduleManager.instance(WebInspector.Revealer, revealable);
-    if (revealer)
+    if (revealer) {
+        InspectorFrontendHost.bringToFront();
         revealer.reveal(revealable, lineNumber);
+    }
 }
 
 WebInspector.Revealer.prototype = {

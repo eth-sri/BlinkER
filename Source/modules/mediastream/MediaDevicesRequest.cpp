@@ -33,11 +33,11 @@
 
 namespace WebCore {
 
-PassRefPtr<MediaDevicesRequest> MediaDevicesRequest::create(ExecutionContext* context, UserMediaController* controller, PassOwnPtr<MediaDeviceInfoCallback> callback, ExceptionState& exceptionState)
+MediaDevicesRequest* MediaDevicesRequest::create(ExecutionContext* context, UserMediaController* controller, PassOwnPtr<MediaDeviceInfoCallback> callback, ExceptionState& exceptionState)
 {
-    RefPtr<MediaDevicesRequest> request = adoptRef(new MediaDevicesRequest(context, controller, callback));
+    MediaDevicesRequest* request = new MediaDevicesRequest(context, controller, callback);
     request->suspendIfNeeded();
-    return request.release();
+    return request;
 }
 
 MediaDevicesRequest::MediaDevicesRequest(ExecutionContext* context, UserMediaController* controller, PassOwnPtr<MediaDeviceInfoCallback> callback)

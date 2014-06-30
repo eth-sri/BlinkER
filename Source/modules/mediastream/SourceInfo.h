@@ -28,20 +28,20 @@
 
 #include "bindings/v8/ScriptWrappable.h"
 #include "public/platform/WebSourceInfo.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
 
 namespace WebCore {
 
-class SourceInfo : public RefCounted<SourceInfo>, public ScriptWrappable {
+class SourceInfo : public GarbageCollectedFinalized<SourceInfo>, public ScriptWrappable {
 public:
-    static PassRefPtr<SourceInfo> create(const blink::WebSourceInfo&);
+    static SourceInfo* create(const blink::WebSourceInfo&);
 
     String id() const;
     String kind() const;
     String label() const;
     String facing() const;
+
+    void trace(Visitor*) { }
 
 private:
     explicit SourceInfo(const blink::WebSourceInfo&);
@@ -49,7 +49,7 @@ private:
     blink::WebSourceInfo m_webSourceInfo;
 };
 
-typedef Vector<RefPtr<SourceInfo> > SourceInfoVector;
+typedef HeapVector<Member<SourceInfo> > SourceInfoVector;
 
 } // namespace WebCore
 

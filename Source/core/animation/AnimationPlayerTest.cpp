@@ -82,7 +82,7 @@ protected:
         return player->update(TimingUpdateOnDemand);
     }
 
-    RefPtr<Document> document;
+    RefPtrWillBePersistent<Document> document;
     RefPtrWillBePersistent<AnimationTimeline> timeline;
     RefPtrWillBePersistent<AnimationPlayer> player;
     TrackExceptionState exceptionState;
@@ -560,8 +560,8 @@ TEST_F(AnimationAnimationPlayerTest, SetSource)
 {
     player = timeline->createAnimationPlayer(0);
     player->setStartTimeInternal(0);
-    RefPtrWillBeRawPtr<TimedItem> source1 = makeAnimation();
-    RefPtrWillBeRawPtr<TimedItem> source2 = makeAnimation();
+    RefPtrWillBeRawPtr<AnimationNode> source1 = makeAnimation();
+    RefPtrWillBeRawPtr<AnimationNode> source2 = makeAnimation();
     player->setSource(source1.get());
     EXPECT_EQ(source1, player->source());
     EXPECT_EQ(0, player->currentTimeInternal());
@@ -606,10 +606,10 @@ TEST_F(AnimationAnimationPlayerTest, EmptyAnimationPlayersDontUpdateEffects)
 
 TEST_F(AnimationAnimationPlayerTest, AnimationPlayersDisassociateFromSource)
 {
-    TimedItem* timedItem = player->source();
-    AnimationPlayer* player2 = timeline->createAnimationPlayer(timedItem);
+    AnimationNode* animationNode = player->source();
+    AnimationPlayer* player2 = timeline->createAnimationPlayer(animationNode);
     EXPECT_EQ(0, player->source());
-    player->setSource(timedItem);
+    player->setSource(animationNode);
     EXPECT_EQ(0, player2->source());
 }
 

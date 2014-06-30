@@ -29,7 +29,7 @@
 #ifndef InspectorOverlay_h
 #define InspectorOverlay_h
 
-#include "InspectorTypeBuilder.h"
+#include "core/InspectorTypeBuilder.h"
 #include "platform/Timer.h"
 #include "platform/geometry/FloatQuad.h"
 #include "platform/geometry/LayoutRect.h"
@@ -68,6 +68,7 @@ public:
     Color eventTarget;
     bool showInfo;
     bool showRulers;
+    bool showExtensionLines;
 };
 
 enum HighlightType {
@@ -91,6 +92,7 @@ struct Highlight {
         marginColor = highlightConfig.margin;
         eventTargetColor = highlightConfig.eventTarget;
         showRulers = highlightConfig.showRulers;
+        showExtensionLines = highlightConfig.showExtensionLines;
     }
 
     Color contentColor;
@@ -105,6 +107,7 @@ struct Highlight {
     HighlightType type;
     Vector<FloatQuad> quads;
     bool showRulers;
+    bool showExtensionLines;
 };
 
 class InspectorOverlay {
@@ -121,7 +124,6 @@ public:
     void hide();
     void paint(GraphicsContext&);
     void drawOutline(GraphicsContext*, const LayoutRect&, const Color&);
-    void resize(const IntSize&);
     bool handleGestureEvent(const PlatformGestureEvent&);
     bool handleMouseEvent(const PlatformMouseEvent&);
     bool handleTouchEvent(const PlatformTouchEvent&);
@@ -159,7 +161,7 @@ private:
     void drawViewSize();
 
     Page* overlayPage();
-    void reset(const IntSize& viewportSize, const IntSize& frameViewFullSize, int scrollX, int scrollY);
+    void reset(const IntSize& viewportSize, int scrollX, int scrollY);
     void evaluateInOverlay(const String& method, const String& argument);
     void evaluateInOverlay(const String& method, PassRefPtr<JSONValue> argument);
     void onTimer(Timer<InspectorOverlay>*);
@@ -168,15 +170,14 @@ private:
     InspectorClient* m_client;
     String m_pausedInDebuggerMessage;
     bool m_inspectModeEnabled;
-    RefPtr<Node> m_highlightNode;
-    RefPtr<Node> m_eventTargetNode;
+    RefPtrWillBePersistent<Node> m_highlightNode;
+    RefPtrWillBePersistent<Node> m_eventTargetNode;
     HighlightConfig m_nodeHighlightConfig;
     OwnPtr<FloatQuad> m_highlightQuad;
     OwnPtrWillBePersistent<Page> m_overlayPage;
     OwnPtr<EmptyChromeClient> m_overlayChromeClient;
     RefPtr<InspectorOverlayHost> m_overlayHost;
     HighlightConfig m_quadHighlightConfig;
-    IntSize m_size;
     bool m_drawViewSize;
     bool m_drawViewSizeWithGrid;
     bool m_omitTooltip;

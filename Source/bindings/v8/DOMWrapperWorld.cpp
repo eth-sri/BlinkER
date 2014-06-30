@@ -31,7 +31,7 @@
 #include "config.h"
 #include "bindings/v8/DOMWrapperWorld.h"
 
-#include "V8Window.h"
+#include "bindings/core/v8/V8Window.h"
 #include "bindings/v8/DOMDataStore.h"
 #include "bindings/v8/ScriptController.h"
 #include "bindings/v8/V8Binding.h"
@@ -57,7 +57,6 @@ DOMWrapperWorld::DOMWrapperWorld(int worldId, int extensionGroup)
     : m_worldId(worldId)
     , m_extensionGroup(extensionGroup)
     , m_domDataStore(adoptPtr(new DOMDataStore(isMainWorld())))
-    , m_activityLogger(0)
 {
 }
 
@@ -66,6 +65,17 @@ DOMWrapperWorld& DOMWrapperWorld::mainWorld()
     ASSERT(isMainThread());
     DEFINE_STATIC_REF(DOMWrapperWorld, cachedMainWorld, (DOMWrapperWorld::create(MainWorldId, mainWorldExtensionGroup)));
     return *cachedMainWorld;
+}
+
+DOMWrapperWorld& DOMWrapperWorld::privateScriptIsolatedWorld()
+{
+    ASSERT(isMainThread());
+    DEFINE_STATIC_LOCAL(RefPtr<DOMWrapperWorld>, cachedPrivateScriptIsolatedWorld, ());
+    if (!cachedPrivateScriptIsolatedWorld) {
+        cachedPrivateScriptIsolatedWorld = DOMWrapperWorld::create(PrivateScriptIsolatedWorldId, privateScriptIsolatedWorldExtensionGroup);
+        isolatedWorldCount++;
+    }
+    return *cachedPrivateScriptIsolatedWorld;
 }
 
 typedef HashMap<int, DOMWrapperWorld*> WorldMap;

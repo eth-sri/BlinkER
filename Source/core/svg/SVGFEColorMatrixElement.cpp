@@ -22,9 +22,8 @@
 
 #include "core/svg/SVGFEColorMatrixElement.h"
 
-#include "SVGNames.h"
+#include "core/SVGNames.h"
 #include "platform/graphics/filters/FilterEffect.h"
-#include "core/svg/SVGElementInstance.h"
 #include "core/svg/graphics/filters/SVGFilterBuilder.h"
 
 namespace WebCore {
@@ -41,7 +40,7 @@ template<> const SVGEnumerationStringEntries& getStaticStringEntries<ColorMatrix
     return entries;
 }
 
-SVGFEColorMatrixElement::SVGFEColorMatrixElement(Document& document)
+inline SVGFEColorMatrixElement::SVGFEColorMatrixElement(Document& document)
     : SVGFilterPrimitiveStandardAttributes(SVGNames::feColorMatrixTag, document)
     , m_values(SVGAnimatedNumberList::create(this, SVGNames::valuesAttr, SVGNumberList::create()))
     , m_in1(SVGAnimatedString::create(this, SVGNames::inAttr, SVGString::create()))
@@ -53,6 +52,8 @@ SVGFEColorMatrixElement::SVGFEColorMatrixElement(Document& document)
     addToPropertyMap(m_in1);
     addToPropertyMap(m_type);
 }
+
+DEFINE_NODE_FACTORY(SVGFEColorMatrixElement)
 
 bool SVGFEColorMatrixElement::isSupportedAttribute(const QualifiedName& attrName)
 {

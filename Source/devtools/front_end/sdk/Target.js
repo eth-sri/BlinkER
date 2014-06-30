@@ -7,16 +7,18 @@
 /**
  * @constructor
  * @extends {Protocol.Agents}
+ * @param {string} name
  * @param {!InspectorBackendClass.Connection} connection
  * @param {function(!WebInspector.Target)=} callback
  */
-WebInspector.Target = function(connection, callback)
+WebInspector.Target = function(name, connection, callback)
 {
     Protocol.Agents.call(this, connection.agentsMap());
+    this._name = name;
     this._connection = connection;
     /** @type {boolean} */
     this.isMainFrontend = false;
-
+    this._id = WebInspector.Target._nextId++;
     /** @type {boolean} */
     this.canScreencast = false;
     this.pageAgent().canScreencast(this._initializeCapability.bind(this, "canScreencast", null));
@@ -34,10 +36,32 @@ WebInspector.Target = function(connection, callback)
     this.profilingLock = new WebInspector.Lock();
 }
 
+WebInspector.Target._nextId = 1;
+
 WebInspector.Target.prototype = {
+
+    /**
+     * @return {number}
+     */
+    id: function()
+    {
+        return this._id;
+    },
+
+    /**
+     *
+     * @return {string}
+     */
+    name: function()
+    {
+        return this._name;
+    },
+
     /**
      * @param {string} name
      * @param {function()|null} callback
+     * @param {?Protocol.Error} error
+     * @param {*} result
      */
     _initializeCapability: function(name, callback, error, result)
     {
@@ -122,6 +146,8 @@ WebInspector.Target.prototype = {
         if (!WebInspector.cpuProfilerModel)
             WebInspector.cpuProfilerModel = this.cpuProfilerModel;
 
+        this._debuggerScriptMapping = new WebInspector.DebuggerScriptMapping(this.debuggerModel, WebInspector.workspace, WebInspector.networkWorkspaceBinding);
+
         if (callback)
             callback(this);
     },
@@ -151,6 +177,13 @@ WebInspector.Target.prototype = {
     {
         // FIXME: either add a separate capability or rename canScreencast to isMobile.
         return this.canScreencast;
+    },
+
+    dispose: function()
+    {
+        this.debuggerModel.dispose();
+        this.networkManager.dispose();
+        this._debuggerScriptMapping.dispose();
     },
 
     __proto__: Protocol.Agents.prototype
@@ -216,32 +249,60 @@ WebInspector.TargetManager.prototype = {
      */
     observeTargets: function(targetObserver)
     {
-        WebInspector.targetManager.targets().forEach(targetObserver.targetAdded.bind(targetObserver));
+        this.targets().forEach(targetObserver.targetAdded.bind(targetObserver));
         this._observers.push(targetObserver);
     },
 
     /**
+     * @param {!WebInspector.TargetManager.Observer} targetObserver
+     */
+    unobserveTargets: function(targetObserver)
+    {
+        this._observers.remove(targetObserver);
+    },
+
+    /**
+     * @param {string} name
      * @param {!InspectorBackendClass.Connection} connection
      * @param {function(!WebInspector.Target)=} callback
      */
-    createTarget: function(connection, callback)
+    createTarget: function(name, connection, callback)
     {
-        var target = new WebInspector.Target(connection, callbackWrapper.bind(this));
+        var target = new WebInspector.Target(name, connection, callbackWrapper.bind(this));
 
         /**
          * @this {WebInspector.TargetManager}
-         * @param newTarget
+         * @param {!WebInspector.Target} newTarget
          */
         function callbackWrapper(newTarget)
         {
-            this._targets.push(newTarget);
-            var copy = this._observers;
-            for (var i = 0; i < copy.length; ++i)
-                copy[i].targetAdded(newTarget);
-
+            this.addTarget(newTarget);
             if (callback)
                 callback(newTarget);
         }
+    },
+
+    /**
+     * @param {!WebInspector.Target} newTarget
+     */
+    addTarget: function(newTarget)
+    {
+        this._targets.push(newTarget);
+        var copy = this._observers;
+        for (var i = 0; i < copy.length; ++i)
+            copy[i].targetAdded(newTarget);
+    },
+
+    /**
+     * @param {!WebInspector.Target} target
+     */
+    removeTarget: function(target)
+    {
+        this._targets.remove(target);
+        target.dispose();
+        var copy = this._observers;
+        for (var i = 0; i < copy.length; ++i)
+            copy[i].targetRemoved(target);
     },
 
     /**

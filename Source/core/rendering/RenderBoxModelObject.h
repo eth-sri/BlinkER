@@ -24,7 +24,6 @@
 #ifndef RenderBoxModelObject_h
 #define RenderBoxModelObject_h
 
-#include "core/animation/ActiveAnimations.h"
 #include "core/rendering/RenderLayerModelObject.h"
 #include "core/rendering/style/ShadowData.h"
 #include "platform/geometry/LayoutRect.h"
@@ -45,15 +44,10 @@ enum BackgroundBleedAvoidance {
 
 enum ContentChangeType {
     ImageChanged,
-    MaskImageChanged,
     CanvasChanged,
-    CanvasPixelsChanged,
-    VideoChanged,
-    FullScreenChanged,
     CanvasContextChanged
 };
 
-class KeyframeList;
 class RenderTextFragment;
 class StickyPositionViewportConstraints;
 
@@ -308,7 +302,7 @@ public:
     IntSize calculateImageIntrinsicDimensions(StyleImage*, const IntSize& scaledPositioningAreaSize, ScaleByEffectiveZoomOrNot) const;
 
 private:
-    LayoutUnit computedCSSPadding(Length) const;
+    LayoutUnit computedCSSPadding(const Length&) const;
     virtual bool isBoxModelObject() const OVERRIDE FINAL { return true; }
 
     virtual LayoutRect frameRectForStickyPositioning() const = 0;

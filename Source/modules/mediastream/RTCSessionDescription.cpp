@@ -29,7 +29,6 @@
  */
 
 #include "config.h"
-
 #include "modules/mediastream/RTCSessionDescription.h"
 
 #include "bindings/v8/Dictionary.h"
@@ -48,7 +47,7 @@ static String constructIllegalTypeExceptionMessage(const String& type)
     return "Illegal value of attribute 'type' : " + type;
 }
 
-PassRefPtr<RTCSessionDescription> RTCSessionDescription::create(const Dictionary& descriptionInitDict, ExceptionState& exceptionState)
+RTCSessionDescription* RTCSessionDescription::create(const Dictionary& descriptionInitDict, ExceptionState& exceptionState)
 {
     String type;
     bool ok = descriptionInitDict.get("type", type);
@@ -60,12 +59,12 @@ PassRefPtr<RTCSessionDescription> RTCSessionDescription::create(const Dictionary
     String sdp;
     descriptionInitDict.get("sdp", sdp);
 
-    return adoptRef(new RTCSessionDescription(blink::WebRTCSessionDescription(type, sdp)));
+    return new RTCSessionDescription(blink::WebRTCSessionDescription(type, sdp));
 }
 
-PassRefPtr<RTCSessionDescription> RTCSessionDescription::create(blink::WebRTCSessionDescription webSessionDescription)
+RTCSessionDescription* RTCSessionDescription::create(blink::WebRTCSessionDescription webSessionDescription)
 {
-    return adoptRef(new RTCSessionDescription(webSessionDescription));
+    return new RTCSessionDescription(webSessionDescription);
 }
 
 RTCSessionDescription::RTCSessionDescription(blink::WebRTCSessionDescription webSessionDescription)

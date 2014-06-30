@@ -24,10 +24,9 @@
 #include "core/rendering/style/RenderStyle.h"
 
 #include <algorithm>
-#include "RuntimeEnabledFeatures.h"
 #include "core/css/resolver/StyleResolver.h"
+#include "core/rendering/FastTextAutosizer.h"
 #include "core/rendering/RenderTheme.h"
-#include "core/rendering/TextAutosizer.h"
 #include "core/rendering/style/AppliedTextDecoration.h"
 #include "core/rendering/style/ContentData.h"
 #include "core/rendering/style/QuotesData.h"
@@ -35,12 +34,11 @@
 #include "core/rendering/style/StyleImage.h"
 #include "core/rendering/style/StyleInheritedData.h"
 #include "platform/LengthFunctions.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/fonts/Font.h"
 #include "platform/fonts/FontSelector.h"
 #include "platform/geometry/FloatRoundedRect.h"
 #include "wtf/MathExtras.h"
-
-using namespace std;
 
 namespace WebCore {
 
@@ -376,6 +374,11 @@ StyleDifference RenderStyle::visualInvalidationDiff(const RenderStyle& other, un
     if (m_svgStyle.get() != other.m_svgStyle.get())
         diff = m_svgStyle->diff(other.m_svgStyle.get());
 
+    if ((!diff.needsFullLayout() || !diff.needsRepaint()) && diffNeedsFullLayoutAndRepaint(other)) {
+        diff.setNeedsFullLayout();
+        diff.setNeedsRepaintObject();
+    }
+
     if (!diff.needsFullLayout() && diffNeedsFullLayout(other))
         diff.setNeedsFullLayout();
 
@@ -411,23 +414,13 @@ StyleDifference RenderStyle::visualInvalidationDiff(const RenderStyle& other, un
     return diff;
 }
 
-bool RenderStyle::diffNeedsFullLayout(const RenderStyle& other) const
+bool RenderStyle::diffNeedsFullLayoutAndRepaint(const RenderStyle& other) const
 {
-    if (m_box.get() != other.m_box.get()) {
-        if (m_box->width() != other.m_box->width()
-            || m_box->minWidth() != other.m_box->minWidth()
-            || m_box->maxWidth() != other.m_box->maxWidth()
-            || m_box->height() != other.m_box->height()
-            || m_box->minHeight() != other.m_box->minHeight()
-            || m_box->maxHeight() != other.m_box->maxHeight())
-            return true;
-
-        if (m_box->verticalAlign() != other.m_box->verticalAlign())
-            return true;
-
-        if (m_box->boxSizing() != other.m_box->boxSizing())
-            return true;
-    }
+    // FIXME: Not all cases in this method need both full layout and repaint.
+    // Should move cases into diffNeedsFullLayout() if
+    // - don't need repaint at all;
+    // - or the renderer knows how to exactly repaint caused by the layout change
+    //   instead of forced full repaint.
 
     if (surround.get() != other.surround.get()) {
         if (surround->margin != other.surround->margin)
@@ -535,7 +528,7 @@ bool RenderStyle::diffNeedsFullLayout(const RenderStyle& other) const
             return true;
     }
 
-    if (visual->m_textAutosizingMultiplier != other.visual->m_textAutosizingMultiplier)
+    if (inherited->textAutosizingMultiplier != other.inherited->textAutosizingMultiplier)
         return true;
 
     if (inherited.get() != other.inherited.get()) {
@@ -561,8 +554,7 @@ bool RenderStyle::diffNeedsFullLayout(const RenderStyle& other) const
         || noninherited_flags._unicodeBidi != other.noninherited_flags._unicodeBidi
         || noninherited_flags._position != other.noninherited_flags._position
         || noninherited_flags._floating != other.noninherited_flags._floating
-        || noninherited_flags._originalDisplay != other.noninherited_flags._originalDisplay
-        || noninherited_flags._vertical_align != other.noninherited_flags._vertical_align)
+        || noninherited_flags._originalDisplay != other.noninherited_flags._originalDisplay)
         return true;
 
     if (noninherited_flags._effectiveDisplay >= FIRST_TABLE_DISPLAY && noninherited_flags._effectiveDisplay <= LAST_TABLE_DISPLAY) {
@@ -599,6 +591,30 @@ bool RenderStyle::diffNeedsFullLayout(const RenderStyle& other) const
     }
 
     // Movement of non-static-positioned object is special cased in RenderStyle::visualInvalidationDiff().
+
+    return false;
+}
+
+bool RenderStyle::diffNeedsFullLayout(const RenderStyle& other) const
+{
+    if (m_box.get() != other.m_box.get()) {
+        if (m_box->width() != other.m_box->width()
+            || m_box->minWidth() != other.m_box->minWidth()
+            || m_box->maxWidth() != other.m_box->maxWidth()
+            || m_box->height() != other.m_box->height()
+            || m_box->minHeight() != other.m_box->minHeight()
+            || m_box->maxHeight() != other.m_box->maxHeight())
+            return true;
+
+        if (m_box->verticalAlign() != other.m_box->verticalAlign())
+            return true;
+
+        if (m_box->boxSizing() != other.m_box->boxSizing())
+            return true;
+    }
+
+    if (noninherited_flags._vertical_align != other.noninherited_flags._vertical_align)
+        return true;
 
     return false;
 }
@@ -707,7 +723,7 @@ unsigned RenderStyle::computeChangedContextSensitiveProperties(const RenderStyle
     return changedContextSensitiveProperties;
 }
 
-void RenderStyle::setClip(Length top, Length right, Length bottom, Length left)
+void RenderStyle::setClip(const Length& top, const Length& right, const Length& bottom, const Length& left)
 {
     StyleVisualData* data = visual.access();
     data->clip.m_top = top;
@@ -1174,11 +1190,12 @@ Length RenderStyle::lineHeight() const
     // too, though this involves messily poking into CalcExpressionLength.
     float multiplier = textAutosizingMultiplier();
     if (multiplier > 1 && lh.isFixed())
-        return Length(TextAutosizer::computeAutosizedFontSize(lh.value(), multiplier), Fixed);
+        return Length(FastTextAutosizer::computeAutosizedFontSize(lh.value(), multiplier), Fixed);
 
     return lh;
 }
-void RenderStyle::setLineHeight(Length specifiedLineHeight) { SET_VAR(inherited, line_height, specifiedLineHeight); }
+
+void RenderStyle::setLineHeight(const Length& specifiedLineHeight) { SET_VAR(inherited, line_height, specifiedLineHeight); }
 
 int RenderStyle::computedLineHeight() const
 {
@@ -1221,7 +1238,7 @@ void RenderStyle::setFontSize(float size)
     if (!std::isfinite(size) || size < 0)
         size = 0;
     else
-        size = min(maximumAllowedFontSize, size);
+        size = std::min(maximumAllowedFontSize, size);
 
     FontSelector* currentFontSelector = font().fontSelector();
     FontDescription desc(fontDescription());
@@ -1230,8 +1247,8 @@ void RenderStyle::setFontSize(float size)
 
     float multiplier = textAutosizingMultiplier();
     if (multiplier > 1) {
-        float autosizedFontSize = TextAutosizer::computeAutosizedFontSize(size, multiplier);
-        desc.setComputedSize(min(maximumAllowedFontSize, autosizedFontSize));
+        float autosizedFontSize = FastTextAutosizer::computeAutosizedFontSize(size, multiplier);
+        desc.setComputedSize(std::min(maximumAllowedFontSize, autosizedFontSize));
     }
 
     setFontDescription(desc);
@@ -1312,10 +1329,10 @@ void RenderStyle::getShadowExtent(const ShadowList* shadowList, LayoutUnit &top,
             continue;
         float blurAndSpread = shadow.blur() + shadow.spread();
 
-        top = min<LayoutUnit>(top, shadow.y() - blurAndSpread);
-        right = max<LayoutUnit>(right, shadow.x() + blurAndSpread);
-        bottom = max<LayoutUnit>(bottom, shadow.y() + blurAndSpread);
-        left = min<LayoutUnit>(left, shadow.x() - blurAndSpread);
+        top = std::min<LayoutUnit>(top, shadow.y() - blurAndSpread);
+        right = std::max<LayoutUnit>(right, shadow.x() + blurAndSpread);
+        bottom = std::max<LayoutUnit>(bottom, shadow.y() + blurAndSpread);
+        left = std::min<LayoutUnit>(left, shadow.x() - blurAndSpread);
     }
 }
 
@@ -1332,10 +1349,10 @@ LayoutBoxExtent RenderStyle::getShadowInsetExtent(const ShadowList* shadowList) 
         if (shadow.style() == Normal)
             continue;
         float blurAndSpread = shadow.blur() + shadow.spread();
-        top = max<LayoutUnit>(top, shadow.y() + blurAndSpread);
-        right = min<LayoutUnit>(right, shadow.x() - blurAndSpread);
-        bottom = min<LayoutUnit>(bottom, shadow.y() - blurAndSpread);
-        left = max<LayoutUnit>(left, shadow.x() + blurAndSpread);
+        top = std::max<LayoutUnit>(top, shadow.y() + blurAndSpread);
+        right = std::min<LayoutUnit>(right, shadow.x() - blurAndSpread);
+        bottom = std::min<LayoutUnit>(bottom, shadow.y() - blurAndSpread);
+        left = std::max<LayoutUnit>(left, shadow.x() + blurAndSpread);
     }
 
     return LayoutBoxExtent(top, right, bottom, left);
@@ -1353,8 +1370,8 @@ void RenderStyle::getShadowHorizontalExtent(const ShadowList* shadowList, Layout
             continue;
         float blurAndSpread = shadow.blur() + shadow.spread();
 
-        left = min<LayoutUnit>(left, shadow.x() - blurAndSpread);
-        right = max<LayoutUnit>(right, shadow.x() + blurAndSpread);
+        left = std::min<LayoutUnit>(left, shadow.x() - blurAndSpread);
+        right = std::max<LayoutUnit>(right, shadow.x() + blurAndSpread);
     }
 }
 
@@ -1370,8 +1387,8 @@ void RenderStyle::getShadowVerticalExtent(const ShadowList* shadowList, LayoutUn
             continue;
         float blurAndSpread = shadow.blur() + shadow.spread();
 
-        top = min<LayoutUnit>(top, shadow.y() - blurAndSpread);
-        bottom = max<LayoutUnit>(bottom, shadow.y() + blurAndSpread);
+        top = std::min<LayoutUnit>(top, shadow.y() - blurAndSpread);
+        bottom = std::max<LayoutUnit>(bottom, shadow.y() + blurAndSpread);
     }
 }
 
@@ -1581,7 +1598,7 @@ unsigned short RenderStyle::borderEndWidth() const
     return isLeftToRightDirection() ? borderBottomWidth() : borderTopWidth();
 }
 
-void RenderStyle::setMarginStart(Length margin)
+void RenderStyle::setMarginStart(const Length& margin)
 {
     if (isHorizontalWritingMode()) {
         if (isLeftToRightDirection())
@@ -1596,7 +1613,7 @@ void RenderStyle::setMarginStart(Length margin)
     }
 }
 
-void RenderStyle::setMarginEnd(Length margin)
+void RenderStyle::setMarginEnd(const Length& margin)
 {
     if (isHorizontalWritingMode()) {
         if (isLeftToRightDirection())
@@ -1643,7 +1660,7 @@ void RenderStyle::setBorderImageSource(PassRefPtr<StyleImage> image)
     surround.access()->border.m_image.setImage(image);
 }
 
-void RenderStyle::setBorderImageSlices(LengthBox slices)
+void RenderStyle::setBorderImageSlices(const LengthBox& slices)
 {
     if (surround->border.m_image.imageSlices() == slices)
         return;

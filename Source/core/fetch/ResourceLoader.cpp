@@ -129,7 +129,6 @@ void ResourceLoader::init(const ResourceRequest& passedRequest)
 {
     ResourceRequest request(passedRequest);
     m_host->willSendRequest(m_resource->identifier(), request, ResourceResponse(), m_options.initiatorInfo);
-    request.setReportLoadTiming(true);
     ASSERT(m_state != Terminated);
     ASSERT(!request.isNull());
     m_originalRequest = m_request = applyOptions(request);
@@ -344,7 +343,6 @@ void ResourceLoader::willSendRequest(blink::WebURLLoader*, blink::WebURLRequest&
         return;
 
     m_host->willSendRequest(m_resource->identifier(), request, redirectResponse, m_options.initiatorInfo);
-    request.setReportLoadTiming(true);
     ASSERT(!request.isNull());
     m_resource->updateRequest(request);
     m_request = request;
@@ -551,8 +549,10 @@ void ResourceLoader::didFail(blink::WebURLLoader*, const blink::WebURLError& err
 
     m_resource->error(Resource::LoadError);
 
-    if (m_state != Terminated)
-        releaseResources();
+    if (m_state == Terminated)
+        return;
+
+    releaseResources();
 }
 
 bool ResourceLoader::isLoadedBy(ResourceLoaderHost* loader) const

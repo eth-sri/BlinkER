@@ -35,7 +35,6 @@
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/text/WTFString.h"
 
@@ -81,12 +80,14 @@ public:
     };
 
     virtual bool connect(const KURL&, const String& protocol) = 0;
-    virtual String subprotocol() = 0; // Will be available after didConnect() callback is invoked.
-    virtual String extensions() = 0; // Will be available after didConnect() callback is invoked.
     virtual SendResult send(const String& message) = 0;
     virtual SendResult send(const ArrayBuffer&, unsigned byteOffset, unsigned byteLength) = 0;
     virtual SendResult send(PassRefPtr<BlobDataHandle>) = 0;
-    virtual unsigned long bufferedAmount() const = 0;
+
+    // For WorkerThreadableWebSocketChannel.
+    virtual SendResult send(PassOwnPtr<Vector<char> >) = 0;
+
+    // Do not call |send| after calling this method.
     virtual void close(int code, const String& reason) = 0;
 
     // Log the reason text and close the connection. Will call didClose().
@@ -101,8 +102,8 @@ public:
     // You can specify String() and 0 for sourceURL and lineNumber
     // respectively, if you can't / needn't provide the information.
     virtual void fail(const String& reason, MessageLevel, const String& sourceURL, unsigned lineNumber) = 0;
-    void fail(const String& reason, MessageLevel level) { fail(reason, level, String(), 0); }
 
+    // Do not call any methods after calling this method.
     virtual void disconnect() = 0; // Will suppress didClose().
 
     virtual void suspend() = 0;

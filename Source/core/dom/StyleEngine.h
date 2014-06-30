@@ -28,6 +28,7 @@
 #ifndef StyleEngine_h
 #define StyleEngine_h
 
+#include "core/css/CSSFontSelectorClient.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/Document.h"
 #include "core/dom/DocumentOrderedList.h"
@@ -44,35 +45,14 @@ namespace WebCore {
 
 class CSSFontSelector;
 class CSSStyleSheet;
-class FontSelector;
 class Node;
 class RuleFeatureSet;
 class ShadowTreeStyleSheetCollection;
-class StyleResolver;
 class StyleRuleFontFace;
 class StyleSheet;
-class StyleSheetCollection;
 class StyleSheetContents;
-class StyleSheetList;
 
-class StyleResolverChange {
-public:
-    StyleResolverChange()
-        : m_needsRepaint(false)
-        , m_needsStyleRecalc(false)
-    { }
-
-    bool needsRepaint() const { return m_needsRepaint; }
-    bool needsStyleRecalc() const { return m_needsStyleRecalc; }
-    void setNeedsRepaint() { m_needsRepaint = true; }
-    void setNeedsStyleRecalc() { m_needsStyleRecalc = true; }
-
-private:
-    bool m_needsRepaint;
-    bool m_needsStyleRecalc;
-};
-
-class StyleEngine : public NoBaseWillBeGarbageCollectedFinalized<StyleEngine> {
+class StyleEngine FINAL : public CSSFontSelectorClient  {
     WTF_MAKE_FAST_ALLOCATED_WILL_BE_REMOVED;
 public:
 
@@ -100,13 +80,16 @@ public:
     const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet> >& documentAuthorStyleSheets() const { return m_authorStyleSheets; }
     const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet> >& injectedAuthorStyleSheets() const;
 
-    const WillBeHeapVector<RefPtrWillBeMember<StyleSheet> > activeStyleSheetsForInspector() const;
+    const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet> > activeStyleSheetsForInspector() const;
 
     void modifiedStyleSheet(StyleSheet*);
     void addStyleSheetCandidateNode(Node*, bool createdByParser);
     void removeStyleSheetCandidateNode(Node*);
     void removeStyleSheetCandidateNode(Node*, ContainerNode* scopingNode, TreeScope&);
     void modifiedStyleSheetCandidateNode(Node*);
+    void enableExitTransitionStylesheets();
+    void addXSLStyleSheet(ProcessingInstruction*, bool createdByParser);
+    void removeXSLStyleSheet(ProcessingInstruction*);
 
     void invalidateInjectedStyleSheetCache();
     void updateInjectedStyleSheetCache() const;
@@ -115,7 +98,7 @@ public:
 
     void clearMediaQueryRuleSetStyleSheets();
     void updateStyleSheetsInImport(DocumentStyleSheetCollector& parentCollector);
-    bool updateActiveStyleSheets(StyleResolverUpdateMode);
+    void updateActiveStyleSheets(StyleResolverUpdateMode);
 
     String preferredStylesheetSetName() const { return m_preferredStylesheetSetName; }
     String selectedStylesheetSetName() const { return m_selectedStylesheetSetName; }
@@ -129,11 +112,7 @@ public:
     }
 
     void addPendingSheet();
-    enum RemovePendingSheetNotificationType {
-        RemovePendingSheetNotifyImmediately,
-        RemovePendingSheetNotifyLater
-    };
-    void removePendingSheet(Node* styleSheetCandidateNode, RemovePendingSheetNotificationType = RemovePendingSheetNotifyImmediately);
+    void removePendingSheet(Node* styleSheetCandidateNode);
 
     bool hasPendingSheets() const { return m_pendingStylesheets > 0; }
     bool haveStylesheetsLoaded() const { return !hasPendingSheets() || m_ignorePendingStylesheets; }
@@ -182,7 +161,7 @@ public:
 
     void didDetach();
     bool shouldClearResolver() const;
-    StyleResolverChange resolverChanged(RecalcStyleTime, StyleResolverUpdateMode);
+    void resolverChanged(StyleResolverUpdateMode);
     unsigned resolverAccessCount() const;
 
     void markDocumentDirty();
@@ -190,14 +169,20 @@ public:
     PassRefPtrWillBeRawPtr<CSSStyleSheet> createSheet(Element*, const String& text, TextPosition startPosition, bool createdByParser);
     void removeSheet(StyleSheetContents*);
 
-    void trace(Visitor*);
+    virtual void trace(Visitor*) OVERRIDE;
+
+private:
+    // CSSFontSelectorClient implementation.
+    virtual void fontsNeedUpdate(CSSFontSelector*) OVERRIDE;
 
 private:
     StyleEngine(Document&);
 
     TreeScopeStyleSheetCollection* ensureStyleSheetCollectionFor(TreeScope&);
     TreeScopeStyleSheetCollection* styleSheetCollectionFor(TreeScope&);
-    bool shouldUpdateShadowTreeStyleSheetCollection(StyleResolverUpdateMode);
+    bool shouldUpdateDocumentStyleSheetCollection(StyleResolverUpdateMode) const;
+    bool shouldUpdateShadowTreeStyleSheetCollection(StyleResolverUpdateMode) const;
+    bool shouldApplyXSLTransform() const;
 
     void markTreeScopeDirty(TreeScope&);
 
@@ -213,23 +198,14 @@ private:
 
     static PassRefPtrWillBeRawPtr<CSSStyleSheet> parseSheet(Element*, const String& text, TextPosition startPosition, bool createdByParser);
 
-    // FIXME: Oilpan: clean this const madness up once oilpan ships.
     const DocumentStyleSheetCollection* documentStyleSheetCollection() const
     {
-#if ENABLE(OILPAN)
-        return m_documentStyleSheetCollection;
-#else
-        return &m_documentStyleSheetCollection;
-#endif
+        return m_documentStyleSheetCollection.get();
     }
 
     DocumentStyleSheetCollection* documentStyleSheetCollection()
     {
-#if ENABLE(OILPAN)
-        return m_documentStyleSheetCollection;
-#else
-        return &m_documentStyleSheetCollection;
-#endif
+        return m_documentStyleSheetCollection.get();
     }
 
     RawPtrWillBeMember<Document> m_document;
@@ -246,11 +222,8 @@ private:
 
     WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet> > m_authorStyleSheets;
 
-#if ENABLE(OILPAN)
-    Member<DocumentStyleSheetCollection> m_documentStyleSheetCollection;
-#else
-    DocumentStyleSheetCollection m_documentStyleSheetCollection;
-#endif
+    OwnPtrWillBeMember<DocumentStyleSheetCollection> m_documentStyleSheetCollection;
+
     typedef WillBeHeapHashMap<RawPtrWillBeWeakMember<TreeScope>, OwnPtrWillBeMember<ShadowTreeStyleSheetCollection> > StyleSheetCollectionMap;
     StyleSheetCollectionMap m_styleSheetCollectionMap;
 
@@ -276,6 +249,8 @@ private:
 
     WillBeHeapHashMap<AtomicString, RawPtrWillBeMember<StyleSheetContents> > m_textToSheetCache;
     WillBeHeapHashMap<RawPtrWillBeMember<StyleSheetContents>, AtomicString> m_sheetToTextCache;
+
+    RefPtrWillBeMember<ProcessingInstruction> m_xslStyleSheet;
 };
 
 }

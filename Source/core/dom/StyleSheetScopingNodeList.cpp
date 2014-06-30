@@ -29,7 +29,6 @@
 #include "core/dom/StyleSheetScopingNodeList.h"
 
 #include "core/dom/Document.h"
-#include "core/dom/Node.h"
 
 namespace WebCore {
 
@@ -53,7 +52,7 @@ void StyleSheetScopingNodeList::remove(ContainerNode* node)
         return;
 
     // If the node is still working as a scoping node, we cannot remove.
-    if (node->inDocument() && node->numberOfScopedHTMLStyleChildren())
+    if (node->inDocument())
         return;
 
     m_scopingNodes->remove(node);
@@ -63,5 +62,3 @@ void StyleSheetScopingNodeList::remove(ContainerNode* node)
 }
 
 }
-
-

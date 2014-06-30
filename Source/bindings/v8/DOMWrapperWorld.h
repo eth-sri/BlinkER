@@ -45,13 +45,13 @@ namespace WebCore {
 class DOMDataStore;
 class ExecutionContext;
 class ScriptController;
-class V8DOMActivityLogger;
 
 enum WorldIdConstants {
     MainWorldId = 0,
     // Embedder isolated worlds can use IDs in [1, 1<<29).
     EmbedderWorldIdLimit = (1 << 29),
     ScriptPreprocessorIsolatedWorldId,
+    PrivateScriptIsolatedWorldId,
     IsolatedWorldIdLimit,
     WorkerWorldId,
     TestingWorldId,
@@ -63,6 +63,7 @@ public:
     static PassRefPtr<DOMWrapperWorld> create(int worldId = -1, int extensionGroup = -1);
 
     static const int mainWorldExtensionGroup = 0;
+    static const int privateScriptIsolatedWorldExtensionGroup = 1;
     static PassRefPtr<DOMWrapperWorld> ensureIsolatedWorld(int worldId, int extensionGroup);
     ~DOMWrapperWorld();
     void dispose();
@@ -88,6 +89,7 @@ public:
     }
 
     static DOMWrapperWorld& mainWorld();
+    static DOMWrapperWorld& privateScriptIsolatedWorld();
 
     // Associates an isolated world (see above for description) with a security
     // origin. XMLHttpRequest instances used in that world will be considered
@@ -107,14 +109,13 @@ public:
     bool isolatedWorldHasContentSecurityPolicy();
 
     bool isMainWorld() const { return m_worldId == MainWorldId; }
+    bool isPrivateScriptIsolatedWorld() const { return m_worldId == PrivateScriptIsolatedWorldId; }
     bool isWorkerWorld() const { return m_worldId == WorkerWorldId; }
     bool isIsolatedWorld() const { return MainWorldId < m_worldId  && m_worldId < IsolatedWorldIdLimit; }
 
     int worldId() const { return m_worldId; }
     int extensionGroup() const { return m_extensionGroup; }
     DOMDataStore& domDataStore() const { return *m_domDataStore; }
-    V8DOMActivityLogger* activityLogger() const { return m_activityLogger; }
-    void setActivityLogger(V8DOMActivityLogger* activityLogger) { m_activityLogger = activityLogger; }
 
     static void setWorldOfInitializingWindow(DOMWrapperWorld* world)
     {
@@ -133,8 +134,6 @@ private:
     const int m_worldId;
     const int m_extensionGroup;
     OwnPtr<DOMDataStore> m_domDataStore;
-    // This is owned by a static hash map in V8DOMActivityLogger.
-    V8DOMActivityLogger* m_activityLogger;
 };
 
 } // namespace WebCore

@@ -27,46 +27,11 @@
 #include "config.h"
 #include "core/rendering/compositing/CompositingRequirementsUpdater.h"
 
-#include "CSSPropertyNames.h"
-#include "HTMLNames.h"
-#include "RuntimeEnabledFeatures.h"
-#include "core/animation/ActiveAnimations.h"
-#include "core/animation/DocumentAnimations.h"
-#include "core/dom/FullscreenElementStack.h"
-#include "core/dom/NodeList.h"
-#include "core/frame/DeprecatedScheduleStyleRecalcDuringCompositingUpdate.h"
-#include "core/frame/FrameView.h"
-#include "core/frame/LocalFrame.h"
-#include "core/frame/Settings.h"
-#include "core/html/HTMLCanvasElement.h"
-#include "core/html/HTMLIFrameElement.h"
-#include "core/html/HTMLMediaElement.h"
-#include "core/html/canvas/CanvasRenderingContext.h"
-#include "core/inspector/InspectorInstrumentation.h"
-#include "core/page/Chrome.h"
-#include "core/page/Page.h"
-#include "core/page/scrolling/ScrollingConstraints.h"
-#include "core/page/scrolling/ScrollingCoordinator.h"
-#include "core/rendering/HitTestResult.h"
-#include "core/rendering/RenderApplet.h"
-#include "core/rendering/RenderEmbeddedObject.h"
-#include "core/rendering/RenderFullScreen.h"
-#include "core/rendering/RenderIFrame.h"
 #include "core/rendering/RenderLayerStackingNode.h"
 #include "core/rendering/RenderLayerStackingNodeIterator.h"
-#include "core/rendering/RenderReplica.h"
-#include "core/rendering/RenderVideo.h"
 #include "core/rendering/RenderView.h"
-#include "core/rendering/compositing/CompositedLayerMapping.h"
-#include "core/rendering/compositing/GraphicsLayerUpdater.h"
 #include "core/rendering/compositing/RenderLayerCompositor.h"
-#include "platform/OverscrollTheme.h"
 #include "platform/TraceEvent.h"
-#include "platform/geometry/TransformState.h"
-#include "platform/graphics/GraphicsLayer.h"
-#include "platform/scroll/ScrollbarTheme.h"
-#include "public/platform/Platform.h"
-#include "wtf/TemporaryChange.h"
 
 namespace WebCore {
 
@@ -199,51 +164,30 @@ static bool requiresCompositingOrSquashing(CompositingReasons reasons)
     return reasons != CompositingReasonNone;
 }
 
-static CompositingReasons subtreeReasonsForCompositing(RenderObject* renderer, bool hasCompositedDescendants, bool has3DTransformedDescendants)
+static CompositingReasons subtreeReasonsForCompositing(RenderLayer* layer, bool hasCompositedDescendants, bool has3DTransformedDescendants)
 {
     CompositingReasons subtreeReasons = CompositingReasonNone;
-
-    // FIXME: this seems to be a potentially different layer than the layer for which this was called. May not be an error, but is very confusing.
-    RenderLayer* layer = toRenderBoxModelObject(renderer)->layer();
 
     // When a layer has composited descendants, some effects, like 2d transforms, filters, masks etc must be implemented
     // via compositing so that they also apply to those composited descdendants.
     if (hasCompositedDescendants) {
-        if (layer->transform())
-            subtreeReasons |= CompositingReasonTransformWithCompositedDescendants;
+        subtreeReasons |= layer->potentialCompositingReasonsFromStyle() & CompositingReasonComboCompositedDescendants;
 
         if (layer->shouldIsolateCompositedDescendants()) {
             ASSERT(layer->stackingNode()->isStackingContext());
             subtreeReasons |= CompositingReasonIsolateCompositedDescendants;
         }
 
-        // If the implementation of createsGroup changes, we need to be aware of that in this part of code.
-        ASSERT((renderer->isTransparent() || renderer->hasMask() || renderer->hasFilter() || renderer->hasBlendMode()) == renderer->createsGroup());
-        if (renderer->isTransparent())
-            subtreeReasons |= CompositingReasonOpacityWithCompositedDescendants;
-        if (renderer->hasMask())
-            subtreeReasons |= CompositingReasonMaskWithCompositedDescendants;
-        if (renderer->hasFilter())
-            subtreeReasons |= CompositingReasonFilterWithCompositedDescendants;
-        if (renderer->hasBlendMode())
-            subtreeReasons |= CompositingReasonBlendingWithCompositedDescendants;
-
-        if (renderer->hasReflection())
-            subtreeReasons |= CompositingReasonReflectionWithCompositedDescendants;
-
-        if (renderer->hasClipOrOverflowClip())
+        // FIXME: This should move into CompositingReasonFinder::potentialCompositingReasonsFromStyle, but
+        // theres a poor interaction with RenderTextControlSingleLine, which sets this hasOverflowClip directly.
+        if (layer->renderer()->hasClipOrOverflowClip())
             subtreeReasons |= CompositingReasonClipsCompositingDescendants;
     }
 
     // A layer with preserve-3d or perspective only needs to be composited if there are descendant layers that
     // will be affected by the preserve-3d or perspective.
-    if (has3DTransformedDescendants) {
-        if (renderer->style()->transformStyle3D() == TransformStyle3DPreserve3D)
-            subtreeReasons |= CompositingReasonPreserve3DWith3DDescendants;
-
-        if (renderer->style()->hasPerspective())
-            subtreeReasons |= CompositingReasonPerspectiveWith3DDescendants;
-    }
+    if (has3DTransformedDescendants)
+        subtreeReasons |= layer->potentialCompositingReasonsFromStyle() & CompositingReasonCombo3DDescendants;
 
     return subtreeReasons;
 }
@@ -283,13 +227,7 @@ void CompositingRequirementsUpdater::updateRecursive(RenderLayer* ancestorLayer,
 
     layer->stackingNode()->updateLayerListsIfNeeded();
 
-    // Clear the flag
-    layer->setHasCompositingDescendant(false);
-
-    // Start by assuming this layer will not need to composite.
     CompositingReasons reasonsToComposite = CompositingReasonNone;
-
-    // First accumulate the straightforward compositing reasons.
     CompositingReasons directReasons = m_compositingReasonFinder.directReasons(layer);
 
     // Video is special. It's the only RenderLayer type that can both have
@@ -332,7 +270,7 @@ void CompositingRequirementsUpdater::updateRecursive(RenderLayer* ancestorLayer,
             unclippedDescendants.append(layer);
     }
 
-    const IntRect& absBounds = layer->ancestorDependentProperties().clippedAbsoluteBoundingBox;
+    const IntRect& absBounds = layer->compositingInputs().clippedAbsoluteBoundingBox;
     absoluteDecendantBoundingBox = absBounds;
 
     if (currentRecursionData.m_testingOverlap && !requiresCompositingOrSquashing(directReasons))
@@ -362,7 +300,7 @@ void CompositingRequirementsUpdater::updateRecursive(RenderLayer* ancestorLayer,
         childRecursionData.m_testingOverlap = true;
     }
 
-#if !ASSERT_DISABLED
+#if ASSERT_ENABLED
     LayerListMutationDetector mutationChecker(layer->stackingNode());
 #endif
 
@@ -392,7 +330,7 @@ void CompositingRequirementsUpdater::updateRecursive(RenderLayer* ancestorLayer,
                     //        re-compute the absBounds for the child so that we can add the
                     //        negative z-index child's bounds to the new overlap context.
                     overlapMap.beginNewOverlapTestingContext();
-                    overlapMap.add(curNode->layer(), curNode->layer()->ancestorDependentProperties().clippedAbsoluteBoundingBox);
+                    overlapMap.add(curNode->layer(), curNode->layer()->compositingInputs().clippedAbsoluteBoundingBox);
                     overlapMap.finishCurrentOverlapTestingContext();
                 }
             }
@@ -452,7 +390,7 @@ void CompositingRequirementsUpdater::updateRecursive(RenderLayer* ancestorLayer,
             overlapMap.add(layer, absBounds);
 
         // Now check for reasons to become composited that depend on the state of descendant layers.
-        CompositingReasons subtreeCompositingReasons = subtreeReasonsForCompositing(layer->renderer(), childRecursionData.m_subtreeIsCompositing, anyDescendantHas3DTransform);
+        CompositingReasons subtreeCompositingReasons = subtreeReasonsForCompositing(layer, childRecursionData.m_subtreeIsCompositing, anyDescendantHas3DTransform);
         reasonsToComposite |= subtreeCompositingReasons;
         if (!willBeCompositedOrSquashed && compositor->canBeComposited(layer) && requiresCompositingOrSquashing(subtreeCompositingReasons)) {
             childRecursionData.m_compositingAncestor = layer;
@@ -479,7 +417,7 @@ void CompositingRequirementsUpdater::updateRecursive(RenderLayer* ancestorLayer,
         // Note that if the layer clips its descendants, there's no reason to propagate the child animation to the parent layers. That's because
         // we know for sure the animation is contained inside the clipping rectangle, which is already added to the overlap map.
         bool isCompositedClippingLayer = compositor->canBeComposited(layer) && (reasonsToComposite & CompositingReasonClipsCompositingDescendants);
-        if ((!childRecursionData.m_testingOverlap && !isCompositedClippingLayer) || isRunningAcceleratedTransformAnimation(layer->renderer()))
+        if ((!childRecursionData.m_testingOverlap && !isCompositedClippingLayer) || layer->renderer()->style()->hasCurrentTransformAnimation())
             currentRecursionData.m_testingOverlap = false;
 
         if (childRecursionData.m_compositingAncestor == layer)
@@ -491,11 +429,6 @@ void CompositingRequirementsUpdater::updateRecursive(RenderLayer* ancestorLayer,
     // At this point we have finished collecting all reasons to composite this layer.
     layer->setCompositingReasons(reasonsToComposite);
 
-}
-
-bool CompositingRequirementsUpdater::isRunningAcceleratedTransformAnimation(RenderObject* renderer) const
-{
-    return renderer->style()->hasCurrentTransformAnimation();
 }
 
 } // namespace WebCore

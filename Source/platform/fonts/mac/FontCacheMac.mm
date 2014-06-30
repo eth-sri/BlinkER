@@ -31,7 +31,10 @@
 #import "platform/fonts/FontCache.h"
 
 #import <AppKit/AppKit.h>
+#import "platform/LayoutTestSupport.h"
+#import "platform/RuntimeEnabledFeatures.h"
 #import "platform/fonts/FontDescription.h"
+#import "platform/fonts/FontFaceCreationParams.h"
 #import "platform/fonts/FontPlatformData.h"
 #import "platform/fonts/SimpleFontData.h"
 #import "platform/mac/WebFontCache.h"
@@ -64,6 +67,14 @@ static void fontCacheRegisteredFontsChangedNotificationCallback(CFNotificationCe
     invalidateFontCache(0);
 }
 
+static bool useHinting()
+{
+    // Enable hinting when subpixel font scaling is disabled or
+    // when running the set of standard non-subpixel layout tests,
+    // otherwise use subpixel glyph positioning.
+    return (isRunningLayoutTest() && !isFontAntialiasingEnabledForTest()) || !RuntimeEnabledFeatures::subpixelFontScalingEnabled();
+}
+
 void FontCache::platformInit()
 {
     CFNotificationCenterAddObserver(CFNotificationCenterGetLocalCenter(), this, fontCacheRegisteredFontsChangedNotificationCallback, kCTFontManagerRegisteredFontsChangedNotification, 0, CFNotificationSuspensionBehaviorDeliverImmediately);
@@ -90,7 +101,7 @@ static inline bool isAppKitFontWeightBold(NSInteger appKitFontWeight)
     return appKitFontWeight >= 7;
 }
 
-PassRefPtr<SimpleFontData> FontCache::platformFallbackForCharacter(const FontDescription& fontDescription, UChar32 character, const SimpleFontData* fontDataToSubstitute)
+PassRefPtr<SimpleFontData> FontCache::fallbackFontForCharacter(const FontDescription& fontDescription, UChar32 character, const SimpleFontData* fontDataToSubstitute)
 {
     // FIXME: We should fix getFallbackFamily to take a UChar32
     // and remove this split-to-UChar16 code.
@@ -154,18 +165,18 @@ PassRefPtr<SimpleFontData> FontCache::platformFallbackForCharacter(const FontDes
 
     if (traits != substituteFontTraits || weight != substituteFontWeight || !nsFont) {
         if (NSFont *bestVariation = [fontManager fontWithFamily:[substituteFont familyName] traits:traits weight:weight size:size]) {
-            if (!nsFont || (([fontManager traitsOfFont:bestVariation] != substituteFontTraits || [fontManager weightOfFont:bestVariation] != substituteFontWeight)
-                && [[bestVariation coveredCharacterSet] longCharacterIsMember:character]))
+            if ((!nsFont || [fontManager traitsOfFont:bestVariation] != substituteFontTraits || [fontManager weightOfFont:bestVariation] != substituteFontWeight)
+                && [[bestVariation coveredCharacterSet] longCharacterIsMember:character])
                 substituteFont = bestVariation;
         }
     }
 
-    substituteFont = fontDescription.usePrinterFont() ? [substituteFont printerFont] : [substituteFont screenFont];
+    substituteFont = useHinting() ? [substituteFont screenFont] : [substituteFont printerFont];
 
     substituteFontTraits = [fontManager traitsOfFont:substituteFont];
     substituteFontWeight = [fontManager weightOfFont:substituteFont];
 
-    FontPlatformData alternateFont(substituteFont, platformData.size(), platformData.isPrinterFont(),
+    FontPlatformData alternateFont(substituteFont, platformData.size(),
         isAppKitFontWeightBold(weight) && !isAppKitFontWeightBold(substituteFontWeight),
         (traits & NSFontItalicTrait) && !(substituteFontTraits & NSFontItalicTrait),
         platformData.m_orientation);
@@ -191,13 +202,13 @@ PassRefPtr<SimpleFontData> FontCache::getLastResortFallbackFont(const FontDescri
     return getFontData(fontDescription, lucidaGrandeStr, false, shouldRetain);
 }
 
-FontPlatformData* FontCache::createFontPlatformData(const FontDescription& fontDescription, const AtomicString& family, float fontSize)
+FontPlatformData* FontCache::createFontPlatformData(const FontDescription& fontDescription, const FontFaceCreationParams& creationParams, float fontSize)
 {
     NSFontTraitMask traits = fontDescription.style() ? NSFontItalicTrait : 0;
     NSInteger weight = toAppKitFontWeight(fontDescription.weight());
     float size = fontSize;
 
-    NSFont *nsFont = [WebFontCache fontWithFamily:family traits:traits weight:weight size:size];
+    NSFont *nsFont = [WebFontCache fontWithFamily:creationParams.family() traits:traits weight:weight size:size];
     if (!nsFont)
         return 0;
 
@@ -207,13 +218,13 @@ FontPlatformData* FontCache::createFontPlatformData(const FontDescription& fontD
         actualTraits = [fontManager traitsOfFont:nsFont];
     NSInteger actualWeight = [fontManager weightOfFont:nsFont];
 
-    NSFont *platformFont = fontDescription.usePrinterFont() ? [nsFont printerFont] : [nsFont screenFont];
+    NSFont *platformFont = useHinting() ? [nsFont screenFont] : [nsFont printerFont];
     bool syntheticBold = (isAppKitFontWeightBold(weight) && !isAppKitFontWeightBold(actualWeight)) || fontDescription.isSyntheticBold();
     bool syntheticOblique = ((traits & NSFontItalicTrait) && !(actualTraits & NSFontItalicTrait)) || fontDescription.isSyntheticItalic();
 
     // FontPlatformData::font() can be null for the case of Chromium out-of-process font loading.
     // In that case, we don't want to use the platformData.
-    OwnPtr<FontPlatformData> platformData = adoptPtr(new FontPlatformData(platformFont, size, fontDescription.usePrinterFont(), syntheticBold, syntheticOblique, fontDescription.orientation(), fontDescription.widthVariant()));
+    OwnPtr<FontPlatformData> platformData = adoptPtr(new FontPlatformData(platformFont, size, syntheticBold, syntheticOblique, fontDescription.orientation(), fontDescription.widthVariant()));
     if (!platformData->font())
         return 0;
     return platformData.leakPtr();

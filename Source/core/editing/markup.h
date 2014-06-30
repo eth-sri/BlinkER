@@ -39,7 +39,6 @@ class Document;
 class DocumentFragment;
 class Element;
 class ExceptionState;
-class HTMLElement;
 class KURL;
 class Node;
 class QualifiedName;
@@ -53,7 +52,7 @@ PassRefPtrWillBeRawPtr<DocumentFragment> createFragmentFromMarkup(Document&, con
 PassRefPtrWillBeRawPtr<DocumentFragment> createFragmentFromMarkupWithContext(Document&, const String& markup, unsigned fragmentStart, unsigned fragmentEnd, const String& baseURL, ParserContentPolicy);
 PassRefPtrWillBeRawPtr<DocumentFragment> createFragmentForInnerOuterHTML(const String&, Element*, ParserContentPolicy, const char* method, ExceptionState&);
 PassRefPtrWillBeRawPtr<DocumentFragment> createFragmentForTransformToFragment(const String&, const String& sourceMIMEType, Document& outputDoc);
-PassRefPtrWillBeRawPtr<DocumentFragment> createContextualFragment(const String&, HTMLElement*, ParserContentPolicy, ExceptionState&);
+PassRefPtrWillBeRawPtr<DocumentFragment> createContextualFragment(const String&, Element*, ParserContentPolicy, ExceptionState&);
 
 bool isPlainTextMarkup(Node*);
 
@@ -62,13 +61,13 @@ bool isPlainTextMarkup(Node*);
 void replaceChildrenWithFragment(ContainerNode*, PassRefPtrWillBeRawPtr<DocumentFragment>, ExceptionState&);
 void replaceChildrenWithText(ContainerNode*, const String&, ExceptionState&);
 
-String createMarkup(const Range*, Vector<Node*>* = 0, EAnnotateForInterchange = DoNotAnnotateForInterchange, bool convertBlocksToInlines = false, EAbsoluteURLs = DoNotResolveURLs, Node* constrainingAncestor = 0);
-String createMarkup(const Node*, EChildrenOnly = IncludeNode, Vector<Node*>* = 0, EAbsoluteURLs = DoNotResolveURLs, Vector<QualifiedName>* tagNamesToSkip = 0);
+String createMarkup(const Range*, WillBeHeapVector<RawPtrWillBeMember<Node> >* = 0, EAnnotateForInterchange = DoNotAnnotateForInterchange, bool convertBlocksToInlines = false, EAbsoluteURLs = DoNotResolveURLs, Node* constrainingAncestor = 0);
+String createMarkup(const Node*, EChildrenOnly = IncludeNode, WillBeHeapVector<RawPtrWillBeMember<Node> >* = 0, EAbsoluteURLs = DoNotResolveURLs, Vector<QualifiedName>* tagNamesToSkip = 0);
 
 String createFullMarkup(const Node*);
 
 String urlToMarkup(const KURL&, const String& title);
-void mergeWithNextTextNode(PassRefPtr<Node>, ExceptionState&);
+void mergeWithNextTextNode(PassRefPtrWillBeRawPtr<Node>, ExceptionState&);
 
 }
 

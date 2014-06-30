@@ -26,6 +26,7 @@
 
 #include "config.h"
 #include "platform/network/ResourceRequest.h"
+#include "platform/weborigin/SecurityOrigin.h"
 
 namespace WebCore {
 
@@ -192,6 +193,32 @@ void ResourceRequest::clearHTTPOrigin()
     m_httpHeaderFields.remove("Origin");
 }
 
+void ResourceRequest::addHTTPOriginIfNeeded(const AtomicString& origin)
+{
+    if (!httpOrigin().isEmpty())
+        return; // Request already has an Origin header.
+
+    // Don't send an Origin header for GET or HEAD to avoid privacy issues.
+    // For example, if an intranet page has a hyperlink to an external web
+    // site, we don't want to include the Origin of the request because it
+    // will leak the internal host name. Similar privacy concerns have lead
+    // to the widespread suppression of the Referer header at the network
+    // layer.
+    if (httpMethod() == "GET" || httpMethod() == "HEAD")
+        return;
+
+    // For non-GET and non-HEAD methods, always send an Origin header so the
+    // server knows we support this feature.
+
+    if (origin.isEmpty()) {
+        // If we don't know what origin header to attach, we attach the value
+        // for an empty origin.
+        setHTTPOrigin(SecurityOrigin::createUnique()->toAtomicString());
+        return;
+    }
+    setHTTPOrigin(origin);
+}
+
 void ResourceRequest::clearHTTPUserAgent()
 {
     m_httpHeaderFields.remove("User-Agent");
@@ -320,21 +347,24 @@ static const AtomicString& pragmaHeaderString()
     return pragmaHeader;
 }
 
-bool ResourceRequest::cacheControlContainsNoCache()
+const CacheControlHeader& ResourceRequest::cacheControlHeader() const
 {
-    if (!m_cacheControlHeader.parsed)
-        m_cacheControlHeader = parseCacheControlDirectives(m_httpHeaderFields.get(cacheControlHeaderString()), m_httpHeaderFields.get(pragmaHeaderString()));
-    return m_cacheControlHeader.containsNoCache;
+    if (!m_cacheControlHeaderCache.parsed)
+        m_cacheControlHeaderCache = parseCacheControlDirectives(m_httpHeaderFields.get(cacheControlHeaderString()), m_httpHeaderFields.get(pragmaHeaderString()));
+    return m_cacheControlHeaderCache;
 }
 
-bool ResourceRequest::cacheControlContainsNoStore()
+bool ResourceRequest::cacheControlContainsNoCache() const
 {
-    if (!m_cacheControlHeader.parsed)
-        m_cacheControlHeader = parseCacheControlDirectives(m_httpHeaderFields.get(cacheControlHeaderString()), m_httpHeaderFields.get(pragmaHeaderString()));
-    return m_cacheControlHeader.containsNoStore;
+    return cacheControlHeader().containsNoCache;
 }
 
-bool ResourceRequest::hasCacheValidatorFields()
+bool ResourceRequest::cacheControlContainsNoStore() const
+{
+    return cacheControlHeader().containsNoStore;
+}
+
+bool ResourceRequest::hasCacheValidatorFields() const
 {
     DEFINE_STATIC_LOCAL(const AtomicString, lastModifiedHeader, ("last-modified", AtomicString::ConstructFromLiteral));
     DEFINE_STATIC_LOCAL(const AtomicString, eTagHeader, ("etag", AtomicString::ConstructFromLiteral));
@@ -359,7 +389,6 @@ void ResourceRequest::initialize(const KURL& url, ResourceRequestCachePolicy cac
     m_httpMethod = "GET";
     m_allowStoredCredentials = true;
     m_reportUploadProgress = false;
-    m_reportLoadTiming = false;
     m_reportRawHeaders = false;
     m_hasUserGesture = false;
     m_downloadToFile = false;

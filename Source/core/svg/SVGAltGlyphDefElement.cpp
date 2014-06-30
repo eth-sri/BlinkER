@@ -22,18 +22,20 @@
 #if ENABLE(SVG_FONTS)
 #include "core/svg/SVGAltGlyphDefElement.h"
 
-#include "SVGNames.h"
+#include "core/SVGNames.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/svg/SVGAltGlyphItemElement.h"
 #include "core/svg/SVGGlyphRefElement.h"
 
 namespace WebCore {
 
-SVGAltGlyphDefElement::SVGAltGlyphDefElement(Document& document)
+inline SVGAltGlyphDefElement::SVGAltGlyphDefElement(Document& document)
     : SVGElement(SVGNames::altGlyphDefTag, document)
 {
     ScriptWrappable::init(this);
 }
+
+DEFINE_NODE_FACTORY(SVGAltGlyphDefElement)
 
 bool SVGAltGlyphDefElement::hasValidGlyphElements(Vector<AtomicString>& glyphNames) const
 {

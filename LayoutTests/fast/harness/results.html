@@ -425,7 +425,7 @@ function shouldUseTracLinks()
     return !globalState().results.layout_tests_dir || !location.toString().indexOf('file://') == 0;
 }
 
-function testLink(test)
+function testLinkTarget(test)
 {
     var target;
     if (shouldUseTracLinks()) {
@@ -436,6 +436,12 @@ function testLink(test)
         target += '#l1';
     } else
         target = globalState().results.layout_tests_dir + '/' + test;
+    return target;
+}
+
+function testLink(test)
+{
+    var target = testLinkTarget(test);
     return '<a class=test-link href="' + target + '">' + test + '</a><span class=flag onclick="unflag(this)"> \u2691</span>';
 }
 
@@ -522,7 +528,7 @@ function toggleImages()
     }
 }
 
-function textResultLinks(prefix)
+function textResultLinks(test, prefix)
 {
     var html = resultLink(prefix, '-expected.txt', 'expected') +
         resultLink(prefix, '-actual.txt', 'actual') +
@@ -585,7 +591,7 @@ function tableRow(testObject)
         if (testObject.is_testharness_test) {
             row += resultLink(testPrefix, '-actual.txt', 'actual');
         } else {
-            row += textResultLinks(testPrefix);
+            row += textResultLinks(testObject.name, testPrefix);
         }
     }
     
@@ -600,6 +606,16 @@ function tableRow(testObject)
         if (testObject.is_missing_text)
             row += resultLink(testPrefix, '-actual.txt', 'result');
     }
+
+    if (actual.indexOf('CRASH') != -1) {
+        row += resultLink(testPrefix, '-crash-log.txt', 'crash log');
+        row += resultLink(testPrefix, '-sample.txt', 'sample');
+        if (testObject.has_stderr)
+            row += resultLink(testPrefix, '-stderr.txt', 'stderr');
+    }
+
+    if (testObject.has_repaint_overlay)
+        row += resultLink(testPrefix, '-overlay.html?' + encodeURIComponent(testLinkTarget(testObject.name)), 'overlay');
 
     var actualTokens = actual.split(/\s+/);
     var cell = imageResultsCell(testObject, testPrefix, actualTokens[0]);
@@ -687,13 +703,18 @@ function testList(tests, header, tableId)
         else if (tableId == 'crash-tests-table') {
             html += resultLink(stripExtension(test), '-crash-log.txt', 'crash log');
             html += resultLink(stripExtension(test), '-sample.txt', 'sample');
+            if (testObject.has_stderr)
+                html += resultLink(stripExtension(test), '-stderr.txt', 'stderr');
         } else if (tableId == 'leak-tests-table')
             html += resultLink(stripExtension(test), '-leak-log.txt', 'leak log');
         else if (tableId == 'timeout-tests-table') {
             // FIXME: only include timeout actual/diff results here if we actually spit out results for timeout tests.
-            html += textResultLinks(stripExtension(test));
+            html += textResultLinks(test, stripExtension(test));
         }
         
+        if (testObject.has_repaint_overlay)
+            html += resultLink(stripExtension(test), '-overlay.html?' + encodeURIComponent(testLinkTarget(test)), 'overlay');
+
         html += '</td></tr></tbody>';
     }
     html += '</table></div>';

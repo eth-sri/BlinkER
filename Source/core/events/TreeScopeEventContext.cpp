@@ -34,15 +34,18 @@
 
 namespace WebCore {
 
-PassRefPtrWillBeRawPtr<NodeList> TreeScopeEventContext::ensureEventPath(EventPath& path)
+PassRefPtrWillBeRawPtr<StaticNodeList> TreeScopeEventContext::ensureEventPath(EventPath& path)
 {
     if (m_eventPath)
         return m_eventPath;
 
-    Vector<RefPtr<Node> > nodes;
+    WillBeHeapVector<RefPtrWillBeMember<Node> > nodes;
     nodes.reserveInitialCapacity(path.size());
     for (size_t i = 0; i < path.size(); ++i) {
-        if (path[i].treeScopeEventContext()->isInclusiveAncestorOf(*this))
+        TreeScope& treeScope = path[i].treeScopeEventContext().treeScope();
+        if (treeScope.rootNode().isShadowRoot() && toShadowRoot(treeScope).type() == ShadowRoot::AuthorShadowRoot)
+            nodes.append(path[i].node());
+        else if (path[i].treeScopeEventContext().isInclusiveAncestorOf(*this))
             nodes.append(path[i].node());
     }
     m_eventPath = StaticNodeList::adopt(nodes);
@@ -56,9 +59,9 @@ TouchEventContext* TreeScopeEventContext::ensureTouchEventContext()
     return m_touchEventContext.get();
 }
 
-PassRefPtr<TreeScopeEventContext> TreeScopeEventContext::create(TreeScope& treeScope)
+PassRefPtrWillBeRawPtr<TreeScopeEventContext> TreeScopeEventContext::create(TreeScope& treeScope)
 {
-    return adoptRef(new TreeScopeEventContext(treeScope));
+    return adoptRefWillBeNoop(new TreeScopeEventContext(treeScope));
 }
 
 TreeScopeEventContext::TreeScopeEventContext(TreeScope& treeScope)
@@ -68,8 +71,18 @@ TreeScopeEventContext::TreeScopeEventContext(TreeScope& treeScope)
 {
 }
 
-TreeScopeEventContext::~TreeScopeEventContext()
+DEFINE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(TreeScopeEventContext)
+
+void TreeScopeEventContext::trace(Visitor* visitor)
 {
+    visitor->trace(m_treeScope);
+    visitor->trace(m_target);
+    visitor->trace(m_relatedTarget);
+    visitor->trace(m_eventPath);
+    visitor->trace(m_touchEventContext);
+#if ENABLE(OILPAN)
+    visitor->trace(m_children);
+#endif
 }
 
 int TreeScopeEventContext::calculatePrePostOrderNumber(int orderNumber)

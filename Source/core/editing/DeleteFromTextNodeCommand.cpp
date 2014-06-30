@@ -28,7 +28,6 @@
 
 #include "bindings/v8/ExceptionState.h"
 #include "bindings/v8/ExceptionStatePlaceholder.h"
-#include "core/dom/Document.h"
 #include "core/dom/Text.h"
 
 namespace WebCore {
@@ -67,6 +66,12 @@ void DeleteFromTextNodeCommand::doUnapply()
         return;
 
     m_node->insertData(m_offset, m_text, IGNORE_EXCEPTION, CharacterData::DeprecatedRecalcStyleImmediatlelyForEditing);
+}
+
+void DeleteFromTextNodeCommand::trace(Visitor* visitor)
+{
+    visitor->trace(m_node);
+    SimpleEditCommand::trace(visitor);
 }
 
 } // namespace WebCore

@@ -21,14 +21,14 @@
 #ifndef SVGTextElement_h
 #define SVGTextElement_h
 
-#include "SVGNames.h"
+#include "core/SVGNames.h"
 #include "core/svg/SVGTextPositioningElement.h"
 
 namespace WebCore {
 
 class SVGTextElement FINAL : public SVGTextPositioningElement {
 public:
-    DEFINE_NODE_FACTORY(SVGTextElement);
+    DECLARE_NODE_FACTORY(SVGTextElement);
 
     virtual AffineTransform animatedLocalTransform() const OVERRIDE;
 

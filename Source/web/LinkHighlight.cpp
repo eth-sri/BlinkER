@@ -49,7 +49,6 @@
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebViewImpl.h"
 #include "wtf/CurrentTime.h"
-#include "wtf/Vector.h"
 
 using namespace WebCore;
 
@@ -75,7 +74,7 @@ LinkHighlight::LinkHighlight(Node* node, WebViewImpl* owningWebViewImpl)
     WebCompositorSupport* compositorSupport = Platform::current()->compositorSupport();
     m_contentLayer = adoptPtr(compositorSupport->createContentLayer(this));
     m_clipLayer = adoptPtr(compositorSupport->createLayer());
-    m_clipLayer->setAnchorPoint(WebFloatPoint());
+    m_clipLayer->setTransformOrigin(WebFloatPoint3D());
     m_clipLayer->addChild(m_contentLayer->layer());
     m_contentLayer->layer()->setAnimationDelegate(this);
     m_contentLayer->layer()->setDrawsContent(true);
@@ -115,7 +114,7 @@ RenderLayer* LinkHighlight::computeEnclosingCompositingLayer()
     RenderObject* renderer = m_node->renderer();
     RenderLayer* renderLayer;
     do {
-        renderLayer = renderer->enclosingLayer()->enclosingCompositingLayerForRepaint();
+        renderLayer = renderer->enclosingLayer()->enclosingCompositingLayerForPaintInvalidation();
         if (!renderLayer) {
             renderer = renderer->frame()->ownerRenderer();
             if (!renderer)

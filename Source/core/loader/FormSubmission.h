@@ -48,7 +48,7 @@ class FormData;
 struct FrameLoadRequest;
 class HTMLFormElement;
 
-class FormSubmission : public RefCounted<FormSubmission> {
+class FormSubmission : public RefCountedWillBeGarbageCollectedFinalized<FormSubmission> {
 public:
     enum Method { GetMethod, PostMethod, DialogMethod };
 
@@ -67,8 +67,8 @@ public:
         void updateMethodType(const String&);
         static String methodString(Method);
 
-        const String& action() const { return m_action; }
-        void parseAction(const String&);
+        const KURL& action() const { return m_action; }
+        void parseAction(const Document&, const String&);
 
         const AtomicString& target() const { return m_target; }
         void setTarget(const AtomicString& target) { m_target = target; }
@@ -87,13 +87,14 @@ public:
         Method m_method;
         bool m_isMultiPartForm;
 
-        String m_action;
+        KURL m_action;
         AtomicString m_target;
         AtomicString m_encodingType;
         String m_acceptCharset;
     };
 
-    static PassRefPtr<FormSubmission> create(HTMLFormElement*, const Attributes&, PassRefPtrWillBeRawPtr<Event>, FormSubmissionTrigger);
+    static PassRefPtrWillBeRawPtr<FormSubmission> create(HTMLFormElement*, const Attributes&, PassRefPtrWillBeRawPtr<Event>, FormSubmissionTrigger);
+    void trace(Visitor*);
 
     void populateFrameLoadRequest(FrameLoadRequest&);
 
@@ -122,10 +123,10 @@ private:
     KURL m_action;
     AtomicString m_target;
     AtomicString m_contentType;
-    RefPtrWillBePersistent<FormState> m_formState;
+    RefPtrWillBeMember<FormState> m_formState;
     RefPtr<FormData> m_formData;
     String m_boundary;
-    RefPtrWillBePersistent<Event> m_event;
+    RefPtrWillBeMember<Event> m_event;
     Referrer m_referrer;
     String m_origin;
     String m_result;

@@ -21,7 +21,7 @@
 #define SVGVKernElement_h
 
 #if ENABLE(SVG_FONTS)
-#include "SVGNames.h"
+#include "core/SVGNames.h"
 #include "core/svg/SVGElement.h"
 #include "core/svg/SVGFontElement.h"
 
@@ -29,7 +29,7 @@ namespace WebCore {
 
 class SVGVKernElement FINAL : public SVGElement {
 public:
-    DEFINE_NODE_FACTORY(SVGVKernElement);
+    DECLARE_NODE_FACTORY(SVGVKernElement);
 
     void buildVerticalKerningPair(KerningPairVector&);
 

@@ -30,7 +30,7 @@
 
 #include "core/accessibility/AXObjectCache.h"
 
-#include "HTMLNames.h"
+#include "core/HTMLNames.h"
 #include "core/accessibility/AXARIAGrid.h"
 #include "core/accessibility/AXARIAGridCell.h"
 #include "core/accessibility/AXARIAGridRow.h"
@@ -691,7 +691,7 @@ void AXObjectCache::childrenChanged(AXObject* obj)
 
 void AXObjectCache::notificationPostTimerFired(Timer<AXObjectCache>*)
 {
-    RefPtr<Document> protectorForCacheOwner(m_document);
+    RefPtrWillBeRawPtr<Document> protectorForCacheOwner(m_document);
 
     m_notificationPostTimer.stop();
 
@@ -775,7 +775,7 @@ void AXObjectCache::postNotification(AXObject* object, Document* document, AXNot
         object = object->observableObject();
 
     if (!object && document)
-        object = get(document->renderer());
+        object = get(document->renderView());
 
     if (!object)
         return;
@@ -966,7 +966,7 @@ void AXObjectCache::postPlatformNotification(AXObject* obj, AXNotification notif
         Document* document = toFrameView(scrollBar->parent())->frame().document();
         if (document != document->topDocument())
             return;
-        obj = get(document->renderer());
+        obj = get(document->renderView());
     }
 
     if (!obj || !obj->document() || !obj->documentFrameView() || !obj->documentFrameView()->frame().page())
@@ -1016,6 +1016,15 @@ void AXObjectCache::handleScrollPositionChanged(ScrollView* scrollView)
 void AXObjectCache::handleScrollPositionChanged(RenderObject* renderObject)
 {
     postPlatformNotification(getOrCreate(renderObject), AXScrollPositionChanged);
+}
+
+void AXObjectCache::setCanvasObjectBounds(Element* element, const LayoutRect& rect)
+{
+    AXObject* obj = getOrCreate(element);
+    if (!obj)
+        return;
+
+    obj->setElementRect(rect);
 }
 
 } // namespace WebCore

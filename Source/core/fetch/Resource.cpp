@@ -24,9 +24,9 @@
 #include "config.h"
 #include "core/fetch/Resource.h"
 
-#include "FetchInitiatorTypeNames.h"
 #include "core/eventracer/EventRacerContext.h"
 #include "core/eventracer/EventRacerLog.h"
+#include "core/FetchInitiatorTypeNames.h"
 #include "core/fetch/CachedMetadata.h"
 #include "core/fetch/CrossOriginAccessControl.h"
 #include "core/fetch/MemoryCache.h"
@@ -38,6 +38,7 @@
 #include "core/inspector/InspectorInstrumentation.h"
 #include "platform/Logging.h"
 #include "platform/SharedBuffer.h"
+#include "platform/TraceEvent.h"
 #include "platform/weborigin/KURL.h"
 #include "public/platform/Platform.h"
 #include "wtf/CurrentTime.h"
@@ -225,7 +226,7 @@ void Resource::checkNotify()
 
 void Resource::appendData(const char* data, int length)
 {
-    TRACE_EVENT0("webkit", "Resource::appendData");
+    TRACE_EVENT0("blink", "Resource::appendData");
     ASSERT(!m_resourceToRevalidate);
     ASSERT(!errorOccurred());
     if (m_options.dataBufferingPolicy == DoNotBufferData)
@@ -994,8 +995,6 @@ const char* Resource::resourceTypeToString(Type type, const FetchInitiatorInfo& 
         return "Link subresource";
     case Resource::TextTrack:
         return "Text track";
-    case Resource::Shader:
-        return "Shader";
     case Resource::ImportResource:
         return "Imported resource";
     case Resource::Media:
@@ -1031,8 +1030,6 @@ const char* ResourceTypeName(Resource::Type type)
         return "LinkSubresource";
     case Resource::TextTrack:
         return "TextTrack";
-    case Resource::Shader:
-        return "Shader";
     case Resource::ImportResource:
         return "ImportResource";
     case Resource::Media:

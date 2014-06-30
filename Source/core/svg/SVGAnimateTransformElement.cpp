@@ -24,17 +24,19 @@
 
 #include "core/svg/SVGAnimateTransformElement.h"
 
-#include "SVGNames.h"
+#include "core/SVGNames.h"
 #include "core/svg/SVGParserUtilities.h"
 
 namespace WebCore {
 
-SVGAnimateTransformElement::SVGAnimateTransformElement(Document& document)
+inline SVGAnimateTransformElement::SVGAnimateTransformElement(Document& document)
     : SVGAnimateElement(SVGNames::animateTransformTag, document)
     , m_type(SVG_TRANSFORM_UNKNOWN)
 {
     ScriptWrappable::init(this);
 }
+
+DEFINE_NODE_FACTORY(SVGAnimateTransformElement)
 
 bool SVGAnimateTransformElement::hasValidAttributeType()
 {
@@ -45,7 +47,7 @@ bool SVGAnimateTransformElement::hasValidAttributeType()
     if (attributeType() == AttributeTypeCSS)
         return false;
 
-    return m_animatedPropertyType == AnimatedTransformList;
+    return animatedPropertyType() == AnimatedTransformList;
 }
 
 bool SVGAnimateTransformElement::isSupportedAttribute(const QualifiedName& attrName)

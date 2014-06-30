@@ -25,8 +25,6 @@
 #include "core/html/HTMLMeterElement.h"
 #include "core/rendering/RenderTheme.h"
 
-using namespace std;
-
 namespace WebCore {
 
 using namespace HTMLNames;
@@ -79,7 +77,7 @@ double RenderMeter::valueRatio() const
 
 void RenderMeter::updateFromElement()
 {
-    repaint();
+    paintInvalidationForWholeRenderer();
 }
 
 } // namespace WebCore

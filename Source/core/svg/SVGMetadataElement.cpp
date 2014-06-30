@@ -19,15 +19,18 @@
  */
 
 #include "config.h"
-#include "SVGNames.h"
 #include "core/svg/SVGMetadataElement.h"
+
+#include "core/SVGNames.h"
 
 namespace WebCore {
 
-SVGMetadataElement::SVGMetadataElement(Document& document)
+inline SVGMetadataElement::SVGMetadataElement(Document& document)
     : SVGElement(SVGNames::metadataTag, document)
 {
     ScriptWrappable::init(this);
 }
+
+DEFINE_NODE_FACTORY(SVGMetadataElement)
 
 }

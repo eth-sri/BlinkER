@@ -31,24 +31,27 @@
 #include "config.h"
 #include "bindings/v8/V8GCController.h"
 
-#include <algorithm>
-#include "V8MutationObserver.h"
-#include "V8Node.h"
-#include "V8ScriptRunner.h"
+#include "bindings/core/v8/V8MutationObserver.h"
+#include "bindings/core/v8/V8Node.h"
 #include "bindings/v8/RetainedDOMInfo.h"
 #include "bindings/v8/V8AbstractEventListener.h"
 #include "bindings/v8/V8Binding.h"
+#include "bindings/v8/V8ScriptRunner.h"
 #include "bindings/v8/WrapperTypeInfo.h"
 #include "core/dom/Attr.h"
+#include "core/dom/Document.h"
 #include "core/dom/NodeTraversal.h"
 #include "core/dom/TemplateContentDocumentFragment.h"
 #include "core/dom/shadow/ElementShadow.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLTemplateElement.h"
+#include "core/html/imports/HTMLImportsController.h"
 #include "core/inspector/InspectorTraceEvents.h"
 #include "core/svg/SVGElement.h"
+#include "platform/Partitions.h"
 #include "platform/TraceEvent.h"
+#include <algorithm>
 
 namespace WebCore {
 
@@ -76,8 +79,12 @@ Node* V8GCController::opaqueRootForGC(Node* node, v8::Isolate*)
     // The same special handling is in V8GCController::gcTree().
     // Maybe should image elements be active DOM nodes?
     // See https://code.google.com/p/chromium/issues/detail?id=164882
-    if (node->inDocument() || (isHTMLImageElement(*node) && toHTMLImageElement(*node).hasPendingActivity()))
-        return &node->document();
+    if (node->inDocument() || (isHTMLImageElement(*node) && toHTMLImageElement(*node).hasPendingActivity())) {
+        Document& document = node->document();
+        if (HTMLImportsController* controller = document.importsController())
+            return controller->master();
+        return &document;
+    }
 
     if (node->isAttributeNode()) {
         Node* ownerElement = toAttr(node)->ownerElement();
@@ -192,6 +199,18 @@ private:
             if (isHTMLTemplateElement(*node)) {
                 if (!traverseTree(toHTMLTemplateElement(*node).content(), partiallyDependentNodes))
                     return false;
+            }
+
+            // Document maintains the list of imported documents through HTMLImportsController.
+            if (node->isDocumentNode()) {
+                Document* document = toDocument(node);
+                HTMLImportsController* controller = document->importsController();
+                if (controller && document == controller->master()) {
+                    for (unsigned i = 0; i < controller->loaderCount(); ++i) {
+                        if (!traverseTree(controller->loaderDocumentAt(i), partiallyDependentNodes))
+                            return false;
+                    }
+                }
             }
         }
         return true;
@@ -330,14 +349,14 @@ void V8GCController::minorGCPrologue(v8::Isolate* isolate)
     TRACE_EVENT_BEGIN0("v8", "minorGC");
     if (isMainThread()) {
         {
-            TRACE_EVENT_SCOPED_SAMPLING_STATE("Blink", "DOMMinorGC");
+            TRACE_EVENT_SCOPED_SAMPLING_STATE("blink", "DOMMinorGC");
             v8::HandleScope scope(isolate);
             MinorGCWrapperVisitor visitor(isolate);
             v8::V8::VisitHandlesForPartialDependence(isolate, &visitor);
             visitor.notifyFinished();
         }
         V8PerIsolateData::from(isolate)->setPreviousSamplingState(TRACE_EVENT_GET_SAMPLING_STATE());
-        TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8MinorGC");
+        TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8MinorGC");
     }
 }
 
@@ -348,13 +367,13 @@ void V8GCController::majorGCPrologue(bool constructRetainedObjectInfos, v8::Isol
     TRACE_EVENT_BEGIN0("v8", "majorGC");
     if (isMainThread()) {
         {
-            TRACE_EVENT_SCOPED_SAMPLING_STATE("Blink", "DOMMajorGC");
+            TRACE_EVENT_SCOPED_SAMPLING_STATE("blink", "DOMMajorGC");
             MajorGCWrapperVisitor visitor(isolate, constructRetainedObjectInfos);
             v8::V8::VisitHandlesWithClassIds(&visitor);
             visitor.notifyFinished();
         }
         V8PerIsolateData::from(isolate)->setPreviousSamplingState(TRACE_EVENT_GET_SAMPLING_STATE());
-        TRACE_EVENT_SET_SAMPLING_STATE("V8", "V8MajorGC");
+        TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8MajorGC");
     } else {
         MajorGCWrapperVisitor visitor(isolate, constructRetainedObjectInfos);
         v8::V8::VisitHandlesWithClassIds(&visitor);
@@ -392,7 +411,7 @@ void V8GCController::gcEpilogue(v8::GCType type, v8::GCCallbackFlags flags)
     }
 
     TRACE_EVENT_END1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "GCEvent", "usedHeapSizeAfter", usedHeapSize(isolate));
-    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "UpdateCounters", "", InspectorUpdateCountersEvent::data());
+    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "UpdateCounters", "data", InspectorUpdateCountersEvent::data());
 }
 
 void V8GCController::minorGCEpilogue(v8::Isolate* isolate)
@@ -413,8 +432,25 @@ void V8GCController::majorGCEpilogue(v8::Isolate* isolate)
 
 void V8GCController::collectGarbage(v8::Isolate* isolate)
 {
-    V8ExecutionScope scope(isolate);
+    v8::HandleScope handleScope(isolate);
+    RefPtr<ScriptState> scriptState = ScriptState::create(v8::Context::New(isolate), DOMWrapperWorld::create());
+    ScriptState::Scope scope(scriptState.get());
     V8ScriptRunner::compileAndRunInternalScript(v8String(isolate, "if (gc) gc();"), isolate);
+    scriptState->disposePerContextData();
+}
+
+void V8GCController::reportDOMMemoryUsageToV8(v8::Isolate* isolate)
+{
+    if (!isMainThread())
+        return;
+
+    static size_t lastUsageReportedToV8 = 0;
+
+    size_t currentUsage = Partitions::currentDOMMemoryUsage();
+    int64_t diff = static_cast<int64_t>(currentUsage) - static_cast<int64_t>(lastUsageReportedToV8);
+    isolate->AdjustAmountOfExternalAllocatedMemory(diff);
+
+    lastUsageReportedToV8 = currentUsage;
 }
 
 }  // namespace WebCore

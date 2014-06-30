@@ -225,10 +225,10 @@ WebInspector.IDBDataView.prototype = {
 
         this._keyInputElement = editorToolbar.createChild("input", "key-input");
         this._keyInputElement.placeholder = WebInspector.UIString("Start from key");
-        this._keyInputElement.addEventListener("paste", this._keyInputChanged.bind(this));
-        this._keyInputElement.addEventListener("cut", this._keyInputChanged.bind(this));
-        this._keyInputElement.addEventListener("keypress", this._keyInputChanged.bind(this));
-        this._keyInputElement.addEventListener("keydown", this._keyInputChanged.bind(this));
+        this._keyInputElement.addEventListener("paste", this._keyInputChanged.bind(this), false);
+        this._keyInputElement.addEventListener("cut", this._keyInputChanged.bind(this), false);
+        this._keyInputElement.addEventListener("keypress", this._keyInputChanged.bind(this), false);
+        this._keyInputElement.addEventListener("keydown", this._keyInputChanged.bind(this), false);
 
         return editorToolbar;
     },
@@ -363,11 +363,6 @@ WebInspector.IDBDataView.prototype = {
     clear: function()
     {
         this._dataGrid.rootNode().removeChildren();
-        for (var i = 0; i < this._entries.length; ++i) {
-            this._entries[i].key.release();
-            this._entries[i].primaryKey.release();
-            this._entries[i].value.release();
-        }
         this._entries = [];
     },
 

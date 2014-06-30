@@ -42,6 +42,7 @@ class WebLayer;
 struct WebPoint;
 struct WebRect;
 struct WebRenderingStats;
+struct WebSelectionBound;
 
 class WebLayerTreeView {
 public:
@@ -61,12 +62,8 @@ public:
 
     // View properties ---------------------------------------------------
 
-    virtual void setViewportSize(const WebSize& layoutViewportSize, const WebSize& deviceViewportSize) = 0;
-    // Gives the viewport size in layer space.
-    virtual WebSize layoutViewportSize() const = 0;
-    // Gives the viewport size in physical device pixels (may be different
-    // from the above if there exists page scale, device scale or fixed layout
-    // mode).
+    virtual void setViewportSize(const WebSize& deviceViewportSize) = 0;
+    // Gives the viewport size in physical device pixels.
     virtual WebSize deviceViewportSize() const = 0;
 
     virtual void setDeviceScaleFactor(float) = 0;
@@ -128,6 +125,13 @@ public:
         const WebLayer* innerViewportScrollLayer,
         const WebLayer* outerViewportScrollLayer) { }
     virtual void clearViewportLayers() { }
+
+    // Used to update the active selection bounds.
+    // If the (empty) selection is an insertion point, |anchor| and |focus| will be identical with type |Caret|.
+    // If the (non-empty) selection has mixed RTL/LTR text, |anchor| and |focus| may share the same type,
+    // |SelectionLeft| or |SelectionRight|.
+    virtual void registerSelection(const WebSelectionBound& anchor, const WebSelectionBound& focus) { }
+    virtual void clearSelection() { }
 
     // Debugging / dangerous ---------------------------------------------
 

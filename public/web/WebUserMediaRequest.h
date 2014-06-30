@@ -82,7 +82,6 @@ public:
     BLINK_EXPORT void requestFailed(const WebString& description = WebString()) { requestDenied(description); }
 
 #if BLINK_IMPLEMENTATION
-    WebUserMediaRequest(const PassRefPtr<WebCore::UserMediaRequest>&);
     WebUserMediaRequest(WebCore::UserMediaRequest*);
     operator WebCore::UserMediaRequest*() const;
 #endif

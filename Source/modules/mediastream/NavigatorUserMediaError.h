@@ -26,29 +26,28 @@
 #define NavigatorUserMediaError_h
 
 #include "bindings/v8/ScriptWrappable.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
 #include "wtf/text/WTFString.h"
 
 namespace WebCore {
 
-class NavigatorUserMediaError FINAL : public RefCounted<NavigatorUserMediaError>, public ScriptWrappable {
+class NavigatorUserMediaError FINAL : public GarbageCollectedFinalized<NavigatorUserMediaError>, public ScriptWrappable {
 public:
     enum Name {
         NamePermissionDenied,
         NameConstraintNotSatisfied
     };
 
-    static PassRefPtr<NavigatorUserMediaError> create(Name, const String& message, const String& constraintName);
-
-    static PassRefPtr<NavigatorUserMediaError> create(const String& name, const String& message, const String& constraintName)
+    static NavigatorUserMediaError* create(Name, const String& message, const String& constraintName);
+    static NavigatorUserMediaError* create(const String& name, const String& message, const String& constraintName)
     {
-        return adoptRef(new NavigatorUserMediaError(name, message, constraintName));
+        return new NavigatorUserMediaError(name, message, constraintName);
     }
 
     String name() const { return m_name; }
     const String& message() const { return m_message; }
     const String& constraintName() const { return m_constraintName; }
+
+    void trace(Visitor*) { }
 
 private:
     NavigatorUserMediaError(const String& name, const String& message, const String& constraintName)

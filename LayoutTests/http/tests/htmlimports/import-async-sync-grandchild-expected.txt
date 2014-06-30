@@ -1,3 +1,0 @@
-
-PASS Even with the async attribute, its subimports are loaded in order. 
-

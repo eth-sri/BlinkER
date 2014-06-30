@@ -24,7 +24,7 @@
 #include "config.h"
 #include "core/events/WheelEvent.h"
 
-#include "core/clipboard/Clipboard.h"
+#include "core/clipboard/DataTransfer.h"
 #include "platform/PlatformWheelEvent.h"
 
 namespace WebCore {
@@ -135,9 +135,9 @@ inline static unsigned deltaMode(const PlatformWheelEvent& event)
     return event.granularity() == ScrollByPageWheelEvent ? WheelEvent::DOM_DELTA_PAGE : WheelEvent::DOM_DELTA_PIXEL;
 }
 
-PassRefPtr<WheelEventDispatchMediator> WheelEventDispatchMediator::create(const PlatformWheelEvent& event, PassRefPtrWillBeRawPtr<AbstractView> view)
+PassRefPtrWillBeRawPtr<WheelEventDispatchMediator> WheelEventDispatchMediator::create(const PlatformWheelEvent& event, PassRefPtrWillBeRawPtr<AbstractView> view)
 {
-    return adoptRef(new WheelEventDispatchMediator(event, view));
+    return adoptRefWillBeNoop(new WheelEventDispatchMediator(event, view));
 }
 
 WheelEventDispatchMediator::WheelEventDispatchMediator(const PlatformWheelEvent& event, PassRefPtrWillBeRawPtr<AbstractView> view)

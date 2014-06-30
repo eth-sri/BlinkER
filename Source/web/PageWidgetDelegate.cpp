@@ -35,6 +35,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/page/AutoscrollController.h"
 #include "core/page/EventHandler.h"
+#include "core/page/Page.h"
 #include "core/rendering/RenderView.h"
 #include "core/rendering/compositing/RenderLayerCompositor.h"
 #include "platform/graphics/GraphicsContext.h"
@@ -54,7 +55,9 @@ static inline FrameView* mainFrameView(Page* page)
     // FIXME: Can we remove this check?
     if (!page->mainFrame())
         return 0;
-    return page->mainFrame()->view();
+    if (!page->mainFrame()->isLocalFrame())
+        return 0;
+    return page->deprecatedLocalMainFrame()->view();
 }
 
 void PageWidgetDelegate::animate(Page* page, double monotonicFrameBeginTime)
@@ -85,7 +88,7 @@ void PageWidgetDelegate::paint(Page* page, PageOverlayList* overlays, WebCanvas*
     gc.save(); // Needed to save the canvas, not the GraphicsContext.
     FrameView* view = mainFrameView(page);
     // FIXME: Can we remove the mainFrame()->document() check?
-    if (view && page->mainFrame()->document()) {
+    if (view && page->deprecatedLocalMainFrame()->document()) {
         gc.clip(dirtyRect);
         view->paint(&gc, dirtyRect);
         if (overlays)
@@ -98,7 +101,7 @@ void PageWidgetDelegate::paint(Page* page, PageOverlayList* overlays, WebCanvas*
 
 bool PageWidgetDelegate::handleInputEvent(Page* page, PageWidgetEventHandler& handler, const WebInputEvent& event)
 {
-    LocalFrame* frame = page ? page->mainFrame() : 0;
+    LocalFrame* frame = page && page->mainFrame()->isLocalFrame() ? page->deprecatedLocalMainFrame() : 0;
     switch (event.type) {
 
     // FIXME: WebKit seems to always return false on mouse events processing

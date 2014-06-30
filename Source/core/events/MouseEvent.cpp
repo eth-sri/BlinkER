@@ -23,7 +23,7 @@
 #include "config.h"
 #include "core/events/MouseEvent.h"
 
-#include "core/clipboard/Clipboard.h"
+#include "core/clipboard/DataTransfer.h"
 #include "core/dom/Element.h"
 #include "core/events/EventDispatcher.h"
 #include "platform/PlatformMouseEvent.h"
@@ -49,7 +49,7 @@ PassRefPtrWillBeRawPtr<MouseEvent> MouseEvent::create(const AtomicString& type, 
     return adoptRefWillBeNoop(new MouseEvent(type, initializer));
 }
 
-PassRefPtrWillBeRawPtr<MouseEvent> MouseEvent::create(const AtomicString& eventType, PassRefPtrWillBeRawPtr<AbstractView> view, const PlatformMouseEvent& event, int detail, PassRefPtr<Node> relatedTarget)
+PassRefPtrWillBeRawPtr<MouseEvent> MouseEvent::create(const AtomicString& eventType, PassRefPtrWillBeRawPtr<AbstractView> view, const PlatformMouseEvent& event, int detail, PassRefPtrWillBeRawPtr<Node> relatedTarget)
 {
     ASSERT(event.type() == PlatformEvent::MouseMoved || event.button() != NoButton);
 
@@ -69,12 +69,12 @@ PassRefPtrWillBeRawPtr<MouseEvent> MouseEvent::create(const AtomicString& type, 
     int detail, int screenX, int screenY, int pageX, int pageY,
     int movementX, int movementY,
     bool ctrlKey, bool altKey, bool shiftKey, bool metaKey, unsigned short button,
-    PassRefPtr<EventTarget> relatedTarget, PassRefPtrWillBeRawPtr<Clipboard> clipboard, bool isSimulated)
+    PassRefPtrWillBeRawPtr<EventTarget> relatedTarget, PassRefPtrWillBeRawPtr<DataTransfer> dataTransfer, bool isSimulated)
 {
     return adoptRefWillBeNoop(new MouseEvent(type, canBubble, cancelable, view,
         detail, screenX, screenY, pageX, pageY,
         movementX, movementY,
-        ctrlKey, altKey, shiftKey, metaKey, button, relatedTarget, clipboard, isSimulated));
+        ctrlKey, altKey, shiftKey, metaKey, button, relatedTarget, dataTransfer, isSimulated));
 }
 
 MouseEvent::MouseEvent()
@@ -88,8 +88,8 @@ MouseEvent::MouseEvent(const AtomicString& eventType, bool canBubble, bool cance
     int detail, int screenX, int screenY, int pageX, int pageY,
     int movementX, int movementY,
     bool ctrlKey, bool altKey, bool shiftKey, bool metaKey,
-    unsigned short button, PassRefPtr<EventTarget> relatedTarget,
-    PassRefPtrWillBeRawPtr<Clipboard> clipboard, bool isSimulated)
+    unsigned short button, PassRefPtrWillBeRawPtr<EventTarget> relatedTarget,
+    PassRefPtrWillBeRawPtr<DataTransfer> dataTransfer, bool isSimulated)
     : MouseRelatedEvent(eventType, canBubble, cancelable, view, detail, IntPoint(screenX, screenY),
                         IntPoint(pageX, pageY),
                         IntPoint(movementX, movementY),
@@ -97,7 +97,7 @@ MouseEvent::MouseEvent(const AtomicString& eventType, bool canBubble, bool cance
     , m_button(button == (unsigned short)-1 ? 0 : button)
     , m_buttonDown(button != (unsigned short)-1)
     , m_relatedTarget(relatedTarget)
-    , m_clipboard(clipboard)
+    , m_dataTransfer(dataTransfer)
 {
     ScriptWrappable::init(this);
 }
@@ -110,7 +110,7 @@ MouseEvent::MouseEvent(const AtomicString& eventType, const MouseEventInit& init
     , m_button(initializer.button == (unsigned short)-1 ? 0 : initializer.button)
     , m_buttonDown(initializer.button != (unsigned short)-1)
     , m_relatedTarget(initializer.relatedTarget)
-    , m_clipboard(nullptr /* clipboard */)
+    , m_dataTransfer(nullptr)
 {
     ScriptWrappable::init(this);
     initCoordinates(IntPoint(initializer.clientX, initializer.clientY));
@@ -123,7 +123,7 @@ MouseEvent::~MouseEvent()
 void MouseEvent::initMouseEvent(const AtomicString& type, bool canBubble, bool cancelable, PassRefPtrWillBeRawPtr<AbstractView> view,
                                 int detail, int screenX, int screenY, int clientX, int clientY,
                                 bool ctrlKey, bool altKey, bool shiftKey, bool metaKey,
-                                unsigned short button, PassRefPtr<EventTarget> relatedTarget)
+                                unsigned short button, PassRefPtrWillBeRawPtr<EventTarget> relatedTarget)
 {
     if (dispatched())
         return;
@@ -142,7 +142,7 @@ void MouseEvent::initMouseEvent(const AtomicString& type, bool canBubble, bool c
     initCoordinates(IntPoint(clientX, clientY));
 
     // FIXME: m_isSimulated is not set to false here.
-    // FIXME: m_clipboard is not set to 0 here.
+    // FIXME: m_dataTransfer is not set to nullptr here.
 }
 
 const AtomicString& MouseEvent::interfaceName() const
@@ -192,7 +192,8 @@ Node* MouseEvent::fromElement() const
 
 void MouseEvent::trace(Visitor* visitor)
 {
-    visitor->trace(m_clipboard);
+    visitor->trace(m_relatedTarget);
+    visitor->trace(m_dataTransfer);
     MouseRelatedEvent::trace(visitor);
 }
 
@@ -230,9 +231,9 @@ void SimulatedMouseEvent::trace(Visitor* visitor)
     MouseEvent::trace(visitor);
 }
 
-PassRefPtr<MouseEventDispatchMediator> MouseEventDispatchMediator::create(PassRefPtrWillBeRawPtr<MouseEvent> mouseEvent, MouseEventType mouseEventType)
+PassRefPtrWillBeRawPtr<MouseEventDispatchMediator> MouseEventDispatchMediator::create(PassRefPtrWillBeRawPtr<MouseEvent> mouseEvent, MouseEventType mouseEventType)
 {
-    return adoptRef(new MouseEventDispatchMediator(mouseEvent, mouseEventType));
+    return adoptRefWillBeNoop(new MouseEventDispatchMediator(mouseEvent, mouseEventType));
 }
 
 MouseEventDispatchMediator::MouseEventDispatchMediator(PassRefPtrWillBeRawPtr<MouseEvent> mouseEvent, MouseEventType mouseEventType)

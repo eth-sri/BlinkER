@@ -66,7 +66,8 @@ function onload()
         regex1, regex2, str, str2, error, errorWithMessage, node, func, multilinefunc, num, linkify,
         null, undefined, valuelessAttribute, valuedAttribute, existingAttribute, throwingLengthGetter,
         NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, array, {}, [function() {}], bar, svg,
-        objectWithNonEnumerables, negZero, Object.create(null), Object, Object.prototype, arrayLikeFunction
+        objectWithNonEnumerables, negZero, Object.create(null), Object, Object.prototype, arrayLikeFunction,
+        new Number(42), new String("abc")
     ];
 
     runTest();
@@ -74,6 +75,7 @@ function onload()
 
 function test()
 {
+    InspectorTest.hideInspectorView();
     InspectorTest.evaluateInPage("globals.length", loopOverGlobals.bind(this, 0));
 
     function loopOverGlobals(current, total)
@@ -81,12 +83,15 @@ function test()
         function advance()
         {
             var next = current + 1;
-            if (next == total.description) {
-                InspectorTest.expandConsoleMessages();
-                InspectorTest.runAfterPendingDispatches(finish);
-            } else {
+            if (next == total.description)
+                InspectorTest.waitForRemoteObjectsConsoleMessages(onRemoteObjectsLoaded);
+            else
                 loopOverGlobals(next, total);
-            }
+        }
+
+        function onRemoteObjectsLoaded()
+        {
+            InspectorTest.expandConsoleMessages(finish);
         }
 
         function finish()

@@ -1,165 +1,145 @@
-/*
- * Copyright (C) 2013 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// Copyright 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 #ifndef ScriptPromiseResolver_h
 #define ScriptPromiseResolver_h
 
+#include "bindings/v8/ScopedPersistent.h"
 #include "bindings/v8/ScriptPromise.h"
 #include "bindings/v8/ScriptState.h"
-#include "bindings/v8/ScriptValue.h"
 #include "bindings/v8/V8Binding.h"
-#include "wtf/RefPtr.h"
-
+#include "core/dom/ActiveDOMObject.h"
+#include "core/dom/ExecutionContext.h"
+#include "platform/Timer.h"
+#include "wtf/RefCounted.h"
+#include "wtf/Vector.h"
 #include <v8.h>
 
 namespace WebCore {
 
-class ExecutionContext;
-
-// ScriptPromiseResolver is a class for performing operations on Promise
-// (resolve / reject) from C++ world.
-// ScriptPromiseResolver holds a PromiseResolver.
-// Here is a typical usage:
-//  1. Create a ScriptPromiseResolver.
-//  2. Pass the associated promise object to a JavaScript program
-//     (such as XMLHttpRequest return value).
-//  3. Call resolve or reject when the operation completes or
-//     the operation fails respectively.
-//
-// Most methods including constructors must be called within a v8 context.
-// To use ScriptPromiseResolver out of a v8 context the caller must
-// enter a v8 context. Please use ScriptPromiseResolverWithContext
-// in such cases.
-//
-// To prevent memory leaks, you should release the reference manually
-// by calling resolve or reject.
-// Destroying the object will also release the reference.
-// Note that ScriptPromiseResolver::promise returns an empty value when the
-// resolver is already resolved or rejected. If you want to resolve a resolver
-// immediately and return the associated promise, you should get the promise
-// before resolving.
-class ScriptPromiseResolver : public RefCounted<ScriptPromiseResolver> {
+// This class wraps v8::Promise::Resolver and provides the following
+// functionalities.
+//  - A ScriptPromiseResolver retains a ScriptState. A caller
+//    can call resolve or reject from outside of a V8 context.
+//  - This class is an ActiveDOMObject and keeps track of the associated
+//    ExecutionContext state. When the ExecutionContext is suspended,
+//    resolve or reject will be delayed. When it is stopped, resolve or reject
+//    will be ignored.
+class ScriptPromiseResolver : public ActiveDOMObject, public RefCounted<ScriptPromiseResolver> {
     WTF_MAKE_NONCOPYABLE(ScriptPromiseResolver);
+
 public:
-    static PassRefPtr<ScriptPromiseResolver> create(ScriptState*);
-
-    // A ScriptPromiseResolver should be resolved / rejected before
-    // its destruction.
-    // A ScriptPromiseResolver can be destructed safely without
-    // entering a v8 context.
-    ~ScriptPromiseResolver();
-
-    // Returns the underlying Promise.
-    // Note that the underlying Promise is cleared when |resolve| or |reject|
-    // is called.
-    ScriptPromise promise();
-
-    template<typename T>
-    void resolve(const T& value, ExecutionContext* executionContext)
+    static PassRefPtr<ScriptPromiseResolver> create(ScriptState* scriptState)
     {
-        ASSERT(m_scriptState->isolate()->InContext());
-        // You should use ScriptPromiseResolverWithContext when you want
-        // to resolve a Promise in a non-original V8 context.
-        return resolve(value);
-    }
-    template<typename T>
-    void reject(const T& value, ExecutionContext* executionContext)
-    {
-        ASSERT(m_scriptState->isolate()->InContext());
-        // You should use ScriptPromiseResolverWithContext when you want
-        // to reject a Promise in a non-original V8 context.
-        return reject(value);
-    }
-    template<typename T>
-    void resolve(const T& value)
-    {
-        ASSERT(m_scriptState->isolate()->InContext());
-        resolve(toV8Value(value));
-    }
-    template<typename T>
-    void reject(const T& value)
-    {
-        ASSERT(m_scriptState->isolate()->InContext());
-        reject(toV8Value(value));
-    }
-    template<typename T> void resolve(const T& value, v8::Handle<v8::Object> creationContext)
-    {
-        ASSERT(m_scriptState->isolate()->InContext());
-        resolve(toV8Value(value, creationContext));
-    }
-    template<typename T> void reject(const T& value, v8::Handle<v8::Object> creationContext)
-    {
-        ASSERT(m_scriptState->isolate()->InContext());
-        reject(toV8Value(value, creationContext));
+        RefPtr<ScriptPromiseResolver> resolver = adoptRef(new ScriptPromiseResolver(scriptState));
+        resolver->suspendIfNeeded();
+        return resolver.release();
     }
 
-    v8::Isolate* isolate() const { return m_scriptState->isolate(); }
-
-    void resolve(v8::Handle<v8::Value>);
-    void reject(v8::Handle<v8::Value>);
-
-    // Used by ToV8Value<ScriptPromiseResolver, v8::Handle<v8::Object> >.
-    static v8::Handle<v8::Object> getCreationContext(v8::Handle<v8::Object> creationContext)
+    virtual ~ScriptPromiseResolver()
     {
-        return creationContext;
+        // This assertion fails if:
+        //  - promise() is called at least once and
+        //  - this resolver is destructed before it is resolved, rejected or
+        //    the associated ExecutionContext is stopped.
+        ASSERT(m_state == ResolvedOrRejected || !m_isPromiseCalled);
     }
-    // Used by ToV8Value<ScriptPromiseResolver, ScriptState*>.
-    static v8::Handle<v8::Object> getCreationContext(ScriptState* scriptState)
+
+    // Anything that can be passed to toV8Value can be passed to this function.
+    template <typename T>
+    void resolve(T value)
     {
-        return scriptState->context()->Global();
+        resolveOrReject(value, Resolving);
     }
+
+    // Anything that can be passed to toV8Value can be passed to this function.
+    template <typename T>
+    void reject(T value)
+    {
+        resolveOrReject(value, Rejecting);
+    }
+
+    ScriptState* scriptState() { return m_scriptState.get(); }
+
+    // Note that an empty ScriptPromise will be returned after resolve or
+    // reject is called.
+    ScriptPromise promise()
+    {
+#if ASSERT_ENABLED
+        m_isPromiseCalled = true;
+#endif
+        return m_resolver.promise();
+    }
+
+    ScriptState* scriptState() const { return m_scriptState.get(); }
+
+    // ActiveDOMObject implementation.
+    virtual void suspend() OVERRIDE;
+    virtual void resume() OVERRIDE;
+    virtual void stop() OVERRIDE;
+
+    // Once this function is called this resolver stays alive while the
+    // promise is pending and the associated ExecutionContext isn't stopped.
+    void keepAliveWhilePending();
+
+protected:
+    // You need to call suspendIfNeeded after the construction because
+    // this is an ActiveDOMObject.
+    explicit ScriptPromiseResolver(ScriptState*);
 
 private:
-    template<typename T>
-    v8::Handle<v8::Value> toV8Value(const T& value, v8::Handle<v8::Object> creationContext)
-    {
-        return ToV8Value<ScriptPromiseResolver, v8::Handle<v8::Object> >::toV8Value(value, creationContext, m_scriptState->isolate());
-    }
+    typedef ScriptPromise::InternalResolver Resolver;
+    enum ResolutionState {
+        Pending,
+        Resolving,
+        Rejecting,
+        ResolvedOrRejected,
+    };
+    enum LifetimeMode {
+        Default,
+        KeepAliveWhilePending,
+    };
 
     template<typename T>
     v8::Handle<v8::Value> toV8Value(const T& value)
     {
-        return ToV8Value<ScriptPromiseResolver, ScriptState*>::toV8Value(value, m_scriptState.get(), m_scriptState->isolate());
+        return V8ValueTraits<T>::toV8Value(value, m_scriptState->context()->Global(), m_scriptState->isolate());
     }
 
-    explicit ScriptPromiseResolver(ScriptState*);
+    template <typename T>
+    void resolveOrReject(T value, ResolutionState newState)
+    {
+        if (m_state != Pending || !executionContext() || executionContext()->activeDOMObjectsAreStopped())
+            return;
+        ASSERT(newState == Resolving || newState == Rejecting);
+        m_state = newState;
+        // Retain this object until it is actually resolved or rejected.
+        // |deref| will be called in |clear|.
+        ref();
 
-    // FIXME: Remove this once ScriptValue::scriptState() becomes available.
-    RefPtr<ScriptState> m_scriptState;
-    // Used when scriptPromiseOnV8Promise is disabled.
-    ScriptPromise m_promise;
-    // Used when scriptPromiseOnV8Promise is enabled.
-    ScriptValue m_resolver;
+        ScriptState::Scope scope(m_scriptState.get());
+        m_value.set(m_scriptState->isolate(), toV8Value(value));
+        if (!executionContext()->activeDOMObjectsAreSuspended())
+            resolveOrRejectImmediately();
+    }
+
+    void resolveOrRejectImmediately();
+    void onTimerFired(Timer<ScriptPromiseResolver>*);
+    void clear();
+
+    ResolutionState m_state;
+    const RefPtr<ScriptState> m_scriptState;
+    LifetimeMode m_mode;
+    Timer<ScriptPromiseResolver> m_timer;
+    Resolver m_resolver;
+    ScopedPersistent<v8::Value> m_value;
+#if ASSERT_ENABLED
+    // True if promise() is called.
+    bool m_isPromiseCalled;
+#endif
 };
 
 } // namespace WebCore
 
-
-#endif // ScriptPromiseResolver_h
+#endif // #ifndef ScriptPromiseResolver_h

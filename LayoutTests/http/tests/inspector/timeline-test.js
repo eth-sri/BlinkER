@@ -13,7 +13,6 @@ InspectorTest.timelinePropertyFormatters = {
     usedHeapSizeDelta: "skip",
     mimeType: "formatAsTypeName",
     id: "formatAsTypeName",
-    counters: "formatAsTypeName",
     timerId: "formatAsTypeName",
     scriptLine: "formatAsTypeName",
     layerId: "formatAsTypeName",
@@ -204,10 +203,26 @@ InspectorTest.dumpTimelineRecord = function(record, detailsCallback, level, filt
     }
 }
 
+InspectorTest.dumpTimelineModelRecord = function(record, level)
+{
+    if (typeof level !== "number")
+        level = 0;
+    var prefix = "";
+    for (var i = 0; i < level ; ++i)
+        prefix = "----" + prefix;
+    if (level > 0)
+        prefix = prefix + "> ";
+    InspectorTest.addResult(prefix + record.type());
+
+    var numChildren = record.children() ? record.children().length : 0;
+    for (var i = 0; i < numChildren; ++i)
+        InspectorTest.dumpTimelineModelRecord(record.children()[i], level + 1);
+}
+
 // Dump just the record name, indenting output on separate lines for subrecords
 InspectorTest.dumpPresentationRecord = function(presentationRecord, detailsCallback, level, filterTypes)
 {
-    var record = presentationRecord.record();
+    var record = !presentationRecord.presentationParent() ? null : presentationRecord.record();
     if (typeof level !== "number")
         level = 0;
     var prefix = "";
@@ -218,13 +233,14 @@ InspectorTest.dumpPresentationRecord = function(presentationRecord, detailsCallb
         prefix = prefix + "> ";
     if (presentationRecord.coalesced()) {
         suffix = " x " + presentationRecord.presentationChildren().length;
-    } else if (record.type() === WebInspector.TimelineModel.RecordType.TimeStamp
-        || record.type() === WebInspector.TimelineModel.RecordType.ConsoleTime) {
+    } else if (record && (record.type() === WebInspector.TimelineModel.RecordType.TimeStamp
+        || record.type() === WebInspector.TimelineModel.RecordType.ConsoleTime)) {
         suffix = " : " + record.data().message;
     }
     if (detailsCallback)
-        suffix += " " + detailsCallback(record);
-    InspectorTest.addResult(prefix + InspectorTest._timelineAgentTypeToString(record.type()) + suffix);
+        suffix += " " + detailsCallback(presentationRecord);
+    var typeString = record ? InspectorTest._timelineAgentTypeToString(record.type()) : "Root";
+    InspectorTest.addResult(prefix + typeString + suffix);
 
     var numChildren = presentationRecord.presentationChildren() ? presentationRecord.presentationChildren().length : 0;
     for (var i = 0; i < numChildren; ++i) {
@@ -281,6 +297,27 @@ InspectorTest.FakeFileReader = function(input, delegate, callback)
     this._loadedSize = 0;
     this._fileSize = input.length;
 };
+
+InspectorTest.dumpFrame = function(frame)
+{
+    var fieldsToDump = ["cpuTime", "duration", "startTime", "endTime", "id", "mainThreadFrameId", "timeByCategory", "other", "scripting", "painting", "rendering", "committedFrom"];
+    function formatFields(object)
+    {
+        var result = {};
+        for (var key in object) {
+            if (fieldsToDump.indexOf(key) < 0)
+                continue;
+            var value = object[key];
+            if (typeof value === "number")
+                value = Number(value.toFixed(7));
+            else if (typeof value === "object" && value)
+                value = formatFields(value);
+            result[key] = value;
+        }
+        return result;
+    }
+    InspectorTest.addObject(formatFields(frame));
+}
 
 InspectorTest.FakeFileReader.prototype = {
     start: function(output)

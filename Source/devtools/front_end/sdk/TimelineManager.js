@@ -39,7 +39,7 @@ WebInspector.TimelineManager = function(target)
     this._dispatcher = new WebInspector.TimelineDispatcher(this);
     this._enablementCount = 0;
     this._jsProfilerStarted = false;
-    TimelineAgent.enable();
+    target.timelineAgent().enable();
 }
 
 WebInspector.TimelineManager.EventTypes = {
@@ -151,11 +151,15 @@ WebInspector.TimelineManager.prototype = {
     _configureCpuProfilerSamplingInterval: function()
     {
         var intervalUs = WebInspector.settings.highResolutionCpuProfiling.get() ? 100 : 1000;
-        ProfilerAgent.setSamplingInterval(intervalUs, didChangeInterval);
+        ProfilerAgent.setSamplingInterval(intervalUs, didChangeInterval.bind(this));
+
+        /**
+         * @this {WebInspector.TimelineManager}
+         */
         function didChangeInterval(error)
         {
             if (error)
-                WebInspector.console.showErrorMessage(error);
+                this.target().consoleModel.showErrorMessage(error);
         }
     },
 
@@ -169,7 +173,7 @@ WebInspector.TimelineManager.prototype = {
 WebInspector.TimelineDispatcher = function(manager)
 {
     this._manager = manager;
-    InspectorBackend.registerTimelineDispatcher(this);
+    this._manager.target().registerTimelineDispatcher(this);
 }
 
 WebInspector.TimelineDispatcher.prototype = {

@@ -5,6 +5,7 @@
 #include "config.h"
 #include "core/css/parser/SizesCalcParser.h"
 
+#include "core/MediaTypeNames.h"
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/css/MediaValuesCached.h"
 #include "core/css/StylePropertySet.h"
@@ -32,7 +33,7 @@ static void verifyCSSCalc(String text, double value, bool valid, unsigned fontSi
 {
     CSSLengthArray lengthArray;
     initLengthArray(lengthArray);
-    RefPtr<MutableStylePropertySet> propertySet = MutableStylePropertySet::create();
+    RefPtrWillBeRawPtr<MutableStylePropertySet> propertySet = MutableStylePropertySet::create();
     propertySet->setProperty(CSSPropertyLeft, text);
     RefPtrWillBeRawPtr<CSSValue> cssValue = propertySet->getPropertyCSSValue(CSSPropertyLeft);
     CSSPrimitiveValue* primitiveValue = toCSSPrimitiveValue(cssValue.get());
@@ -110,9 +111,7 @@ TEST(SizesCalcParserTest, Basic)
     data.pointer = MediaValues::MousePointer;
     data.defaultFontSize = 16;
     data.threeDEnabled = true;
-    data.scanMediaType = false;
-    data.screenMediaType = true;
-    data.printMediaType = false;
+    data.mediaType = MediaTypeNames::screen;
     data.strictMode = true;
     RefPtr<MediaValues> mediaValues = MediaValuesCached::create(data);
 

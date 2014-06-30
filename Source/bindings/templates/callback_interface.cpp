@@ -25,7 +25,7 @@ namespace WebCore {
 {
 }
 
-{% for method in methods if not method.custom %}
+{% for method in methods if not method.is_custom %}
 {{method.cpp_type}} {{v8_class}}::{{method.name}}({{method.argument_declarations | join(', ')}})
 {
     {% set return_default = 'return true'
@@ -45,7 +45,6 @@ namespace WebCore {
             CRASH();
         {{return_default}};
     }
-    ASSERT(thisHandle->IsObject());
     {% endif %}
     {% for argument in method.arguments %}
     v8::Handle<v8::Value> {{argument.handle}} = {{argument.cpp_value_to_v8_value}};
@@ -58,14 +57,18 @@ namespace WebCore {
     {% if method.arguments %}
     v8::Handle<v8::Value> argv[] = { {{method.arguments | join(', ', 'handle')}} };
     {% else %}
+    {# Empty array initializers are illegal, and don't compile in MSVC. #}
     v8::Handle<v8::Value> *argv = 0;
     {% endif %}
 
-    {% set this_handle_parameter = 'v8::Handle<v8::Object>::Cast(thisHandle), ' if method.call_with_this_handle else '' %}
+    {% set this_handle_parameter = 'thisHandle, ' if method.call_with_this_handle else 'm_scriptState->context()->Global(), ' %}
     {% if method.idl_type == 'boolean' %}
-    return invokeCallback(m_scriptState.get(), m_callback.newLocal(isolate), {{this_handle_parameter}}{{method.arguments | length}}, argv);
+    v8::TryCatch exceptionCatcher;
+    exceptionCatcher.SetVerbose(true);
+    ScriptController::callFunction(m_scriptState->executionContext(), m_callback.newLocal(isolate), {{this_handle_parameter}}{{method.arguments | length}}, argv, m_scriptState->isolate());
+    return !exceptionCatcher.HasCaught();
     {% else %}{# void #}
-    invokeCallback(m_scriptState.get(), m_callback.newLocal(isolate), {{this_handle_parameter}}{{method.arguments | length}}, argv);
+    ScriptController::callFunction(m_scriptState->executionContext(), m_callback.newLocal(isolate), {{this_handle_parameter}}{{method.arguments | length}}, argv, m_scriptState->isolate());
     {% endif %}
 }
 

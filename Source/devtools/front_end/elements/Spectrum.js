@@ -131,6 +131,7 @@ WebInspector.Spectrum.Events = {
 };
 
 /**
+ * @param {!Element} element
  * @param {function(!Element, number, number, !MouseEvent)=} onmove
  * @param {function(!Element, !MouseEvent)=} onstart
  * @param {function(!Element, !MouseEvent)=} onstop
@@ -297,8 +298,8 @@ WebInspector.Spectrum.prototype = {
     {
         this._updateHelperLocations();
 
-        this._draggerElement.style.backgroundColor = WebInspector.Color.fromHSVA([this._hsv[0], 1, 1, 1]).toString(WebInspector.Color.Format.RGB);
-        this._swatchInnerElement.style.backgroundColor = this.color().toString(WebInspector.Color.Format.RGBA);
+        this._draggerElement.style.backgroundColor = /** @type {string} */ (WebInspector.Color.fromHSVA([this._hsv[0], 1, 1, 1]).toString(WebInspector.Color.Format.RGB));
+        this._swatchInnerElement.style.backgroundColor = /** @type {string} */ (this.color().toString(WebInspector.Color.Format.RGBA));
 
         this._alphaElement.value = this._hsv[3] * 100;
     },

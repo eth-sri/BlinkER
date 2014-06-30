@@ -36,6 +36,12 @@ InspectorTest.Output = {   // override in window.initialize_yourName
     }
 };
 
+InspectorTest.startDumpingProtocolMessages = function()
+{
+    InspectorBackendClass.Connection.prototype._dumpProtocolMessage = testRunner.logToStderr.bind(testRunner);
+    InspectorBackendClass.Options.dumpInspectorProtocolMessages = 1;
+}
+
 InspectorTest.completeTest = function()
 {
     InspectorTest.Output.testComplete();
@@ -315,7 +321,7 @@ InspectorTest.runTestSuite = function(testSuite)
         var nextTest = testSuiteTests.shift();
         InspectorTest.addResult("");
         InspectorTest.addResult("Running: " + /function\s([^(]*)/.exec(nextTest)[1]);
-        InspectorTest.safeWrap(nextTest)(runner, runner);
+        InspectorTest.safeWrap(nextTest)(runner);
     }
     runner();
 }
@@ -563,6 +569,42 @@ InspectorTest.dumpLoadedModules = function(next)
         next();
 }
 
+InspectorTest.TimeoutMock = function()
+{
+    this._timeoutId = 0;
+    this._timeoutIdToProcess = {};
+    this._timeoutIdToMillis = {};
+    this.setTimeout = this.setTimeout.bind(this);
+    this.clearTimeout = this.clearTimeout.bind(this);
+}
+InspectorTest.TimeoutMock.prototype = {
+    setTimeout: function(operation, timeout)
+    {
+        this._timeoutIdToProcess[++this._timeoutId] = operation;
+        this._timeoutIdToMillis[this._timeoutId] = timeout;
+        return this._timeoutId;
+    },
+
+    clearTimeout: function(timeoutId)
+    {
+        delete this._timeoutIdToProcess[timeoutId];
+        delete this._timeoutIdToMillis[timeoutId];
+    },
+
+    activeTimersTimeouts: function()
+    {
+        return Object.values(this._timeoutIdToMillis);
+    },
+
+    fireAllTimers: function()
+    {
+        for (var timeoutId in this._timeoutIdToProcess)
+            this._timeoutIdToProcess[timeoutId].call(window);
+        this._timeoutIdToProcess = {};
+        this._timeoutIdToMillis = {};
+    }
+}
+
 WebInspector.TempFile = InspectorTest.TempFileMock;
 
 };
@@ -690,9 +732,7 @@ function didEvaluateForTestInFrontend(callId)
     delete window.completeTestCallId;
     if (outputElement && window.quietUntilDone)
         outputElementParent.appendChild(outputElement);
-    // Close inspector asynchrously to allow caller of this
-    // function send response before backend dispatcher and frontend are destroyed.
-    setTimeout(closeInspectorAndNotifyDone, 0);
+    closeInspectorAndNotifyDone();
 }
 
 function closeInspectorAndNotifyDone()
@@ -708,23 +748,28 @@ function closeInspectorAndNotifyDone()
 
 var outputElement;
 var outputElementParent;
+var savedOutput;
+
+function createOutputElement()
+{
+    var intermediate = document.createElement("div");
+    document.body.appendChild(intermediate);
+
+    outputElementParent = document.createElement("div");
+    intermediate.appendChild(outputElementParent);
+
+    outputElement = document.createElement("div");
+    outputElement.className = "output";
+    outputElement.id = "output";
+    outputElement.style.whiteSpace = "pre";
+    if (!window.quietUntilDone)
+        outputElementParent.appendChild(outputElement);
+}
 
 function output(text)
 {
-    if (!outputElement) {
-        var intermediate = document.createElement("div");
-        document.body.appendChild(intermediate);
-
-        outputElementParent = document.createElement("div");
-        intermediate.appendChild(outputElementParent);
-
-        outputElement = document.createElement("div");
-        outputElement.className = "output";
-        outputElement.id = "output";
-        outputElement.style.whiteSpace = "pre";
-        if (!window.quietUntilDone)
-            outputElementParent.appendChild(outputElement);
-    }
+    if (!outputElement)
+        createOutputElement();
     outputElement.appendChild(document.createTextNode(text));
     outputElement.appendChild(document.createElement("br"));
 }
@@ -735,6 +780,19 @@ function clearOutput()
         outputElement.remove();
         outputElement = null;
     }
+}
+
+function saveOutput()
+{
+    savedOutput = outputElement ? outputElement.innerHTML : "";
+}
+
+function restoreOutput()
+{
+    if (!savedOutput)
+        return;
+    createOutputElement();
+    outputElement.innerHTML = savedOutput;
 }
 
 function StandaloneTestRunnerStub()

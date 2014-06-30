@@ -34,20 +34,9 @@
 Event.prototype.isMetaOrCtrlForTest;
 
 /**
- * @constructor
- * @extends {KeyboardEvent}
- * @param {string} eventType
- * @param {!Object=} properties
- */
-window.KeyboardEvent = function(eventType, properties) {}
-
-/**
  * @type {number}
  */
 KeyboardEvent.DOM_KEY_LOCATION_NUMPAD;
-
-/** @param {*} message */
-function postMessage(message) {}
 
 /**
  * @param {string} eventName
@@ -64,6 +53,12 @@ function addEventListener(eventName, listener, capturing) {}
  */
 Array.prototype.remove = function(value, onlyFirst) {}
 /**
+ * @param {!Array.<!T>} array
+ * @this {Array.<!T>}
+ * @template T
+ */
+Array.prototype.pushAll = function(array) {}
+/**
  * @return {!Object.<string, boolean>}
  * @this {Array.<T>}
  * @template T
@@ -76,6 +71,10 @@ Array.prototype.keySet = function() {}
  * @template T
  */
 Array.prototype.rotate = function(index) {}
+/**
+ * @this {Array.<number>}
+ */
+Array.prototype.sortNumbers = function() {}
 /**
  * @param {!T} object
  * @param {function(!T,!S):number=} comparator
@@ -239,7 +238,7 @@ InspectorFrontendHostAPI.prototype.recordPanelShown = function(panelCode) {}
 InspectorFrontendHostAPI.prototype.sendMessageToBackend = function(message) {}
 InspectorFrontendHostAPI.prototype.sendMessageToEmbedder = function(message) {}
 InspectorFrontendHostAPI.prototype.setInjectedScriptForOrigin = function(origin, script) {}
-InspectorFrontendHostAPI.prototype.setIsDocked = function(isDocked) {}
+InspectorFrontendHostAPI.prototype.setIsDocked = function(isDocked, callback) {}
 InspectorFrontendHostAPI.prototype.setZoomFactor = function(zoom) {}
 InspectorFrontendHostAPI.prototype.subscribe = function(eventType) {}
 InspectorFrontendHostAPI.prototype.unsubscribe = function(eventType) {}
@@ -309,11 +308,23 @@ difflib.SequenceMatcher = function(baseText, newText) { }
 difflib.SequenceMatcher.prototype.get_opcodes = function() { return []; }
 
 /** @constructor */
-var CodeMirror = function() { }
+var Doc = function() { }
+Doc.prototype = {
+    /** @type {number} */
+    scrollLeft: 0,
+    /** @type {number} */
+    scrollTop: 0
+}
+
+/** @constructor */
+var CodeMirror = function(element, config) { }
 CodeMirror.on = function(obj, type, handler) { }
 CodeMirror.prototype = {
+    /** @type {!Doc} */
+    doc: null,
     addKeyMap: function(map) { },
     addLineClass: function(handle, where, cls) { },
+    /** @param {?Object=} options */
     addLineWidget: function(handle, node, options) { },
     /**
      * @param {string|!Object} spec
@@ -325,11 +336,17 @@ CodeMirror.prototype = {
     clearGutter: function(gutterID) { },
     clearHistory: function() { },
     clipPos: function(pos) { },
+    /** @param {string=} mode */
     coordsChar: function(coords, mode) { },
+    /** @param {string=} mode */
     cursorCoords: function(start, mode) { },
     defaultCharWidth: function() { },
     defaultTextHeight: function() { },
     deleteH: function(dir, unit) { },
+    /**
+     * @param {*=} to
+     * @param {*=} op
+     */
     eachLine: function(from, to, op) { },
     execCommand: function(cmd) { },
     extendSelection: function(from, to) { },
@@ -354,6 +371,7 @@ CodeMirror.prototype = {
     getLineNumber: function(line) { },
     getMode: function() { },
     getOption: function(option) { },
+    /** @param {*=} lineSep */
     getRange: function(from, to, lineSep) { },
     /**
      * @return {!{left: number, top: number, width: number, height: number, clientWidth: number, clientHeight: number}}
@@ -364,6 +382,7 @@ CodeMirror.prototype = {
     getSelections: function() { },
     getStateAfter: function(line) { },
     getTokenAt: function(pos) { },
+    /** @param {*=} lineSep */
     getValue: function(lineSep) { },
     getViewport: function() { },
     getWrapperElement: function() { },
@@ -399,8 +418,10 @@ CodeMirror.prototype = {
     removeLineClass: function(handle, where, cls) { },
     removeLineWidget: function(widget) { },
     removeOverlay: function(spec) { },
+    /** @param {*=} origin */
     replaceRange: function(code, from, to, origin) { },
     replaceSelection: function(code, collapse, origin) { },
+    /** @param {*=} margin */
     scrollIntoView: function(pos, margin) { },
     scrollTo: function(x, y) { },
     setBookmark: function(pos, options) { },
@@ -411,7 +432,11 @@ CodeMirror.prototype = {
     setLine: function(line, text) { },
     setOption: function(option, value) { },
     setSelection: function(anchor, head) { },
-    setSelections: function(selections) { },
+    /**
+     * @param {number=} primaryIndex
+     * @param {?Object=} config
+     */
+    setSelections: function(selections, primaryIndex, config) { },
     setSize: function(width, height) { },
     setValue: function(code) { },
     somethingSelected: function() { },
@@ -421,6 +446,7 @@ CodeMirror.prototype = {
 }
 /** @type {!{cursorDiv: Element}} */
 CodeMirror.prototype.display;
+/** @type {!Object} */
 CodeMirror.Pass;
 CodeMirror.showHint = function(codeMirror, hintintFunction) { };
 CodeMirror.commands = {};
@@ -433,9 +459,9 @@ CodeMirror.startState = function(mode) { };
 
 /** @constructor */
 CodeMirror.Pos = function(line, ch) { }
-/** type {number} */
+/** @type {number} */
 CodeMirror.Pos.prototype.line;
-/** type {number} */
+/** @type {number} */
 CodeMirror.Pos.prototype.ch;
 
 /** @constructor */
@@ -471,6 +497,15 @@ CodeMirror.keyMap;
 
 /** @type {{scrollLeft: number, scrollTop: number}} */
 CodeMirror.doc;
+
+/**
+ * @constructor
+ * @extends {Event}
+ */
+function ErrorEvent() {}
+
+/** @type {string} */
+ErrorEvent.prototype.message;
 
 /** @type {boolean} */
 window.dispatchStandaloneTestRunnerMessages;

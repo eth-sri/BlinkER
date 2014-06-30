@@ -20,20 +20,24 @@
 #include "config.h"
 #include "core/svg/SVGFEPointLightElement.h"
 
-#include "SVGNames.h"
+#include "core/SVGNames.h"
+#include "platform/graphics/filters/Filter.h"
 #include "platform/graphics/filters/PointLightSource.h"
 
 namespace WebCore {
 
-SVGFEPointLightElement::SVGFEPointLightElement(Document& document)
+inline SVGFEPointLightElement::SVGFEPointLightElement(Document& document)
     : SVGFELightElement(SVGNames::fePointLightTag, document)
 {
     ScriptWrappable::init(this);
 }
 
-PassRefPtr<LightSource> SVGFEPointLightElement::lightSource() const
+DEFINE_NODE_FACTORY(SVGFEPointLightElement)
+
+PassRefPtr<LightSource> SVGFEPointLightElement::lightSource(Filter* filter) const
 {
-    return PointLightSource::create(FloatPoint3D(x()->currentValue()->value(), y()->currentValue()->value(), z()->currentValue()->value()));
+    FloatPoint3D location(x()->currentValue()->value(), y()->currentValue()->value(), z()->currentValue()->value());
+    return PointLightSource::create(filter->resolve3dPoint(location));
 }
 
 }

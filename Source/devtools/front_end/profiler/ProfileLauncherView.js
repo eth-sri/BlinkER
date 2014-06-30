@@ -86,7 +86,7 @@ WebInspector.ProfileLauncherView.prototype = {
             this._controlButton.removeAttribute("disabled");
         else
             this._controlButton.setAttribute("disabled", "");
-        this._controlButton.title = this._recordButtonEnabled ? "" : WebInspector.UIString("Another profiler is already active");
+        this._controlButton.title = this._recordButtonEnabled ? "" : WebInspector.anotherProfilerActiveLabel();
         if (this._isInstantProfile) {
             this._controlButton.classList.remove("running");
             this._controlButton.textContent = WebInspector.UIString("Take Snapshot");
@@ -205,7 +205,7 @@ WebInspector.MultiProfileLauncherView.prototype = {
     /**
      * @param {!WebInspector.ProfileType} profileType
      */
-    _profileTypeChanged: function(profileType, event)
+    _profileTypeChanged: function(profileType)
     {
         this.dispatchEventToListeners(WebInspector.MultiProfileLauncherView.EventTypes.ProfileTypeSelected, profileType);
         this._isInstantProfile = profileType.isInstantProfile();

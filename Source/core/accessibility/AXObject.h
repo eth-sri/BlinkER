@@ -49,6 +49,7 @@ class HTMLAreaElement;
 class IntPoint;
 class IntSize;
 class Node;
+class Range;
 class RenderObject;
 class RenderListItem;
 class ScrollableArea;
@@ -292,9 +293,6 @@ public:
     // The AXObjectCache that owns this object, and its unique ID within this cache.
     AXObjectCache* axObjectCache() const;
     AXID axObjectID() const { return m_id; }
-
-    // Lays out the page so that the accessibility tree is based on up-to-date information.
-    void updateBackingStore();
 
     // Determine subclass type.
     virtual bool isAXNodeObject() const { return false; }

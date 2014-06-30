@@ -393,8 +393,8 @@ enum ECursor {
     CURSOR_PROGRESS,
     CURSOR_NO_DROP,
     CURSOR_NOT_ALLOWED,
-    CURSOR_WEBKIT_ZOOM_IN,
-    CURSOR_WEBKIT_ZOOM_OUT,
+    CURSOR_ZOOM_IN,
+    CURSOR_ZOOM_OUT,
     CURSOR_E_RESIZE,
     CURSOR_NE_RESIZE,
     CURSOR_NW_RESIZE,
@@ -469,7 +469,7 @@ enum TextOrientation { TextOrientationVerticalRight, TextOrientationUpright, Tex
 
 enum TextOverflow { TextOverflowClip = 0, TextOverflowEllipsis };
 
-enum EImageRendering { ImageRenderingAuto, ImageRenderingOptimizeSpeed, ImageRenderingOptimizeQuality, ImageRenderingOptimizeContrast };
+enum EImageRendering { ImageRenderingAuto, ImageRenderingOptimizeSpeed, ImageRenderingOptimizeQuality, ImageRenderingOptimizeContrast, ImageRenderingPixelated };
 
 enum ImageResolutionSource { ImageResolutionSpecified = 0, ImageResolutionFromImage };
 

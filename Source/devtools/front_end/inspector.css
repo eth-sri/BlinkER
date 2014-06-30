@@ -88,6 +88,14 @@ fieldset[disabled] label:hover input {
     display: none !important;
 }
 
+.white-background {
+    background-color: white;
+}
+
+.overflow-hidden {
+    overflow: hidden;
+}
+
 .nowrap,
 .nowrap-below,
 .nowrap-below div,
@@ -194,6 +202,10 @@ body.undocked.platform-mac.inactive .toolbar-background {
 
 .toolbar > .tabbed-pane-header {
     flex: auto;
+}
+
+.tabbed-pane-header.locked .tabbed-pane-header-tab:not(.selected) {
+    opacity: 0.6;
 }
 
 .toolbar-controls-left {
@@ -539,6 +551,10 @@ button.status-bar-item:hover .glyph {
     opacity: 1;
 }
 
+button.status-bar-item:active .glyph {
+    opacity: 0.8;
+}
+
 button.status-bar-item:disabled {
     background-position: 0 0 !important;
 }
@@ -820,6 +836,7 @@ body.platform-linux .source-code {
 
 .console-view {
     background-color: white;
+    overflow: hidden;
 }
 
 .console-view-wrapper {
@@ -1210,7 +1227,8 @@ ol.watch-expressions > li.hovered {
 }
 
 .console-formatted-string,
-.console-formatted-regexp {
+.console-formatted-regexp,
+.console-formatted-symbol {
     color: rgb(196, 26, 22);
     white-space: pre;
     unicode-bidi: -webkit-isolate;
@@ -2281,6 +2299,10 @@ body.inactive .sidebar-tree-item.selected {
     -webkit-mask-position: -224px -24px;
 }
 
+.emulation-status-bar-item .glyph {
+    -webkit-mask-position: -164px 0px;
+}
+
 .delete-storage-status-bar-item .glyph {
     -webkit-mask-position: -128px 0;
 }
@@ -2881,4 +2903,8 @@ body.undocked .toolbar-close-button-item {
 select.drop-down-menu {
     border: none;
     -webkit-appearance: none;
+}
+
+.viewport-control-gap-element {
+    color: transparent;
 }

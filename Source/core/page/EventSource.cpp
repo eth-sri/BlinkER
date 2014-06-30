@@ -42,7 +42,7 @@
 #include "core/dom/ExecutionContext.h"
 #include "core/events/Event.h"
 #include "core/events/MessageEvent.h"
-#include "core/frame/DOMWindow.h"
+#include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/parser/TextResourceDecoder.h"
@@ -86,12 +86,12 @@ PassRefPtrWillBeRawPtr<EventSource> EventSource::create(ExecutionContext* contex
     }
 
     // FIXME: Convert this to check the isolated world's Content Security Policy once webkit.org/b/104520 is solved.
-    bool shouldBypassMainWorldContentSecurityPolicy = false;
+    bool shouldBypassMainWorldCSP = false;
     if (context->isDocument()) {
         Document* document = toDocument(context);
-        shouldBypassMainWorldContentSecurityPolicy = document->frame()->script().shouldBypassMainWorldContentSecurityPolicy();
+        shouldBypassMainWorldCSP = document->frame()->script().shouldBypassMainWorldCSP();
     }
-    if (!shouldBypassMainWorldContentSecurityPolicy && !context->contentSecurityPolicy()->allowConnectToSource(fullURL)) {
+    if (!shouldBypassMainWorldCSP && !context->contentSecurityPolicy()->allowConnectToSource(fullURL)) {
         // We can safely expose the URL to JavaScript, as this exception is generate synchronously before any redirects take place.
         exceptionState.throwSecurityError("Refused to connect to '" + fullURL.elidedString() + "' because it violates the document's Content Security Policy.");
         return nullptr;
@@ -137,16 +137,17 @@ void EventSource::connect()
     SecurityOrigin* origin = executionContext.securityOrigin();
 
     ThreadableLoaderOptions options;
-    options.sniffContent = DoNotSniffContent;
-    options.allowCredentials = (origin->canRequest(m_url) || m_withCredentials) ? AllowStoredCredentials : DoNotAllowStoredCredentials;
-    options.credentialsRequested = m_withCredentials ? ClientRequestedCredentials : ClientDidNotRequestCredentials;
     options.preflightPolicy = PreventPreflight;
     options.crossOriginRequestPolicy = UseAccessControl;
-    options.dataBufferingPolicy = DoNotBufferData;
-    options.securityOrigin = origin;
     options.contentSecurityPolicyEnforcement = ContentSecurityPolicy::shouldBypassMainWorld(&executionContext) ? DoNotEnforceContentSecurityPolicy : EnforceConnectSrcDirective;
 
-    m_loader = ThreadableLoader::create(executionContext, this, request, options);
+    ResourceLoaderOptions resourceLoaderOptions;
+    resourceLoaderOptions.allowCredentials = (origin->canRequest(m_url) || m_withCredentials) ? AllowStoredCredentials : DoNotAllowStoredCredentials;
+    resourceLoaderOptions.credentialsRequested = m_withCredentials ? ClientRequestedCredentials : ClientDidNotRequestCredentials;
+    resourceLoaderOptions.dataBufferingPolicy = DoNotBufferData;
+    resourceLoaderOptions.securityOrigin = origin;
+
+    m_loader = ThreadableLoader::create(executionContext, this, request, options, resourceLoaderOptions);
 
     if (m_loader)
         m_requestInFlight = true;

@@ -38,9 +38,6 @@ namespace WebCore {
 class FloatPoint;
 class GraphicsContextStateSaver;
 class PointerEventsHitRules;
-class RenderSVGContainer;
-class RenderSVGPath;
-class RenderSVGResource;
 class SVGGraphicsElement;
 
 class RenderSVGShape : public RenderSVGModelObject {
@@ -63,9 +60,10 @@ public:
         return *m_path;
     }
 
+    virtual bool isShapeEmpty() const { return path().isEmpty(); }
+
 protected:
     virtual void updateShapeFromElement();
-    virtual bool isShapeEmpty() const { return path().isEmpty(); }
     virtual bool shapeDependentStrokeContains(const FloatPoint&);
     virtual bool shapeDependentFillContains(const FloatPoint&, const WindRule) const;
     float strokeWidth() const;
@@ -84,7 +82,7 @@ private:
     bool fillContains(const FloatPoint&, bool requiresFill = true, const WindRule fillRule = RULE_NONZERO);
     bool strokeContains(const FloatPoint&, bool requiresStroke = true);
 
-    virtual FloatRect repaintRectInLocalCoordinates() const OVERRIDE FINAL { return m_repaintBoundingBox; }
+    virtual FloatRect paintInvalidationRectInLocalCoordinates() const OVERRIDE FINAL { return m_repaintBoundingBox; }
     virtual const AffineTransform& localToParentTransform() const OVERRIDE FINAL { return m_localTransform; }
     virtual AffineTransform localTransform() const OVERRIDE FINAL { return m_localTransform; }
 

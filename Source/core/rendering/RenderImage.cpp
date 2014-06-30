@@ -28,7 +28,7 @@
 #include "config.h"
 #include "core/rendering/RenderImage.h"
 
-#include "HTMLNames.h"
+#include "core/HTMLNames.h"
 #include "core/editing/FrameSelection.h"
 #include "core/fetch/ImageResource.h"
 #include "core/fetch/ResourceLoadPriorityOptimizer.h"
@@ -39,6 +39,7 @@
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLMapElement.h"
 #include "core/inspector/InspectorInstrumentation.h"
+#include "core/inspector/InspectorTraceEvents.h"
 #include "core/rendering/HitTestResult.h"
 #include "core/rendering/PaintInfo.h"
 #include "core/rendering/RenderView.h"
@@ -48,9 +49,9 @@
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
 
-using namespace std;
-
 namespace WebCore {
+
+float deviceScaleFactor(LocalFrame*);
 
 using namespace HTMLNames;
 
@@ -129,7 +130,7 @@ bool RenderImage::setImageSizeForAltText(ImageResource* newImage /* = 0 */)
         FontCachePurgePreventer fontCachePurgePreventer;
 
         const Font& font = style()->font();
-        IntSize paddedTextSize(paddingWidth + min(ceilf(font.width(RenderBlockFlow::constructTextRun(this, font, m_altText, style()))), maxAltTextWidth), paddingHeight + min(font.fontMetrics().height(), maxAltTextHeight));
+        IntSize paddedTextSize(paddingWidth + std::min(ceilf(font.width(RenderBlockFlow::constructTextRun(this, font, m_altText, style()))), maxAltTextWidth), paddingHeight + std::min(font.fontMetrics().height(), maxAltTextHeight));
         imageSize = imageSize.expandedTo(paddedTextSize);
     }
 
@@ -138,11 +139,6 @@ bool RenderImage::setImageSizeForAltText(ImageResource* newImage /* = 0 */)
 
     setIntrinsicSize(imageSize);
     return true;
-}
-
-void RenderImage::styleDidChange(StyleDifference diff, const RenderStyle* oldStyle)
-{
-    RenderReplaced::styleDidChange(diff, oldStyle);
 }
 
 void RenderImage::imageChanged(WrappedImagePtr newImage, const IntRect* rect)
@@ -214,15 +210,14 @@ void RenderImage::repaintOrMarkForLayout(bool imageSizeChangedToAccomodateAltTex
 
     // If the actual area occupied by the image has changed and it is not constrained by style then a layout is required.
     bool imageSizeIsConstrained = style()->logicalWidth().isSpecified() && style()->logicalHeight().isSpecified();
-    bool needsLayout = !imageSizeIsConstrained && imageSourceHasChangedSize;
 
     // FIXME: We only need to recompute the containing block's preferred size if the containing block's size
     // depends on the image's size (i.e., the container uses shrink-to-fit sizing).
     // There's no easy way to detect that shrink-to-fit is needed, always force a layout.
-    bool containingBlockNeedsToRecomputePreferredSize =  style()->logicalWidth().isPercent() || style()->logicalMaxWidth().isPercent()  || style()->logicalMinWidth().isPercent();
+    bool containingBlockNeedsToRecomputePreferredSize = style()->logicalWidth().isPercent() || style()->logicalMaxWidth().isPercent()  || style()->logicalMinWidth().isPercent();
 
-    if (needsLayout || containingBlockNeedsToRecomputePreferredSize) {
-        setNeedsLayoutAndFullRepaint();
+    if (imageSourceHasChangedSize && (!imageSizeIsConstrained || containingBlockNeedsToRecomputePreferredSize)) {
+        setNeedsLayoutAndFullPaintInvalidation();
         return;
     }
 
@@ -237,9 +232,10 @@ void RenderImage::repaintOrMarkForLayout(bool imageSizeChangedToAccomodateAltTex
 
     LayoutRect repaintRect;
     if (rect) {
-        // The image changed rect is in source image coordinates (pre-zooming),
+        // The image changed rect is in source image coordinates (without zoom),
         // so map from the bounds of the image to the contentsBox.
-        repaintRect = enclosingIntRect(mapRect(*rect, FloatRect(FloatPoint(), m_imageResource->imageSize(1.0f)), contentBoxRect()));
+        const LayoutSize imageSizeWithoutZoom = m_imageResource->imageSize(1 / style()->effectiveZoom());
+        repaintRect = enclosingIntRect(mapRect(*rect, FloatRect(FloatPoint(), imageSizeWithoutZoom), contentBoxRect()));
         // Guard against too-large changed rects.
         repaintRect.intersect(contentBoxRect());
     } else {
@@ -248,8 +244,8 @@ void RenderImage::repaintOrMarkForLayout(bool imageSizeChangedToAccomodateAltTex
 
     {
         // FIXME: We should not be allowing repaint during layout. crbug.com/339584
-        AllowRepaintScope scoper(frameView());
-        repaintRectangle(repaintRect);
+        AllowPaintInvalidationScope scoper(frameView());
+        invalidatePaintRectangle(repaintRect);
     }
 
     // Tell any potential compositing layers that the image needs updating.
@@ -436,7 +432,7 @@ void RenderImage::areaElementFocusChanged(HTMLAreaElement* areaElement)
     repaintRect.moveBy(-absoluteContentBox().location());
     repaintRect.inflate(outlineWidth);
 
-    repaintRectangle(repaintRect);
+    invalidatePaintRectangle(repaintRect);
 }
 
 void RenderImage::paintIntoRect(GraphicsContext* context, const LayoutRect& rect)
@@ -454,6 +450,8 @@ void RenderImage::paintIntoRect(GraphicsContext* context, const LayoutRect& rect
     Image* image = m_imageResource->image().get();
     InterpolationQuality interpolationQuality = chooseInterpolationQuality(context, image, image, alignedRect.size());
 
+    TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "PaintImage", "data", InspectorPaintImageEvent::data(*this));
+    // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentation::willPaintImage(this);
     InterpolationQuality previousInterpolationQuality = context->imageInterpolationQuality();
     context->setImageInterpolationQuality(interpolationQuality);

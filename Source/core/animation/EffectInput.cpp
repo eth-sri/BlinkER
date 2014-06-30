@@ -36,26 +36,18 @@
 #include "core/animation/KeyframeEffectModel.h"
 #include "core/animation/StringKeyframe.h"
 #include "core/css/parser/BisonCSSParser.h"
+#include "core/css/resolver/CSSToStyleMap.h"
 #include "core/css/resolver/StyleResolver.h"
+#include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "wtf/NonCopyingSort.h"
 
 namespace WebCore {
 
-// FIXME: Remove this once we've removed the dependency on Element.
-static bool checkDocumentAndRenderer(Element* element)
+PassRefPtrWillBeRawPtr<AnimationEffect> EffectInput::convert(Element* element, const Vector<Dictionary>& keyframeDictionaryVector, ExceptionState& exceptionState)
 {
-    if (!element || !element->inActiveDocument())
-        return false;
-    element->document().updateRenderTreeIfNeeded();
-    return element->renderer();
-}
-
-PassRefPtrWillBeRawPtr<AnimationEffect> EffectInput::convert(Element* element, const Vector<Dictionary>& keyframeDictionaryVector, ExceptionState& exceptionState, bool unsafe)
-{
-    // FIXME: This test will not be neccessary once resolution of keyframe values occurs at
-    // animation application time.
-    if (!unsafe && !checkDocumentAndRenderer(element))
+    // FIXME: Remove the dependency on element.
+    if (!element)
         return nullptr;
 
     StyleSheetContents* styleSheetContents = element->document().elementSheet().contents();
@@ -99,8 +91,7 @@ PassRefPtrWillBeRawPtr<AnimationEffect> EffectInput::convert(Element* element, c
 
         String timingFunctionString;
         if (keyframeDictionaryVector[i].get("easing", timingFunctionString)) {
-            RefPtrWillBeRawPtr<CSSValue> timingFunctionValue = BisonCSSParser::parseAnimationTimingFunctionValue(timingFunctionString);
-            if (timingFunctionValue)
+            if (RefPtrWillBeRawPtr<CSSValue> timingFunctionValue = BisonCSSParser::parseAnimationTimingFunctionValue(timingFunctionString))
                 keyframe->setEasing(CSSToStyleMap::mapAnimationTimingFunction(timingFunctionValue.get(), true));
         }
 

@@ -22,10 +22,9 @@
 
 #include "core/svg/SVGTextPathElement.h"
 
-#include "XLinkNames.h"
+#include "core/XLinkNames.h"
 #include "core/rendering/svg/RenderSVGResource.h"
 #include "core/rendering/svg/RenderSVGTextPath.h"
-#include "core/svg/SVGElementInstance.h"
 
 namespace WebCore {
 
@@ -49,7 +48,7 @@ template<> const SVGEnumerationStringEntries& getStaticStringEntries<SVGTextPath
     return entries;
 }
 
-SVGTextPathElement::SVGTextPathElement(Document& document)
+inline SVGTextPathElement::SVGTextPathElement(Document& document)
     : SVGTextContentElement(SVGNames::textPathTag, document)
     , SVGURIReference(this)
     , m_startOffset(SVGAnimatedLength::create(this, SVGNames::startOffsetAttr, SVGLength::create(LengthModeOther), AllowNegativeLengths))
@@ -63,6 +62,8 @@ SVGTextPathElement::SVGTextPathElement(Document& document)
     addToPropertyMap(m_spacing);
 }
 
+DEFINE_NODE_FACTORY(SVGTextPathElement)
+
 SVGTextPathElement::~SVGTextPathElement()
 {
 #if !ENABLE(OILPAN)
@@ -72,7 +73,7 @@ SVGTextPathElement::~SVGTextPathElement()
 
 void SVGTextPathElement::clearResourceReferences()
 {
-    document().accessSVGExtensions().removeAllTargetReferencesForElement(this);
+    removeAllOutgoingReferences();
 }
 
 bool SVGTextPathElement::isSupportedAttribute(const QualifiedName& attrName)
@@ -160,7 +161,7 @@ void SVGTextPathElement::buildPendingResource()
     } else if (isSVGPathElement(*target)) {
         // Register us with the target in the dependencies map. Any change of hrefElement
         // that leads to relayout/repainting now informs us, so we can react to it.
-        document().accessSVGExtensions().addElementReferencingTarget(this, toSVGElement((target)));
+        addReferenceTo(toSVGElement((target)));
     }
 }
 

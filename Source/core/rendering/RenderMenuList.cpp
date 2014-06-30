@@ -25,8 +25,7 @@
 #include "config.h"
 #include "core/rendering/RenderMenuList.h"
 
-#include <math.h>
-#include "HTMLNames.h"
+#include "core/HTMLNames.h"
 #include "core/accessibility/AXMenuList.h"
 #include "core/accessibility/AXObjectCache.h"
 #include "core/css/CSSFontSelector.h"
@@ -45,8 +44,8 @@
 #include "core/rendering/RenderView.h"
 #include "platform/fonts/FontCache.h"
 #include "platform/geometry/IntSize.h"
-
-using namespace std;
+#include "platform/text/PlatformLocale.h"
+#include <math.h>
 
 namespace WebCore {
 
@@ -114,7 +113,7 @@ void RenderMenuList::adjustInnerStyle()
 
     if (m_optionStyle) {
         if ((m_optionStyle->direction() != innerStyle->direction() || m_optionStyle->unicodeBidi() != innerStyle->unicodeBidi()))
-            m_innerBlock->setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
+            m_innerBlock->setNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation();
         innerStyle->setTextAlign(style()->isLeftToRightDirection() ? LEFT : RIGHT);
         innerStyle->setDirection(m_optionStyle->direction());
         innerStyle->setUnicodeBidi(m_optionStyle->unicodeBidi());
@@ -180,9 +179,10 @@ void RenderMenuList::updateOptionsWidth()
                 optionWidth += minimumValueForLength(optionStyle->textIndent(), 0);
             if (!text.isEmpty())
                 optionWidth += style()->font().width(text);
-            maxOptionWidth = max(maxOptionWidth, optionWidth);
-        } else if (!text.isEmpty())
-            maxOptionWidth = max(maxOptionWidth, style()->font().width(text));
+            maxOptionWidth = std::max(maxOptionWidth, optionWidth);
+        } else if (!text.isEmpty()) {
+            maxOptionWidth = std::max(maxOptionWidth, style()->font().width(text));
+        }
     }
 
     int width = static_cast<int>(ceilf(maxOptionWidth));
@@ -191,7 +191,7 @@ void RenderMenuList::updateOptionsWidth()
 
     m_optionsWidth = width;
     if (parent())
-        setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
+        setNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation();
 }
 
 void RenderMenuList::updateFromElement()
@@ -215,19 +215,51 @@ void RenderMenuList::setTextFromOption(int optionIndex)
 {
     HTMLSelectElement* select = selectElement();
     const WillBeHeapVector<RawPtrWillBeMember<HTMLElement> >& listItems = select->listItems();
-    int size = listItems.size();
+    const int size = listItems.size();
 
-    int i = select->optionToListIndex(optionIndex);
     String text = emptyString();
-    if (i >= 0 && i < size) {
-        Element* element = listItems[i];
-        if (isHTMLOptionElement(*element)) {
-            text = toHTMLOptionElement(element)->textIndentedToRespectGroupLabel();
-            m_optionStyle = element->renderStyle();
+    m_optionStyle.clear();
+
+    if (multiple()) {
+        unsigned selectedCount = 0;
+        int firstSelectedIndex = -1;
+        for (int i = 0; i < size; ++i) {
+            Element* element = listItems[i];
+            if (!isHTMLOptionElement(*element))
+                continue;
+
+            if (toHTMLOptionElement(element)->selected()) {
+                if (++selectedCount == 1)
+                    firstSelectedIndex = i;
+            }
+        }
+
+        if (selectedCount == 1) {
+            ASSERT(0 <= firstSelectedIndex);
+            ASSERT(firstSelectedIndex < size);
+            HTMLOptionElement* selectedOptionElement = toHTMLOptionElement(listItems[firstSelectedIndex]);
+            ASSERT(selectedOptionElement->selected());
+            text = selectedOptionElement->textIndentedToRespectGroupLabel();
+            m_optionStyle = selectedOptionElement->renderStyle();
+        } else {
+            Locale& locale = select->locale();
+            String localizedNumberString = locale.convertToLocalizedNumber(String::number(selectedCount));
+            text = locale.queryString(blink::WebLocalizedString::SelectMenuListText, localizedNumberString);
+            ASSERT(!m_optionStyle);
+        }
+    } else {
+        const int i = select->optionToListIndex(optionIndex);
+        if (i >= 0 && i < size) {
+            Element* element = listItems[i];
+            if (isHTMLOptionElement(*element)) {
+                text = toHTMLOptionElement(element)->textIndentedToRespectGroupLabel();
+                m_optionStyle = element->renderStyle();
+            }
         }
     }
 
     setText(text.stripWhiteSpace());
+
     didUpdateActiveOption(optionIndex);
 }
 
@@ -290,7 +322,7 @@ LayoutRect RenderMenuList::controlClipRect(const LayoutPoint& additionalOffset) 
 
 void RenderMenuList::computeIntrinsicLogicalWidths(LayoutUnit& minLogicalWidth, LayoutUnit& maxLogicalWidth) const
 {
-    maxLogicalWidth = max(m_optionsWidth, RenderTheme::theme().minimumMenuListSize(style())) + m_innerBlock->paddingLeft() + m_innerBlock->paddingRight();
+    maxLogicalWidth = std::max(m_optionsWidth, RenderTheme::theme().minimumMenuListSize(style())) + m_innerBlock->paddingLeft() + m_innerBlock->paddingRight();
     if (!style()->width().isPercent())
         minLogicalWidth = maxLogicalWidth;
 }
@@ -307,13 +339,13 @@ void RenderMenuList::computePreferredLogicalWidths()
         computeIntrinsicLogicalWidths(m_minPreferredLogicalWidth, m_maxPreferredLogicalWidth);
 
     if (styleToUse->minWidth().isFixed() && styleToUse->minWidth().value() > 0) {
-        m_maxPreferredLogicalWidth = max(m_maxPreferredLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(styleToUse->minWidth().value()));
-        m_minPreferredLogicalWidth = max(m_minPreferredLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(styleToUse->minWidth().value()));
+        m_maxPreferredLogicalWidth = std::max(m_maxPreferredLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(styleToUse->minWidth().value()));
+        m_minPreferredLogicalWidth = std::max(m_minPreferredLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(styleToUse->minWidth().value()));
     }
 
     if (styleToUse->maxWidth().isFixed()) {
-        m_maxPreferredLogicalWidth = min(m_maxPreferredLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(styleToUse->maxWidth().value()));
-        m_minPreferredLogicalWidth = min(m_minPreferredLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(styleToUse->maxWidth().value()));
+        m_maxPreferredLogicalWidth = std::min(m_maxPreferredLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(styleToUse->maxWidth().value()));
+        m_minPreferredLogicalWidth = std::min(m_minPreferredLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(styleToUse->maxWidth().value()));
     }
 
     LayoutUnit toAdd = borderAndPaddingWidth();

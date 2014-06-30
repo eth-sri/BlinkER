@@ -7,7 +7,6 @@
 
 #include "bindings/v8/CallbackPromiseAdapter.h"
 #include "bindings/v8/ScriptPromiseResolver.h"
-#include "bindings/v8/ScriptPromiseResolverWithContext.h"
 #include "modules/serviceworkers/Client.h"
 #include "modules/serviceworkers/ServiceWorkerError.h"
 #include "modules/serviceworkers/ServiceWorkerGlobalScopeClient.h"
@@ -22,7 +21,7 @@ namespace {
     class ClientArray {
     public:
         typedef blink::WebServiceWorkerClientsInfo WebType;
-        static Vector<RefPtr<Client> > from(ScriptPromiseResolverWithContext*, WebType* webClientsRaw)
+        static Vector<RefPtr<Client> > from(ScriptPromiseResolver*, WebType* webClientsRaw)
         {
             OwnPtr<WebType> webClients = adoptPtr(webClientsRaw);
             Vector<RefPtr<Client> > clients;
@@ -53,10 +52,10 @@ ServiceWorkerClients::~ServiceWorkerClients()
 {
 }
 
-ScriptPromise ServiceWorkerClients::getServiced(ExecutionContext* context)
+ScriptPromise ServiceWorkerClients::getServiced(ScriptState* scriptState)
 {
-    RefPtr<ScriptPromiseResolverWithContext> resolver = ScriptPromiseResolverWithContext::create(ScriptState::current(toIsolate(context)));
-    ServiceWorkerGlobalScopeClient::from(context)->getClients(new CallbackPromiseAdapter<ClientArray, ServiceWorkerError>(resolver));
+    RefPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(scriptState);
+    ServiceWorkerGlobalScopeClient::from(scriptState->executionContext())->getClients(new CallbackPromiseAdapter<ClientArray, ServiceWorkerError>(resolver));
     return resolver->promise();
 }
 

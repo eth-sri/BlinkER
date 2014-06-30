@@ -31,14 +31,13 @@
 #include "core/css/CSSSegmentedFontFace.h"
 #include "core/css/FontFaceSet.h"
 #include "core/css/RemoteFontFaceSource.h"
-#include "core/dom/Document.h"
 #include "core/frame/UseCounter.h"
 #include "platform/fonts/FontDescription.h"
 #include "platform/fonts/SimpleFontData.h"
 
 namespace WebCore {
 
-void CSSFontFace::addSource(PassOwnPtr<CSSFontFaceSource> source)
+void CSSFontFace::addSource(PassOwnPtrWillBeRawPtr<CSSFontFaceSource> source)
 {
     source->setFontFace(this);
     m_sources.append(source);
@@ -50,40 +49,25 @@ void CSSFontFace::setSegmentedFontFace(CSSSegmentedFontFace* segmentedFontFace)
     m_segmentedFontFace = segmentedFontFace;
 }
 
-CSSFontSelector* CSSFontFace::fontSelector() const
+void CSSFontFace::didBeginLoad()
 {
-    return m_segmentedFontFace ? m_segmentedFontFace->fontSelector() : 0;
-}
-
-void CSSFontFace::beginLoadIfNeeded(CSSFontFaceSource* source, CSSFontSelector* fontSelector)
-{
-    if (source->resource() && source->resource()->stillNeedsLoad()) {
-        if (!fontSelector) {
-            if (!m_segmentedFontFace)
-                return;
-            fontSelector = m_segmentedFontFace->fontSelector();
-        }
-        fontSelector->beginLoadingFontSoon(source->resource());
-    }
-
     if (loadStatus() == FontFace::Unloaded)
         setLoadStatus(FontFace::Loading);
 }
 
 void CSSFontFace::fontLoaded(RemoteFontFaceSource* source)
 {
-    if (m_segmentedFontFace)
-        m_segmentedFontFace->fontSelector()->fontLoaded();
-
     if (!isValid() || source != m_sources.first())
         return;
 
     if (loadStatus() == FontFace::Loading) {
         if (source->ensureFontData()) {
             setLoadStatus(FontFace::Loaded);
+#if ENABLE(SVG_FONTS)
             Document* document = m_segmentedFontFace ? m_segmentedFontFace->fontSelector()->document() : 0;
             if (document && source->isSVGFontFaceSource())
                 UseCounter::count(*document, UseCounter::SVGFontInCSS);
+#endif
         } else {
             m_sources.removeFirst();
             load();
@@ -108,7 +92,7 @@ PassRefPtr<SimpleFontData> CSSFontFace::getFontData(const FontDescription& fontD
         return nullptr;
 
     while (!m_sources.isEmpty()) {
-        OwnPtr<CSSFontFaceSource>& source = m_sources.first();
+        OwnPtrWillBeMember<CSSFontFaceSource>& source = m_sources.first();
         if (RefPtr<SimpleFontData> result = source->getFontData(fontDescription)) {
             if (loadStatus() == FontFace::Unloaded && (source->isLoading() || source->isLoaded()))
                 setLoadStatus(FontFace::Loading);
@@ -136,24 +120,24 @@ bool CSSFontFace::maybeScheduleFontLoad(const FontDescription& fontDescription, 
     return false;
 }
 
-void CSSFontFace::load(CSSFontSelector* fontSelector)
+void CSSFontFace::load()
 {
     FontDescription fontDescription;
     FontFamily fontFamily;
     fontFamily.setFamily(m_fontFace->family());
     fontDescription.setFamily(fontFamily);
     fontDescription.setTraits(m_fontFace->traits());
-    load(fontDescription, fontSelector);
+    load(fontDescription);
 }
 
-void CSSFontFace::load(const FontDescription& fontDescription, CSSFontSelector* fontSelector)
+void CSSFontFace::load(const FontDescription& fontDescription)
 {
     if (loadStatus() == FontFace::Unloaded)
         setLoadStatus(FontFace::Loading);
     ASSERT(loadStatus() == FontFace::Loading);
 
     while (!m_sources.isEmpty()) {
-        OwnPtr<CSSFontFaceSource>& source = m_sources.first();
+        OwnPtrWillBeMember<CSSFontFaceSource>& source = m_sources.first();
         if (source->isValid()) {
             if (source->isLocal()) {
                 if (source->isLocalFontAvailable(fontDescription)) {
@@ -161,11 +145,10 @@ void CSSFontFace::load(const FontDescription& fontDescription, CSSFontSelector* 
                     return;
                 }
             } else {
-                if (!source->isLoaded()) {
-                    beginLoadIfNeeded(source.get(), fontSelector);
-                } else {
+                if (!source->isLoaded())
+                    source->beginLoadIfNeeded();
+                else
                     setLoadStatus(FontFace::Loaded);
-                }
                 return;
             }
         }
@@ -255,6 +238,7 @@ bool CSSFontFace::UnicodeRangeSet::intersectsWith(const String& text) const
 void CSSFontFace::trace(Visitor* visitor)
 {
     visitor->trace(m_segmentedFontFace);
+    visitor->trace(m_sources);
     visitor->trace(m_fontFace);
 }
 

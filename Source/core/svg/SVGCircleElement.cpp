@@ -24,12 +24,11 @@
 
 #include "core/rendering/svg/RenderSVGEllipse.h"
 #include "core/rendering/svg/RenderSVGResource.h"
-#include "core/svg/SVGElementInstance.h"
 #include "core/svg/SVGLength.h"
 
 namespace WebCore {
 
-SVGCircleElement::SVGCircleElement(Document& document)
+inline SVGCircleElement::SVGCircleElement(Document& document)
     : SVGGeometryElement(SVGNames::circleTag, document)
     , m_cx(SVGAnimatedLength::create(this, SVGNames::cxAttr, SVGLength::create(LengthModeWidth), AllowNegativeLengths))
     , m_cy(SVGAnimatedLength::create(this, SVGNames::cyAttr, SVGLength::create(LengthModeHeight), AllowNegativeLengths))
@@ -41,6 +40,8 @@ SVGCircleElement::SVGCircleElement(Document& document)
     addToPropertyMap(m_cy);
     addToPropertyMap(m_r);
 }
+
+DEFINE_NODE_FACTORY(SVGCircleElement)
 
 bool SVGCircleElement::isSupportedAttribute(const QualifiedName& attrName)
 {

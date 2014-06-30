@@ -23,7 +23,7 @@
 #if ENABLE(SVG_FONTS)
 #include "core/svg/SVGFontFaceUriElement.h"
 
-#include "XLinkNames.h"
+#include "core/XLinkNames.h"
 #include "core/css/CSSFontFaceSrcValue.h"
 #include "core/dom/Document.h"
 #include "core/fetch/FetchRequest.h"
@@ -34,11 +34,13 @@ namespace WebCore {
 
 using namespace SVGNames;
 
-SVGFontFaceUriElement::SVGFontFaceUriElement(Document& document)
+inline SVGFontFaceUriElement::SVGFontFaceUriElement(Document& document)
     : SVGElement(font_face_uriTag, document)
 {
     ScriptWrappable::init(this);
 }
+
+DEFINE_NODE_FACTORY(SVGFontFaceUriElement)
 
 SVGFontFaceUriElement::~SVGFontFaceUriElement()
 {

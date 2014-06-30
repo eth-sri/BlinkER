@@ -70,16 +70,34 @@ WebInspector.CSSMetadata = function(properties)
  */
 WebInspector.CSSMetadata.cssPropertiesMetainfo = new WebInspector.CSSMetadata([]);
 
+/**
+ * @param {string} propertyName
+ * @return {boolean}
+ */
 WebInspector.CSSMetadata.isColorAwareProperty = function(propertyName)
 {
     return WebInspector.CSSMetadata._colorAwareProperties[propertyName] === true;
 }
 
+/**
+ * @return {!Object.<string, boolean>}
+ */
 WebInspector.CSSMetadata.colors = function()
 {
     if (!WebInspector.CSSMetadata._colorsKeySet)
         WebInspector.CSSMetadata._colorsKeySet = WebInspector.CSSMetadata._colors.keySet();
     return WebInspector.CSSMetadata._colorsKeySet;
+}
+
+/**
+ * @param {string} propertyName
+ * @return {boolean}
+ */
+WebInspector.CSSMetadata.isLengthProperty = function(propertyName)
+{
+    if (!WebInspector.CSSMetadata._distancePropertiesKeySet)
+        WebInspector.CSSMetadata._distancePropertiesKeySet = WebInspector.CSSMetadata._distanceProperties.keySet();
+    return WebInspector.CSSMetadata._distancePropertiesKeySet[propertyName] || propertyName.startsWith("margin") || propertyName.startsWith("padding") || propertyName.indexOf("width") !== -1 || propertyName.indexOf("height") !== -1;
 }
 
 // Taken from http://www.w3.org/TR/CSS21/propidx.html.
@@ -142,6 +160,11 @@ WebInspector.CSSMetadata._colors = [
     "royalblue", "saddlebrown", "salmon", "sandybrown", "seagreen", "seashell", "sienna", "skyblue", "slateblue",
     "slategray", "slategrey", "snow", "springgreen", "steelblue", "tan", "thistle", "tomato", "turquoise", "violet",
     "wheat", "whitesmoke", "yellowgreen"
+];
+
+WebInspector.CSSMetadata._distanceProperties = [
+    'background-position', 'border-spacing', 'bottom', 'font-size', 'height', 'left', 'letter-spacing', 'line-height', 'max-height', 'max-width', 'min-height',
+    'min-width', 'right', 'text-indent', 'top', 'width', 'word-spacing'
 ];
 
 WebInspector.CSSMetadata._colorAwareProperties = [
@@ -729,6 +752,9 @@ WebInspector.CSSMetadata.initializeWithSupportedProperties = function(properties
     WebInspector.CSSMetadata.cssPropertiesMetainfo = new WebInspector.CSSMetadata(properties);
 }
 
+/**
+ * @return {!Object.<string, boolean>}
+ */
 WebInspector.CSSMetadata.cssPropertiesMetainfoKeySet = function()
 {
     if (!WebInspector.CSSMetadata._cssPropertiesMetainfoKeySet)

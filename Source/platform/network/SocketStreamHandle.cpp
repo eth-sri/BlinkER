@@ -47,6 +47,7 @@ static const unsigned bufferSize = 100 * 1024 * 1024;
 
 SocketStreamHandleInternal::SocketStreamHandleInternal(SocketStreamHandle* handle)
     : m_handle(handle)
+    , m_socket(adoptPtr(blink::Platform::current()->createSocketStreamHandle()))
     , m_maxPendingSendAllowed(0)
     , m_pendingAmountSent(0)
 {
@@ -54,17 +55,16 @@ SocketStreamHandleInternal::SocketStreamHandleInternal(SocketStreamHandle* handl
 
 SocketStreamHandleInternal::~SocketStreamHandleInternal()
 {
-    m_handle = 0;
+#if !ENABLE(OILPAN)
+    m_handle = nullptr;
+#endif
 }
 
 void SocketStreamHandleInternal::connect(const KURL& url)
 {
-    m_socket = adoptPtr(blink::Platform::current()->createSocketStreamHandle());
     WTF_LOG(Network, "SocketStreamHandleInternal %p connect()", this);
+
     ASSERT(m_socket);
-    ASSERT(m_handle);
-    if (m_handle->m_client)
-        m_handle->m_client->willOpenSocketStream(m_handle);
     m_socket->connect(url, this);
 }
 
@@ -145,7 +145,7 @@ void SocketStreamHandleInternal::didClose(blink::WebSocketStreamHandle* socketHa
         ASSERT(socketHandle == m_socket.get());
         m_socket.clear();
         SocketStreamHandle* h = m_handle;
-        m_handle = 0;
+        m_handle = nullptr;
         if (h->m_client)
             h->m_client->didCloseSocketStream(h);
     }
@@ -161,21 +161,30 @@ void SocketStreamHandleInternal::didFail(blink::WebSocketStreamHandle* socketHan
     }
 }
 
+void SocketStreamHandleInternal::trace(Visitor* visitor)
+{
+    visitor->trace(m_handle);
+}
+
 // SocketStreamHandle ----------------------------------------------------------
 
-SocketStreamHandle::SocketStreamHandle(const KURL& url, SocketStreamHandleClient* client)
-    : m_url(url)
-    , m_client(client)
+SocketStreamHandle::SocketStreamHandle(SocketStreamHandleClient* client)
+    : m_client(client)
     , m_state(Connecting)
 {
     m_internal = SocketStreamHandleInternal::create(this);
-    m_internal->connect(m_url);
+}
+
+void SocketStreamHandle::connect(const KURL& url)
+{
+    m_internal->connect(url);
 }
 
 SocketStreamHandle::~SocketStreamHandle()
 {
+#if !ENABLE(OILPAN)
     setClient(0);
-    m_internal.clear();
+#endif
 }
 
 SocketStreamHandle::SocketStreamState SocketStreamHandle::state() const
@@ -193,8 +202,6 @@ bool SocketStreamHandle::send(const char* data, int length)
             return false;
         }
         m_buffer.append(data, length);
-        if (m_client)
-            m_client->didUpdateBufferedAmount(this, bufferedAmount());
         return true;
     }
     int bytesWritten = 0;
@@ -202,14 +209,14 @@ bool SocketStreamHandle::send(const char* data, int length)
         bytesWritten = sendInternal(data, length);
     if (bytesWritten < 0)
         return false;
+    if (m_client)
+        m_client->didConsumeBufferedAmount(this, bytesWritten);
     if (m_buffer.size() + length - bytesWritten > bufferSize) {
         // FIXME: report error to indicate that buffer has no more space.
         return false;
     }
     if (bytesWritten < length) {
         m_buffer.append(data + bytesWritten, length - bytesWritten);
-        if (m_client)
-            m_client->didUpdateBufferedAmount(this, bufferedAmount());
     }
     return true;
 }
@@ -226,7 +233,7 @@ void SocketStreamHandle::close()
 
 void SocketStreamHandle::disconnect()
 {
-    RefPtr<SocketStreamHandle> protect(this); // closeInternal calls the client, which may make the handle get deallocated immediately.
+    RefPtrWillBeRawPtr<SocketStreamHandle> protect(this); // closeInternal calls the client, which may make the handle get deallocated immediately.
 
     closeInternal();
     m_state = Closed;
@@ -258,9 +265,10 @@ bool SocketStreamHandle::sendPendingData()
             return false;
         ASSERT(m_buffer.size() - bytesWritten <= bufferSize);
         m_buffer.consume(bytesWritten);
+        // FIXME: place didConsumeBufferedAmount out of do-while.
+        if (m_client)
+            m_client->didConsumeBufferedAmount(this, bytesWritten);
     } while (!pending && !m_buffer.isEmpty());
-    if (m_client)
-        m_client->didUpdateBufferedAmount(this, bufferedAmount());
     return true;
 }
 
@@ -275,6 +283,12 @@ void SocketStreamHandle::closeInternal()
 {
     if (m_internal)
         m_internal->close();
+}
+
+void SocketStreamHandle::trace(Visitor* visitor)
+{
+    visitor->trace(m_client);
+    visitor->trace(m_internal);
 }
 
 } // namespace WebCore

@@ -5,12 +5,14 @@
 #ifndef FetchEvent_h
 #define FetchEvent_h
 
-#include "core/events/Event.h"
+#include "modules/EventModules.h"
+#include "modules/serviceworkers/Request.h"
 #include "modules/serviceworkers/RespondWithObserver.h"
 
 namespace WebCore {
 
 class ExecutionContext;
+class Request;
 class RespondWithObserver;
 
 // A fetch event is dispatched by the client to a service worker's script
@@ -19,21 +21,28 @@ class RespondWithObserver;
 class FetchEvent FINAL : public Event {
 public:
     static PassRefPtrWillBeRawPtr<FetchEvent> create();
-    static PassRefPtrWillBeRawPtr<FetchEvent> create(PassRefPtr<RespondWithObserver>);
+    static PassRefPtrWillBeRawPtr<FetchEvent> create(PassRefPtr<RespondWithObserver>, PassRefPtr<Request>);
     virtual ~FetchEvent() { }
 
-    void respondWith(const ScriptValue&);
+    Request* request() const;
+    bool isReload() const;
+
+    void respondWith(ScriptState*, const ScriptValue&);
 
     virtual const AtomicString& interfaceName() const OVERRIDE;
+
+    void setIsReload(bool);
 
     virtual void trace(Visitor*) OVERRIDE;
 
 protected:
     FetchEvent();
-    explicit FetchEvent(PassRefPtr<RespondWithObserver>);
+    FetchEvent(PassRefPtr<RespondWithObserver>, PassRefPtr<Request>);
 
 private:
     RefPtr<RespondWithObserver> m_observer;
+    RefPtr<Request> m_request;
+    bool m_isReload;
 };
 
 } // namespace WebCore

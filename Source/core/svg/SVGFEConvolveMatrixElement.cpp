@@ -21,9 +21,8 @@
 
 #include "core/svg/SVGFEConvolveMatrixElement.h"
 
-#include "SVGNames.h"
+#include "core/SVGNames.h"
 #include "platform/graphics/filters/FilterEffect.h"
-#include "core/svg/SVGElementInstance.h"
 #include "core/svg/SVGParserUtilities.h"
 #include "core/svg/graphics/filters/SVGFilterBuilder.h"
 #include "platform/geometry/FloatPoint.h"
@@ -43,7 +42,7 @@ template<> const SVGEnumerationStringEntries& getStaticStringEntries<EdgeModeTyp
     return entries;
 }
 
-SVGFEConvolveMatrixElement::SVGFEConvolveMatrixElement(Document& document)
+inline SVGFEConvolveMatrixElement::SVGFEConvolveMatrixElement(Document& document)
     : SVGFilterPrimitiveStandardAttributes(SVGNames::feConvolveMatrixTag, document)
     , m_bias(SVGAnimatedNumber::create(this, SVGNames::biasAttr, SVGNumber::create()))
     , m_divisor(SVGAnimatedNumber::create(this, SVGNames::divisorAttr, SVGNumber::create()))
@@ -69,6 +68,8 @@ SVGFEConvolveMatrixElement::SVGFEConvolveMatrixElement(Document& document)
     addToPropertyMap(m_targetX);
     addToPropertyMap(m_targetY);
 }
+
+DEFINE_NODE_FACTORY(SVGFEConvolveMatrixElement)
 
 bool SVGFEConvolveMatrixElement::isSupportedAttribute(const QualifiedName& attrName)
 {

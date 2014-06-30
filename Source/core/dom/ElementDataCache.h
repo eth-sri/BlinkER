@@ -27,6 +27,7 @@
 #ifndef ElementDataCache_h
 #define ElementDataCache_h
 
+#include "platform/heap/Handle.h"
 #include "wtf/HashMap.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/PassRefPtr.h"
@@ -38,19 +39,18 @@ namespace WebCore {
 
 class Attribute;
 class ShareableElementData;
-class ShareableElementDataCacheEntry;
 
 class ElementDataCache {
 public:
     static PassOwnPtr<ElementDataCache> create() { return adoptPtr(new ElementDataCache); }
     ~ElementDataCache();
 
-    PassRefPtr<ShareableElementData> cachedShareableElementDataWithAttributes(const Vector<Attribute>&);
+    PassRefPtrWillBeRawPtr<ShareableElementData> cachedShareableElementDataWithAttributes(const Vector<Attribute>&);
 
 private:
     ElementDataCache();
 
-    typedef HashMap<unsigned, RefPtr<ShareableElementData>, AlreadyHashed> ShareableElementDataCache;
+    typedef WillBePersistentHeapHashMap<unsigned, RefPtrWillBeMember<ShareableElementData>, AlreadyHashed> ShareableElementDataCache;
     ShareableElementDataCache m_shareableElementDataCache;
 };
 

@@ -34,7 +34,7 @@
 #include "bindings/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/frame/DOMWindow.h"
+#include "core/frame/LocalDOMWindow.h"
 #include "core/timing/Performance.h"
 #include "modules/webmidi/MIDIAccess.h"
 
@@ -44,7 +44,7 @@ namespace {
 
 double now(ExecutionContext* context)
 {
-    DOMWindow* window = context ? context->executingWindow() : 0;
+    LocalDOMWindow* window = context ? context->executingWindow() : 0;
     Performance* performance = window ? &window->performance() : 0;
     return performance ? performance->now() : 0.0;
 }
@@ -173,10 +173,10 @@ private:
 
 } // namespace
 
-PassRefPtrWillBeRawPtr<MIDIOutput> MIDIOutput::create(MIDIAccess* access, unsigned portIndex, const String& id, const String& manufacturer, const String& name, const String& version)
+MIDIOutput* MIDIOutput::create(MIDIAccess* access, unsigned portIndex, const String& id, const String& manufacturer, const String& name, const String& version)
 {
     ASSERT(access);
-    return adoptRefWillBeRefCountedGarbageCollected(new MIDIOutput(access, portIndex, id, manufacturer, name, version));
+    return adoptRefCountedGarbageCollectedWillBeNoop(new MIDIOutput(access, portIndex, id, manufacturer, name, version));
 }
 
 MIDIOutput::MIDIOutput(MIDIAccess* access, unsigned portIndex, const String& id, const String& manufacturer, const String& name, const String& version)

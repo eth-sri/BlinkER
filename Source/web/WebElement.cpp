@@ -62,12 +62,6 @@ WebString WebElement::tagName() const
     return constUnwrap<Element>()->tagName();
 }
 
-bool WebElement::hasTagName(const WebString& tagName) const
-{
-    return equalIgnoringCase(constUnwrap<Element>()->tagName(),
-                             tagName.operator String());
-}
-
 bool WebElement::hasHTMLTagName(const WebString& tagName) const
 {
     // How to create                     class              nodeName localName
@@ -126,14 +120,14 @@ WebString WebElement::attributeLocalName(unsigned index) const
 {
     if (index >= attributeCount())
         return WebString();
-    return constUnwrap<Element>()->attributeItem(index).localName();
+    return constUnwrap<Element>()->attributeAt(index).localName();
 }
 
 WebString WebElement::attributeValue(unsigned index) const
 {
     if (index >= attributeCount())
         return WebString();
-    return constUnwrap<Element>()->attributeItem(index).value();
+    return constUnwrap<Element>()->attributeAt(index).value();
 }
 
 WebString WebElement::innerText()

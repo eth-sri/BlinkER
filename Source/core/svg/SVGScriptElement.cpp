@@ -22,13 +22,12 @@
 
 #include "core/svg/SVGScriptElement.h"
 
-#include "HTMLNames.h"
-#include "XLinkNames.h"
 #include "bindings/v8/ScriptEventListener.h"
+#include "core/HTMLNames.h"
+#include "core/XLinkNames.h"
 #include "core/dom/Attribute.h"
-#include "core/dom/Document.h"
 #include "core/dom/ScriptLoader.h"
-#include "core/svg/SVGElementInstance.h"
+#include "core/events/Event.h"
 
 namespace WebCore {
 
@@ -43,7 +42,7 @@ inline SVGScriptElement::SVGScriptElement(Document& document, bool wasInsertedBy
 
 PassRefPtrWillBeRawPtr<SVGScriptElement> SVGScriptElement::create(Document& document, bool insertedByParser)
 {
-    return adoptRefWillBeRefCountedGarbageCollected(new SVGScriptElement(document, insertedByParser, false));
+    return adoptRefWillBeNoop(new SVGScriptElement(document, insertedByParser, false));
 }
 
 bool SVGScriptElement::isSupportedAttribute(const QualifiedName& attrName)
@@ -69,7 +68,7 @@ void SVGScriptElement::parseAttribute(const QualifiedName& name, const AtomicStr
         return;
 
     if (name == HTMLNames::onerrorAttr) {
-        setAttributeEventListener(EventTypeNames::error, createAttributeEventListener(this, name, value));
+        setAttributeEventListener(EventTypeNames::error, createAttributeEventListener(this, name, value, eventParameterName()));
     } else if (SVGURIReference::parseAttribute(name, value, parseError)) {
     } else {
         ASSERT_NOT_REACHED();
@@ -183,7 +182,7 @@ bool SVGScriptElement::hasSourceAttribute() const
 
 PassRefPtrWillBeRawPtr<Element> SVGScriptElement::cloneElementWithoutAttributesAndChildren()
 {
-    return adoptRefWillBeRefCountedGarbageCollected(new SVGScriptElement(document(), false, m_loader->alreadyStarted()));
+    return adoptRefWillBeNoop(new SVGScriptElement(document(), false, m_loader->alreadyStarted()));
 }
 
 void SVGScriptElement::dispatchLoadEvent()

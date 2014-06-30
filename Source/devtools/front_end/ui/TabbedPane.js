@@ -47,6 +47,7 @@ WebInspector.TabbedPane = function()
     this._tabsHistory = [];
     /** @type {!Object.<string, !WebInspector.TabbedPaneTab>} */
     this._tabsById = {};
+    this._currentTabLocked = false;
 
     this._dropDownButton = this._createDropDownButton();
     WebInspector.zoomManager.addEventListener(WebInspector.ZoomManager.Events.ZoomChanged, this._zoomChanged, this);
@@ -58,6 +59,15 @@ WebInspector.TabbedPane.EventTypes = {
 }
 
 WebInspector.TabbedPane.prototype = {
+    /**
+     * @param {boolean} locked
+     */
+    setCurrentTabLocked: function(locked)
+    {
+        this._currentTabLocked = locked;
+        this._headerElement.classList.toggle("locked", this._currentTabLocked);
+    },
+
     /**
      * @return {?WebInspector.View}
      */
@@ -299,15 +309,18 @@ WebInspector.TabbedPane.prototype = {
     /**
      * @param {string} id
      * @param {boolean=} userGesture
+     * @return {boolean}
      */
     selectTab: function(id, userGesture)
     {
+        if (this._currentTabLocked)
+            return false;
         var focused = this.hasFocus();
         var tab = this._tabsById[id];
         if (!tab)
-            return;
+            return false;
         if (this._currentTab && this._currentTab.id === id)
-            return;
+            return true;
 
         this._hideCurrentTab();
         this._showTab(tab);
@@ -322,6 +335,7 @@ WebInspector.TabbedPane.prototype = {
 
         var eventData = { tabId: id, view: tab.view, isUserGesture: userGesture };
         this.dispatchEventToListeners(WebInspector.TabbedPane.EventTypes.TabSelected, eventData);
+        return true;
     },
 
     /**

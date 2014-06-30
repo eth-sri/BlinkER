@@ -45,6 +45,7 @@ namespace WebCore {
     class EventHandler;
     class FetchContext;
     class FloatSize;
+    class FloatRect;
     class FrameConsole;
     class FrameSelection;
     class FrameView;
@@ -60,9 +61,9 @@ namespace WebCore {
     class TreeScope;
     class VisiblePosition;
 
-    class LocalFrame : public Frame, public Supplementable<LocalFrame>  {
+    class LocalFrame : public Frame, public WillBePersistentHeapSupplementable<LocalFrame>  {
     public:
-        static PassRefPtr<LocalFrame> create(FrameLoaderClient*, FrameHost*, HTMLFrameOwnerElement*);
+        static PassRefPtr<LocalFrame> create(FrameLoaderClient*, FrameHost*, FrameOwner*);
 
         virtual bool isLocalFrame() const OVERRIDE { return true; }
 
@@ -79,7 +80,7 @@ namespace WebCore {
 
         virtual void disconnectOwnerElement() OVERRIDE;
 
-        virtual void setDOMWindow(PassRefPtrWillBeRawPtr<DOMWindow>) OVERRIDE;
+        virtual void setDOMWindow(PassRefPtrWillBeRawPtr<LocalDOMWindow>) OVERRIDE;
         FrameView* view() const;
         Document* document() const;
 
@@ -88,7 +89,6 @@ namespace WebCore {
         Editor& editor() const;
         EventHandler& eventHandler() const;
         FrameLoader& loader() const;
-        FrameTree& tree() const;
         NavigationScheduler& navigationScheduler() const;
         FrameSelection& selection() const;
         InputMethodController& inputMethodController() const;
@@ -112,7 +112,6 @@ namespace WebCore {
 
         // See GraphicsLayerClient.h for accepted flags.
         String layerTreeAsText(unsigned flags = 0) const;
-        String trackedRepaintRectsAsText() const;
 
         void setPrinting(bool printing, const FloatSize& pageSize, const FloatSize& originalPageSize, float maximumShrinkRatio);
         bool shouldUsePrintingLayout() const;
@@ -144,29 +143,25 @@ namespace WebCore {
         Document* documentAtPoint(const IntPoint& windowPoint);
         PassRefPtrWillBeRawPtr<Range> rangeForPoint(const IntPoint& framePoint);
 
-        // Should only be called on the main frame of a page.
-        void notifyChromeClientWheelEventHandlerCountChanged() const;
-
         bool isURLAllowed(const KURL&) const;
 
     // ========
 
     private:
-        LocalFrame(FrameLoaderClient*, FrameHost*, HTMLFrameOwnerElement*);
+        LocalFrame(FrameLoaderClient*, FrameHost*, FrameOwner*);
 
         String localLayerTreeAsText(unsigned flags) const;
 
-        mutable FrameTree m_treeNode;
         mutable FrameLoader m_loader;
         mutable NavigationScheduler m_navigationScheduler;
 
         RefPtr<FrameView> m_view;
 
         OwnPtr<ScriptController> m_script;
-        const OwnPtr<Editor> m_editor;
+        const OwnPtrWillBePersistent<Editor> m_editor;
         const OwnPtr<SpellChecker> m_spellChecker;
-        const OwnPtr<FrameSelection> m_selection;
-        const OwnPtr<EventHandler> m_eventHandler;
+        const OwnPtrWillBePersistent<FrameSelection> m_selection;
+        const OwnPtrWillBePersistent<EventHandler> m_eventHandler;
         const OwnPtr<FrameConsole> m_console;
         OwnPtr<InputMethodController> m_inputMethodController;
 
@@ -234,11 +229,6 @@ namespace WebCore {
     inline void LocalFrame::setInViewSourceMode(bool mode)
     {
         m_inViewSourceMode = mode;
-    }
-
-    inline FrameTree& LocalFrame::tree() const
-    {
-        return m_treeNode;
     }
 
     inline EventHandler& LocalFrame::eventHandler() const

@@ -58,9 +58,8 @@ class FontsReadyPromiseResolver;
 class ExecutionContext;
 
 #if ENABLE(OILPAN)
-class FontFaceSet FINAL : public RefCountedGarbageCollected<FontFaceSet>, public HeapSupplement<Document>, public ActiveDOMObject, public EventTargetWithInlineData {
+class FontFaceSet FINAL : public GarbageCollectedFinalized<FontFaceSet>, public HeapSupplement<Document>, public ActiveDOMObject, public EventTargetWithInlineData {
     USING_GARBAGE_COLLECTED_MIXIN(FontFaceSet);
-    DEFINE_EVENT_TARGET_REFCOUNTING(RefCountedGarbageCollected<FontFaceSet>);
     typedef HeapSupplement<Document> SupplementType;
 #else
 class FontFaceSet FINAL : public RefCountedSupplement<Document, FontFaceSet>, public ActiveDOMObject, public EventTargetWithInlineData {
@@ -115,7 +114,7 @@ public:
 private:
     static PassRefPtrWillBeRawPtr<FontFaceSet> create(Document& document)
     {
-        return adoptRefWillBeRefCountedGarbageCollected<FontFaceSet>(new FontFaceSet(document));
+        return adoptRefWillBeNoop(new FontFaceSet(document));
     }
 
     class FontLoadHistogram {
@@ -145,7 +144,7 @@ private:
     bool resolveFontStyle(const String&, Font&);
     void handlePendingEventsAndPromisesSoon();
     void handlePendingEventsAndPromises();
-    const ListHashSet<RefPtrWillBeMember<FontFace> >& cssConnectedFontFaceList() const;
+    const WillBeHeapListHashSet<RefPtrWillBeMember<FontFace> >& cssConnectedFontFaceList() const;
     bool isCSSConnectedFontFace(FontFace*) const;
 
     WillBeHeapHashSet<RefPtrWillBeMember<FontFace> > m_loadingFonts;
@@ -153,8 +152,7 @@ private:
     Vector<OwnPtr<FontsReadyPromiseResolver> > m_readyResolvers;
     FontFaceArray m_loadedFonts;
     FontFaceArray m_failedFonts;
-    // FIXME: Oilpan: replace with a HeapListHashSet or HeapLinkedHashSet.
-    ListHashSet<RefPtrWillBeMember<FontFace> > m_nonCSSConnectedFaces;
+    WillBeHeapListHashSet<RefPtrWillBeMember<FontFace> > m_nonCSSConnectedFaces;
 
     AsyncMethodRunner<FontFaceSet> m_asyncRunner;
 

@@ -25,22 +25,24 @@
 #if ENABLE(SVG_FONTS)
 #include "core/svg/SVGAltGlyphElement.h"
 
-#include "SVGNames.h"
-#include "XLinkNames.h"
 #include "bindings/v8/ExceptionMessages.h"
 #include "bindings/v8/ExceptionState.h"
+#include "core/SVGNames.h"
+#include "core/XLinkNames.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/rendering/svg/RenderSVGTSpan.h"
 #include "core/svg/SVGAltGlyphDefElement.h"
 
 namespace WebCore {
 
-SVGAltGlyphElement::SVGAltGlyphElement(Document& document)
+inline SVGAltGlyphElement::SVGAltGlyphElement(Document& document)
     : SVGTextPositioningElement(SVGNames::altGlyphTag, document)
     , SVGURIReference(this)
 {
     ScriptWrappable::init(this);
 }
+
+DEFINE_NODE_FACTORY(SVGAltGlyphElement)
 
 void SVGAltGlyphElement::setGlyphRef(const AtomicString&, ExceptionState& exceptionState)
 {

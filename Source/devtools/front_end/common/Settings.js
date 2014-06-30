@@ -66,6 +66,7 @@ WebInspector.Settings = function()
     this.savedURLs = this.createSetting("savedURLs", {});
     this.javaScriptDisabled = this.createSetting("javaScriptDisabled", false);
     this.showAdvancedHeapSnapshotProperties = this.createSetting("showAdvancedHeapSnapshotProperties", false);
+    this.recordAllocationStacks = this.createSetting("recordAllocationStacks", false);
     this.highResolutionCpuProfiling = this.createSetting("highResolutionCpuProfiling", false);
     this.searchInContentScripts = this.createSetting("searchInContentScripts", false);
     this.textEditorIndent = this.createSetting("textEditorIndent", "    ");
@@ -90,6 +91,7 @@ WebInspector.Settings = function()
     this.pauseOnExceptionEnabled = this.createSetting("pauseOnExceptionEnabled", false);
     this.pauseOnCaughtException = this.createSetting("pauseOnCaughtException", false);
     this.enableAsyncStackTraces = this.createSetting("enableAsyncStackTraces", false);
+    this.showMediaQueryInspector = this.createSetting("showMediaQueryInspector", false);
 }
 
 WebInspector.Settings.prototype = {
@@ -282,7 +284,7 @@ WebInspector.BackendSetting.prototype = {
         function callback(error)
         {
             if (error) {
-                WebInspector.console.log("Error applying setting " + this._name + ": " + error);
+                WebInspector.messageSink.addErrorMessage("Error applying setting " + this._name + ": " + error);
                 this._eventSupport.dispatchEventToListeners(this._name, this._value);
                 return;
             }
@@ -309,12 +311,12 @@ WebInspector.ExperimentsSettings = function(experimentsEnabled)
     this.applyCustomStylesheet = this._createExperiment("applyCustomStylesheet", "Allow custom UI themes");
     this.canvasInspection = this._createExperiment("canvasInspection ", "Canvas inspection");
     this.devicesPanel = this._createExperiment("devicesPanel", "Devices panel", true);
+    this.disableAgentsWhenProfile = this._createExperiment("disableAgentsWhenProfile", "Disable other agents and UI when profiler is active", true);
     this.dockToLeft = this._createExperiment("dockToLeft", "Dock to left", true);
     this.editorInDrawer = this._createExperiment("showEditorInDrawer", "Editor in drawer", true);
     this.fileSystemInspection = this._createExperiment("fileSystemInspection", "FileSystem inspection");
     this.frameworksDebuggingSupport = this._createExperiment("frameworksDebuggingSupport", "JavaScript frameworks debugging");
     this.gpuTimeline = this._createExperiment("gpuTimeline", "GPU data on timeline", true);
-    this.heapAllocationProfiler = this._createExperiment("allocationProfiler", "Heap allocation profiler");
     this.heapSnapshotStatistics = this._createExperiment("heapSnapshotStatistics", "Heap snapshot statistics", true);
     this.layersPanel = this._createExperiment("layersPanel", "Layers panel", true);
     this.timelineFlameChart = this._createExperiment("timelineFlameChart", "Timeline flame chart");
@@ -675,8 +677,15 @@ WebInspector.VersionController.prototype = {
     }
 }
 
-WebInspector.settings = new WebInspector.Settings();
-WebInspector.experimentsSettings = new WebInspector.ExperimentsSettings(WebInspector.queryParam("experiments") !== null);
+/**
+ * @type {!WebInspector.Settings}
+ */
+WebInspector.settings;
+
+/**
+ * @type {!WebInspector.ExperimentsSettings}
+ */
+WebInspector.experimentsSettings;
 
 // These methods are added for backwards compatibility with Devtools CodeSchool extension.
 // DO NOT REMOVE
@@ -752,5 +761,3 @@ WebInspector.PauseOnExceptionStateSetting.prototype = {
         this._eventSupport.dispatchEventToListeners(this._name, this._value);
     }
 }
-
-WebInspector.settings.pauseOnExceptionStateString = new WebInspector.PauseOnExceptionStateSetting();

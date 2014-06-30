@@ -32,22 +32,26 @@
 #include "core/dom/custom/CustomElementMicrotaskImportStep.h"
 
 #include "core/dom/custom/CustomElementMicrotaskDispatcher.h"
-#include "core/dom/custom/CustomElementMicrotaskQueue.h"
+#include "core/dom/custom/CustomElementSyncMicrotaskQueue.h"
 #include "core/html/imports/HTMLImportChild.h"
 #include "core/html/imports/HTMLImportLoader.h"
 #include <stdio.h>
 
 namespace WebCore {
 
-PassOwnPtr<CustomElementMicrotaskImportStep> CustomElementMicrotaskImportStep::create(HTMLImportChild* import)
+PassOwnPtrWillBeRawPtr<CustomElementMicrotaskImportStep> CustomElementMicrotaskImportStep::create(HTMLImportChild* import)
 {
-    return adoptPtr(new CustomElementMicrotaskImportStep(import));
+    return adoptPtrWillBeNoop(new CustomElementMicrotaskImportStep(import));
 }
 
 CustomElementMicrotaskImportStep::CustomElementMicrotaskImportStep(HTMLImportChild* import)
+#if ENABLE(OILPAN)
+    : m_import(import)
+#else
     : m_import(import->weakPtr())
-    , m_queue(import->loader()->microtaskQueue())
     , m_weakFactory(this)
+#endif
+    , m_queue(import->loader()->microtaskQueue())
 {
 }
 
@@ -57,18 +61,13 @@ CustomElementMicrotaskImportStep::~CustomElementMicrotaskImportStep()
 
 void CustomElementMicrotaskImportStep::parentWasChanged()
 {
-    m_queue = CustomElementMicrotaskQueue::create();
+    m_queue = CustomElementSyncMicrotaskQueue::create();
     m_import.clear();
 }
 
 bool CustomElementMicrotaskImportStep::shouldWaitForImport() const
 {
-    return m_import && !m_import->isLoaded();
-}
-
-bool CustomElementMicrotaskImportStep::shouldStopProcessing() const
-{
-    return m_import && m_import->isSync();
+    return m_import && !m_import->loader()->isDone();
 }
 
 void CustomElementMicrotaskImportStep::didUpgradeAllCustomElements()
@@ -80,26 +79,25 @@ void CustomElementMicrotaskImportStep::didUpgradeAllCustomElements()
 
 CustomElementMicrotaskStep::Result CustomElementMicrotaskImportStep::process()
 {
-    Result result = m_queue->dispatch();
-    if (!(result & ShouldStop) && !shouldWaitForImport())
-        didUpgradeAllCustomElements();
+    m_queue->dispatch();
+    if (!m_queue->isEmpty() || shouldWaitForImport())
+        return Processing;
 
-    if (shouldWaitForImport())
-        result = Result(result | ShouldRemain | ShouldStop);
-    if (!shouldStopProcessing())
-        result = Result(result & ~ShouldStop);
-    return result;
+    didUpgradeAllCustomElements();
+    return FinishedProcessing;
 }
 
-bool CustomElementMicrotaskImportStep::needsProcessOrStop() const
+void CustomElementMicrotaskImportStep::trace(Visitor* visitor)
 {
-    return shouldStopProcessing() || m_queue->needsProcessOrStop();
+    visitor->trace(m_import);
+    visitor->trace(m_queue);
+    CustomElementMicrotaskStep::trace(visitor);
 }
 
 #if !defined(NDEBUG)
 void CustomElementMicrotaskImportStep::show(unsigned indent)
 {
-    fprintf(stderr, "%*sImport(wait=%d sync=%d, url=%s)\n", indent, "", shouldWaitForImport(), shouldStopProcessing(), m_import ? m_import->url().string().utf8().data() : "null");
+    fprintf(stderr, "%*sImport(wait=%d sync=%d, url=%s)\n", indent, "", shouldWaitForImport(), m_import && m_import->isSync(), m_import ? m_import->url().string().utf8().data() : "null");
     m_queue->show(indent + 1);
 }
 #endif

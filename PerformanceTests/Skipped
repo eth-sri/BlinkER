@@ -32,9 +32,6 @@ Dromaeo
 # Bug 77024 - Web Inspector: tests in PerformanceTests/inspector/ are timing out
 inspector
 
-# Bug 100262 - REGRESSION(r131982): this test is crashing
-SVG/SvgNestedUse.html
-
 Canvas/drawimage.html
 
 # Has a time-dependency (monotonically increasing), and is much slower than
@@ -60,6 +57,9 @@ Canvas/draw-video-to-hw-accelerated-canvas-2d.html
 Canvas/upload-video-to-sub-texture.html
 Canvas/upload-video-to-texture.html
 
+# Times out on Nexus10. crbug.com/385313
+Canvas/draw-static-canvas-2d-to-hw-accelerated-canvas-2d.html
+
 # Microbenchmark that we aren't interested in monitoring.
 Bindings/gc-forest.html
 Bindings/gc-mini-tree.html
@@ -68,3 +68,8 @@ Bindings/named-property-enumerator.html
 
 # Times out on the bots
 Interactive/spellcheck-paste-huge-text.html
+
+# Times out on Android. crbug.com/384857
+Animation/overlay-background-color-transitions.html
+Animation/balls-transition-10-properties.html
+Animation/balls-transition-all.html

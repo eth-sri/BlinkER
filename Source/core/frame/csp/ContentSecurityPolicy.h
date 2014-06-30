@@ -27,7 +27,7 @@
 #define ContentSecurityPolicy_h
 
 #include "bindings/v8/ScriptState.h"
-#include "core/dom/Document.h"
+#include "core/dom/ExecutionContext.h"
 #include "platform/network/ContentSecurityPolicyParsers.h"
 #include "platform/network/HTTPParsers.h"
 #include "platform/weborigin/ReferrerPolicy.h"
@@ -49,9 +49,9 @@ namespace WebCore {
 class ContentSecurityPolicyResponseHeaders;
 class CSPDirectiveList;
 class DOMStringList;
+class Document;
 class JSONObject;
 class KURL;
-class ExecutionContextClient;
 class SecurityOrigin;
 
 typedef int SandboxFlags;
@@ -82,9 +82,9 @@ public:
     static const char ReflectedXSS[];
     static const char Referrer[];
 
-    static PassRefPtr<ContentSecurityPolicy> create(ExecutionContextClient* client)
+    static PassRefPtr<ContentSecurityPolicy> create(ExecutionContext* executionContext)
     {
-        return adoptRef(new ContentSecurityPolicy(client));
+        return adoptRef(new ContentSecurityPolicy(executionContext));
     }
     ~ContentSecurityPolicy();
 
@@ -126,10 +126,14 @@ public:
 
     // The nonce and hash allow functions are guaranteed to not have any side
     // effects, including reporting.
-    bool allowScriptNonce(const String& nonce) const;
-    bool allowStyleNonce(const String& nonce) const;
-    bool allowScriptHash(const String& source) const;
-    bool allowStyleHash(const String& source) const;
+    // Nonce/Hash functions check all policies relating to use of a script/style
+    // with the given nonce/hash and return true all CSP policies allow it.
+    // If these return true, callers can then process the content or
+    // issue a load and be safe disabling any further CSP checks.
+    bool allowScriptWithNonce(const String& nonce) const;
+    bool allowStyleWithNonce(const String& nonce) const;
+    bool allowScriptWithHash(const String& source) const;
+    bool allowStyleWithHash(const String& source) const;
 
     void usesScriptHashAlgorithms(uint8_t ContentSecurityPolicyHashAlgorithm);
     void usesStyleHashAlgorithms(uint8_t ContentSecurityPolicyHashAlgorithm);
@@ -173,11 +177,12 @@ public:
 
     static bool isDirectiveName(const String&);
 
-    ExecutionContextClient* client() const { return m_client; }
-    Document* document() const { return client()->isDocument() ? toDocument(client()) : 0; }
+    ExecutionContext* executionContext() const { return m_executionContext; }
 
 private:
-    explicit ContentSecurityPolicy(ExecutionContextClient*);
+    explicit ContentSecurityPolicy(ExecutionContext*);
+
+    Document* document() const;
 
     void logToConsole(const String& message) const;
     void addPolicyFromHeaderValue(const String&, ContentSecurityPolicyHeaderType, ContentSecurityPolicyHeaderSource);
@@ -185,7 +190,7 @@ private:
     bool shouldSendViolationReport(const String&) const;
     void didSendViolationReport(const String&);
 
-    ExecutionContextClient* m_client;
+    ExecutionContext* m_executionContext;
     bool m_overrideInlineStyleAllowed;
     CSPDirectiveListVector m_policies;
 

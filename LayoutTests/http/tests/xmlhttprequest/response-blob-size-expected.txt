@@ -1,3 +1,0 @@
-
-PASS Test Blob.size of response blob received for XMLHttpRequest 
-

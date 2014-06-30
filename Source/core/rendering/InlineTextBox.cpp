@@ -27,6 +27,8 @@
 #include "core/dom/DocumentMarkerController.h"
 #include "core/dom/RenderedDocumentMarker.h"
 #include "core/dom/Text.h"
+#include "core/editing/CompositionUnderline.h"
+#include "core/editing/CompositionUnderlineRangeFilter.h"
 #include "core/editing/Editor.h"
 #include "core/editing/InputMethodController.h"
 #include "core/frame/LocalFrame.h"
@@ -44,7 +46,9 @@
 #include "core/rendering/RenderTheme.h"
 #include "core/rendering/style/ShadowList.h"
 #include "core/rendering/svg/SVGTextRunRenderingContext.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/fonts/FontCache.h"
+#include "platform/fonts/GlyphBuffer.h"
 #include "platform/fonts/WidthIterator.h"
 #include "platform/graphics/DrawLooperBuilder.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
@@ -52,7 +56,7 @@
 #include "wtf/text/CString.h"
 #include "wtf/text/StringBuilder.h"
 
-using namespace std;
+#include <algorithm>
 
 namespace WebCore {
 
@@ -137,10 +141,10 @@ LayoutUnit InlineTextBox::selectionHeight()
 
 bool InlineTextBox::isSelected(int startPos, int endPos) const
 {
-    int sPos = max(startPos - m_start, 0);
+    int sPos = std::max(startPos - m_start, 0);
     // The position after a hard line break is considered to be past its end.
     // See the corresponding code in InlineTextBox::selectionState.
-    int ePos = min(endPos - m_start, int(m_len) + (isLineBreak() ? 0 : 1));
+    int ePos = std::min(endPos - m_start, int(m_len) + (isLineBreak() ? 0 : 1));
     return (sPos < ePos);
 }
 
@@ -192,8 +196,8 @@ RenderObject::SelectionState InlineTextBox::selectionState()
 
 LayoutRect InlineTextBox::localSelectionRect(int startPos, int endPos)
 {
-    int sPos = max(startPos - m_start, 0);
-    int ePos = min(endPos - m_start, (int)m_len);
+    int sPos = std::max(startPos - m_start, 0);
+    int ePos = std::min(endPos - m_start, (int)m_len);
 
     if (sPos > ePos)
         return LayoutRect();
@@ -294,7 +298,7 @@ float InlineTextBox::placeEllipsisBox(bool flowIsLTR, float visibleLeftEdge, flo
             // and the ellipsis edge.
             m_truncation = cFullTruncation;
             truncatedWidth += ellipsisWidth;
-            return min(ellipsisX, logicalLeft());
+            return std::min(ellipsisX, logicalLeft());
         }
 
         // Set the truncation index on the text run.
@@ -470,15 +474,20 @@ void InlineTextBox::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset, 
 
     ASSERT(paintInfo.phase != PaintPhaseSelfOutline && paintInfo.phase != PaintPhaseChildOutlines);
 
-    LayoutUnit logicalLeftSide = logicalLeftVisualOverflow();
-    LayoutUnit logicalRightSide = logicalRightVisualOverflow();
-    LayoutUnit logicalStart = logicalLeftSide + (isHorizontal() ? paintOffset.x() : paintOffset.y());
-    LayoutUnit logicalExtent = logicalRightSide - logicalLeftSide;
+    LayoutRect logicalVisualOverflow = logicalOverflowRect();
+    LayoutUnit logicalStart = logicalVisualOverflow.x() + (isHorizontal() ? paintOffset.x() : paintOffset.y());
+    LayoutUnit logicalExtent = logicalVisualOverflow.width();
 
     LayoutUnit paintEnd = isHorizontal() ? paintInfo.rect.maxX() : paintInfo.rect.maxY();
     LayoutUnit paintStart = isHorizontal() ? paintInfo.rect.x() : paintInfo.rect.y();
 
-    LayoutPoint adjustedPaintOffset = roundedIntPoint(paintOffset);
+    // When subpixel font scaling is enabled text runs are positioned at
+    // subpixel boundaries on the x-axis and thus there is no reason to
+    // snap the x value. We still round the y-axis to ensure consistent
+    // line heights.
+    LayoutPoint adjustedPaintOffset = RuntimeEnabledFeatures::subpixelFontScalingEnabled()
+        ? LayoutPoint(paintOffset.x(), paintOffset.y().round())
+        : roundedIntPoint(paintOffset);
 
     if (logicalStart >= paintEnd || logicalStart + logicalExtent <= paintStart)
         return;
@@ -517,7 +526,6 @@ void InlineTextBox::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset, 
     adjustedPaintOffset.move(0, styleToUse->isHorizontalWritingMode() ? 0 : -logicalHeight());
 
     FloatPoint boxOrigin = locationIncludingFlipping();
-    // FIXME: Shouldn't these offsets be rounded?
     boxOrigin.move(adjustedPaintOffset.x().toFloat(), adjustedPaintOffset.y().toFloat());
     FloatRect boxRect(boxOrigin, LayoutSize(logicalWidth(), logicalHeight()));
 
@@ -630,13 +638,10 @@ void InlineTextBox::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset, 
         combinedText->adjustTextOrigin(textOrigin, boxRect);
 
     // 1. Paint backgrounds behind text if needed. Examples of such backgrounds include selection
-    // and composition underlines.
+    // and composition highlights.
     if (paintInfo.phase != PaintPhaseSelection && paintInfo.phase != PaintPhaseTextClip && !isPrinting) {
-
-        if (containsComposition && !useCustomUnderlines) {
-            paintCompositionBackground(context, boxOrigin, styleToUse, font,
-                renderer().frame()->inputMethodController().compositionStart(),
-                renderer().frame()->inputMethodController().compositionEnd());
+        if (containsComposition) {
+            paintCompositionBackgrounds(context, boxOrigin, styleToUse, font, useCustomUnderlines);
         }
 
         paintDocumentMarkers(context, boxOrigin, styleToUse, font, true);
@@ -670,8 +675,8 @@ void InlineTextBox::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset, 
         selectionStartEnd(sPos, ePos);
 
     if (m_truncation != cNoTruncation) {
-        sPos = min<int>(sPos, m_truncation);
-        ePos = min<int>(ePos, m_truncation);
+        sPos = std::min<int>(sPos, m_truncation);
+        ePos = std::min<int>(ePos, m_truncation);
         length = m_truncation;
     }
 
@@ -762,28 +767,14 @@ void InlineTextBox::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset, 
     if (paintInfo.phase == PaintPhaseForeground) {
         paintDocumentMarkers(context, boxOrigin, styleToUse, font, false);
 
+        // Paint custom underlines for compositions.
         if (useCustomUnderlines) {
             const Vector<CompositionUnderline>& underlines = renderer().frame()->inputMethodController().customCompositionUnderlines();
-            size_t numUnderlines = underlines.size();
-
-            for (size_t index = 0; index < numUnderlines; ++index) {
-                const CompositionUnderline& underline = underlines[index];
-
-                if (underline.endOffset <= start())
-                    // underline is completely before this run.  This might be an underline that sits
-                    // before the first run we draw, or underlines that were within runs we skipped
-                    // due to truncation.
+            CompositionUnderlineRangeFilter filter(underlines, start(), end());
+            for (CompositionUnderlineRangeFilter::ConstIterator it = filter.begin(); it != filter.end(); ++it) {
+                if (it->color == Color::transparent)
                     continue;
-
-                if (underline.startOffset <= end()) {
-                    // underline intersects this run.  Paint it.
-                    paintCompositionUnderline(context, boxOrigin, underline);
-                    if (underline.endOffset > end() + 1)
-                        // underline also runs into the next run. Bail now, no more marker advancement.
-                        break;
-                } else
-                    // underline is completely after this run, bail.  A later run will paint it.
-                    break;
+                paintCompositionUnderline(context, boxOrigin, *it);
             }
         }
     }
@@ -806,13 +797,13 @@ void InlineTextBox::selectionStartEnd(int& sPos, int& ePos)
             startPos = 0;
     }
 
-    sPos = max(startPos - m_start, 0);
-    ePos = min(endPos - m_start, (int)m_len);
+    sPos = std::max(startPos - m_start, 0);
+    ePos = std::min(endPos - m_start, (int)m_len);
 }
 
 void alignSelectionRectToDevicePixels(FloatRect& rect)
 {
-    float maxX = floorf(rect.maxX());
+    float maxX = roundf(rect.maxX());
     rect.setX(floorf(rect.x()));
     rect.setWidth(roundf(maxX - rect.x()));
 }
@@ -858,7 +849,7 @@ void InlineTextBox::paintSelection(GraphicsContext* context, const FloatPoint& b
     LayoutUnit selectionTop = root().selectionTopAdjustedForPrecedingBlock();
 
     int deltaY = roundToInt(renderer().style()->isFlippedLinesWritingMode() ? selectionBottom - logicalBottom() : logicalTop() - selectionTop);
-    int selHeight = max(0, roundToInt(selectionBottom - selectionTop));
+    int selHeight = std::max(0, roundToInt(selectionBottom - selectionTop));
 
     FloatPoint localOrigin(boxOrigin.x(), boxOrigin.y() - deltaY);
     FloatRect clipRect(localOrigin, FloatSize(m_logicalWidth, selHeight));
@@ -869,25 +860,34 @@ void InlineTextBox::paintSelection(GraphicsContext* context, const FloatPoint& b
     context->drawHighlightForText(font, textRun, localOrigin, selHeight, c, sPos, ePos);
 }
 
-void InlineTextBox::paintCompositionBackground(GraphicsContext* context, const FloatPoint& boxOrigin, RenderStyle* style, const Font& font, int startPos, int endPos)
+unsigned InlineTextBox::underlinePaintStart(const CompositionUnderline& underline)
 {
-    int offset = m_start;
-    int sPos = max(startPos - offset, 0);
-    int ePos = min(endPos - offset, (int)m_len);
+    return std::max(static_cast<unsigned>(m_start), underline.startOffset);
+}
 
+unsigned InlineTextBox::underlinePaintEnd(const CompositionUnderline& underline)
+{
+    unsigned paintEnd = std::min(end() + 1, underline.endOffset); // end() points at the last char, not past it.
+    if (m_truncation != cNoTruncation)
+        paintEnd = std::min(paintEnd, static_cast<unsigned>(m_start + m_truncation));
+    return paintEnd;
+}
+
+void InlineTextBox::paintSingleCompositionBackgroundRun(GraphicsContext* context, const FloatPoint& boxOrigin, RenderStyle* style, const Font& font, Color backgroundColor, int startPos, int endPos)
+{
+    int sPos = std::max(startPos - m_start, 0);
+    int ePos = std::min(endPos - m_start, static_cast<int>(m_len));
     if (sPos >= ePos)
         return;
 
     GraphicsContextStateSaver stateSaver(*context);
 
-    Color c = Color(225, 221, 85);
-
-    updateGraphicsContext(context, c, c, 0); // Don't draw text at all!
+    updateGraphicsContext(context, backgroundColor, backgroundColor, 0); // Don't draw text at all!
 
     int deltaY = renderer().style()->isFlippedLinesWritingMode() ? selectionBottom() - logicalBottom() : logicalTop() - selectionTop();
     int selHeight = selectionHeight();
     FloatPoint localOrigin(boxOrigin.x(), boxOrigin.y() - deltaY);
-    context->drawHighlightForText(font, constructTextRun(style, font), localOrigin, selHeight, c, sPos, ePos);
+    context->drawHighlightForText(font, constructTextRun(style, font), localOrigin, selHeight, backgroundColor, sPos, ePos);
 }
 
 static StrokeStyle textDecorationStyleToStrokeStyle(TextDecorationStyle decorationStyle)
@@ -1005,12 +1005,12 @@ static void strokeWavyTextDecoration(GraphicsContext* context, FloatPoint p1, Fl
     // the actual curve passes approximately at half of that distance, that is 3 pixels.
     // The minimum height of the curve is also approximately 3 pixels. Increases the curve's height
     // as strockThickness increases to make the curve looks better.
-    float controlPointDistance = 3 * max<float>(2, strokeThickness);
+    float controlPointDistance = 3 * std::max<float>(2, strokeThickness);
 
     // Increment used to form the diamond shape between start point (p1), control
     // points and end point (p2) along the axis of the decoration. Makes the
     // curve wider as strockThickness increases to make the curve looks better.
-    float step = 2 * max<float>(2, strokeThickness);
+    float step = 2 * std::max<float>(2, strokeThickness);
 
     bool isVerticalLine = (p1.x() == p2.x());
 
@@ -1159,14 +1159,14 @@ void InlineTextBox::paintDecoration(GraphicsContext* context, const FloatPoint& 
             float shadowY = isHorizontal() ? s.y() : -s.x();
             shadowRect.move(shadowX, shadowY);
             clipRect.unite(shadowRect);
-            extraOffset = max(extraOffset, max(0.0f, shadowY) + s.blur());
+            extraOffset = std::max(extraOffset, std::max(0.0f, shadowY) + s.blur());
         }
         context->clip(clipRect);
         extraOffset += baseline + 2;
         localOrigin.move(0, extraOffset);
     }
 
-    for (size_t i = max(static_cast<size_t>(1), shadowCount); i--; ) {
+    for (size_t i = std::max(static_cast<size_t>(1), shadowCount); i--; ) {
         // Even if we have no shadows, we still want to run the code below this once.
         if (i < shadowCount) {
             if (!i) {
@@ -1232,11 +1232,11 @@ void InlineTextBox::paintDocumentMarker(GraphicsContext* pt, const FloatPoint& b
         markerSpansWholeBox = false;
 
     if (!markerSpansWholeBox || grammar) {
-        int startPosition = max<int>(marker->startOffset() - m_start, 0);
-        int endPosition = min<int>(marker->endOffset() - m_start, m_len);
+        int startPosition = std::max<int>(marker->startOffset() - m_start, 0);
+        int endPosition = std::min<int>(marker->endOffset() - m_start, m_len);
 
         if (m_truncation != cNoTruncation)
-            endPosition = min<int>(endPosition, m_truncation);
+            endPosition = std::min<int>(endPosition, m_truncation);
 
         // Calculate start & width
         int deltaY = renderer().style()->isFlippedLinesWritingMode() ? selectionBottom() - logicalBottom() : logicalTop() - selectionTop();
@@ -1285,8 +1285,8 @@ void InlineTextBox::paintTextMatchMarker(GraphicsContext* pt, const FloatPoint& 
     int deltaY = renderer().style()->isFlippedLinesWritingMode() ? selectionBottom() - logicalBottom() : logicalTop() - selectionTop();
     int selHeight = selectionHeight();
 
-    int sPos = max(marker->startOffset() - m_start, (unsigned)0);
-    int ePos = min(marker->endOffset() - m_start, (unsigned)m_len);
+    int sPos = std::max(marker->startOffset() - m_start, (unsigned)0);
+    int ePos = std::min(marker->endOffset() - m_start, (unsigned)m_len);
     TextRun run = constructTextRun(style, font);
 
     // Always compute and store the rect associated with this marker. The computed rect is in absolute coordinates.
@@ -1303,6 +1303,25 @@ void InlineTextBox::paintTextMatchMarker(GraphicsContext* pt, const FloatPoint& 
         updateGraphicsContext(pt, color, color, 0); // Don't draw text at all!
         pt->clip(FloatRect(boxOrigin.x(), boxOrigin.y() - deltaY, m_logicalWidth, selHeight));
         pt->drawHighlightForText(font, run, FloatPoint(boxOrigin.x(), boxOrigin.y() - deltaY), selHeight, color, sPos, ePos);
+    }
+}
+
+void InlineTextBox::paintCompositionBackgrounds(GraphicsContext* pt, const FloatPoint& boxOrigin, RenderStyle* style, const Font& font, bool useCustomUnderlines)
+{
+    if (useCustomUnderlines) {
+        // Paint custom background highlights for compositions.
+        const Vector<CompositionUnderline>& underlines = renderer().frame()->inputMethodController().customCompositionUnderlines();
+        CompositionUnderlineRangeFilter filter(underlines, start(), end());
+        for (CompositionUnderlineRangeFilter::ConstIterator it = filter.begin(); it != filter.end(); ++it) {
+            if (it->backgroundColor == Color::transparent)
+                continue;
+            paintSingleCompositionBackgroundRun(pt, boxOrigin, style, font, it->backgroundColor, underlinePaintStart(*it), underlinePaintEnd(*it));
+        }
+
+    } else {
+        paintSingleCompositionBackgroundRun(pt, boxOrigin, style, font, RenderTheme::theme().platformDefaultCompositionBackgroundColor(),
+            renderer().frame()->inputMethodController().compositionStart(),
+            renderer().frame()->inputMethodController().compositionEnd());
     }
 }
 
@@ -1366,27 +1385,15 @@ void InlineTextBox::paintCompositionUnderline(GraphicsContext* ctx, const FloatP
     if (m_truncation == cFullTruncation)
         return;
 
-    float start = 0; // start of line to draw, relative to tx
-    float width = m_logicalWidth; // how much line to draw
-    bool useWholeWidth = true;
-    unsigned paintStart = m_start;
-    unsigned paintEnd = end() + 1; // end points at the last char, not past it
-    if (paintStart <= underline.startOffset) {
-        paintStart = underline.startOffset;
-        useWholeWidth = false;
-        start = toRenderText(renderer()).width(m_start, paintStart - m_start, textPos(), isLeftToRightDirection() ? LTR : RTL, isFirstLineStyle());
-    }
-    if (paintEnd != underline.endOffset) {      // end points at the last char, not past it
-        paintEnd = min(paintEnd, (unsigned)underline.endOffset);
-        useWholeWidth = false;
-    }
-    if (m_truncation != cNoTruncation) {
-        paintEnd = min(paintEnd, (unsigned)m_start + m_truncation);
-        useWholeWidth = false;
-    }
-    if (!useWholeWidth) {
-        width = toRenderText(renderer()).width(paintStart, paintEnd - paintStart, textPos() + start, isLeftToRightDirection() ? LTR : RTL, isFirstLineStyle());
-    }
+    unsigned paintStart = underlinePaintStart(underline);
+    unsigned paintEnd = underlinePaintEnd(underline);
+
+    // start of line to draw, relative to paintOffset.
+    float start = paintStart == static_cast<unsigned>(m_start) ? 0 :
+        toRenderText(renderer()).width(m_start, paintStart - m_start, textPos(), isLeftToRightDirection() ? LTR : RTL, isFirstLineStyle());
+    // how much line to draw
+    float width = (paintStart == static_cast<unsigned>(m_start) && paintEnd == static_cast<unsigned>(end()) + 1) ? m_logicalWidth :
+        toRenderText(renderer()).width(paintStart, paintEnd - paintStart, textPos() + start, isLeftToRightDirection() ? LTR : RTL, isFirstLineStyle());
 
     // Thick marked text underlines are 2px thick as long as there is room for the 2px line under the baseline.
     // All other marked text underlines are 1px thick.

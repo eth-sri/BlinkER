@@ -32,9 +32,7 @@
 
 namespace WebCore {
 
-class CSSStyleSheet;
 class DocumentStyleSheetCollector;
-class StyleSheet;
 class StyleEngine;
 class TreeScope;
 
@@ -42,9 +40,12 @@ class DocumentStyleSheetCollection FINAL : public TreeScopeStyleSheetCollection 
     WTF_MAKE_NONCOPYABLE(DocumentStyleSheetCollection);
     WTF_MAKE_FAST_ALLOCATED_WILL_BE_REMOVED;
 public:
-    explicit DocumentStyleSheetCollection(TreeScope&);
+    static PassOwnPtrWillBeRawPtr<DocumentStyleSheetCollection> create(TreeScope& treeScope)
+    {
+        return adoptPtrWillBeNoop(new DocumentStyleSheetCollection(treeScope));
+    }
 
-    bool updateActiveStyleSheets(StyleEngine*, StyleResolverUpdateMode);
+    void updateActiveStyleSheets(StyleEngine*, StyleResolverUpdateMode);
     void collectStyleSheets(StyleEngine*, DocumentStyleSheetCollector&);
 
     virtual void trace(Visitor* visitor) OVERRIDE
@@ -53,6 +54,8 @@ public:
     }
 
 private:
+    explicit DocumentStyleSheetCollection(TreeScope&);
+
     void collectStyleSheetsFromCandidates(StyleEngine*, DocumentStyleSheetCollector&);
 };
 

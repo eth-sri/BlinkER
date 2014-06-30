@@ -102,6 +102,7 @@
 
 .timeline-view {
     flex: auto;
+    overflow: hidden;
 }
 
 .timeline-view-stack {
@@ -751,8 +752,12 @@
 .timeline-aggregated-info {
     flex: none;
     position: relative;
-    margin: 8px 2px;
-    width: 200px;
+    margin: 8px;
+}
+
+.timeline-range-summary {
+    align-items: center;
+    margin: 6px;
 }
 
 .timeline-aggregated-info-legend > div {
@@ -788,4 +793,22 @@
 .revealable-link {
     text-decoration: underline;
     cursor: pointer;
+}
+
+.timeline-paint-profiler-view .outline-disclosure li {
+    margin-top: 0;
+    margin-bottom: 0;
+    padding: 1 1 1 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.paint-profiler-image-view {
+    overflow: hidden;
+}
+
+.paint-profiler-image-view img {
+    border: solid 1px black;
+    -webkit-transform-origin: 0px 0px;
 }

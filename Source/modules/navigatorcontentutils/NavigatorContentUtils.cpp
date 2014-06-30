@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2011, Google Inc. All rights reserved.
- * Copyright (C) 2012, Samsung Electronics. All rights reserved.
+ * Copyright (C) 2014, Samsung Electronics. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -34,6 +34,7 @@
 #include "core/frame/Navigator.h"
 #include "core/page/Page.h"
 #include "wtf/HashSet.h"
+#include "wtf/text/StringBuilder.h"
 
 namespace WebCore {
 
@@ -97,24 +98,34 @@ static bool isProtocolWhitelisted(const String& scheme)
 {
     if (!protocolWhitelist)
         initProtocolHandlerWhitelist();
-    return protocolWhitelist->contains(scheme);
+
+    StringBuilder builder;
+    unsigned length = scheme.length();
+    for (unsigned i = 0; i < length; ++i)
+        builder.append(toASCIILower(scheme[i]));
+
+    return protocolWhitelist->contains(builder.toString());
 }
 
 static bool verifyProtocolHandlerScheme(const String& scheme, const String& method, ExceptionState& exceptionState)
 {
+    if (!isValidProtocol(scheme)) {
+        exceptionState.throwSecurityError("The scheme '" + scheme + "' is not valid protocol");
+        return false;
+    }
+
     if (scheme.startsWith("web+")) {
         // The specification requires that the length of scheme is at least five characteres (including 'web+' prefix).
-        if (scheme.length() >= 5 && isValidProtocol(scheme))
+        if (scheme.length() >= 5)
             return true;
-        if (!isValidProtocol(scheme))
-            exceptionState.throwSecurityError("The scheme '" + scheme + "' is not a valid protocol.");
-        else
-            exceptionState.throwSecurityError("The scheme '" + scheme + "' is less than five characters long.");
+
+        exceptionState.throwSecurityError("The scheme '" + scheme + "' is less than five characters long.");
         return false;
     }
 
     if (isProtocolWhitelisted(scheme))
         return true;
+
     exceptionState.throwSecurityError("The scheme '" + scheme + "' doesn't belong to the protocol whitelist. Please prefix non-whitelisted schemes with the string 'web+'.");
     return false;
 }

@@ -25,10 +25,10 @@
 #include "config.h"
 #include "core/inspector/InspectorStyleSheet.h"
 
-#include "CSSPropertyNames.h"
 #include "bindings/v8/ExceptionState.h"
 #include "bindings/v8/ExceptionStatePlaceholder.h"
 #include "bindings/v8/ScriptRegexp.h"
+#include "core/CSSPropertyNames.h"
 #include "core/css/CSSKeyframesRule.h"
 #include "core/css/CSSMediaRule.h"
 #include "core/css/parser/BisonCSSParser.h"
@@ -980,7 +980,7 @@ String InspectorStyleSheet::finalURL() const
 
 bool InspectorStyleSheet::setText(const String& text, ExceptionState& exceptionState)
 {
-    m_parsedStyleSheet->setText(text);
+    updateText(text);
     m_flatRules.clear();
 
     if (listener())
@@ -1000,7 +1000,7 @@ bool InspectorStyleSheet::setText(const String& text, ExceptionState& exceptionS
     if (listener())
         listener()->didReparseStyleSheet();
     fireStyleSheetChanged();
-    m_pageStyleSheet->ownerDocument()->styleResolverChanged(RecalcStyleDeferred, FullStyleUpdate);
+    m_pageStyleSheet->ownerDocument()->styleResolverChanged(FullStyleUpdate);
     return true;
 }
 
@@ -1036,7 +1036,7 @@ bool InspectorStyleSheet::setRuleSelector(const InspectorCSSId& id, const String
 
     String sheetText = m_parsedStyleSheet->text();
     sheetText.replace(sourceData->ruleHeaderRange.start, sourceData->ruleHeaderRange.length(), selector);
-    m_parsedStyleSheet->setText(sheetText);
+    updateText(sheetText);
     fireStyleSheetChanged();
     return true;
 }
@@ -1126,6 +1126,15 @@ bool InspectorStyleSheet::deleteRule(const InspectorCSSId& id, ExceptionState& e
     fireStyleSheetChanged();
     return true;
 }
+
+void InspectorStyleSheet::updateText(const String& newText)
+{
+    Element* element = ownerStyleElement();
+    if (!element)
+        m_pageAgent->addEditedResourceContent(finalURL(), newText);
+    m_parsedStyleSheet->setText(newText);
+}
+
 
 CSSStyleRule* InspectorStyleSheet::ruleForId(const InspectorCSSId& id) const
 {
@@ -1385,6 +1394,12 @@ bool InspectorStyleSheet::findRuleBySelectorRange(const SourceRange& sourceRange
     return false;
 }
 
+const CSSRuleVector& InspectorStyleSheet::flatRules()
+{
+    ensureFlatRules();
+    return m_flatRules;
+}
+
 Document* InspectorStyleSheet::ownerDocument() const
 {
     return m_pageStyleSheet->ownerDocument();
@@ -1475,7 +1490,7 @@ bool InspectorStyleSheet::setStyleText(const InspectorCSSId& id, const String& t
     TrackExceptionState exceptionState;
     style->setCSSText(text, exceptionState);
     if (!exceptionState.hadException()) {
-        m_parsedStyleSheet->setText(patchedStyleSheetText);
+        updateText(patchedStyleSheetText);
         fireStyleSheetChanged();
     }
 
@@ -1528,25 +1543,33 @@ bool InspectorStyleSheet::resourceStyleSheetText(String* result) const
     return success;
 }
 
-bool InspectorStyleSheet::inlineStyleSheetText(String* result) const
+Element* InspectorStyleSheet::ownerStyleElement() const
 {
     Node* ownerNode = m_pageStyleSheet->ownerNode();
-    if (!ownerNode || ownerNode->nodeType() != Node::ELEMENT_NODE)
-        return false;
-    Element& ownerElement = toElement(*ownerNode);
+    if (!ownerNode || !ownerNode->isElementNode())
+        return 0;
+    Element* ownerElement = toElement(ownerNode);
 
     if (!isHTMLStyleElement(ownerElement) && !isSVGStyleElement(ownerElement))
+        return 0;
+    return ownerElement;
+}
+
+bool InspectorStyleSheet::inlineStyleSheetText(String* result) const
+{
+    Element* ownerElement = ownerStyleElement();
+    if (!ownerElement)
         return false;
-    *result = ownerElement.textContent();
+    *result = ownerElement->textContent();
     return true;
 }
 
-PassRefPtr<InspectorStyleSheetForInlineStyle> InspectorStyleSheetForInlineStyle::create(const String& id, PassRefPtr<Element> element, Listener* listener)
+PassRefPtr<InspectorStyleSheetForInlineStyle> InspectorStyleSheetForInlineStyle::create(const String& id, PassRefPtrWillBeRawPtr<Element> element, Listener* listener)
 {
     return adoptRef(new InspectorStyleSheetForInlineStyle(id, element, listener));
 }
 
-InspectorStyleSheetForInlineStyle::InspectorStyleSheetForInlineStyle(const String& id, PassRefPtr<Element> element, Listener* listener)
+InspectorStyleSheetForInlineStyle::InspectorStyleSheetForInlineStyle(const String& id, PassRefPtrWillBeRawPtr<Element> element, Listener* listener)
     : InspectorStyleSheetBase(id, listener)
     , m_element(element)
     , m_ruleSourceData(nullptr)

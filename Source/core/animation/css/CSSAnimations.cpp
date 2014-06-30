@@ -31,14 +31,16 @@
 #include "config.h"
 #include "core/animation/css/CSSAnimations.h"
 
-#include "StylePropertyShorthand.h"
+#include "core/StylePropertyShorthand.h"
 #include "core/animation/ActiveAnimations.h"
 #include "core/animation/AnimationTimeline.h"
 #include "core/animation/CompositorAnimations.h"
 #include "core/animation/KeyframeEffectModel.h"
 #include "core/animation/css/CSSAnimatableValueFactory.h"
 #include "core/animation/css/CSSPropertyEquality.h"
+#include "core/animation/interpolation/LegacyStyleInterpolation.h"
 #include "core/css/CSSKeyframeRule.h"
+#include "core/css/resolver/CSSToStyleMap.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/Element.h"
 #include "core/dom/PseudoElement.h"
@@ -116,10 +118,8 @@ static void resolveKeyframes(StyleResolver* resolver, Element* element, const El
                     timingFunction = parentStyle->animations()->timingFunctionList()[0];
                 else if (value->isInheritedValue() || value->isInitialValue())
                     timingFunction = CSSTimingData::initialTimingFunction();
-                else if (value->isValueList())
-                    timingFunction = CSSToStyleMap::mapAnimationTimingFunction(toCSSValueList(value)->item(0));
                 else
-                    timingFunction = CSSToStyleMap::mapAnimationTimingFunction(value);
+                    timingFunction = CSSToStyleMap::mapAnimationTimingFunction(toCSSValueList(value)->item(0));
                 keyframe->setEasing(timingFunction.release());
             } else if (CSSAnimations::isAnimatableProperty(property)) {
                 keyframe->setPropertyValue(property, CSSAnimatableValueFactory::create(property, *keyframeStyle).get());
@@ -236,7 +236,7 @@ void CSSAnimations::calculateAnimationUpdate(CSSAnimationUpdate* update, Element
 {
     const ActiveAnimations* activeAnimations = element ? element->activeAnimations() : 0;
 
-#if ASSERT_DISABLED
+#if !ASSERT_ENABLED
     // If we're in an animation style change, no animations can have started, been cancelled or changed play state.
     // When ASSERT is enabled, we verify this optimization.
     if (activeAnimations && activeAnimations->isAnimationStyleChange())
@@ -460,12 +460,12 @@ void CSSAnimations::calculateTransitionUpdate(CSSAnimationUpdate* update, const 
     const TransitionMap* activeTransitions = activeAnimations ? &activeAnimations->cssAnimations().m_transitions : 0;
     const CSSTransitionData* transitionData = style.transitions();
 
-#if ASSERT_DISABLED
-    // In release builds we avoid the cost of checking for new and interrupted transitions if the style recalc is due to animation.
-    const bool animationStyleRecalc = activeAnimations && activeAnimations->isAnimationStyleChange();
-#else
+#if ASSERT_ENABLED
     // In debug builds we verify that it would have been safe to avoid populating and testing listedProperties if the style recalc is due to animation.
     const bool animationStyleRecalc = false;
+#else
+    // In release builds we avoid the cost of checking for new and interrupted transitions if the style recalc is due to animation.
+    const bool animationStyleRecalc = activeAnimations && activeAnimations->isAnimationStyleChange();
 #endif
 
     BitArray<numCSSProperties> listedProperties;
@@ -478,7 +478,7 @@ void CSSAnimations::calculateTransitionUpdate(CSSAnimationUpdate* update, const 
             const CSSTransitionData::TransitionProperty& transitionProperty = transitionData->propertyList()[i];
             CSSTransitionData::TransitionPropertyType mode = transitionProperty.propertyType;
             CSSPropertyID property = transitionProperty.propertyId;
-            if (mode == CSSTransitionData::TransitionNone)
+            if (mode == CSSTransitionData::TransitionNone || mode == CSSTransitionData::TransitionUnknown)
                 continue;
 
             bool animateAll = mode == CSSTransitionData::TransitionAll;
@@ -601,43 +601,43 @@ void CSSAnimations::AnimationEventDelegate::maybeDispatch(Document::ListenerType
     }
 }
 
-void CSSAnimations::AnimationEventDelegate::onEventCondition(const TimedItem* timedItem)
+void CSSAnimations::AnimationEventDelegate::onEventCondition(const AnimationNode* animationNode)
 {
-    const TimedItem::Phase currentPhase = timedItem->phase();
-    const double currentIteration = timedItem->currentIteration();
+    const AnimationNode::Phase currentPhase = animationNode->phase();
+    const double currentIteration = animationNode->currentIteration();
 
     if (m_previousPhase != currentPhase
-        && (currentPhase == TimedItem::PhaseActive || currentPhase == TimedItem::PhaseAfter)
-        && (m_previousPhase == TimedItem::PhaseNone || m_previousPhase == TimedItem::PhaseBefore)) {
+        && (currentPhase == AnimationNode::PhaseActive || currentPhase == AnimationNode::PhaseAfter)
+        && (m_previousPhase == AnimationNode::PhaseNone || m_previousPhase == AnimationNode::PhaseBefore)) {
         // The spec states that the elapsed time should be
         // 'delay < 0 ? -delay : 0', but we always use 0 to match the existing
         // implementation. See crbug.com/279611
         maybeDispatch(Document::ANIMATIONSTART_LISTENER, EventTypeNames::animationstart, 0);
     }
 
-    if (currentPhase == TimedItem::PhaseActive && m_previousPhase == currentPhase && m_previousIteration != currentIteration) {
+    if (currentPhase == AnimationNode::PhaseActive && m_previousPhase == currentPhase && m_previousIteration != currentIteration) {
         // We fire only a single event for all iterations thast terminate
         // between a single pair of samples. See http://crbug.com/275263. For
         // compatibility with the existing implementation, this event uses
         // the elapsedTime for the first iteration in question.
-        ASSERT(!std::isnan(timedItem->specifiedTiming().iterationDuration));
-        const double elapsedTime = timedItem->specifiedTiming().iterationDuration * (m_previousIteration + 1);
+        ASSERT(!std::isnan(animationNode->specifiedTiming().iterationDuration));
+        const double elapsedTime = animationNode->specifiedTiming().iterationDuration * (m_previousIteration + 1);
         maybeDispatch(Document::ANIMATIONITERATION_LISTENER, EventTypeNames::animationiteration, elapsedTime);
     }
 
-    if (currentPhase == TimedItem::PhaseAfter && m_previousPhase != TimedItem::PhaseAfter)
-        maybeDispatch(Document::ANIMATIONEND_LISTENER, EventTypeNames::animationend, timedItem->activeDurationInternal());
+    if (currentPhase == AnimationNode::PhaseAfter && m_previousPhase != AnimationNode::PhaseAfter)
+        maybeDispatch(Document::ANIMATIONEND_LISTENER, EventTypeNames::animationend, animationNode->activeDurationInternal());
 
     m_previousPhase = currentPhase;
     m_previousIteration = currentIteration;
 }
 
-void CSSAnimations::TransitionEventDelegate::onEventCondition(const TimedItem* timedItem)
+void CSSAnimations::TransitionEventDelegate::onEventCondition(const AnimationNode* animationNode)
 {
-    const TimedItem::Phase currentPhase = timedItem->phase();
-    if (currentPhase == TimedItem::PhaseAfter && currentPhase != m_previousPhase && m_target->document().hasListenerType(Document::TRANSITIONEND_LISTENER)) {
+    const AnimationNode::Phase currentPhase = animationNode->phase();
+    if (currentPhase == AnimationNode::PhaseAfter && currentPhase != m_previousPhase && m_target->document().hasListenerType(Document::TRANSITIONEND_LISTENER)) {
         String propertyName = getPropertyNameString(m_property);
-        const Timing& timing = timedItem->specifiedTiming();
+        const Timing& timing = animationNode->specifiedTiming();
         double elapsedTime = timing.iterationDuration;
         const AtomicString& eventType = EventTypeNames::transitionend;
         String pseudoElement = PseudoElement::pseudoElementNameForEvents(m_target->pseudoId());
@@ -724,6 +724,7 @@ bool CSSAnimations::isAnimatableProperty(CSSPropertyID property)
     case CSSPropertyTextIndent:
     case CSSPropertyTextShadow:
     case CSSPropertyTop:
+    case CSSPropertyVerticalAlign:
     case CSSPropertyVisibility:
     case CSSPropertyWebkitBackgroundSize:
     case CSSPropertyWebkitBorderHorizontalSpacing:

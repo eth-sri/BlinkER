@@ -21,16 +21,18 @@
 #include "config.h"
 #include "core/svg/SVGTitleElement.h"
 
-#include "SVGNames.h"
+#include "core/SVGNames.h"
 #include "core/dom/Document.h"
 
 namespace WebCore {
 
-SVGTitleElement::SVGTitleElement(Document& document)
+inline SVGTitleElement::SVGTitleElement(Document& document)
     : SVGElement(SVGNames::titleTag, document)
 {
     ScriptWrappable::init(this);
 }
+
+DEFINE_NODE_FACTORY(SVGTitleElement)
 
 Node::InsertionNotificationRequest SVGTitleElement::insertedInto(ContainerNode* rootParent)
 {

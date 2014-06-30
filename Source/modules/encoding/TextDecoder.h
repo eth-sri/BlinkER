@@ -34,7 +34,6 @@
 #include "bindings/v8/Dictionary.h"
 #include "platform/heap/Handle.h"
 #include "wtf/ArrayBufferView.h"
-#include "wtf/RefCounted.h"
 #include "wtf/text/TextCodec.h"
 #include "wtf/text/TextEncoding.h"
 #include "wtf/text/WTFString.h"
@@ -50,17 +49,20 @@ public:
 
     // Implement the IDL
     String encoding() const;
+    bool fatal() const { return m_fatal; }
+    bool ignoreBOM() const { return m_ignoreBOM; }
     String decode(ArrayBufferView*, const Dictionary&, ExceptionState&);
     String decode(ExceptionState& exceptionState) { return decode(0, Dictionary(), exceptionState); }
 
     void trace(Visitor*) { }
 
 private:
-    TextDecoder(const WTF::TextEncoding&, bool fatal);
+    TextDecoder(const WTF::TextEncoding&, bool fatal, bool ignoreBOM);
 
     WTF::TextEncoding m_encoding;
     OwnPtr<WTF::TextCodec> m_codec;
     bool m_fatal;
+    bool m_ignoreBOM;
     bool m_bomSeen;
 };
 

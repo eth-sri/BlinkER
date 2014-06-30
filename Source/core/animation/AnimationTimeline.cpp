@@ -69,21 +69,20 @@ AnimationTimeline::~AnimationTimeline()
 #endif
 }
 
-AnimationPlayer* AnimationTimeline::createAnimationPlayer(TimedItem* child)
+AnimationPlayer* AnimationTimeline::createAnimationPlayer(AnimationNode* child)
 {
-    RefPtrWillBeRawPtr<AnimationPlayer> player = AnimationPlayer::create(*this, child);
+    RefPtrWillBeRawPtr<AnimationPlayer> player = AnimationPlayer::create(m_document->contextDocument().get(), *this, child);
     AnimationPlayer* result = player.get();
     m_players.add(result);
     setOutdatedAnimationPlayer(result);
     return result;
 }
 
-AnimationPlayer* AnimationTimeline::play(TimedItem* child)
+AnimationPlayer* AnimationTimeline::play(AnimationNode* child)
 {
     if (!m_document)
         return 0;
     AnimationPlayer* player = createAnimationPlayer(child);
-    player->setStartTimeInternal(effectiveTime());
     m_document->compositorPendingAnimations().add(player);
     return player;
 }
@@ -95,12 +94,14 @@ void AnimationTimeline::wake()
 
 void AnimationTimeline::serviceAnimations(TimingUpdateReason reason)
 {
-    TRACE_EVENT0("webkit", "AnimationTimeline::serviceAnimations");
+    TRACE_EVENT0("blink", "AnimationTimeline::serviceAnimations");
 
     m_timing->cancelWake();
 
     double timeToNextEffect = std::numeric_limits<double>::infinity();
+
     WillBeHeapVector<RawPtrWillBeMember<AnimationPlayer> > players;
+    players.reserveInitialCapacity(m_playersNeedingUpdate.size());
     for (WillBeHeapHashSet<RefPtrWillBeMember<AnimationPlayer> >::iterator it = m_playersNeedingUpdate.begin(); it != m_playersNeedingUpdate.end(); ++it)
         players.append(it->get());
 
@@ -207,9 +208,9 @@ size_t AnimationTimeline::numberOfActiveAnimationsForTesting() const
     // are current or in effect.
     size_t count = 0;
     for (WillBeHeapHashSet<RefPtrWillBeMember<AnimationPlayer> >::iterator it = m_playersNeedingUpdate.begin(); it != m_playersNeedingUpdate.end(); ++it) {
-        const TimedItem* timedItem = (*it)->source();
+        const AnimationNode* animationNode = (*it)->source();
         if ((*it)->hasStartTime())
-            count += (timedItem && (timedItem->isCurrent() || timedItem->isInEffect()));
+            count += (animationNode && (animationNode->isCurrent() || animationNode->isInEffect()));
     }
     return count;
 }

@@ -84,7 +84,7 @@ WebInspector.ConsoleModel.prototype = {
      */
     addMessage: function(msg, isFromBackend)
     {
-        if (isFromBackend && WebInspector.SourceMap.hasSourceMapRequestHeader(msg.request))
+        if (isFromBackend && WebInspector.NetworkManager.hasDevToolsRequestHeader(msg.request))
             return;
 
         msg.index = this.messages.length;
@@ -188,13 +188,12 @@ WebInspector.ConsoleModel.evaluateCommandInConsole = function(executionContext, 
     executionContext.evaluate(text, "console", useCommandLineAPI, false, false, true, printResult.bind(target.consoleModel));
 
     WebInspector.userMetrics.ConsoleEvaluated.record();
-},
+}
 
 
 /**
  * @constructor
- * @extends {WebInspector.TargetAware}
- * @param {!WebInspector.Target} target
+ * @param {?WebInspector.Target} target
  * @param {string} source
  * @param {?string} level
  * @param {string} messageText
@@ -211,7 +210,7 @@ WebInspector.ConsoleModel.evaluateCommandInConsole = function(executionContext, 
  */
 WebInspector.ConsoleMessage = function(target, source, level, messageText, type, url, line, column, requestId, parameters, stackTrace, timestamp, isOutdated, executionContextId)
 {
-    WebInspector.TargetAware.call(this, target);
+    this._target = target;
     this.source = source;
     this.level = level;
     this.messageText = messageText;
@@ -226,9 +225,25 @@ WebInspector.ConsoleMessage = function(target, source, level, messageText, type,
     this.executionContextId = executionContextId || 0;
 
     this.request = requestId ? target.networkLog.requestForId(requestId) : null;
+
+    if (this.request) {
+        this.stackTrace = this.request.initiator.stackTrace;
+        if (this.request.initiator && this.request.initiator.url) {
+            this.url = this.request.initiator.url;
+            this.line = this.request.initiator.lineNumber;
+        }
+    }
 }
 
 WebInspector.ConsoleMessage.prototype = {
+    /**
+     * @return {?WebInspector.Target}
+     */
+    target: function()
+    {
+        return this._target;
+    },
+
     /**
      * @param {!WebInspector.ConsoleMessage} originatingMessage
      */
@@ -336,9 +351,7 @@ WebInspector.ConsoleMessage.prototype = {
             && (this.messageText === msg.messageText)
             && (this.request === msg.request)
             && (this.executionContextId === msg.executionContextId);
-    },
-
-    __proto__: WebInspector.TargetAware.prototype
+    }
 }
 
 // Note: Keep these constants in sync with the ones in Console.h
@@ -393,7 +406,7 @@ WebInspector.ConsoleMessage.MessageLevel = {
 /**
  * @param {!WebInspector.ConsoleMessage} a
  * @param {!WebInspector.ConsoleMessage} b
- * @return number
+ * @return {number}
  */
 WebInspector.ConsoleMessage.timestampComparator = function (a, b)
 {

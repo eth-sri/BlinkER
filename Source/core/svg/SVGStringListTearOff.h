@@ -31,6 +31,7 @@
 #ifndef SVGStringListTearOff_h
 #define SVGStringListTearOff_h
 
+#include "core/dom/ExceptionCode.h"
 #include "core/svg/SVGStringList.h"
 #include "core/svg/properties/SVGPropertyTearOff.h"
 
@@ -38,7 +39,7 @@ namespace WebCore {
 
 class SVGStringListTearOff : public SVGPropertyTearOff<SVGStringList>, public ScriptWrappable {
 public:
-    static PassRefPtr<SVGStringListTearOff> create(PassRefPtr<SVGStringList> target, SVGElement* contextElement, PropertyIsAnimValType propertyIsAnimVal, const QualifiedName& attributeName = nullQName())
+    static PassRefPtr<SVGStringListTearOff> create(PassRefPtr<SVGStringList> target, SVGElement* contextElement, PropertyIsAnimValType propertyIsAnimVal, const QualifiedName& attributeName = QualifiedName::null())
     {
         return adoptRef(new SVGStringListTearOff(target, contextElement, propertyIsAnimVal, attributeName));
     }

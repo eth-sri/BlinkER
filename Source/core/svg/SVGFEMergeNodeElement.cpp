@@ -22,18 +22,19 @@
 
 #include "core/svg/SVGFEMergeNodeElement.h"
 
-#include "core/svg/SVGElementInstance.h"
 #include "core/svg/SVGFilterPrimitiveStandardAttributes.h"
 
 namespace WebCore {
 
-SVGFEMergeNodeElement::SVGFEMergeNodeElement(Document& document)
+inline SVGFEMergeNodeElement::SVGFEMergeNodeElement(Document& document)
     : SVGElement(SVGNames::feMergeNodeTag, document)
     , m_in1(SVGAnimatedString::create(this, SVGNames::inAttr, SVGString::create()))
 {
     ScriptWrappable::init(this);
     addToPropertyMap(m_in1);
 }
+
+DEFINE_NODE_FACTORY(SVGFEMergeNodeElement)
 
 bool SVGFEMergeNodeElement::isSupportedAttribute(const QualifiedName& attrName)
 {

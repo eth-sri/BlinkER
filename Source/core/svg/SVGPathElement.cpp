@@ -24,7 +24,6 @@
 
 #include "core/rendering/svg/RenderSVGPath.h"
 #include "core/rendering/svg/RenderSVGResource.h"
-#include "core/svg/SVGElementInstance.h"
 #include "core/svg/SVGMPathElement.h"
 #include "core/svg/SVGPathSegArcAbs.h"
 #include "core/svg/SVGPathSegArcRel.h"
@@ -50,7 +49,7 @@
 
 namespace WebCore {
 
-SVGPathElement::SVGPathElement(Document& document)
+inline SVGPathElement::SVGPathElement(Document& document)
     : SVGGeometryElement(SVGNames::pathTag, document)
     , m_pathLength(SVGAnimatedNumber::create(this, SVGNames::pathLengthAttr, SVGNumber::create()))
     , m_pathSegList(SVGAnimatedPath::create(this, SVGNames::dAttr))
@@ -60,6 +59,8 @@ SVGPathElement::SVGPathElement(Document& document)
     addToPropertyMap(m_pathLength);
     addToPropertyMap(m_pathSegList);
 }
+
+DEFINE_NODE_FACTORY(SVGPathElement)
 
 float SVGPathElement::getTotalLength()
 {
@@ -235,9 +236,9 @@ void SVGPathElement::invalidateMPathDependencies()
 {
     // <mpath> can only reference <path> but this dependency is not handled in
     // markForLayoutAndParentResourceInvalidation so we update any mpath dependencies manually.
-    if (HashSet<SVGElement*>* dependencies = document().accessSVGExtensions().setOfElementsReferencingTarget(this)) {
-        HashSet<SVGElement*>::iterator end = dependencies->end();
-        for (HashSet<SVGElement*>::iterator it = dependencies->begin(); it != end; ++it) {
+    if (SVGElementSet* dependencies = setOfIncomingReferences()) {
+        SVGElementSet::iterator end = dependencies->end();
+        for (SVGElementSet::iterator it = dependencies->begin(); it != end; ++it) {
             if (isSVGMPathElement(**it))
                 toSVGMPathElement(*it)->targetPathChanged();
         }

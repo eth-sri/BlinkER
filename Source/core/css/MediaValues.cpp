@@ -76,7 +76,8 @@ float MediaValues::calculateDevicePixelRatio(LocalFrame* frame) const
 int MediaValues::calculateColorBitsPerComponent(LocalFrame* frame) const
 {
     ASSERT(frame && frame->page() && frame->page()->mainFrame());
-    if (screenIsMonochrome(frame->page()->mainFrame()->view()))
+    if (!frame->page()->mainFrame()->isLocalFrame()
+        || screenIsMonochrome(frame->page()->deprecatedLocalMainFrame()->view()))
         return 0;
     return screenDepthPerComponent(frame->view());
 }
@@ -84,9 +85,10 @@ int MediaValues::calculateColorBitsPerComponent(LocalFrame* frame) const
 int MediaValues::calculateMonochromeBitsPerComponent(LocalFrame* frame) const
 {
     ASSERT(frame && frame->page() && frame->page()->mainFrame());
-    if (screenIsMonochrome(frame->page()->mainFrame()->view()))
-        return screenDepthPerComponent(frame->view());
-    return 0;
+    if (!frame->page()->mainFrame()->isLocalFrame()
+        || !screenIsMonochrome(frame->page()->deprecatedLocalMainFrame()->view()))
+        return 0;
+    return screenDepthPerComponent(frame->view());
 }
 
 int MediaValues::calculateDefaultFontSize(LocalFrame* frame) const
@@ -94,23 +96,10 @@ int MediaValues::calculateDefaultFontSize(LocalFrame* frame) const
     return frame->host()->settings().defaultFontSize();
 }
 
-bool MediaValues::calculateScanMediaType(LocalFrame* frame) const
+const String MediaValues::calculateMediaType(LocalFrame* frame) const
 {
     ASSERT(frame && frame->view());
-    // Scan only applies to 'tv' media.
-    return equalIgnoringCase(frame->view()->mediaType(), "tv");
-}
-
-bool MediaValues::calculateScreenMediaType(LocalFrame* frame) const
-{
-    ASSERT(frame && frame->view());
-    return equalIgnoringCase(frame->view()->mediaType(), "screen");
-}
-
-bool MediaValues::calculatePrintMediaType(LocalFrame* frame) const
-{
-    ASSERT(frame && frame->view());
-    return equalIgnoringCase(frame->view()->mediaType(), "print");
+    return frame->view()->mediaType();
 }
 
 bool MediaValues::calculateThreeDEnabled(LocalFrame* frame) const
@@ -138,7 +127,7 @@ MediaValues::PointerDeviceType MediaValues::calculateLeastCapablePrimaryPointerD
     return MediaValues::UnknownPointer;
 }
 
-bool MediaValues::computeLengthImpl(double value, CSSPrimitiveValue::UnitTypes type, unsigned defaultFontSize, unsigned viewportWidth, unsigned viewportHeight, double& result)
+bool MediaValues::computeLengthImpl(double value, CSSPrimitiveValue::UnitType type, unsigned defaultFontSize, unsigned viewportWidth, unsigned viewportHeight, double& result)
 {
     // The logic in this function is duplicated from CSSPrimitiveValue::computeLengthDouble
     // because MediaValues::computeLength needs nearly identical logic, but we haven't found a way to make

@@ -48,12 +48,14 @@ class InjectedScriptManager;
 class InspectorBackendDispatcher;
 class InspectorAgent;
 class InspectorClient;
+class InspectorCSSAgent;
 class InspectorDOMAgent;
 class InspectorFrontend;
 class InspectorFrontendChannel;
 class InspectorFrontendClient;
 class InspectorLayerTreeAgent;
 class InspectorPageAgent;
+class InspectorResourceAgent;
 class InspectorTimelineAgent;
 class InspectorTracingAgent;
 class InspectorOverlay;
@@ -89,13 +91,12 @@ public:
 
     void dispatchMessageFromFrontend(const String& message);
 
-    void connectFrontend(InspectorFrontendChannel*);
+    void connectFrontend(const String& hostId, InspectorFrontendChannel*);
     void disconnectFrontend();
     void reconnectFrontend();
-    void reuseFrontend(InspectorFrontendChannel*, const String& inspectorStateCookie);
+    void reuseFrontend(const String& hostId, InspectorFrontendChannel*, const String& inspectorStateCookie);
     void setProcessId(long);
     void setLayerTreeId(int);
-    void webViewResized(const IntSize&);
 
     void inspect(Node*);
     void drawHighlight(GraphicsContext&) const;
@@ -146,6 +147,8 @@ private:
 
     InspectorDOMAgent* m_domAgent;
     InspectorPageAgent* m_pageAgent;
+    InspectorResourceAgent* m_resourceAgent;
+    InspectorCSSAgent* m_cssAgent;
     InspectorTimelineAgent* m_timelineAgent;
     InspectorLayerTreeAgent* m_layerTreeAgent;
     InspectorTracingAgent* m_tracingAgent;
@@ -156,9 +159,9 @@ private:
     Page* m_page;
     InspectorClient* m_inspectorClient;
     InspectorAgentRegistry m_agents;
-    Vector<InspectorAgent*> m_moduleAgents;
     bool m_isUnderTest;
     bool m_deferredAgentsInitialized;
+    String m_hostId;
 };
 
 }

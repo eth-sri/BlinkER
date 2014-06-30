@@ -24,12 +24,11 @@
 
 #include "core/rendering/svg/RenderSVGEllipse.h"
 #include "core/rendering/svg/RenderSVGResource.h"
-#include "core/svg/SVGElementInstance.h"
 #include "core/svg/SVGLength.h"
 
 namespace WebCore {
 
-SVGEllipseElement::SVGEllipseElement(Document& document)
+inline SVGEllipseElement::SVGEllipseElement(Document& document)
     : SVGGeometryElement(SVGNames::ellipseTag, document)
     , m_cx(SVGAnimatedLength::create(this, SVGNames::cxAttr, SVGLength::create(LengthModeWidth), AllowNegativeLengths))
     , m_cy(SVGAnimatedLength::create(this, SVGNames::cyAttr, SVGLength::create(LengthModeHeight), AllowNegativeLengths))
@@ -43,6 +42,8 @@ SVGEllipseElement::SVGEllipseElement(Document& document)
     addToPropertyMap(m_rx);
     addToPropertyMap(m_ry);
 }
+
+DEFINE_NODE_FACTORY(SVGEllipseElement)
 
 bool SVGEllipseElement::isSupportedAttribute(const QualifiedName& attrName)
 {

@@ -211,6 +211,7 @@ oninvalid
 onkeydown
 onkeypress
 onkeyup
+onlanguagechange
 onload
 onloadeddata
 onloadedmetadata
@@ -283,7 +284,6 @@ pluginspage
 pluginurl
 ping
 poster
-precision
 preload
 primary
 profile

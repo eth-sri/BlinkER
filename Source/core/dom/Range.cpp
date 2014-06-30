@@ -34,15 +34,17 @@
 #include "core/dom/NodeTraversal.h"
 #include "core/dom/NodeWithIndex.h"
 #include "core/dom/ProcessingInstruction.h"
-#include "core/events/ScopedEventQueue.h"
 #include "core/dom/Text.h"
 #include "core/editing/TextIterator.h"
 #include "core/editing/VisiblePosition.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/editing/markup.h"
+#include "core/events/ScopedEventQueue.h"
+#include "core/html/HTMLBodyElement.h"
 #include "core/html/HTMLElement.h"
 #include "core/rendering/RenderBoxModelObject.h"
 #include "core/rendering/RenderText.h"
+#include "core/svg/SVGSVGElement.h"
 #include "platform/geometry/FloatQuad.h"
 #include "wtf/RefCountedLeakCounter.h"
 #include "wtf/text/CString.h"
@@ -52,9 +54,6 @@
 #endif
 
 namespace WebCore {
-
-using namespace std;
-using namespace HTMLNames;
 
 DEFINE_DEBUG_ONLY_GLOBAL(WTF::RefCountedLeakCounter, rangeCounter, ("Range"));
 
@@ -106,8 +105,10 @@ PassRefPtrWillBeRawPtr<Range> Range::create(Document& ownerDocument, const Posit
 
 Range::~Range()
 {
+#if !ENABLE(OILPAN)
     // Always detach (even if we've already detached) to fix https://bugs.webkit.org/show_bug.cgi?id=26044
     m_ownerDocument->detachRange(this);
+#endif
 
 #ifndef NDEBUG
     rangeCounter.decrement();
@@ -153,7 +154,7 @@ static inline bool checkForDifferentRootContainer(const RangeBoundaryPoint& star
     return startRootContainer != endRootContainer || (Range::compareBoundaryPoints(start, end, ASSERT_NO_EXCEPTION) > 0);
 }
 
-void Range::setStart(PassRefPtr<Node> refNode, int offset, ExceptionState& exceptionState)
+void Range::setStart(PassRefPtrWillBeRawPtr<Node> refNode, int offset, ExceptionState& exceptionState)
 {
     if (!refNode) {
         exceptionState.throwDOMException(NotFoundError, "The node provided was null.");
@@ -176,7 +177,7 @@ void Range::setStart(PassRefPtr<Node> refNode, int offset, ExceptionState& excep
         collapse(true);
 }
 
-void Range::setEnd(PassRefPtr<Node> refNode, int offset, ExceptionState& exceptionState)
+void Range::setEnd(PassRefPtrWillBeRawPtr<Node> refNode, int offset, ExceptionState& exceptionState)
 {
     if (!refNode) {
         exceptionState.throwDOMException(NotFoundError, "The node provided was null.");
@@ -470,7 +471,10 @@ void Range::deleteContents(ExceptionState& exceptionState)
     if (exceptionState.hadException())
         return;
 
-    processContents(DELETE_CONTENTS, exceptionState);
+    {
+        EventQueueScope eventQueueScope;
+        processContents(DELETE_CONTENTS, exceptionState);
+    }
 }
 
 bool Range::intersectsNode(Node* refNode, ExceptionState& exceptionState)
@@ -543,31 +547,9 @@ static inline Node* childOfCommonRootBeforeOffset(Node* container, unsigned offs
     return container;
 }
 
-static inline unsigned lengthOfContentsInNode(Node* node)
-{
-    // This switch statement must be consistent with that of Range::processContentsBetweenOffsets.
-    switch (node->nodeType()) {
-    case Node::TEXT_NODE:
-    case Node::CDATA_SECTION_NODE:
-    case Node::COMMENT_NODE:
-        return toCharacterData(node)->length();
-    case Node::PROCESSING_INSTRUCTION_NODE:
-        return toProcessingInstruction(node)->data().length();
-    case Node::ELEMENT_NODE:
-    case Node::ATTRIBUTE_NODE:
-    case Node::DOCUMENT_NODE:
-    case Node::DOCUMENT_FRAGMENT_NODE:
-        return toContainerNode(node)->countChildren();
-    case Node::DOCUMENT_TYPE_NODE:
-        return 0;
-    }
-    ASSERT_NOT_REACHED();
-    return 0;
-}
-
 PassRefPtrWillBeRawPtr<DocumentFragment> Range::processContents(ActionType action, ExceptionState& exceptionState)
 {
-    typedef Vector<RefPtr<Node> > NodeVector;
+    typedef WillBeHeapVector<RefPtrWillBeMember<Node> > NodeVector;
 
     RefPtrWillBeRawPtr<DocumentFragment> fragment = nullptr;
     if (action == EXTRACT_CONTENTS || action == CLONE_CONTENTS)
@@ -576,7 +558,7 @@ PassRefPtrWillBeRawPtr<DocumentFragment> Range::processContents(ActionType actio
     if (collapsed())
         return fragment.release();
 
-    RefPtr<Node> commonRoot = commonAncestorContainer();
+    RefPtrWillBeRawPtr<Node> commonRoot = commonAncestorContainer();
     ASSERT(commonRoot);
 
     if (m_start.container() == m_end.container()) {
@@ -589,8 +571,8 @@ PassRefPtrWillBeRawPtr<DocumentFragment> Range::processContents(ActionType actio
     RangeBoundaryPoint originalEnd(m_end);
 
     // what is the highest node that partially selects the start / end of the range?
-    RefPtr<Node> partialStart = highestAncestorUnderCommonRoot(originalStart.container(), commonRoot.get());
-    RefPtr<Node> partialEnd = highestAncestorUnderCommonRoot(originalEnd.container(), commonRoot.get());
+    RefPtrWillBeRawPtr<Node> partialStart = highestAncestorUnderCommonRoot(originalStart.container(), commonRoot.get());
+    RefPtrWillBeRawPtr<Node> partialEnd = highestAncestorUnderCommonRoot(originalEnd.container(), commonRoot.get());
 
     // Start and end containers are different.
     // There are three possibilities here:
@@ -612,23 +594,23 @@ PassRefPtrWillBeRawPtr<DocumentFragment> Range::processContents(ActionType actio
     // Note that we are verifying that our common root hierarchy is still intact
     // after any DOM mutation event, at various stages below. See webkit bug 60350.
 
-    RefPtr<Node> leftContents;
+    RefPtrWillBeRawPtr<Node> leftContents = nullptr;
     if (originalStart.container() != commonRoot && commonRoot->contains(originalStart.container())) {
-        leftContents = processContentsBetweenOffsets(action, nullptr, originalStart.container(), originalStart.offset(), lengthOfContentsInNode(originalStart.container()), exceptionState);
+        leftContents = processContentsBetweenOffsets(action, nullptr, originalStart.container(), originalStart.offset(), originalStart.container()->lengthOfContents(), exceptionState);
         leftContents = processAncestorsAndTheirSiblings(action, originalStart.container(), ProcessContentsForward, leftContents, commonRoot.get(), exceptionState);
     }
 
-    RefPtr<Node> rightContents;
+    RefPtrWillBeRawPtr<Node> rightContents = nullptr;
     if (m_end.container() != commonRoot && commonRoot->contains(originalEnd.container())) {
         rightContents = processContentsBetweenOffsets(action, nullptr, originalEnd.container(), 0, originalEnd.offset(), exceptionState);
         rightContents = processAncestorsAndTheirSiblings(action, originalEnd.container(), ProcessContentsBackward, rightContents, commonRoot.get(), exceptionState);
     }
 
     // delete all children of commonRoot between the start and end container
-    RefPtr<Node> processStart = childOfCommonRootBeforeOffset(originalStart.container(), originalStart.offset(), commonRoot.get());
+    RefPtrWillBeRawPtr<Node> processStart = childOfCommonRootBeforeOffset(originalStart.container(), originalStart.offset(), commonRoot.get());
     if (processStart && originalStart.container() != commonRoot) // processStart contains nodes before m_start.
         processStart = processStart->nextSibling();
-    RefPtr<Node> processEnd = childOfCommonRootBeforeOffset(originalEnd.container(), originalEnd.offset(), commonRoot.get());
+    RefPtrWillBeRawPtr<Node> processEnd = childOfCommonRootBeforeOffset(originalEnd.container(), originalEnd.offset(), commonRoot.get());
 
     // Collapse the range, making sure that the result is not within a node that was partially selected.
     if (action == EXTRACT_CONTENTS || action == DELETE_CONTENTS) {
@@ -676,14 +658,14 @@ static inline void deleteCharacterData(PassRefPtrWillBeRawPtr<CharacterData> dat
         data->deleteData(0, startOffset, exceptionState);
 }
 
-PassRefPtr<Node> Range::processContentsBetweenOffsets(ActionType action, PassRefPtrWillBeRawPtr<DocumentFragment> fragment,
+PassRefPtrWillBeRawPtr<Node> Range::processContentsBetweenOffsets(ActionType action, PassRefPtrWillBeRawPtr<DocumentFragment> fragment,
     Node* container, unsigned startOffset, unsigned endOffset, ExceptionState& exceptionState)
 {
     ASSERT(container);
     ASSERT(startOffset <= endOffset);
 
-    // This switch statement must be consistent with that of lengthOfContentsInNode.
-    RefPtr<Node> result;
+    // This switch statement must be consistent with that of Node::lengthOfContents.
+    RefPtrWillBeRawPtr<Node> result = nullptr;
     switch (container->nodeType()) {
     case Node::TEXT_NODE:
     case Node::CDATA_SECTION_NODE:
@@ -733,7 +715,7 @@ PassRefPtr<Node> Range::processContentsBetweenOffsets(ActionType action, PassRef
         }
 
         Node* n = container->firstChild();
-        Vector<RefPtr<Node> > nodes;
+        WillBeHeapVector<RefPtrWillBeMember<Node> > nodes;
         for (unsigned i = startOffset; n && i; i--)
             n = n->nextSibling();
         for (unsigned i = startOffset; n && i < endOffset; i++, n = n->nextSibling())
@@ -746,7 +728,7 @@ PassRefPtr<Node> Range::processContentsBetweenOffsets(ActionType action, PassRef
     return result.release();
 }
 
-void Range::processNodes(ActionType action, Vector<RefPtr<Node> >& nodes, PassRefPtr<Node> oldContainer, PassRefPtr<Node> newContainer, ExceptionState& exceptionState)
+void Range::processNodes(ActionType action, WillBeHeapVector<RefPtrWillBeMember<Node> >& nodes, PassRefPtrWillBeRawPtr<Node> oldContainer, PassRefPtrWillBeRawPtr<Node> newContainer, ExceptionState& exceptionState)
 {
     for (unsigned i = 0; i < nodes.size(); i++) {
         switch (action) {
@@ -763,20 +745,20 @@ void Range::processNodes(ActionType action, Vector<RefPtr<Node> >& nodes, PassRe
     }
 }
 
-PassRefPtr<Node> Range::processAncestorsAndTheirSiblings(ActionType action, Node* container, ContentsProcessDirection direction, PassRefPtr<Node> passedClonedContainer, Node* commonRoot, ExceptionState& exceptionState)
+PassRefPtrWillBeRawPtr<Node> Range::processAncestorsAndTheirSiblings(ActionType action, Node* container, ContentsProcessDirection direction, PassRefPtrWillBeRawPtr<Node> passedClonedContainer, Node* commonRoot, ExceptionState& exceptionState)
 {
-    typedef Vector<RefPtr<Node> > NodeVector;
+    typedef WillBeHeapVector<RefPtrWillBeMember<Node> > NodeVector;
 
-    RefPtr<Node> clonedContainer = passedClonedContainer;
-    Vector<RefPtr<Node> > ancestors;
+    RefPtrWillBeRawPtr<Node> clonedContainer = passedClonedContainer;
+    NodeVector ancestors;
     for (ContainerNode* n = container->parentNode(); n && n != commonRoot; n = n->parentNode())
         ancestors.append(n);
 
-    RefPtr<Node> firstChildInAncestorToProcess = direction == ProcessContentsForward ? container->nextSibling() : container->previousSibling();
-    for (Vector<RefPtr<Node> >::const_iterator it = ancestors.begin(); it != ancestors.end(); ++it) {
-        RefPtr<Node> ancestor = *it;
+    RefPtrWillBeRawPtr<Node> firstChildInAncestorToProcess = direction == ProcessContentsForward ? container->nextSibling() : container->previousSibling();
+    for (NodeVector::const_iterator it = ancestors.begin(); it != ancestors.end(); ++it) {
+        RefPtrWillBeRawPtr<Node> ancestor = *it;
         if (action == EXTRACT_CONTENTS || action == CLONE_CONTENTS) {
-            if (RefPtr<Node> clonedAncestor = ancestor->cloneNode(false)) { // Might have been removed already during mutation event.
+            if (RefPtrWillBeRawPtr<Node> clonedAncestor = ancestor->cloneNode(false)) { // Might have been removed already during mutation event.
                 clonedAncestor->appendChild(clonedContainer, exceptionState);
                 clonedContainer = clonedAncestor;
             }
@@ -835,9 +817,9 @@ PassRefPtrWillBeRawPtr<DocumentFragment> Range::cloneContents(ExceptionState& ex
     return processContents(CLONE_CONTENTS, exceptionState);
 }
 
-void Range::insertNode(PassRefPtr<Node> prpNewNode, ExceptionState& exceptionState)
+void Range::insertNode(PassRefPtrWillBeRawPtr<Node> prpNewNode, ExceptionState& exceptionState)
 {
-    RefPtr<Node> newNode = prpNewNode;
+    RefPtrWillBeRawPtr<Node> newNode = prpNewNode;
 
     if (!newNode) {
         exceptionState.throwDOMException(NotFoundError, "The node provided is null.");
@@ -867,7 +849,7 @@ void Range::insertNode(PassRefPtr<Node> prpNewNode, ExceptionState& exceptionSta
     if (newNodeType == Node::DOCUMENT_FRAGMENT_NODE && !newNode->isShadowRoot()) {
         // check each child node, not the DocumentFragment itself
         numNewChildren = 0;
-        for (Node* c = newNode->firstChild(); c; c = c->nextSibling()) {
+        for (Node* c = toDocumentFragment(newNode)->firstChild(); c; c = c->nextSibling()) {
             if (!checkAgainst->childTypeAllowed(c->nodeType())) {
                 exceptionState.throwDOMException(HierarchyRequestError, "The node to be inserted contains a '" + c->nodeName() + "' node, which may not be inserted here.");
                 return;
@@ -905,7 +887,7 @@ void Range::insertNode(PassRefPtr<Node> prpNewNode, ExceptionState& exceptionSta
 
     EventQueueScope scope;
     bool collapsed = m_start == m_end;
-    RefPtr<Node> container;
+    RefPtrWillBeRawPtr<Node> container = nullptr;
     if (startIsText) {
         container = m_start.container();
         RefPtrWillBeRawPtr<Text> newText = toText(container)->splitText(m_start.offset(), exceptionState);
@@ -920,11 +902,11 @@ void Range::insertNode(PassRefPtr<Node> prpNewNode, ExceptionState& exceptionSta
         if (collapsed)
             m_end.setToBeforeChild(*newText);
     } else {
-        RefPtr<Node> lastChild = (newNodeType == Node::DOCUMENT_FRAGMENT_NODE) ? newNode->lastChild() : newNode;
+        RefPtrWillBeRawPtr<Node> lastChild = (newNodeType == Node::DOCUMENT_FRAGMENT_NODE) ? toDocumentFragment(newNode)->lastChild() : newNode.get();
         if (lastChild && lastChild == m_start.childBefore()) {
             // The insertion will do nothing, but we need to extend the range to include
             // the inserted nodes.
-            Node* firstChild = (newNodeType == Node::DOCUMENT_FRAGMENT_NODE) ? newNode->firstChild() : newNode.get();
+            Node* firstChild = (newNodeType == Node::DOCUMENT_FRAGMENT_NODE) ? toDocumentFragment(newNode)->firstChild() : newNode.get();
             ASSERT(firstChild);
             m_start.setToBeforeChild(*firstChild);
             return;
@@ -948,11 +930,12 @@ String Range::toString() const
 
     Node* pastLast = pastLastNode();
     for (Node* n = firstNode(); n != pastLast; n = NodeTraversal::next(*n)) {
-        if (n->nodeType() == Node::TEXT_NODE || n->nodeType() == Node::CDATA_SECTION_NODE) {
+        Node::NodeType type = n->nodeType();
+        if (type == Node::TEXT_NODE || type == Node::CDATA_SECTION_NODE) {
             String data = toCharacterData(n)->data();
             int length = data.length();
-            int start = (n == m_start.container()) ? min(max(0, m_start.offset()), length) : 0;
-            int end = (n == m_end.container()) ? min(max(start, m_end.offset()), length) : length;
+            int start = (n == m_start.container()) ? std::min(std::max(0, m_start.offset()), length) : 0;
+            int end = (n == m_end.container()) ? std::min(std::max(start, m_end.offset()), length) : length;
             builder.append(data, start, end - start);
         }
     }
@@ -976,13 +959,42 @@ String Range::text() const
 
 PassRefPtrWillBeRawPtr<DocumentFragment> Range::createContextualFragment(const String& markup, ExceptionState& exceptionState)
 {
-    Node* element = m_start.container()->isElementNode() ? m_start.container() : m_start.container()->parentNode();
-    if (!element || !element->isHTMLElement()) {
-        exceptionState.throwDOMException(NotSupportedError, "The range's container must be an HTML element.");
+    // Algorithm: http://domparsing.spec.whatwg.org/#extensions-to-the-range-interface
+
+    Node* node = m_start.container();
+
+    // Step 1.
+    RefPtrWillBeRawPtr<Element> element;
+    if (!m_start.offset() && (node->isDocumentNode() || node->isDocumentFragment()))
+        element = nullptr;
+    else if (node->isElementNode())
+        element = toElement(node);
+    else
+        element = node->parentElement();
+
+    // Step 2.
+    if (!element || isHTMLHtmlElement(element)) {
+        Document& document = node->document();
+
+        if (document.isHTMLDocument() || document.isXHTMLDocument()) {
+            // Optimization over spec: try to reuse the existing <body> element, if it is available.
+            element = document.body();
+            if (!element)
+                element = HTMLBodyElement::create(document);
+        } else if (document.isSVGDocument()) {
+            element = document.documentElement();
+            if (!element)
+                element = SVGSVGElement::create(document);
+        }
+    }
+
+    if (!element || (!element->isHTMLElement() && !element->isSVGElement())) {
+        exceptionState.throwDOMException(NotSupportedError, "The range's container must be an HTML or SVG Element, Document, or DocumentFragment.");
         return nullptr;
     }
 
-    RefPtrWillBeRawPtr<DocumentFragment> fragment = WebCore::createContextualFragment(markup, toHTMLElement(element), AllowScriptingContentAndDoNotMarkAlreadyStarted, exceptionState);
+    // Steps 3, 4, 5.
+    RefPtrWillBeRawPtr<DocumentFragment> fragment = WebCore::createContextualFragment(markup, element.get(), AllowScriptingContentAndDoNotMarkAlreadyStarted, exceptionState);
     if (!fragment)
         return nullptr;
 
@@ -1197,9 +1209,9 @@ void Range::selectNodeContents(Node* refNode, ExceptionState& exceptionState)
     m_end.setToEndOfNode(*refNode);
 }
 
-void Range::surroundContents(PassRefPtr<Node> passNewParent, ExceptionState& exceptionState)
+void Range::surroundContents(PassRefPtrWillBeRawPtr<Node> passNewParent, ExceptionState& exceptionState)
 {
-    RefPtr<Node> newParent = passNewParent;
+    RefPtrWillBeRawPtr<Node> newParent = passNewParent;
     if (!newParent) {
         exceptionState.throwDOMException(NotFoundError, "The node provided is null.");
         return;
@@ -1356,7 +1368,7 @@ void Range::textRects(Vector<IntRect>& rects, bool useSelectionHeight, RangeInFi
             continue;
         RenderText* renderText = toRenderText(r);
         int startOffset = node == startContainer ? m_start.offset() : 0;
-        int endOffset = node == endContainer ? m_end.offset() : numeric_limits<int>::max();
+        int endOffset = node == endContainer ? m_end.offset() : std::numeric_limits<int>::max();
         bool isFixed = false;
         renderText->absoluteRectsForRange(rects, startOffset, endOffset, useSelectionHeight, &isFixed);
         allFixed &= isFixed;
@@ -1384,7 +1396,7 @@ void Range::textQuads(Vector<FloatQuad>& quads, bool useSelectionHeight, RangeIn
             continue;
         RenderText* renderText = toRenderText(r);
         int startOffset = node == startContainer ? m_start.offset() : 0;
-        int endOffset = node == endContainer ? m_end.offset() : numeric_limits<int>::max();
+        int endOffset = node == endContainer ? m_end.offset() : std::numeric_limits<int>::max();
         bool isFixed = false;
         renderText->absoluteQuadsForRange(quads, startOffset, endOffset, useSelectionHeight, &isFixed);
         allFixed &= isFixed;
@@ -1493,7 +1505,7 @@ static inline void boundaryNodeWillBeRemoved(RangeBoundaryPoint& boundary, Node&
 void Range::nodeWillBeRemoved(Node& node)
 {
     ASSERT(node.document() == m_ownerDocument);
-    ASSERT(node != m_ownerDocument);
+    ASSERT(node != m_ownerDocument.get());
 
     // FIXME: Once DOMNodeRemovedFromDocument mutation event removed, we
     // should change following if-statement to ASSERT(!node->parentNode).
@@ -1559,6 +1571,19 @@ void Range::didMergeTextNodes(const NodeWithIndex& oldNode, unsigned offset)
     ASSERT(oldNode.node().previousSibling()->isTextNode());
     boundaryTextNodesMerged(m_start, oldNode, offset);
     boundaryTextNodesMerged(m_end, oldNode, offset);
+}
+
+void Range::updateOwnerDocumentIfNeeded()
+{
+    ASSERT(m_start.container());
+    ASSERT(m_end.container());
+    Document& newDocument = m_start.container()->document();
+    ASSERT(newDocument == m_end.container()->document());
+    if (newDocument == m_ownerDocument)
+        return;
+    m_ownerDocument->detachRange(this);
+    m_ownerDocument = &newDocument;
+    m_ownerDocument->attachRange(this);
 }
 
 static inline void boundaryTextNodeSplit(RangeBoundaryPoint& boundary, Text& oldNode)
@@ -1675,8 +1700,11 @@ FloatRect Range::boundingRect() const
     return result;
 }
 
-void Range::trace(Visitor*)
+void Range::trace(Visitor* visitor)
 {
+    visitor->trace(m_ownerDocument);
+    visitor->trace(m_start);
+    visitor->trace(m_end);
 }
 
 } // namespace WebCore

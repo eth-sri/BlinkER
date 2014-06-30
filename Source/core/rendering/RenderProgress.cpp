@@ -27,8 +27,6 @@
 #include "wtf/CurrentTime.h"
 #include "wtf/RefPtr.h"
 
-using namespace std;
-
 namespace WebCore {
 
 RenderProgress::RenderProgress(HTMLElement* element)
@@ -54,7 +52,7 @@ void RenderProgress::updateFromElement()
     m_position = element->position();
 
     updateAnimationState();
-    repaint();
+    paintInvalidationForWholeRenderer();
     RenderBlockFlow::updateFromElement();
 }
 
@@ -71,7 +69,7 @@ bool RenderProgress::isDeterminate() const
 
 void RenderProgress::animationTimerFired(Timer<RenderProgress>*)
 {
-    repaint();
+    paintInvalidationForWholeRenderer();
     if (!m_animationTimer.isActive() && m_animating)
         m_animationTimer.startOneShot(m_animationRepeatInterval, FROM_HERE);
 }

@@ -50,9 +50,14 @@ ContextMenuController::~ContextMenuController()
 {
 }
 
-PassOwnPtr<ContextMenuController> ContextMenuController::create(Page* page, ContextMenuClient* client)
+PassOwnPtrWillBeRawPtr<ContextMenuController> ContextMenuController::create(Page* page, ContextMenuClient* client)
 {
-    return adoptPtr(new ContextMenuController(page, client));
+    return adoptPtrWillBeNoop(new ContextMenuController(page, client));
+}
+
+void ContextMenuController::trace(Visitor* visitor)
+{
+    visitor->trace(m_hitTestResult);
 }
 
 void ContextMenuController::clearContextMenu()
@@ -108,7 +113,7 @@ PassOwnPtr<ContextMenu> ContextMenuController::createContextMenu(Event* event)
     HitTestResult result(mouseEvent->absoluteLocation());
 
     if (LocalFrame* frame = event->target()->toNode()->document().frame())
-        result = frame->eventHandler().hitTestResultAtPoint(mouseEvent->absoluteLocation(), HitTestRequest::ReadOnly | HitTestRequest::Active | HitTestRequest::ConfusingAndOftenMisusedDisallowShadowContent);
+        result = frame->eventHandler().hitTestResultAtPoint(mouseEvent->absoluteLocation(), HitTestRequest::ReadOnly | HitTestRequest::Active);
 
     if (!result.innerNonSharedNode())
         return nullptr;

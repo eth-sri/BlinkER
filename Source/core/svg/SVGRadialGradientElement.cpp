@@ -27,12 +27,11 @@
 
 #include "core/rendering/svg/RenderSVGResourceRadialGradient.h"
 #include "core/svg/RadialGradientAttributes.h"
-#include "core/svg/SVGElementInstance.h"
 #include "core/svg/SVGTransformList.h"
 
 namespace WebCore {
 
-SVGRadialGradientElement::SVGRadialGradientElement(Document& document)
+inline SVGRadialGradientElement::SVGRadialGradientElement(Document& document)
     : SVGGradientElement(SVGNames::radialGradientTag, document)
     , m_cx(SVGAnimatedLength::create(this, SVGNames::cxAttr, SVGLength::create(LengthModeWidth), AllowNegativeLengths))
     , m_cy(SVGAnimatedLength::create(this, SVGNames::cyAttr, SVGLength::create(LengthModeHeight), AllowNegativeLengths))
@@ -58,6 +57,8 @@ SVGRadialGradientElement::SVGRadialGradientElement(Document& document)
     addToPropertyMap(m_fy);
     addToPropertyMap(m_fr);
 }
+
+DEFINE_NODE_FACTORY(SVGRadialGradientElement)
 
 bool SVGRadialGradientElement::isSupportedAttribute(const QualifiedName& attrName)
 {

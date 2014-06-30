@@ -38,7 +38,7 @@
     Custom=Wrap, // Conflicts with and [Custom=ToV8], respectively
     DependentLifetime, // Covered by [ActiveDOMObject]
     SetWrapperReferenceFrom=ownerNode, // Conflicts with [SetWrapperReferenceTo]
-    SpecialWrapFor=Interface1|Interface2, // Conflicts with [Custom=ToV8]
+    SpecialWrapFor=TestInterface|TestInterfaceEmpty, // Conflicts with [Custom=ToV8]
 ] interface TestInterface2 {
     // Indexed property operations with an identifier
     [RaisesException] getter TestInterfaceEmpty item(unsigned long index);
@@ -49,4 +49,6 @@
     [RaisesException] getter TestInterfaceEmpty namedItem(DOMString name);
     [RaisesException] setter DOMString setNamedItem(DOMString name, DOMString value);
     [RaisesException] deleter boolean deleteNamedItem(DOMString name);
+
+    stringifier DOMString stringifierMethod();
 };

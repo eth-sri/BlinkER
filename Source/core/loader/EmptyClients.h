@@ -48,7 +48,6 @@
 #include "platform/text/TextCheckerClient.h"
 #include "public/platform/WebScreenInfo.h"
 #include "wtf/Forward.h"
-
 #include <v8.h>
 
 /*
@@ -130,7 +129,7 @@ public:
 
     virtual void invalidateContentsAndRootView(const IntRect&) OVERRIDE { }
     virtual void invalidateContentsForSlowScroll(const IntRect&) OVERRIDE { }
-    virtual void scroll(const IntSize&, const IntRect&, const IntRect&) OVERRIDE { }
+    virtual void scroll() OVERRIDE { }
     virtual void scheduleAnimation() OVERRIDE { }
 
     virtual IntRect rootViewToScreen(const IntRect& r) const OVERRIDE { return r; }
@@ -146,7 +145,7 @@ public:
     virtual void enumerateChosenDirectory(FileChooser*) OVERRIDE { }
 
     virtual PassOwnPtr<ColorChooser> createColorChooser(LocalFrame*, ColorChooserClient*, const Color&) OVERRIDE;
-    virtual PassRefPtr<DateTimeChooser> openDateTimeChooser(DateTimeChooserClient*, const DateTimeChooserParameters&) OVERRIDE;
+    virtual PassRefPtrWillBeRawPtr<DateTimeChooser> openDateTimeChooser(DateTimeChooserClient*, const DateTimeChooserParameters&) OVERRIDE;
     virtual void openTextDataListChooser(HTMLInputElement&) OVERRIDE;
 
     virtual void runOpenPanel(LocalFrame*, PassRefPtr<FileChooser>) OVERRIDE;
@@ -158,11 +157,7 @@ public:
     virtual void needTouchEvents(bool) OVERRIDE { }
     virtual void setTouchAction(TouchAction touchAction) OVERRIDE { };
 
-    virtual void numWheelEventHandlersChanged(unsigned) OVERRIDE { }
-
-    virtual bool shouldRubberBandInDirection(WebCore::ScrollDirection) const OVERRIDE { return false; }
-
-    virtual void didAssociateFormControls(const Vector<RefPtr<Element> >&) OVERRIDE { }
+    virtual void didAssociateFormControls(const WillBeHeapVector<RefPtrWillBeMember<Element> >&) OVERRIDE { }
 
     virtual void annotatedRegionsChanged() OVERRIDE { }
     virtual bool paintCustomOverhangArea(GraphicsContext*, const IntRect&, const IntRect&, const IntRect&) OVERRIDE { return false; }
@@ -205,6 +200,7 @@ public:
     virtual void dispatchDidFinishDocumentLoad() OVERRIDE { }
     virtual void dispatchDidFinishLoad() OVERRIDE { }
     virtual void dispatchDidFirstVisuallyNonEmptyLayout() OVERRIDE { }
+    virtual void dispatchDidChangeBrandColor() OVERRIDE { };
 
     virtual NavigationPolicy decidePolicyForNavigation(const ResourceRequest&, DocumentLoader*, NavigationPolicy) OVERRIDE;
 
@@ -247,7 +243,7 @@ public:
 
     virtual blink::WebCookieJar* cookieJar() const OVERRIDE { return 0; }
 
-    virtual void didRequestAutocomplete(HTMLFormElement*, const Dictionary&) OVERRIDE;
+    virtual void didRequestAutocomplete(HTMLFormElement*) OVERRIDE;
 
     virtual PassOwnPtr<blink::WebServiceWorkerProvider> createServiceWorkerProvider() OVERRIDE;
     virtual PassOwnPtr<blink::WebApplicationCacheHost> createApplicationCacheHost(blink::WebApplicationCacheHostClient*) OVERRIDE;
@@ -296,7 +292,6 @@ public:
     virtual bool canCopyCut(LocalFrame*, bool defaultValue) const OVERRIDE { return defaultValue; }
     virtual bool canPaste(LocalFrame*, bool defaultValue) const OVERRIDE { return defaultValue; }
 
-    virtual void didExecuteCommand(String) OVERRIDE { }
     virtual bool handleKeyboardEvent() OVERRIDE { return false; }
 };
 
@@ -315,7 +310,7 @@ public:
     EmptyDragClient() { }
     virtual ~EmptyDragClient() {}
     virtual DragDestinationAction actionMaskForDrag(DragData*) OVERRIDE { return DragDestinationActionNone; }
-    virtual void startDrag(DragImage*, const IntPoint&, const IntPoint&, Clipboard*, LocalFrame*, bool) OVERRIDE { }
+    virtual void startDrag(DragImage*, const IntPoint&, const IntPoint&, DataTransfer*, LocalFrame*, bool) OVERRIDE { }
 };
 
 class EmptyInspectorClient FINAL : public InspectorClient {

@@ -168,8 +168,8 @@ GridTrackSize StyleBuilderConverter::convertGridTrackSize(StyleResolverState& st
     CSSFunctionValue* minmaxFunction = toCSSFunctionValue(value);
     CSSValueList* arguments = minmaxFunction->arguments();
     ASSERT_WITH_SECURITY_IMPLICATION(arguments->length() == 2);
-    GridLength minTrackBreadth(convertGridTrackBreadth(state, toCSSPrimitiveValue(arguments->itemWithoutBoundsCheck(0))));
-    GridLength maxTrackBreadth(convertGridTrackBreadth(state, toCSSPrimitiveValue(arguments->itemWithoutBoundsCheck(1))));
+    GridLength minTrackBreadth(convertGridTrackBreadth(state, toCSSPrimitiveValue(arguments->item(0))));
+    GridLength maxTrackBreadth(convertGridTrackBreadth(state, toCSSPrimitiveValue(arguments->item(1))));
     return GridTrackSize(minTrackBreadth, maxTrackBreadth);
 }
 
@@ -343,7 +343,7 @@ PassRefPtr<QuotesData> StyleBuilderConverter::convertQuotes(StyleResolverState&,
         CSSValueList* list = toCSSValueList(value);
         RefPtr<QuotesData> quotes = QuotesData::create();
         for (size_t i = 0; i < list->length(); i += 2) {
-            CSSValue* first = list->itemWithoutBoundsCheck(i);
+            CSSValue* first = list->item(i);
             // item() returns null if out of bounds so this is safe.
             CSSValue* second = list->item(i + 1);
             if (!second)
@@ -404,8 +404,6 @@ float StyleBuilderConverter::convertSpacing(StyleResolverState& state, CSSValue*
     CSSPrimitiveValue* primitiveValue = toCSSPrimitiveValue(value);
     if (primitiveValue->getValueID() == CSSValueNormal)
         return 0;
-    if (state.useSVGZoomRules())
-        return primitiveValue->computeLength<float>(state.cssToLengthConversionData().copyWithAdjustedZoom(1));
     return primitiveValue->computeLength<float>(state.cssToLengthConversionData());
 }
 
@@ -420,11 +418,11 @@ PassRefPtr<SVGLengthList> StyleBuilderConverter::convertStrokeDasharray(StyleRes
     RefPtr<SVGLengthList> array = SVGLengthList::create();
     size_t length = dashes->length();
     for (size_t i = 0; i < length; ++i) {
-        CSSValue* currValue = dashes->itemWithoutBoundsCheck(i);
+        CSSValue* currValue = dashes->item(i);
         if (!currValue->isPrimitiveValue())
             continue;
 
-        CSSPrimitiveValue* dash = toCSSPrimitiveValue(dashes->itemWithoutBoundsCheck(i));
+        CSSPrimitiveValue* dash = toCSSPrimitiveValue(dashes->item(i));
         array->append(SVGLength::fromCSSPrimitiveValue(dash));
     }
 

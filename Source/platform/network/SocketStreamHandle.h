@@ -33,6 +33,7 @@
 #define SocketStreamHandle_h
 
 #include "platform/PlatformExport.h"
+#include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
@@ -43,38 +44,42 @@ namespace WebCore {
 class SocketStreamHandleClient;
 class SocketStreamHandleInternal;
 
-class PLATFORM_EXPORT SocketStreamHandle : public RefCounted<SocketStreamHandle> {
+class PLATFORM_EXPORT SocketStreamHandle : public RefCountedWillBeGarbageCollectedFinalized<SocketStreamHandle> {
 public:
     enum SocketStreamState { Connecting, Open, Closing, Closed };
 
-    static PassRefPtr<SocketStreamHandle> create(const KURL& url, SocketStreamHandleClient* client) { return adoptRef(new SocketStreamHandle(url, client)); }
+    static PassRefPtrWillBeRawPtr<SocketStreamHandle> create(SocketStreamHandleClient* client)
+    {
+        return adoptRefWillBeNoop(new SocketStreamHandle(client));
+    }
 
     virtual ~SocketStreamHandle();
     SocketStreamState state() const;
 
+    void connect(const KURL&);
     bool send(const char* data, int length);
     void close(); // Disconnect after all data in buffer are sent.
     void disconnect();
-    size_t bufferedAmount() const { return m_buffer.size(); }
 
     SocketStreamHandleClient* client() const { return m_client; }
     void setClient(SocketStreamHandleClient*);
 
+    void trace(Visitor*);
+
 private:
-    SocketStreamHandle(const KURL&, SocketStreamHandleClient*);
+    explicit SocketStreamHandle(SocketStreamHandleClient*);
 
     bool sendPendingData();
 
     int sendInternal(const char* data, int length);
     void closeInternal();
 
-    KURL m_url;
-    SocketStreamHandleClient* m_client;
+    RawPtrWillBeMember<SocketStreamHandleClient> m_client;
     StreamBuffer<char, 1024 * 1024> m_buffer;
     SocketStreamState m_state;
 
     friend class SocketStreamHandleInternal;
-    OwnPtr<SocketStreamHandleInternal> m_internal;
+    OwnPtrWillBeMember<SocketStreamHandleInternal> m_internal;
 };
 
 } // namespace WebCore

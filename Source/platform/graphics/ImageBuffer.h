@@ -33,7 +33,6 @@
 #include "platform/geometry/IntSize.h"
 #include "platform/graphics/Canvas2DLayerBridge.h"
 #include "platform/graphics/ColorSpace.h"
-#include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/GraphicsTypes.h"
 #include "platform/graphics/GraphicsTypes3D.h"
 #include "platform/graphics/ImageBufferSurface.h"
@@ -54,6 +53,7 @@ class WebGraphicsContext3D;
 namespace WebCore {
 
 class DrawingBuffer;
+class GraphicsContext;
 class Image;
 class ImageBufferClient;
 class IntPoint;
@@ -100,10 +100,9 @@ public:
     // or return CopyBackingStore if it doesn't.
     static BackingStoreCopy fastCopyImageMode();
 
-    PassRefPtr<Uint8ClampedArray> getUnmultipliedImageData(const IntRect&) const;
-    PassRefPtr<Uint8ClampedArray> getPremultipliedImageData(const IntRect&) const;
+    PassRefPtr<Uint8ClampedArray> getImageData(Multiply, const IntRect&) const;
 
-    void putByteArray(Multiply multiplied, Uint8ClampedArray*, const IntSize& sourceSize, const IntRect& sourceRect, const IntPoint& destPoint);
+    void putByteArray(Multiply, Uint8ClampedArray*, const IntSize& sourceSize, const IntRect& sourceRect, const IntPoint& destPoint);
 
     String toDataURL(const String& mimeType, const double* quality = 0) const;
     AffineTransform baseTransform() const { return AffineTransform(); }
@@ -118,7 +117,7 @@ public:
 
     Platform3DObject getBackingTexture();
 
-    bool copyRenderingResultsFromDrawingBuffer(DrawingBuffer*);
+    bool copyRenderingResultsFromDrawingBuffer(DrawingBuffer*, bool fromFrontBuffer = false);
 
     void flush();
 

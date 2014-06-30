@@ -42,7 +42,8 @@ enum ResourceRequestCachePolicy {
     UseProtocolCachePolicy, // normal load
     ReloadIgnoringCacheData, // reload
     ReturnCacheDataElseLoad, // back/forward or encoding change - allow stale data
-    ReturnCacheDataDontLoad  // results of a post - allow stale data and only use cache
+    ReturnCacheDataDontLoad, // results of a post - allow stale data and only use cache
+    ReloadBypassingCache, // end-to-end reload
 };
 
 struct CrossThreadResourceRequestData;
@@ -145,6 +146,7 @@ public:
     const AtomicString& httpOrigin() const { return httpHeaderField("Origin"); }
     void setHTTPOrigin(const AtomicString& httpOrigin) { setHTTPHeaderField("Origin", httpOrigin); }
     void clearHTTPOrigin();
+    void addHTTPOriginIfNeeded(const AtomicString& origin);
 
     const AtomicString& httpUserAgent() const { return httpHeaderField("User-Agent"); }
     void setHTTPUserAgent(const AtomicString& httpUserAgent) { setHTTPHeaderField("User-Agent", httpUserAgent); }
@@ -168,10 +170,6 @@ public:
     // upload progress made for that resource.
     bool reportUploadProgress() const { return m_reportUploadProgress; }
     void setReportUploadProgress(bool reportUploadProgress) { m_reportUploadProgress = reportUploadProgress; }
-
-    // Whether the timing information should be collected for the request.
-    bool reportLoadTiming() const { return m_reportLoadTiming; }
-    void setReportLoadTiming(bool reportLoadTiming) { m_reportLoadTiming = reportLoadTiming; }
 
     // Whether actual headers being sent/received should be collected and reported for the request.
     bool reportRawHeaders() const { return m_reportRawHeaders; }
@@ -208,9 +206,9 @@ public:
     TargetType targetType() const { return m_targetType; }
     void setTargetType(TargetType type) { m_targetType = type; }
 
-    bool cacheControlContainsNoCache();
-    bool cacheControlContainsNoStore();
-    bool hasCacheValidatorFields();
+    bool cacheControlContainsNoCache() const;
+    bool cacheControlContainsNoStore() const;
+    bool hasCacheValidatorFields() const;
 
     static double defaultTimeoutInterval(); // May return 0 when using platform default.
     static void setDefaultTimeoutInterval(double);
@@ -219,6 +217,8 @@ public:
 
 private:
     void initialize(const KURL& url, ResourceRequestCachePolicy cachePolicy);
+
+    const CacheControlHeader& cacheControlHeader() const;
 
     KURL m_url;
     ResourceRequestCachePolicy m_cachePolicy;
@@ -229,7 +229,6 @@ private:
     RefPtr<FormData> m_httpBody;
     bool m_allowStoredCredentials : 1;
     bool m_reportUploadProgress : 1;
-    bool m_reportLoadTiming : 1;
     bool m_reportRawHeaders : 1;
     bool m_hasUserGesture : 1;
     bool m_downloadToFile : 1;
@@ -241,7 +240,8 @@ private:
     RefPtr<ExtraData> m_extraData;
     TargetType m_targetType;
     ReferrerPolicy m_referrerPolicy;
-    CacheControlHeader m_cacheControlHeader;
+
+    mutable CacheControlHeader m_cacheControlHeaderCache;
 
     static double s_defaultTimeoutInterval;
 };

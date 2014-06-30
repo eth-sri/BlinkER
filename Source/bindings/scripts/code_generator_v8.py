@@ -75,6 +75,7 @@ from idl_types import IdlType
 import v8_callback_interface
 from v8_globals import includes, interfaces
 import v8_interface
+import v8_private_script_interface
 import v8_types
 from v8_utilities import capitalize, cpp_name, conditional_string, v8_class_name
 
@@ -106,6 +107,9 @@ class CodeGeneratorV8(object):
             interface_name
             for interface_name, interface_info in interfaces_info.iteritems()
             if 'WillBeGarbageCollected' in interface_info['inherited_extended_attributes']))
+        v8_types.set_component_dirs(dict(
+            (interface_name, interface_info['component_dir'])
+            for interface_name, interface_info in interfaces_info.iteritems()))
 
     def generate_code(self, definitions, interface_name):
         """Returns .h/.cpp code as (header_text, cpp_text)."""
@@ -126,28 +130,35 @@ class CodeGeneratorV8(object):
         if interface.is_callback:
             header_template_filename = 'callback_interface.h'
             cpp_template_filename = 'callback_interface.cpp'
-            generate_contents = v8_callback_interface.generate_callback_interface
+            interface_context = v8_callback_interface.callback_interface_context
+        elif 'PrivateScriptInterface' in interface.extended_attributes:
+            # Currently private scripts don't have dependencies. Once private scripts have dependencies,
+            # we should add them to interface_info.
+            header_template_filename = 'private_script_interface.h'
+            cpp_template_filename = 'private_script_interface.cpp'
+            interface_context = v8_private_script_interface.private_script_interface_context
         else:
             header_template_filename = 'interface.h'
             cpp_template_filename = 'interface.cpp'
-            generate_contents = v8_interface.generate_interface
+            interface_context = v8_interface.interface_context
         header_template = self.jinja_env.get_template(header_template_filename)
         cpp_template = self.jinja_env.get_template(cpp_template_filename)
 
-        # Generate contents (input parameters for Jinja)
-        template_contents = generate_contents(interface)
-        template_contents['code_generator'] = module_pyname
+        # Compute context (input values for Jinja)
+        template_context = interface_context(interface)
+        template_context['code_generator'] = module_pyname
 
         # Add includes for interface itself and any dependencies
         interface_info = self.interfaces_info[interface_name]
-        template_contents['header_includes'].add(interface_info['include_path'])
-        template_contents['header_includes'] = sorted(template_contents['header_includes'])
+        if 'PrivateScriptInterface' not in interface.extended_attributes:
+            template_context['header_includes'].add(interface_info['include_path'])
+        template_context['header_includes'] = sorted(template_context['header_includes'])
         includes.update(interface_info.get('dependencies_include_paths', []))
-        template_contents['cpp_includes'] = sorted(includes)
+        template_context['cpp_includes'] = sorted(includes)
 
         # Render Jinja templates
-        header_text = header_template.render(template_contents)
-        cpp_text = cpp_template.render(template_contents)
+        header_text = header_template.render(template_context)
+        cpp_text = cpp_template.render(template_context)
         return header_text, cpp_text
 
 
@@ -184,8 +195,9 @@ def runtime_enabled_if(code, runtime_enabled_function_name):
         return code
     # Indent if statement to level of original code
     indent = re.match(' *', code).group(0)
-    return ('%sif (%s())\n' % (indent, runtime_enabled_function_name) +
-            '    %s' % code)
+    return ('%sif (%s()) {\n' % (indent, runtime_enabled_function_name) +
+            '    %s\n' % '\n    '.join(code.splitlines()) +
+            '%s}\n' % indent)
 
 
 ################################################################################
@@ -196,7 +208,7 @@ def main(argv):
         cache_dir = argv[1]
         dummy_filename = argv[2]
     except IndexError as err:
-        print 'Usage: %s OUTPUT_DIR DUMMY_FILENAME' % argv[0]
+        print 'Usage: %s CACHE_DIR DUMMY_FILENAME' % argv[0]
         return 1
 
     # Cache templates

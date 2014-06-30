@@ -31,8 +31,7 @@
 #include "config.h"
 #include "core/loader/FormSubmission.h"
 
-#include "HTMLNames.h"
-#include "RuntimeEnabledFeatures.h"
+#include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/events/Event.h"
 #include "core/html/DOMFormData.h"
@@ -42,6 +41,7 @@
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/FrameLoader.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/heap/Handle.h"
 #include "platform/network/FormData.h"
 #include "platform/network/FormDataBuilder.h"
@@ -83,10 +83,9 @@ static void appendMailtoPostFormDataToURL(KURL& url, const FormData& data, const
     url.setQuery(query.toString());
 }
 
-void FormSubmission::Attributes::parseAction(const String& action)
+void FormSubmission::Attributes::parseAction(const Document& document, const String& action)
 {
-    // FIXME: Can we parse into a KURL?
-    m_action = stripLeadingAndTrailingHTMLSpaces(action);
+    m_action = action.isEmpty() ? KURL() : document.completeURL(stripLeadingAndTrailingHTMLSpaces(action));
 }
 
 AtomicString FormSubmission::Attributes::parseEncodingType(const String& type)
@@ -161,7 +160,7 @@ inline FormSubmission::FormSubmission(const String& result)
 {
 }
 
-PassRefPtr<FormSubmission> FormSubmission::create(HTMLFormElement* form, const Attributes& attributes, PassRefPtrWillBeRawPtr<Event> event, FormSubmissionTrigger trigger)
+PassRefPtrWillBeRawPtr<FormSubmission> FormSubmission::create(HTMLFormElement* form, const Attributes& attributes, PassRefPtrWillBeRawPtr<Event> event, FormSubmissionTrigger trigger)
 {
     ASSERT(form);
 
@@ -180,7 +179,7 @@ PassRefPtr<FormSubmission> FormSubmission::create(HTMLFormElement* form, const A
     if (submitButton) {
         AtomicString attributeValue;
         if (!(attributeValue = submitButton->fastGetAttribute(formactionAttr)).isNull())
-            copiedAttributes.parseAction(attributeValue);
+            copiedAttributes.parseAction(form->document(), attributeValue);
         if (!(attributeValue = submitButton->fastGetAttribute(formenctypeAttr)).isNull())
             copiedAttributes.updateEncodingType(attributeValue);
         if (!(attributeValue = submitButton->fastGetAttribute(formmethodAttr)).isNull())
@@ -191,12 +190,12 @@ PassRefPtr<FormSubmission> FormSubmission::create(HTMLFormElement* form, const A
 
     if (copiedAttributes.method() == DialogMethod) {
         if (submitButton)
-            return adoptRef(new FormSubmission(submitButton->resultForDialogSubmit()));
-        return adoptRef(new FormSubmission(""));
+            return adoptRefWillBeNoop(new FormSubmission(submitButton->resultForDialogSubmit()));
+        return adoptRefWillBeNoop(new FormSubmission(""));
     }
 
     Document& document = form->document();
-    KURL actionURL = document.completeURL(copiedAttributes.action().isEmpty() ? document.url().string() : copiedAttributes.action());
+    KURL actionURL = copiedAttributes.action().isEmpty() ? document.url() : copiedAttributes.action();
     bool isMailtoForm = actionURL.protocolIs("mailto");
     bool isMultiPartForm = false;
     AtomicString encodingType = copiedAttributes.encodingType();
@@ -229,10 +228,10 @@ PassRefPtr<FormSubmission> FormSubmission::create(HTMLFormElement* form, const A
     String boundary;
 
     if (isMultiPartForm) {
-        formData = domFormData->createMultiPartFormData(domFormData->encoding());
+        formData = domFormData->createMultiPartFormData();
         boundary = formData->boundary().data();
     } else {
-        formData = domFormData->createFormData(domFormData->encoding(), attributes.method() == GetMethod ? FormData::FormURLEncoded : FormData::parseEncodingType(encodingType));
+        formData = domFormData->createFormData(attributes.method() == GetMethod ? FormData::FormURLEncoded : FormData::parseEncodingType(encodingType));
         if (copiedAttributes.method() == PostMethod && isMailtoForm) {
             // Convert the form data into a string that we put into the URL.
             appendMailtoPostFormDataToURL(actionURL, *formData, encodingType);
@@ -243,7 +242,13 @@ PassRefPtr<FormSubmission> FormSubmission::create(HTMLFormElement* form, const A
     formData->setIdentifier(generateFormDataIdentifier());
     formData->setContainsPasswordData(containsPasswordData);
     AtomicString targetOrBaseTarget = copiedAttributes.target().isEmpty() ? document.baseTarget() : copiedAttributes.target();
-    return adoptRef(new FormSubmission(copiedAttributes.method(), actionURL, targetOrBaseTarget, encodingType, FormState::create(*form, trigger), formData.release(), boundary, event));
+    return adoptRefWillBeNoop(new FormSubmission(copiedAttributes.method(), actionURL, targetOrBaseTarget, encodingType, FormState::create(*form, trigger), formData.release(), boundary, event));
+}
+
+void FormSubmission::trace(Visitor* visitor)
+{
+    visitor->trace(m_formState);
+    visitor->trace(m_event);
 }
 
 KURL FormSubmission::requestURL() const
@@ -276,7 +281,7 @@ void FormSubmission::populateFrameLoadRequest(FrameLoadRequest& frameRequest)
     }
 
     frameRequest.resourceRequest().setURL(requestURL());
-    FrameLoader::addHTTPOriginIfNeeded(frameRequest.resourceRequest(), AtomicString(m_origin));
+    frameRequest.resourceRequest().addHTTPOriginIfNeeded(AtomicString(m_origin));
 }
 
 }

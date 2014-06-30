@@ -39,6 +39,7 @@
 #include "core/rendering/style/RenderStyle.h"
 #include "platform/LengthFunctions.h"
 #include "platform/geometry/FloatSize.h"
+#include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/WindRule.h"
 #include "wtf/MathExtras.h"
@@ -185,7 +186,7 @@ PassOwnPtr<Shape> Shape::createRasterShape(Image* image, float threshold, const 
         GraphicsContext* graphicsContext = imageBuffer->context();
         graphicsContext->drawImage(image, IntRect(IntPoint(), imageRect.size()));
 
-        RefPtr<Uint8ClampedArray> pixelArray = imageBuffer->getUnmultipliedImageData(IntRect(IntPoint(), imageRect.size()));
+        RefPtr<Uint8ClampedArray> pixelArray = imageBuffer->getImageData(Unmultiplied, IntRect(IntPoint(), imageRect.size()));
         unsigned pixelArrayOffset = 3; // Each pixel is four bytes: RGBA.
         uint8_t alphaPixelThreshold = threshold * 255;
 

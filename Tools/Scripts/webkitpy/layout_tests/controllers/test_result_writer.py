@@ -29,6 +29,7 @@
 
 import logging
 
+from webkitpy.layout_tests.controllers import repaint_overlay
 from webkitpy.layout_tests.models import test_failures
 
 
@@ -91,6 +92,8 @@ def write_test_result(filesystem, port, results_directory, test_name, driver_out
         else:
             assert isinstance(failure, (test_failures.FailureTimeout, test_failures.FailureReftestNoImagesGenerated))
 
+        writer.create_repaint_overlay_result(driver_output.text, expected_driver_output.text)
+
 
 class TestResultWriter(object):
     """A class which handles all writing operations to the result directory."""
@@ -107,6 +110,7 @@ class TestResultWriter(object):
     FILENAME_SUFFIX_PRETTY_PATCH = "-pretty-diff.html"
     FILENAME_SUFFIX_IMAGE_DIFF = "-diff.png"
     FILENAME_SUFFIX_IMAGE_DIFFS_HTML = "-diffs.html"
+    FILENAME_SUFFIX_OVERLAY = "-overlay.html"
 
     def __init__(self, filesystem, port, root_output_dir, test_name):
         self._filesystem = filesystem
@@ -209,6 +213,12 @@ class TestResultWriter(object):
             pretty_patch = self._port.pretty_patch_text(diff_filename)
             pretty_patch_filename = self.output_filename(self.FILENAME_SUFFIX_PRETTY_PATCH)
             self._write_file(pretty_patch_filename, pretty_patch)
+
+    def create_repaint_overlay_result(self, actual_text, expected_text):
+        html = repaint_overlay.generate_repaint_overlay_html(self._test_name, actual_text, expected_text)
+        if html:
+            overlay_filename = self.output_filename(self.FILENAME_SUFFIX_OVERLAY)
+            self._write_file(overlay_filename, html)
 
     def write_audio_files(self, actual_audio, expected_audio):
         self.write_output_files('.wav', actual_audio, expected_audio)

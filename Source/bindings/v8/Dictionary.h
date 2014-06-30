@@ -45,13 +45,16 @@ namespace WebCore {
 
 class ArrayValue;
 class DOMError;
-class DOMWindow;
+class Element;
+class LocalDOMWindow;
 class Gamepad;
+class MediaStream;
+class HeaderMap;
+class Headers;
 class IDBKeyRange;
 class MIDIPort;
 class MediaKeyError;
 class Notification;
-class SpeechRecognitionError;
 class SpeechRecognitionResult;
 class SpeechRecognitionResultList;
 class Storage;
@@ -82,26 +85,27 @@ public:
     bool get(const String&, unsigned&) const;
     bool get(const String&, unsigned long&) const;
     bool get(const String&, unsigned long long&) const;
-    bool get(const String&, RefPtrWillBeMember<DOMWindow>&) const;
+    bool get(const String&, RefPtrWillBeMember<LocalDOMWindow>&) const;
     bool get(const String&, RefPtrWillBeMember<Storage>&) const;
     bool get(const String&, MessagePortArray&) const;
     bool get(const String&, RefPtr<Uint8Array>&) const;
     bool get(const String&, RefPtr<ArrayBufferView>&) const;
-    bool get(const String&, RefPtr<MIDIPort>&) const;
-    bool get(const String&, RefPtr<MediaKeyError>&) const;
+    bool get(const String&, Member<MIDIPort>&) const;
+    bool get(const String&, RefPtrWillBeMember<MediaKeyError>&) const;
     bool get(const String&, RefPtrWillBeMember<TrackBase>&) const;
-    bool get(const String&, RefPtrWillBeMember<SpeechRecognitionError>&) const;
-    bool get(const String&, RefPtrWillBeMember<SpeechRecognitionResult>&) const;
-    bool get(const String&, RefPtrWillBeMember<SpeechRecognitionResultList>&) const;
+    bool get(const String&, Member<SpeechRecognitionResult>&) const;
+    bool get(const String&, Member<SpeechRecognitionResultList>&) const;
     bool get(const String&, Member<Gamepad>&) const;
-    bool get(const String&, RefPtr<MediaStream>&) const;
-    bool get(const String&, RefPtr<EventTarget>&) const;
+    bool get(const String&, Member<MediaStream>&) const;
+    bool get(const String&, RefPtrWillBeMember<EventTarget>&) const;
     bool get(const String&, HashSet<AtomicString>&) const;
     bool get(const String&, Dictionary&) const;
     bool get(const String&, Vector<String>&) const;
     bool get(const String&, ArrayValue&) const;
     bool get(const String&, RefPtrWillBeMember<DOMError>&) const;
     bool get(const String&, v8::Local<v8::Value>&) const;
+    bool get(const String&, RefPtr<HeaderMap>&) const;
+    bool get(const String&, RefPtr<Headers>&) const;
 
     class ConversionContext {
     public:
@@ -175,6 +179,7 @@ public:
     bool getOwnPropertyNames(Vector<String>&) const;
 
     bool getWithUndefinedOrNullCheck(const String&, String&) const;
+    bool getWithUndefinedOrNullCheck(const String&, RefPtrWillBeMember<Element>&) const;
 
     bool hasProperty(const String&) const;
 

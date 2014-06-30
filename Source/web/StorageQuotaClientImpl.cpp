@@ -32,7 +32,7 @@
 #include "web/StorageQuotaClientImpl.h"
 
 #include "bindings/v8/ScriptPromise.h"
-#include "bindings/v8/ScriptPromiseResolverWithContext.h"
+#include "bindings/v8/ScriptPromiseResolver.h"
 #include "bindings/v8/ScriptState.h"
 #include "core/dom/DOMError.h"
 #include "core/dom/Document.h"
@@ -76,15 +76,13 @@ void StorageQuotaClientImpl::requestQuota(ExecutionContext* executionContext, We
     }
 }
 
-ScriptPromise StorageQuotaClientImpl::requestPersistentQuota(ExecutionContext* executionContext, unsigned long long newQuotaInBytes)
+ScriptPromise StorageQuotaClientImpl::requestPersistentQuota(ScriptState* scriptState, unsigned long long newQuotaInBytes)
 {
-    ASSERT(executionContext);
-
-    RefPtr<ScriptPromiseResolverWithContext> resolver = ScriptPromiseResolverWithContext::create(ScriptState::current(toIsolate(executionContext)));
+    RefPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(scriptState);
     ScriptPromise promise = resolver->promise();
 
-    if (executionContext->isDocument()) {
-        Document* document = toDocument(executionContext);
+    if (scriptState->executionContext()->isDocument()) {
+        Document* document = toDocument(scriptState->executionContext());
         WebLocalFrameImpl* webFrame = WebLocalFrameImpl::fromFrame(document->frame());
         OwnPtr<StorageQuotaCallbacks> callbacks = StorageQuotaCallbacksImpl::create(resolver);
         webFrame->client()->requestStorageQuota(webFrame, WebStorageQuotaTypePersistent, newQuotaInBytes, callbacks.release());

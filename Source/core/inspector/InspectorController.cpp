@@ -31,9 +31,9 @@
 #include "config.h"
 #include "core/inspector/InspectorController.h"
 
-#include "InspectorBackendDispatcher.h"
-#include "InspectorFrontend.h"
 #include "bindings/v8/DOMWrapperWorld.h"
+#include "core/InspectorBackendDispatcher.h"
+#include "core/InspectorFrontend.h"
 #include "core/inspector/IdentifiersFactory.h"
 #include "core/inspector/InjectedScriptHost.h"
 #include "core/inspector/InjectedScriptManager.h"
@@ -75,6 +75,7 @@ InspectorController::InspectorController(Page* page, InspectorClient* inspectorC
     , m_injectedScriptManager(InjectedScriptManager::createForPage())
     , m_state(adoptPtr(new InspectorCompositeState(inspectorClient)))
     , m_overlay(InspectorOverlay::create(page, inspectorClient))
+    , m_cssAgent(0)
     , m_layerTreeAgent(0)
     , m_page(page)
     , m_inspectorClient(inspectorClient)
@@ -150,10 +151,12 @@ void InspectorController::initializeDeferredAgents()
     InspectorOverlay* overlay = m_overlay.get();
 
     OwnPtr<InspectorResourceAgent> resourceAgentPtr(InspectorResourceAgent::create(m_pageAgent));
-    InspectorResourceAgent* resourceAgent = resourceAgentPtr.get();
+    m_resourceAgent = resourceAgentPtr.get();
     m_agents.append(resourceAgentPtr.release());
 
-    m_agents.append(InspectorCSSAgent::create(m_domAgent, m_pageAgent, resourceAgent));
+    OwnPtr<InspectorCSSAgent> cssAgentPtr(InspectorCSSAgent::create(m_domAgent, m_pageAgent, m_resourceAgent));
+    m_cssAgent = cssAgentPtr.get();
+    m_agents.append(cssAgentPtr.release());
 
     m_agents.append(InspectorDOMStorageAgent::create(m_pageAgent));
 
@@ -190,7 +193,6 @@ void InspectorController::willBeDestroyed()
 
 void InspectorController::registerModuleAgent(PassOwnPtr<InspectorAgent> agent)
 {
-    m_moduleAgents.append(agent.get());
     m_agents.append(agent);
 }
 
@@ -207,11 +209,13 @@ void InspectorController::didClearDocumentOfWindowObject(LocalFrame* frame)
         m_inspectorFrontendClient->windowObjectCleared();
 }
 
-void InspectorController::connectFrontend(InspectorFrontendChannel* frontendChannel)
+void InspectorController::connectFrontend(const String& hostId, InspectorFrontendChannel* frontendChannel)
 {
     ASSERT(frontendChannel);
+    m_hostId = hostId;
 
     initializeDeferredAgents();
+    m_resourceAgent->setHostId(hostId);
 
     m_inspectorFrontend = adoptPtr(new InspectorFrontend(frontendChannel));
     // We can reconnect to existing front-end -> unmute state.
@@ -247,6 +251,7 @@ void InspectorController::disconnectFrontend()
     m_overlay->freePage();
     InspectorInstrumentation::frontendDeleted();
     InspectorInstrumentation::unregisterInstrumentingAgents(m_instrumentingAgents.get());
+    m_hostId = "";
 }
 
 void InspectorController::reconnectFrontend()
@@ -254,14 +259,15 @@ void InspectorController::reconnectFrontend()
     if (!m_inspectorFrontend)
         return;
     InspectorFrontendChannel* frontendChannel = m_inspectorFrontend->channel();
+    String hostId = m_hostId;
     disconnectFrontend();
-    connectFrontend(frontendChannel);
+    connectFrontend(hostId, frontendChannel);
 }
 
-void InspectorController::reuseFrontend(InspectorFrontendChannel* frontendChannel, const String& inspectorStateCookie)
+void InspectorController::reuseFrontend(const String& hostId, InspectorFrontendChannel* frontendChannel, const String& inspectorStateCookie)
 {
     ASSERT(!m_inspectorFrontend);
-    connectFrontend(frontendChannel);
+    connectFrontend(hostId, frontendChannel);
     m_state->loadFromCookie(inspectorStateCookie);
     m_agents.restore();
 }
@@ -275,12 +281,6 @@ void InspectorController::setLayerTreeId(int id)
 {
     m_timelineAgent->setLayerTreeId(id);
     m_tracingAgent->setLayerTreeId(id);
-}
-
-void InspectorController::webViewResized(const IntSize& size)
-{
-    if (InspectorPageAgent* pageAgent = m_instrumentingAgents->inspectorPageAgent())
-        pageAgent->webViewResized(size);
 }
 
 bool InspectorController::isUnderTest()
@@ -311,7 +311,7 @@ void InspectorController::inspect(Node* node)
     if (!frame)
         return;
 
-    if (node->nodeType() != Node::ELEMENT_NODE && node->nodeType() != Node::DOCUMENT_NODE)
+    if (!node->isElementNode() && !node->isDocumentNode())
         node = node->parentNode();
 
     InjectedScript injectedScript = m_injectedScriptManager->injectedScriptFor(ScriptState::forMainWorld(frame));
@@ -396,8 +396,8 @@ void InspectorController::resume()
 
 void InspectorController::setResourcesDataSizeLimitsFromInternals(int maximumResourcesContentSize, int maximumSingleResourceContentSize)
 {
-    if (InspectorResourceAgent* resourceAgent = m_instrumentingAgents->inspectorResourceAgent())
-        resourceAgent->setResourcesDataSizeLimitsFromInternals(maximumResourcesContentSize, maximumSingleResourceContentSize);
+    if (m_resourceAgent)
+        m_resourceAgent->setResourcesDataSizeLimitsFromInternals(maximumResourcesContentSize, maximumSingleResourceContentSize);
 }
 
 void InspectorController::willProcessTask()
@@ -425,9 +425,7 @@ void InspectorController::flushPendingFrontendMessages()
 
 void InspectorController::didCommitLoadForMainFrame()
 {
-    Vector<InspectorAgent*> agents = m_moduleAgents;
-    for (size_t i = 0; i < agents.size(); i++)
-        agents[i]->didCommitLoadForMainFrame();
+    m_agents.didCommitLoadForMainFrame();
 }
 
 void InspectorController::didBeginFrame(int frameId)

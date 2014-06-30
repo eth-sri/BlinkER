@@ -34,7 +34,7 @@
 #include "bindings/v8/V8Binding.h"
 #include "bindings/v8/V8DOMActivityLogger.h"
 #include "core/dom/Document.h"
-#include "core/frame/DOMWindow.h"
+#include "core/frame/LocalDOMWindow.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/text/WTFString.h"
 
@@ -69,6 +69,14 @@ public:
         m_domActivityLogger->logMethod(WebString(apiName), argc, argv, getURL(), getTitle());
     }
 
+    virtual void logEvent(const String& eventName, int argc, const String* argv) OVERRIDE
+    {
+        Vector<WebString> webStringArgv;
+        for (int i = 0; i < argc; i++)
+            webStringArgv.append(argv[i]);
+        m_domActivityLogger->logEvent(WebString(eventName), argc, webStringArgv.data(), getURL(), getTitle());
+    }
+
 private:
     WebURL getURL()
     {
@@ -87,15 +95,15 @@ private:
     OwnPtr<WebDOMActivityLogger> m_domActivityLogger;
 };
 
-bool hasDOMActivityLogger(int worldId)
+bool hasDOMActivityLogger(int worldId, const WebString& extensionId)
 {
-    return V8DOMActivityLogger::activityLogger(worldId);
+    return V8DOMActivityLogger::activityLogger(worldId, extensionId);
 }
 
-void setDOMActivityLogger(int worldId, WebDOMActivityLogger* logger)
+void setDOMActivityLogger(int worldId, const WebString& extensionId, WebDOMActivityLogger* logger)
 {
     ASSERT(logger);
-    V8DOMActivityLogger::setActivityLogger(worldId, adoptPtr(new DOMActivityLoggerContainer(adoptPtr(logger))));
+    V8DOMActivityLogger::setActivityLogger(worldId, extensionId, adoptPtr(new DOMActivityLoggerContainer(adoptPtr(logger))));
 }
 
 } // namespace blink

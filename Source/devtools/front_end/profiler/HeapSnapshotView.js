@@ -29,6 +29,12 @@
  */
 
 /**
+ * FIXME: ES5 strict mode check is suppressed due to multiple uses of arguments.callee.
+ * @fileoverview
+ * @suppress {es5Strict}
+ */
+
+/**
  * @constructor
  * @extends {WebInspector.VBox}
  * @param {!WebInspector.ProfileType.DataDisplayDelegate} dataDisplayDelegate
@@ -73,13 +79,7 @@ WebInspector.HeapSnapshotView = function(dataDisplayDelegate, profile)
     this._diffDataGrid.show(this._diffView.element);
     this._diffDataGrid.addEventListener(WebInspector.DataGrid.Events.SelectedNode, this._selectionChanged, this);
 
-    this._dominatorView = new WebInspector.VBox();
-    this._dominatorView.setMinimumSize(50, 25);
-    this._dominatorDataGrid = new WebInspector.HeapSnapshotDominatorsDataGrid(dataDisplayDelegate);
-    this._dominatorDataGrid.show(this._dominatorView.element);
-    this._dominatorDataGrid.addEventListener(WebInspector.DataGrid.Events.SelectedNode, this._selectionChanged, this);
-
-    if (WebInspector.experimentsSettings.heapAllocationProfiler.isEnabled() && profile.profileType() === WebInspector.ProfileTypeRegistry.instance.trackingHeapSnapshotProfileType) {
+    if (profile._hasAllocationStacks) {
         this._allocationView = new WebInspector.VBox();
         this._allocationView.setMinimumSize(50, 25);
         this._allocationDataGrid = new WebInspector.AllocationDataGrid(dataDisplayDelegate);
@@ -132,8 +132,6 @@ WebInspector.HeapSnapshotView = function(dataDisplayDelegate, profile)
     if (profile.profileType() !== WebInspector.ProfileTypeRegistry.instance.trackingHeapSnapshotProfileType)
         this._perspectives.push(new WebInspector.HeapSnapshotView.ComparisonPerspective());
     this._perspectives.push(new WebInspector.HeapSnapshotView.ContainmentPerspective());
-    if (WebInspector.settings.showAdvancedHeapSnapshotProperties.get())
-        this._perspectives.push(new WebInspector.HeapSnapshotView.DominatorPerspective());
     if (this._allocationView)
         this._perspectives.push(new WebInspector.HeapSnapshotView.AllocationPerspective());
     if (WebInspector.experimentsSettings.heapSnapshotStatistics.isEnabled())
@@ -355,40 +353,6 @@ WebInspector.HeapSnapshotView.ContainmentPerspective.prototype = {
     {
         return heapSnapshotView._containmentDataGrid;
     },
-   __proto__: WebInspector.HeapSnapshotView.Perspective.prototype
-}
-
-/**
- * @constructor
- * @extends {WebInspector.HeapSnapshotView.Perspective}
- */
-WebInspector.HeapSnapshotView.DominatorPerspective = function()
-{
-    WebInspector.HeapSnapshotView.Perspective.call(this,  WebInspector.UIString("Dominators"));
-}
-
-WebInspector.HeapSnapshotView.DominatorPerspective.prototype = {
-    /**
-     * @override
-     * @param {!WebInspector.HeapSnapshotView} heapSnapshotView
-     */
-    activate: function(heapSnapshotView)
-    {
-        heapSnapshotView._dominatorView.show(heapSnapshotView._splitView.mainElement());
-        heapSnapshotView._objectDetailsView.show(heapSnapshotView._splitView.sidebarElement());
-        heapSnapshotView._splitView.show(heapSnapshotView.element);
-    },
-
-    /**
-     * @override
-     * @param {!WebInspector.HeapSnapshotView} heapSnapshotView
-     * @return {?WebInspector.DataGrid}
-     */
-    masterGrid: function(heapSnapshotView)
-    {
-        return heapSnapshotView._dominatorDataGrid;
-    },
-
    __proto__: WebInspector.HeapSnapshotView.Perspective.prototype
 }
 
@@ -945,7 +909,7 @@ WebInspector.HeapSnapshotView.prototype = {
         function didHighlightObject(found)
         {
             if (!found)
-                WebInspector.console.log("Cannot find corresponding heap snapshot node", WebInspector.ConsoleMessage.MessageLevel.Error, true);
+                WebInspector.messageSink.addErrorMessage("Cannot find corresponding heap snapshot node", true);
         }
     },
 
@@ -1198,7 +1162,7 @@ WebInspector.HeapSnapshotProfileType.prototype = {
 
     /**
      * @override
-     * @param {!string} title
+     * @param {string} title
      * @return {!WebInspector.ProfileHeader}
      */
     createProfileLoadedFromFile: function(title)
@@ -1374,14 +1338,18 @@ WebInspector.TrackingHeapSnapshotProfileType.prototype = {
     {
         if (this.profileBeingRecorded())
             return;
-        this._addNewProfile();
-        HeapProfilerAgent.startTrackingHeapObjects(WebInspector.experimentsSettings.heapAllocationProfiler.isEnabled());
+        var recordAllocationStacks = WebInspector.settings.recordAllocationStacks.get();
+        this._addNewProfile(recordAllocationStacks);
+        HeapProfilerAgent.startTrackingHeapObjects(recordAllocationStacks);
     },
 
-    _addNewProfile: function()
+    /**
+     * @param {boolean} withAllocationStacks
+     */
+    _addNewProfile: function(withAllocationStacks)
     {
         var target = /** @type {!WebInspector.Target} */ (WebInspector.targetManager.activeTarget());
-        this.setProfileBeingRecorded(new WebInspector.HeapProfileHeader(target, this));
+        this.setProfileBeingRecorded(new WebInspector.HeapProfileHeader(target, this, undefined, withAllocationStacks));
         this._lastSeenIndex = -1;
         this._profileSamples = {
             'sizes': [],
@@ -1445,13 +1413,14 @@ WebInspector.TrackingHeapSnapshotProfileType.prototype = {
     resetProfiles: function()
     {
         var wasRecording = this._recording;
+        var recordingAllocationStacks = wasRecording && this.profileBeingRecorded()._hasAllocationStacks;
         // Clear current profile to avoid stopping backend.
         this.setProfileBeingRecorded(null);
         WebInspector.HeapSnapshotProfileType.prototype.resetProfiles.call(this);
         this._profileSamples = null;
         this._lastSeenIndex = -1;
         if (wasRecording)
-            this._addNewProfile();
+            this._addNewProfile(recordingAllocationStacks);
     },
 
     /**
@@ -1472,10 +1441,12 @@ WebInspector.TrackingHeapSnapshotProfileType.prototype = {
  * @param {!WebInspector.Target} target
  * @param {!WebInspector.HeapSnapshotProfileType} type
  * @param {string=} title
+ * @param {boolean=} hasAllocationStacks
  */
-WebInspector.HeapProfileHeader = function(target, type, title)
+WebInspector.HeapProfileHeader = function(target, type, title, hasAllocationStacks)
 {
     WebInspector.ProfileHeader.call(this, target, type, title || WebInspector.UIString("Snapshot %d", type._nextProfileUid));
+    this._hasAllocationStacks = !!hasAllocationStacks;
     this.maxJSObjectId = -1;
     /**
      * @type {?WebInspector.HeapSnapshotWorkerProxy}
@@ -1676,8 +1647,7 @@ WebInspector.HeapProfileHeader.prototype = {
             if (!accepted)
                 return;
             if (this._failedToCreateTempFile) {
-                WebInspector.console.log("Failed to open temp file with heap snapshot",
-                                 WebInspector.ConsoleMessage.MessageLevel.Error);
+                WebInspector.messageSink.addErrorMessage("Failed to open temp file with heap snapshot");
                 fileOutputStream.close();
             } else if (this._tempFile) {
                 var delegate = new WebInspector.SaveSnapshotOutputStreamDelegate(this);
@@ -1745,6 +1715,7 @@ WebInspector.HeapSnapshotLoadFromFileDelegate.prototype = {
 
     /**
      * @param {!WebInspector.ChunkedReader} reader
+     * @param {?Event} e
      */
     onError: function (reader, e)
     {
@@ -1796,11 +1767,11 @@ WebInspector.SaveSnapshotOutputStreamDelegate.prototype = {
 
     /**
      * @param {!WebInspector.ChunkedReader} reader
+     * @param {?Event} event
      */
     onError: function(reader, event)
     {
-        WebInspector.console.log("Failed to read heap snapshot from temp file: " + event.message,
-                         WebInspector.ConsoleMessage.MessageLevel.Error);
+        WebInspector.messageSink.addErrorMessage("Failed to read heap snapshot from temp file: " + /** @type {!ErrorEvent} */ (event).message);
         this.onTransferFinished();
     }
 }

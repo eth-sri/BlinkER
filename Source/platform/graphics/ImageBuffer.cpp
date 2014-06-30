@@ -170,8 +170,7 @@ bool ImageBuffer::copyToPlatformTexture(blink::WebGraphicsContext3D* context, Pl
 
     // Contexts may be in a different share group. We must transfer the texture through a mailbox first
     sharedContext->genMailboxCHROMIUM(mailbox->name);
-    sharedContext->bindTexture(GL_TEXTURE_2D, getBackingTexture());
-    sharedContext->produceTextureCHROMIUM(GL_TEXTURE_2D, mailbox->name);
+    sharedContext->produceTextureDirectCHROMIUM(getBackingTexture(), GL_TEXTURE_2D, mailbox->name);
     sharedContext->flush();
 
     mailbox->syncPoint = sharedContext->insertSyncPoint();
@@ -179,12 +178,8 @@ bool ImageBuffer::copyToPlatformTexture(blink::WebGraphicsContext3D* context, Pl
     if (!context->makeContextCurrent())
         return false;
 
-    Platform3DObject sourceTexture = context->createTexture();
-
-    context->bindTexture(GL_TEXTURE_2D, sourceTexture);
-
     context->waitSyncPoint(mailbox->syncPoint);
-    context->consumeTextureCHROMIUM(GL_TEXTURE_2D, mailbox->name);
+    Platform3DObject sourceTexture = context->createAndConsumeTextureCHROMIUM(GL_TEXTURE_2D, mailbox->name);
 
     // The canvas is stored in a premultiplied format, so unpremultiply if necessary.
     context->pixelStorei(GC3D_UNPACK_UNPREMULTIPLY_ALPHA_CHROMIUM, !premultiplyAlpha);
@@ -196,7 +191,6 @@ bool ImageBuffer::copyToPlatformTexture(blink::WebGraphicsContext3D* context, Pl
     context->pixelStorei(GC3D_UNPACK_FLIP_Y_CHROMIUM, false);
     context->pixelStorei(GC3D_UNPACK_UNPREMULTIPLY_ALPHA_CHROMIUM, false);
 
-    context->bindTexture(GL_TEXTURE_2D, 0);
     context->deleteTexture(sourceTexture);
 
     context->flush();
@@ -219,7 +213,7 @@ Platform3DObject ImageBuffer::getBackingTexture()
     return m_surface->getBackingTexture();
 }
 
-bool ImageBuffer::copyRenderingResultsFromDrawingBuffer(DrawingBuffer* drawingBuffer)
+bool ImageBuffer::copyRenderingResultsFromDrawingBuffer(DrawingBuffer* drawingBuffer, bool fromFrontBuffer)
 {
     if (!drawingBuffer)
         return false;
@@ -230,9 +224,10 @@ bool ImageBuffer::copyRenderingResultsFromDrawingBuffer(DrawingBuffer* drawingBu
     Platform3DObject tex = m_surface->getBackingTexture();
     if (!context3D || !tex)
         return false;
+
     m_surface->invalidateCachedBitmap();
     return drawingBuffer->copyToPlatformTexture(context3D, tex, GL_RGBA,
-        GL_UNSIGNED_BYTE, 0, true, false);
+        GL_UNSIGNED_BYTE, 0, true, false, fromFrontBuffer);
 }
 
 void ImageBuffer::draw(GraphicsContext* context, const FloatRect& destRect, const FloatRect* srcPtr, CompositeOperator op)
@@ -312,9 +307,11 @@ PassRefPtr<SkColorFilter> ImageBuffer::createColorSpaceFilter(ColorSpace srcColo
     return adoptRef(SkTableColorFilter::CreateARGB(0, lut, lut, lut));
 }
 
-template <Multiply multiplied>
-PassRefPtr<Uint8ClampedArray> getImageData(const IntRect& rect, GraphicsContext* context, const IntSize& size)
+PassRefPtr<Uint8ClampedArray> ImageBuffer::getImageData(Multiply multiplied, const IntRect& rect) const
 {
+    if (!isSurfaceValid())
+        return Uint8ClampedArray::create(rect.width() * rect.height() * 4);
+
     float area = 4.0f * rect.width() * rect.height();
     if (area > static_cast<float>(std::numeric_limits<int>::max()))
         return nullptr;
@@ -323,29 +320,16 @@ PassRefPtr<Uint8ClampedArray> getImageData(const IntRect& rect, GraphicsContext*
 
     if (rect.x() < 0
         || rect.y() < 0
-        || rect.maxX() > size.width()
-        || rect.maxY() > size.height())
+        || rect.maxX() > m_surface->size().width()
+        || rect.maxY() > m_surface->size().height())
         result->zeroFill();
 
     SkAlphaType alphaType = (multiplied == Premultiplied) ? kPremul_SkAlphaType : kUnpremul_SkAlphaType;
     SkImageInfo info = SkImageInfo::Make(rect.width(), rect.height(), kRGBA_8888_SkColorType, alphaType);
 
-    context->readPixels(info, result->data(), 4 * rect.width(), rect.x(), rect.y());
+    m_surface->willReadback();
+    context()->readPixels(info, result->data(), 4 * rect.width(), rect.x(), rect.y());
     return result.release();
-}
-
-PassRefPtr<Uint8ClampedArray> ImageBuffer::getUnmultipliedImageData(const IntRect& rect) const
-{
-    if (!isSurfaceValid())
-        return Uint8ClampedArray::create(rect.width() * rect.height() * 4);
-    return getImageData<Unmultiplied>(rect, context(), m_surface->size());
-}
-
-PassRefPtr<Uint8ClampedArray> ImageBuffer::getPremultipliedImageData(const IntRect& rect) const
-{
-    if (!isSurfaceValid())
-        return Uint8ClampedArray::create(rect.width() * rect.height() * 4);
-    return getImageData<Premultiplied>(rect, context(), m_surface->size());
 }
 
 void ImageBuffer::putByteArray(Multiply multiplied, Uint8ClampedArray* source, const IntSize& sourceSize, const IntRect& sourceRect, const IntPoint& destPoint)
@@ -372,7 +356,7 @@ void ImageBuffer::putByteArray(Multiply multiplied, Uint8ClampedArray* source, c
 
     const size_t srcBytesPerRow = 4 * sourceSize.width();
     const void* srcAddr = source->data() + originY * srcBytesPerRow + originX * 4;
-    const SkAlphaType alphaType = (multiplied == Premultiplied) ? kPremul_SkAlphaType : kUnpremul_SkAlphaType;
+    SkAlphaType alphaType = (multiplied == Premultiplied) ? kPremul_SkAlphaType : kUnpremul_SkAlphaType;
     SkImageInfo info = SkImageInfo::Make(sourceRect.width(), sourceRect.height(), kRGBA_8888_SkColorType, alphaType);
 
     context()->writePixels(info, srcAddr, srcBytesPerRow, destX, destY);

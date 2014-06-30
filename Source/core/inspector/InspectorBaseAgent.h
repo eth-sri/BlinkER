@@ -31,7 +31,7 @@
 #ifndef InspectorBaseAgent_h
 #define InspectorBaseAgent_h
 
-#include "InspectorBackendDispatcher.h"
+#include "core/InspectorBackendDispatcher.h"
 #include "wtf/Forward.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
@@ -79,6 +79,7 @@ public:
     void registerInDispatcher(InspectorBackendDispatcher*);
     void discardAgents();
     void flushPendingFrontendMessages();
+    void didCommitLoadForMainFrame();
 
 private:
     InstrumentingAgents* m_instrumentingAgents;

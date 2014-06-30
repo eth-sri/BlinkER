@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2013 Google Inc. All rights reserved.
+ * Copyright (C) 2014 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -32,24 +33,31 @@
 #define ElementData_h
 
 #include "core/dom/Attribute.h"
+#include "core/dom/AttributeCollection.h"
 #include "core/dom/SpaceSplitString.h"
+#include "platform/heap/Handle.h"
 #include "wtf/text/AtomicString.h"
 
 namespace WebCore {
 
-class Attr;
 class ShareableElementData;
 class StylePropertySet;
 class UniqueElementData;
 
 // ElementData represents very common, but not necessarily unique to an element,
 // data such as attributes, inline style, and parsed class names and ids.
-class ElementData : public RefCounted<ElementData> {
-    WTF_MAKE_FAST_ALLOCATED;
+class ElementData : public RefCountedWillBeGarbageCollectedFinalized<ElementData> {
+    WTF_MAKE_FAST_ALLOCATED_WILL_BE_REMOVED;
 public:
+#if ENABLE(OILPAN)
+    // Override GarbageCollectedFinalized's finalizeGarbageCollectedObject to
+    // dispatch to the correct subclass destructor.
+    void finalizeGarbageCollectedObject();
+#else
     // Override RefCounted's deref() to ensure operator delete is called on
     // the appropriate subclass type.
     void deref();
+#endif
 
     void clearClass() const { m_classNames.clear(); }
     void setClass(const AtomicString& className, bool shouldFoldCase) const { m_classNames.set(className, shouldFoldCase); }
@@ -62,15 +70,7 @@ public:
 
     const StylePropertySet* presentationAttributeStyle() const;
 
-    // This is not a trivial getter and its return value should be cached for performance.
-    size_t length() const;
-    bool isEmpty() const { return !length(); }
-
-    const Attribute& attributeItem(unsigned index) const;
-    const Attribute* getAttributeItem(const QualifiedName&) const;
-    size_t getAttributeItemIndex(const QualifiedName&, bool shouldIgnoreCase = false) const;
-    size_t getAttributeItemIndex(const AtomicString& name, bool shouldIgnoreAttributeCase) const;
-    size_t getAttrIndex(Attr*) const;
+    AttributeCollection attributes() const;
 
     bool hasID() const { return !m_idForStyleResolution.isNull(); }
     bool hasClass() const { return !m_classNames.isNull(); }
@@ -78,6 +78,9 @@ public:
     bool isEquivalent(const ElementData* other) const;
 
     bool isUnique() const { return m_isUnique; }
+
+    void traceAfterDispatch(Visitor*);
+    void trace(Visitor*);
 
 protected:
     ElementData();
@@ -91,7 +94,7 @@ protected:
     mutable unsigned m_styleAttributeIsDirty : 1;
     mutable unsigned m_animatedSVGAttributesAreDirty : 1;
 
-    mutable RefPtr<StylePropertySet> m_inlineStyle;
+    mutable RefPtrWillBeMember<StylePropertySet> m_inlineStyle;
     mutable SpaceSplitString m_classNames;
     mutable AtomicString m_idForStyleResolution;
 
@@ -101,13 +104,11 @@ private:
     friend class UniqueElementData;
     friend class SVGElement;
 
+#if !ENABLE(OILPAN)
     void destroy();
+#endif
 
-    const Attribute* attributeBase() const;
-    const Attribute* getAttributeItem(const AtomicString& name, bool shouldIgnoreAttributeCase) const;
-    size_t getAttributeItemIndexSlowCase(const AtomicString& name, bool shouldIgnoreAttributeCase) const;
-
-    PassRefPtr<UniqueElementData> makeUniqueCopy() const;
+    PassRefPtrWillBeRawPtr<UniqueElementData> makeUniqueCopy() const;
 };
 
 #if COMPILER(MSVC)
@@ -121,11 +122,25 @@ private:
 // duplicate sets of attributes (ex. the same classes).
 class ShareableElementData FINAL : public ElementData {
 public:
-    static PassRefPtr<ShareableElementData> createWithAttributes(const Vector<Attribute>&);
+    static PassRefPtrWillBeRawPtr<ShareableElementData> createWithAttributes(const Vector<Attribute>&);
 
     explicit ShareableElementData(const Vector<Attribute>&);
     explicit ShareableElementData(const UniqueElementData&);
     ~ShareableElementData();
+
+    void traceAfterDispatch(Visitor* visitor) { ElementData::traceAfterDispatch(visitor); }
+
+    // Add support for placement new as ShareableElementData is not allocated
+    // with a fixed size. Instead the allocated memory size is computed based on
+    // the number of attributes. This requires us to use Heap::allocate directly
+    // with the computed size and subsequently call placement new with the
+    // allocated memory address.
+    void* operator new(std::size_t, void* location)
+    {
+        return location;
+    }
+
+    AttributeCollection attributes() const;
 
     Attribute m_attributeArray[0];
 };
@@ -142,41 +157,40 @@ public:
 // attribute will have the same inline style.
 class UniqueElementData FINAL : public ElementData {
 public:
-    static PassRefPtr<UniqueElementData> create();
-    PassRefPtr<ShareableElementData> makeShareableCopy() const;
+    static PassRefPtrWillBeRawPtr<UniqueElementData> create();
+    PassRefPtrWillBeRawPtr<ShareableElementData> makeShareableCopy() const;
 
     // These functions do no error/duplicate checking.
-    void addAttribute(const QualifiedName&, const AtomicString&);
-    void removeAttribute(size_t index);
+    void appendAttribute(const QualifiedName&, const AtomicString&);
+    void removeAttributeAt(size_t index);
 
-    Attribute& attributeItem(unsigned index);
-    Attribute* getAttributeItem(const QualifiedName&);
+    AttributeCollection attributes() const;
+
+    Attribute& attributeAt(unsigned index);
+    Attribute* findAttributeByName(const QualifiedName&);
 
     UniqueElementData();
     explicit UniqueElementData(const ShareableElementData&);
     explicit UniqueElementData(const UniqueElementData&);
 
+    void traceAfterDispatch(Visitor*);
+
     // FIXME: We might want to support sharing element data for elements with
     // presentation attribute style. Lots of table cells likely have the same
     // attributes. Most modern pages don't use presentation attributes though
     // so this might not make sense.
-    mutable RefPtr<StylePropertySet> m_presentationAttributeStyle;
+    mutable RefPtrWillBeMember<StylePropertySet> m_presentationAttributeStyle;
     Vector<Attribute, 4> m_attributeVector;
 };
 
+#if !ENABLE(OILPAN)
 inline void ElementData::deref()
 {
     if (!derefBase())
         return;
     destroy();
 }
-
-inline size_t ElementData::length() const
-{
-    if (isUnique())
-        return static_cast<const UniqueElementData*>(this)->m_attributeVector.size();
-    return m_arraySize;
-}
+#endif
 
 inline const StylePropertySet* ElementData::presentationAttributeStyle() const
 {
@@ -185,91 +199,34 @@ inline const StylePropertySet* ElementData::presentationAttributeStyle() const
     return static_cast<const UniqueElementData*>(this)->m_presentationAttributeStyle.get();
 }
 
-inline const Attribute* ElementData::getAttributeItem(const AtomicString& name, bool shouldIgnoreAttributeCase) const
+inline AttributeCollection ElementData::attributes() const
 {
-    size_t index = getAttributeItemIndex(name, shouldIgnoreAttributeCase);
-    if (index != kNotFound)
-        return &attributeItem(index);
-    return 0;
+    if (isUnique())
+        return static_cast<const UniqueElementData*>(this)->attributes();
+    return static_cast<const ShareableElementData*>(this)->attributes();
 }
 
-inline const Attribute* ElementData::attributeBase() const
+inline AttributeCollection ShareableElementData::attributes() const
 {
-    if (m_isUnique)
-        return static_cast<const UniqueElementData*>(this)->m_attributeVector.begin();
-    return static_cast<const ShareableElementData*>(this)->m_attributeArray;
+    return AttributeCollection(m_attributeArray, m_arraySize);
 }
 
-inline size_t ElementData::getAttributeItemIndex(const QualifiedName& name, bool shouldIgnoreCase) const
+inline AttributeCollection UniqueElementData::attributes() const
 {
-    const Attribute* begin = attributeBase();
-    // Cache length for performance as ElementData::length() contains a conditional branch.
-    unsigned length = this->length();
-    for (unsigned i = 0; i < length; ++i) {
-        const Attribute& attribute = begin[i];
-        if (attribute.name().matchesPossiblyIgnoringCase(name, shouldIgnoreCase))
-            return i;
-    }
-    return kNotFound;
+    return AttributeCollection(m_attributeVector.data(), m_attributeVector.size());
 }
 
-// We use a boolean parameter instead of calling shouldIgnoreAttributeCase so that the caller
-// can tune the behavior (hasAttribute is case sensitive whereas getAttribute is not).
-inline size_t ElementData::getAttributeItemIndex(const AtomicString& name, bool shouldIgnoreAttributeCase) const
-{
-    // Cache length for performance as ElementData::length() contains a conditional branch.
-    unsigned length = this->length();
-    bool doSlowCheck = shouldIgnoreAttributeCase;
-
-    // Optimize for the case where the attribute exists and its name exactly matches.
-    const Attribute* begin = attributeBase();
-    for (unsigned i = 0; i < length; ++i) {
-        const Attribute& attribute = begin[i];
-        // FIXME: Why check the prefix? Namespaces should be all that matter.
-        // Most attributes (all of HTML and CSS) have no namespace.
-        if (!attribute.name().hasPrefix()) {
-            if (name == attribute.localName())
-                return i;
-        } else {
-            doSlowCheck = true;
-        }
-    }
-
-    if (doSlowCheck)
-        return getAttributeItemIndexSlowCase(name, shouldIgnoreAttributeCase);
-    return kNotFound;
-}
-
-inline const Attribute* ElementData::getAttributeItem(const QualifiedName& name) const
-{
-    const Attribute* begin = attributeBase();
-    unsigned length = this->length();
-    for (unsigned i = 0; i < length; ++i) {
-        const Attribute& attribute = begin[i];
-        if (attribute.name().matches(name))
-            return &attribute;
-    }
-    return 0;
-}
-
-inline const Attribute& ElementData::attributeItem(unsigned index) const
-{
-    RELEASE_ASSERT(index < length());
-    ASSERT(attributeBase() + index);
-    return *(attributeBase() + index);
-}
-
-inline void UniqueElementData::addAttribute(const QualifiedName& attributeName, const AtomicString& value)
+inline void UniqueElementData::appendAttribute(const QualifiedName& attributeName, const AtomicString& value)
 {
     m_attributeVector.append(Attribute(attributeName, value));
 }
 
-inline void UniqueElementData::removeAttribute(size_t index)
+inline void UniqueElementData::removeAttributeAt(size_t index)
 {
     m_attributeVector.remove(index);
 }
 
-inline Attribute& UniqueElementData::attributeItem(unsigned index)
+inline Attribute& UniqueElementData::attributeAt(unsigned index)
 {
     return m_attributeVector.at(index);
 }

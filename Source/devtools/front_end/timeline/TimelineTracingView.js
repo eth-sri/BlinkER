@@ -38,7 +38,7 @@ WebInspector.TimelineTracingView.prototype = {
 
     wasShown: function()
     {
-        this._mainView._scheduleUpdate();
+        this._mainView.scheduleUpdate();
     },
 
     /**
@@ -55,7 +55,6 @@ WebInspector.TimelineTracingView.prototype = {
 
     reset: function()
     {
-        this._tracingModel.reset();
         this._dataProvider.reset();
         this._mainView.setWindowTimes(0, Infinity);
     },
@@ -66,7 +65,7 @@ WebInspector.TimelineTracingView.prototype = {
     refreshRecords: function(textFilter)
     {
         this._dataProvider.reset();
-        this._mainView._scheduleUpdate();
+        this._mainView.scheduleUpdate();
     },
 
     /**
@@ -114,28 +113,42 @@ WebInspector.TimelineTracingView.prototype = {
         var contentHelper = new WebInspector.TimelineDetailsContentHelper(null, null, false);
         contentHelper.appendTextRow(WebInspector.UIString("Name"), record.name);
         contentHelper.appendTextRow(WebInspector.UIString("Category"), record.category);
-        contentHelper.appendTextRow(WebInspector.UIString("Start"), Number.millisToString(this._dataProvider._toTimelineTime(record.startTime - this._tracingModel.minimumRecordTime()), true));
-        contentHelper.appendTextRow(WebInspector.UIString("Duration"), Number.millisToString(this._dataProvider._toTimelineTime(record.duration), true));
+        contentHelper.appendTextRow(WebInspector.UIString("Start"), Number.millisToString(record.startTime - this._tracingModel.minimumRecordTime(), true));
+        contentHelper.appendTextRow(WebInspector.UIString("Duration"), Number.millisToString(record.duration, true));
         if (!Object.isEmpty(record.args))
             contentHelper.appendElementRow(WebInspector.UIString("Arguments"), this._formatArguments(record.args));
+        /**
+         * @this {WebInspector.TimelineTracingView}
+         */
         function reveal()
         {
-            WebInspector.Revealer.reveal(new WebInspector.TracingLayerSnapshot(record.args["snapshot"]["active_tree"]["root_layer"]));
+            WebInspector.Revealer.reveal(new WebInspector.DeferredTracingLayerTree(this._tracingModel.target(), record.args["snapshot"]["active_tree"]["root_layer"], record.args["snapshot"]["device_viewport_size"]));
         }
-        if (record.name === "cc::LayerTreeHostImpl") {
+        /**
+         * @param {!Node=} node
+         * @this {WebInspector.TimelineTracingView}
+         */
+        function appendPreviewAndshowDetails(node)
+        {
+            if (node)
+                contentHelper.appendElementRow("Preview", node);
+            this._delegate.showInDetails(WebInspector.UIString("Selected Event"), contentHelper.element);
+        }
+        var recordTypes = WebInspector.TracingTimelineModel.RecordType;
+        switch (record.name) {
+        case recordTypes.PictureSnapshot:
+            WebInspector.TracingTimelineUIUtils.buildPicturePreviewContent(record.args["snapshot"]["skp64"], appendPreviewAndshowDetails.bind(this));
+            break;
+        case recordTypes.LayerTreeHostImplSnapshot:
             var link = document.createElement("span");
             link.classList.add("revealable-link");
             link.textContent = "show";
-            link.addEventListener("click", reveal, false);
+            link.addEventListener("click", reveal.bind(this), false);
             contentHelper.appendElementRow(WebInspector.UIString("Layer tree"), link);
-        } else if (record.name === "cc::Picture") {
-            var div = document.createElement("div");
-            div.className = "image-preview-container";
-            var img = div.createChild("img");
-            contentHelper.appendElementRow("Preview", div);
-            this._requestThumbnail(img, record.args["snapshot"]["skp64"]);
+            // Fall-through intended.
+        default:
+            this._delegate.showInDetails(WebInspector.UIString("Selected Event"), contentHelper.element);
         }
-        this._delegate.showInDetails(WebInspector.UIString("Selected Event"), contentHelper.element);
     },
 
     /**
@@ -159,43 +172,6 @@ WebInspector.TimelineTracingView.prototype = {
             }
         }
         return table;
-    },
-
-    /**
-     * @param {!Element} img
-     * @param {string} encodedPicture
-     */
-    _requestThumbnail: function(img, encodedPicture)
-    {
-        var snapshotId;
-        LayerTreeAgent.loadSnapshot(encodedPicture, onSnapshotLoaded);
-        /**
-         * @param {string} error
-         * @param {string} id
-         */
-        function onSnapshotLoaded(error, id)
-        {
-            if (error) {
-                console.error("LayerTreeAgent.loadSnapshot(): " + error);
-                return;
-            }
-            snapshotId = id;
-            LayerTreeAgent.replaySnapshot(snapshotId, onSnapshotReplayed);
-        }
-
-        /**
-         * @param {string} error
-         * @param {string} encodedBitmap
-         */
-        function onSnapshotReplayed(error, encodedBitmap)
-        {
-            LayerTreeAgent.releaseSnapshot(snapshotId);
-            if (error) {
-                console.error("LayerTreeAgent.replaySnapshot(): " + error);
-                return;
-            }
-            img.src = encodedBitmap;
-        }
     },
 
     __proto__: WebInspector.VBox.prototype
@@ -226,8 +202,8 @@ WebInspector.TraceViewFlameChartDataProvider = function(model, timelineModelForM
         id: 0,
         s: ""
     }
-    this._processHeaderRecord = new WebInspector.TracingModel.Event(dummyEventPayload, 0);
-    this._threadHeaderRecord = new WebInspector.TracingModel.Event(dummyEventPayload, 0);
+    this._processHeaderRecord = new WebInspector.TracingModel.Event(dummyEventPayload, 0, null);
+    this._threadHeaderRecord = new WebInspector.TracingModel.Event(dummyEventPayload, 0, null);
 }
 
 WebInspector.TraceViewFlameChartDataProvider.prototype = {
@@ -312,8 +288,8 @@ WebInspector.TraceViewFlameChartDataProvider.prototype = {
 
         this._currentLevel = 0;
         this._headerTitles = {};
-        this._minimumBoundary = this._timelineModelForMinimumBoundary.minimumRecordTime() * 1000;
-        this._timeSpan = Math.max((this._model.maximumRecordTime() || 0) - this._minimumBoundary, 1000000);
+        this._minimumBoundary = this._timelineModelForMinimumBoundary.minimumRecordTime();
+        this._timeSpan = Math.max(this._model.maximumRecordTime() - this._minimumBoundary, 1000);
         var processes = this._model.sortedProcesses();
         for (var processIndex = 0; processIndex < processes.length; ++processIndex) {
             var process = processes[processIndex];
@@ -323,7 +299,7 @@ WebInspector.TraceViewFlameChartDataProvider.prototype = {
                 this._appendHeaderRecord(WebInspector.UIString("Object %s", objectNames[objectNameIndex]), this._threadHeaderRecord);
                 var objects = process.objectsByName(objectNames[objectNameIndex]);
                 for (var objectIndex = 0; objectIndex < objects.length; ++objectIndex)
-                    this._appendRecord(objects[objectIndex]);
+                    this._appendRecord(objects[objectIndex], 0);
                 ++this._currentLevel;
             }
             var threads = process.sortedThreads();
@@ -333,7 +309,7 @@ WebInspector.TraceViewFlameChartDataProvider.prototype = {
                 for (var eventIndex = 0; eventIndex < events.length; ++eventIndex) {
                     var event = events[eventIndex];
                     if (event.duration)
-                        this._appendRecord(event);
+                        this._appendRecord(event, event.level);
                 }
                 this._currentLevel += threads[threadIndex].maxStackDepth();
             }
@@ -347,7 +323,7 @@ WebInspector.TraceViewFlameChartDataProvider.prototype = {
      */
     minimumBoundary: function()
     {
-        return this._toTimelineTime(this._minimumBoundary);
+        return this._minimumBoundary;
     },
 
     /**
@@ -355,7 +331,7 @@ WebInspector.TraceViewFlameChartDataProvider.prototype = {
      */
     totalTime: function()
     {
-        return this._toTimelineTime(this._timeSpan);
+        return this._timeSpan;
     },
 
     /**
@@ -387,7 +363,7 @@ WebInspector.TraceViewFlameChartDataProvider.prototype = {
 
     /**
      * @param {number} entryIndex
-     * @return {!string}
+     * @return {string}
      */
     entryColor: function(entryIndex)
     {
@@ -436,8 +412,8 @@ WebInspector.TraceViewFlameChartDataProvider.prototype = {
         if (!record || this._isHeaderRecord(record))
             return null;
         return {
-            startTime: this._toTimelineTime(record.startTime),
-            endTime: this._toTimelineTime(record.endTime)
+            startTime: record.startTime,
+            endTime: record.endTime
         }
     },
 
@@ -451,7 +427,7 @@ WebInspector.TraceViewFlameChartDataProvider.prototype = {
 
     /**
      * @param {number} entryIndex
-     * @return {!string}
+     * @return {string}
      */
     textColor: function(entryIndex)
     {
@@ -468,29 +444,21 @@ WebInspector.TraceViewFlameChartDataProvider.prototype = {
         this._records.push(record);
         this._timelineData.entryLevels[index] = this._currentLevel++;
         this._timelineData.entryTotalTimes[index] = this.totalTime();
-        this._timelineData.entryStartTimes[index] = this._toTimelineTime(this._minimumBoundary);
+        this._timelineData.entryStartTimes[index] = this._minimumBoundary;
         this._headerTitles[index] = title;
     },
 
     /**
      * @param {!WebInspector.TracingModel.Event} record
+     * @param {number} level
      */
-    _appendRecord: function(record)
+    _appendRecord: function(record, level)
     {
         var index = this._records.length;
         this._records.push(record);
-        this._timelineData.entryLevels[index] = this._currentLevel + record.level;
-        this._timelineData.entryTotalTimes[index] = this._toTimelineTime(record.phase === WebInspector.TracingModel.Phase.SnapshotObject ? NaN : record.duration || 0);
-        this._timelineData.entryStartTimes[index] = this._toTimelineTime(record.startTime);
-    },
-
-    /**
-     * @param {number} time
-     * @return {number}
-     */
-    _toTimelineTime: function(time)
-    {
-        return time / 1000;
+        this._timelineData.entryLevels[index] = this._currentLevel + level;
+        this._timelineData.entryTotalTimes[index] = record.phase === WebInspector.TracingModel.Phase.SnapshotObject ? NaN : record.duration || 0;
+        this._timelineData.entryStartTimes[index] = record.startTime;
     },
 
     /**

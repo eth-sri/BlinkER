@@ -50,6 +50,7 @@
 #include "platform/network/ContentSecurityPolicyParsers.h"
 #include "public/web/WebServiceWorkerContextClient.h"
 #include "public/web/WebServiceWorkerNetworkProvider.h"
+#include "public/web/WebSettings.h"
 #include "public/web/WebView.h"
 #include "public/web/WebWorkerPermissionClientProxy.h"
 #include "web/ServiceWorkerGlobalScopeClientImpl.h"
@@ -152,6 +153,7 @@ WebEmbeddedWorkerImpl::WebEmbeddedWorkerImpl(
     , m_webView(0)
     , m_mainFrame(0)
     , m_askedToTerminate(false)
+    , m_pauseAfterDownloadState(DontPauseAfterDownload)
 {
 }
 
@@ -171,8 +173,10 @@ void WebEmbeddedWorkerImpl::startWorkerContext(
 {
     ASSERT(!m_askedToTerminate);
     ASSERT(!m_mainScriptLoader);
+    ASSERT(m_pauseAfterDownloadState == DontPauseAfterDownload);
     m_workerStartData = data;
-
+    if (data.pauseAfterDownloadMode == WebEmbeddedWorkerStartData::PauseAfterDownload)
+        m_pauseAfterDownloadState = DoPauseAfterDownload;
     prepareShadowPageForLoader();
 }
 
@@ -183,6 +187,11 @@ void WebEmbeddedWorkerImpl::terminateWorkerContext()
     m_askedToTerminate = true;
     if (m_mainScriptLoader)
         m_mainScriptLoader->cancel();
+    if (m_pauseAfterDownloadState == IsPausedAfterDownload) {
+        // This may delete 'this'.
+        m_workerContextClient->workerContextFailedToStart();
+        return;
+    }
     if (m_workerThread)
         m_workerThread->stop();
 }
@@ -217,6 +226,15 @@ void dispatchOnInspectorBackendTask(ExecutionContext* context, const String& mes
 }
 
 } // namespace
+
+void WebEmbeddedWorkerImpl::resumeAfterDownload()
+{
+    ASSERT(!m_askedToTerminate);
+    bool wasPaused = (m_pauseAfterDownloadState == IsPausedAfterDownload);
+    m_pauseAfterDownloadState = DontPauseAfterDownload;
+    if (wasPaused)
+        startWorkerThread();
+}
 
 void WebEmbeddedWorkerImpl::resumeWorkerContext()
 {
@@ -256,6 +274,9 @@ void WebEmbeddedWorkerImpl::prepareShadowPageForLoader()
     // with SharedWorker.
     ASSERT(!m_webView);
     m_webView = WebView::create(0);
+    // FIXME: http://crbug.com/363843. This needs to find a better way to
+    // not create graphics layers.
+    m_webView->settings()->setAcceleratedCompositingEnabled(false);
     m_mainFrame = WebLocalFrame::create(this);
     m_webView->setMainFrame(m_mainFrame);
 
@@ -302,8 +323,21 @@ void WebEmbeddedWorkerImpl::onScriptLoaderFinished()
         return;
     }
 
+    if (m_pauseAfterDownloadState == DoPauseAfterDownload) {
+        m_pauseAfterDownloadState = IsPausedAfterDownload;
+        m_workerContextClient->didPauseAfterDownload();
+        return;
+    }
+    startWorkerThread();
+}
+
+void WebEmbeddedWorkerImpl::startWorkerThread()
+{
+    ASSERT(m_pauseAfterDownloadState == DontPauseAfterDownload);
+    ASSERT(!m_askedToTerminate);
+
     WorkerThreadStartMode startMode =
-        (m_workerStartData.startMode == WebEmbeddedWorkerStartModePauseOnStart)
+        (m_workerStartData.waitForDebuggerMode == WebEmbeddedWorkerStartData::WaitForDebugger)
         ? PauseWorkerGlobalScopeOnStart : DontPauseWorkerGlobalScopeOnStart;
 
     OwnPtrWillBeRawPtr<WorkerClients> workerClients = WorkerClients::create();

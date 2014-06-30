@@ -29,7 +29,7 @@
  */
 
 #include "config.h"
-#include "PinchViewport.h"
+#include "core/frame/PinchViewport.h"
 
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
@@ -77,7 +77,7 @@ void PinchViewport::setSize(const IntSize& size)
     if (m_size == size)
         return;
 
-    TRACE_EVENT2("webkit", "PinchViewport::setSize", "width", size.width(), "height", size.height());
+    TRACE_EVENT2("blink", "PinchViewport::setSize", "width", size.width(), "height", size.height());
     m_size = size;
 
     // Make sure we clamp the offset to within the new bounds.
@@ -100,7 +100,7 @@ void PinchViewport::reset()
 
 void PinchViewport::mainFrameDidChangeSize()
 {
-    TRACE_EVENT0("webkit", "PinchViewport::mainFrameDidChangeSize");
+    TRACE_EVENT0("blink", "PinchViewport::mainFrameDidChangeSize");
 
     // In unit tests we may not have initialized the layer tree.
     if (m_innerViewportScrollLayer)
@@ -115,6 +115,37 @@ FloatRect PinchViewport::visibleRect() const
     FloatSize scaledSize(m_size);
     scaledSize.scale(1 / m_scale);
     return FloatRect(m_offset, scaledSize);
+}
+
+FloatRect PinchViewport::visibleRectInDocument() const
+{
+    if (!mainFrame() || !mainFrame()->view())
+        return FloatRect();
+
+    FloatRect viewRect = mainFrame()->view()->visibleContentRect();
+    FloatRect pinchRect = visibleRect();
+    pinchRect.moveBy(viewRect.location());
+    return pinchRect;
+}
+
+void PinchViewport::scrollIntoView(const FloatRect& rect)
+{
+    if (!mainFrame() || !mainFrame()->view())
+        return;
+
+    FrameView* view = mainFrame()->view();
+
+    float centeringOffsetX = (visibleRect().width() - rect.width()) / 2;
+    float centeringOffsetY = (visibleRect().height() - rect.height()) / 2;
+
+    FloatPoint targetOffset(
+        rect.x() - centeringOffsetX - visibleRect().x(),
+        rect.y() - centeringOffsetY - visibleRect().y());
+
+    view->setScrollPosition(flooredIntPoint(targetOffset));
+
+    FloatPoint remainder = FloatPoint(targetOffset - view->scrollPosition());
+    move(remainder);
 }
 
 void PinchViewport::setLocation(const FloatPoint& newLocation)
@@ -164,11 +195,11 @@ void PinchViewport::setScale(float scale)
 // the inner/outer viewport fixed-position model for pinch zoom. When finished,
 // the tree will look like this (with * denoting added layers):
 //
-// *innerViewportContainerLayer (fixed pos container)
-//  +- *pageScaleLayer
-//  |   +- *innerViewportScrollLayer
-//  |       +-- overflowControlsHostLayer (root layer)
-//  |           +-- rootTransformLayer (optional)
+// *rootTransformLayer
+//  +- *innerViewportContainerLayer (fixed pos container)
+//      +- *pageScaleLayer
+//  |       +- *innerViewportScrollLayer
+//  |           +-- overflowControlsHostLayer (root layer)
 //  |               +-- outerViewportContainerLayer (fixed pos container) [frame container layer in RenderLayerCompositor]
 //  |               |   +-- outerViewportScrollLayer [frame scroll layer in RenderLayerCompositor]
 //  |               |       +-- content layers ...
@@ -180,7 +211,7 @@ void PinchViewport::setScale(float scale)
 //
 void PinchViewport::attachToLayerTree(GraphicsLayer* currentLayerTreeRoot, GraphicsLayerFactory* graphicsLayerFactory)
 {
-    TRACE_EVENT1("webkit", "PinchViewport::attachToLayerTree", "currentLayerTreeRoot", (bool)currentLayerTreeRoot);
+    TRACE_EVENT1("blink", "PinchViewport::attachToLayerTree", "currentLayerTreeRoot", (bool)currentLayerTreeRoot);
     if (!currentLayerTreeRoot) {
         m_innerViewportScrollLayer->removeAllChildren();
         return;
@@ -195,6 +226,8 @@ void PinchViewport::attachToLayerTree(GraphicsLayer* currentLayerTreeRoot, Graph
             && !m_pageScaleLayer
             && !m_innerViewportContainerLayer);
 
+        // FIXME: The root transform layer should only be created on demand.
+        m_rootTransformLayer = GraphicsLayer::create(graphicsLayerFactory, this);
         m_innerViewportContainerLayer = GraphicsLayer::create(graphicsLayerFactory, this);
         m_pageScaleLayer = GraphicsLayer::create(graphicsLayerFactory, this);
         m_innerViewportScrollLayer = GraphicsLayer::create(graphicsLayerFactory, this);
@@ -214,6 +247,7 @@ void PinchViewport::attachToLayerTree(GraphicsLayer* currentLayerTreeRoot, Graph
             m_innerViewportContainerLayer->platformLayer());
         m_innerViewportScrollLayer->platformLayer()->setUserScrollable(true, true);
 
+        m_rootTransformLayer->addChild(m_innerViewportContainerLayer.get());
         m_innerViewportContainerLayer->addChild(m_pageScaleLayer.get());
         m_pageScaleLayer->addChild(m_innerViewportScrollLayer.get());
         m_innerViewportContainerLayer->addChild(m_overlayScrollbarHorizontal.get());
@@ -276,12 +310,13 @@ void PinchViewport::setupScrollbar(WebScrollbar::Orientation orientation)
 
 void PinchViewport::registerLayersWithTreeView(WebLayerTreeView* layerTreeView) const
 {
-    TRACE_EVENT0("webkit", "PinchViewport::registerLayersWithTreeView");
+    TRACE_EVENT0("blink", "PinchViewport::registerLayersWithTreeView");
     ASSERT(layerTreeView);
     ASSERT(m_frameHost.page().mainFrame());
-    ASSERT(m_frameHost.page().mainFrame()->contentRenderer());
+    ASSERT(m_frameHost.page().mainFrame()->isLocalFrame());
+    ASSERT(m_frameHost.page().deprecatedLocalMainFrame()->contentRenderer());
 
-    RenderLayerCompositor* compositor = m_frameHost.page().mainFrame()->contentRenderer()->compositor();
+    RenderLayerCompositor* compositor = m_frameHost.page().deprecatedLocalMainFrame()->contentRenderer()->compositor();
     // Get the outer viewport scroll layer.
     WebLayer* scrollLayer = compositor->scrollLayer()->platformLayer();
 
@@ -384,7 +419,7 @@ void PinchViewport::paintContents(const GraphicsLayer*, GraphicsContext&, Graphi
 
 LocalFrame* PinchViewport::mainFrame() const
 {
-    return m_frameHost.page().mainFrame();
+    return m_frameHost.page().mainFrame() && m_frameHost.page().mainFrame()->isLocalFrame() ? m_frameHost.page().deprecatedLocalMainFrame() : 0;
 }
 
 FloatPoint PinchViewport::clampOffsetToBoundaries(const FloatPoint& offset)

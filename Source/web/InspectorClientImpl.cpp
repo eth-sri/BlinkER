@@ -31,7 +31,7 @@
 #include "config.h"
 #include "web/InspectorClientImpl.h"
 
-#include "core/frame/DOMWindow.h"
+#include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/inspector/InspectorInstrumentation.h"
@@ -90,10 +90,10 @@ void InspectorClientImpl::updateInspectorStateCookie(const WTF::String& inspecto
         agent->updateInspectorStateCookie(inspectorState);
 }
 
-void InspectorClientImpl::setDeviceMetricsOverride(int width, int height, float deviceScaleFactor, bool emulateViewport, bool fitWindow)
+void InspectorClientImpl::setDeviceMetricsOverride(int width, int height, float deviceScaleFactor, bool emulateViewport, bool fitWindow, float scale, float offsetX, float offsetY)
 {
     if (WebDevToolsAgentImpl* agent = devToolsAgent())
-        agent->setDeviceMetricsOverride(width, height, deviceScaleFactor, emulateViewport, fitWindow);
+        agent->setDeviceMetricsOverride(width, height, deviceScaleFactor, emulateViewport, fitWindow, scale, offsetX, offsetY);
 }
 
 void InspectorClientImpl::clearDeviceMetricsOverride()

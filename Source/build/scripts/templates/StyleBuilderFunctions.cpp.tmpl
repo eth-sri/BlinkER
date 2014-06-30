@@ -99,12 +99,8 @@ namespace WebCore {
 {
     CSS{{animation}}Data& data = state.style()->access{{animation}}s();
     data.{{vector}}.clear();
-    if (value->isValueList()) {
-        for (CSSValueListIterator i = value; i.hasMore(); i.advance())
-            data.{{vector}}.append(state.styleMap().mapAnimation{{attribute}}(i.value()));
-    } else {
-        data.{{vector}}.append(state.styleMap().mapAnimation{{attribute}}(value));
-    }
+    for (CSSValueListIterator i = value; i.hasMore(); i.advance())
+        data.{{vector}}.append(state.styleMap().mapAnimation{{attribute}}(i.value()));
 }
 {% endmacro %}
 {{apply_animation('CSSPropertyWebkitAnimationDelay', 'Delay', 'Animation')}}
@@ -160,27 +156,75 @@ namespace WebCore {
 {{apply_auto('CSSPropertyWidows')}}
 {{apply_auto('CSSPropertyZIndex')}}
 
+static bool lengthTypeAndValueMatch(const Length& length, LengthType type, float value)
+{
+    return length.type() == type && length.value() == value;
+}
+
+static bool lengthTypeAndValueMatch(const LengthBox& lengthBox, LengthType type, float value)
+{
+    return (lengthTypeAndValueMatch(lengthBox.left(), type, value)
+        && lengthTypeAndValueMatch(lengthBox.right(), type, value)
+        && lengthTypeAndValueMatch(lengthBox.top(), type, value)
+        && lengthTypeAndValueMatch(lengthBox.bottom(), type, value));
+}
+
+static bool lengthTypeAndValueMatch(const BorderImageLength& borderImageLength, LengthType type, float value)
+{
+    return borderImageLength.isLength() && lengthTypeAndValueMatch(borderImageLength.length(), type, value);
+}
+
+static bool lengthTypeAndValueMatch(const BorderImageLengthBox& borderImageLengthBox, LengthType type, float value)
+{
+    return (lengthTypeAndValueMatch(borderImageLengthBox.left(), type, value)
+        && lengthTypeAndValueMatch(borderImageLengthBox.right(), type, value)
+        && lengthTypeAndValueMatch(borderImageLengthBox.top(), type, value)
+        && lengthTypeAndValueMatch(borderImageLengthBox.bottom(), type, value));
+}
+
 {% macro apply_border_image_modifier(property_id, modifier_type) %}
 {% set is_mask_box = 'MaskBox' in property_id %}
 {% set getter = 'maskBoxImage' if is_mask_box else 'borderImage' %}
 {% set setter = 'setMaskBoxImage' if is_mask_box else 'setBorderImage' %}
 {{ declare_initial_function(property_id) }}
 {
-    NinePieceImage image(state.style()->{{getter}}());
+    const NinePieceImage& currentImage = state.style()->{{getter}}();
+    {# Check for equality in case we can bail out before creating a new NinePieceImage. #}
+    {% if modifier_type == 'Outset' %}
+    if (lengthTypeAndValueMatch(currentImage.outset(), Fixed, 0))
+        return;
+    {% elif modifier_type == 'Repeat' %}
+    if (currentImage.horizontalRule() == StretchImageRule && currentImage.verticalRule() == StretchImageRule)
+        return;
+    {% elif modifier_type == 'Slice' and is_mask_box %}
+    // Masks have a different initial value for slices. Preserve the value of 0 for backwards compatibility.
+    if (currentImage.fill() == true && lengthTypeAndValueMatch(currentImage.imageSlices(), Fixed, 0))
+        return;
+    {% elif modifier_type == 'Slice' and not is_mask_box %}
+    if (currentImage.fill() == false && lengthTypeAndValueMatch(currentImage.imageSlices(), Percent, 100))
+        return;
+    {% elif modifier_type == 'Width' and is_mask_box %}
+    // Masks have a different initial value for widths. Preserve the value of 'auto' for backwards compatibility.
+    if (lengthTypeAndValueMatch(currentImage.borderSlices(), Auto, 0))
+        return;
+    {% elif modifier_type == 'Width' and not is_mask_box %}
+    if (lengthTypeAndValueMatch(currentImage.borderSlices(), Fixed, 1))
+        return;
+    {% endif %}
+
+    NinePieceImage image(currentImage);
     {% if modifier_type == 'Outset' %}
     image.setOutset(Length(0, Fixed));
     {% elif modifier_type == 'Repeat' %}
     image.setHorizontalRule(StretchImageRule);
     image.setVerticalRule(StretchImageRule);
     {% elif modifier_type == 'Slice' and is_mask_box %}
-    // Masks have a different initial value for slices. Preserve the value of 0 for backwards compatibility.
     image.setImageSlices(LengthBox({{ (['Length(0, Fixed)']*4) | join(', ') }}));
     image.setFill(true);
     {% elif modifier_type == 'Slice' and not is_mask_box %}
     image.setImageSlices(LengthBox({{ (['Length(100, Percent)']*4) | join(', ') }}));
     image.setFill(false);
     {% elif modifier_type == 'Width' %}
-    // Masks have a different initial value for widths. Preserve the value of 'auto' for backwards compatibility.
     image.setBorderSlices({{ 'Length(Auto)' if is_mask_box else '1.0' }});
     {% endif %}
     state.style()->{{setter}}(image);
@@ -315,7 +359,7 @@ namespace WebCore {
 
     int length = list ? list->length() : 0;
     for (int i = 0; i < length; ++i) {
-        CSSValue* currValue = list->itemWithoutBoundsCheck(i);
+        CSSValue* currValue = list->item(i);
         if (!currValue->isPrimitiveValue())
             continue;
 
@@ -387,7 +431,7 @@ namespace WebCore {
                 currChild = new FillLayer({{fill_layer_type}});
                 prevChild->setNext(currChild);
             }
-            state.styleMap().{{map_fill}}({{property_id}}, currChild, valueList->itemWithoutBoundsCheck(i));
+            state.styleMap().{{map_fill}}({{property_id}}, currChild, valueList->item(i));
             prevChild = currChild;
             currChild = currChild->next();
         }
@@ -479,7 +523,7 @@ namespace WebCore {
     {% set property = properties[property_id] %}
     if (value->isPrimitiveValue()) {
         CSSPrimitiveValue* primitiveValue = toCSSPrimitiveValue(value);
-        if (primitiveValue->getValueID() == CSSValueAuto)
+        if (primitiveValue->getValueID() == CSSValueNone)
             {{set_value(property)}}(nullptr);
     } else if (value->isImageValue() || value->isImageGeneratorValue() || value->isImageSetValue()) {
         {{set_value(property)}}(ShapeValue::createImageValue(state.styleImage({{property_id}}, value)));
@@ -488,7 +532,7 @@ namespace WebCore {
         CSSBoxType cssBox = BoxMissing;
         CSSValueList* valueList = toCSSValueList(value);
         for (unsigned i = 0; i < valueList->length(); ++i) {
-            CSSPrimitiveValue* primitiveValue = toCSSPrimitiveValue(valueList->itemWithoutBoundsCheck(i));
+            CSSPrimitiveValue* primitiveValue = toCSSPrimitiveValue(valueList->item(i));
             if (primitiveValue->isShape())
                 shape = basicShapeForValue(state, primitiveValue->getShapeValue());
             else if (primitiveValue->getValueID() == CSSValueContentBox

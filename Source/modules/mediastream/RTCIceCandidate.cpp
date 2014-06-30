@@ -29,7 +29,6 @@
  */
 
 #include "config.h"
-
 #include "modules/mediastream/RTCIceCandidate.h"
 
 #include "bindings/v8/Dictionary.h"
@@ -39,7 +38,7 @@
 
 namespace WebCore {
 
-PassRefPtr<RTCIceCandidate> RTCIceCandidate::create(const Dictionary& dictionary, ExceptionState& exceptionState)
+RTCIceCandidate* RTCIceCandidate::create(const Dictionary& dictionary, ExceptionState& exceptionState)
 {
     String candidate;
     bool ok = dictionary.get("candidate", candidate);
@@ -54,12 +53,12 @@ PassRefPtr<RTCIceCandidate> RTCIceCandidate::create(const Dictionary& dictionary
     unsigned short sdpMLineIndex = 0;
     dictionary.get("sdpMLineIndex", sdpMLineIndex);
 
-    return adoptRef(new RTCIceCandidate(blink::WebRTCICECandidate(candidate, sdpMid, sdpMLineIndex)));
+    return new RTCIceCandidate(blink::WebRTCICECandidate(candidate, sdpMid, sdpMLineIndex));
 }
 
-PassRefPtr<RTCIceCandidate> RTCIceCandidate::create(blink::WebRTCICECandidate webCandidate)
+RTCIceCandidate* RTCIceCandidate::create(blink::WebRTCICECandidate webCandidate)
 {
-    return adoptRef(new RTCIceCandidate(webCandidate));
+    return new RTCIceCandidate(webCandidate);
 }
 
 RTCIceCandidate::RTCIceCandidate(blink::WebRTCICECandidate webCandidate)

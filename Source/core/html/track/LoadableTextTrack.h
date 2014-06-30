@@ -66,13 +66,11 @@ private:
     virtual void cueLoadingCompleted(TextTrackLoader*, bool loadingFailed) OVERRIDE;
     virtual void newRegionsAvailable(TextTrackLoader*) OVERRIDE;
 
-    LoadableTextTrack(HTMLTrackElement*);
+    explicit LoadableTextTrack(HTMLTrackElement*);
 
     void loadTimerFired(Timer<LoadableTextTrack>*);
 
-    // FIXME: Oilpan: This should be a strong pointer once Member pointers
-    // into the Node hierarchy can be used.
-    RawPtrWillBeWeakMember<HTMLTrackElement> m_trackElement;
+    RawPtrWillBeMember<HTMLTrackElement> m_trackElement;
     Timer<LoadableTextTrack> m_loadTimer;
     OwnPtrWillBeMember<TextTrackLoader> m_loader;
     KURL m_url;

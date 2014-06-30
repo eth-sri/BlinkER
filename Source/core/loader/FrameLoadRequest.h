@@ -28,6 +28,7 @@
 
 #include "core/dom/Document.h"
 #include "core/events/Event.h"
+#include "core/fetch/ResourceLoaderOptions.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/loader/FrameLoaderTypes.h"
 #include "core/loader/SubstituteData.h"
@@ -37,12 +38,14 @@ namespace WebCore {
 class LocalFrame;
 
 struct FrameLoadRequest {
+    STACK_ALLOCATED();
 public:
     explicit FrameLoadRequest(Document* originDocument)
         : m_originDocument(originDocument)
         , m_lockBackForwardList(false)
         , m_clientRedirect(NotClientRedirect)
         , m_shouldSendReferrer(MaybeSendReferrer)
+        , m_shouldCheckMainWorldContentSecurityPolicy(CheckContentSecurityPolicy)
     {
     }
 
@@ -52,6 +55,7 @@ public:
         , m_lockBackForwardList(false)
         , m_clientRedirect(NotClientRedirect)
         , m_shouldSendReferrer(MaybeSendReferrer)
+        , m_shouldCheckMainWorldContentSecurityPolicy(CheckContentSecurityPolicy)
     {
     }
 
@@ -62,6 +66,18 @@ public:
         , m_lockBackForwardList(false)
         , m_clientRedirect(NotClientRedirect)
         , m_shouldSendReferrer(MaybeSendReferrer)
+        , m_shouldCheckMainWorldContentSecurityPolicy(CheckContentSecurityPolicy)
+    {
+    }
+
+    FrameLoadRequest(Document* originDocument, const ResourceRequest& resourceRequest, const AtomicString& frameName, ContentSecurityPolicyCheck shouldCheckMainWorldContentSecurityPolicy)
+        : m_originDocument(originDocument)
+        , m_resourceRequest(resourceRequest)
+        , m_frameName(frameName)
+        , m_lockBackForwardList(false)
+        , m_clientRedirect(NotClientRedirect)
+        , m_shouldSendReferrer(MaybeSendReferrer)
+        , m_shouldCheckMainWorldContentSecurityPolicy(shouldCheckMainWorldContentSecurityPolicy)
     {
     }
 
@@ -72,6 +88,7 @@ public:
         , m_lockBackForwardList(false)
         , m_clientRedirect(NotClientRedirect)
         , m_shouldSendReferrer(MaybeSendReferrer)
+        , m_shouldCheckMainWorldContentSecurityPolicy(CheckContentSecurityPolicy)
     {
     }
 
@@ -100,16 +117,19 @@ public:
     ShouldSendReferrer shouldSendReferrer() const { return m_shouldSendReferrer; }
     void setShouldSendReferrer(ShouldSendReferrer shouldSendReferrer) { m_shouldSendReferrer = shouldSendReferrer; }
 
+    ContentSecurityPolicyCheck shouldCheckMainWorldContentSecurityPolicy() const { return m_shouldCheckMainWorldContentSecurityPolicy; }
+
 private:
-    RefPtrWillBePersistent<Document> m_originDocument;
+    RefPtrWillBeMember<Document> m_originDocument;
     ResourceRequest m_resourceRequest;
     AtomicString m_frameName;
     SubstituteData m_substituteData;
     bool m_lockBackForwardList;
     ClientRedirectPolicy m_clientRedirect;
-    RefPtrWillBePersistent<Event> m_triggeringEvent;
-    RefPtrWillBePersistent<FormState> m_formState;
+    RefPtrWillBeMember<Event> m_triggeringEvent;
+    RefPtrWillBeMember<FormState> m_formState;
     ShouldSendReferrer m_shouldSendReferrer;
+    ContentSecurityPolicyCheck m_shouldCheckMainWorldContentSecurityPolicy;
 };
 
 }

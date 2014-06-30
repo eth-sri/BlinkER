@@ -1,3 +1,0 @@
-
-PASS With the async attribute, link element don't block the script execution of following imports. 
-

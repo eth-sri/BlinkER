@@ -20,6 +20,9 @@ function onload()
     obj["negZero"] = -0;
     console.dir(obj);
 
+    // This should correctly display information about the function.
+    console.dir(function() {});
+
     runTest();
 }
 
@@ -29,7 +32,7 @@ function test()
 
     function dumpConsoleMessages()
     {
-        InspectorTest.addResult(InspectorTest.textContentWithLineBreaks(WebInspector.ConsolePanel._view()._messagesContainer));
+        InspectorTest.dumpConsoleMessages(false, false, InspectorTest.textContentWithLineBreaks);
         InspectorTest.completeTest();
     }
 }

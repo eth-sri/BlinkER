@@ -23,6 +23,7 @@
  */
 
 [
+    GarbageCollected,
     ActiveDOMObject
 ] interface MediaStreamTrack : EventTarget {
     readonly attribute DOMString kind;

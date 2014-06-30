@@ -29,17 +29,15 @@
 #include "config.h"
 #include "core/xml/XMLTreeViewer.h"
 
-#include "XMLViewerCSS.h"
-#include "XMLViewerJS.h"
 #include "bindings/v8/ExceptionStatePlaceholder.h"
 #include "bindings/v8/ScriptController.h"
 #include "bindings/v8/ScriptSourceCode.h"
+#include "core/XMLViewerCSS.h"
+#include "core/XMLViewerJS.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/Text.h"
 #include "core/frame/LocalFrame.h"
-
-using namespace std;
 
 namespace WebCore {
 

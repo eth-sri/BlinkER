@@ -28,7 +28,6 @@
 #define ShadowRoot_h
 
 #include "core/dom/ContainerNode.h"
-#include "core/dom/Document.h"
 #include "core/dom/DocumentFragment.h"
 #include "core/dom/Element.h"
 #include "core/dom/TreeScope.h"
@@ -36,11 +35,13 @@
 
 namespace WebCore {
 
+class Document;
 class ElementShadow;
 class ExceptionState;
 class HTMLShadowElement;
 class InsertionPoint;
 class ShadowRootRareData;
+class StyleSheetList;
 
 class ShadowRoot FINAL : public DocumentFragment, public TreeScope, public DoublyLinkedListNode<ShadowRoot> {
     WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(ShadowRoot);
@@ -57,7 +58,7 @@ public:
 
     static PassRefPtrWillBeRawPtr<ShadowRoot> create(Document& document, ShadowRootType type)
     {
-        return adoptRefWillBeRefCountedGarbageCollected(new ShadowRoot(document, type));
+        return adoptRefWillBeNoop(new ShadowRoot(document, type));
     }
 
     void recalcStyle(StyleRecalcChange);
@@ -83,8 +84,8 @@ public:
     virtual InsertionNotificationRequest insertedInto(ContainerNode*) OVERRIDE;
     virtual void removedFrom(ContainerNode*) OVERRIDE;
 
-    virtual void registerScopedHTMLStyleChild() OVERRIDE;
-    virtual void unregisterScopedHTMLStyleChild() OVERRIDE;
+    void registerScopedHTMLStyleChild();
+    void unregisterScopedHTMLStyleChild();
 
     bool containsShadowElements() const;
     bool containsContentElements() const;
@@ -95,6 +96,7 @@ public:
 
     // For Internals, don't use this.
     unsigned childShadowRootCount() const;
+    unsigned numberOfStyles() const { return m_numberOfStyles; }
 
     HTMLShadowElement* shadowInsertionPointOfYoungerShadowRoot() const;
     void setShadowInsertionPointOfYoungerShadowRoot(PassRefPtrWillBeRawPtr<HTMLShadowElement>);

@@ -31,7 +31,8 @@
 #include "config.h"
 #include "core/html/HTMLShadowElement.h"
 
-#include "HTMLNames.h"
+#include "core/HTMLNames.h"
+#include "core/dom/Document.h"
 #include "core/dom/shadow/ShadowRoot.h"
 
 namespace WebCore {
@@ -44,10 +45,7 @@ inline HTMLShadowElement::HTMLShadowElement(Document& document)
     ScriptWrappable::init(this);
 }
 
-PassRefPtrWillBeRawPtr<HTMLShadowElement> HTMLShadowElement::create(Document& document)
-{
-    return adoptRefWillBeRefCountedGarbageCollected(new HTMLShadowElement(document));
-}
+DEFINE_NODE_FACTORY(HTMLShadowElement)
 
 HTMLShadowElement::~HTMLShadowElement()
 {

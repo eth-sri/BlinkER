@@ -93,6 +93,7 @@ WebInspector.StylesSidebarPane._colorRegex = /((?:rgb|hsl)a?\([^)]+\)|#[0-9a-fA-
 
 /**
  * @param {!WebInspector.CSSProperty} property
+ * @return {!Element}
  */
 WebInspector.StylesSidebarPane.createExclamationMark = function(property)
 {
@@ -2117,6 +2118,9 @@ WebInspector.StylePropertyTreeElementBase.prototype = {
 
         /**
          * @param {!RegExp} regex
+         * @param {function(string):!Node} processor
+         * @param {?function(string):!Node} nextProcessor
+         * @param {string} valueText
          * @return {!DocumentFragment}
          */
         function processValue(regex, processor, nextProcessor, valueText)
@@ -2209,6 +2213,7 @@ WebInspector.StylePropertyTreeElementBase.prototype = {
      * @param {!Element} nameElement
      * @param {!Element} valueElement
      * @param {string} text
+     * @return {!Node}
      */
     _processColor: function(nameElement, valueElement, text)
     {
@@ -2684,7 +2689,7 @@ WebInspector.StylePropertyTreeElement.prototype = {
     },
 
     /**
-     * @param {!Element=} selectElement
+     * @param {?Element=} selectElement
      */
     startEditing: function(selectElement)
     {
@@ -3280,8 +3285,22 @@ WebInspector.StylesSidebarPane.CSSPropertyPrompt.prototype = {
             this._sidebarPane.applyStyleText(this._sidebarPane.nameElement.textContent + ": " + this._sidebarPane.valueElement.textContent, false, false, false);
         }
 
+        /**
+         * @param {string} prefix
+         * @param {number} number
+         * @param {string} suffix
+         * @return {string}
+         * @this {WebInspector.StylesSidebarPane.CSSPropertyPrompt}
+         */
+        function customNumberHandler(prefix, number, suffix)
+        {
+            if (number !== 0 && !suffix.length && WebInspector.CSSMetadata.isLengthProperty(this._sidebarPane.property.name))
+                suffix = "px";
+            return prefix + number + suffix;
+        }
+
         // Handle numeric value increment/decrement only at this point.
-        if (!this._isEditingName && WebInspector.handleElementValueModifications(event, this._sidebarPane.valueElement, finishHandler.bind(this), this._isValueSuggestion.bind(this)))
+        if (!this._isEditingName && WebInspector.handleElementValueModifications(event, this._sidebarPane.valueElement, finishHandler.bind(this), this._isValueSuggestion.bind(this), customNumberHandler.bind(this)))
             return true;
 
         return false;

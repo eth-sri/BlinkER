@@ -1,3 +1,0 @@
-
-FAIL postMessage to a ServiceWorker (and back via MessagePort) assert_unreached: Unregister should not fail: NotSupportedError Reached unreachable code
-

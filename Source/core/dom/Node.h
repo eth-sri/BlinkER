@@ -39,8 +39,6 @@
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURLHash.h"
 #include "wtf/Forward.h"
-#include "wtf/ListHashSet.h"
-#include "wtf/text/AtomicString.h"
 
 // This needs to be here because Document.h also depends on it.
 #define DUMP_NODE_STATISTICS 0
@@ -81,6 +79,7 @@ class RenderBoxModelObject;
 class RenderObject;
 class RenderStyle;
 class ShadowRoot;
+class StaticNodeList;
 class TagCollection;
 class Text;
 class TouchEvent;
@@ -109,12 +108,21 @@ private:
     RenderObject* m_renderer;
 };
 
-class Node : public TreeSharedWillBeRefCountedGarbageCollected<Node>, public EventTarget, public ScriptWrappable {
+#if ENABLE(OILPAN)
+#define NODE_BASE_CLASSES public GarbageCollectedFinalized<Node>, public EventTarget, public ScriptWrappable
+#else
+// TreeShared should be the last to pack TreeShared::m_refCount and
+// Node::m_nodeFlags on 64bit platforms.
+#define NODE_BASE_CLASSES public EventTarget, public ScriptWrappable, public TreeShared<Node>
+#endif
+
+class Node : NODE_BASE_CLASSES {
     friend class Document;
     friend class TreeScope;
     friend class TreeScopeAdopter;
 
-    DEFINE_EVENT_TARGET_REFCOUNTING(TreeSharedWillBeRefCountedGarbageCollected<Node>);
+    DEFINE_EVENT_TARGET_REFCOUNTING_WILL_BE_REMOVED(TreeShared<Node>);
+    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(Node);
 public:
     enum NodeType {
         ELEMENT_NODE = 1,
@@ -188,10 +196,10 @@ public:
 
     // These should all actually return a node, but this is only important for language bindings,
     // which will already know and hold a ref on the right node to return.
-    void insertBefore(PassRefPtr<Node> newChild, Node* refChild, ExceptionState& = ASSERT_NO_EXCEPTION);
-    void replaceChild(PassRefPtr<Node> newChild, Node* oldChild, ExceptionState& = ASSERT_NO_EXCEPTION);
+    void insertBefore(PassRefPtrWillBeRawPtr<Node> newChild, Node* refChild, ExceptionState& = ASSERT_NO_EXCEPTION);
+    void replaceChild(PassRefPtrWillBeRawPtr<Node> newChild, Node* oldChild, ExceptionState& = ASSERT_NO_EXCEPTION);
     void removeChild(Node* child, ExceptionState&);
-    void appendChild(PassRefPtr<Node> newChild, ExceptionState& = ASSERT_NO_EXCEPTION);
+    void appendChild(PassRefPtrWillBeRawPtr<Node> newChild, ExceptionState& = ASSERT_NO_EXCEPTION);
 
     bool hasChildren() const { return firstChild(); }
     virtual PassRefPtrWillBeRawPtr<Node> cloneNode(bool deep = false) = 0;
@@ -373,14 +381,11 @@ public:
 
     void recalcDistribution();
 
-    bool needsLayerUpdate() const { return getFlag(NeedsLayerUpdateFlag); }
-    void setNeedsLayerUpdate() { setFlag(NeedsLayerUpdateFlag); }
-    void clearNeedsLayerUpdate() { clearFlag(NeedsLayerUpdateFlag); }
+    bool svgFilterNeedsLayerUpdate() const { return getFlag(SVGFilterNeedsLayerUpdateFlag); }
+    void setSVGFilterNeedsLayerUpdate() { setFlag(SVGFilterNeedsLayerUpdateFlag); }
+    void clearSVGFilterNeedsLayerUpdate() { clearFlag(SVGFilterNeedsLayerUpdateFlag); }
 
     void setIsLink(bool f);
-
-    bool hasScopedHTMLStyleChild() const { return getFlag(HasScopedHTMLStyleChildFlag); }
-    void setHasScopedHTMLStyleChild(bool flag) { setFlag(flag, HasScopedHTMLStyleChildFlag); }
 
     bool hasEventTargetData() const { return getFlag(HasEventTargetDataFlag); }
     void setHasEventTargetData(bool flag) { setFlag(flag, HasEventTargetDataFlag); }
@@ -509,7 +514,6 @@ public:
         else
             m_data.m_renderer = renderer;
     }
-    bool hasRenderer() const { return renderer(); }
 
     // Use these two methods with caution.
     RenderBox* renderBox() const;
@@ -610,7 +614,7 @@ public:
     virtual Node* toNode() OVERRIDE FINAL;
 
     virtual const AtomicString& interfaceName() const OVERRIDE;
-    virtual ExecutionContext* executionContext() const OVERRIDE;
+    virtual ExecutionContext* executionContext() const OVERRIDE FINAL;
 
     virtual bool addEventListener(const AtomicString& eventType, PassRefPtr<EventListener>, bool useCapture = false) OVERRIDE;
     virtual bool removeEventListener(const AtomicString& eventType, EventListener*, bool useCapture = false) OVERRIDE;
@@ -626,7 +630,7 @@ public:
     virtual bool dispatchEvent(PassRefPtrWillBeRawPtr<Event>) OVERRIDE;
 
     void dispatchScopedEvent(PassRefPtrWillBeRawPtr<Event>);
-    void dispatchScopedEventDispatchMediator(PassRefPtr<EventDispatchMediator>);
+    void dispatchScopedEventDispatchMediator(PassRefPtrWillBeRawPtr<EventDispatchMediator>);
 
     virtual void handleLocalEvents(Event*);
 
@@ -650,7 +654,7 @@ public:
     virtual EventTargetData* eventTargetData() OVERRIDE;
     virtual EventTargetData& ensureEventTargetData() OVERRIDE;
     virtual void setCreatorEventRacerContext(PassRefPtr<EventRacerLog>, EventAction *) OVERRIDE FINAL;
-    virtual PassRefPtr<EventRacerLog> getCreatorEventRacerLog() OVERRIDE FINAL const;
+    virtual PassRefPtr<EventRacerLog> getCreatorEventRacerLog() const OVERRIDE FINAL;
     virtual EventAction *getCreatorEventAction() const OVERRIDE FINAL { return m_creatorAction; }
 
     void getRegisteredMutationObserversOfType(WillBeHeapHashMap<RawPtrWillBeMember<MutationObserver>, MutationRecordDeliveryOptions>&, MutationObserver::MutationType, const QualifiedName* attributeName);
@@ -660,24 +664,22 @@ public:
     void unregisterTransientMutationObserver(MutationObserverRegistration*);
     void notifyMutationObserversNodeWillDetach();
 
-    virtual void registerScopedHTMLStyleChild();
-    virtual void unregisterScopedHTMLStyleChild();
-    size_t numberOfScopedHTMLStyleChildren() const;
-
     unsigned connectedSubframeCount() const;
     void incrementConnectedSubframeCount(unsigned amount = 1);
     void decrementConnectedSubframeCount(unsigned amount = 1);
     void updateAncestorConnectedSubframeCountForRemoval() const;
     void updateAncestorConnectedSubframeCountForInsertion() const;
 
-    PassRefPtrWillBeRawPtr<NodeList> getDestinationInsertionPoints();
+    PassRefPtrWillBeRawPtr<StaticNodeList> getDestinationInsertionPoints();
 
     void setAlreadySpellChecked(bool flag) { setFlag(flag, AlreadySpellCheckedFlag); }
     bool isAlreadySpellChecked() { return getFlag(AlreadySpellCheckedFlag); }
 
     bool isFinishedParsingChildren() const { return getFlag(IsFinishedParsingChildrenFlag); }
 
-    virtual void trace(Visitor*);
+    virtual void trace(Visitor*) OVERRIDE;
+
+    unsigned lengthOfContents() const;
 
 private:
     enum NodeFlags {
@@ -708,7 +710,7 @@ private:
         IsFinishedParsingChildrenFlag = 1 << 12,
 
         // Flags related to recalcStyle.
-        NeedsLayerUpdateFlag = 1 << 13,
+        SVGFilterNeedsLayerUpdateFlag = 1 << 13,
         HasCustomStyleCallbacksFlag = 1 << 14,
         ChildNeedsStyleInvalidationFlag = 1 << 15,
         NeedsStyleInvalidationFlag = 1 << 16,
@@ -729,18 +731,15 @@ private:
         // HTML dir=auto.
         SelfOrAncestorHasDirAutoFlag = 1 << 29,
 
-        // FIXME: Remove <style scoped> support.
-        HasScopedHTMLStyleChildFlag = 1 << 30,
-
         DefaultNodeFlags = IsFinishedParsingChildrenFlag | ChildNeedsStyleRecalcFlag | NeedsReattachStyleChange
     };
 
-    // 1 bits remaining.
+    // 2 bits remaining.
 
     bool getFlag(NodeFlags mask) const { return m_nodeFlags & mask; }
-    void setFlag(bool f, NodeFlags mask) const { m_nodeFlags = (m_nodeFlags & ~mask) | (-(int32_t)f & mask); }
-    void setFlag(NodeFlags mask) const { m_nodeFlags |= mask; }
-    void clearFlag(NodeFlags mask) const { m_nodeFlags &= ~mask; }
+    void setFlag(bool f, NodeFlags mask) { m_nodeFlags = (m_nodeFlags & ~mask) | (-(int32_t)f & mask); }
+    void setFlag(NodeFlags mask) { m_nodeFlags |= mask; }
+    void clearFlag(NodeFlags mask) { m_nodeFlags &= ~mask; }
 
 protected:
     enum ConstructionType {
@@ -829,7 +828,7 @@ private:
     WillBeHeapVector<OwnPtrWillBeMember<MutationObserverRegistration> >* mutationObserverRegistry();
     WillBeHeapHashSet<RawPtrWillBeMember<MutationObserverRegistration> >* transientMutationObserverRegistry();
 
-    mutable uint32_t m_nodeFlags;
+    uint32_t m_nodeFlags;
     RawPtrWillBeMember<ContainerNode> m_parentOrShadowHostNode;
     RawPtrWillBeMember<TreeScope> m_treeScope;
     RawPtrWillBeMember<Node> m_previous;
@@ -892,16 +891,7 @@ inline bool isTreeScopeRoot(const Node& node)
 }
 
 // Allow equality comparisons of Nodes by reference or pointer, interchangeably.
-inline bool operator==(const Node& a, const Node& b) { return &a == &b; }
-inline bool operator==(const Node& a, const Node* b) { return &a == b; }
-inline bool operator==(const Node* a, const Node& b) { return a == &b; }
-inline bool operator!=(const Node& a, const Node& b) { return !(a == b); }
-inline bool operator!=(const Node& a, const Node* b) { return !(a == b); }
-inline bool operator!=(const Node* a, const Node& b) { return !(a == b); }
-inline bool operator==(const PassRefPtr<Node>& a, const Node& b) { return a.get() == &b; }
-inline bool operator==(const Node& a, const PassRefPtr<Node>& b) { return &a == b.get(); }
-inline bool operator!=(const PassRefPtr<Node>& a, const Node& b) { return !(a == b); }
-inline bool operator!=(const Node& a, const PassRefPtr<Node>& b) { return !(a == b); }
+DEFINE_COMPARISON_OPERATORS_WITH_REFERENCES_REFCOUNTED(Node)
 
 
 #define DEFINE_NODE_TYPE_CASTS(thisType, predicate) \
@@ -913,11 +903,13 @@ inline bool operator!=(const Node& a, const PassRefPtr<Node>& b) { return !(a ==
     template<typename T> inline thisType* to##thisType(const RefPtr<T>& node) { return to##thisType(node.get()); } \
     DEFINE_TYPE_CASTS(thisType, Node, node, is##thisType(*node), is##thisType(node))
 
+#define DECLARE_NODE_FACTORY(T) \
+    static PassRefPtrWillBeRawPtr<T> create(Document&)
 #define DEFINE_NODE_FACTORY(T) \
-    inline static PassRefPtrWillBeRawPtr<T> create(Document& document) \
-    { \
-        return adoptRefWillBeRefCountedGarbageCollected(new T(document)); \
-    }
+PassRefPtrWillBeRawPtr<T> T::create(Document& document) \
+{ \
+    return adoptRefWillBeNoop(new T(document)); \
+}
 
 } // namespace WebCore
 

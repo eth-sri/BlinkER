@@ -110,6 +110,7 @@ HTMLCollection
 HTMLContentElement
 HTMLDListElement
 HTMLDataListElement
+HTMLDialogElement
 HTMLDirectoryElement
 HTMLDivElement
 HTMLDocument
@@ -279,7 +280,6 @@ SVGDefsElement
 SVGDescElement
 SVGDiscardElement
 SVGElement
-SVGElementInstance
 SVGEllipseElement
 SVGFEBlendElement
 SVGFEColorMatrixElement

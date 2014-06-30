@@ -27,8 +27,8 @@
 
 #include "core/frame/Settings.h"
 #include "core/rendering/GraphicsContextAnnotator.h"
-#include "core/rendering/LayoutRepainter.h"
 #include "core/rendering/RenderView.h"
+#include "core/rendering/svg/SVGRenderSupport.h"
 #include "core/rendering/svg/SVGRenderingContext.h"
 #include "core/rendering/svg/SVGResources.h"
 #include "core/rendering/svg/SVGResourcesCache.h"
@@ -53,9 +53,7 @@ void RenderSVGContainer::layout()
     ASSERT(needsLayout());
 
     // RenderSVGRoot disables layoutState for the SVG rendering tree.
-    ASSERT(!view()->layoutStateEnabled());
-
-    LayoutRepainter repainter(*this, SVGRenderSupport::checkForSVGRepaintDuringLayout(this) || selfWillPaint());
+    ASSERT(!view()->layoutStateCachedOffsetsEnabled());
 
     // Allow RenderSVGViewportContainer to update its viewport.
     calcViewport();
@@ -72,8 +70,6 @@ void RenderSVGContainer::layout()
     if (everHadLayout() && needsLayout())
         SVGResourcesCache::clientLayoutChanged(this);
 
-    // At this point LayoutRepainter already grabbed the old bounds,
-    // recalculate them now so repaintAfterLayout() uses the new bounds.
     if (m_needsBoundariesUpdate || updatedTransform) {
         updateCachedBoundaries();
         m_needsBoundariesUpdate = false;
@@ -82,7 +78,6 @@ void RenderSVGContainer::layout()
         RenderSVGModelObject::setNeedsBoundariesUpdate();
     }
 
-    repainter.repaintAfterLayout();
     clearNeedsLayout();
 }
 
@@ -116,7 +111,7 @@ void RenderSVGContainer::paint(PaintInfo& paintInfo, const LayoutPoint&)
     if (!firstChild() && !selfWillPaint())
         return;
 
-    FloatRect repaintRect = repaintRectInLocalCoordinates();
+    FloatRect repaintRect = paintInvalidationRectInLocalCoordinates();
     if (!SVGRenderSupport::paintInfoIntersectsRepaintRect(repaintRect, localToParentTransform(), paintInfo))
         return;
 
@@ -137,7 +132,7 @@ void RenderSVGContainer::paint(PaintInfo& paintInfo, const LayoutPoint&)
             continueRendering = renderingContext.isRenderingPrepared();
 
             if (continueRendering && document().settings()->containerCullingEnabled())
-                cullSaver.cull(repaintRectInLocalCoordinates());
+                cullSaver.cull(paintInvalidationRectInLocalCoordinates());
         }
 
         if (continueRendering) {
@@ -161,7 +156,7 @@ void RenderSVGContainer::paint(PaintInfo& paintInfo, const LayoutPoint&)
 // addFocusRingRects is called from paintOutline and needs to be in the same coordinates as the paintOuline call
 void RenderSVGContainer::addFocusRingRects(Vector<IntRect>& rects, const LayoutPoint&, const RenderLayerModelObject*)
 {
-    IntRect paintRectInParent = enclosingIntRect(localToParentTransform().mapRect(repaintRectInLocalCoordinates()));
+    IntRect paintRectInParent = enclosingIntRect(localToParentTransform().mapRect(paintInvalidationRectInLocalCoordinates()));
     if (!paintRectInParent.isEmpty())
         rects.append(paintRectInParent);
 }

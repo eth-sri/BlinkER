@@ -29,7 +29,7 @@
 #include "config.h"
 #include "core/html/HTMLTableRowsCollection.h"
 
-#include "HTMLNames.h"
+#include "core/HTMLNames.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/html/HTMLTableElement.h"
 #include "core/html/HTMLTableRowElement.h"
@@ -143,8 +143,9 @@ HTMLTableRowsCollection::HTMLTableRowsCollection(ContainerNode& table)
     ASSERT(isHTMLTableElement(table));
 }
 
-PassRefPtrWillBeRawPtr<HTMLTableRowsCollection> HTMLTableRowsCollection::create(ContainerNode& table, CollectionType)
+PassRefPtrWillBeRawPtr<HTMLTableRowsCollection> HTMLTableRowsCollection::create(ContainerNode& table, CollectionType type)
 {
+    ASSERT_UNUSED(type, type == TableRows);
     return adoptRefWillBeNoop(new HTMLTableRowsCollection(table));
 }
 

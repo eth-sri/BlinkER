@@ -56,47 +56,68 @@ bool FontPlatformFeatures::canExpandAroundIdeographsInComplexText()
     return false;
 }
 
+static SkPaint textFillPaint(GraphicsContext* gc, const SimpleFontData* font)
+{
+    SkPaint paint = gc->fillPaint();
+    font->platformData().setupPaint(&paint, gc);
+    gc->adjustTextRenderMode(&paint);
+    paint.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
+    return paint;
+}
+
+static SkPaint textStrokePaint(GraphicsContext* gc, const SimpleFontData* font, bool isFilling)
+{
+    SkPaint paint = gc->strokePaint();
+    font->platformData().setupPaint(&paint, gc);
+    gc->adjustTextRenderMode(&paint);
+    paint.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
+    if (isFilling) {
+        // If there is a shadow and we filled above, there will already be
+        // a shadow. We don't want to draw it again or it will be too dark
+        // and it will go on top of the fill.
+        //
+        // Note that this isn't strictly correct, since the stroke could be
+        // very thick and the shadow wouldn't account for this. The "right"
+        // thing would be to draw to a new layer and then draw that layer
+        // with a shadow. But this is a lot of extra work for something
+        // that isn't normally an issue.
+        paint.setLooper(0);
+    }
+    return paint;
+}
+
 static void paintGlyphs(GraphicsContext* gc, const SimpleFontData* font,
-    const GlyphBufferGlyph* glyphs, unsigned numGlyphs,
-    SkPoint* pos, const FloatRect& textRect)
+    const Glyph glyphs[], unsigned numGlyphs,
+    const SkPoint pos[], const FloatRect& textRect)
 {
     TextDrawingModeFlags textMode = gc->textDrawingMode();
 
     // We draw text up to two times (once for fill, once for stroke).
     if (textMode & TextModeFill) {
-        SkPaint paint;
-        gc->setupPaintForFilling(&paint);
-        font->platformData().setupPaint(&paint, gc);
-        gc->adjustTextRenderMode(&paint);
-        paint.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
-
-        gc->drawPosText(glyphs, numGlyphs << 1, pos, textRect, paint);
+        SkPaint paint = textFillPaint(gc, font);
+        gc->drawPosText(glyphs, numGlyphs * sizeof(Glyph), pos, textRect, paint);
     }
 
-    if ((textMode & TextModeStroke)
-        && gc->strokeStyle() != NoStroke
-        && gc->strokeThickness() > 0) {
+    if ((textMode & TextModeStroke) && gc->hasStroke()) {
+        SkPaint paint = textStrokePaint(gc, font, textMode & TextModeFill);
+        gc->drawPosText(glyphs, numGlyphs * sizeof(Glyph), pos, textRect, paint);
+    }
+}
 
-        SkPaint paint;
-        gc->setupPaintForStroking(&paint);
-        font->platformData().setupPaint(&paint, gc);
-        gc->adjustTextRenderMode(&paint);
-        paint.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
+static void paintGlyphsHorizontal(GraphicsContext* gc, const SimpleFontData* font,
+    const Glyph glyphs[], unsigned numGlyphs,
+    const SkScalar xpos[], SkScalar constY, const FloatRect& textRect)
+{
+    TextDrawingModeFlags textMode = gc->textDrawingMode();
 
-        if (textMode & TextModeFill) {
-            // If there is a shadow and we filled above, there will already be
-            // a shadow. We don't want to draw it again or it will be too dark
-            // and it will go on top of the fill.
-            //
-            // Note that this isn't strictly correct, since the stroke could be
-            // very thick and the shadow wouldn't account for this. The "right"
-            // thing would be to draw to a new layer and then draw that layer
-            // with a shadow. But this is a lot of extra work for something
-            // that isn't normally an issue.
-            paint.setLooper(0);
-        }
+    if (textMode & TextModeFill) {
+        SkPaint paint = textFillPaint(gc, font);
+        gc->drawPosTextH(glyphs, numGlyphs * sizeof(Glyph), xpos, constY, textRect, paint);
+    }
 
-        gc->drawPosText(glyphs, numGlyphs << 1, pos, textRect, paint);
+    if ((textMode & TextModeStroke) && gc->hasStroke()) {
+        SkPaint paint = textStrokePaint(gc, font, textMode & TextModeFill);
+        gc->drawPosTextH(glyphs, numGlyphs * sizeof(Glyph), xpos, constY, textRect, paint);
     }
 }
 
@@ -104,16 +125,14 @@ void Font::drawGlyphs(GraphicsContext* gc, const SimpleFontData* font,
     const GlyphBuffer& glyphBuffer, unsigned from, unsigned numGlyphs,
     const FloatPoint& point, const FloatRect& textRect) const
 {
-    SkASSERT(sizeof(GlyphBufferGlyph) == sizeof(uint16_t)); // compile-time assert
-
     SkScalar x = SkFloatToScalar(point.x());
     SkScalar y = SkFloatToScalar(point.y());
 
-    SkAutoSTMalloc<32, SkPoint> storage(numGlyphs);
-    SkPoint* pos = storage.get();
-
     const OpenTypeVerticalData* verticalData = font->verticalData();
     if (font->platformData().orientation() == Vertical && verticalData) {
+        SkAutoSTMalloc<32, SkPoint> storage(numGlyphs);
+        SkPoint* pos = storage.get();
+
         AffineTransform savedMatrix = gc->getCTM();
         gc->concatCTM(AffineTransform(0, -1, 1, 0, point.x(), point.y()));
         gc->concatCTM(AffineTransform(1, 0, 0, 1, -point.x(), -point.y()));
@@ -129,7 +148,7 @@ void Font::drawGlyphs(GraphicsContext* gc, const SimpleFontData* font,
         while (glyphIndex < numGlyphs) {
             unsigned chunkLength = std::min(kMaxBufferLength, numGlyphs - glyphIndex);
 
-            const GlyphBufferGlyph* glyphs = glyphBuffer.glyphs(from + glyphIndex);
+            const Glyph* glyphs = glyphBuffer.glyphs(from + glyphIndex);
             translations.resize(chunkLength);
             verticalData->getVerticalTranslationsForGlyphs(font, &glyphs[0], chunkLength, reinterpret_cast<float*>(&translations[0]));
 
@@ -151,20 +170,35 @@ void Font::drawGlyphs(GraphicsContext* gc, const SimpleFontData* font,
         return;
     }
 
+    if (!glyphBuffer.hasVerticalAdvances()) {
+        SkAutoSTMalloc<64, SkScalar> storage(numGlyphs);
+        SkScalar* xpos = storage.get();
+        const FloatSize* adv = glyphBuffer.advances(from);
+        for (unsigned i = 0; i < numGlyphs; i++) {
+            xpos[i] = x;
+            x += SkFloatToScalar(adv[i].width());
+        }
+        const Glyph* glyphs = glyphBuffer.glyphs(from);
+        paintGlyphsHorizontal(gc, font, glyphs, numGlyphs, xpos, SkFloatToScalar(y), textRect);
+        return;
+    }
+
     // FIXME: text rendering speed:
     // Android has code in their WebCore fork to special case when the
     // GlyphBuffer has no advances other than the defaults. In that case the
     // text drawing can proceed faster. However, it's unclear when those
     // patches may be upstreamed to WebKit so we always use the slower path
     // here.
-    const GlyphBufferAdvance* adv = glyphBuffer.advances(from);
+    SkAutoSTMalloc<32, SkPoint> storage(numGlyphs);
+    SkPoint* pos = storage.get();
+    const FloatSize* adv = glyphBuffer.advances(from);
     for (unsigned i = 0; i < numGlyphs; i++) {
         pos[i].set(x, y);
         x += SkFloatToScalar(adv[i].width());
         y += SkFloatToScalar(adv[i].height());
     }
 
-    const GlyphBufferGlyph* glyphs = glyphBuffer.glyphs(from);
+    const Glyph* glyphs = glyphBuffer.glyphs(from);
     paintGlyphs(gc, font, glyphs, numGlyphs, pos, textRect);
 }
 
@@ -175,9 +209,7 @@ void Font::drawComplexText(GraphicsContext* gc, const TextRunPaintInfo& runInfo,
 
     TextDrawingModeFlags textMode = gc->textDrawingMode();
     bool fill = textMode & TextModeFill;
-    bool stroke = (textMode & TextModeStroke)
-        && gc->strokeStyle() != NoStroke
-        && gc->strokeThickness() > 0;
+    bool stroke = (textMode & TextModeStroke) && gc->hasStroke();
 
     if (!fill && !stroke)
         return;
@@ -211,18 +243,17 @@ float Font::getGlyphsAndAdvancesForComplexText(const TextRunPaintInfo& runInfo, 
     return 0;
 }
 
-float Font::floatWidthForComplexText(const TextRun& run, HashSet<const SimpleFontData*>* /* fallbackFonts */, GlyphOverflow* glyphOverflow) const
+float Font::floatWidthForComplexText(const TextRun& run, HashSet<const SimpleFontData*>* /* fallbackFonts */, IntRectExtent* glyphBounds) const
 {
     HarfBuzzShaper shaper(this, run);
     if (!shaper.shape())
         return 0;
 
-    if (glyphOverflow) {
-        glyphOverflow->top = std::max<int>(glyphOverflow->top, floorf(-shaper.glyphBoundingBox().top()) - (glyphOverflow->computeBounds ? 0 : fontMetrics().ascent()));
-        glyphOverflow->bottom = std::max<int>(glyphOverflow->bottom, ceilf(shaper.glyphBoundingBox().bottom()) - (glyphOverflow->computeBounds ? 0 : fontMetrics().descent()));
-        glyphOverflow->left = std::max<int>(0, floorf(-shaper.glyphBoundingBox().left()));
-        glyphOverflow->right = std::max<int>(0, ceilf(shaper.glyphBoundingBox().right() - shaper.totalWidth()));
-    }
+    glyphBounds->setTop(floorf(-shaper.glyphBoundingBox().top()));
+    glyphBounds->setBottom(ceilf(shaper.glyphBoundingBox().bottom()));
+    glyphBounds->setLeft(std::max<int>(0, floorf(-shaper.glyphBoundingBox().left())));
+    glyphBounds->setRight(std::max<int>(0, ceilf(shaper.glyphBoundingBox().right() - shaper.totalWidth())));
+
     return shaper.totalWidth();
 }
 

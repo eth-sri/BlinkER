@@ -3,39 +3,38 @@
 function service_worker_test(url, description) {
     var t = async_test(description);
     t.step(function() {
+        var scope = 'nonexistent';
+        service_worker_unregister_and_register(t, url, scope).then(t.step_func(onRegistered));
 
-        navigator.serviceWorker.register(url, {scope:'nonexistent'}).then(
-            t.step_func(function(worker) {
-                var messageChannel = new MessageChannel();
-                messageChannel.port1.onmessage = t.step_func(onMessage);
-                worker.postMessage({port:messageChannel.port2}, [messageChannel.port2]);
-            }),
-            unreached_rejection(t, 'Registration should succeed, but failed')
-        );
+        function onRegistered(worker) {
+            var messageChannel = new MessageChannel();
+            messageChannel.port1.onmessage = t.step_func(onMessage);
+            worker.postMessage({port:messageChannel.port2}, [messageChannel.port2]);
+        }
 
         function onMessage(e) {
             assert_equals(e.data, 'pass');
-            t.done();
+            service_worker_unregister_and_done(t, scope);
         }
     });
 }
 
-function service_worker_unregister_and_register(test, url, scope, onregister) {
+function service_worker_unregister_and_register(test, url, scope) {
     var options = scope ? { scope: scope } : {};
     return navigator.serviceWorker.unregister(scope).then(
-        // FIXME: Wrap this with test.step_func once testharness.js is updated.
-        function() {
+        test.step_func(function() {
             return navigator.serviceWorker.register(url, options);
-        },
+        }),
         unreached_rejection(test, 'Unregister should not fail')
-    ).then(
-        test.step_func(onregister),
+    ).then(test.step_func(function(worker) {
+          return Promise.resolve(worker);
+        }),
         unreached_rejection(test, 'Registration should not fail')
     );
 }
 
 function service_worker_unregister_and_done(test, scope) {
-    navigator.serviceWorker.unregister(scope).then(
+    return navigator.serviceWorker.unregister(scope).then(
         test.done.bind(test),
         unreached_rejection(test, 'Unregister should not fail'));
 }
@@ -49,14 +48,19 @@ function unreached_rejection(test, prefix) {
 
 // FIXME: Clean up the iframe when the test completes.
 function with_iframe(url, f) {
-  var frame = document.createElement('iframe');
-  frame.src = url;
-  frame.onload = function() {
-      f(frame);
-  };
-  document.body.appendChild(frame);
+    return new Promise(function(resolve, reject) {
+        var frame = document.createElement('iframe');
+        frame.src = url;
+        frame.onload = function() {
+            if (f) {
+              f(frame);
+            }
+            resolve(frame);
+        };
+        document.body.appendChild(frame);
+    });
 }
 
 function normalizeURL(url) {
-  return new URL(url, document.location).toString();
+  return new URL(url, document.location).toString().replace(/#.*$/, '');
 }

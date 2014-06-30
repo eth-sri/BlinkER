@@ -38,11 +38,14 @@ NUMERIC_TYPES = (INTEGER_TYPES | frozenset([
 PRIMITIVE_TYPES = (frozenset(['boolean']) | NUMERIC_TYPES)
 BASIC_TYPES = (PRIMITIVE_TYPES | frozenset([
     # Built-in, non-composite, non-object data types
-    # http://www.w3.org/TR/WebIDL/#idl-types
+    # http://heycam.github.io/webidl/#idl-types
     'DOMString',
+    'ByteString',
     'Date',
-    # http://www.w3.org/TR/WebIDL/#es-type-mapping
+    # http://heycam.github.io/webidl/#es-type-mapping
     'void',
+    # http://encoding.spec.whatwg.org/#type-scalarvaluestring
+    'ScalarValueString',
 ]))
 TYPE_NAMES = {
     # http://heycam.github.io/webidl/#dfn-type-name
@@ -62,8 +65,18 @@ TYPE_NAMES = {
     'unrestricted double': 'UnrestrictedDouble',
     'DOMString': 'String',
     'ByteString': 'ByteString',
+    'ScalarValueString': 'ScalarValueString',
     'object': 'Object',
+    'Date': 'Date',
 }
+
+STRING_TYPES = frozenset([
+    # http://heycam.github.io/webidl/#es-interface-call (step 10.11)
+    # (Interface object [[Call]] method's string types.)
+    'String',
+    'ByteString',
+    'ScalarValueString',
+])
 
 
 ################################################################################
@@ -190,8 +203,22 @@ class IdlType(object):
                    self.name == 'Promise')  # Promise will be basic in future
 
     @property
+    def is_string_type(self):
+        return self.base_type_name in STRING_TYPES
+
+    @property
+    def may_raise_exception_on_conversion(self):
+        return (self.is_integer_type or
+                self.name in ('ByteString', 'ScalarValueString'))
+
+    @property
     def is_union_type(self):
         return isinstance(self, IdlUnionType)
+
+    @property
+    def base_type_name(self):
+        base_type = self.base_type
+        return TYPE_NAMES.get(base_type, base_type)
 
     @property
     def name(self):
@@ -199,8 +226,7 @@ class IdlType(object):
 
         http://heycam.github.io/webidl/#dfn-type-name
         """
-        base_type = self.base_type
-        base_type_name = TYPE_NAMES.get(base_type, base_type)
+        base_type_name = self.base_type_name
         if self.is_array:
             return base_type_name + 'Array'
         if self.is_sequence:

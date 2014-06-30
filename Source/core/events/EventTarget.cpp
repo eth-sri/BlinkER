@@ -32,14 +32,18 @@
 #include "config.h"
 #include "core/events/EventTarget.h"
 
-#include "RuntimeEnabledFeatures.h"
 #include "bindings/v8/ExceptionState.h"
+#include "bindings/v8/V8DOMActivityLogger.h"
+#include "core/dom/ExceptionCode.h"
+#include "core/dom/NoEventDispatchAssertion.h"
+#include "core/editing/Editor.h"
 #include "core/eventracer/EventRacerContext.h"
 #include "core/eventracer/EventRacerLog.h"
 #include "core/events/Event.h"
-#include "core/dom/ExceptionCode.h"
 #include "core/inspector/InspectorInstrumentation.h"
-#include "core/frame/DOMWindow.h"
+#include "core/frame/LocalDOMWindow.h"
+#include "core/frame/UseCounter.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/Vector.h"
 
@@ -89,7 +93,7 @@ Node* EventTarget::toNode()
     return 0;
 }
 
-DOMWindow* EventTarget::toDOMWindow()
+LocalDOMWindow* EventTarget::toDOMWindow()
 {
     return 0;
 }
@@ -99,7 +103,7 @@ MessagePort* EventTarget::toMessagePort()
     return 0;
 }
 
-inline DOMWindow* EventTarget::executingWindow()
+inline LocalDOMWindow* EventTarget::executingWindow()
 {
     if (ExecutionContext* context = executionContext())
         return context->executingWindow();
@@ -112,12 +116,16 @@ bool EventTarget::addEventListener(const AtomicString& eventType, PassRefPtr<Eve
     // generated bindings), but breaks legacy content. http://crbug.com/249598
     if (!listener)
         return false;
-    EventListener* eventListener = listener.get();
-    if (ensureEventTargetData().eventListenerMap.add(eventType, listener, useCapture)) {
-        InspectorInstrumentation::didAddEventListener(this, eventType, eventListener, useCapture);
-        return true;
+
+    V8DOMActivityLogger* activityLogger = V8DOMActivityLogger::currentActivityLoggerIfIsolatedWorld();
+    if (activityLogger) {
+        Vector<String> argv;
+        argv.append(toNode() ? toNode()->nodeName() : interfaceName());
+        argv.append(eventType);
+        activityLogger->logEvent("blinkAddEventListener", argv.size(), argv.data());
     }
-    return false;
+
+    return ensureEventTargetData().eventListenerMap.add(eventType, listener, useCapture);
 }
 
 bool EventTarget::removeEventListener(const AtomicString& eventType, EventListener* listener, bool useCapture)
@@ -128,10 +136,8 @@ bool EventTarget::removeEventListener(const AtomicString& eventType, EventListen
 
     size_t indexOfRemovedListener;
 
-    RefPtr<EventListener> protect(listener);
     if (!d->eventListenerMap.remove(eventType, listener, useCapture, indexOfRemovedListener))
         return false;
-    InspectorInstrumentation::didRemoveEventListener(this, eventType, listener, useCapture);
 
     // Notify firing events planning to invoke the listener at 'index' that
     // they have one less listener to invoke.
@@ -265,7 +271,7 @@ void EventTarget::countLegacyEvents(const AtomicString& legacyTypeName, EventLis
     }
 
     if (shouldCount) {
-        if (DOMWindow* executingWindow = this->executingWindow()) {
+        if (LocalDOMWindow* executingWindow = this->executingWindow()) {
             if (legacyListenersVector) {
                 if (listenersVector)
                     UseCounter::count(executingWindow->document(), prefixedAndUnprefixedFeature);
@@ -283,7 +289,7 @@ bool EventTarget::fireEventListeners(Event* event)
     ASSERT(!NoEventDispatchAssertion::isEventDispatchForbidden());
     ASSERT(event && !event->type().isEmpty());
 
-    RefPtr<EventTarget> protect = this;
+    RefPtrWillBeRawPtr<EventTarget> protect(this);
 
     EventTargetData* d = eventTargetData();
     if (!d)
@@ -343,6 +349,7 @@ bool EventTarget::fireEventListeners(Event* event)
         d->eventListenerMap.setEventAction(event->type(), thisAction);
     }
 
+    Editor::countEvent(executionContext(), event);
     countLegacyEvents(legacyTypeName, listenersVector, legacyListenersVector);
     return !event->defaultPrevented();
 }
@@ -358,14 +365,20 @@ void EventTarget::fireEventListeners(Event* event, EventTargetData* d, EventList
     // new event listeners.
 
     if (event->type() == EventTypeNames::beforeunload) {
-        if (DOMWindow* executingWindow = this->executingWindow()) {
+        if (LocalDOMWindow* executingWindow = this->executingWindow()) {
             if (executingWindow->top())
                 UseCounter::count(executingWindow->document(), UseCounter::SubFrameBeforeUnloadFired);
             UseCounter::count(executingWindow->document(), UseCounter::DocumentBeforeUnloadFired);
         }
     } else if (event->type() == EventTypeNames::unload) {
-        if (DOMWindow* executingWindow = this->executingWindow())
+        if (LocalDOMWindow* executingWindow = this->executingWindow())
             UseCounter::count(executingWindow->document(), UseCounter::DocumentUnloadFired);
+    } else if (event->type() == EventTypeNames::DOMFocusIn || event->type() == EventTypeNames::DOMFocusOut) {
+        if (LocalDOMWindow* executingWindow = this->executingWindow())
+            UseCounter::count(executingWindow->document(), UseCounter::DOMFocusInOutEvent);
+    } else if (event->type() == EventTypeNames::focusin || event->type() == EventTypeNames::focusout) {
+        if (LocalDOMWindow* executingWindow = this->executingWindow())
+            UseCounter::count(executingWindow->document(), UseCounter::FocusInOutEvent);
     }
 
     size_t i = 0;
@@ -389,7 +402,7 @@ void EventTarget::fireEventListeners(Event* event, EventTargetData* d, EventList
         if (!context)
             break;
 
-        InspectorInstrumentationCookie cookie = InspectorInstrumentation::willHandleEvent(this, event->type(), registeredListener.listener.get(), registeredListener.useCapture);
+        InspectorInstrumentationCookie cookie = InspectorInstrumentation::willHandleEvent(this, event, registeredListener.listener.get(), registeredListener.useCapture);
         if (log) {
             ASSERT(log->hasAction());
             if (registeredListener.action && registeredListener.action != log->getCurrentAction()) {
@@ -432,7 +445,6 @@ void EventTarget::removeAllEventListeners()
     if (!d)
         return;
     d->eventListenerMap.clear();
-    InspectorInstrumentation::didRemoveAllEventListeners(this);
 
     // Notify firing events planning to invoke the listener at 'index' that
     // they have one less listener to invoke.

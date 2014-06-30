@@ -29,6 +29,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/rendering/HitTestResult.h"
 #include "core/rendering/InlineFlowBox.h"
+#include "core/rendering/PaintInfo.h"
 #include "core/rendering/PointerEventsHitRules.h"
 #include "core/rendering/RenderInline.h"
 #include "core/rendering/RenderTheme.h"
@@ -42,8 +43,6 @@
 #include "platform/fonts/FontCache.h"
 #include "platform/graphics/DrawLooperBuilder.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
-
-using namespace std;
 
 namespace WebCore {
 
@@ -146,8 +145,8 @@ FloatRect SVGInlineTextBox::selectionRectForTextFragment(const SVGTextFragment& 
 LayoutRect SVGInlineTextBox::localSelectionRect(int startPosition, int endPosition)
 {
     int boxStart = start();
-    startPosition = max(startPosition - boxStart, 0);
-    endPosition = min(endPosition - boxStart, static_cast<int>(len()));
+    startPosition = std::max(startPosition - boxStart, 0);
+    endPosition = std::min(endPosition - boxStart, static_cast<int>(len()));
     if (startPosition >= endPosition)
         return LayoutRect();
 
@@ -595,7 +594,7 @@ void SVGInlineTextBox::paintDecorationWithStyle(GraphicsContext* context, TextDe
         stateSaver.save();
         width *= scalingFactor;
         decorationOrigin.scale(scalingFactor, scalingFactor);
-        context->scale(FloatSize(1 / scalingFactor, 1 / scalingFactor));
+        context->scale(1 / scalingFactor, 1 / scalingFactor);
     }
 
     decorationOrigin.move(0, -scaledFontMetrics.floatAscent() + positionOffsetForDecoration(decoration, scaledFontMetrics, thickness));
@@ -631,7 +630,7 @@ void SVGInlineTextBox::paintTextWithShadows(GraphicsContext* context, RenderStyl
         textOrigin.scale(scalingFactor, scalingFactor);
         textSize.scale(scalingFactor);
         context->save();
-        context->scale(FloatSize(1 / scalingFactor, 1 / scalingFactor));
+        context->scale(1 / scalingFactor, 1 / scalingFactor);
     }
 
     if (hasShadow) {
@@ -727,8 +726,8 @@ void SVGInlineTextBox::paintTextMatchMarker(GraphicsContext* context, const Floa
 
         SVGInlineTextBox* textBox = toSVGInlineTextBox(box);
 
-        int markerStartPosition = max<int>(marker->startOffset() - textBox->start(), 0);
-        int markerEndPosition = min<int>(marker->endOffset() - textBox->start(), textBox->len());
+        int markerStartPosition = std::max<int>(marker->startOffset() - textBox->start(), 0);
+        int markerEndPosition = std::min<int>(marker->endOffset() - textBox->start(), textBox->len());
 
         if (markerStartPosition >= markerEndPosition)
             continue;

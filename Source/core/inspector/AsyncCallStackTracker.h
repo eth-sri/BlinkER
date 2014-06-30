@@ -41,6 +41,7 @@
 
 namespace WebCore {
 
+class Event;
 class EventListener;
 class EventTarget;
 class ExecutionContext;
@@ -87,11 +88,9 @@ public:
     void didCancelAnimationFrame(ExecutionContext*, int callbackId);
     void willFireAnimationFrame(ExecutionContext*, int callbackId);
 
-    void didAddEventListener(EventTarget*, const AtomicString& eventType, EventListener*, bool useCapture, const ScriptValue& callFrames);
-    void didRemoveEventListener(EventTarget*, const AtomicString& eventType, EventListener*, bool useCapture);
-    void didRemoveAllEventListeners(EventTarget*);
-    void willHandleEvent(EventTarget*, const AtomicString& eventType, EventListener*, bool useCapture);
-
+    void didEnqueueEvent(EventTarget*, Event*, const ScriptValue& callFrames);
+    void didRemoveEvent(EventTarget*, Event*);
+    void willHandleEvent(EventTarget*, Event*, EventListener*, bool useCapture);
     void willLoadXHR(XMLHttpRequest*, const ScriptValue& callFrames);
 
     void didEnqueueMutationRecord(ExecutionContext*, MutationObserver*, const ScriptValue& callFrames);
@@ -103,7 +102,7 @@ public:
     void clear();
 
 private:
-    void willHandleXHREvent(XMLHttpRequest*, EventTarget*, const AtomicString& eventType);
+    void willHandleXHREvent(XMLHttpRequest*, EventTarget*, Event*);
 
     PassRefPtr<AsyncCallChain> createAsyncCallChain(const String& description, const ScriptValue& callFrames);
     void setCurrentAsyncCallChain(PassRefPtr<AsyncCallChain>);

@@ -1,3 +1,0 @@
-
-PASS Check that upload 'load' events are delivered and have expected values. 
-

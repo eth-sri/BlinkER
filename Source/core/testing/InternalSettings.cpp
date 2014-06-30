@@ -25,15 +25,14 @@
  */
 
 #include "config.h"
-#include "InternalSettings.h"
+#include "core/testing/InternalSettings.h"
 
-#include "RuntimeEnabledFeatures.h"
 #include "bindings/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/frame/Settings.h"
 #include "core/inspector/InspectorController.h"
 #include "core/page/Page.h"
-#include "platform/ColorChooser.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/Supplementable.h"
 #include "platform/text/LocaleToScriptMapping.h"
 
@@ -60,7 +59,6 @@ namespace WebCore {
 InternalSettings::Backup::Backup(Settings* settings)
     : m_originalCSSExclusionsEnabled(RuntimeEnabledFeatures::cssExclusionsEnabled())
     , m_originalAuthorShadowDOMForAnyElementEnabled(RuntimeEnabledFeatures::authorShadowDOMForAnyElementEnabled())
-    , m_originalStyleScoped(RuntimeEnabledFeatures::styleScopedEnabled())
     , m_originalCSP(RuntimeEnabledFeatures::experimentalContentSecurityPolicyFeaturesEnabled())
     , m_originalOverlayScrollbarsEnabled(RuntimeEnabledFeatures::overlayScrollbarsEnabled())
     , m_originalEditingBehavior(settings->editingBehaviorType())
@@ -73,7 +71,7 @@ InternalSettings::Backup::Backup(Settings* settings)
     , m_imagesEnabled(settings->imagesEnabled())
     , m_defaultVideoPosterURL(settings->defaultVideoPosterURL())
     , m_originalLayerSquashingEnabled(settings->layerSquashingEnabled())
-    , m_originalPasswordGenerationDecorationEnabled(settings->passwordGenerationDecorationEnabled())
+    , m_originalPseudoClassesInMatchingCriteriaInAuthorShadowTreesEnabled(RuntimeEnabledFeatures::pseudoClassesInMatchingCriteriaInAuthorShadowTreesEnabled())
 {
 }
 
@@ -81,7 +79,6 @@ void InternalSettings::Backup::restoreTo(Settings* settings)
 {
     RuntimeEnabledFeatures::setCSSExclusionsEnabled(m_originalCSSExclusionsEnabled);
     RuntimeEnabledFeatures::setAuthorShadowDOMForAnyElementEnabled(m_originalAuthorShadowDOMForAnyElementEnabled);
-    RuntimeEnabledFeatures::setStyleScopedEnabled(m_originalStyleScoped);
     RuntimeEnabledFeatures::setExperimentalContentSecurityPolicyFeaturesEnabled(m_originalCSP);
     RuntimeEnabledFeatures::setOverlayScrollbarsEnabled(m_originalOverlayScrollbarsEnabled);
     settings->setEditingBehaviorType(m_originalEditingBehavior);
@@ -94,8 +91,8 @@ void InternalSettings::Backup::restoreTo(Settings* settings)
     settings->setImagesEnabled(m_imagesEnabled);
     settings->setDefaultVideoPosterURL(m_defaultVideoPosterURL);
     settings->setLayerSquashingEnabled(m_originalLayerSquashingEnabled);
-    settings->setPasswordGenerationDecorationEnabled(m_originalPasswordGenerationDecorationEnabled);
     settings->genericFontFamilySettings().reset();
+    RuntimeEnabledFeatures::setPseudoClassesInMatchingCriteriaInAuthorShadowTreesEnabled(m_originalPseudoClassesInMatchingCriteriaInAuthorShadowTreesEnabled);
 }
 
 #if ENABLE(OILPAN)
@@ -114,7 +111,7 @@ public:
     explicit InternalSettingsWrapper(Page& page)
         : m_internalSettings(InternalSettings::create(page)) { }
     virtual ~InternalSettingsWrapper() { m_internalSettings->hostDestroyed(); }
-#if !ASSERT_DISABLED
+#if ASSERT_ENABLED
     virtual bool isRefCountedWrapper() const OVERRIDE { return true; }
 #endif
     InternalSettings* internalSettings() const { return m_internalSettings.get(); }
@@ -176,14 +173,14 @@ void InternalSettings::setAuthorShadowDOMForAnyElementEnabled(bool isEnabled)
     RuntimeEnabledFeatures::setAuthorShadowDOMForAnyElementEnabled(isEnabled);
 }
 
-void InternalSettings::setStyleScopedEnabled(bool enabled)
-{
-    RuntimeEnabledFeatures::setStyleScopedEnabled(enabled);
-}
-
 void InternalSettings::setExperimentalContentSecurityPolicyFeaturesEnabled(bool enabled)
 {
     RuntimeEnabledFeatures::setExperimentalContentSecurityPolicyFeaturesEnabled(enabled);
+}
+
+void InternalSettings::setPseudoClassesInMatchingCriteriaInAuthorShadowTreesEnabled(bool enabled)
+{
+    RuntimeEnabledFeatures::setPseudoClassesInMatchingCriteriaInAuthorShadowTreesEnabled(enabled);
 }
 
 void InternalSettings::setOverlayScrollbarsEnabled(bool enabled)
@@ -335,12 +332,6 @@ void InternalSettings::setDefaultVideoPosterURL(const String& url, ExceptionStat
 {
     InternalSettingsGuardForSettings();
     settings()->setDefaultVideoPosterURL(url);
-}
-
-void InternalSettings::setPasswordGenerationDecorationEnabled(bool enabled, ExceptionState& exceptionState)
-{
-    InternalSettingsGuardForSettings();
-    settings()->setPasswordGenerationDecorationEnabled(enabled);
 }
 
 void InternalSettings::trace(Visitor* visitor)

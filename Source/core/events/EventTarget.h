@@ -33,31 +33,20 @@
 #define EventTarget_h
 
 #include "core/events/EventListenerMap.h"
-#include "core/events/EventTargetModules.h" // TODO: remove this later http://crbug.com/371581.
 #include "core/events/ThreadLocalEventNames.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Forward.h"
 
 namespace WebCore {
 
-class ApplicationCache;
-class DOMWindow;
-class DedicatedWorkerGlobalScope;
+class LocalDOMWindow;
 class Event;
 class EventAction;
 class EventRacerLog;
-class EventListener;
-class EventSource;
 class ExceptionState;
-class FileReader;
-class MediaController;
 class MessagePort;
 class Node;
-class SharedWorker;
-class SharedWorkerGlobalScope;
 class TextTrack;
 class TextTrackCue;
-class Worker;
 class XMLHttpRequest;
 class XMLHttpRequestUpload;
 
@@ -85,16 +74,18 @@ public:
     OwnPtr<FiringEventIteratorVector> firingEventIterators;
 };
 
-class EventTarget {
+class EventTarget : public WillBeGarbageCollectedMixin {
 public:
+#if !ENABLE(OILPAN)
     void ref() { refEventTarget(); }
     void deref() { derefEventTarget(); }
+#endif
 
     virtual const AtomicString& interfaceName() const = 0;
     virtual ExecutionContext* executionContext() const = 0;
 
     virtual Node* toNode();
-    virtual DOMWindow* toDOMWindow();
+    virtual LocalDOMWindow* toDOMWindow();
     virtual MessagePort* toMessagePort();
 
     // FIXME: first 2 args to addEventListener and removeEventListener should
@@ -127,6 +118,8 @@ public:
     virtual PassRefPtr<EventRacerLog> getCreatorEventRacerLog() const = 0;
     virtual EventAction *getCreatorEventAction() const = 0;
 
+    virtual void trace(Visitor*) { }
+
 protected:
     virtual ~EventTarget();
 
@@ -135,11 +128,13 @@ protected:
     virtual EventTargetData& ensureEventTargetData() = 0;
 
 private:
+#if !ENABLE(OILPAN)
     // Subclasses should likely not override these themselves; instead, they should use the REFCOUNTED_EVENT_TARGET() macro.
     virtual void refEventTarget() = 0;
     virtual void derefEventTarget() = 0;
+#endif
 
-    DOMWindow* executingWindow();
+    LocalDOMWindow* executingWindow();
     void fireEventListeners(Event*, EventTargetData*, EventListenerVector&);
     void countLegacyEvents(const AtomicString& legacyTypeName, EventListenerVector*, EventListenerVector*);
 
@@ -151,7 +146,7 @@ private:
 class EventTargetWithInlineData : public EventTarget {
 public:
     virtual void setCreatorEventRacerContext(PassRefPtr<EventRacerLog>, EventAction *) OVERRIDE FINAL;
-    virtual PassRefPtr<EventRacerLog> getCreatorEventRacerLog() OVERRIDE FINAL const;
+    virtual PassRefPtr<EventRacerLog> getCreatorEventRacerLog() const OVERRIDE FINAL;
     virtual EventAction *getCreatorEventAction() const OVERRIDE FINAL { return m_creatorAction; }
 
 protected:
@@ -239,6 +234,15 @@ inline bool EventTarget::hasCapturingEventListeners(const AtomicString& eventTyp
 
 } // namespace WebCore
 
+#if ENABLE(OILPAN)
+#define DEFINE_EVENT_TARGET_REFCOUNTING(baseClass) \
+public: \
+    using baseClass::ref; \
+    using baseClass::deref; \
+private: \
+    typedef int thisIsHereToForceASemiColonAfterThisEventTargetMacro
+#define DEFINE_EVENT_TARGET_REFCOUNTING_WILL_BE_REMOVED(baseClass)
+#else
 #define DEFINE_EVENT_TARGET_REFCOUNTING(baseClass) \
 public: \
     using baseClass::ref; \
@@ -247,10 +251,12 @@ private: \
     virtual void refEventTarget() OVERRIDE FINAL { ref(); } \
     virtual void derefEventTarget() OVERRIDE FINAL { deref(); } \
     typedef int thisIsHereToForceASemiColonAfterThisEventTargetMacro
+#define DEFINE_EVENT_TARGET_REFCOUNTING_WILL_BE_REMOVED(baseClass) DEFINE_EVENT_TARGET_REFCOUNTING(baseClass)
+#endif
 
 // Use this macro if your EventTarget subclass is also a subclass of WTF::RefCounted.
 // A ref-counted class that uses a different method of refcounting should use DEFINE_EVENT_TARGET_REFCOUNTING directly.
 // Both of these macros are meant to be placed just before the "public:" section of the class declaration.
-#define REFCOUNTED_EVENT_TARGET(className) DEFINE_EVENT_TARGET_REFCOUNTING(RefCounted<className>)
+#define REFCOUNTED_EVENT_TARGET(className) DEFINE_EVENT_TARGET_REFCOUNTING(RefCountedWillBeRefCountedGarbageCollected<className>)
 
 #endif // EventTarget_h

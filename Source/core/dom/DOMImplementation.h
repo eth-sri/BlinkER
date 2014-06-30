@@ -25,12 +25,10 @@
 #define DOMImplementation_h
 
 #include "core/dom/Document.h"
-#include "wtf/Forward.h"
 #include "wtf/PassRefPtr.h"
 
 namespace WebCore {
 
-class CSSStyleSheet;
 class Document;
 class DocumentInit;
 class DocumentType;
@@ -58,14 +56,14 @@ public:
     static bool hasFeature(const String& feature, const String& version);
     bool hasFeatureForBindings(const String& feature, const String& version);
     PassRefPtrWillBeRawPtr<DocumentType> createDocumentType(const AtomicString& qualifiedName, const String& publicId, const String& systemId, ExceptionState&);
-    PassRefPtr<XMLDocument> createDocument(const AtomicString& namespaceURI, const AtomicString& qualifiedName, DocumentType*, ExceptionState&);
+    PassRefPtrWillBeRawPtr<XMLDocument> createDocument(const AtomicString& namespaceURI, const AtomicString& qualifiedName, DocumentType*, ExceptionState&);
 
     // From the HTMLDOMImplementation interface
-    PassRefPtr<HTMLDocument> createHTMLDocument(const String& title);
+    PassRefPtrWillBeRawPtr<HTMLDocument> createHTMLDocument(const String& title);
 
     // Other methods (not part of DOM)
-    static PassRefPtr<Document> createDocument(const String& mimeType, LocalFrame*, const KURL&, bool inViewSourceMode);
-    static PassRefPtr<Document> createDocument(const String& mimeType, const DocumentInit&, bool inViewSourceMode);
+    static PassRefPtrWillBeRawPtr<Document> createDocument(const String& mimeType, LocalFrame*, const KURL&, bool inViewSourceMode);
+    static PassRefPtrWillBeRawPtr<Document> createDocument(const String& mimeType, const DocumentInit&, bool inViewSourceMode);
 
     static bool isXMLMIMEType(const String&);
     static bool isTextMIMEType(const String&);

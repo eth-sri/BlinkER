@@ -177,7 +177,7 @@ bool TextAutosizer::isApplicable() const
         && m_document->settings()->textAutosizingEnabled()
         && m_document->page()
         && m_document->page()->mainFrame()
-        && m_document->page()->mainFrame()->loader().stateMachine()->committedFirstRealDocumentLoad();
+        && m_document->page()->deprecatedLocalMainFrame()->loader().stateMachine()->committedFirstRealDocumentLoad();
 }
 
 void TextAutosizer::recalculateMultipliers()
@@ -185,7 +185,7 @@ void TextAutosizer::recalculateMultipliers()
     if (!isApplicable() && !m_previouslyAutosized)
         return;
 
-    RenderObject* renderer = m_document->renderer();
+    RenderObject* renderer = m_document->renderView();
     while (renderer) {
         if (renderer->style() && renderer->style()->textAutosizingMultiplier() != 1)
             setMultiplier(renderer, 1);
@@ -196,12 +196,12 @@ void TextAutosizer::recalculateMultipliers()
 
 bool TextAutosizer::processSubtree(RenderObject* layoutRoot)
 {
-    TRACE_EVENT0("webkit", "TextAutosizer: check if needed");
+    TRACE_EVENT0("blink", "TextAutosizer: check if needed");
 
     if (!isApplicable() || layoutRoot->view()->document().printing())
         return false;
 
-    LocalFrame* mainFrame = m_document->page()->mainFrame();
+    LocalFrame* mainFrame = m_document->page()->deprecatedLocalMainFrame();
     TextAutosizingWindowInfo windowInfo;
 
     // Window area, in logical (density-independent) pixels.
@@ -212,8 +212,9 @@ bool TextAutosizer::processSubtree(RenderObject* layoutRoot)
     // Largest area of block that can be visible at once (assuming the main
     // frame doesn't get scaled to less than overview scale), in CSS pixels.
     windowInfo.minLayoutSize = mainFrame->view()->layoutSize();
-    for (LocalFrame* frame = m_document->frame(); frame; frame = frame->tree().parent())
-        windowInfo.minLayoutSize = windowInfo.minLayoutSize.shrunkTo(frame->view()->layoutSize());
+    for (Frame* frame = m_document->frame(); frame; frame = frame->tree().parent()) {
+        windowInfo.minLayoutSize = windowInfo.minLayoutSize.shrunkTo(toLocalFrame(frame)->view()->layoutSize());
+    }
 
     // The layoutRoot could be neither a container nor a cluster, so walk up the tree till we find each of these.
     RenderBlock* container = layoutRoot->isRenderBlock() ? toRenderBlock(layoutRoot) : layoutRoot->containingBlock();
@@ -231,7 +232,7 @@ bool TextAutosizer::processSubtree(RenderObject* layoutRoot)
         std::numeric_limits<float>::infinity()) == 1.0f)
         return false;
 
-    TRACE_EVENT0("webkit", "TextAutosizer: process root cluster");
+    TRACE_EVENT0("blink", "TextAutosizer: process root cluster");
     UseCounter::count(*m_document, UseCounter::TextAutosizing);
 
     TextAutosizingClusterInfo clusterInfo(cluster);
@@ -260,7 +261,7 @@ float TextAutosizer::clusterMultiplier(WritingMode writingMode, const TextAutosi
     multiplier *= m_document->settings()->accessibilityFontScaleFactor();
 
     // If the page has a meta viewport or @viewport, don't apply the device scale adjustment.
-    const ViewportDescription& viewportDescription = m_document->page()->mainFrame()->document()->viewportDescription();
+    const ViewportDescription& viewportDescription = m_document->page()->deprecatedLocalMainFrame()->document()->viewportDescription();
     if (!viewportDescription.isSpecifiedByAuthor()) {
         float deviceScaleAdjustment = m_document->settings()->deviceScaleAdjustment();
         multiplier *= deviceScaleAdjustment;
@@ -464,34 +465,6 @@ void TextAutosizer::setMultiplierForList(RenderObject* renderer, float multiplie
         if (child->isListItem() && child->style()->textAutosizingMultiplier() == 1)
             setMultiplier(child, multiplier);
     }
-}
-
-float TextAutosizer::computeAutosizedFontSize(float specifiedSize, float multiplier)
-{
-    // Somewhat arbitrary "pleasant" font size.
-    const float pleasantSize = 16;
-
-    // Multiply fonts that the page author has specified to be larger than
-    // pleasantSize by less and less, until huge fonts are not increased at all.
-    // For specifiedSize between 0 and pleasantSize we directly apply the
-    // multiplier; hence for specifiedSize == pleasantSize, computedSize will be
-    // multiplier * pleasantSize. For greater specifiedSizes we want to
-    // gradually fade out the multiplier, so for every 1px increase in
-    // specifiedSize beyond pleasantSize we will only increase computedSize
-    // by gradientAfterPleasantSize px until we meet the
-    // computedSize = specifiedSize line, after which we stay on that line (so
-    // then every 1px increase in specifiedSize increases computedSize by 1px).
-    const float gradientAfterPleasantSize = 0.5;
-
-    float computedSize;
-    if (specifiedSize <= pleasantSize)
-        computedSize = multiplier * specifiedSize;
-    else {
-        computedSize = multiplier * pleasantSize + gradientAfterPleasantSize * (specifiedSize - pleasantSize);
-        if (computedSize < specifiedSize)
-            computedSize = specifiedSize;
-    }
-    return computedSize;
 }
 
 bool TextAutosizer::isAutosizingContainer(const RenderObject* renderer)
@@ -795,16 +768,16 @@ const RenderBlock* TextAutosizer::findDeepestBlockContainingAllText(const Render
     return containingBlock;
 }
 
-const RenderObject* TextAutosizer::findFirstTextLeafNotInCluster(const RenderBlock* parent, size_t& depth, TraversalDirection direction)
+const RenderObject* TextAutosizer::findFirstTextLeafNotInCluster(const RenderObject* parent, size_t& depth, TraversalDirection direction)
 {
     if (parent->isText())
         return parent;
 
     ++depth;
-    const RenderObject* child = (direction == FirstToLast) ? parent->firstChild() : parent->lastChild();
+    const RenderObject* child = (direction == FirstToLast) ? parent->slowFirstChild() : parent->slowLastChild();
     while (child) {
         if (!isAutosizingContainer(child) || !isIndependentDescendant(toRenderBlock(child))) {
-            const RenderObject* leaf = findFirstTextLeafNotInCluster(toRenderBlock(child), depth, direction);
+            const RenderObject* leaf = findFirstTextLeafNotInCluster(child, depth, direction);
             if (leaf)
                 return leaf;
         }

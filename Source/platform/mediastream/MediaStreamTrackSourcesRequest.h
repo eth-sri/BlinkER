@@ -26,11 +26,10 @@
 #ifndef MediaStreamTrackSourcesRequest_h
 #define MediaStreamTrackSourcesRequest_h
 
+#include "platform/heap/Handle.h"
 #include "public/platform/WebVector.h"
+#include "wtf/Forward.h"
 #include "wtf/PassOwnPtr.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
-#include "wtf/text/WTFString.h"
 
 namespace blink {
 class WebSourceInfo;
@@ -38,7 +37,7 @@ class WebSourceInfo;
 
 namespace WebCore {
 
-class MediaStreamTrackSourcesRequest : public RefCounted<MediaStreamTrackSourcesRequest> {
+class MediaStreamTrackSourcesRequest : public GarbageCollectedFinalized<MediaStreamTrackSourcesRequest> {
 public:
     class ExtraData {
     public:
@@ -52,6 +51,8 @@ public:
 
     ExtraData* extraData() const { return m_extraData.get(); }
     void setExtraData(PassOwnPtr<ExtraData> extraData) { m_extraData = extraData; }
+
+    virtual void trace(Visitor*) { }
 
 protected:
     MediaStreamTrackSourcesRequest() { }

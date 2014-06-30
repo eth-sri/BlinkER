@@ -28,6 +28,7 @@
 #include "core/html/forms/BaseChooserOnlyDateAndTimeInputType.h"
 
 #include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "core/dom/Document.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/frame/FrameHost.h"
 #include "core/html/HTMLDivElement.h"
@@ -39,7 +40,6 @@ namespace WebCore {
 
 BaseChooserOnlyDateAndTimeInputType::~BaseChooserOnlyDateAndTimeInputType()
 {
-    closeDateTimeChooser();
 }
 
 void BaseChooserOnlyDateAndTimeInputType::handleDOMActivateEvent(Event*)
@@ -61,7 +61,7 @@ void BaseChooserOnlyDateAndTimeInputType::createShadowSubtree()
 {
     DEFINE_STATIC_LOCAL(AtomicString, valueContainerPseudo, ("-webkit-date-and-time-value", AtomicString::ConstructFromLiteral));
 
-    RefPtr<HTMLDivElement> valueContainer = HTMLDivElement::create(element().document());
+    RefPtrWillBeRawPtr<HTMLDivElement> valueContainer = HTMLDivElement::create(element().document());
     valueContainer->setShadowPseudoId(valueContainerPseudo);
     element().userAgentShadowRoot()->appendChild(valueContainer.get());
     updateView();
@@ -140,6 +140,13 @@ void BaseChooserOnlyDateAndTimeInputType::accessKeyAction(bool sendMouseEvents)
 {
     BaseDateAndTimeInputType::accessKeyAction(sendMouseEvents);
     BaseClickableWithKeyInputType::accessKeyAction(element(), sendMouseEvents);
+}
+
+void BaseChooserOnlyDateAndTimeInputType::trace(Visitor* visitor)
+{
+    visitor->trace(m_dateTimeChooser);
+    BaseDateAndTimeInputType::trace(visitor);
+    DateTimeChooserClient::trace(visitor);
 }
 
 }

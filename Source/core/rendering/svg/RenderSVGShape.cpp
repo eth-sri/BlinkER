@@ -26,16 +26,15 @@
  */
 
 #include "config.h"
-
 #include "core/rendering/svg/RenderSVGShape.h"
 
 #include "core/rendering/GraphicsContextAnnotator.h"
 #include "core/rendering/HitTestRequest.h"
-#include "core/rendering/LayoutRepainter.h"
 #include "core/rendering/PointerEventsHitRules.h"
 #include "core/rendering/svg/RenderSVGResourceMarker.h"
 #include "core/rendering/svg/RenderSVGResourceSolidColor.h"
 #include "core/rendering/svg/SVGPathData.h"
+#include "core/rendering/svg/SVGRenderSupport.h"
 #include "core/rendering/svg/SVGRenderingContext.h"
 #include "core/rendering/svg/SVGResources.h"
 #include "core/rendering/svg/SVGResourcesCache.h"
@@ -134,8 +133,6 @@ bool RenderSVGShape::strokeContains(const FloatPoint& point, bool requiresStroke
 
 void RenderSVGShape::layout()
 {
-    LayoutRepainter repainter(*this, SVGRenderSupport::checkForSVGRepaintDuringLayout(this) && selfNeedsLayout());
-
     bool updateCachedBoundariesInParents = false;
 
     if (m_needsShapeUpdate || m_needsBoundariesUpdate) {
@@ -160,7 +157,6 @@ void RenderSVGShape::layout()
     if (updateCachedBoundariesInParents)
         RenderSVGModelObject::setNeedsBoundariesUpdate();
 
-    repainter.repaintAfterLayout();
     clearNeedsLayout();
 }
 
@@ -241,7 +237,7 @@ void RenderSVGShape::paint(PaintInfo& paintInfo, const LayoutPoint&)
         || isShapeEmpty())
         return;
 
-    FloatRect boundingBox = repaintRectInLocalCoordinates();
+    FloatRect boundingBox = paintInvalidationRectInLocalCoordinates();
     if (!SVGRenderSupport::paintInfoIntersectsRepaintRect(boundingBox, m_localTransform, paintInfo))
         return;
 
@@ -295,7 +291,7 @@ void RenderSVGShape::paint(PaintInfo& paintInfo, const LayoutPoint&)
 // while transformed to our coord system, return local coords
 void RenderSVGShape::addFocusRingRects(Vector<IntRect>& rects, const LayoutPoint&, const RenderLayerModelObject*)
 {
-    IntRect rect = enclosingIntRect(repaintRectInLocalCoordinates());
+    IntRect rect = enclosingIntRect(paintInvalidationRectInLocalCoordinates());
     if (!rect.isEmpty())
         rects.append(rect);
 }

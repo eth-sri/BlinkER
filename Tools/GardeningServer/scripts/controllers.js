@@ -278,9 +278,6 @@ controllers.UnexpectedFailures = base.extends(FailureStreamController, {
             $(suspiciousCommit).bind('rollout', function() {
                 this.onRollout(commitData.revision, failure.testNameList());
             }.bind(this));
-            $(failure).bind('blame', function() {
-                this.onBlame(failure, commitData);
-            }.bind(this));
         }, this);
 
         return failure;
@@ -294,15 +291,6 @@ controllers.UnexpectedFailures = base.extends(FailureStreamController, {
     {
         return this._testFailures.length();
     },
-    onBlame: function(failure, commitData)
-    {
-        failure.pinToCommitData(commitData);
-        $('.action', failure).each(function() {
-            // FIXME: This isn't the right way of finding and disabling this action.
-            if (this.textContent == 'Blame')
-                this.disabled = true;
-        });
-    },
     onRollout: function(revision, testNameList)
     {
         checkout.rollout(revision, ui.rolloutReasonForTestNameList(testNameList)).then($.noop, function() {
@@ -310,19 +298,6 @@ controllers.UnexpectedFailures = base.extends(FailureStreamController, {
             alert(kCheckoutUnavailableMessage);
         });
     }
-});
-
-controllers.Failures = base.extends(FailureStreamController, {
-    _resultsFilter: results.expectedFailuresByTest,
-
-    _keyFor: function(failureAnalysis)
-    {
-        return base.dirName(failureAnalysis.testName);
-    },
-    _createFailureView: function(failureAnalysis)
-    {
-        return new ui.notifications.FailingTests();
-    },
 });
 
 controllers.FailingBuilders = base.extends(Object, {

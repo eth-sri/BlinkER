@@ -22,9 +22,8 @@
 
 #include "core/svg/SVGFECompositeElement.h"
 
-#include "SVGNames.h"
+#include "core/SVGNames.h"
 #include "platform/graphics/filters/FilterEffect.h"
-#include "core/svg/SVGElementInstance.h"
 #include "core/svg/graphics/filters/SVGFilterBuilder.h"
 
 namespace WebCore {
@@ -43,7 +42,7 @@ template<> const SVGEnumerationStringEntries& getStaticStringEntries<CompositeOp
     return entries;
 }
 
-SVGFECompositeElement::SVGFECompositeElement(Document& document)
+inline SVGFECompositeElement::SVGFECompositeElement(Document& document)
     : SVGFilterPrimitiveStandardAttributes(SVGNames::feCompositeTag, document)
     , m_k1(SVGAnimatedNumber::create(this, SVGNames::k1Attr, SVGNumber::create()))
     , m_k2(SVGAnimatedNumber::create(this, SVGNames::k2Attr, SVGNumber::create()))
@@ -63,6 +62,8 @@ SVGFECompositeElement::SVGFECompositeElement(Document& document)
     addToPropertyMap(m_in2);
     addToPropertyMap(m_svgOperator);
 }
+
+DEFINE_NODE_FACTORY(SVGFECompositeElement)
 
 bool SVGFECompositeElement::isSupportedAttribute(const QualifiedName& attrName)
 {

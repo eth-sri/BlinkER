@@ -28,9 +28,10 @@
 
 #include "core/rendering/svg/RenderSVGText.h"
 
+#include "core/editing/PositionWithAffinity.h"
 #include "core/rendering/HitTestRequest.h"
 #include "core/rendering/HitTestResult.h"
-#include "core/rendering/LayoutRepainter.h"
+#include "core/rendering/PaintInfo.h"
 #include "core/rendering/PointerEventsHitRules.h"
 #include "core/rendering/style/ShadowList.h"
 #include "core/rendering/svg/RenderSVGInline.h"
@@ -93,10 +94,10 @@ const RenderSVGText* RenderSVGText::locateRenderSVGTextAncestor(const RenderObje
     return toRenderSVGText(start);
 }
 
-void RenderSVGText::computeRectForRepaint(const RenderLayerModelObject* repaintContainer, LayoutRect& rect, bool fixed) const
+void RenderSVGText::mapRectToPaintInvalidationBacking(const RenderLayerModelObject* paintInvalidationContainer, LayoutRect& rect, bool fixed) const
 {
     FloatRect repaintRect = rect;
-    computeFloatRectForRepaint(repaintContainer, repaintRect, fixed);
+    computeFloatRectForPaintInvalidation(paintInvalidationContainer, repaintRect, fixed);
     rect = enclosingLayoutRect(repaintRect);
 }
 
@@ -324,8 +325,6 @@ void RenderSVGText::layout()
 
     subtreeStyleDidChange();
 
-    LayoutRepainter repainter(*this, SVGRenderSupport::checkForSVGRepaintDuringLayout(this));
-
     bool updateCachedBoundariesInParents = false;
     if (m_needsTransformUpdate) {
         m_localTransform = toSVGTextElement(node())->animatedLocalTransform();
@@ -412,7 +411,6 @@ void RenderSVGText::layout()
     if (updateCachedBoundariesInParents)
         RenderSVGBlock::setNeedsBoundariesUpdate();
 
-    repainter.repaintAfterLayout();
     clearNeedsLayout();
 }
 
@@ -506,7 +504,7 @@ FloatRect RenderSVGText::strokeBoundingBox() const
     return strokeBoundaries;
 }
 
-FloatRect RenderSVGText::repaintRectInLocalCoordinates() const
+FloatRect RenderSVGText::paintInvalidationRectInLocalCoordinates() const
 {
     FloatRect repaintRect = strokeBoundingBox();
     SVGRenderSupport::intersectRepaintRectWithResources(this, repaintRect);

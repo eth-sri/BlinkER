@@ -31,39 +31,41 @@
 #include "core/rendering/RenderLayer.h"
 #include "core/rendering/RenderLayerReflectionInfo.h"
 #include "core/rendering/RenderPart.h"
-#include "core/rendering/RenderView.h"
 #include "core/rendering/compositing/CompositedLayerMapping.h"
 #include "core/rendering/compositing/RenderLayerCompositor.h"
-#include "public/platform/Platform.h"
+#include "platform/TraceEvent.h"
 
 namespace WebCore {
 
-static bool shouldAppendLayer(const RenderLayer& layer)
-{
-    if (!RuntimeEnabledFeatures::overlayFullscreenVideoEnabled())
-        return true;
-    Node* node = layer.renderer()->node();
-    if (node && isHTMLMediaElement(*node) && toHTMLMediaElement(node)->isFullscreen())
-        return false;
-    return true;
-}
-
-GraphicsLayerUpdater::UpdateContext::UpdateContext(const UpdateContext& other, const RenderLayer& layer)
-    : m_compositingStackingContext(other.m_compositingStackingContext)
-    , m_compositingAncestor(other.compositingContainer(layer))
-{
-    CompositingState compositingState = layer.compositingState();
-    if (compositingState != NotComposited && compositingState != PaintsIntoGroupedBacking) {
-        m_compositingAncestor = &layer;
-        if (layer.stackingNode()->isStackingContext())
-            m_compositingStackingContext = &layer;
+class GraphicsLayerUpdater::UpdateContext {
+public:
+    UpdateContext()
+        : m_compositingStackingContext(0)
+        , m_compositingAncestor(0)
+    {
     }
-}
 
-const RenderLayer* GraphicsLayerUpdater::UpdateContext::compositingContainer(const RenderLayer& layer) const
-{
-    return layer.stackingNode()->isNormalFlowOnly() ? m_compositingAncestor : m_compositingStackingContext;
-}
+    UpdateContext(const UpdateContext& other, const RenderLayer& layer)
+        : m_compositingStackingContext(other.m_compositingStackingContext)
+        , m_compositingAncestor(other.compositingContainer(layer))
+    {
+        CompositingState compositingState = layer.compositingState();
+        if (compositingState != NotComposited && compositingState != PaintsIntoGroupedBacking) {
+            m_compositingAncestor = &layer;
+            if (layer.stackingNode()->isStackingContext())
+                m_compositingStackingContext = &layer;
+        }
+    }
+
+    const RenderLayer* compositingContainer(const RenderLayer& layer) const
+    {
+        return layer.stackingNode()->isNormalFlowOnly() ? m_compositingAncestor : m_compositingStackingContext;
+    }
+
+private:
+    const RenderLayer* m_compositingStackingContext;
+    const RenderLayer* m_compositingAncestor;
+};
 
 GraphicsLayerUpdater::GraphicsLayerUpdater()
     : m_needsRebuildTree(false)
@@ -74,112 +76,53 @@ GraphicsLayerUpdater::~GraphicsLayerUpdater()
 {
 }
 
-void GraphicsLayerUpdater::rebuildTree(RenderLayer& layer, GraphicsLayerVector& childLayersOfEnclosingLayer)
+void GraphicsLayerUpdater::update(RenderLayer& layer, Vector<RenderLayer*>& layersNeedingPaintInvalidation)
 {
-    // Make the layer compositing if necessary, and set up clipping and content layers.
-    // Note that we can only do work here that is independent of whether the descendant layers
-    // have been processed. computeCompositingRequirements() will already have done the repaint if necessary.
-
-    layer.stackingNode()->updateLayerListsIfNeeded();
-
-    const bool hasCompositedLayerMapping = layer.hasCompositedLayerMapping();
-    CompositedLayerMappingPtr currentCompositedLayerMapping = layer.compositedLayerMapping();
-
-    // If this layer has a compositedLayerMapping, then that is where we place subsequent children GraphicsLayers.
-    // Otherwise children continue to append to the child list of the enclosing layer.
-    GraphicsLayerVector layerChildren;
-    GraphicsLayerVector& childList = hasCompositedLayerMapping ? layerChildren : childLayersOfEnclosingLayer;
-
-#if !ASSERT_DISABLED
-    LayerListMutationDetector mutationChecker(layer.stackingNode());
-#endif
-
-    if (layer.stackingNode()->isStackingContext()) {
-        RenderLayerStackingNodeIterator iterator(*layer.stackingNode(), NegativeZOrderChildren);
-        while (RenderLayerStackingNode* curNode = iterator.next())
-            rebuildTree(*curNode->layer(), childList);
-
-        // If a negative z-order child is compositing, we get a foreground layer which needs to get parented.
-        if (hasCompositedLayerMapping && currentCompositedLayerMapping->foregroundLayer())
-            childList.append(currentCompositedLayerMapping->foregroundLayer());
-    }
-
-    RenderLayerStackingNodeIterator iterator(*layer.stackingNode(), NormalFlowChildren | PositiveZOrderChildren);
-    while (RenderLayerStackingNode* curNode = iterator.next())
-        rebuildTree(*curNode->layer(), childList);
-
-    if (hasCompositedLayerMapping) {
-        bool parented = false;
-        if (layer.renderer()->isRenderPart())
-            parented = RenderLayerCompositor::parentFrameContentLayers(toRenderPart(layer.renderer()));
-
-        if (!parented)
-            currentCompositedLayerMapping->parentForSublayers()->setChildren(layerChildren);
-
-        // If the layer has a clipping layer the overflow controls layers will be siblings of the clipping layer.
-        // Otherwise, the overflow control layers are normal children.
-        if (!currentCompositedLayerMapping->hasClippingLayer() && !currentCompositedLayerMapping->hasScrollingLayer()) {
-            if (GraphicsLayer* overflowControlLayer = currentCompositedLayerMapping->layerForHorizontalScrollbar()) {
-                overflowControlLayer->removeFromParent();
-                currentCompositedLayerMapping->parentForSublayers()->addChild(overflowControlLayer);
-            }
-
-            if (GraphicsLayer* overflowControlLayer = currentCompositedLayerMapping->layerForVerticalScrollbar()) {
-                overflowControlLayer->removeFromParent();
-                currentCompositedLayerMapping->parentForSublayers()->addChild(overflowControlLayer);
-            }
-
-            if (GraphicsLayer* overflowControlLayer = currentCompositedLayerMapping->layerForScrollCorner()) {
-                overflowControlLayer->removeFromParent();
-                currentCompositedLayerMapping->parentForSublayers()->addChild(overflowControlLayer);
-            }
-        }
-
-        if (shouldAppendLayer(layer))
-            childLayersOfEnclosingLayer.append(currentCompositedLayerMapping->childForSuperlayers());
-    }
+    TRACE_EVENT0("blink_rendering", "GraphicsLayerUpdater::update");
+    updateRecursive(layer, DoNotForceUpdate, UpdateContext(), layersNeedingPaintInvalidation);
+    layer.compositor()->updateRootLayerPosition();
 }
 
-void GraphicsLayerUpdater::update(RenderLayer& layer, UpdateType updateType, const UpdateContext& context)
+void GraphicsLayerUpdater::updateRecursive(RenderLayer& layer, UpdateType updateType, const UpdateContext& context, Vector<RenderLayer*>& layersNeedingPaintInvalidation)
 {
     if (layer.hasCompositedLayerMapping()) {
         CompositedLayerMappingPtr mapping = layer.compositedLayerMapping();
 
-        const RenderLayer* compositingContainer = context.compositingContainer(layer);
-        ASSERT(compositingContainer == layer.ancestorCompositingLayer());
-        if (mapping->updateRequiresOwnBackingStoreForAncestorReasons(compositingContainer))
-            updateType = ForceUpdate;
+        if (updateType == ForceUpdate || mapping->needsGraphicsLayerUpdate()) {
+            const RenderLayer* compositingContainer = context.compositingContainer(layer);
+            ASSERT(compositingContainer == layer.ancestorCompositingLayer());
 
-        // Note carefully: here we assume that the compositing state of all descendants have been updated already,
-        // so it is legitimate to compute and cache the composited bounds for this layer.
-        mapping->updateCompositedBounds(updateType);
+            if (mapping->updateRequiresOwnBackingStoreForAncestorReasons(compositingContainer))
+                updateType = ForceUpdate;
 
-        if (RenderLayerReflectionInfo* reflection = layer.reflectionInfo()) {
-            if (reflection->reflectionLayer()->hasCompositedLayerMapping())
-                reflection->reflectionLayer()->compositedLayerMapping()->updateCompositedBounds(ForceUpdate);
+            // Note carefully: here we assume that the compositing state of all descendants have been updated already,
+            // so it is legitimate to compute and cache the composited bounds for this layer.
+            mapping->updateCompositedBounds();
+
+            if (RenderLayerReflectionInfo* reflection = layer.reflectionInfo()) {
+                if (reflection->reflectionLayer()->hasCompositedLayerMapping())
+                    reflection->reflectionLayer()->compositedLayerMapping()->updateCompositedBounds();
+            }
+
+            if (mapping->updateGraphicsLayerConfiguration())
+                m_needsRebuildTree = true;
+
+            mapping->updateGraphicsLayerGeometry(compositingContainer, layersNeedingPaintInvalidation);
+
+            if (mapping->hasUnpositionedOverflowControlsLayers())
+                layer.scrollableArea()->positionOverflowControls(IntSize());
+
+            updateType = mapping->updateTypeForChildren(updateType);
+            mapping->clearNeedsGraphicsLayerUpdate();
         }
-
-        if (mapping->updateGraphicsLayerConfiguration(updateType))
-            m_needsRebuildTree = true;
-
-        mapping->updateGraphicsLayerGeometry(updateType, compositingContainer);
-
-        updateType = mapping->updateTypeForChildren(updateType);
-        mapping->clearNeedsGraphicsLayerUpdate();
-
-        if (!layer.parent())
-            layer.compositor()->updateRootLayerPosition();
-
-        if (mapping->hasUnpositionedOverflowControlsLayers())
-            layer.scrollableArea()->positionOverflowControls();
     }
 
     UpdateContext childContext(context, layer);
     for (RenderLayer* child = layer.firstChild(); child; child = child->nextSibling())
-        update(*child, updateType, childContext);
+        updateRecursive(*child, updateType, childContext, layersNeedingPaintInvalidation);
 }
 
-#if !ASSERT_DISABLED
+#if ASSERT_ENABLED
 
 void GraphicsLayerUpdater::assertNeedsToUpdateGraphicsLayerBitsCleared(RenderLayer& layer)
 {

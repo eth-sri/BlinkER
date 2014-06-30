@@ -439,14 +439,6 @@ void RenderFrameSet::layout()
 {
     ASSERT(needsLayout());
 
-    bool doFullRepaint = selfNeedsLayout() && checkForRepaintDuringLayout();
-    LayoutRect oldBounds;
-    const RenderLayerModelObject* repaintContainer = 0;
-    if (doFullRepaint) {
-        repaintContainer = containerForRepaint();
-        oldBounds = clippedOverflowRectForRepaint(repaintContainer);
-    }
-
     if (!parent()->isFrameSet() && !document().printing()) {
         setWidth(view()->viewWidth());
         setHeight(view()->viewHeight());
@@ -470,14 +462,7 @@ void RenderFrameSet::layout()
 
     computeEdgeInfo();
 
-    updateLayerTransform();
-
-    if (doFullRepaint) {
-        repaintUsingContainer(repaintContainer, pixelSnappedIntRect(oldBounds), InvalidationSelfLayout);
-        LayoutRect newBounds = clippedOverflowRectForRepaint(repaintContainer);
-        if (newBounds != oldBounds)
-            repaintUsingContainer(repaintContainer, pixelSnappedIntRect(newBounds), InvalidationSelfLayout);
-    }
+    updateLayerTransformAfterLayout();
 
     clearNeedsLayout();
 }
@@ -514,7 +499,7 @@ void RenderFrameSet::positionFrames()
             if (width != child->width() || height != child->height()) {
                 child->setWidth(width);
                 child->setHeight(height);
-                child->setNeedsLayoutAndFullRepaint();
+                child->setNeedsLayoutAndFullPaintInvalidation();
                 child->layout();
             }
 
@@ -554,7 +539,7 @@ void RenderFrameSet::continueResizing(GridAxis& axis, int position)
         return;
     axis.m_deltas[axis.m_splitBeingResized - 1] += delta;
     axis.m_deltas[axis.m_splitBeingResized] -= delta;
-    setNeedsLayoutAndFullRepaint();
+    setNeedsLayoutAndFullPaintInvalidation();
 }
 
 bool RenderFrameSet::userResize(MouseEvent* evt)

@@ -29,8 +29,6 @@
 
 namespace WebCore {
 
-class ExecutionContext;
-
 class DocumentFragment : public ContainerNode {
 public:
     static PassRefPtrWillBeRawPtr<DocumentFragment> create(Document&);
@@ -51,7 +49,7 @@ private:
     virtual bool childTypeAllowed(NodeType) const OVERRIDE;
 };
 
-DEFINE_NODE_TYPE_CASTS(DocumentFragment, nodeType() == Node::DOCUMENT_FRAGMENT_NODE);
+DEFINE_NODE_TYPE_CASTS(DocumentFragment, isDocumentFragment());
 
 } // namespace WebCore
 

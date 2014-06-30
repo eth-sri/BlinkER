@@ -22,10 +22,9 @@
 #include "config.h"
 #include "core/rendering/RenderTheme.h"
 
-#include "CSSValueKeywords.h"
-#include "HTMLNames.h"
-#include "InputTypeNames.h"
-#include "RuntimeEnabledFeatures.h"
+#include "core/CSSValueKeywords.h"
+#include "core/HTMLNames.h"
+#include "core/InputTypeNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/shadow/ElementShadow.h"
 #include "core/editing/FrameSelection.h"
@@ -51,6 +50,7 @@
 #include "core/rendering/style/RenderStyle.h"
 #include "platform/FileMetadata.h"
 #include "platform/FloatConversion.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/fonts/FontSelector.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
 #include "platform/text/PlatformLocale.h"
@@ -86,7 +86,7 @@ RenderTheme::RenderTheme()
 {
 }
 
-void RenderTheme::adjustStyle(RenderStyle* style, Element* e, const CachedUAStyle& uaStyle)
+void RenderTheme::adjustStyle(RenderStyle* style, Element* e, const CachedUAStyle* uaStyle)
 {
     // Force inline and table display styles to be inline-block (except for table- which is block)
     ControlPart part = style->appearance();
@@ -98,7 +98,7 @@ void RenderTheme::adjustStyle(RenderStyle* style, Element* e, const CachedUAStyl
     else if (style->display() == LIST_ITEM || style->display() == TABLE)
         style->setDisplay(BLOCK);
 
-    if (uaStyle.hasAppearance && isControlStyled(style, uaStyle)) {
+    if (uaStyle && uaStyle->hasAppearance && isControlStyled(style, uaStyle)) {
         if (part == MenulistPart) {
             style->setAppearance(MenulistButtonPart);
             part = MenulistButtonPart;
@@ -234,7 +234,7 @@ bool RenderTheme::paint(RenderObject* o, const PaintInfo& paintInfo, const IntRe
     // for that control.
     if (paintInfo.context->updatingControlTints()) {
         if (controlSupportsTints(o))
-            o->repaint();
+            o->paintInvalidationForWholeRenderer();
         return false;
     }
     ControlPart part = o->style()->appearance();
@@ -568,8 +568,10 @@ static bool isBackgroundOrBorderStyled(const RenderStyle& style, const CachedUAS
         || style.visitedDependentColor(CSSPropertyBackgroundColor) != uaStyle.backgroundColor;
 }
 
-bool RenderTheme::isControlStyled(const RenderStyle* style, const CachedUAStyle& uaStyle) const
+bool RenderTheme::isControlStyled(const RenderStyle* style, const CachedUAStyle* uaStyle) const
 {
+    ASSERT(uaStyle);
+
     switch (style->appearance()) {
     case PushButtonPart:
     case SquareButtonPart:
@@ -580,14 +582,14 @@ bool RenderTheme::isControlStyled(const RenderStyle* style, const CachedUAStyle&
     case ContinuousCapacityLevelIndicatorPart:
     case DiscreteCapacityLevelIndicatorPart:
     case RatingLevelIndicatorPart:
-        return isBackgroundOrBorderStyled(*style, uaStyle);
+        return isBackgroundOrBorderStyled(*style, *uaStyle);
 
     case ListboxPart:
     case MenulistPart:
     case SearchFieldPart:
     case TextAreaPart:
     case TextFieldPart:
-        return isBackgroundOrBorderStyled(*style, uaStyle) || style->boxShadow();
+        return isBackgroundOrBorderStyled(*style, *uaStyle) || style->boxShadow();
 
     case SliderHorizontalPart:
     case SliderVerticalPart:
@@ -637,7 +639,7 @@ bool RenderTheme::stateChanged(RenderObject* o, ControlState state) const
         return false;
 
     // Repaint the control.
-    o->repaint();
+    o->paintInvalidationForWholeRenderer();
     return true;
 }
 
@@ -1150,7 +1152,7 @@ bool RenderTheme::paintCheckboxUsingFallbackTheme(RenderObject* o, const PaintIn
         unzoomedRect.setWidth(unzoomedRect.width() / zoomLevel);
         unzoomedRect.setHeight(unzoomedRect.height() / zoomLevel);
         i.context->translate(unzoomedRect.x(), unzoomedRect.y());
-        i.context->scale(FloatSize(zoomLevel, zoomLevel));
+        i.context->scale(zoomLevel, zoomLevel);
         i.context->translate(-unzoomedRect.x(), -unzoomedRect.y());
     }
 
@@ -1194,7 +1196,7 @@ bool RenderTheme::paintRadioUsingFallbackTheme(RenderObject* o, const PaintInfo&
         unzoomedRect.setWidth(unzoomedRect.width() / zoomLevel);
         unzoomedRect.setHeight(unzoomedRect.height() / zoomLevel);
         i.context->translate(unzoomedRect.x(), unzoomedRect.y());
-        i.context->scale(FloatSize(zoomLevel, zoomLevel));
+        i.context->scale(zoomLevel, zoomLevel);
         i.context->translate(-unzoomedRect.x(), -unzoomedRect.y());
     }
 

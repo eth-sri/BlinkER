@@ -29,11 +29,13 @@
 #
 {
   'includes': [
+    '../build/scripts/scripts.gypi',
     '../build/win/precompile.gypi',
-    '../bindings/bindings.gypi',
+    '../bindings/modules/modules.gypi',  # modules can depend on bindings/modules, but not on bindings
     'modules.gypi',
   ],
   'targets': [{
+    # GN version: //third_party/WebKit/Source/modules:modules
     'target_name': 'modules',
     'type': 'static_library',
     'dependencies': [
@@ -41,6 +43,7 @@
       '<(DEPTH)/third_party/sqlite/sqlite.gyp:sqlite',
       '../config.gyp:config',
       '../core/core.gyp:webcore',
+      'make_modules_generated',
     ],
     'defines': [
       'BLINK_IMPLEMENTATION=1',
@@ -48,12 +51,94 @@
     ],
     'sources': [
       '<@(modules_files)',
-      '<@(bindings_modules_generated_aggregate_files)',
+      '<@(bindings_modules_v8_files)',
+      '<@(bindings_modules_v8_generated_aggregate_files)',
+    ],
+    'actions': [
+      {
+        # GN version: //third_party/WebKit/Source/modules:modules_fetch_polyfill
+        'action_name': 'FetchPolyfill',
+        'process_outputs_as_sources': 1,
+        'variables': {
+            'resources': [
+                 'serviceworkers/polyfills/fetchPolyfill.js',
+            ],
+        },
+        'inputs': [
+            '../build/scripts/make-file-arrays.py',
+            '<@(resources)',
+        ],
+        'outputs': [
+            '<(blink_modules_output_dir)/FetchPolyfill.h',
+            '<(blink_modules_output_dir)/FetchPolyfill.cpp',
+        ],
+        'action': [
+            'python',
+            '../build/scripts/make-file-arrays.py',
+            '--out-h=<(blink_modules_output_dir)/FetchPolyfill.h',
+            '--out-cpp=<(blink_modules_output_dir)/FetchPolyfill.cpp',
+            '--namespace=WebCore',
+            '<@(resources)',
+        ],
+      },
+      {
+        # GN version: //third_party/WebKit/Source/modules:modules_cache_polyfill
+        'action_name': 'CachePolyfill',
+        'process_outputs_as_sources': 1,
+        'variables': {
+            'resources': [
+                 'serviceworkers/polyfills/cachePolyfill.js',
+            ],
+        },
+        'inputs': [
+            '../build/scripts/make-file-arrays.py',
+            '<@(resources)',
+        ],
+        'outputs': [
+            '<(blink_modules_output_dir)/CachePolyfill.h',
+            '<(blink_modules_output_dir)/CachePolyfill.cpp',
+        ],
+        'action': [
+            'python',
+            '../build/scripts/make-file-arrays.py',
+            '--out-h=<(blink_modules_output_dir)/CachePolyfill.h',
+            '--out-cpp=<(blink_modules_output_dir)/CachePolyfill.cpp',
+            '--namespace=WebCore',
+            '<@(resources)',
+        ],
+      },
+      {
+        # GN version: //third_party/WebKit/Source/modules:modules_cache_storage_polyfill
+        'action_name': 'CacheStoragePolyfill',
+        'process_outputs_as_sources': 1,
+        'variables': {
+            'resources': [
+                 'serviceworkers/polyfills/cacheStoragePolyfill.js',
+            ],
+        },
+        'inputs': [
+            '../build/scripts/make-file-arrays.py',
+            '<@(resources)',
+        ],
+        'outputs': [
+            '<(blink_modules_output_dir)/CacheStoragePolyfill.h',
+            '<(blink_modules_output_dir)/CacheStoragePolyfill.cpp',
+        ],
+        'action': [
+            'python',
+            '../build/scripts/make-file-arrays.py',
+            '--out-h=<(blink_modules_output_dir)/CacheStoragePolyfill.h',
+            '--out-cpp=<(blink_modules_output_dir)/CacheStoragePolyfill.cpp',
+            '--namespace=WebCore',
+            '<@(resources)',
+        ],
+      },
     ],
     # Disable c4267 warnings until we fix size_t to int truncations.
     'msvs_disabled_warnings': [ 4267, 4334, ]
   },
   {
+    # GN version: //third_party/WebKit/Source/modules:modules_testing
     'target_name': 'modules_testing',
     'type': 'static_library',
     'dependencies': [
@@ -68,5 +153,25 @@
       '<@(modules_testing_files)',
     ],
 
+  },
+  {
+    # FIXME: should be in modules_generated.gyp
+    # GN version: //third_party/WebKit/Source/modules:make_modules_generated
+    'target_name': 'make_modules_generated',
+    'type': 'none',
+    'hard_dependency': 1,
+    'dependencies': [
+      #'generated_testing_idls',
+      '../core/core_generated.gyp:core_event_interfaces',
+      '../bindings/modules/generated.gyp:modules_event_generated',
+      '../config.gyp:config',
+    ],
+    'sources': [
+      # bison rule
+      '../core/css/CSSGrammar.y',
+      '../core/xml/XPathGrammar.y',
+    ],
+    'actions': [
+    ],
   }],
 }

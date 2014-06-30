@@ -7,7 +7,6 @@
 
 #include "bindings/v8/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
-#include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
 
 namespace WebCore {
@@ -17,8 +16,8 @@ public:
     static GamepadButton* create();
     ~GamepadButton();
 
-    float value() const { return m_value; }
-    void setValue(float val) { m_value = val; }
+    double value() const { return m_value; }
+    void setValue(double val) { m_value = val; }
 
     bool pressed() const { return m_pressed; }
     void setPressed(bool val) { m_pressed = val; }
@@ -27,7 +26,7 @@ public:
 
 private:
     GamepadButton();
-    float m_value;
+    double m_value;
     bool m_pressed;
 };
 

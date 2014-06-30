@@ -22,7 +22,6 @@
 #include "core/xml/XMLSerializer.h"
 
 #include "bindings/v8/ExceptionState.h"
-#include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/editing/MarkupAccumulator.h"
 #include "wtf/text/WTFString.h"
@@ -36,7 +35,7 @@ String XMLSerializer::serializeToString(Node* node, ExceptionState& exceptionSta
         return String();
     }
 
-    MarkupAccumulator accumulator(0, DoNotResolveURLs, 0, ForcedXML);
+    MarkupAccumulator accumulator(0, DoNotResolveURLs, nullptr, ForcedXML);
     return accumulator.serializeNodes(*node, IncludeNode);
 }
 

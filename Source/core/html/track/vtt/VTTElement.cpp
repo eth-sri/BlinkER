@@ -26,7 +26,7 @@
 #include "config.h"
 #include "core/html/track/vtt/VTTElement.h"
 
-#include "HTMLElementFactory.h"
+#include "core/HTMLElementFactory.h"
 
 namespace WebCore {
 
@@ -73,7 +73,7 @@ VTTElement::VTTElement(VTTNodeType nodeType, Document* document)
 
 PassRefPtrWillBeRawPtr<VTTElement> VTTElement::create(VTTNodeType nodeType, Document* document)
 {
-    return adoptRefWillBeRefCountedGarbageCollected(new VTTElement(nodeType, document));
+    return adoptRefWillBeNoop(new VTTElement(nodeType, document));
 }
 
 PassRefPtrWillBeRawPtr<Element> VTTElement::cloneElementWithoutAttributesAndChildren()
@@ -83,9 +83,9 @@ PassRefPtrWillBeRawPtr<Element> VTTElement::cloneElementWithoutAttributesAndChil
     return clone.release();
 }
 
-PassRefPtr<HTMLElement> VTTElement::createEquivalentHTMLElement(Document& document)
+PassRefPtrWillBeRawPtr<HTMLElement> VTTElement::createEquivalentHTMLElement(Document& document)
 {
-    RefPtr<HTMLElement> htmlElement;
+    RefPtrWillBeRawPtr<HTMLElement> htmlElement = nullptr;
     switch (m_webVTTNodeType) {
     case VTTNodeTypeClass:
     case VTTNodeTypeLanguage:

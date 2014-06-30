@@ -28,15 +28,11 @@
 
 #include "bindings/v8/ScriptWrappable.h"
 #include "core/dom/ActiveDOMObject.h"
-#include "core/events/EventTarget.h"
+#include "modules/EventTargetModules.h"
 #include "modules/mediastream/SourceInfo.h"
 #include "platform/mediastream/MediaStreamDescriptor.h"
 #include "platform/mediastream/MediaStreamSource.h"
-#include "wtf/PassOwnPtr.h"
-#include "wtf/RefCounted.h"
-#include "wtf/RefPtr.h"
-#include "wtf/Vector.h"
-#include "wtf/text/WTFString.h"
+#include "wtf/Forward.h"
 
 namespace WebCore {
 
@@ -45,16 +41,16 @@ class ExceptionState;
 class MediaStreamComponent;
 class MediaStreamTrackSourcesCallback;
 
-class MediaStreamTrack FINAL : public RefCounted<MediaStreamTrack>, public ScriptWrappable, public ActiveDOMObject, public EventTargetWithInlineData, public MediaStreamSource::Observer {
-    REFCOUNTED_EVENT_TARGET(MediaStreamTrack);
+class MediaStreamTrack FINAL
+    : public RefCountedGarbageCollectedWillBeGarbageCollectedFinalized<MediaStreamTrack>
+    , public ScriptWrappable
+    , public ActiveDOMObject
+    , public EventTargetWithInlineData
+    , public MediaStreamSource::Observer {
+    DEFINE_EVENT_TARGET_REFCOUNTING_WILL_BE_REMOVED(RefCountedGarbageCollectedWillBeGarbageCollectedFinalized<MediaStreamTrack>);
+    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(MediaStreamTrack);
 public:
-    class Observer {
-    public:
-        virtual ~Observer() { }
-        virtual void trackEnded() = 0;
-    };
-
-    static PassRefPtr<MediaStreamTrack> create(ExecutionContext*, MediaStreamComponent*);
+    static MediaStreamTrack* create(ExecutionContext*, MediaStreamComponent*);
     virtual ~MediaStreamTrack();
 
     String kind() const;
@@ -68,7 +64,7 @@ public:
 
     static void getSources(ExecutionContext*, PassOwnPtr<MediaStreamTrackSourcesCallback>, ExceptionState&);
     void stopTrack(ExceptionState&);
-    PassRefPtr<MediaStreamTrack> clone(ExecutionContext*);
+    MediaStreamTrack* clone(ExecutionContext*);
 
     DEFINE_ATTRIBUTE_EVENT_LISTENER(mute);
     DEFINE_ATTRIBUTE_EVENT_LISTENER(unmute);
@@ -77,8 +73,8 @@ public:
     MediaStreamComponent* component();
     bool ended() const;
 
-    void addObserver(Observer*);
-    void removeObserver(Observer*);
+    void registerMediaStream(MediaStream*);
+    void unregisterMediaStream(MediaStream*);
 
     // EventTarget
     virtual const AtomicString& interfaceName() const OVERRIDE;
@@ -89,23 +85,24 @@ public:
 
     PassOwnPtr<AudioSourceProvider> createWebAudioSource();
 
+    virtual void trace(Visitor*) OVERRIDE;
+
 private:
     MediaStreamTrack(ExecutionContext*, MediaStreamComponent*);
-
-    MediaStreamSource::ReadyState m_readyState;
 
     // MediaStreamSourceObserver
     virtual void sourceChangedState() OVERRIDE;
 
     void propagateTrackEnded();
-    Vector<Observer*> m_observers;
-    bool m_isIteratingObservers;
 
+    MediaStreamSource::ReadyState m_readyState;
+    HeapHashSet<Member<MediaStream> > m_registeredMediaStreams;
+    bool m_isIteratingRegisteredMediaStreams;
     bool m_stopped;
     RefPtr<MediaStreamComponent> m_component;
 };
 
-typedef Vector<RefPtr<MediaStreamTrack> > MediaStreamTrackVector;
+typedef HeapVector<Member<MediaStreamTrack> > MediaStreamTrackVector;
 
 } // namespace WebCore
 

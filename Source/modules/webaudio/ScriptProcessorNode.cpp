@@ -28,7 +28,6 @@
 
 #include "modules/webaudio/ScriptProcessorNode.h"
 
-#include "core/dom/Document.h"
 #include "modules/webaudio/AudioBuffer.h"
 #include "modules/webaudio/AudioContext.h"
 #include "modules/webaudio/AudioNodeInput.h"
@@ -104,8 +103,8 @@ ScriptProcessorNode::ScriptProcessorNode(AudioContext* context, float sampleRate
 
     ASSERT(numberOfInputChannels <= AudioContext::maxNumberOfChannels());
 
-    addInput(adoptPtr(new AudioNodeInput(this)));
-    addOutput(adoptPtr(new AudioNodeOutput(this, numberOfOutputChannels)));
+    addInput();
+    addOutput(AudioNodeOutput::create(this, numberOfOutputChannels));
 
     setNodeType(NodeTypeJavaScript);
 

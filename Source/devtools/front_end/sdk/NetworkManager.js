@@ -99,6 +99,18 @@ WebInspector.NetworkManager._MIMETypes = {
     "text/vtt":                    {"texttrack": true},
 }
 
+// Keep in sync with kDevToolsRequestInitiator defined in InspectorResourceAgent.cpp
+WebInspector.NetworkManager._devToolsRequestHeader = "X-DevTools-Request-Initiator";
+
+/**
+ * @param {?WebInspector.NetworkRequest} request
+ * @return {boolean}
+ */
+WebInspector.NetworkManager.hasDevToolsRequestHeader = function(request)
+{
+    return !!request && !!request.requestHeaderValue(WebInspector.NetworkManager._devToolsRequestHeader);
+}
+
 WebInspector.NetworkManager.prototype = {
     /**
      * @param {string} url
@@ -116,6 +128,11 @@ WebInspector.NetworkManager.prototype = {
     {
         var enabled = /** @type {boolean} */ (event.data);
         this._networkAgent.setCacheDisabled(enabled);
+    },
+
+    dispose: function()
+    {
+        WebInspector.settings.cacheDisabled.removeChangeListener(this._cacheDisabledSettingChanged, this)
     },
 
     __proto__: WebInspector.TargetAwareObject.prototype
@@ -341,16 +358,18 @@ WebInspector.NetworkDispatcher.prototype = {
     /**
      * @param {!NetworkAgent.RequestId} requestId
      * @param {!NetworkAgent.Timestamp} time
+     * @param {!PageAgent.ResourceType} resourceType
      * @param {string} localizedDescription
      * @param {boolean=} canceled
      */
-    loadingFailed: function(requestId, time, localizedDescription, canceled)
+    loadingFailed: function(requestId, time, resourceType, localizedDescription, canceled)
     {
         var networkRequest = this._inflightRequestsById[requestId];
         if (!networkRequest)
             return;
 
         networkRequest.failed = true;
+        networkRequest.type = WebInspector.resourceTypes[resourceType];
         networkRequest.canceled = canceled;
         networkRequest.localizedFailDescription = localizedDescription;
         this._finishNetworkRequest(networkRequest, time, -1);
@@ -482,7 +501,7 @@ WebInspector.NetworkDispatcher.prototype = {
     {
         var originalNetworkRequest = this._inflightRequestsById[requestId];
         var previousRedirects = originalNetworkRequest.redirects || [];
-        originalNetworkRequest.requestId = "redirected:" + requestId + "." + previousRedirects.length;
+        originalNetworkRequest.requestId = requestId + ":redirected." + previousRedirects.length;
         delete originalNetworkRequest.redirects;
         if (previousRedirects.length > 0)
             originalNetworkRequest.redirectSource = previousRedirects[previousRedirects.length - 1];

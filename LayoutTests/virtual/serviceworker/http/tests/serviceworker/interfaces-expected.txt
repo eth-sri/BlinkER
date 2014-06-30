@@ -1,4 +1,0 @@
-
-PASS Interfaces and attributes of ServiceWorkerContainer 
-PASS Interfaces and attributes in ServiceWorkerGlobalScope 
-

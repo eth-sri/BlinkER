@@ -5,14 +5,30 @@
     if (window.testRunner)
         window.testRunner.dumpAsText();
 
-    function isScrollbarRepaint(rect) {
-        return rect.width == 15 && rect.height == 285;
+    if (window.internals)
+        window.internals.settings.setAcceleratedCompositingForOverflowScrollEnabled(false);
+
+    function hasScrollbarRepaint(layerTree)
+    {
+        return hasScrollbarRepaintHelper(JSON.parse(layerTree));
     }
 
-    function hasNonScrollbarRepaint(repaintRects) {
-        for (var i = 0; i < repaintRects.length; ++i) {
-           if (!isScrollbarRepaint(repaintRects[i]))
-              return true;
+    function hasScrollbarRepaintHelper(jsonLayerTree) {
+        var repaintRects = jsonLayerTree["repaintRects"];
+        if (repaintRects) {
+            for (var i = 0; i < repaintRects.length; ++i) {
+                var width = repaintRects[i][2];
+                var height = repaintRects[i][3];
+                if (width != 15 || height != 285)
+                    return true;
+            }
+        }
+        var children = jsonLayerTree["children"];
+        if (children) {
+            for (var i = 0; i < children.length; i++) {
+                if (hasScrollbarRepaintHelper(children[i]))
+                    return true;
+            }
         }
         return false;
     }
@@ -50,9 +66,7 @@
             toScroll.scrollTop = 100;
 
             if (window.internals) {
-                var repaintRects = window.internals.repaintRects(toScroll);
-                var repainted = hasNonScrollbarRepaint(repaintRects);
-                if (repainted === true)
+                if (hasScrollbarRepaint(window.internals.layerTreeAsText(document, internals.LAYER_TREE_INCLUDES_REPAINT_RECTS)))
                     result += "PASS repainted when expected\n";
                 else
                     result += "FAIL did not repaint when expected\n";
@@ -81,9 +95,7 @@
         container.scrollTop = 100;
 
         if (window.internals) {
-            var repaintRects = window.internals.repaintRects(container);
-            var repainted = hasNonScrollbarRepaint(repaintRects);
-            if (repainted === false)
+            if (!hasScrollbarRepaint(window.internals.layerTreeAsText(document, internals.LAYER_TREE_INCLUDES_REPAINT_RECTS)))
                 result += "PASS did not repaint as expected\n";
             else
                 result += "FAIL repainted when unexpected\n";
@@ -108,12 +120,11 @@
         container.scrollTop = 100;
 
         if (window.internals) {
-            var repaintRects = window.internals.repaintRects(container);
-            var repainted = hasNonScrollbarRepaint(repaintRects);
-            if (repainted === true)
+            if (hasScrollbarRepaint(window.internals.layerTreeAsText(document, internals.LAYER_TREE_INCLUDES_REPAINT_RECTS)))
                 result += "PASS repainted when expected\n";
             else
                 result += "FAIL did not repaint when expected\n";
+
             window.internals.stopTrackingRepaints(document);
         }
 
@@ -155,7 +166,7 @@
         position: fixed;
         top: 200px;
         left: 200px;
-        background-color: blue;    
+        background-color: blue;
         -webkit-backface-visibility: hidden;
     }
 
@@ -164,7 +175,7 @@
         height: 50px;
         margin: 10px;
         position: relative;
-        background-color: green;    
+        background-color: green;
         -webkit-backface-visibility: hidden;
     }
 

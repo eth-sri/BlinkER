@@ -26,7 +26,7 @@
 #ifndef Editor_h
 #define Editor_h
 
-#include "core/clipboard/ClipboardAccessPolicy.h"
+#include "core/clipboard/DataTransferAccessPolicy.h"
 #include "core/dom/DocumentMarker.h"
 #include "core/editing/EditAction.h"
 #include "core/editing/EditingBehavior.h"
@@ -41,8 +41,8 @@
 
 namespace WebCore {
 
-class Clipboard;
 class CompositeEditCommand;
+class DataTransfer;
 class EditCommand;
 class EditCommandComposition;
 class EditorClient;
@@ -63,10 +63,10 @@ class UndoStack;
 enum EditorCommandSource { CommandFromMenuOrKeyBinding, CommandFromDOM, CommandFromDOMWithUserInterface };
 enum EditorParagraphSeparator { EditorParagraphSeparatorIsDiv, EditorParagraphSeparatorIsP };
 
-class Editor {
+class Editor FINAL : public NoBaseWillBeGarbageCollectedFinalized<Editor> {
     WTF_MAKE_NONCOPYABLE(Editor);
 public:
-    static PassOwnPtr<Editor> create(LocalFrame&);
+    static PassOwnPtrWillBeRawPtr<Editor> create(LocalFrame&);
     ~Editor();
 
     EditorClient& client() const;
@@ -97,10 +97,9 @@ public:
     void pasteAsPlainText();
     void performDelete();
 
+    static void countEvent(ExecutionContext*, const Event*);
     void copyImage(const HitTestResult&);
 
-    void indent();
-    void outdent();
     void transpose();
 
     bool shouldDeleteRange(Range*) const;
@@ -110,9 +109,6 @@ public:
     bool selectionStartHasStyle(CSSPropertyID, const String& value) const;
     TriState selectionHasStyle(CSSPropertyID, const String& value) const;
     String selectionStartCSSPropertyValue(CSSPropertyID);
-
-    TriState selectionUnorderedListState() const;
-    TriState selectionOrderedListState() const;
 
     void removeFormattingAndStyle();
 
@@ -126,9 +122,9 @@ public:
     void applyStyleToSelection(StylePropertySet*, EditAction);
     void applyParagraphStyleToSelection(StylePropertySet*, EditAction);
 
-    void appliedEditing(PassRefPtr<CompositeEditCommand>);
-    void unappliedEditing(PassRefPtr<EditCommandComposition>);
-    void reappliedEditing(PassRefPtr<EditCommandComposition>);
+    void appliedEditing(PassRefPtrWillBeRawPtr<CompositeEditCommand>);
+    void unappliedEditing(PassRefPtrWillBeRawPtr<EditCommandComposition>);
+    void reappliedEditing(PassRefPtrWillBeRawPtr<EditCommandComposition>);
 
     void setShouldStyleWithCSS(bool flag) { m_shouldStyleWithCSS = flag; }
     bool shouldStyleWithCSS() const { return m_shouldStyleWithCSS; }
@@ -234,9 +230,11 @@ public:
     };
     friend class RevealSelectionScope;
 
+    void trace(Visitor*);
+
 private:
     LocalFrame& m_frame;
-    RefPtr<CompositeEditCommand> m_lastEditCommand;
+    RefPtrWillBeMember<CompositeEditCommand> m_lastEditCommand;
     int m_preventRevealSelection;
     bool m_shouldStartNewKillRingSequence;
     bool m_shouldStyleWithCSS;
@@ -260,7 +258,7 @@ private:
     void pasteAsPlainTextWithPasteboard(Pasteboard*);
     void pasteWithPasteboard(Pasteboard*);
     void writeSelectionToPasteboard(Pasteboard*, Range*, const String& plainText);
-    bool dispatchCPPEvent(const AtomicString&, ClipboardAccessPolicy, PasteMode = AllMimeTypes);
+    bool dispatchCPPEvent(const AtomicString&, DataTransferAccessPolicy, PasteMode = AllMimeTypes);
 
     void revealSelectionAfterEditingOperation(const ScrollAlignment& = ScrollAlignment::alignCenterIfNeeded, RevealExtentOption = DoNotRevealExtent);
     void changeSelectionAfterCommand(const VisibleSelection& newSelection, FrameSelection::SetSelectionOptions);

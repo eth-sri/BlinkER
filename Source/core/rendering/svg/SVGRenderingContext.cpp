@@ -119,7 +119,7 @@ void SVGRenderingContext::prepareToRenderSVGContent(RenderObject* object, PaintI
     bool hasBlendMode = style->hasBlendMode() && !isRenderingMask;
 
     if (opacity < 1 || hasBlendMode || style->hasIsolation()) {
-        FloatRect repaintRect = m_object->repaintRectInLocalCoordinates();
+        FloatRect repaintRect = m_object->paintInvalidationRectInLocalCoordinates();
         m_paintInfo->context->clip(repaintRect);
 
         if (hasBlendMode) {
@@ -286,7 +286,7 @@ bool SVGRenderingContext::bufferForeground(OwnPtr<ImageBuffer>& imageBuffer)
 
     // Invalidate an existing buffer if the scale is not correct.
     if (imageBuffer) {
-        AffineTransform transform = m_paintInfo->context->getCTM(GraphicsContext::DefinitelyIncludeDeviceScale);
+        AffineTransform transform = m_paintInfo->context->getCTM();
         IntSize expandedBoundingBox = expandedIntSize(boundingBox.size());
         IntSize bufferSize(static_cast<int>(ceil(expandedBoundingBox.width() * transform.xScale())), static_cast<int>(ceil(expandedBoundingBox.height() * transform.yScale())));
         if (bufferSize != imageBuffer->size())

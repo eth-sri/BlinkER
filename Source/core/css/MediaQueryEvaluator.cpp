@@ -30,10 +30,10 @@
 #include "config.h"
 #include "core/css/MediaQueryEvaluator.h"
 
-#include "CSSValueKeywords.h"
-#include "MediaFeatureNames.h"
-#include "MediaFeatures.h"
-#include "MediaTypeNames.h"
+#include "core/CSSValueKeywords.h"
+#include "core/MediaFeatureNames.h"
+#include "core/MediaFeatures.h"
+#include "core/MediaTypeNames.h"
 #include "core/css/CSSAspectRatioValue.h"
 #include "core/css/CSSHelper.h"
 #include "core/css/CSSPrimitiveValue.h"
@@ -47,6 +47,7 @@
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
+#include "core/frame/UseCounter.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/rendering/RenderView.h"
 #include "core/rendering/compositing/RenderLayerCompositor.h"
@@ -70,28 +71,20 @@ MediaQueryEvaluator::MediaQueryEvaluator(bool mediaFeatureResult)
 {
 }
 
-MediaQueryEvaluator::MediaQueryEvaluator(const String& acceptedMediaType, bool mediaFeatureResult)
-    : m_mediaType(acceptedMediaType)
-    , m_expectedResult(mediaFeatureResult)
-{
-}
-
 MediaQueryEvaluator::MediaQueryEvaluator(const char* acceptedMediaType, bool mediaFeatureResult)
     : m_mediaType(acceptedMediaType)
     , m_expectedResult(mediaFeatureResult)
 {
 }
 
-MediaQueryEvaluator::MediaQueryEvaluator(const String& acceptedMediaType, LocalFrame* frame)
-    : m_mediaType(acceptedMediaType)
-    , m_expectedResult(false) // Doesn't matter when we have m_frame and m_style.
+MediaQueryEvaluator::MediaQueryEvaluator(LocalFrame* frame)
+    : m_expectedResult(false) // Doesn't matter when we have m_frame and m_style.
     , m_mediaValues(MediaValues::createDynamicIfFrameExists(frame))
 {
 }
 
-MediaQueryEvaluator::MediaQueryEvaluator(const String& acceptedMediaType, const MediaValues& mediaValues)
-    : m_mediaType(acceptedMediaType)
-    , m_expectedResult(false) // Doesn't matter when we have mediaValues.
+MediaQueryEvaluator::MediaQueryEvaluator(const MediaValues& mediaValues)
+    : m_expectedResult(false) // Doesn't matter when we have mediaValues.
     , m_mediaValues(mediaValues.copy())
 {
 }
@@ -100,11 +93,22 @@ MediaQueryEvaluator::~MediaQueryEvaluator()
 {
 }
 
+const String MediaQueryEvaluator::mediaType() const
+{
+    // If a static mediaType was given by the constructor, we use it here.
+    if (!m_mediaType.isEmpty())
+        return m_mediaType;
+    // Otherwise, we get one from mediaValues (which may be dynamic or cached).
+    if (m_mediaValues)
+        return m_mediaValues->mediaType();
+    return nullAtom;
+}
+
 bool MediaQueryEvaluator::mediaTypeMatch(const String& mediaTypeToMatch) const
 {
     return mediaTypeToMatch.isEmpty()
         || equalIgnoringCase(mediaTypeToMatch, MediaTypeNames::all)
-        || equalIgnoringCase(mediaTypeToMatch, m_mediaType);
+        || equalIgnoringCase(mediaTypeToMatch, mediaType());
 }
 
 bool MediaQueryEvaluator::mediaTypeMatchSpecific(const char* mediaTypeToMatch) const
@@ -113,7 +117,7 @@ bool MediaQueryEvaluator::mediaTypeMatchSpecific(const char* mediaTypeToMatch) c
     ASSERT(mediaTypeToMatch);
     ASSERT(mediaTypeToMatch[0] != '\0');
     ASSERT(!equalIgnoringCase(mediaTypeToMatch, MediaTypeNames::all));
-    return equalIgnoringCase(mediaTypeToMatch, m_mediaType);
+    return equalIgnoringCase(mediaTypeToMatch, mediaType());
 }
 
 static bool applyRestrictor(MediaQuery::Restrictor r, bool value)
@@ -268,9 +272,9 @@ static bool evalResolution(const MediaQueryExpValue& value, MediaFeaturePrefix o
     // this method only got called if this media type matches the one defined
     // in the query. Thus, if if the document's media type is "print", the
     // media type of the query will either be "print" or "all".
-    if (mediaValues.screenMediaType()) {
+    if (equalIgnoringCase(mediaValues.mediaType(), MediaTypeNames::screen)) {
         actualResolution = clampTo<float>(mediaValues.devicePixelRatio());
-    } else if (mediaValues.printMediaType()) {
+    } else if (equalIgnoringCase(mediaValues.mediaType(), MediaTypeNames::print)) {
         // The resolution of images while printing should not depend on the DPI
         // of the screen. Until we support proper ways of querying this info
         // we use 300px which is considered minimum for current printers.
@@ -566,7 +570,8 @@ static bool pointerMediaFeatureEval(const MediaQueryExpValue& value, MediaFeatur
 
 static bool scanMediaFeatureEval(const MediaQueryExpValue& value, MediaFeaturePrefix, const MediaValues& mediaValues)
 {
-    if (!mediaValues.scanMediaType())
+    // Scan only applies to 'tv' media.
+    if (!equalIgnoringCase(mediaValues.mediaType(), MediaTypeNames::tv))
         return false;
 
     if (!value.isValid())

@@ -31,10 +31,11 @@
 #ifndef WebPermissionClient_h
 #define WebPermissionClient_h
 
+#include "public/platform/WebPermissionCallbacks.h"
+
 namespace blink {
 
 class WebDocument;
-class WebPermissionCallbacks;
 class WebSecurityOrigin;
 class WebString;
 class WebURL;
@@ -45,18 +46,19 @@ public:
     virtual bool allowDatabase(const WebString& name, const WebString& displayName, unsigned long estimatedSize) { return true; }
 
     // Controls whether access to File System is allowed for this frame.
-    virtual bool allowFileSystem() { return true; }
-
-    // Controls whether access to File System is allowed for this frame.
     virtual bool requestFileSystemAccessSync() { return true; }
 
-    virtual void requestFileSystemAccessAsync(const WebPermissionCallbacks& callbacks) { }
+    // Controls whether access to File System is allowed for this frame.
+    virtual void requestFileSystemAccessAsync(const WebPermissionCallbacks& callbacks) { WebPermissionCallbacks permissionCallbacks(callbacks); permissionCallbacks.doAllow(); }
 
     // Controls whether images are allowed for this frame.
     virtual bool allowImage(bool enabledPerSettings, const WebURL& imageURL) { return enabledPerSettings; }
 
     // Controls whether access to Indexed DB are allowed for this frame.
     virtual bool allowIndexedDB(const WebString& name, const WebSecurityOrigin&) { return true; }
+
+    // Controls whether HTML5 media elements (<audio>, <video>) are allowed for this frame.
+    virtual bool allowMedia(const WebURL& videoURL) { return true; }
 
     // Controls whether plugins are allowed for this frame.
     virtual bool allowPlugins(bool enabledPerSettings) { return enabledPerSettings; }

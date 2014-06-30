@@ -31,16 +31,19 @@
 #include "config.h"
 #include "web/ContextMenuClientImpl.h"
 
-#include "CSSPropertyNames.h"
-#include "HTMLNames.h"
 #include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "core/CSSPropertyNames.h"
+#include "core/HTMLNames.h"
 #include "core/css/CSSStyleDeclaration.h"
 #include "core/dom/Document.h"
 #include "core/dom/DocumentMarkerController.h"
 #include "core/editing/Editor.h"
 #include "core/editing/SpellChecker.h"
+#include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
+#include "core/frame/PinchViewport.h"
 #include "core/frame/Settings.h"
+#include "core/html/HTMLAnchorElement.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLMediaElement.h"
@@ -190,6 +193,11 @@ void ContextMenuClientImpl::showContextMenu(const WebCore::ContextMenu* defaultM
 
     WebContextMenuData data;
     IntPoint mousePoint = selectedFrame->view()->contentsToWindow(r.roundedPointInInnerNodeFrame());
+
+    // FIXME(bokan): crbug.com/371902 - We shouldn't be making these scale
+    // related coordinate transformatios in an ad hoc way.
+    PinchViewport& pinchViewport = selectedFrame->host()->pinchViewport();
+    mousePoint -= flooredIntSize(pinchViewport.visibleRect().location());
     mousePoint.scale(m_webView->pageScaleFactor(), m_webView->pageScaleFactor());
     data.mousePosition = mousePoint;
 
@@ -363,6 +371,12 @@ void ContextMenuClientImpl::showContextMenu(const WebCore::ContextMenu* defaultM
 
     // Filter out custom menu elements and add them into the data.
     populateCustomMenuItems(defaultMenu, &data);
+
+    // Extract suggested filename for saving file.
+    if (isHTMLAnchorElement(r.URLElement())) {
+        HTMLAnchorElement* anchor = toHTMLAnchorElement(r.URLElement());
+        data.suggestedFilename = anchor->fastGetAttribute(HTMLNames::downloadAttr);
+    }
 
     data.node = r.innerNonSharedNode();
 

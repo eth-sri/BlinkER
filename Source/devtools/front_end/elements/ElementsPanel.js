@@ -147,7 +147,7 @@ WebInspector.ElementsPanel.prototype = {
      */
     targetRemoved: function(target)
     {
-        var treeOutline = this._targetToTreeOutline.get(target);
+        var treeOutline = this._targetToTreeOutline.remove(target);
         treeOutline.unwireFromDOMModel();
         this._treeOutlines.remove(treeOutline);
         treeOutline.element.remove();
@@ -468,15 +468,20 @@ WebInspector.ElementsPanel.prototype = {
         pane.populateNodeContextMenu(node, contextMenu);
     },
 
-    _getPopoverAnchor: function(element)
+    /**
+     * @param {!Element} element
+     * @param {!Event} event
+     * @return {!Element|!AnchorBox|undefined}
+     */
+    _getPopoverAnchor: function(element, event)
     {
         var anchor = element.enclosingNodeOrSelfWithClass("webkit-html-resource-link");
         if (!anchor || !anchor.href)
-            return null;
+            return;
 
         var treeOutlineElement = anchor.enclosingNodeOrSelfWithClass("elements-tree-outline");
         if (!treeOutlineElement)
-            return null;
+            return;
 
         for (var i = 0; i < this._treeOutlines.length; ++i) {
             if (this._treeOutlines[i].element !== treeOutlineElement)
@@ -484,15 +489,15 @@ WebInspector.ElementsPanel.prototype = {
 
             var resource = this._treeOutlines[i].target().resourceTreeModel.resourceForURL(anchor.href);
             if (!resource || resource.type !== WebInspector.resourceTypes.Image)
-                return null;
+                return;
             anchor.removeAttribute("title");
             return anchor;
         }
-        return null;
     },
 
     /**
      * @param {!WebInspector.DOMNode} node
+     * @param {function()} callback
      */
     _loadDimensionsForNode: function(node, callback)
     {
@@ -645,6 +650,7 @@ WebInspector.ElementsPanel.prototype = {
     },
 
     /**
+     * @param {!WebInspector.DOMNode} node
      * @param {boolean=} focus
      */
     selectDOMNode: function(node, focus)
@@ -1210,6 +1216,7 @@ WebInspector.ElementsPanel.prototype = {
     },
 
     /**
+     * @param {!Event} event
      * @param {!WebInspector.ContextMenu} contextMenu
      * @param {!Object} object
      */
@@ -1227,7 +1234,7 @@ WebInspector.ElementsPanel.prototype = {
         if (!commandCallback)
             return;
         // Skip adding "Reveal..." menu item for our own tree outline.
-        if (this.element.isAncestor(event.target))
+        if (this.element.isAncestor(/** @type {!Node} */ (event.target)))
             return;
         contextMenu.appendItem(WebInspector.useLowerCaseMenuTitles() ? "Reveal in Elements panel" : "Reveal in Elements Panel", commandCallback);
     },

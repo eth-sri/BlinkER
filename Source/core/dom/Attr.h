@@ -30,8 +30,6 @@
 
 namespace WebCore {
 
-class ExceptionState;
-
 // Attr can have Text children
 // therefore it has to be a fullblown Node. The plan
 // is to dynamically allocate a textchild and store the
@@ -40,11 +38,11 @@ class ExceptionState;
 
 class Attr FINAL : public ContainerNode {
 public:
-    static PassRefPtr<Attr> create(Element&, const QualifiedName&);
-    static PassRefPtr<Attr> create(Document&, const QualifiedName&, const AtomicString& value);
+    static PassRefPtrWillBeRawPtr<Attr> create(Element&, const QualifiedName&);
+    static PassRefPtrWillBeRawPtr<Attr> create(Document&, const QualifiedName&, const AtomicString& value);
     virtual ~Attr();
 
-    String name() const { return qualifiedName().toString(); }
+    String name() const { return m_name.toString(); }
     bool specified() const { return true; }
     Element* ownerElement() const { return m_element; }
 
@@ -54,14 +52,16 @@ public:
     const AtomicString& valueForBindings() const;
     void setValueForBindings(const AtomicString&);
 
-    const QualifiedName& qualifiedName() const { return m_name; }
+    const QualifiedName qualifiedName() const;
 
-    void attachToElement(Element*);
+    void attachToElement(Element*, const AtomicString&);
     void detachFromElementWithValue(const AtomicString&);
 
     virtual const AtomicString& localName() const OVERRIDE { return m_name.localName(); }
     virtual const AtomicString& namespaceURI() const OVERRIDE { return m_name.namespaceURI(); }
     const AtomicString& prefix() const { return m_name.prefix(); }
+
+    virtual void trace(Visitor*) OVERRIDE;
 
 private:
     Attr(Element&, const QualifiedName&);
@@ -87,9 +87,13 @@ private:
 
     // Attr wraps either an element/name, or a name/value pair (when it's a standalone Node.)
     // Note that m_name is always set, but m_element/m_standaloneValue may be null.
-    Element* m_element;
+    RawPtrWillBeMember<Element> m_element;
     QualifiedName m_name;
-    AtomicString m_standaloneValue;
+    // Holds the value if it is a standalone Node, or the local name of the
+    // attribute it is attached to on an Element. The latter may (letter case)
+    // differ from m_name's local name. As these two modes are non-overlapping,
+    // use a single field.
+    AtomicString m_standaloneValueOrAttachedLocalName;
     unsigned m_ignoreChildrenChanged;
 };
 

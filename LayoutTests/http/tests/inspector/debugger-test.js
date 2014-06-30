@@ -2,53 +2,20 @@ var initialize_DebuggerTest = function() {
 
 InspectorTest.startDebuggerTest = function(callback, quiet)
 {
+    console.assert(WebInspector.debuggerModel.debuggerEnabled(), "Debugger has to be enabled");
     if (quiet !== undefined)
         InspectorTest._quiet = quiet;
     WebInspector.inspectorView.showPanel("sources");
 
-    if (WebInspector.debuggerModel.debuggerEnabled())
-        startTest();
-    else {
-        InspectorTest.addSniffer(WebInspector.debuggerModel, "_debuggerWasEnabled", startTest);
-        WebInspector.debuggerModel.enableDebugger();
-    }
-
-    function startTest()
-    {
-        InspectorTest.addResult("Debugger was enabled.");
-        InspectorTest.addSniffer(WebInspector.debuggerModel, "_pausedScript", InspectorTest._pausedScript, true);
-        InspectorTest.addSniffer(WebInspector.debuggerModel, "_resumedScript", InspectorTest._resumedScript, true);
-        InspectorTest.safeWrap(callback)();
-    }
-};
-
-InspectorTest.finishDebuggerTest = function(callback)
-{
-    var sourcesPanel = WebInspector.panels.sources;
-
-    WebInspector.debuggerModel.setBreakpointsActive(true);
-    InspectorTest.resumeExecution(disableDebugger);
-
-    function disableDebugger()
-    {
-        if (!WebInspector.debuggerModel.debuggerEnabled())
-            completeTest();
-        else {
-            InspectorTest.addSniffer(WebInspector.debuggerModel, "_debuggerWasDisabled", debuggerDisabled);
-            WebInspector.debuggerModel.disableDebugger();
-        }
-    }
-
-    function debuggerDisabled()
-    {
-        InspectorTest.addResult("Debugger was disabled.");
-        callback();
-    }
+    InspectorTest.addSniffer(WebInspector.debuggerModel, "_pausedScript", InspectorTest._pausedScript, true);
+    InspectorTest.addSniffer(WebInspector.debuggerModel, "_resumedScript", InspectorTest._resumedScript, true);
+    InspectorTest.safeWrap(callback)();
 };
 
 InspectorTest.completeDebuggerTest = function()
 {
-    InspectorTest.finishDebuggerTest(InspectorTest.completeTest.bind(InspectorTest));
+    WebInspector.breakpointManager.setBreakpointsActive(true);
+    InspectorTest.resumeExecution(InspectorTest.completeTest.bind(InspectorTest));
 };
 
 InspectorTest.runDebuggerTestSuite = function(testSuite)
@@ -147,9 +114,49 @@ InspectorTest.waitUntilResumed = function(callback)
 
 InspectorTest.resumeExecution = function(callback)
 {
-    if (WebInspector.panels.sources.paused)
+    if (WebInspector.panels.sources.paused())
         WebInspector.panels.sources.togglePause();
     InspectorTest.waitUntilResumed(callback);
+};
+
+InspectorTest.waitUntilPausedAndDumpStackAndResume = function(callback, options)
+{
+    InspectorTest.waitUntilPaused(paused);
+    InspectorTest.addSniffer(WebInspector.CallStackSidebarPane.prototype, "setStatus", setStatus);
+
+    var caption;
+    var callFrames;
+    var asyncStackTrace;
+
+    function setStatus(status)
+    {
+        if (typeof status === "string")
+            caption = status;
+        else
+            caption = status.textContent;
+        if (callFrames)
+            step1();
+    }
+
+    function paused(frames, reason, breakpointIds, async)
+    {
+        callFrames = frames;
+        asyncStackTrace = async;
+        if (typeof caption === "string")
+            step1();
+    }
+
+    function step1()
+    {
+        InspectorTest.captureStackTrace(callFrames, asyncStackTrace, options);
+        InspectorTest.addResult(caption);
+        InspectorTest.runAfterPendingDispatches(step2);
+    }
+
+    function step2()
+    {
+        InspectorTest.resumeExecution(InspectorTest.safeWrap(callback));
+    }
 };
 
 InspectorTest.captureStackTrace = function(callFrames, asyncStackTrace, options)
@@ -164,9 +171,13 @@ InspectorTest.captureStackTraceIntoString = function(callFrames, asyncStackTrace
 
     function printCallFrames(callFrames)
     {
+        var printed = 0;
         for (var i = 0; i < callFrames.length; i++) {
             var frame = callFrames[i];
             var script = WebInspector.debuggerModel.scriptForId(frame.location().scriptId);
+            var isFramework = script.isFramework();
+            if (options.dropFrameworkCallFrames && isFramework)
+                continue;
             var url;
             var lineNumber;
             if (script) {
@@ -176,11 +187,12 @@ InspectorTest.captureStackTraceIntoString = function(callFrames, asyncStackTrace
                 url = "(internal script)";
                 lineNumber = "(line number)";
             }
-            var s = "    " + i + ") " + frame.functionName + " (" + url + (options.dropLineNumbers ? "" : ":" + lineNumber) + ")";
+            var s = (isFramework ? "  * " : "    ") + (printed++) + ") " + frame.functionName + " (" + url + (options.dropLineNumbers ? "" : ":" + lineNumber) + ")";
             results.push(s);
             if (options.printReturnValue && frame.returnValue())
                 results.push("       <return>: " + frame.returnValue().description);
         }
+        return printed;
     }
 
     results.push("Call stack:");
@@ -188,7 +200,9 @@ InspectorTest.captureStackTraceIntoString = function(callFrames, asyncStackTrace
 
     while (asyncStackTrace) {
         results.push("    [" + (asyncStackTrace.description || "Async Call") + "]");
-        printCallFrames(WebInspector.DebuggerModel.CallFrame.fromPayloadArray(WebInspector.targetManager.activeTarget(), asyncStackTrace.callFrames));
+        var printed = printCallFrames(WebInspector.DebuggerModel.CallFrame.fromPayloadArray(WebInspector.targetManager.activeTarget(), asyncStackTrace.callFrames));
+        if (!printed)
+            results.pop();
         if (asyncStackTrace.callFrames.peekLast().functionName === "testFunction")
             break;
         asyncStackTrace = asyncStackTrace.asyncStackTrace;
@@ -209,7 +223,7 @@ InspectorTest._pausedScript = function(callFrames, reason, auxData, breakpointId
 {
     if (!InspectorTest._quiet)
         InspectorTest.addResult("Script execution paused.");
-    InspectorTest._pausedScriptArguments = [WebInspector.DebuggerModel.CallFrame.fromPayloadArray(WebInspector.targetManager.activeTarget(), callFrames), reason, breakpointIds, asyncStackTrace];
+    InspectorTest._pausedScriptArguments = [WebInspector.DebuggerModel.CallFrame.fromPayloadArray(WebInspector.targetManager.activeTarget(), callFrames), reason, breakpointIds, asyncStackTrace, auxData];
     if (InspectorTest._waitUntilPausedCallback) {
         var callback = InspectorTest._waitUntilPausedCallback;
         delete InspectorTest._waitUntilPausedCallback;

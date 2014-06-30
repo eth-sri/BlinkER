@@ -369,7 +369,7 @@ function drawViewSize(drawViewSizeWithGrid)
     case "linux": context.font = "14px dejavu sans mono"; break;
     }
 
-    var frameWidth = frameViewFullSize.width || canvasWidth;
+    var frameWidth = canvasWidth;
     var textWidth = context.measureText(text).width;
     context.fillStyle = gridBackgroundColor;
     context.fillRect(frameWidth - textWidth - 12, drawGridBoolean ? 15 : 0, frameWidth, 25);
@@ -383,7 +383,6 @@ function drawViewSize(drawViewSizeWithGrid)
 function reset(resetData)
 {
     window.viewportSize = resetData.viewportSize;
-    window.frameViewFullSize = resetData.frameViewFullSize;
     window.deviceScaleFactor = resetData.deviceScaleFactor;
     window.pageZoomFactor = resetData.pageZoomFactor;
     window.pageScaleFactor = resetData.pageScaleFactor;
@@ -659,13 +658,13 @@ function drawNodeHighlight(highlight)
         }
     }
 
-    var rulerAtRight = minX < 20 && maxX + 20 < width;
-    var rulerAtBottom = minY < 20 && maxY + 20 < height;
+    var rulerAtRight = highlight.showRulers && minX < 20 && maxX + 20 < width;
+    var rulerAtBottom = highlight.showRulers && minY < 20 && maxY + 20 < height;
 
-    if (highlight.showRulers) {
+    if (highlight.showRulers)
         _drawGrid(rulerAtRight, rulerAtBottom);
+    if (highlight.showExtensionLines)
         _drawRulers(highlight, rulerAtRight, rulerAtBottom);
-    }
     if (highlight.elementInfo && highlight.elementInfo.shapeOutsideInfo)
         drawShapeHighlight(highlight.elementInfo.shapeOutsideInfo);
     _drawElementTitle(highlight);

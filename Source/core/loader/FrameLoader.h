@@ -76,7 +76,7 @@ bool isBackForwardLoadType(FrameLoadType);
 class FrameLoader {
     WTF_MAKE_NONCOPYABLE(FrameLoader);
 public:
-    FrameLoader(LocalFrame*, FrameLoaderClient*);
+    FrameLoader(LocalFrame*);
     ~FrameLoader();
 
     void init();
@@ -132,9 +132,7 @@ public:
 
     void checkLoadComplete();
 
-    static void addHTTPOriginIfNeeded(ResourceRequest&, const AtomicString& origin);
-
-    FrameLoaderClient* client() const { return m_client; }
+    FrameLoaderClient* client() const;
 
     void setDefersLoading(bool);
 
@@ -213,7 +211,7 @@ private:
 
     // Calls continueLoadAfterNavigationPolicy
     void loadWithNavigationAction(const NavigationAction&, FrameLoadType, PassRefPtrWillBeRawPtr<FormState>,
-        const SubstituteData&, ClientRedirectPolicy = NotClientRedirect, const AtomicString& overrideEncoding = nullAtom);
+        const SubstituteData&, ContentSecurityPolicyCheck shouldCheckMainWorldContentSecurityPolicy, ClientRedirectPolicy = NotClientRedirect, const AtomicString& overrideEncoding = nullAtom);
 
     void detachFromParent();
     void detachChildren();
@@ -227,7 +225,6 @@ private:
     void startCheckCompleteTimer();
 
     LocalFrame* m_frame;
-    FrameLoaderClient* m_client;
 
     // FIXME: These should be OwnPtr<T> to reduce build times and simplify
     // header dependencies unless performance testing proves otherwise.

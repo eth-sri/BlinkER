@@ -20,18 +20,20 @@
 #include "config.h"
 #include "core/svg/SVGFEDistantLightElement.h"
 
-#include "SVGNames.h"
+#include "core/SVGNames.h"
 #include "platform/graphics/filters/DistantLightSource.h"
 
 namespace WebCore {
 
-SVGFEDistantLightElement::SVGFEDistantLightElement(Document& document)
+inline SVGFEDistantLightElement::SVGFEDistantLightElement(Document& document)
     : SVGFELightElement(SVGNames::feDistantLightTag, document)
 {
     ScriptWrappable::init(this);
 }
 
-PassRefPtr<LightSource> SVGFEDistantLightElement::lightSource() const
+DEFINE_NODE_FACTORY(SVGFEDistantLightElement)
+
+PassRefPtr<LightSource> SVGFEDistantLightElement::lightSource(Filter* filter) const
 {
     return DistantLightSource::create(azimuth()->currentValue()->value(), elevation()->currentValue()->value());
 }

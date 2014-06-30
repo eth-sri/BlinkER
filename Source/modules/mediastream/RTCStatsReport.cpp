@@ -24,15 +24,13 @@
  */
 
 #include "config.h"
-
 #include "modules/mediastream/RTCStatsReport.h"
-
 
 namespace WebCore {
 
-PassRefPtr<RTCStatsReport> RTCStatsReport::create(const String& id, const String& type, double timestamp)
+RTCStatsReport* RTCStatsReport::create(const String& id, const String& type, double timestamp)
 {
-    return adoptRef(new RTCStatsReport(id, type, timestamp));
+    return new RTCStatsReport(id, type, timestamp);
 }
 
 RTCStatsReport::RTCStatsReport(const String& id, const String& type, double timestamp)
@@ -52,12 +50,12 @@ Vector<String> RTCStatsReport::names() const
     return result;
 }
 
-const PassRefPtr<RTCStatsReport> RTCStatsReport::local()
+RTCStatsReport* RTCStatsReport::local()
 {
     return this;
 }
 
-const PassRefPtr<RTCStatsReport> RTCStatsReport::remote()
+RTCStatsReport* RTCStatsReport::remote()
 {
     return this;
 }

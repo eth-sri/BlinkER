@@ -38,7 +38,6 @@ class SVGElement;
 class SVGFontFaceElement;
 #endif
 class SVGResourcesCache;
-class SVGSMILElement;
 class SVGSVGElement;
 class Element;
 
@@ -67,12 +66,6 @@ public:
 
     SVGResourcesCache* resourcesCache() const { return m_resourcesCache.get(); }
 
-    HashSet<SVGElement*>* setOfElementsReferencingTarget(SVGElement* referencedElement) const;
-    void addElementReferencingTarget(SVGElement* referencingElement, SVGElement* referencedElement);
-    void removeAllTargetReferencesForElement(SVGElement*);
-    void rebuildAllElementReferencesForTarget(SVGElement*);
-    void removeAllElementReferencesForTarget(SVGElement*);
-
     void addSVGRootWithRelativeLengthDescendents(SVGSVGElement*);
     void removeSVGRootWithRelativeLengthDescendents(SVGSVGElement*);
     bool isSVGRootWithRelativeLengthDescendents(SVGSVGElement*) const;
@@ -98,7 +91,7 @@ public:
     void trace(Visitor*);
 
 private:
-    Document* m_document; // weak reference
+    RawPtrWillBeMember<Document> m_document;
     WillBeHeapHashSet<RawPtrWillBeMember<SVGSVGElement> > m_timeContainers; // For SVG 1.2 support this will need to be made more general.
 #if ENABLE(SVG_FONTS)
     WillBeHeapHashSet<RawPtrWillBeMember<SVGFontFaceElement> > m_svgFontFaceElements;
@@ -108,11 +101,10 @@ private:
     HashMap<AtomicString, RenderSVGResourceContainer*> m_resources;
     HashMap<AtomicString, OwnPtr<SVGPendingElements> > m_pendingResources; // Resources that are pending.
     HashMap<AtomicString, OwnPtr<SVGPendingElements> > m_pendingResourcesForRemoval; // Resources that are pending and scheduled for removal.
-    HashMap<SVGElement*, OwnPtr<HashSet<SVGElement*> > > m_elementDependencies;
     OwnPtr<SVGResourcesCache> m_resourcesCache;
-    HashSet<SVGSVGElement*> m_relativeLengthSVGRoots; // Root SVG elements with relative length descendants.
+    WillBeHeapHashSet<RawPtrWillBeMember<SVGSVGElement> > m_relativeLengthSVGRoots; // Root SVG elements with relative length descendants.
     FloatPoint m_translate;
-#if !ASSERT_DISABLED
+#if ASSERT_ENABLED
     bool m_inRelativeLengthSVGRootsInvalidation;
 #endif
 

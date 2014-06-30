@@ -22,15 +22,14 @@
 
 #include "core/svg/SVGFEGaussianBlurElement.h"
 
-#include "SVGNames.h"
+#include "core/SVGNames.h"
 #include "platform/graphics/filters/FilterEffect.h"
-#include "core/svg/SVGElementInstance.h"
 #include "core/svg/SVGParserUtilities.h"
 #include "core/svg/graphics/filters/SVGFilterBuilder.h"
 
 namespace WebCore {
 
-SVGFEGaussianBlurElement::SVGFEGaussianBlurElement(Document& document)
+inline SVGFEGaussianBlurElement::SVGFEGaussianBlurElement(Document& document)
     : SVGFilterPrimitiveStandardAttributes(SVGNames::feGaussianBlurTag, document)
     , m_stdDeviation(SVGAnimatedNumberOptionalNumber::create(this, SVGNames::stdDeviationAttr, 0, 0))
     , m_in1(SVGAnimatedString::create(this, SVGNames::inAttr, SVGString::create()))
@@ -40,6 +39,8 @@ SVGFEGaussianBlurElement::SVGFEGaussianBlurElement(Document& document)
     addToPropertyMap(m_stdDeviation);
     addToPropertyMap(m_in1);
 }
+
+DEFINE_NODE_FACTORY(SVGFEGaussianBlurElement)
 
 void SVGFEGaussianBlurElement::setStdDeviation(float x, float y)
 {

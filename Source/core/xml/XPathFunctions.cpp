@@ -28,7 +28,7 @@
 #include "config.h"
 #include "core/xml/XPathFunctions.h"
 
-#include "XMLNames.h"
+#include "core/XMLNames.h"
 #include "core/dom/Attr.h"
 #include "core/dom/Element.h"
 #include "core/dom/ProcessingInstruction.h"
@@ -332,7 +332,7 @@ Value FunId::evaluate() const
     }
 
     TreeScope& contextScope = evaluationContext().node->treeScope();
-    NodeSet result;
+    OwnPtrWillBeRawPtr<NodeSet> result(NodeSet::create());
     HashSet<Node*> resultSet;
 
     unsigned startPos = 0;
@@ -352,14 +352,14 @@ Value FunId::evaluate() const
         // In WebKit, getElementById behaves so, too, although its behavior in this case is formally undefined.
         Node* node = contextScope.getElementById(AtomicString(idList.substring(startPos, endPos - startPos)));
         if (node && resultSet.add(node).isNewEntry)
-            result.append(node);
+            result->append(node);
 
         startPos = endPos;
     }
 
-    result.markSorted(false);
+    result->markSorted(false);
 
-    return Value(result, Value::adopt);
+    return Value(result.release(), Value::adopt);
 }
 
 static inline String expandedNameLocalPart(Node* node)
@@ -603,7 +603,7 @@ Value FunLang::evaluate() const
         if (node->isElementNode()) {
             Element* element = toElement(node);
             if (element->hasAttributes())
-                languageAttribute = element->getAttributeItem(XMLNames::langAttr);
+                languageAttribute = element->findAttributeByName(XMLNames::langAttr);
         }
         if (languageAttribute)
             break;

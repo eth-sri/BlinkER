@@ -35,7 +35,6 @@
 #include "core/dom/shadow/ContentDistribution.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/html/HTMLElement.h"
-#include "wtf/Forward.h"
 
 namespace WebCore {
 
@@ -52,7 +51,7 @@ public:
     bool isShadowInsertionPoint() const;
     bool isContentInsertionPoint() const;
 
-    PassRefPtrWillBeRawPtr<NodeList> getDistributedNodes();
+    PassRefPtrWillBeRawPtr<StaticNodeList> getDistributedNodes();
 
     virtual bool canAffectSelector() const { return false; }
 

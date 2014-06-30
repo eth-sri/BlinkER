@@ -26,9 +26,10 @@
 #include "config.h"
 #include "core/css/CSSGradientValue.h"
 
-#include "CSSValueKeywords.h"
+#include "core/CSSValueKeywords.h"
 #include "core/css/CSSCalculationValue.h"
 #include "core/css/CSSToLengthConversionData.h"
+#include "core/css/Pair.h"
 #include "core/dom/NodeRenderStyle.h"
 #include "core/dom/TextLinkColors.h"
 #include "core/rendering/RenderObject.h"
@@ -38,8 +39,6 @@
 #include "platform/graphics/Image.h"
 #include "wtf/text/StringBuilder.h"
 #include "wtf/text/WTFString.h"
-
-using namespace std;
 
 namespace WebCore {
 
@@ -391,15 +390,31 @@ void CSSGradientValue::addStops(Gradient* gradient, const CSSToLengthConversionD
 
 static float positionFromValue(CSSPrimitiveValue* value, const CSSToLengthConversionData& conversionData, const IntSize& size, bool isHorizontal)
 {
-    if (value->isNumber())
-        return value->getFloatValue() * conversionData.zoom();
-
+    int origin = 0;
+    int sign = 1;
     int edgeDistance = isHorizontal ? size.width() : size.height();
+
+    // In this case the center of the gradient is given relative to an edge in the form of:
+    // [ top | bottom | right | left ] [ <percentage> | <length> ].
+    if (Pair* pair = value->getPairValue()) {
+        CSSValueID originID = pair->first()->getValueID();
+        value = pair->second();
+
+        if (originID == CSSValueRight || originID == CSSValueBottom) {
+            // For right/bottom, the offset is relative to the far edge.
+            origin = edgeDistance;
+            sign = -1;
+        }
+    }
+
+    if (value->isNumber())
+        return origin + sign * value->getFloatValue() * conversionData.zoom();
+
     if (value->isPercentage())
-        return value->getFloatValue() / 100.f * edgeDistance;
+        return origin + sign * value->getFloatValue() / 100.f * edgeDistance;
 
     if (value->isCalculatedPercentageWithLength())
-        return value->cssCalcValue()->toCalcValue(conversionData)->evaluate(edgeDistance);
+        return origin + sign * value->cssCalcValue()->toCalcValue(conversionData)->evaluate(edgeDistance);
 
     switch (value->getValueID()) {
     case CSSValueTop:
@@ -418,7 +433,7 @@ static float positionFromValue(CSSPrimitiveValue* value, const CSSToLengthConver
         break;
     }
 
-    return value->computeLength<float>(conversionData);
+    return origin + sign * value->computeLength<float>(conversionData);
 }
 
 FloatPoint CSSGradientValue::computeEndPoint(CSSPrimitiveValue* horizontal, CSSPrimitiveValue* vertical, const CSSToLengthConversionData& conversionData, const IntSize& size)
@@ -1056,10 +1071,10 @@ PassRefPtr<Gradient> CSSRadialGradientValue::createGradient(const CSSToLengthCon
         // Horizontal
         switch (fill) {
         case ClosestSide: {
-            float xDist = min(secondPoint.x(), size.width() - secondPoint.x());
-            float yDist = min(secondPoint.y(), size.height() - secondPoint.y());
+            float xDist = std::min(secondPoint.x(), size.width() - secondPoint.x());
+            float yDist = std::min(secondPoint.y(), size.height() - secondPoint.y());
             if (shape == Circle) {
-                float smaller = min(xDist, yDist);
+                float smaller = std::min(xDist, yDist);
                 xDist = smaller;
                 yDist = smaller;
             }
@@ -1068,10 +1083,10 @@ PassRefPtr<Gradient> CSSRadialGradientValue::createGradient(const CSSToLengthCon
             break;
         }
         case FarthestSide: {
-            float xDist = max(secondPoint.x(), size.width() - secondPoint.x());
-            float yDist = max(secondPoint.y(), size.height() - secondPoint.y());
+            float xDist = std::max(secondPoint.x(), size.width() - secondPoint.x());
+            float yDist = std::max(secondPoint.y(), size.height() - secondPoint.y());
             if (shape == Circle) {
-                float larger = max(xDist, yDist);
+                float larger = std::max(xDist, yDist);
                 xDist = larger;
                 yDist = larger;
             }
@@ -1087,8 +1102,8 @@ PassRefPtr<Gradient> CSSRadialGradientValue::createGradient(const CSSToLengthCon
             else {
                 // If <shape> is ellipse, the gradient-shape has the same ratio of width to height
                 // that it would if closest-side or farthest-side were specified, as appropriate.
-                float xDist = min(secondPoint.x(), size.width() - secondPoint.x());
-                float yDist = min(secondPoint.y(), size.height() - secondPoint.y());
+                float xDist = std::min(secondPoint.x(), size.width() - secondPoint.x());
+                float yDist = std::min(secondPoint.y(), size.height() - secondPoint.y());
 
                 secondRadius = horizontalEllipseRadius(corner - secondPoint, xDist / yDist);
                 aspectRatio = xDist / yDist;
@@ -1104,8 +1119,8 @@ PassRefPtr<Gradient> CSSRadialGradientValue::createGradient(const CSSToLengthCon
             else {
                 // If <shape> is ellipse, the gradient-shape has the same ratio of width to height
                 // that it would if closest-side or farthest-side were specified, as appropriate.
-                float xDist = max(secondPoint.x(), size.width() - secondPoint.x());
-                float yDist = max(secondPoint.y(), size.height() - secondPoint.y());
+                float xDist = std::max(secondPoint.x(), size.width() - secondPoint.x());
+                float yDist = std::max(secondPoint.y(), size.height() - secondPoint.y());
 
                 secondRadius = horizontalEllipseRadius(corner - secondPoint, xDist / yDist);
                 aspectRatio = xDist / yDist;

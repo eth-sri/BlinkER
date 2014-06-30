@@ -33,6 +33,8 @@
 
 #include "platform/TraceEvent.h"
 #include "platform/heap/ThreadState.h"
+#include "public/platform/Platform.h"
+#include "wtf/AddressSpaceRandomization.h"
 #include "wtf/Assertions.h"
 #include "wtf/LeakAnnotations.h"
 #include "wtf/PassOwnPtr.h"
@@ -105,7 +107,12 @@ size_t osPageSize()
 
 class MemoryRegion {
 public:
-    MemoryRegion(Address base, size_t size) : m_base(base), m_size(size) { ASSERT(size > 0); }
+    MemoryRegion(Address base, size_t size)
+        : m_base(base)
+        , m_size(size)
+    {
+        ASSERT(size > 0);
+    }
 
     bool contains(Address addr) const
     {
@@ -159,18 +166,133 @@ public:
     }
 
     Address base() const { return m_base; }
+    size_t size() const { return m_size; }
 
 private:
     Address m_base;
     size_t m_size;
 };
 
+// A PageMemoryRegion represents a chunk of reserved virtual address
+// space containing a number of blink heap pages. On Windows, reserved
+// virtual address space can only be given back to the system as a
+// whole. The PageMemoryRegion allows us to do that by keeping track
+// of the number of pages using it in order to be able to release all
+// of the virtual address space when there are no more pages using it.
+class PageMemoryRegion : public MemoryRegion {
+public:
+    ~PageMemoryRegion()
+    {
+        release();
+    }
+
+    void pageRemoved()
+    {
+        if (!--m_numPages)
+            delete this;
+    }
+
+    static PageMemoryRegion* allocate(size_t size, unsigned numPages)
+    {
+        ASSERT(Heap::heapDoesNotContainCacheIsEmpty());
+
+        // Compute a random blink page aligned address for the page memory
+        // region and attempt to get the memory there.
+        Address randomAddress = reinterpret_cast<Address>(WTF::getRandomPageBase());
+        Address alignedRandomAddress = roundToBlinkPageBoundary(randomAddress);
+
+#if OS(POSIX)
+        Address base = static_cast<Address>(mmap(alignedRandomAddress, size, PROT_NONE, MAP_ANON | MAP_PRIVATE, -1, 0));
+        RELEASE_ASSERT(base != MAP_FAILED);
+        if (base == roundToBlinkPageBoundary(base))
+            return new PageMemoryRegion(base, size, numPages);
+
+        // We failed to get a blink page aligned chunk of
+        // memory. Unmap the chunk that we got and fall back to
+        // overallocating and selecting an aligned sub part of what
+        // we allocate.
+        int error = munmap(base, size);
+        RELEASE_ASSERT(!error);
+        size_t allocationSize = size + blinkPageSize;
+        base = static_cast<Address>(mmap(alignedRandomAddress, allocationSize, PROT_NONE, MAP_ANON | MAP_PRIVATE, -1, 0));
+        RELEASE_ASSERT(base != MAP_FAILED);
+
+        Address end = base + allocationSize;
+        Address alignedBase = roundToBlinkPageBoundary(base);
+        Address regionEnd = alignedBase + size;
+
+        // If the allocated memory was not blink page aligned release
+        // the memory before the aligned address.
+        if (alignedBase != base)
+            MemoryRegion(base, alignedBase - base).release();
+
+        // Free the additional memory at the end of the page if any.
+        if (regionEnd < end)
+            MemoryRegion(regionEnd, end - regionEnd).release();
+
+        return new PageMemoryRegion(alignedBase, size, numPages);
+#else
+        Address base = static_cast<Address>(VirtualAlloc(alignedRandomAddress, size, MEM_RESERVE, PAGE_NOACCESS));
+        if (base) {
+            ASSERT(base == alignedRandomAddress);
+            return new PageMemoryRegion(base, size, numPages);
+        }
+
+        // We failed to get the random aligned address that we asked
+        // for. Fall back to overallocating. On Windows it is
+        // impossible to partially release a region of memory
+        // allocated by VirtualAlloc. To avoid wasting virtual address
+        // space we attempt to release a large region of memory
+        // returned as a whole and then allocate an aligned region
+        // inside this larger region.
+        size_t allocationSize = size + blinkPageSize;
+        for (int attempt = 0; attempt < 3; attempt++) {
+            base = static_cast<Address>(VirtualAlloc(0, allocationSize, MEM_RESERVE, PAGE_NOACCESS));
+            RELEASE_ASSERT(base);
+            VirtualFree(base, 0, MEM_RELEASE);
+
+            Address alignedBase = roundToBlinkPageBoundary(base);
+            base = static_cast<Address>(VirtualAlloc(alignedBase, size, MEM_RESERVE, PAGE_NOACCESS));
+            if (base) {
+                ASSERT(base == alignedBase);
+                return new PageMemoryRegion(alignedBase, size, numPages);
+            }
+        }
+
+        // We failed to avoid wasting virtual address space after
+        // several attempts.
+        base = static_cast<Address>(VirtualAlloc(0, allocationSize, MEM_RESERVE, PAGE_NOACCESS));
+        RELEASE_ASSERT(base);
+
+        // FIXME: If base is by accident blink page size aligned
+        // here then we can create two pages out of reserved
+        // space. Do this.
+        Address alignedBase = roundToBlinkPageBoundary(base);
+
+        return new PageMemoryRegion(alignedBase, size, numPages);
+#endif
+    }
+
+private:
+    PageMemoryRegion(Address base, size_t size, unsigned numPages)
+        : MemoryRegion(base, size)
+        , m_numPages(numPages)
+    {
+    }
+
+    unsigned m_numPages;
+};
+
 // Representation of the memory used for a Blink heap page.
 //
 // The representation keeps track of two memory regions:
 //
-// 1. The virtual memory reserved from the sytem in order to be able
-//    to free all the virtual memory reserved on destruction.
+// 1. The virtual memory reserved from the system in order to be able
+//    to free all the virtual memory reserved. Multiple PageMemory
+//    instances can share the same reserved memory region and
+//    therefore notify the reserved memory region on destruction so
+//    that the system memory can be given back when all PageMemory
+//    instances for that memory are gone.
 //
 // 2. The writable memory (a sub-region of the reserved virtual
 //    memory region) that is used for the actual heap page payload.
@@ -178,14 +300,26 @@ private:
 // Guard pages are created before and after the writable memory.
 class PageMemory {
 public:
-    ~PageMemory() { m_reserved.release(); }
+    ~PageMemory()
+    {
+        __lsan_unregister_root_region(m_writable.base(), m_writable.size());
+        m_reserved->pageRemoved();
+    }
 
     bool commit() WARN_UNUSED_RETURN { return m_writable.commit(); }
     void decommit() { m_writable.decommit(); }
 
     Address writableStart() { return m_writable.base(); }
 
-    // Allocate a virtual address space for the blink page with the
+    static PageMemory* setupPageMemoryInRegion(PageMemoryRegion* region, size_t pageOffset, size_t payloadSize)
+    {
+        // Setup the payload one OS page into the page memory. The
+        // first os page is the guard page.
+        Address payloadAddress = region->base() + pageOffset + osPageSize();
+        return new PageMemory(region, MemoryRegion(payloadAddress, payloadSize));
+    }
+
+    // Allocate a virtual address space for one blink page with the
     // following layout:
     //
     //    [ guard os page | ... payload ... | guard os page ]
@@ -199,102 +333,31 @@ public:
         // Round up the requested size to nearest os page size.
         payloadSize = roundToOsPageSize(payloadSize);
 
-        // Overallocate by blinkPageSize and 2 times OS page size to
-        // ensure a chunk of memory which is blinkPageSize aligned and
-        // has a system page before and after to use for guarding. We
-        // unmap the excess memory before returning.
-        size_t allocationSize = payloadSize + 2 * osPageSize() + blinkPageSize;
-
-        ASSERT(Heap::heapDoesNotContainCacheIsEmpty());
-#if OS(POSIX)
-        Address base = static_cast<Address>(mmap(0, allocationSize, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0));
-        RELEASE_ASSERT(base != MAP_FAILED);
-
-        Address end = base + allocationSize;
-        Address alignedBase = roundToBlinkPageBoundary(base);
-        Address payloadBase = alignedBase + osPageSize();
-        Address payloadEnd = payloadBase + payloadSize;
-        Address blinkPageEnd = payloadEnd + osPageSize();
-
-        // If the allocate memory was not blink page aligned release
-        // the memory before the aligned address.
-        if (alignedBase != base)
-            MemoryRegion(base, alignedBase - base).release();
-
-        // Create guard pages by decommiting an OS page before and
-        // after the payload.
-        MemoryRegion(alignedBase, osPageSize()).decommit();
-        MemoryRegion(payloadEnd, osPageSize()).decommit();
-
-        // Free the additional memory at the end of the page if any.
-        if (blinkPageEnd < end)
-            MemoryRegion(blinkPageEnd, end - blinkPageEnd).release();
-
-        return new PageMemory(MemoryRegion(alignedBase, blinkPageEnd - alignedBase), MemoryRegion(payloadBase, payloadSize));
-#else
-        Address base = 0;
-        Address alignedBase = 0;
-
-        // On Windows it is impossible to partially release a region
-        // of memory allocated by VirtualAlloc. To avoid wasting
-        // virtual address space we attempt to release a large region
-        // of memory returned as a whole and then allocate an aligned
-        // region inside this larger region.
-        for (int attempt = 0; attempt < 3; attempt++) {
-            base = static_cast<Address>(VirtualAlloc(0, allocationSize, MEM_RESERVE, PAGE_NOACCESS));
-            RELEASE_ASSERT(base);
-            VirtualFree(base, 0, MEM_RELEASE);
-
-            alignedBase = roundToBlinkPageBoundary(base);
-            base = static_cast<Address>(VirtualAlloc(alignedBase, payloadSize + 2 * osPageSize(), MEM_RESERVE, PAGE_NOACCESS));
-            if (base) {
-                RELEASE_ASSERT(base == alignedBase);
-                allocationSize = payloadSize + 2 * osPageSize();
-                break;
-            }
-        }
-
-        if (!base) {
-            // We failed to avoid wasting virtual address space after
-            // several attempts.
-            base = static_cast<Address>(VirtualAlloc(0, allocationSize, MEM_RESERVE, PAGE_NOACCESS));
-            RELEASE_ASSERT(base);
-
-            // FIXME: If base is by accident blink page size aligned
-            // here then we can create two pages out of reserved
-            // space. Do this.
-            alignedBase = roundToBlinkPageBoundary(base);
-        }
-
-        Address payloadBase = alignedBase + osPageSize();
-        PageMemory* storage = new PageMemory(MemoryRegion(base, allocationSize), MemoryRegion(payloadBase, payloadSize));
-        bool res = storage->commit();
-        RELEASE_ASSERT(res);
+        // Overallocate by 2 times OS page size to have space for a
+        // guard page at the beginning and end of blink heap page.
+        size_t allocationSize = payloadSize + 2 * osPageSize();
+        PageMemoryRegion* pageMemoryRegion = PageMemoryRegion::allocate(allocationSize, 1);
+        PageMemory* storage = setupPageMemoryInRegion(pageMemoryRegion, 0, payloadSize);
+        RELEASE_ASSERT(storage->commit());
         return storage;
-#endif
     }
 
 private:
-    PageMemory(const MemoryRegion& reserved, const MemoryRegion& writable)
+    PageMemory(PageMemoryRegion* reserved, const MemoryRegion& writable)
         : m_reserved(reserved)
         , m_writable(writable)
     {
-        // This annotation is for letting the LeakSanitizer ignore PageMemory objects.
-        //
-        // - The LeakSanitizer runs before the shutdown sequence and reports unreachable memory blocks.
-        // - The LeakSanitizer only recognizes memory blocks allocated through malloc/new,
-        //   and we need special handling for mapped regions.
-        // - The PageMemory object is only referenced by a HeapPage<Header> object, which is
-        //   located inside the mapped region, which is not released until the shutdown sequence.
-        //
-        // Given the above, we need to explicitly annotate that the LeakSanitizer should ignore
-        // PageMemory objects.
-        WTF_ANNOTATE_LEAKING_OBJECT_PTR(this);
+        ASSERT(reserved->contains(writable));
 
-        ASSERT(reserved.contains(writable));
+        // Register the writable area of the memory as part of the LSan root set.
+        // Only the writable area is mapped and can contain C++ objects. Those
+        // C++ objects can contain pointers to objects outside of the heap and
+        // should therefore be part of the LSan root set.
+        __lsan_register_root_region(m_writable.base(), m_writable.size());
     }
 
-    MemoryRegion m_reserved;
+
+    PageMemoryRegion* m_reserved;
     MemoryRegion m_writable;
 };
 
@@ -305,10 +368,10 @@ public:
         , m_safePointScope(stackState)
         , m_parkedAllThreads(false)
     {
-        TRACE_EVENT0("Blink", "Heap::GCScope");
+        TRACE_EVENT0("blink", "Heap::GCScope");
         const char* samplingState = TRACE_EVENT_GET_SAMPLING_STATE();
         if (m_state->isMainThread())
-            TRACE_EVENT_SET_SAMPLING_STATE("Blink", "BlinkGCWaiting");
+            TRACE_EVENT_SET_SAMPLING_STATE("blink", "BlinkGCWaiting");
 
         m_state->checkThread();
 
@@ -401,7 +464,11 @@ void HeapObjectHeader::finalize(const GCInfo* gcInfo, Address object, size_t obj
     if (gcInfo->hasFinalizer()) {
         gcInfo->m_finalize(object);
     }
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(LEAK_SANITIZER)
+    // Zap freed memory with a recognizable zap value in debug mode.
+    // Also zap when using leak sanitizer because the heap is used as
+    // a root region for lsan and therefore pointers in unreachable
+    // memory could hide leaks.
     for (size_t i = 0; i < objectSize; i++)
         object[i] = finalizedZapValue;
 #endif
@@ -711,13 +778,19 @@ PageMemory* ThreadHeap<Header>::takePageFromPool()
 }
 
 template<typename Header>
-void ThreadHeap<Header>::addPageToPool(HeapPage<Header>* unused)
+void ThreadHeap<Header>::addPageMemoryToPool(PageMemory* storage)
 {
     flushHeapContainsCache();
-    PageMemory* storage = unused->storage();
     PagePoolEntry* entry = new PagePoolEntry(storage, m_pagePool);
     m_pagePool = entry;
+}
+
+template <typename Header>
+void ThreadHeap<Header>::addPageToPool(HeapPage<Header>* page)
+{
+    PageMemory* storage = page->storage();
     storage->decommit();
+    addPageMemoryToPool(storage);
 }
 
 template<typename Header>
@@ -726,7 +799,20 @@ void ThreadHeap<Header>::allocatePage(const GCInfo* gcInfo)
     Heap::flushHeapDoesNotContainCache();
     PageMemory* pageMemory = takePageFromPool();
     if (!pageMemory) {
-        pageMemory = PageMemory::allocate(blinkPagePayloadSize());
+        // Allocate a memory region for blinkPagesPerRegion pages that
+        // will each have the following layout.
+        //
+        //    [ guard os page | ... payload ... | guard os page ]
+        //    ^---{ aligned to blink page size }
+        PageMemoryRegion* region = PageMemoryRegion::allocate(blinkPageSize * blinkPagesPerRegion, blinkPagesPerRegion);
+        // Setup the PageMemory object for each of the pages in the
+        // region.
+        size_t offset = 0;
+        for (size_t i = 0; i < blinkPagesPerRegion; i++) {
+            addPageMemoryToPool(PageMemory::setupPageMemoryInRegion(region, offset, blinkPagePayloadSize()));
+            offset += blinkPageSize;
+        }
+        pageMemory = takePageFromPool();
         RELEASE_ASSERT(pageMemory);
     }
     HeapPage<Header>* page = new (pageMemory->writableStart()) HeapPage<Header>(pageMemory, this, gcInfo);
@@ -816,16 +902,29 @@ void ThreadHeap<Header>::assertEmpty()
         for (headerAddress = page->payload(); headerAddress < end; ) {
             BasicObjectHeader* basicHeader = reinterpret_cast<BasicObjectHeader*>(headerAddress);
             ASSERT(basicHeader->size() < blinkPagePayloadSize());
-            // Live object is potentially a dangling pointer from some root.
-            // Treat it as critical bug both in release and debug mode.
-            RELEASE_ASSERT(basicHeader->isFree());
+            // A live object is potentially a dangling pointer from
+            // some root. Treat that as a bug. Unfortunately, it is
+            // hard to reliably check in the presence of conservative
+            // stack scanning. Something could be conservatively kept
+            // alive because a non-pointer on another thread's stack
+            // is treated as a pointer into the heap.
+            //
+            // FIXME: This assert can currently trigger in cases where
+            // worker shutdown does not get enough precise GCs to get
+            // all objects removed from the worker heap. There are two
+            // issues: 1) conservative GCs keeping objects alive, and
+            // 2) long chains of RefPtrs/Persistents that require more
+            // GCs to get everything cleaned up. Maybe we can keep
+            // threads alive until their heaps become empty instead of
+            // forcing the threads to die immediately?
+            ASSERT(Heap::lastGCWasConservative() || basicHeader->isFree());
             headerAddress += basicHeader->size();
         }
         ASSERT(headerAddress == end);
         addToFreeList(page->payload(), end - page->payload());
     }
 
-    RELEASE_ASSERT(!m_firstLargeHeapObject);
+    ASSERT(Heap::lastGCWasConservative() || !m_firstLargeHeapObject);
 }
 
 template<typename Header>
@@ -1255,15 +1354,13 @@ CallbackStack::~CallbackStack()
 
 void CallbackStack::clearUnused()
 {
-    ASSERT(m_current == &(m_buffer[0]));
     for (size_t i = 0; i < bufferSize; i++)
         m_buffer[i] = Item(0, 0);
 }
 
-void CallbackStack::assertIsEmpty()
+bool CallbackStack::isEmpty()
 {
-    ASSERT(m_current == &(m_buffer[0]));
-    ASSERT(!m_next);
+    return m_current == &(m_buffer[0]) && !m_next;
 }
 
 bool CallbackStack::popAndInvokeCallback(CallbackStack** first, Visitor* visitor)
@@ -1292,6 +1389,53 @@ bool CallbackStack::popAndInvokeCallback(CallbackStack** first, Visitor* visitor
     return true;
 }
 
+void CallbackStack::invokeCallbacks(CallbackStack** first, Visitor* visitor)
+{
+    CallbackStack* stack = 0;
+    // The first block is the only one where new ephemerons are added, so we
+    // call the callbacks on that last, to catch any new ephemerons discovered
+    // in the callbacks.
+    // However, if enough ephemerons were added, we may have a new block that
+    // has been prepended to the chain. This will be very rare, but we can
+    // handle the situation by starting again and calling all the callbacks
+    // a second time.
+    while (stack != *first) {
+        stack = *first;
+        stack->invokeOldestCallbacks(visitor);
+    }
+}
+
+void CallbackStack::invokeOldestCallbacks(Visitor* visitor)
+{
+    // Recurse first (bufferSize at a time) so we get to the newly added entries
+    // last.
+    if (m_next)
+        m_next->invokeOldestCallbacks(visitor);
+
+    // This loop can tolerate entries being added by the callbacks after
+    // iteration starts.
+    for (unsigned i = 0; m_buffer + i < m_current; i++) {
+        Item& item = m_buffer[i];
+        item.callback()(visitor, item.object());
+    }
+}
+
+#ifndef NDEBUG
+bool CallbackStack::hasCallbackForObject(const void* object)
+{
+    for (unsigned i = 0; m_buffer + i < m_current; i++) {
+        Item* item = &m_buffer[i];
+        if (item->object() == object) {
+            return true;
+        }
+    }
+    if (m_next)
+        return m_next->hasCallbackForObject(object);
+
+    return false;
+}
+#endif
+
 class MarkingVisitor : public Visitor {
 public:
 #if ENABLE(GC_TRACING)
@@ -1308,6 +1452,7 @@ public:
             return;
         header->mark();
 #if ENABLE(GC_TRACING)
+        MutexLocker locker(objectGraphMutex());
         String className(classOf(objectPointer));
         {
             LiveObjectMap::AddResult result = currentlyLive().add(className, LiveObjectSet());
@@ -1315,7 +1460,7 @@ public:
         }
         ObjectGraph::AddResult result = objectGraph().add(reinterpret_cast<uintptr_t>(objectPointer), std::make_pair(reinterpret_cast<uintptr_t>(m_hostObject), m_hostName));
         ASSERT(result.isNewEntry);
-        // printf("%s[%p] -> %s[%p]\n", m_hostName.ascii().data(), m_hostObject, className.ascii().data(), objectPointer);
+        // fprintf(stderr, "%s[%p] -> %s[%p]\n", m_hostName.ascii().data(), m_hostObject, className.ascii().data(), objectPointer);
 #endif
         if (callback)
             Heap::pushTraceCallback(const_cast<void*>(objectPointer), callback);
@@ -1377,6 +1522,18 @@ public:
         Heap::pushWeakObjectPointerCallback(const_cast<void*>(closure), const_cast<void*>(containingObject), callback);
     }
 
+    virtual void registerWeakTable(const void* closure, EphemeronCallback iterationCallback, EphemeronCallback iterationDoneCallback)
+    {
+        Heap::registerWeakTable(const_cast<void*>(closure), iterationCallback, iterationDoneCallback);
+    }
+
+#ifndef NDEBUG
+    virtual bool weakTableRegistered(const void* closure)
+    {
+        return Heap::weakTableRegistered(closure);
+    }
+#endif
+
     virtual bool isMarked(const void* objectPointer) OVERRIDE
     {
         return FinalizedHeapObjectHeader::fromPayload(objectPointer)->isMarked();
@@ -1403,14 +1560,14 @@ public:
 #if ENABLE(GC_TRACING)
     void reportStats()
     {
-        printf("\n---------- AFTER MARKING -------------------\n");
+        fprintf(stderr, "\n---------- AFTER MARKING -------------------\n");
         for (LiveObjectMap::iterator it = currentlyLive().begin(), end = currentlyLive().end(); it != end; ++it) {
-            printf("%s %u", it->key.ascii().data(), it->value.size());
+            fprintf(stderr, "%s %u", it->key.ascii().data(), it->value.size());
 
             if (it->key == "WebCore::Document")
                 reportStillAlive(it->value, previouslyLive().get(it->key));
 
-            printf("\n");
+            fprintf(stderr, "\n");
         }
 
         previouslyLive().swap(currentlyLive());
@@ -1425,7 +1582,7 @@ public:
     {
         int count = 0;
 
-        printf(" [previously %u]", previous.size());
+        fprintf(stderr, " [previously %u]", previous.size());
         for (LiveObjectSet::iterator it = current.begin(), end = current.end(); it != end; ++it) {
             if (previous.find(*it) == previous.end())
                 continue;
@@ -1435,32 +1592,40 @@ public:
         if (!count)
             return;
 
-        printf(" {survived 2GCs %d: ", count);
+        fprintf(stderr, " {survived 2GCs %d: ", count);
         for (LiveObjectSet::iterator it = current.begin(), end = current.end(); it != end; ++it) {
             if (previous.find(*it) == previous.end())
                 continue;
-            printf("%ld", *it);
+            fprintf(stderr, "%ld", *it);
             if (--count)
-                printf(", ");
+                fprintf(stderr, ", ");
         }
         ASSERT(!count);
-        printf("}");
+        fprintf(stderr, "}");
     }
 
     static void dumpPathToObjectFromObjectGraph(const ObjectGraph& graph, uintptr_t target)
     {
-        printf("Path to %lx of %s\n", target, classOf(reinterpret_cast<const void*>(target)).ascii().data());
         ObjectGraph::const_iterator it = graph.find(target);
+        if (it == graph.end())
+            return;
+        fprintf(stderr, "Path to %lx of %s\n", target, classOf(reinterpret_cast<const void*>(target)).ascii().data());
         while (it != graph.end()) {
-            printf("<- %lx of %s\n", it->value.first, it->value.second.ascii().data());
+            fprintf(stderr, "<- %lx of %s\n", it->value.first, it->value.second.utf8().data());
             it = graph.find(it->value.first);
         }
-        printf("\n");
+        fprintf(stderr, "\n");
     }
 
     static void dumpPathToObjectOnNextGC(void* p)
     {
         objectsToFindPath().add(reinterpret_cast<uintptr_t>(p));
+    }
+
+    static Mutex& objectGraphMutex()
+    {
+        AtomicallyInitializedStatic(Mutex&, mutex = *new Mutex);
+        return mutex;
     }
 
     static LiveObjectMap& previouslyLive()
@@ -1500,6 +1665,7 @@ void Heap::init()
     ThreadState::init();
     CallbackStack::init(&s_markingStack);
     CallbackStack::init(&s_weakCallbackStack);
+    CallbackStack::init(&s_ephemeronStack);
     s_heapDoesNotContainCache = new HeapDoesNotContainCache();
     s_markingVisitor = new MarkingVisitor();
 }
@@ -1524,6 +1690,7 @@ void Heap::doShutdown()
     s_heapDoesNotContainCache = 0;
     CallbackStack::shutdown(&s_weakCallbackStack);
     CallbackStack::shutdown(&s_markingStack);
+    CallbackStack::shutdown(&s_ephemeronStack);
     ThreadState::shutdown();
 }
 
@@ -1554,6 +1721,7 @@ Address Heap::checkAndMarkPointer(Visitor* visitor, Address address)
             // Pointer was in a page of that thread. If it actually pointed
             // into an object then that object was found and marked.
             ASSERT(!s_heapDoesNotContainCache->lookup(address));
+            s_lastGCWasConservative = true;
             return address;
         }
     }
@@ -1570,18 +1738,47 @@ Address Heap::checkAndMarkPointer(Visitor* visitor, Address address)
 #if ENABLE(GC_TRACING)
 const GCInfo* Heap::findGCInfo(Address address)
 {
-    ThreadState::AttachedThreadStateSet& threads = ThreadState::attachedThreads();
-    for (ThreadState::AttachedThreadStateSet::iterator it = threads.begin(), end = threads.end(); it != end; ++it) {
-        if (const GCInfo* gcInfo = (*it)->findGCInfo(address)) {
-            return gcInfo;
-        }
-    }
-    return 0;
+    return ThreadState::findGCInfoFromAllThreads(address);
 }
 
 void Heap::dumpPathToObjectOnNextGC(void* p)
 {
     static_cast<MarkingVisitor*>(s_markingVisitor)->dumpPathToObjectOnNextGC(p);
+}
+
+String Heap::createBacktraceString()
+{
+    int framesToShow = 3;
+    int stackFrameSize = 16;
+    ASSERT(stackFrameSize >= framesToShow);
+    typedef void* FramePointer;
+    FramePointer* stackFrame = static_cast<FramePointer*>(alloca(sizeof(FramePointer) * stackFrameSize));
+    WTFGetBacktrace(stackFrame, &stackFrameSize);
+
+    StringBuilder builder;
+    builder.append("Persistent");
+    bool didAppendFirstName = false;
+    // Skip frames before/including "WebCore::Persistent".
+    bool didSeePersistent = false;
+    for (int i = 0; i < stackFrameSize && framesToShow > 0; ++i) {
+        FrameToNameScope frameToName(stackFrame[i]);
+        if (!frameToName.nullableName())
+            continue;
+        if (strstr(frameToName.nullableName(), "WebCore::Persistent")) {
+            didSeePersistent = true;
+            continue;
+        }
+        if (!didSeePersistent)
+            continue;
+        if (!didAppendFirstName) {
+            didAppendFirstName = true;
+            builder.append(" ... Backtrace:");
+        }
+        builder.append("\n\t");
+        builder.append(frameToName.nullableName());
+        --framesToShow;
+    }
+    return builder.toString().replace("WebCore::", "");
 }
 #endif
 
@@ -1618,6 +1815,25 @@ bool Heap::popAndInvokeWeakPointerCallback(Visitor* visitor)
     return s_weakCallbackStack->popAndInvokeCallback(&s_weakCallbackStack, visitor);
 }
 
+void Heap::registerWeakTable(void* table, EphemeronCallback iterationCallback, EphemeronCallback iterationDoneCallback)
+{
+    CallbackStack::Item* slot = s_ephemeronStack->allocateEntry(&s_ephemeronStack);
+    *slot = CallbackStack::Item(table, iterationCallback);
+
+    // We use the callback stack of weak cell pointers for the ephemeronIterationDone callbacks.
+    // These callbacks are called right after marking and before any thread commences execution
+    // so it suits our needs for telling the ephemerons that the iteration is done.
+    pushWeakCellPointerCallback(static_cast<void**>(table), iterationDoneCallback);
+}
+
+#ifndef NDEBUG
+bool Heap::weakTableRegistered(const void* table)
+{
+    ASSERT(s_ephemeronStack);
+    return s_ephemeronStack->hasCallbackForObject(table);
+}
+#endif
+
 void Heap::prepareForGC()
 {
     ASSERT(ThreadState::isAnyThreadInGC());
@@ -1637,8 +1853,12 @@ void Heap::collectGarbage(ThreadState::StackState stackState)
         ThreadState::current()->setGCRequested();
         return;
     }
-    TRACE_EVENT0("Blink", "Heap::collectGarbage");
-    TRACE_EVENT_SCOPED_SAMPLING_STATE("Blink", "BlinkGC");
+
+    s_lastGCWasConservative = false;
+
+    TRACE_EVENT0("blink", "Heap::collectGarbage");
+    TRACE_EVENT_SCOPED_SAMPLING_STATE("blink", "BlinkGC");
+    double timeStamp = WTF::currentTimeMS();
 #if ENABLE(GC_TRACING)
     static_cast<MarkingVisitor*>(s_markingVisitor)->objectGraph().clear();
 #endif
@@ -1651,20 +1871,43 @@ void Heap::collectGarbage(ThreadState::StackState stackState)
     prepareForGC();
 
     ThreadState::visitRoots(s_markingVisitor);
-    // Recursively mark all objects that are reachable from the roots.
-    while (popAndInvokeTraceCallback(s_markingVisitor)) { }
+
+    // Ephemeron fixed point loop.
+    do {
+        // Recursively mark all objects that are reachable from the roots.
+        while (popAndInvokeTraceCallback(s_markingVisitor)) { }
+
+        // Mark any strong pointers that have now become reachable in ephemeron
+        // maps.
+        CallbackStack::invokeCallbacks(&s_ephemeronStack, s_markingVisitor);
+
+        // Rerun loop if ephemeron processing queued more objects for tracing.
+    } while (!s_markingStack->isEmpty());
 
     // Call weak callbacks on objects that may now be pointing to dead
-    // objects.
+    // objects and call ephemeronIterationDone callbacks on weak tables
+    // to do cleanup (specifically clear the queued bits for weak hash
+    // tables).
     while (popAndInvokeWeakPointerCallback(s_markingVisitor)) { }
+
+    CallbackStack::clear(&s_ephemeronStack);
 
     // It is not permitted to trace pointers of live objects in the weak
     // callback phase, so the marking stack should still be empty here.
-    s_markingStack->assertIsEmpty();
+    ASSERT(s_markingStack->isEmpty());
 
 #if ENABLE(GC_TRACING)
     static_cast<MarkingVisitor*>(s_markingVisitor)->reportStats();
 #endif
+
+    if (blink::Platform::current()) {
+        uint64_t objectSpaceSize;
+        uint64_t allocatedSpaceSize;
+        getHeapSpaceSize(&objectSpaceSize, &allocatedSpaceSize);
+        blink::Platform::current()->histogramCustomCounts("BlinkGC.CollectGarbage", WTF::currentTimeMS() - timeStamp, 0, 10 * 1000, 50);
+        blink::Platform::current()->histogramCustomCounts("BlinkGC.TotalObjectSpace", objectSpaceSize / 1024, 0, 4 * 1024 * 1024, 50);
+        blink::Platform::current()->histogramCustomCounts("BlinkGC.TotalAllocatedSpace", allocatedSpaceSize / 1024, 0, 4 * 1024 * 1024, 50);
+    }
 }
 
 void Heap::collectAllGarbage()
@@ -1681,6 +1924,19 @@ void Heap::collectAllGarbage()
 void Heap::setForcePreciseGCForTesting()
 {
     ThreadState::current()->setForcePreciseGCForTesting(true);
+}
+
+void Heap::getHeapSpaceSize(uint64_t* objectSpaceSize, uint64_t* allocatedSpaceSize)
+{
+    *objectSpaceSize = 0;
+    *allocatedSpaceSize = 0;
+    ASSERT(ThreadState::isAnyThreadInGC());
+    ThreadState::AttachedThreadStateSet& threads = ThreadState::attachedThreads();
+    typedef ThreadState::AttachedThreadStateSet::iterator ThreadStateIterator;
+    for (ThreadStateIterator it = threads.begin(), end = threads.end(); it != end; ++it) {
+        *objectSpaceSize += (*it)->stats().totalObjectSpace();
+        *allocatedSpaceSize += (*it)->stats().totalAllocatedSpace();
+    }
 }
 
 void Heap::getStats(HeapStats* stats)
@@ -1724,6 +1980,8 @@ template class ThreadHeap<HeapObjectHeader>;
 Visitor* Heap::s_markingVisitor;
 CallbackStack* Heap::s_markingStack;
 CallbackStack* Heap::s_weakCallbackStack;
+CallbackStack* Heap::s_ephemeronStack;
 HeapDoesNotContainCache* Heap::s_heapDoesNotContainCache;
 bool Heap::s_shutdownCalled = false;
+bool Heap::s_lastGCWasConservative = false;
 }

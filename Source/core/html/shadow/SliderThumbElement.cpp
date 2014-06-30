@@ -46,8 +46,6 @@
 #include "core/rendering/RenderSlider.h"
 #include "core/rendering/RenderTheme.h"
 
-using namespace std;
-
 namespace WebCore {
 
 using namespace HTMLNames;
@@ -186,15 +184,6 @@ void RenderSliderContainer::layout()
     else
         thumbLocation.setX(thumbLocation.x() - offset);
     thumb->setLocation(thumbLocation);
-    if (checkForRepaintDuringLayout() && parent()
-        && (parent()->style()->appearance() == MediaVolumeSliderPart || parent()->style()->appearance() == MediaSliderPart)) {
-        // This will sometimes repaint too much. However, it is necessary to
-        // correctly repaint media controls (volume and timeline sliders) -
-        // they have special painting code in RenderMediaControls.cpp:paintMediaVolumeSlider
-        // and paintMediaSlider that gets called via -webkit-appearance and RenderTheme,
-        // so nothing else would otherwise invalidate the slider.
-        repaint();
-    }
 }
 
 // --------------------------------
@@ -207,7 +196,7 @@ inline SliderThumbElement::SliderThumbElement(Document& document)
 
 PassRefPtrWillBeRawPtr<SliderThumbElement> SliderThumbElement::create(Document& document)
 {
-    RefPtrWillBeRawPtr<SliderThumbElement> element = adoptRefWillBeRefCountedGarbageCollected(new SliderThumbElement(document));
+    RefPtrWillBeRawPtr<SliderThumbElement> element = adoptRefWillBeNoop(new SliderThumbElement(document));
     element->setAttribute(idAttr, ShadowElementNames::sliderThumb());
     return element.release();
 }
@@ -218,7 +207,7 @@ void SliderThumbElement::setPositionFromValue()
     // path, we don't actually update the value here. Instead, we poke at the
     // renderer directly to trigger layout.
     if (renderer())
-        renderer()->setNeedsLayoutAndFullRepaint();
+        renderer()->setNeedsLayoutAndFullPaintInvalidation();
 }
 
 RenderObject* SliderThumbElement::createRenderer(RenderStyle*)
@@ -248,14 +237,14 @@ Node* SliderThumbElement::focusDelegate()
 
 void SliderThumbElement::dragFrom(const LayoutPoint& point)
 {
-    RefPtr<SliderThumbElement> protector(this);
+    RefPtrWillBeRawPtr<SliderThumbElement> protector(this);
     startDragging();
     setPositionFromPoint(point);
 }
 
 void SliderThumbElement::setPositionFromPoint(const LayoutPoint& point)
 {
-    RefPtr<HTMLInputElement> input(hostInput());
+    RefPtrWillBeRawPtr<HTMLInputElement> input(hostInput());
     Element* trackElement = input->userAgentShadowRoot()->getElementById(ShadowElementNames::sliderTrack());
 
     if (!input->renderer() || !renderBox() || !trackElement->renderBox())
@@ -285,7 +274,7 @@ void SliderThumbElement::setPositionFromPoint(const LayoutPoint& point)
         position -= isLeftToRightDirection ? renderBox()->marginLeft() : renderBox()->marginRight();
         currentPosition = absoluteThumbOrigin.x() - absoluteSliderContentOrigin.x();
     }
-    position = max<LayoutUnit>(0, min(position, trackSize));
+    position = std::max<LayoutUnit>(0, std::min(position, trackSize));
     const Decimal ratio = Decimal::fromDouble(static_cast<double>(position) / trackSize);
     const Decimal fraction = isVertical || !isLeftToRightDirection ? Decimal(1) - ratio : ratio;
     StepRange stepRange(input->createStepRange(RejectAny));
@@ -308,7 +297,7 @@ void SliderThumbElement::setPositionFromPoint(const LayoutPoint& point)
     // FIXME: This is no longer being set from renderer. Consider updating the method name.
     input->setValueFromRenderer(valueString);
     if (renderer())
-        renderer()->setNeedsLayoutAndFullRepaint();
+        renderer()->setNeedsLayoutAndFullPaintInvalidation();
 }
 
 void SliderThumbElement::startDragging()
@@ -328,7 +317,7 @@ void SliderThumbElement::stopDragging()
         frame->eventHandler().setCapturingMouseEventsNode(nullptr);
     m_inDragMode = false;
     if (renderer())
-        renderer()->setNeedsLayoutAndFullRepaint();
+        renderer()->setNeedsLayoutAndFullPaintInvalidation();
     if (hostInput())
         hostInput()->dispatchFormControlChangeEvent();
 }
@@ -444,10 +433,7 @@ inline SliderContainerElement::SliderContainerElement(Document& document)
 {
 }
 
-PassRefPtrWillBeRawPtr<SliderContainerElement> SliderContainerElement::create(Document& document)
-{
-    return adoptRefWillBeRefCountedGarbageCollected(new SliderContainerElement(document));
-}
+DEFINE_NODE_FACTORY(SliderContainerElement)
 
 RenderObject* SliderContainerElement::createRenderer(RenderStyle*)
 {

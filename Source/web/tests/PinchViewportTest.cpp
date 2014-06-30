@@ -8,12 +8,17 @@
 
 #include "core/frame/FrameHost.h"
 #include "core/frame/LocalFrame.h"
+#include "core/page/Page.h"
+#include "core/rendering/RenderObject.h"
 #include "core/rendering/RenderView.h"
 #include "core/rendering/compositing/CompositedLayerMapping.h"
 #include "core/rendering/compositing/RenderLayerCompositor.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebLayerTreeView.h"
 #include "public/platform/WebUnitTestSupport.h"
+#include "public/web/WebContextMenuData.h"
+#include "public/web/WebFrameClient.h"
+#include "public/web/WebInputEvent.h"
 #include "public/web/WebScriptSource.h"
 #include "public/web/WebSettings.h"
 #include "public/web/WebViewClient.h"
@@ -64,6 +69,19 @@
 
 using namespace WebCore;
 using namespace blink;
+
+using ::testing::_;
+using ::testing::PrintToString;
+using ::testing::Mock;
+
+namespace blink {
+::std::ostream& operator<<(::std::ostream& os, const WebContextMenuData& data)
+{
+    return os << "Context menu location: ["
+        << data.mousePosition.x << ", " << data.mousePosition.y << "]";
+}
+}
+
 
 namespace {
 
@@ -125,7 +143,6 @@ public:
     static void configureSettings(WebSettings* settings)
     {
         settings->setJavaScriptEnabled(true);
-        settings->setForceCompositingMode(true);
         settings->setAcceleratedCompositingEnabled(true);
         settings->setAcceleratedCompositingForFixedPositionEnabled(true);
         settings->setAcceleratedCompositingForOverflowScrollEnabled(true);
@@ -179,27 +196,29 @@ TEST_F(PinchViewportTest, TestResize)
     EXPECT_SIZE_EQ(newViewportSize, pinchViewport.size());
 }
 
-static void turnOffForceCompositingMode(WebSettings* settings)
+static void disableAcceleratedCompositing(WebSettings* settings)
 {
     PinchViewportTest::configureSettings(settings);
-    settings->setForceCompositingMode(false);
+    // FIXME: This setting is being removed, so this test needs to be rewritten to
+    // do something else. crbug.com/173949
+    settings->setAcceleratedCompositingEnabled(false);
 }
 
 // Test that the container layer gets sized properly if the WebView is resized
 // prior to the PinchViewport being attached to the layer tree.
 TEST_F(PinchViewportTest, TestWebViewResizedBeforeAttachment)
 {
-    initializeWithDesktopSettings(turnOffForceCompositingMode);
+    initializeWithDesktopSettings(disableAcceleratedCompositing);
     webViewImpl()->resize(IntSize(320, 240));
 
     navigateTo("about:blank");
     forceFullCompositingUpdate();
-    webViewImpl()->enterForceCompositingMode(true);
+    webViewImpl()->settings()->setAcceleratedCompositingEnabled(true);
+    webViewImpl()->layout();
 
     PinchViewport& pinchViewport = frame()->page()->frameHost().pinchViewport();
-    EXPECT_FLOAT_SIZE_EQ(FloatSize(320, 240), pinchViewport.rootGraphicsLayer()->size());
+    EXPECT_FLOAT_SIZE_EQ(FloatSize(320, 240), pinchViewport.containerLayer()->size());
 }
-
 // Make sure that the visibleRect method acurately reflects the scale and scroll location
 // of the viewport.
 TEST_F(PinchViewportTest, TestVisibleRect)
@@ -517,17 +536,17 @@ TEST_F(PinchViewportTest, TestSavedToHistoryItem)
     navigateTo(m_baseURL + "200-by-300.html");
 
     EXPECT_FLOAT_POINT_EQ(FloatPoint(0, 0),
-        webViewImpl()->page()->mainFrame()->loader().currentItem()->pinchViewportScrollPoint());
+        toLocalFrame(webViewImpl()->page()->mainFrame())->loader().currentItem()->pinchViewportScrollPoint());
 
     PinchViewport& pinchViewport = frame()->page()->frameHost().pinchViewport();
     pinchViewport.setScale(2);
 
-    EXPECT_EQ(2, webViewImpl()->page()->mainFrame()->loader().currentItem()->pageScaleFactor());
+    EXPECT_EQ(2, toLocalFrame(webViewImpl()->page()->mainFrame())->loader().currentItem()->pageScaleFactor());
 
     pinchViewport.setLocation(FloatPoint(10, 20));
 
     EXPECT_FLOAT_POINT_EQ(FloatPoint(10, 20),
-        webViewImpl()->page()->mainFrame()->loader().currentItem()->pinchViewportScrollPoint());
+        toLocalFrame(webViewImpl()->page()->mainFrame())->loader().currentItem()->pinchViewportScrollPoint());
 }
 
 // Test restoring a HistoryItem properly restores the pinch viewport's state.
@@ -580,6 +599,41 @@ TEST_F(PinchViewportTest, TestRestoredFromLegacyHistoryItem)
     EXPECT_FLOAT_POINT_EQ(FloatPoint(20, 30), pinchViewport.visibleRect().location());
 }
 
+// Test that the coordinates sent into moveRangeSelection are offset by the
+// pinch viewport's location.
+TEST_F(PinchViewportTest, TestWebFrameRangeAccountsForPinchViewportScroll)
+{
+    initializeWithDesktopSettings();
+    webViewImpl()->settings()->setDefaultFontSize(12);
+    webViewImpl()->resize(WebSize(640, 480));
+    registerMockedHttpURLLoad("move_range.html");
+    navigateTo(m_baseURL + "move_range.html");
+
+    WebRect baseRect;
+    WebRect extentRect;
+
+    webViewImpl()->setPageScaleFactor(2);
+    WebFrame* mainFrame = webViewImpl()->mainFrame();
+
+    // Select some text and get the base and extent rects (that's the start of
+    // the range and its end). Do a sanity check that the expected text is
+    // selected
+    mainFrame->executeScript(WebScriptSource("selectRange();"));
+    EXPECT_EQ("ir", mainFrame->selectionAsText().utf8());
+
+    webViewImpl()->selectionBounds(baseRect, extentRect);
+    WebPoint initialPoint(baseRect.x, baseRect.y);
+    WebPoint endPoint(extentRect.x, extentRect.y);
+
+    // Move the pinch viewport over and make the selection in the same
+    // screen-space location. The selection should change to two characters to
+    // the right and down one line.
+    PinchViewport& pinchViewport = frame()->page()->frameHost().pinchViewport();
+    pinchViewport.move(FloatPoint(60, 25));
+    mainFrame->moveRangeSelection(initialPoint, endPoint);
+    EXPECT_EQ("t ", mainFrame->selectionAsText().utf8());
+}
+
 // Test that the scrollFocusedNodeIntoRect method works with the pinch viewport.
 TEST_F(PinchViewportTest, TestScrollFocusedNodeIntoRect)
 {
@@ -592,6 +646,7 @@ TEST_F(PinchViewportTest, TestScrollFocusedNodeIntoRect)
     PinchViewport& pinchViewport = frame()->page()->frameHost().pinchViewport();
     webViewImpl()->resizePinchViewport(IntSize(200, 100));
     webViewImpl()->setInitialFocus(false);
+    pinchViewport.setLocation(FloatPoint());
     webViewImpl()->scrollFocusedNodeIntoRect(IntRect(0, 0, 500, 200));
 
     EXPECT_POINT_EQ(IntPoint(0, frame()->view()->maximumScrollPosition().y()),
@@ -613,6 +668,7 @@ TEST_F(PinchViewportTest, TestScrollFocusedNodeIntoRect)
     registerMockedHttpURLLoad("pinch-viewport-input-field-long-and-wide.html");
     navigateTo(m_baseURL + "pinch-viewport-input-field-long-and-wide.html");
     webViewImpl()->setInitialFocus(false);
+    pinchViewport.setLocation(FloatPoint());
     frame()->view()->notifyScrollPositionChanged(IntPoint(0, 0));
     webViewImpl()->resizePinchViewport(IntSize(500, 300));
     pinchViewport.setLocation(FloatPoint(30, 50));
@@ -621,6 +677,129 @@ TEST_F(PinchViewportTest, TestScrollFocusedNodeIntoRect)
     webViewImpl()->scrollFocusedNodeIntoRect(IntRect(0, 0, 500, 200));
     EXPECT_POINT_EQ(IntPoint(200-30-75, 600-50-65), frame()->view()->scrollPosition());
     EXPECT_FLOAT_POINT_EQ(FloatPoint(30, 50), pinchViewport.visibleRect().location());
+}
+
+// Test that resizing the WebView causes ViewportConstrained objects to relayout.
+TEST_F(PinchViewportTest, TestWebViewResizeCausesViewportConstrainedLayout)
+{
+    initializeWithDesktopSettings();
+    webViewImpl()->resize(IntSize(500, 300));
+
+    registerMockedHttpURLLoad("pinch-viewport-fixed-pos.html");
+    navigateTo(m_baseURL + "pinch-viewport-fixed-pos.html");
+
+    RenderObject* navbar = frame()->document()->getElementById("navbar")->renderer();
+
+    EXPECT_FALSE(navbar->needsLayout());
+
+    frame()->view()->resize(IntSize(500, 200));
+
+    EXPECT_TRUE(navbar->needsLayout());
+}
+
+class MockWebFrameClient : public blink::WebFrameClient {
+public:
+    MOCK_METHOD1(showContextMenu, void(const WebContextMenuData&));
+};
+
+MATCHER_P2(ContextMenuAtLocation, x, y,
+    std::string(negation ? "is" : "isn't")
+    + " at expected location ["
+    + PrintToString(x) + ", " + PrintToString(y) + "]")
+{
+    return arg.mousePosition.x == x && arg.mousePosition.y == y;
+}
+
+// Test that the context menu's location is correct in the presence of pinch
+// viewport offset.
+TEST_F(PinchViewportTest, TestContextMenuShownInCorrectLocation)
+{
+    initializeWithDesktopSettings();
+    webViewImpl()->resize(IntSize(200, 300));
+
+    registerMockedHttpURLLoad("200-by-300.html");
+    navigateTo(m_baseURL + "200-by-300.html");
+
+    WebMouseEvent mouseDownEvent;
+    mouseDownEvent.type = WebInputEvent::MouseDown;
+    mouseDownEvent.x = 10;
+    mouseDownEvent.y = 10;
+    mouseDownEvent.windowX = 10;
+    mouseDownEvent.windowY = 10;
+    mouseDownEvent.globalX = 110;
+    mouseDownEvent.globalY = 210;
+    mouseDownEvent.clickCount = 1;
+    mouseDownEvent.button = WebMouseEvent::ButtonRight;
+
+    // Corresponding release event (Windows shows context menu on release).
+    WebMouseEvent mouseUpEvent(mouseDownEvent);
+    mouseUpEvent.type = WebInputEvent::MouseUp;
+
+    WebFrameClient* oldClient = webViewImpl()->mainFrameImpl()->client();
+    MockWebFrameClient mockWebFrameClient;
+    EXPECT_CALL(mockWebFrameClient, showContextMenu(ContextMenuAtLocation(mouseDownEvent.x, mouseDownEvent.y)));
+
+    // Do a sanity check with no scale applied.
+    webViewImpl()->mainFrameImpl()->setClient(&mockWebFrameClient);
+    webViewImpl()->handleInputEvent(mouseDownEvent);
+    webViewImpl()->handleInputEvent(mouseUpEvent);
+
+    Mock::VerifyAndClearExpectations(&mockWebFrameClient);
+    mouseDownEvent.button = WebMouseEvent::ButtonLeft;
+    webViewImpl()->handleInputEvent(mouseDownEvent);
+
+    // Now pinch zoom into the page and move the pinch viewport. The context
+    // menu should still appear at the location of the event, relative to the
+    // WebView.
+    PinchViewport& pinchViewport = frame()->page()->frameHost().pinchViewport();
+    webViewImpl()->setPageScaleFactor(2);
+    pinchViewport.setLocation(FloatPoint(60, 80));
+    EXPECT_CALL(mockWebFrameClient, showContextMenu(ContextMenuAtLocation(mouseDownEvent.x, mouseDownEvent.y)));
+
+    mouseDownEvent.button = WebMouseEvent::ButtonRight;
+    webViewImpl()->handleInputEvent(mouseDownEvent);
+    webViewImpl()->handleInputEvent(mouseUpEvent);
+
+    // Reset the old client so destruction can occur naturally.
+    webViewImpl()->mainFrameImpl()->setClient(oldClient);
+}
+
+// Test that the scrollIntoView correctly scrolls the main frame
+// and pinch viewports such that the given rect is centered in the viewport.
+TEST_F(PinchViewportTest, TestScrollingDocumentRegionIntoView)
+{
+    initializeWithDesktopSettings();
+    webViewImpl()->resize(IntSize(100, 150));
+
+    registerMockedHttpURLLoad("200-by-300-viewport.html");
+    navigateTo(m_baseURL + "200-by-300-viewport.html");
+
+    PinchViewport& pinchViewport = frame()->page()->frameHost().pinchViewport();
+
+    // Test that the pinch viewport is scrolled if the viewport has been
+    // resized (as is the case when the ChromeOS keyboard comes up) but not
+    // scaled.
+    webViewImpl()->resizePinchViewport(WebSize(100, 100));
+    pinchViewport.scrollIntoView(FloatRect(100, 250, 50, 50));
+    EXPECT_POINT_EQ(IntPoint(75, 150), frame()->view()->scrollPosition());
+    EXPECT_FLOAT_POINT_EQ(FloatPoint(0, 50), pinchViewport.visibleRect().location());
+
+    pinchViewport.scrollIntoView(FloatRect(25, 75, 50, 50));
+    EXPECT_POINT_EQ(IntPoint(0, 0), frame()->view()->scrollPosition());
+    EXPECT_FLOAT_POINT_EQ(FloatPoint(0, 50), pinchViewport.visibleRect().location());
+
+    // Reset the pinch viewport's size, scale the page and repeat the test
+    webViewImpl()->resizePinchViewport(IntSize(100, 150));
+    webViewImpl()->setPageScaleFactor(2);
+    pinchViewport.setLocation(FloatPoint());
+
+    pinchViewport.scrollIntoView(FloatRect(50, 75, 50, 75));
+    EXPECT_POINT_EQ(IntPoint(50, 75), frame()->view()->scrollPosition());
+    EXPECT_FLOAT_POINT_EQ(FloatPoint(), pinchViewport.visibleRect().location());
+
+    pinchViewport.scrollIntoView(FloatRect(190, 290, 10, 10));
+    EXPECT_POINT_EQ(IntPoint(100, 150), frame()->view()->scrollPosition());
+    EXPECT_FLOAT_POINT_EQ(FloatPoint(50, 75), pinchViewport.visibleRect().location());
 }
 
 } // namespace

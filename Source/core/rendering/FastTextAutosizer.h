@@ -46,10 +46,8 @@ class RenderBlock;
 class RenderListItem;
 class RenderListMarker;
 
-// Single-pass text autosizer (work in progress). Works in two stages:
-// (1) record information about page elements during style recalc
-// (2) inflate sizes during layout
-// See: http://tinyurl.com/chromium-fast-autosizer
+// Single-pass text autosizer. Documentation at:
+// http://tinyurl.com/fasttextautosizer
 
 class FastTextAutosizer FINAL {
     WTF_MAKE_NONCOPYABLE(FastTextAutosizer);
@@ -59,6 +57,7 @@ public:
     {
         return adoptPtr(new FastTextAutosizer(document));
     }
+    static float computeAutosizedFontSize(float specifiedSize, float multiplier);
 
     void updatePageInfoInAllFrames();
     void updatePageInfo();
@@ -105,6 +104,11 @@ private:
     enum BeginLayoutBehavior {
         StopLayout,
         ContinueLayout
+    };
+
+    enum InflateBehavior {
+        ThisBlockOnly,
+        DescendToInnerBlocks
     };
 
     enum BlockFlag {
@@ -245,7 +249,7 @@ private:
     void beginLayout(RenderBlock*);
     void endLayout(RenderBlock*);
     void inflateAutoTable(RenderTable*);
-    void inflate(RenderBlock*);
+    float inflate(RenderObject*, InflateBehavior = ThisBlockOnly, float multiplier = 0);
     bool shouldHandleLayout() const;
     void setAllTextNeedsLayout();
     void resetMultipliers();

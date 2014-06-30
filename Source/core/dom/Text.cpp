@@ -22,9 +22,9 @@
 #include "config.h"
 #include "core/dom/Text.h"
 
-#include "SVGNames.h"
 #include "bindings/v8/ExceptionState.h"
 #include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "core/SVGNames.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/NodeRenderStyle.h"
@@ -40,18 +40,16 @@
 #include "wtf/text/CString.h"
 #include "wtf/text/StringBuilder.h"
 
-using namespace std;
-
 namespace WebCore {
 
 PassRefPtrWillBeRawPtr<Text> Text::create(Document& document, const String& data)
 {
-    return adoptRefWillBeRefCountedGarbageCollected(new Text(document, data, CreateText));
+    return adoptRefWillBeNoop(new Text(document, data, CreateText));
 }
 
 PassRefPtrWillBeRawPtr<Text> Text::createEditingText(Document& document, const String& data)
 {
-    return adoptRefWillBeRefCountedGarbageCollected(new Text(document, data, CreateEditingText));
+    return adoptRefWillBeNoop(new Text(document, data, CreateEditingText));
 }
 
 PassRefPtrWillBeRawPtr<Node> Text::mergeNextSiblingNodesIfPossible()

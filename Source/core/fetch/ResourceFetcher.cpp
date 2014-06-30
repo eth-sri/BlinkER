@@ -27,7 +27,6 @@
 #include "config.h"
 #include "core/fetch/ResourceFetcher.h"
 
-#include "RuntimeEnabledFeatures.h"
 #include "bindings/v8/ScriptController.h"
 #include "core/dom/Document.h"
 #include "core/fetch/CSSStyleSheetResource.h"
@@ -41,7 +40,6 @@
 #include "core/fetch/ResourceLoader.h"
 #include "core/fetch/ResourceLoaderSet.h"
 #include "core/fetch/ScriptResource.h"
-#include "core/fetch/ShaderResource.h"
 #include "core/fetch/XSLStyleSheetResource.h"
 #include "core/html/HTMLElement.h"
 #include "core/html/HTMLFrameOwnerElement.h"
@@ -54,13 +52,15 @@
 #include "core/loader/SubstituteData.h"
 #include "core/loader/UniqueIdentifier.h"
 #include "core/loader/appcache/ApplicationCacheHost.h"
-#include "core/frame/DOMWindow.h"
+#include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/timing/Performance.h"
 #include "core/timing/ResourceTimingInfo.h"
 #include "core/frame/Settings.h"
+#include "core/svg/graphics/SVGImageChromeClient.h"
 #include "platform/Logging.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/TraceEvent.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/weborigin/SecurityPolicy.h"
@@ -92,13 +92,11 @@ static Resource* createResource(Resource::Type type, const ResourceRequest& requ
     case Resource::Media:
         return new RawResource(request, type);
     case Resource::XSLStyleSheet:
-        return new XSLStyleSheetResource(request);
+        return new XSLStyleSheetResource(request, charset);
     case Resource::LinkPrefetch:
         return new Resource(request, Resource::LinkPrefetch);
     case Resource::LinkSubresource:
         return new Resource(request, Resource::LinkSubresource);
-    case Resource::Shader:
-        return new ShaderResource(request);
     case Resource::ImportResource:
         return new RawResource(request, type);
     }
@@ -140,8 +138,6 @@ static ResourceLoadPriority loadPriority(Resource::Type type, const FetchRequest
         return ResourceLoadPriorityLow;
     case Resource::TextTrack:
         return ResourceLoadPriorityLow;
-    case Resource::Shader:
-        return ResourceLoadPriorityMedium;
     }
     ASSERT_NOT_REACHED();
     return ResourceLoadPriorityUnresolved;
@@ -186,7 +182,7 @@ static void reportResourceTiming(ResourceTimingInfo* info, Document* initiatorDo
         initiatorDocument = initiatorDocument->parentDocument();
     if (!initiatorDocument || !initiatorDocument->loader())
         return;
-    if (DOMWindow* initiatorWindow = initiatorDocument->domWindow())
+    if (LocalDOMWindow* initiatorWindow = initiatorDocument->domWindow())
         initiatorWindow->performance().addResourceTiming(*info, initiatorDocument);
 }
 
@@ -207,7 +203,6 @@ static ResourceRequest::TargetType requestTargetType(const ResourceFetcher* fetc
         return ResourceRequest::TargetIsFont;
     case Resource::Image:
         return ResourceRequest::TargetIsImage;
-    case Resource::Shader:
     case Resource::Raw:
     case Resource::ImportResource:
         return ResourceRequest::TargetIsSubresource;
@@ -224,14 +219,6 @@ static ResourceRequest::TargetType requestTargetType(const ResourceFetcher* fetc
     }
     ASSERT_NOT_REACHED();
     return ResourceRequest::TargetIsSubresource;
-}
-
-static void reportFontResourceCORSFailed(Resource* resource, const KURL& url, LocalFrame* frame)
-{
-    FontResource* fontResource = toFontResource(resource);
-    fontResource->setCORSFailed();
-    if (frame && frame->document())
-        frame->document()->addConsoleMessage(JSMessageSource, WarningMessageLevel, "Blink is considering rejecting non spec-compliant cross-origin web font requests: " + url.string() + ". Please use Access-Control-Allow-Origin to make these requests spec-compliant.");
 }
 
 ResourceFetcher::ResourceFetcher(DocumentLoader* documentLoader)
@@ -268,7 +255,7 @@ LocalFrame* ResourceFetcher::frame() const
     if (m_documentLoader)
         return m_documentLoader->frame();
     if (m_document && m_document->importsController())
-        return m_document->importsController()->frame();
+        return m_document->importsController()->master()->frame();
     return 0;
 }
 
@@ -324,11 +311,6 @@ void ResourceFetcher::preCacheDataURIImage(const FetchRequest& request)
 ResourcePtr<FontResource> ResourceFetcher::fetchFont(FetchRequest& request)
 {
     return toFontResource(requestResource(Resource::Font, request));
-}
-
-ResourcePtr<ShaderResource> ResourceFetcher::fetchShader(FetchRequest& request)
-{
-    return toShaderResource(requestResource(Resource::Shader, request));
 }
 
 ResourcePtr<RawResource> ResourceFetcher::fetchImport(FetchRequest& request)
@@ -433,11 +415,15 @@ bool ResourceFetcher::checkInsecureContent(Resource::Type type, const KURL& url,
             treatment = TreatAsActiveContent;
             break;
 
+        case Resource::Font:
         case Resource::TextTrack:
-        case Resource::Shader:
+            // These resources are passive, but mixed usage is low enough that we
+            // can block them in a mixed context.
+            treatment = TreatAsActiveContent;
+            break;
+
         case Resource::Raw:
         case Resource::Image:
-        case Resource::Font:
         case Resource::Media:
             // These resources can corrupt only the frame's pixels.
             treatment = TreatAsPassiveContent;
@@ -451,19 +437,46 @@ bool ResourceFetcher::checkInsecureContent(Resource::Type type, const KURL& url,
             break;
         }
     }
+    // FIXME: We need a way to access the top-level frame's mixedContentChecker when that frame
+    // is in a different process from the current frame. Until that is done, we always allow
+    // loads in remote frames.
+    if (frame() && !frame()->tree().top()->isLocalFrame())
+        return true;
     if (treatment == TreatAsActiveContent) {
         if (LocalFrame* f = frame()) {
             if (!f->loader().mixedContentChecker()->canRunInsecureContent(m_document->securityOrigin(), url))
                 return false;
-            LocalFrame* top = f->tree().top();
-            if (top != f && !top->loader().mixedContentChecker()->canRunInsecureContent(top->document()->securityOrigin(), url))
+            Frame* top = f->tree().top();
+            if (top != f && !toLocalFrame(top)->loader().mixedContentChecker()->canRunInsecureContent(toLocalFrame(top)->document()->securityOrigin(), url))
                 return false;
         }
     } else if (treatment == TreatAsPassiveContent) {
         if (LocalFrame* f = frame()) {
-            LocalFrame* top = f->tree().top();
-            if (!top->loader().mixedContentChecker()->canDisplayInsecureContent(top->document()->securityOrigin(), url))
+            Frame* top = f->tree().top();
+            if (!toLocalFrame(top)->loader().mixedContentChecker()->canDisplayInsecureContent(toLocalFrame(top)->document()->securityOrigin(), url))
                 return false;
+            if (MixedContentChecker::isMixedContent(toLocalFrame(top)->document()->securityOrigin(), url)) {
+                switch (type) {
+                case Resource::TextTrack:
+                    UseCounter::count(toLocalFrame(top)->document(), UseCounter::MixedContentTextTrack);
+                    break;
+
+                case Resource::Raw:
+                    UseCounter::count(toLocalFrame(top)->document(), UseCounter::MixedContentRaw);
+                    break;
+
+                case Resource::Image:
+                    UseCounter::count(toLocalFrame(top)->document(), UseCounter::MixedContentImage);
+                    break;
+
+                case Resource::Media:
+                    UseCounter::count(toLocalFrame(top)->document(), UseCounter::MixedContentMedia);
+                    break;
+
+                default:
+                    ASSERT_NOT_REACHED();
+                }
+            }
         }
     } else {
         ASSERT(treatment == TreatAsAlwaysAllowedContent);
@@ -484,9 +497,6 @@ bool ResourceFetcher::canRequest(Resource::Type type, const KURL& url, const Res
         return 0;
     }
 
-    // FIXME: Convert this to check the isolated world's Content Security Policy once webkit.org/b/104520 is solved.
-    bool shouldBypassMainWorldContentSecurityPolicy = (frame() && frame()->script().shouldBypassMainWorldContentSecurityPolicy()) || (options.contentSecurityPolicyOption == DoNotCheckContentSecurityPolicy);
-
     // Some types of resources can be loaded only from the same origin. Other
     // types of resources, like Images, Scripts, and CSS, can be loaded from
     // any URL.
@@ -500,7 +510,6 @@ bool ResourceFetcher::canRequest(Resource::Type type, const KURL& url, const Res
     case Resource::LinkPrefetch:
     case Resource::LinkSubresource:
     case Resource::TextTrack:
-    case Resource::Shader:
     case Resource::ImportResource:
     case Resource::Media:
         // By default these types of resources can be loaded from any origin.
@@ -520,19 +529,30 @@ bool ResourceFetcher::canRequest(Resource::Type type, const KURL& url, const Res
         break;
     }
 
+    // FIXME: Convert this to check the isolated world's Content Security Policy once webkit.org/b/104520 is solved.
+    bool shouldBypassMainWorldCSP = (frame() && frame()->script().shouldBypassMainWorldCSP()) || (options.contentSecurityPolicyOption == DoNotCheckContentSecurityPolicy);
+
     // Don't send CSP messages for preloads, we might never actually display those items.
     ContentSecurityPolicy::ReportingStatus cspReporting = forPreload ?
         ContentSecurityPolicy::SuppressReport : ContentSecurityPolicy::SendReport;
 
+    // m_document can be null, but not in any of the cases where csp is actually used below.
+    // ImageResourceTest.MultipartImage crashes w/o the m_document null check.
+    // I believe it's the Resource::Raw case.
+    const ContentSecurityPolicy* csp = m_document ? m_document->contentSecurityPolicy() : nullptr;
+
+    // FIXME: This would be cleaner if moved this switch into an allowFromSource()
+    // helper on this object which took a Resource::Type, then this block would
+    // collapse to about 10 lines for handling Raw and Script special cases.
     switch (type) {
     case Resource::XSLStyleSheet:
         ASSERT(RuntimeEnabledFeatures::xsltEnabled());
-        if (!shouldBypassMainWorldContentSecurityPolicy && !m_document->contentSecurityPolicy()->allowScriptFromSource(url, cspReporting))
+        if (!shouldBypassMainWorldCSP && !csp->allowScriptFromSource(url, cspReporting))
             return false;
         break;
     case Resource::Script:
     case Resource::ImportResource:
-        if (!shouldBypassMainWorldContentSecurityPolicy && !m_document->contentSecurityPolicy()->allowScriptFromSource(url, cspReporting))
+        if (!shouldBypassMainWorldCSP && !csp->allowScriptFromSource(url, cspReporting))
             return false;
 
         if (frame()) {
@@ -543,19 +563,17 @@ bool ResourceFetcher::canRequest(Resource::Type type, const KURL& url, const Res
             }
         }
         break;
-    case Resource::Shader:
-        // Since shaders are referenced from CSS Styles use the same rules here.
     case Resource::CSSStyleSheet:
-        if (!shouldBypassMainWorldContentSecurityPolicy && !m_document->contentSecurityPolicy()->allowStyleFromSource(url, cspReporting))
+        if (!shouldBypassMainWorldCSP && !csp->allowStyleFromSource(url, cspReporting))
             return false;
         break;
     case Resource::SVGDocument:
     case Resource::Image:
-        if (!shouldBypassMainWorldContentSecurityPolicy && !m_document->contentSecurityPolicy()->allowImageFromSource(url, cspReporting))
+        if (!shouldBypassMainWorldCSP && !csp->allowImageFromSource(url, cspReporting))
             return false;
         break;
     case Resource::Font: {
-        if (!shouldBypassMainWorldContentSecurityPolicy && !m_document->contentSecurityPolicy()->allowFontFromSource(url, cspReporting))
+        if (!shouldBypassMainWorldCSP && !csp->allowFontFromSource(url, cspReporting))
             return false;
         break;
     }
@@ -566,9 +584,21 @@ bool ResourceFetcher::canRequest(Resource::Type type, const KURL& url, const Res
         break;
     case Resource::Media:
     case Resource::TextTrack:
-        if (!shouldBypassMainWorldContentSecurityPolicy && !m_document->contentSecurityPolicy()->allowMediaFromSource(url, cspReporting))
+        if (!shouldBypassMainWorldCSP && !csp->allowMediaFromSource(url, cspReporting))
             return false;
+
+        if (frame()) {
+            if (!frame()->loader().client()->allowMedia(url))
+                return false;
+        }
         break;
+    }
+
+    // SVG Images have unique security rules that prevent all subresource requests
+    // except for data urls.
+    if (type != Resource::MainResource) {
+        if (frame() && frame()->chromeClient().isSVGImageChromeClient() && !url.protocolIsData())
+            return false;
     }
 
     // Last of all, check for insecure content. We do this last so that when
@@ -596,12 +626,6 @@ bool ResourceFetcher::canAccessResource(Resource* resource, SecurityOrigin* sour
 
     String errorDescription;
     if (!resource->passesAccessControlCheck(sourceOrigin, errorDescription)) {
-        // FIXME: Remove later, http://crbug.com/286681
-        if (resource->type() == Resource::Font) {
-            reportFontResourceCORSFailed(resource, url, frame());
-            return false;
-        }
-
         if (frame() && frame()->document()) {
             String resourceType = Resource::resourceTypeToString(resource->type(), resource->options().initiatorInfo);
             frame()->document()->addConsoleMessage(JSMessageSource, ErrorMessageLevel, resourceType + " from origin '" + SecurityOrigin::create(url)->toString() + "' has been blocked from loading by Cross-Origin Resource Sharing policy: " + errorDescription);
@@ -635,6 +659,9 @@ bool ResourceFetcher::resourceNeedsLoad(Resource* resource, const FetchRequest& 
 
 void ResourceFetcher::requestLoadStarted(Resource* resource, const FetchRequest& request, ResourceLoadStartType type)
 {
+    if (type == ResourceLoadingFromCache)
+        notifyLoadedFromMemoryCache(resource);
+
     if (request.resourceRequest().url().protocolIsData() || (m_documentLoader && m_documentLoader->substituteData().isValid()))
         return;
 
@@ -654,7 +681,7 @@ ResourcePtr<Resource> ResourceFetcher::requestResource(Resource::Type type, Fetc
 {
     ASSERT(request.options().synchronousPolicy == RequestAsynchronously || type == Resource::Raw);
 
-    TRACE_EVENT0("webkit", "ResourceFetcher::requestResource");
+    TRACE_EVENT0("blink", "ResourceFetcher::requestResource");
 
     KURL url = request.resourceRequest().url();
 
@@ -675,20 +702,19 @@ ResourcePtr<Resource> ResourceFetcher::requestResource(Resource::Type type, Fetc
     // See if we can use an existing resource from the cache.
     ResourcePtr<Resource> resource = memoryCache()->resourceForURL(url);
 
-    const RevalidationPolicy policy = determineRevalidationPolicy(type, request.mutableResourceRequest(), request.forPreload(), resource.get(), request.defer(), request.options());
+    const RevalidationPolicy policy = determineRevalidationPolicy(type, request, resource.get());
     switch (policy) {
     case Reload:
         memoryCache()->remove(resource.get());
         // Fall through
     case Load:
-        resource = loadResource(type, request, request.charset());
+        resource = createResourceForLoading(type, request, request.charset());
         break;
     case Revalidate:
-        resource = revalidateResource(request, resource.get());
+        resource = createResourceForRevalidation(request, resource.get());
         break;
     case Use:
         memoryCache()->updateForAccess(resource.get());
-        notifyLoadedFromMemoryCache(resource.get());
         break;
     }
 
@@ -736,15 +762,11 @@ ResourcePtr<Resource> ResourceFetcher::requestResource(Resource::Type type, Fetc
     // see https://bugs.webkit.org/show_bug.cgi?id=107962. Before caching main
     // resources, we should be sure to understand the implications for memory
     // use.
-    //
-    // Ensure main resources aren't preloaded, and other main resource loads
-    // are removed from cache to prevent reuse.
+    // Remove main resource from cache to prevent reuse.
     if (type == Resource::MainResource) {
         ASSERT(policy != Use || m_documentLoader->substituteData().isValid());
         ASSERT(policy != Revalidate);
         memoryCache()->remove(resource.get());
-        if (request.forPreload())
-            return 0;
     }
 
     requestLoadStarted(resource.get(), request, policy == Use ? ResourceLoadingFromCache : ResourceLoadingFromNetwork);
@@ -777,15 +799,17 @@ ResourceRequestCachePolicy ResourceFetcher::resourceRequestCachePolicy(const Res
 {
     if (type == Resource::MainResource) {
         FrameLoadType frameLoadType = frame()->loader().loadType();
-        bool isReload = frameLoadType == FrameLoadTypeReload || frameLoadType == FrameLoadTypeReloadFromOrigin;
         if (request.httpMethod() == "POST" && frameLoadType == FrameLoadTypeBackForward)
             return ReturnCacheDataDontLoad;
         if (!m_documentLoader->overrideEncoding().isEmpty() || frameLoadType == FrameLoadTypeBackForward)
             return ReturnCacheDataElseLoad;
-        if (isReload || frameLoadType == FrameLoadTypeSame || request.isConditional() || request.httpMethod() == "POST")
+        if (frameLoadType == FrameLoadTypeReloadFromOrigin)
+            return ReloadBypassingCache;
+        if (frameLoadType == FrameLoadTypeReload || frameLoadType == FrameLoadTypeSame || request.isConditional() || request.httpMethod() == "POST")
             return ReloadIgnoringCacheData;
-        if (LocalFrame* parent = frame()->tree().parent())
-            return parent->document()->fetcher()->resourceRequestCachePolicy(request, type);
+        Frame* parent = frame()->tree().parent();
+        if (parent && parent->isLocalFrame())
+            return toLocalFrame(parent)->document()->fetcher()->resourceRequestCachePolicy(request, type);
         return UseProtocolCachePolicy;
     }
 
@@ -818,7 +842,7 @@ void ResourceFetcher::addAdditionalRequestHeaders(ResourceRequest& request, Reso
     context().addAdditionalRequestHeaders(document(), request, (type == Resource::MainResource) ? FetchMainResource : FetchSubresource);
 }
 
-ResourcePtr<Resource> ResourceFetcher::revalidateResource(const FetchRequest& request, Resource* resource)
+ResourcePtr<Resource> ResourceFetcher::createResourceForRevalidation(const FetchRequest& request, Resource* resource)
 {
     ASSERT(resource);
     ASSERT(memoryCache()->contains(resource));
@@ -836,15 +860,15 @@ ResourcePtr<Resource> ResourceFetcher::revalidateResource(const FetchRequest& re
         ASSERT(context().cachePolicy(document()) != CachePolicyReload);
         if (context().cachePolicy(document()) == CachePolicyRevalidate)
             revalidatingRequest.setHTTPHeaderField("Cache-Control", "max-age=0");
-        if (!lastModified.isEmpty())
-            revalidatingRequest.setHTTPHeaderField("If-Modified-Since", lastModified);
-        if (!eTag.isEmpty())
-            revalidatingRequest.setHTTPHeaderField("If-None-Match", eTag);
     }
+    if (!lastModified.isEmpty())
+        revalidatingRequest.setHTTPHeaderField("If-Modified-Since", lastModified);
+    if (!eTag.isEmpty())
+        revalidatingRequest.setHTTPHeaderField("If-None-Match", eTag);
 
     ResourcePtr<Resource> newResource = createResource(resource->type(), revalidatingRequest, resource->encoding());
-
     WTF_LOG(ResourceLoading, "Resource %p created to revalidate %p", newResource.get(), resource);
+
     newResource->setResourceToRevalidate(resource);
 
     memoryCache()->remove(resource);
@@ -852,14 +876,14 @@ ResourcePtr<Resource> ResourceFetcher::revalidateResource(const FetchRequest& re
     return newResource;
 }
 
-ResourcePtr<Resource> ResourceFetcher::loadResource(Resource::Type type, FetchRequest& request, const String& charset)
+ResourcePtr<Resource> ResourceFetcher::createResourceForLoading(Resource::Type type, FetchRequest& request, const String& charset)
 {
     ASSERT(!memoryCache()->resourceForURL(request.resourceRequest().url()));
 
     WTF_LOG(ResourceLoading, "Loading Resource for '%s'.", request.resourceRequest().url().elidedString().latin1().data());
 
     addAdditionalRequestHeaders(request.mutableResourceRequest(), type);
-    ResourcePtr<Resource> resource = createResource(type, request.mutableResourceRequest(), charset);
+    ResourcePtr<Resource> resource = createResource(type, request.resourceRequest(), charset);
 
     memoryCache()->add(resource.get());
     return resource;
@@ -880,34 +904,41 @@ void ResourceFetcher::storeResourceTimingInitiatorInformation(Resource* resource
 
     if (resource->type() == Resource::MainResource) {
         // <iframe>s should report the initial navigation requested by the parent document, but not subsequent navigations.
-        if (frame()->ownerElement() && !frame()->ownerElement()->loadedNonEmptyDocument()) {
-            info->setInitiatorType(frame()->ownerElement()->localName());
+        // FIXME: Resource timing is broken when the parent is a remote frame.
+        if (frame()->deprecatedLocalOwner() && !frame()->deprecatedLocalOwner()->loadedNonEmptyDocument()) {
+            info->setInitiatorType(frame()->deprecatedLocalOwner()->localName());
             m_resourceTimingInfoMap.add(resource, info);
-            frame()->ownerElement()->didLoadNonEmptyDocument();
+            frame()->deprecatedLocalOwner()->didLoadNonEmptyDocument();
         }
     } else {
         m_resourceTimingInfoMap.add(resource, info);
     }
 }
 
-ResourceFetcher::RevalidationPolicy ResourceFetcher::determineRevalidationPolicy(Resource::Type type, ResourceRequest& request, bool forPreload, Resource* existingResource, FetchRequest::DeferOption defer, const ResourceLoaderOptions& options) const
+ResourceFetcher::RevalidationPolicy ResourceFetcher::determineRevalidationPolicy(Resource::Type type, const FetchRequest& fetchRequest, Resource* existingResource) const
 {
+    const ResourceRequest& request = fetchRequest.resourceRequest();
+
     if (!existingResource)
         return Load;
 
     // We already have a preload going for this URL.
-    if (forPreload && existingResource->isPreloaded())
+    if (fetchRequest.forPreload() && existingResource->isPreloaded())
         return Use;
 
     // If the same URL has been loaded as a different type, we need to reload.
     if (existingResource->type() != type) {
+        // FIXME: If existingResource is a Preload and the new type is LinkPrefetch
+        // We really should discard the new prefetch since the preload has more
+        // specific type information! crbug.com/379893
+        // fast/dom/HTMLLinkElement/link-and-subresource-test hits this case.
         WTF_LOG(ResourceLoading, "ResourceFetcher::determineRevalidationPolicy reloading due to type mismatch.");
         return Reload;
     }
 
     // Do not load from cache if images are not enabled. The load for this image will be blocked
     // in ImageResource::load.
-    if (FetchRequest::DeferredByClient == defer)
+    if (FetchRequest::DeferredByClient == fetchRequest.defer())
         return Reload;
 
     // Always use data uris.
@@ -936,6 +967,9 @@ ResourceFetcher::RevalidationPolicy ResourceFetcher::determineRevalidationPolicy
     if (m_allowStaleResources)
         return Use;
 
+    if (!fetchRequest.options().canReuseRequest(existingResource->options()))
+        return Reload;
+
     // Always use preloads.
     if (existingResource->isPreloaded())
         return Use;
@@ -950,10 +984,6 @@ ResourceFetcher::RevalidationPolicy ResourceFetcher::determineRevalidationPolicy
         WTF_LOG(ResourceLoading, "ResourceFetcher::determineRevalidationPolicy reloading due to Cache-control: no-store.");
         return Reload;
     }
-
-    // If fetching a resource with a different 'CORS enabled' flag, reload.
-    if (type != Resource::MainResource && options.corsEnabled != existingResource->options().corsEnabled)
-        return Reload;
 
     // If credentials were sent with the previous request and won't be
     // with this one, or vice versa, re-fetch the resource.
@@ -1175,6 +1205,10 @@ void ResourceFetcher::preload(Resource::Type type, FetchRequest& request, const 
 
 void ResourceFetcher::requestPreload(Resource::Type type, FetchRequest& request, const String& charset)
 {
+    // Ensure main resources aren't preloaded, since the cache can't actually reuse the preload.
+    if (type == Resource::MainResource)
+        return;
+
     String encoding;
     if (type == Resource::Script || type == Resource::CSSStyleSheet)
         encoding = charset.isEmpty() ? m_document->charset().string() : charset;
@@ -1351,12 +1385,6 @@ bool ResourceFetcher::canAccessRedirect(Resource* resource, ResourceRequest& req
 
         String errorMessage;
         if (!CrossOriginAccessControl::handleRedirect(resource, sourceOrigin, request, redirectResponse, options, errorMessage)) {
-            // FIXME: Remove later, http://crbug.com/286681
-            if (resource->type() == Resource::Font) {
-                reportFontResourceCORSFailed(resource, request.url(), frame());
-                return false;
-            }
-
             if (frame() && frame()->document())
                 frame()->document()->addConsoleMessage(JSMessageSource, ErrorMessageLevel, errorMessage);
             return false;

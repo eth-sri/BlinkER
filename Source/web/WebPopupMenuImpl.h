@@ -71,7 +71,6 @@ public:
     virtual void willEndLiveResize() OVERRIDE FINAL;
     virtual void animate(double frameBeginTime) OVERRIDE FINAL;
     virtual void layout() OVERRIDE FINAL;
-    virtual void enterForceCompositingMode(bool enable) OVERRIDE FINAL;
     virtual void paint(WebCanvas*, const WebRect&) OVERRIDE FINAL;
     virtual void themeChanged() OVERRIDE FINAL;
     virtual bool handleInputEvent(const WebInputEvent&) OVERRIDE FINAL;
@@ -121,9 +120,7 @@ public:
     virtual void invalidateContentsAndRootView(const WebCore::IntRect&) OVERRIDE FINAL;
     virtual void invalidateContentsForSlowScroll(const WebCore::IntRect&) OVERRIDE FINAL;
     virtual void scheduleAnimation() OVERRIDE FINAL;
-    virtual void scroll(
-        const WebCore::IntSize& scrollDelta, const WebCore::IntRect& scrollRect,
-        const WebCore::IntRect& clipRect) OVERRIDE FINAL;
+    virtual void scroll(const WebCore::IntRect& clipRect) OVERRIDE FINAL;
     virtual WebCore::IntRect rootViewToScreen(const WebCore::IntRect&) const OVERRIDE FINAL;
     virtual WebScreenInfo screenInfo() const OVERRIDE FINAL;
 
@@ -135,7 +132,6 @@ public:
 
     WebLayerTreeView* m_layerTreeView;
     OwnPtr<WebContentLayer> m_rootLayer;
-    bool m_isAcceleratedCompositingActive;
 
     WebPoint m_lastMousePosition;
 

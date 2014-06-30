@@ -24,7 +24,6 @@
 #include "core/fetch/MemoryCache.h"
 
 #include "core/dom/CrossThreadTask.h"
-#include "core/dom/Document.h"
 #include "core/fetch/ResourcePtr.h"
 #include "core/frame/FrameView.h"
 #include "core/workers/WorkerGlobalScope.h"
@@ -109,8 +108,9 @@ KURL MemoryCache::removeFragmentIdentifierIfNeeded(const KURL& originalURL)
 void MemoryCache::add(Resource* resource)
 {
     ASSERT(WTF::isMainThread());
+    ASSERT(resource->url().isValid());
     RELEASE_ASSERT(!m_resources.contains(resource->url()));
-    m_resources.set(resource->url(), MemoryCacheEntry::create(resource));
+    m_resources.set(resource->url().string(), MemoryCacheEntry::create(resource));
     update(resource, 0, resource->size(), true);
 
     WTF_LOG(ResourceLoading, "MemoryCache::add Added '%s', resource %p\n", resource->url().string().latin1().data(), resource);
@@ -345,7 +345,7 @@ MemoryCache::LRUList* MemoryCache::lruListFor(unsigned accessCount, size_t size)
 
 void MemoryCache::removeFromLRUList(MemoryCacheEntry* entry, LRUList* list)
 {
-#if !ASSERT_DISABLED
+#if ASSERT_ENABLED
     // Verify that we are in fact in this list.
     bool found = false;
     for (MemoryCacheEntry* current = list->m_head; current; current = current->m_nextInAllResourcesList) {
@@ -385,7 +385,7 @@ void MemoryCache::insertInLRUList(MemoryCacheEntry* entry, LRUList* list)
     else
         list->m_tail = entry;
 
-#if !ASSERT_DISABLED
+#if ASSERT_ENABLED
     // Verify that we are in now in the list like we should be.
     bool found = false;
     for (MemoryCacheEntry* current = list->m_head; current; current = current->m_nextInAllResourcesList) {
@@ -407,7 +407,7 @@ void MemoryCache::removeFromLiveDecodedResourcesList(MemoryCacheEntry* entry)
 
     LRUList* list = &m_liveDecodedResources[entry->m_liveResourcePriority];
 
-#if !ASSERT_DISABLED
+#if ASSERT_ENABLED
     // Verify that we are in fact in this list.
     bool found = false;
     for (MemoryCacheEntry* current = list->m_head; current; current = current->m_nextInLiveResourcesList) {
@@ -451,7 +451,7 @@ void MemoryCache::insertInLiveDecodedResourcesList(MemoryCacheEntry* entry)
     if (!entry->m_nextInLiveResourcesList)
         list->m_tail = entry;
 
-#if !ASSERT_DISABLED
+#if ASSERT_ENABLED
     // Verify that we are in now in the list like we should be.
     bool found = false;
     for (MemoryCacheEntry* current = list->m_head; current; current = current->m_nextInLiveResourcesList) {

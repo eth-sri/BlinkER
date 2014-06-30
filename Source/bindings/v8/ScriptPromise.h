@@ -33,19 +33,21 @@
 
 #include "bindings/v8/ScriptFunction.h"
 #include "bindings/v8/ScriptValue.h"
+#include "platform/heap/Handle.h"
 #include "wtf/PassOwnPtr.h"
+#include "wtf/PassRefPtr.h"
 #include <v8.h>
 
 namespace WebCore {
 
-class ExecutionContext;
+class DOMException;
 
 // ScriptPromise is the class for representing Promise values in C++ world.
 // ScriptPromise holds a Promise.
 // So holding a ScriptPromise as a member variable in DOM object causes
 // memory leaks since it has a reference from C++ to V8.
 //
-class ScriptPromise {
+class ScriptPromise FINAL {
 public:
     // Constructs an empty promise.
     ScriptPromise() { }
@@ -95,11 +97,28 @@ public:
     // if |value| is not a Promise object, returns a Promise object
     // resolved with |value|.
     // Returns |value| itself if it is a Promise.
-    static ScriptPromise cast(const ScriptValue& /*value*/);
+    static ScriptPromise cast(ScriptState*, const ScriptValue& /*value*/);
     static ScriptPromise cast(ScriptState*, v8::Handle<v8::Value> /*value*/);
 
-    static ScriptPromise reject(const ScriptValue&);
+    static ScriptPromise reject(ScriptState*, const ScriptValue&);
     static ScriptPromise reject(ScriptState*, v8::Handle<v8::Value>);
+
+    static ScriptPromise rejectWithDOMException(ScriptState*, PassRefPtrWillBeRawPtr<DOMException>);
+
+    // This is a utility class intended to be used internally.
+    // ScriptPromiseResolver is for general purpose.
+    class InternalResolver FINAL {
+    public:
+        explicit InternalResolver(ScriptState*);
+        v8::Local<v8::Promise> v8Promise() const;
+        ScriptPromise promise() const;
+        void resolve(v8::Local<v8::Value>);
+        void reject(v8::Local<v8::Value>);
+        void clear() { m_resolver.clear(); }
+
+    private:
+        ScriptValue m_resolver;
+    };
 
 private:
     RefPtr<ScriptState> m_scriptState;

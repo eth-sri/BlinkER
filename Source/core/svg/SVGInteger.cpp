@@ -30,27 +30,20 @@
 
 #include "config.h"
 #include "core/svg/SVGInteger.h"
+#include "core/html/parser/HTMLParserIdioms.h"
 
 #include "core/svg/SVGAnimationElement.h"
 
 namespace WebCore {
 
 SVGInteger::SVGInteger(int value)
-    : SVGPropertyBase(classType())
-    , m_value(value)
+    : m_value(value)
 {
 }
 
 PassRefPtr<SVGInteger> SVGInteger::clone() const
 {
     return create(m_value);
-}
-
-PassRefPtr<SVGPropertyBase> SVGInteger::cloneForAnimation(const String& value) const
-{
-    RefPtr<SVGInteger> svgInteger = create();
-    svgInteger->setValueAsString(value, IGNORE_EXCEPTION);
-    return svgInteger.release();
 }
 
 String SVGInteger::valueAsString() const
@@ -66,7 +59,7 @@ void SVGInteger::setValueAsString(const String& string, ExceptionState& exceptio
     }
 
     bool valid = true;
-    m_value = string.toIntStrict(&valid);
+    m_value = stripLeadingAndTrailingHTMLSpaces(string).toIntStrict(&valid);
 
     if (!valid) {
         exceptionState.throwDOMException(SyntaxError, "The value provided ('" + string + "') is invalid.");

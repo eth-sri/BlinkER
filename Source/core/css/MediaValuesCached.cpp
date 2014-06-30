@@ -60,10 +60,10 @@ MediaValuesCached::MediaValuesCached(LocalFrame* frame)
     m_data.pointer = calculateLeastCapablePrimaryPointerDeviceType(frame);
     m_data.defaultFontSize = calculateDefaultFontSize(frame);
     m_data.threeDEnabled = calculateThreeDEnabled(frame);
-    m_data.scanMediaType = calculateScanMediaType(frame);
-    m_data.screenMediaType = calculateScreenMediaType(frame);
-    m_data.printMediaType = calculatePrintMediaType(frame);
     m_data.strictMode = calculateStrictMode(frame);
+    const String mediaType = calculateMediaType(frame);
+    if (!mediaType.isEmpty())
+        m_data.mediaType = mediaType.isolatedCopy();
 }
 
 MediaValuesCached::MediaValuesCached(const MediaValuesCachedData& data)
@@ -76,12 +76,12 @@ PassRefPtr<MediaValues> MediaValuesCached::copy() const
     return adoptRef(new MediaValuesCached(m_data));
 }
 
-bool MediaValuesCached::computeLength(double value, CSSPrimitiveValue::UnitTypes type, int& result) const
+bool MediaValuesCached::computeLength(double value, CSSPrimitiveValue::UnitType type, int& result) const
 {
     return MediaValues::computeLength(value, type, m_data.defaultFontSize, m_data.viewportWidth, m_data.viewportHeight, result);
 }
 
-bool MediaValuesCached::computeLength(double value, CSSPrimitiveValue::UnitTypes type, double& result) const
+bool MediaValuesCached::computeLength(double value, CSSPrimitiveValue::UnitType type, double& result) const
 {
     return MediaValues::computeLength(value, type, m_data.defaultFontSize, m_data.viewportWidth, m_data.viewportHeight, result);
 }
@@ -136,24 +136,13 @@ bool MediaValuesCached::threeDEnabled() const
     return m_data.threeDEnabled;
 }
 
-bool MediaValuesCached::scanMediaType() const
-{
-    return m_data.scanMediaType;
-}
-
-bool MediaValuesCached::screenMediaType() const
-{
-    return m_data.screenMediaType;
-}
-
-bool MediaValuesCached::printMediaType() const
-{
-    return m_data.printMediaType;
-}
-
 bool MediaValuesCached::strictMode() const
 {
     return m_data.strictMode;
+}
+const String MediaValuesCached::mediaType() const
+{
+    return m_data.mediaType;
 }
 
 Document* MediaValuesCached::document() const

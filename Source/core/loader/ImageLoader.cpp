@@ -66,12 +66,12 @@ class ImageLoader::Task : public blink::WebThread::Task {
 public:
     Task(ImageLoader* loader)
         : m_loader(loader)
-        , m_shouldBypassMainWorldContentSecurityPolicy(false)
+        , m_shouldBypassMainWorldCSP(false)
         , m_weakFactory(this)
         , m_startAction(0)
     {
         LocalFrame* frame = loader->m_element->document().frame();
-        m_shouldBypassMainWorldContentSecurityPolicy = frame->script().shouldBypassMainWorldContentSecurityPolicy();
+        m_shouldBypassMainWorldCSP = frame->script().shouldBypassMainWorldCSP();
         m_log = EventRacerContext::getLog();
         if (m_log && m_log->hasAction()) {
             m_startAction = m_log->getCurrentAction();
@@ -88,9 +88,9 @@ public:
                 EventActionScope act(action);
                 m_log->join(m_startAction, action);
                 OperationScope op("img-ldr:tsk-run");
-                m_loader->doUpdateFromElement(m_shouldBypassMainWorldContentSecurityPolicy);
+                m_loader->doUpdateFromElement(m_shouldBypassMainWorldCSP);
             } else {
-                m_loader->doUpdateFromElement(m_shouldBypassMainWorldContentSecurityPolicy);
+                m_loader->doUpdateFromElement(m_shouldBypassMainWorldCSP);
             }
         }
     }
@@ -107,7 +107,7 @@ public:
 
 private:
     ImageLoader* m_loader;
-    bool m_shouldBypassMainWorldContentSecurityPolicy;
+    bool m_shouldBypassMainWorldCSP;
     WeakPtrFactory<Task> m_weakFactory;
     RefPtr<EventRacerLog> m_log;
     EventAction *m_startAction;
@@ -141,11 +141,11 @@ ImageLoader::~ImageLoader()
     ASSERT(m_hasPendingErrorEvent || !errorEventSender().hasPendingEvents(this));
     if (m_hasPendingErrorEvent)
         errorEventSender().cancelEvent(this);
+}
 
-    // If the ImageLoader is being destroyed but it is still protecting its image-loading Element,
-    // remove that protection here.
-    if (m_elementIsProtected)
-        m_element->deref();
+void ImageLoader::trace(Visitor* visitor)
+{
+    visitor->trace(m_element);
 }
 
 void ImageLoader::setImage(ImageResource* newImage)
@@ -194,6 +194,8 @@ void ImageLoader::doUpdateFromElement(bool bypassMainWorldCSP)
     delayLoad.swap(m_delayLoad);
 
     Document& document = m_element->document();
+    if (!document.isActive())
+        return;
 
     AtomicString attr = m_element->imageSourceURL();
 
@@ -280,22 +282,23 @@ void ImageLoader::doUpdateFromElement(bool bypassMainWorldCSP)
     updatedHasPendingEvent();
 }
 
-void ImageLoader::updateFromElement()
+void ImageLoader::updateFromElement(LoadType loadType)
 {
     AtomicString attr = m_element->imageSourceURL();
 
     if (!m_failedLoadURL.isEmpty() && attr == m_failedLoadURL)
         return;
 
+    // If we have a pending task, we have to clear it -- either we're
+    // now loading immediately, or we need to reset the task's state.
+    if (m_pendingTask) {
+        m_pendingTask->clearLoader();
+        m_pendingTask.clear();
+    }
+
     KURL url = imageURL();
     if (!attr.isNull() && !url.isNull()) {
-        // If we have a pending task, we have to clear it -- either we're
-        // now loading immediately, or we need to reset the task's state.
-        if (m_pendingTask) {
-            m_pendingTask->clearLoader();
-            m_pendingTask.clear();
-        }
-        bool loadImmediately = shouldLoadImmediately(url);
+        bool loadImmediately = shouldLoadImmediately(url) || (loadType == ForceLoadImmediately);
         if (loadImmediately) {
             doUpdateFromElement(false);
         } else {
@@ -434,7 +437,7 @@ void ImageLoader::updatedHasPendingEvent()
         if (m_derefElementTimer.isActive())
             m_derefElementTimer.stop();
         else
-            m_element->ref();
+            m_keepAlive = m_element;
     } else {
         ASSERT(!m_derefElementTimer.isActive());
         m_derefElementTimer.startOneShot(0, FROM_HERE);
@@ -443,7 +446,7 @@ void ImageLoader::updatedHasPendingEvent()
 
 void ImageLoader::timerFired(Timer<ImageLoader>*)
 {
-    m_element->deref();
+    m_keepAlive.clear();
 }
 
 void ImageLoader::dispatchPendingEvent(ImageEventSender* eventSender)
@@ -476,6 +479,7 @@ void ImageLoader::dispatchPendingErrorEvent()
     if (!m_hasPendingErrorEvent)
         return;
     m_hasPendingErrorEvent = false;
+
     if (element()->document().frame())
         element()->dispatchEvent(Event::create(EventTypeNames::error));
 
@@ -490,16 +494,26 @@ void ImageLoader::addClient(ImageLoaderClient* client)
         if (m_image && !m_highPriorityClientCount++)
             memoryCache()->updateDecodedResource(m_image.get(), UpdateForPropertyChange, MemoryCacheLiveResourcePriorityHigh);
     }
+#if ENABLE(OILPAN)
+    m_clients.add(client, adoptPtr(new ImageLoaderClientRemover(*this, *client)));
+#else
     m_clients.add(client);
+#endif
 }
-void ImageLoader::removeClient(ImageLoaderClient* client)
+
+void ImageLoader::willRemoveClient(ImageLoaderClient& client)
 {
-    if (client->requestsHighLiveResourceCachePriority()) {
+    if (client.requestsHighLiveResourceCachePriority()) {
         ASSERT(m_highPriorityClientCount);
         m_highPriorityClientCount--;
         if (m_image && !m_highPriorityClientCount)
             memoryCache()->updateDecodedResource(m_image.get(), UpdateForPropertyChange, MemoryCacheLiveResourcePriorityLow);
     }
+}
+
+void ImageLoader::removeClient(ImageLoaderClient* client)
+{
+    willRemoveClient(*client);
     m_clients.remove(client);
 }
 
@@ -524,16 +538,30 @@ void ImageLoader::elementDidMoveToNewDocument()
 
 void ImageLoader::sourceImageChanged()
 {
-    ImageLoaderClientSet::iterator end = m_clients.end();
-    for (ImageLoaderClientSet::iterator it = m_clients.begin(); it != end; ++it) {
+#if ENABLE(OILPAN)
+    PersistentHeapHashMap<WeakMember<ImageLoaderClient>, OwnPtr<ImageLoaderClientRemover> >::iterator end = m_clients.end();
+    for (PersistentHeapHashMap<WeakMember<ImageLoaderClient>, OwnPtr<ImageLoaderClientRemover> >::iterator it = m_clients.begin(); it != end; ++it) {
+        it->key->notifyImageSourceChanged();
+    }
+#else
+    HashSet<ImageLoaderClient*>::iterator end = m_clients.end();
+    for (HashSet<ImageLoaderClient*>::iterator it = m_clients.begin(); it != end; ++it) {
         ImageLoaderClient* handle = *it;
         handle->notifyImageSourceChanged();
     }
+#endif
 }
 
 inline void ImageLoader::clearFailedLoadURL()
 {
     m_failedLoadURL = AtomicString();
 }
+
+#if ENABLE(OILPAN)
+ImageLoader::ImageLoaderClientRemover::~ImageLoaderClientRemover()
+{
+    m_loader.willRemoveClient(m_client);
+}
+#endif
 
 }

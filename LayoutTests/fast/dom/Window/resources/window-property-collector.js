@@ -58,12 +58,14 @@ function emitExpectedResult(path, expected)
         break;
     case "navigator.appCodeName":
     case "navigator.appName":
+    case "navigator.hardwareConcurrency":
     case "navigator.language":
     case "navigator.onLine":
     case "navigator.platform":
     case "navigator.product":
     case "navigator.productSub":
     case "navigator.vendor":
+    case "navigator.connection.type":
         expected = "window." + propertyPath;
         break;
     case "screen.orientation":

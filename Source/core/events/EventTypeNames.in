@@ -103,6 +103,7 @@ invalid
 keydown
 keypress
 keyup
+languagechange
 levelchange
 load
 loadeddata
@@ -144,6 +145,7 @@ pointerlockchange
 pointerlockerror
 popstate
 progress
+push
 ratechange
 ready
 readystatechange
@@ -190,6 +192,7 @@ touchend
 touchmove
 touchstart
 transitionend
+typechange
 unload
 unmute
 update

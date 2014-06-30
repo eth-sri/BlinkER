@@ -30,10 +30,10 @@
 
 namespace WebCore {
 
-PassRefPtr<MediaDeviceInfo> MediaDeviceInfo::create(const blink::WebMediaDeviceInfo& webMediaDeviceInfo)
+MediaDeviceInfo* MediaDeviceInfo::create(const blink::WebMediaDeviceInfo& webMediaDeviceInfo)
 {
     ASSERT(!webMediaDeviceInfo.isNull());
-    return adoptRef(new MediaDeviceInfo(webMediaDeviceInfo));
+    return new MediaDeviceInfo(webMediaDeviceInfo);
 }
 
 MediaDeviceInfo::MediaDeviceInfo(const blink::WebMediaDeviceInfo& webMediaDeviceInfo)

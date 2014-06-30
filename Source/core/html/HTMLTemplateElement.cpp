@@ -32,6 +32,7 @@
 
 #include "core/html/HTMLTemplateElement.h"
 
+#include "core/dom/Document.h"
 #include "core/dom/DocumentFragment.h"
 #include "core/dom/TemplateContentDocumentFragment.h"
 
@@ -45,17 +46,14 @@ inline HTMLTemplateElement::HTMLTemplateElement(Document& document)
     ScriptWrappable::init(this);
 }
 
+DEFINE_NODE_FACTORY(HTMLTemplateElement)
+
 HTMLTemplateElement::~HTMLTemplateElement()
 {
 #if !ENABLE(OILPAN)
     if (m_content)
         m_content->clearHost();
 #endif
-}
-
-PassRefPtrWillBeRawPtr<HTMLTemplateElement> HTMLTemplateElement::create(Document& document)
-{
-    return adoptRefWillBeRefCountedGarbageCollected(new HTMLTemplateElement(document));
 }
 
 DocumentFragment* HTMLTemplateElement::content() const

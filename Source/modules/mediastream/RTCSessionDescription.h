@@ -32,20 +32,18 @@
 #define RTCSessionDescription_h
 
 #include "bindings/v8/ScriptWrappable.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
-#include "wtf/text/WTFString.h"
 #include "public/platform/WebRTCSessionDescription.h"
+#include "wtf/Forward.h"
 
 namespace WebCore {
 
 class Dictionary;
 class ExceptionState;
 
-class RTCSessionDescription FINAL : public RefCounted<RTCSessionDescription>, public ScriptWrappable {
+class RTCSessionDescription FINAL : public GarbageCollectedFinalized<RTCSessionDescription>, public ScriptWrappable {
 public:
-    static PassRefPtr<RTCSessionDescription> create(const Dictionary&, ExceptionState&);
-    static PassRefPtr<RTCSessionDescription> create(blink::WebRTCSessionDescription);
+    static RTCSessionDescription* create(const Dictionary&, ExceptionState&);
+    static RTCSessionDescription* create(blink::WebRTCSessionDescription);
 
     String type();
     void setType(const String&, ExceptionState&);
@@ -54,6 +52,8 @@ public:
     void setSdp(const String&);
 
     blink::WebRTCSessionDescription webSessionDescription();
+
+    void trace(Visitor*) { }
 
 private:
     explicit RTCSessionDescription(blink::WebRTCSessionDescription);

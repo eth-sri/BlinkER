@@ -23,11 +23,10 @@
 
 #include "core/svg/SVGAnimateMotionElement.h"
 
-#include "SVGNames.h"
+#include "core/SVGNames.h"
 #include "core/rendering/RenderObject.h"
 #include "core/rendering/svg/RenderSVGResource.h"
 #include "core/rendering/svg/SVGPathData.h"
-#include "core/svg/SVGElementInstance.h"
 #include "core/svg/SVGMPathElement.h"
 #include "core/svg/SVGParserUtilities.h"
 #include "core/svg/SVGPathElement.h"
@@ -40,7 +39,7 @@ namespace WebCore {
 
 using namespace SVGNames;
 
-SVGAnimateMotionElement::SVGAnimateMotionElement(Document& document)
+inline SVGAnimateMotionElement::SVGAnimateMotionElement(Document& document)
     : SVGAnimationElement(animateMotionTag, document)
     , m_hasToPointAtEndOfDuration(false)
 {
@@ -48,12 +47,10 @@ SVGAnimateMotionElement::SVGAnimateMotionElement(Document& document)
     ScriptWrappable::init(this);
 }
 
+DEFINE_NODE_FACTORY(SVGAnimateMotionElement)
+
 SVGAnimateMotionElement::~SVGAnimateMotionElement()
 {
-#if !ENABLE(OILPAN)
-    if (targetElement())
-        clearAnimatedType(targetElement());
-#endif
 }
 
 bool SVGAnimateMotionElement::hasValidAttributeType()

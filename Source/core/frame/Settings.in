@@ -99,17 +99,12 @@ acceleratedCompositingForFiltersEnabled initial=false, invalidate=AcceleratedCom
 acceleratedCompositingForFixedPositionEnabled initial=false, invalidate=AcceleratedCompositing
 acceleratedCompositingForOverflowScrollEnabled initial=false, invalidate=AcceleratedCompositing
 acceleratedCompositingForFixedRootBackgroundEnabled initial=false
-
-forceCompositingMode initial=false, invalidate=AcceleratedCompositing
-
-# Works only in conjunction with forceCompositingMode.
 compositedScrollingForFramesEnabled initial=false, invalidate=AcceleratedCompositing
 
 # 3D canvas (WebGL) support.
 webGLEnabled initial=false
 
 webGLErrorsToConsoleEnabled initial=true
-privilegedWebGLExtensionsEnabled initial=false
 accelerated2dCanvasEnabled initial=false
 antialiased2dCanvasEnabled initial=true
 accelerated2dCanvasMSAASampleCount type=int, initial=0
@@ -128,7 +123,6 @@ allowConnectingInsecureWebSocket initial=false
 mediaControlsOverlayPlayButtonEnabled initial=false
 mediaPlaybackRequiresUserGesture initial=false
 
-scrollingCoordinatorEnabled initial=false
 scrollAnimatorEnabled initial=true
 
 shouldRespectImageOrientation initial=false
@@ -161,10 +155,6 @@ syncXHRInDocumentsEnabled initial=true
 cookieEnabled initial=true
 navigateOnDragDrop initial=true
 DOMPasteAllowed initial=false
-
-// FIXME: Remove this. Unfortunately many webkit_unit_tests
-// depend on parsing being synchronous. crbug.com/366354
-threadedHTMLParser initial=true
 
 allowCustomScrollbarInMainFrame initial=true
 webSecurityEnabled initial=true
@@ -228,10 +218,6 @@ useSolidColorScrollbars initial=false
 pinchOverlayScrollbarThickness type=int, initial=0
 
 mainFrameClipsContent initial=true
-
-# Enable decoration shadow nodes to test password genration feature
-# crbug.com/114092. This flag should not be enabled for production.
-passwordGenerationDecorationEnabled initial=false
 
 
 # Presumably used by LayoutTests?  Unclear.

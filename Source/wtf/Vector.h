@@ -43,6 +43,9 @@ static const size_t kInitialVectorSize = 1;
 static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
 #endif
 
+    template<typename T, size_t inlineBuffer, typename Allocator>
+    class Deque;
+
     template <bool needsDestruction, typename T>
     struct VectorDestructor;
 
@@ -221,7 +224,9 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
     {
         static bool compare(const T* a, const T* b, size_t size)
         {
-            return std::equal(a, a + size, b);
+            if (LIKELY(a && b))
+                return std::equal(a, a + size, b);
+            return !a && !b;
         }
     };
 
@@ -302,7 +307,7 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
 
         void clearUnusedSlots(T* from, T* to)
         {
-            VectorUnusedSlotClearer<Allocator::isGarbageCollected && (VectorTraits<T>::needsDestruction || ShouldBeTraced<VectorTraits<T> >::value || VectorTraits<T>::isWeak), T>::clear(from, to);
+            VectorUnusedSlotClearer<Allocator::isGarbageCollected && (VectorTraits<T>::needsDestruction || ShouldBeTraced<VectorTraits<T> >::value), T>::clear(from, to);
         }
 
     protected:
@@ -494,6 +499,8 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
         const T* inlineBuffer() const { return reinterpret_cast_ptr<const T*>(m_inlineBuffer.buffer); }
 
         AlignedBuffer<m_inlineBufferSize, WTF_ALIGN_OF(T)> m_inlineBuffer;
+        template<typename U, size_t inlineBuffer, typename V>
+        friend class Deque;
     };
 
     template<typename T, size_t inlineCapacity, typename Allocator>
@@ -1180,7 +1187,7 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
     template<typename T, size_t inlineCapacity, typename Allocator>
     void Vector<T, inlineCapacity, Allocator>::trace(typename Allocator::Visitor* visitor)
     {
-        COMPILE_ASSERT(Allocator::isGarbageCollected, Garbage_collector_must_be_enabled);
+        ASSERT(Allocator::isGarbageCollected); // Garbage collector must be enabled.
         const T* bufferBegin = buffer();
         const T* bufferEnd = buffer() + size();
         if (ShouldBeTraced<VectorTraits<T> >::value) {
@@ -1190,6 +1197,13 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
         if (this->hasOutOfLineBuffer())
             Allocator::markNoTracing(visitor, buffer());
     }
+
+#if !ENABLE(OILPAN)
+    template<typename T, size_t N>
+    struct NeedsTracing<Vector<T, N> > {
+        static const bool value = false;
+    };
+#endif
 
 } // namespace WTF
 

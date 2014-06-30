@@ -22,14 +22,13 @@
 
 #include "core/svg/SVGFEOffsetElement.h"
 
-#include "SVGNames.h"
+#include "core/SVGNames.h"
 #include "platform/graphics/filters/FilterEffect.h"
-#include "core/svg/SVGElementInstance.h"
 #include "core/svg/graphics/filters/SVGFilterBuilder.h"
 
 namespace WebCore {
 
-SVGFEOffsetElement::SVGFEOffsetElement(Document& document)
+inline SVGFEOffsetElement::SVGFEOffsetElement(Document& document)
     : SVGFilterPrimitiveStandardAttributes(SVGNames::feOffsetTag, document)
     , m_dx(SVGAnimatedNumber::create(this, SVGNames::dxAttr, SVGNumber::create()))
     , m_dy(SVGAnimatedNumber::create(this, SVGNames::dyAttr, SVGNumber::create()))
@@ -41,6 +40,8 @@ SVGFEOffsetElement::SVGFEOffsetElement(Document& document)
     addToPropertyMap(m_dy);
     addToPropertyMap(m_in1);
 }
+
+DEFINE_NODE_FACTORY(SVGFEOffsetElement)
 
 bool SVGFEOffsetElement::isSupportedAttribute(const QualifiedName& attrName)
 {

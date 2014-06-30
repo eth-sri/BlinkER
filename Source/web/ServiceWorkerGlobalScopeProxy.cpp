@@ -36,11 +36,13 @@
 #include "core/dom/MessagePort.h"
 #include "core/events/MessageEvent.h"
 #include "core/workers/WorkerGlobalScope.h"
+#include "modules/push_messaging/PushEvent.h"
 #include "modules/serviceworkers/FetchEvent.h"
 #include "modules/serviceworkers/InstallEvent.h"
 #include "modules/serviceworkers/InstallPhaseEvent.h"
 #include "modules/serviceworkers/WaitUntilObserver.h"
 #include "platform/NotImplemented.h"
+#include "public/platform/WebServiceWorkerRequest.h"
 #include "public/web/WebSerializedScriptValue.h"
 #include "public/web/WebServiceWorkerContextClient.h"
 #include "web/WebEmbeddedWorkerImpl.h"
@@ -78,11 +80,14 @@ void ServiceWorkerGlobalScopeProxy::dispatchActivateEvent(int eventID)
     observer->didDispatchEvent();
 }
 
-void ServiceWorkerGlobalScopeProxy::dispatchFetchEvent(int eventID)
+void ServiceWorkerGlobalScopeProxy::dispatchFetchEvent(int eventID, const WebServiceWorkerRequest& webRequest)
 {
     ASSERT(m_workerGlobalScope);
     RefPtr<RespondWithObserver> observer = RespondWithObserver::create(m_workerGlobalScope, eventID);
-    m_workerGlobalScope->dispatchEvent(FetchEvent::create(observer));
+    RefPtr<Request> request = Request::create(webRequest);
+    RefPtrWillBeRawPtr<FetchEvent> fetchEvent(FetchEvent::create(observer, request));
+    fetchEvent->setIsReload(webRequest.isReload());
+    m_workerGlobalScope->dispatchEvent(fetchEvent.release());
     observer->didDispatchEvent();
 }
 
@@ -90,9 +95,15 @@ void ServiceWorkerGlobalScopeProxy::dispatchMessageEvent(const WebString& messag
 {
     ASSERT(m_workerGlobalScope);
 
-    OwnPtr<MessagePortArray> ports = MessagePort::toMessagePortArray(m_workerGlobalScope, webChannels);
+    OwnPtrWillBeRawPtr<MessagePortArray> ports = MessagePort::toMessagePortArray(m_workerGlobalScope, webChannels);
     WebSerializedScriptValue value = WebSerializedScriptValue::fromString(message);
     m_workerGlobalScope->dispatchEvent(MessageEvent::create(ports.release(), value));
+}
+
+void ServiceWorkerGlobalScopeProxy::dispatchPushEvent(int eventID, const WebString& data)
+{
+    ASSERT(m_workerGlobalScope);
+    m_workerGlobalScope->dispatchEvent(PushEvent::create(EventTypeNames::push, data));
 }
 
 void ServiceWorkerGlobalScopeProxy::dispatchSyncEvent(int eventID)

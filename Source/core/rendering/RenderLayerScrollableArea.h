@@ -98,8 +98,6 @@ public:
     virtual IntSize contentsSize() const OVERRIDE;
     virtual IntSize overhangAmount() const OVERRIDE;
     virtual IntPoint lastKnownMousePosition() const OVERRIDE;
-    virtual bool scrollAnimatorEnabled() const OVERRIDE;
-    virtual bool scheduleAnimation() OVERRIDE;
     virtual bool shouldSuspendScrollAnimations() const OVERRIDE;
     virtual bool scrollbarsCanBeActive() const OVERRIDE;
     virtual IntRect scrollableAreaBoundingBox() const OVERRIDE;
@@ -141,8 +139,8 @@ public:
         return resizerCornerRect(bounds, ResizerForTouch);
     }
 
-    int scrollWidth() const;
-    int scrollHeight() const;
+    LayoutUnit scrollWidth() const;
+    LayoutUnit scrollHeight() const;
 
     int verticalScrollbarWidth(OverlayScrollbarSizeRelevancy = IgnoreOverlayScrollbarSize) const;
     int horizontalScrollbarHeight(OverlayScrollbarSizeRelevancy = IgnoreOverlayScrollbarSize) const;
@@ -153,9 +151,6 @@ public:
     void paintOverflowControls(GraphicsContext*, const IntPoint& paintOffset, const IntRect& damageRect, bool paintingOverlayControls);
     void paintScrollCorner(GraphicsContext*, const IntPoint&, const IntRect& damageRect);
 
-    // If IntSize is not given, then we must incur additional overhead to instantiate a RenderGeometryMap
-    // and compute the correct offset ourselves.
-    void positionOverflowControls();
     void positionOverflowControls(const IntSize& offsetFromRoot);
 
     // isPointInResizeControl() is used for testing if a pointer/touch position is in the resize control
@@ -206,7 +201,6 @@ private:
     void setHasVerticalScrollbar(bool hasScrollbar);
 
     void updateScrollCornerStyle();
-    IntSize minimumSizeForResizing();
 
     // See comments on isPointInResizeControl.
     IntRect resizerCornerRect(const IntRect&, ResizerHitTestType) const;

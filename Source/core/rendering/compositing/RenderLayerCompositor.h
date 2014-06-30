@@ -26,32 +26,25 @@
 #ifndef RenderLayerCompositor_h
 #define RenderLayerCompositor_h
 
-#include "core/page/ChromeClient.h"
 #include "core/rendering/RenderLayer.h"
-#include "core/rendering/compositing/CompositingPropertyUpdater.h"
 #include "core/rendering/compositing/CompositingReasonFinder.h"
-#include "core/rendering/compositing/GraphicsLayerUpdater.h"
 #include "platform/graphics/GraphicsLayerClient.h"
 #include "wtf/HashMap.h"
 
 namespace WebCore {
 
-class FixedPositionViewportConstraints;
+class DocumentLifecycle;
 class GraphicsLayer;
-class RenderEmbeddedObject;
-class RenderLayerStackingNode;
+class GraphicsLayerFactory;
+class Page;
 class RenderPart;
-class RenderVideo;
 class ScrollingCoordinator;
-class StickyPositionViewportConstraints;
 
 enum CompositingUpdateType {
     CompositingUpdateNone,
-    CompositingUpdateOnCompositedScroll,
+    CompositingUpdateAfterGeometryChange,
     CompositingUpdateAfterCompositingInputChange,
-    CompositingUpdateAfterStyleChange,
-    CompositingUpdateAfterLayout,
-    CompositingUpdateOnScroll,
+    CompositingUpdateRebuildTree,
 };
 
 enum CompositingStateTransitionType {
@@ -97,16 +90,10 @@ public:
     // Copy the accelerated compositing related flags from Settings
     void updateAcceleratedCompositingSettings();
 
-    // Called when the layer hierarchy needs to be updated (compositing layers have been
-    // created, destroyed or re-parented).
-    void setCompositingLayersNeedRebuild();
-
-    // Updating properties required for determining if compositing is necessary.
-    void updateCompositingRequirementsState();
-    void setNeedsUpdateCompositingRequirementsState() { m_needsUpdateCompositingRequirementsState = true; }
-
     // Used to indicate that a compositing update will be needed for the next frame that gets drawn.
     void setNeedsCompositingUpdate(CompositingUpdateType);
+
+    void didLayout();
 
     enum UpdateLayerCompositingStateOptions {
         Normal,
@@ -116,8 +103,6 @@ public:
     // Update the compositing dirty bits, based on the compositing-impacting properties of the layer.
     void updateLayerCompositingState(RenderLayer*, UpdateLayerCompositingStateOptions = Normal);
 
-    // Returns whether this layer is clipped by another layer that is not an ancestor of the given layer in the stacking context hierarchy.
-    bool clippedByNonAncestorInStackingTree(const RenderLayer*) const;
     // Whether layer's compositedLayerMapping needs a GraphicsLayer to clip z-order children of the given RenderLayer.
     bool clipsCompositingDescendants(const RenderLayer*) const;
 
@@ -133,11 +118,6 @@ public:
     void repaintOnCompositingChange(RenderLayer*);
 
     void repaintInCompositedAncestor(RenderLayer*, const LayoutRect&);
-
-    // Notify us that a layer has been added or removed
-    void layerWasAdded(RenderLayer* parent, RenderLayer* child);
-    void layerWillBeRemoved(RenderLayer* parent, RenderLayer* child);
-
     void repaintCompositedLayers();
 
     RenderLayer* rootRenderLayer() const;
@@ -180,19 +160,13 @@ public:
     GraphicsLayer* layerForVerticalScrollbar() const { return m_layerForVerticalScrollbar.get(); }
     GraphicsLayer* layerForScrollCorner() const { return m_layerForScrollCorner.get(); }
 
-    void addOutOfFlowPositionedLayer(RenderLayer*);
-    void removeOutOfFlowPositionedLayer(RenderLayer*);
-
     void resetTrackedRepaintRects();
     void setTracksRepaints(bool);
 
-    void setNeedsToRecomputeCompositingRequirements() { m_needsToRecomputeCompositingRequirements = true; }
-
     virtual String debugName(const GraphicsLayer*) OVERRIDE;
+    DocumentLifecycle& lifecycle() const;
 
-    void updateStyleDeterminedCompositingReasons(RenderLayer*);
-
-    void scheduleAnimationIfNeeded();
+    void updatePotentialCompositingReasonsFromStyle(RenderLayer*);
 
     // Whether the layer could ever be composited.
     bool canBeComposited(const RenderLayer*) const;
@@ -203,10 +177,16 @@ public:
 
     void updateDirectCompositingReasons(RenderLayer*);
 
+    void setOverlayLayer(GraphicsLayer*);
+
+    bool inOverlayFullscreenVideo() const { return m_inOverlayFullscreenVideo; }
+
 private:
     class OverlapMap;
 
+#if ASSERT_ENABLED
     void assertNoUnresolvedDirtyBits();
+#endif
 
     // Make updates to the layer based on viewport-constrained properties such as position:fixed. This can in turn affect
     // compositing.
@@ -237,28 +217,18 @@ private:
 
     void updateOverflowControlsLayers();
 
-    void notifyIFramesOfCompositingChange();
-
     Page* page() const;
 
     GraphicsLayerFactory* graphicsLayerFactory() const;
     ScrollingCoordinator* scrollingCoordinator() const;
-
-    bool compositingLayersNeedRebuild();
 
     void enableCompositingModeIfNeeded();
 
     bool requiresHorizontalScrollbarLayer() const;
     bool requiresVerticalScrollbarLayer() const;
     bool requiresScrollCornerLayer() const;
-#if USE(RUBBER_BANDING)
-    bool requiresOverhangLayers() const;
-#endif
 
     void applyUpdateLayerCompositingStateChickenEggHacks(RenderLayer*, CompositingStateTransitionType compositedLayerUpdate);
-
-    DocumentLifecycle& lifecycle() const;
-
     void applyOverlayFullscreenVideoAdjustment();
 
     RenderView& m_renderView;
@@ -270,9 +240,7 @@ private:
     CompositingUpdateType m_pendingUpdateType;
 
     bool m_hasAcceleratedCompositing;
-    bool m_needsToRecomputeCompositingRequirements;
     bool m_compositing;
-    bool m_compositingLayersNeedRebuild;
 
     // The root layer doesn't composite if it's a non-scrollable frame.
     // So, after a layout we set this dirty bit to know that we need
@@ -282,7 +250,6 @@ private:
     // except the one in updateIfNeeded, then rename this to
     // m_compositingDirty.
     bool m_rootShouldAlwaysCompositeDirty;
-    bool m_needsUpdateCompositingRequirementsState;
     bool m_needsUpdateFixedBackground;
     bool m_isTrackingRepaints; // Used for testing.
 
@@ -291,10 +258,6 @@ private:
     // Enclosing container layer, which clips for iframe content
     OwnPtr<GraphicsLayer> m_containerLayer;
     OwnPtr<GraphicsLayer> m_scrollLayer;
-
-    // This is used in updateCompositingRequirementsState to avoid full tree
-    // walks while determining if layers have unclipped descendants.
-    HashSet<RenderLayer*> m_outOfFlowPositionedLayers;
 
     // Enclosing layer for overflow controls and the clipping layer
     OwnPtr<GraphicsLayer> m_overflowControlsHostLayer;
@@ -306,6 +269,8 @@ private:
 #if USE(RUBBER_BANDING)
     OwnPtr<GraphicsLayer> m_layerForOverhangShadow;
 #endif
+
+    bool m_inOverlayFullscreenVideo;
 };
 
 } // namespace WebCore

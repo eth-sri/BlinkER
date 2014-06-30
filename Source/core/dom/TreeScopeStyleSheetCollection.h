@@ -43,11 +43,8 @@
 namespace WebCore {
 
 class ContainerNode;
-class DocumentStyleSheetCollector;
-class StyleEngine;
 class Node;
 class StyleSheetContents;
-class StyleSheetList;
 class StyleRuleFontFace;
 
 class TreeScopeStyleSheetCollection : public StyleSheetCollection {
@@ -63,6 +60,7 @@ public:
     ListHashSet<Node*, 4>* scopingNodesRemoved() { return m_scopingNodesForStyleScoped.scopingNodesRemoved(); }
 
     void clearMediaQueryRuleSetStyleSheets();
+    void enableExitTransitionStylesheets();
 
     virtual void trace(Visitor* visitor) OVERRIDE
     {

@@ -23,6 +23,7 @@
 
 #include "core/css/CSSValue.h"
 #include "core/fetch/ResourceFetcher.h"
+#include "platform/weborigin/Referrer.h"
 #include "wtf/RefPtr.h"
 
 namespace WebCore {
@@ -53,8 +54,8 @@ public:
 
     const String& url() { return m_absoluteURL; }
 
-    void setReferrer(const String& referrer) { m_referrer = referrer; }
-    const String& referrer() { return m_referrer; }
+    void setReferrer(const Referrer& referrer) { m_referrer = referrer; }
+    const Referrer& referrer() const { return m_referrer; }
 
     void reResolveURL(const Document&);
 
@@ -78,7 +79,7 @@ private:
 
     String m_relativeURL;
     String m_absoluteURL;
-    String m_referrer;
+    Referrer m_referrer;
     RefPtr<StyleImage> m_image;
     bool m_accessedImage;
     AtomicString m_initiatorName;

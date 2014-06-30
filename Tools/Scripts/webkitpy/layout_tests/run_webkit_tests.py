@@ -59,8 +59,8 @@ def main(argv, stdout, stderr):
         host = Host()
 
     if options.lint_test_files:
-        from webkitpy.layout_tests.lint_test_expectations import lint
-        return lint(host, options, stderr)
+        from webkitpy.layout_tests.lint_test_expectations import run_checks
+        return run_checks(host, options, stderr)
 
     try:
         port = host.port_factory.get(options.platform, options)
@@ -261,6 +261,8 @@ def parse_args(args):
             help="Use LigHTTPd instead of Apache (default is port-specific)."),
         optparse.make_option("--enable-leak-detection", action="store_true",
             help="Enable the leak detection of DOM objects."),
+        optparse.make_option("--enable-sanitizer", action="store_true",
+            help="Only alert on sanitizer-related errors and crashes"),
     ]))
 
     option_group_definitions.append(("Miscellaneous Options", [

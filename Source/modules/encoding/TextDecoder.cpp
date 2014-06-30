@@ -41,27 +41,29 @@ namespace WebCore {
 
 TextDecoder* TextDecoder::create(const String& label, const Dictionary& options, ExceptionState& exceptionState)
 {
-    const String& encodingLabel = label.isNull() ? String("utf-8") : label;
-
-    WTF::TextEncoding encoding(encodingLabel);
+    WTF::TextEncoding encoding(label);
     // The replacement encoding is not valid, but the Encoding API also
     // rejects aliases of the replacement encoding.
     if (!encoding.isValid() || !strcasecmp(encoding.name(), "replacement")) {
-        exceptionState.throwTypeError("The encoding label provided ('" + encodingLabel + "') is invalid.");
+        exceptionState.throwTypeError("The encoding label provided ('" + label + "') is invalid.");
         return 0;
     }
 
     bool fatal = false;
     options.get("fatal", fatal);
 
-    return new TextDecoder(encoding, fatal);
+    bool ignoreBOM = false;
+    options.get("ignoreBOM", ignoreBOM);
+
+    return new TextDecoder(encoding, fatal, ignoreBOM);
 }
 
 
-TextDecoder::TextDecoder(const WTF::TextEncoding& encoding, bool fatal)
+TextDecoder::TextDecoder(const WTF::TextEncoding& encoding, bool fatal, bool ignoreBOM)
     : m_encoding(encoding)
     , m_codec(newTextCodec(encoding))
     , m_fatal(fatal)
+    , m_ignoreBOM(ignoreBOM)
     , m_bomSeen(false)
 {
 }
@@ -98,7 +100,7 @@ String TextDecoder::decode(ArrayBufferView* input, const Dictionary& options, Ex
         return String();
     }
 
-    if (!m_bomSeen && !s.isEmpty()) {
+    if (!m_ignoreBOM && !m_bomSeen && !s.isEmpty()) {
         m_bomSeen = true;
         String name(m_encoding.name());
         if ((name == "UTF-8" || name == "UTF-16LE" || name == "UTF-16BE") && s[0] == 0xFEFF)

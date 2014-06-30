@@ -27,56 +27,26 @@
 #define PositionOptions_h
 
 #include "platform/heap/Handle.h"
-#include "wtf/RefCounted.h"
 
 namespace WebCore {
 
-class PositionOptions : public RefCountedWillBeGarbageCollected<PositionOptions> {
+class Dictionary;
+
+class PositionOptions : public GarbageCollected<PositionOptions> {
 public:
-    static PassRefPtrWillBeRawPtr<PositionOptions> create() { return adoptRefWillBeNoop(new PositionOptions()); }
+    static PositionOptions* create(const Dictionary&);
     void trace(Visitor*) { }
 
     bool enableHighAccuracy() const { return m_highAccuracy; }
-    void setEnableHighAccuracy(bool enable) { m_highAccuracy = enable; }
-    bool hasTimeout() const { return m_hasTimeout; }
-    int timeout() const
-    {
-        ASSERT(hasTimeout());
-        return m_timeout;
-    }
-    void setTimeout(int timeout)
-    {
-        ASSERT(timeout >= 0);
-        m_hasTimeout = true;
-        m_timeout = timeout;
-    }
-    bool hasMaximumAge() const { return m_hasMaximumAge; }
-    int maximumAge() const
-    {
-        ASSERT(hasMaximumAge());
-        return m_maximumAge;
-    }
-    void clearMaximumAge() { m_hasMaximumAge = false; }
-    void setMaximumAge(int age)
-    {
-        ASSERT(age >= 0);
-        m_hasMaximumAge = true;
-        m_maximumAge = age;
-    }
+    unsigned timeout() const { return m_timeout; }
+    unsigned maximumAge() const { return m_maximumAge; }
 
 private:
-    PositionOptions()
-        : m_highAccuracy(false)
-        , m_hasTimeout(false)
-    {
-        setMaximumAge(0);
-    }
+    explicit PositionOptions(const Dictionary&);
 
     bool m_highAccuracy;
-    bool m_hasTimeout;
-    int m_timeout;
-    bool m_hasMaximumAge;
-    int m_maximumAge;
+    unsigned m_maximumAge;
+    unsigned m_timeout;
 };
 
 } // namespace WebCore

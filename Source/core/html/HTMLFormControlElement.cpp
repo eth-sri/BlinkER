@@ -41,7 +41,6 @@
 namespace WebCore {
 
 using namespace HTMLNames;
-using namespace std;
 
 HTMLFormControlElement::HTMLFormControlElement(const QualifiedName& tagName, Document& document, HTMLFormElement* form)
     : LabelableElement(tagName, document)
@@ -351,7 +350,7 @@ void HTMLFormControlElement::willCallDefaultEventHandler(const Event& event)
         return;
     m_wasFocusedByMouse = false;
     if (renderer())
-        renderer()->repaint();
+        renderer()->paintInvalidationForWholeRenderer();
 }
 
 

@@ -26,7 +26,7 @@
 #include "config.h"
 #include "core/css/CSSImageSetValue.h"
 
-#include "FetchInitiatorTypeNames.h"
+#include "core/FetchInitiatorTypeNames.h"
 #include "core/css/CSSImageValue.h"
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/dom/Document.h"
@@ -105,8 +105,7 @@ StyleFetchedImageSet* CSSImageSetValue::cachedImageSet(ResourceFetcher* loader, 
         ImageWithScale image = bestImageForScaleFactor();
         if (Document* document = loader->document()) {
             FetchRequest request(ResourceRequest(document->completeURL(image.imageURL)), FetchInitiatorTypeNames::css, options);
-            if (!image.referrer.isEmpty())
-                request.mutableResourceRequest().setHTTPReferrer(Referrer(image.referrer, ReferrerPolicyDefault));
+            request.mutableResourceRequest().setHTTPReferrer(image.referrer);
 
             if (options.corsEnabled == IsCORSEnabled)
                 request.setCrossOriginAccessControl(loader->document()->securityOrigin(), options.allowCredentials, options.credentialsRequested);

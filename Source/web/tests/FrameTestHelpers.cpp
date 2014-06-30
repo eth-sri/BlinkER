@@ -272,12 +272,10 @@ WebViewImpl* WebViewHelper::initialize(bool enableJavascript, TestWebFrameClient
         webViewClient = defaultWebViewClient();
     m_webView = WebViewImpl::create(webViewClient);
     m_webView->settings()->setJavaScriptEnabled(enableJavascript);
-    if (updateSettingsFunc) {
+    if (updateSettingsFunc)
         updateSettingsFunc(m_webView->settings());
-    } else {
+    else
         m_webView->settings()->setDeviceSupportsMouse(false);
-        m_webView->settings()->setForceCompositingMode(true);
-    }
 
     m_webView->setMainFrame(WebLocalFrameImpl::create(webFrameClient));
 
@@ -333,7 +331,7 @@ void TestWebFrameClient::didStopLoading()
 
 void TestWebViewClient::initializeLayerTreeView()
 {
-    m_layerTreeView = adoptPtr(Platform::current()->unitTestSupport()->createLayerTreeViewForTesting(WebUnitTestSupport::TestViewTypeUnitTest));
+    m_layerTreeView = adoptPtr(Platform::current()->unitTestSupport()->createLayerTreeViewForTesting());
     ASSERT(m_layerTreeView);
 }
 

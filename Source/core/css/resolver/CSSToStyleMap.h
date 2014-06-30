@@ -22,7 +22,7 @@
 #ifndef CSSToStyleMap_h
 #define CSSToStyleMap_h
 
-#include "CSSPropertyNames.h"
+#include "core/CSSPropertyNames.h"
 #include "core/animation/Timing.h"
 #include "core/animation/css/CSSTransitionData.h"
 #include "core/css/resolver/ElementStyleResources.h"
@@ -80,7 +80,6 @@ public:
 
 private:
     const CSSToLengthConversionData& cssToLengthConversionData() const;
-    bool useSVGZoomRules() const;
 
     PassRefPtr<StyleImage> styleImage(CSSPropertyID, CSSValue*);
 

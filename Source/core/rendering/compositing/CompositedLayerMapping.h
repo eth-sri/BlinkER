@@ -32,11 +32,9 @@
 #include "platform/geometry/FloatPoint3D.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/GraphicsLayerClient.h"
-#include "platform/transforms/TransformationMatrix.h"
 
 namespace WebCore {
 
-class KeyframeList;
 class RenderLayerCompositor;
 
 // A GraphicsLayerPaintInfo contains all the info needed to paint a partial subtree of RenderLayers into a GraphicsLayer.
@@ -48,29 +46,32 @@ struct GraphicsLayerPaintInfo {
     // The clip rect to apply, in the local coordinate space of the squashed layer, when painting it.
     IntRect localClipRectForSquashedLayer;
 
-    // At first, the m_squashingLayer's bounds/location are not known. The value offsetFromSquashingLayer is
-    // an intermediate offset for a squashed RenderLayer, described with respect to the CompositedLayerMapping's
-    // owning layer that would eventually have the m_squashingLayer. Once the shared GraphicsLayer's bounds are
-    // known, then we can trivially convert this offset to m_squashingLayer's space.
-    LayoutSize offsetFromSquashingLayer;
-
     // Offset describing where this squashed RenderLayer paints into the shared GraphicsLayer backing.
     IntSize offsetFromRenderer;
+    bool offsetFromRendererSet;
+
     LayoutSize subpixelAccumulation;
 
     GraphicsLayerPaintingPhase paintingPhase;
 
     bool isBackgroundLayer;
 
+    GraphicsLayerPaintInfo() : renderLayer(0), offsetFromRendererSet(false), isBackgroundLayer(false) { }
+
     bool isEquivalentForSquashing(const GraphicsLayerPaintInfo& other)
     {
         // FIXME: offsetFromRenderer and compositedBounds should not be checked here, because
         // they are not yet fixed at the time this function is used.
         return renderLayer == other.renderLayer
-            && offsetFromSquashingLayer == other.offsetFromSquashingLayer
             && paintingPhase == other.paintingPhase
             && isBackgroundLayer == other.isBackgroundLayer;
     }
+};
+
+enum GraphicsLayerUpdateScope {
+    GraphicsLayerUpdateNone,
+    GraphicsLayerUpdateLocal,
+    GraphicsLayerUpdateSubtree,
 };
 
 // CompositedLayerMapping keeps track of how RenderLayers of the render tree correspond to
@@ -88,10 +89,9 @@ public:
 
     RenderLayer& owningLayer() const { return m_owningLayer; }
 
-    // Returns true if layer configuration changed.
-    bool updateGraphicsLayerConfiguration(GraphicsLayerUpdater::UpdateType);
-    // Update graphics layer position and bounds.
-    void updateGraphicsLayerGeometry(GraphicsLayerUpdater::UpdateType, const RenderLayer* compositingContainer);
+    bool updateGraphicsLayerConfiguration();
+    void updateGraphicsLayerGeometry(const RenderLayer* compositingContainer, Vector<RenderLayer*>& layersNeedingPaintInvalidation);
+
     // Update whether layer needs blending.
     void updateContentsOpaque();
 
@@ -114,6 +114,7 @@ public:
     bool hasScrollingLayer() const { return m_scrollingLayer; }
     GraphicsLayer* scrollingLayer() const { return m_scrollingLayer.get(); }
     GraphicsLayer* scrollingContentsLayer() const { return m_scrollingContentsLayer.get(); }
+    GraphicsLayer* scrollingBlockSelectionLayer() const { return m_scrollingBlockSelectionLayer.get(); }
 
     bool hasMaskLayer() const { return m_maskLayer; }
     GraphicsLayer* maskLayer() const { return m_maskLayer.get(); }
@@ -146,6 +147,7 @@ public:
     // a backing store changed.
     bool updateRequiresOwnBackingStoreForIntrinsicReasons();
 
+    void setSquashingContentsNeedDisplay();
     void setContentsNeedDisplay();
     // r is in the coordinate space of the layer's render object
     void setContentsNeedDisplayInRect(const IntRect&);
@@ -155,7 +157,7 @@ public:
 
     LayoutRect compositedBounds() const { return m_compositedBounds; }
     IntRect pixelSnappedCompositedBounds() const;
-    void updateCompositedBounds(GraphicsLayerUpdater::UpdateType);
+    void updateCompositedBounds();
 
     void positionOverflowControlsLayers(const IntSize& offsetFromRoot);
     bool hasUnpositionedOverflowControlsLayers() const;
@@ -173,8 +175,6 @@ public:
     virtual void paintContents(const GraphicsLayer*, GraphicsContext&, GraphicsLayerPaintingPhase, const IntRect& clip) OVERRIDE;
     virtual bool isTrackingRepaints() const OVERRIDE;
 
-    PassOwnPtr<Vector<FloatRect> > collectTrackedRepaintRects() const;
-
 #ifndef NDEBUG
     virtual void verifyNotPainting() OVERRIDE;
 #endif
@@ -190,13 +190,14 @@ public:
 
     void setBlendMode(blink::WebBlendMode);
 
-    void setNeedsGraphicsLayerUpdate();
-    bool shouldUpdateGraphicsLayer(GraphicsLayerUpdater::UpdateType updateType) const { return m_needToUpdateGraphicsLayer || updateType == GraphicsLayerUpdater::ForceUpdate; }
-    GraphicsLayerUpdater::UpdateType updateTypeForChildren(GraphicsLayerUpdater::UpdateType) const;
-    void clearNeedsGraphicsLayerUpdate();
+    bool needsGraphicsLayerUpdate() { return m_pendingUpdateScope > GraphicsLayerUpdateNone; }
+    void setNeedsGraphicsLayerUpdate(GraphicsLayerUpdateScope scope) { m_pendingUpdateScope = std::max(static_cast<GraphicsLayerUpdateScope>(m_pendingUpdateScope), scope); }
+    void clearNeedsGraphicsLayerUpdate() { m_pendingUpdateScope = GraphicsLayerUpdateNone; }
 
-#if !ASSERT_DISABLED
-    void assertNeedsToUpdateGraphicsLayerBitsCleared();
+    GraphicsLayerUpdater::UpdateType updateTypeForChildren(GraphicsLayerUpdater::UpdateType) const;
+
+#if ASSERT_ENABLED
+    void assertNeedsToUpdateGraphicsLayerBitsCleared() {  ASSERT(m_pendingUpdateScope == GraphicsLayerUpdateNone); }
 #endif
 
     virtual String debugName(const GraphicsLayer*) OVERRIDE;
@@ -209,9 +210,28 @@ public:
     }
 
     // If there is a squashed layer painting into this CLM that is an ancestor of the given RenderObject, return it. Otherwise return 0.
-    const GraphicsLayerPaintInfo* containingSquashedLayer(const RenderObject*) const;
+    const GraphicsLayerPaintInfo* containingSquashedLayer(const RenderObject*);
+
+    void updateScrollingBlockSelection();
 
 private:
+    static const GraphicsLayerPaintInfo* containingSquashedLayer(const RenderObject*,  const Vector<GraphicsLayerPaintInfo>& layers);
+
+    // Helper methods to updateGraphicsLayerGeometry:
+    void computeGraphicsLayerParentLocation(const RenderLayer* compositingContainer, const IntRect& ancestorCompositingBounds, IntPoint& graphicsLayerParentLocation);
+    void updateSquashingLayerGeometry(const LayoutPoint& offsetFromCompositedAncestor, const IntPoint& graphicsLayerParentLocation, const RenderLayer& referenceLayer, Vector<GraphicsLayerPaintInfo>& layers, GraphicsLayer*, LayoutPoint* offsetFromTransformedAncestor, Vector<RenderLayer*>& layersNeedingPaintInvalidation);
+    void updateMainGraphicsLayerGeometry(const IntRect& relativeCompositingBounds, const IntRect& localCompositingBounds, IntPoint& graphicsLayerParentLocation);
+    void updateAncestorClippingLayerGeometry(const RenderLayer* compositingContainer, const IntPoint& snappedOffsetFromCompositedAncestor, IntPoint& graphicsLayerParentLocation);
+    void updateChildContainmentLayerGeometry(const IntRect& clippingBox, const IntRect& localCompositingBounds);
+    void updateChildTransformLayerGeometry();
+    void updateMaskLayerGeometry();
+    void updateTransformGeometry(const IntPoint& snappedOffsetFromCompositedAncestor, const IntRect& relativeCompositingBounds);
+    void updateForegroundLayerGeometry(const FloatSize& relativeCompositingBoundsSize, const IntRect& clippingBox);
+    void updateBackgroundLayerGeometry(const FloatSize& relativeCompositingBoundsSize);
+    void updateReflectionLayerGeometry(Vector<RenderLayer*>& layersNeedingPaintInvalidation);
+    void updateScrollingLayerGeometry(const IntRect& localCompositingBounds);
+    void updateChildClippingMaskLayerGeometry();
+
     void createPrimaryGraphicsLayer();
     void destroyGraphicsLayers();
 
@@ -235,13 +255,14 @@ private:
     bool requiresScrollCornerLayer() const { return m_owningLayer.scrollableArea() && !m_owningLayer.scrollableArea()->scrollCornerAndResizerRect().isEmpty(); }
     bool updateScrollingLayers(bool scrollingLayers);
     void updateScrollParent(RenderLayer*);
-    void updateClipParent(RenderLayer*);
+    void updateClipParent();
     bool updateSquashingLayers(bool needsSquashingLayers);
     void updateDrawsContent();
     void updateChildrenTransform();
     void registerScrollingLayers();
 
-    void adjustBoundsForSubPixelAccumulation(const RenderLayer* compositedAncestor, IntRect& localCompositingBounds, IntRect& relativeCompositingBounds, IntPoint& delta);
+    // Also sets subpixelAccumulation on the layer.
+    void computeBoundsOfOwningLayer(const RenderLayer* compositedAncestor, IntRect& localCompositingBounds, IntRect& compositingBoundsRelativeToCompositedAncestor, LayoutPoint& offsetFromCompositedAncestor, IntPoint& snappedOffsetFromCompositedAncestor);
 
     void setBackgroundLayerPaintsFixedRootBackground(bool);
 
@@ -249,8 +270,6 @@ private:
 
     // Result is transform origin in pixels.
     FloatPoint3D computeTransformOrigin(const IntRect& borderBox) const;
-
-    void updateSquashingLayerGeometry(const IntPoint& delta, const LayoutSize subpixelAccumulation, const RenderLayer& referenceLayer);
 
     void updateOpacity(const RenderStyle*);
     void updateTransform(const RenderStyle*);
@@ -275,7 +294,7 @@ private:
     void updateAfterWidgetResize();
     void updateCompositingReasons();
 
-    bool hasVisibleNonCompositingDescendantLayers() const;
+    static bool hasVisibleNonCompositingDescendant(RenderLayer* parent);
 
     void paintsIntoCompositedAncestorChanged();
 
@@ -286,7 +305,11 @@ private:
     // The clip rect is returned in the coordinate space of the given squashed layer.
     // If there is no such containing layer, returns the infinite rect.
     // FIXME: unify this code with the code that sets up m_ancestorClippingLayer. They are doing very similar things.
-    IntRect localClipRectForSquashedLayer(const GraphicsLayerPaintInfo&) const;
+    static IntRect localClipRectForSquashedLayer(const RenderLayer& referenceLayer, const GraphicsLayerPaintInfo&,  const Vector<GraphicsLayerPaintInfo>& layers);
+
+    // Return true if |m_owningLayer|'s compositing ancestor is not a descendant (inclusive) of the
+    // clipping container for |m_owningLayer|.
+    bool owningLayerClippedByLayerNotAboveCompositedAncestor();
 
     RenderLayer& m_owningLayer;
 
@@ -296,6 +319,7 @@ private:
     //     + m_graphicsLayer
     //        + m_childContainmentLayer [OPTIONAL] <-OR-> m_scrollingLayer [OPTIONAL] <-OR-> m_childTransformLayer
     //                                                     + m_scrollingContentsLayer [Present iff m_scrollingLayer is present]
+    //                                                        + m_scrollingBlockSelectionLayer [Present iff m_scrollingLayer is present]
     //
     // We need an ancestor clipping layer if our clipping ancestor is not our ancestor in the
     // clipping tree. Here's what that might look like.
@@ -323,6 +347,7 @@ private:
     OwnPtr<GraphicsLayer> m_childTransformLayer; // Only used if we have perspective and no m_childContainmentLayer.
     OwnPtr<GraphicsLayer> m_scrollingLayer; // Only used if the layer is using composited scrolling.
     OwnPtr<GraphicsLayer> m_scrollingContentsLayer; // Only used if the layer is using composited scrolling.
+    OwnPtr<GraphicsLayer> m_scrollingBlockSelectionLayer; // Only used if the layer is using composited scrolling, but has no scrolling contents apart from block selection gaps.
 
     // This layer is also added to the hierarchy by the RLB, but in a different way than
     // the layers above. It's added to m_graphicsLayer as its mask layer (naturally) if
@@ -379,14 +404,13 @@ private:
 
     LayoutRect m_compositedBounds;
 
-    bool m_artificiallyInflatedBounds : 1; // bounds had to be made non-zero to make transform-origin work
-    bool m_isMainFrameRenderViewLayer : 1;
-    bool m_requiresOwnBackingStoreForIntrinsicReasons : 1;
-    bool m_requiresOwnBackingStoreForAncestorReasons : 1;
-    bool m_canCompositeFilters : 1;
-    bool m_backgroundLayerPaintsFixedRootBackground : 1;
-    bool m_needToUpdateGraphicsLayer : 1;
-    bool m_needToUpdateGraphicsLayerOfAllDecendants : 1;
+    unsigned m_pendingUpdateScope : 2;
+    unsigned m_isMainFrameRenderViewLayer : 1;
+    unsigned m_requiresOwnBackingStoreForIntrinsicReasons : 1;
+    unsigned m_requiresOwnBackingStoreForAncestorReasons : 1;
+    unsigned m_canCompositeFilters : 1;
+    unsigned m_backgroundLayerPaintsFixedRootBackground : 1;
+    unsigned m_scrollingContentsAreEmpty : 1;
 };
 
 } // namespace WebCore

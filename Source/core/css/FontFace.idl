@@ -39,9 +39,9 @@ enum FontFaceLoadStatus {
 
 [
     // FIXME: should be union type http://crbug.com/240176
-    Constructor(DOMString family, DOMString source, Dictionary descriptors),
-    Constructor(DOMString family, ArrayBuffer source, Dictionary descriptors),
-    Constructor(DOMString family, ArrayBufferView source, Dictionary descriptors),
+    Constructor(DOMString family, DOMString source, optional Dictionary descriptors),
+    Constructor(DOMString family, ArrayBuffer source, optional Dictionary descriptors),
+    Constructor(DOMString family, ArrayBufferView source, optional Dictionary descriptors),
     ConstructorCallWith=ExecutionContext,
     RaisesException=Constructor,
     RuntimeEnabled=FontLoadEvents,
@@ -57,6 +57,7 @@ enum FontFaceLoadStatus {
     [RaisesException=Setter, SetterCallWith=ExecutionContext] attribute DOMString featureSettings;
 
     readonly attribute FontFaceLoadStatus status;
+    [CallWith=ScriptState] readonly attribute Promise loaded;
 
-    [CallWith=ExecutionContext] Promise load();
+    [CallWith=ScriptState] Promise load();
 };

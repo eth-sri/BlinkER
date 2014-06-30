@@ -27,31 +27,28 @@
 #include "config.h"
 #include "core/html/HTMLContentElement.h"
 
-#include "HTMLNames.h"
-#include "RuntimeEnabledFeatures.h"
+#include "core/HTMLNames.h"
 #include "core/css/SelectorChecker.h"
 #include "core/css/SiblingTraversalStrategies.h"
 #include "core/css/parser/BisonCSSParser.h"
 #include "core/dom/QualifiedName.h"
 #include "core/dom/shadow/ElementShadow.h"
 #include "core/dom/shadow/ShadowRoot.h"
+#include "platform/RuntimeEnabledFeatures.h"
 
 namespace WebCore {
 
 using namespace HTMLNames;
 
-PassRefPtrWillBeRawPtr<HTMLContentElement> HTMLContentElement::create(Document& document)
-{
-    return adoptRefWillBeRefCountedGarbageCollected(new HTMLContentElement(document));
-}
-
-HTMLContentElement::HTMLContentElement(Document& document)
+inline HTMLContentElement::HTMLContentElement(Document& document)
     : InsertionPoint(contentTag, document)
     , m_shouldParseSelect(false)
     , m_isValidSelector(true)
 {
     ScriptWrappable::init(this);
 }
+
+DEFINE_NODE_FACTORY(HTMLContentElement)
 
 HTMLContentElement::~HTMLContentElement()
 {
@@ -83,6 +80,11 @@ void HTMLContentElement::parseAttribute(const QualifiedName& name, const AtomicS
     }
 }
 
+static inline bool includesDisallowedPseudoClass(const CSSSelector& selector)
+{
+    return selector.match() == CSSSelector::PseudoClass && selector.pseudoType() != CSSSelector::PseudoNot;
+}
+
 bool HTMLContentElement::validateSelect() const
 {
     ASSERT(!m_shouldParseSelect);
@@ -93,15 +95,15 @@ bool HTMLContentElement::validateSelect() const
     if (!m_selectorList.isValid())
         return false;
 
-    bool disallowPseudoClasses = !RuntimeEnabledFeatures::pseudoClassesInMatchingCriteriaInAuthorShadowTreesEnabled() && containingShadowRoot() && containingShadowRoot()->type() == ShadowRoot::AuthorShadowRoot;
+    bool allowAnyPseudoClasses = RuntimeEnabledFeatures::pseudoClassesInMatchingCriteriaInAuthorShadowTreesEnabled() || (containingShadowRoot() && containingShadowRoot()->type() == ShadowRoot::UserAgentShadowRoot);
 
     for (const CSSSelector* selector = m_selectorList.first(); selector; selector = m_selectorList.next(*selector)) {
         if (!selector->isCompound())
             return false;
-        if (!disallowPseudoClasses)
+        if (allowAnyPseudoClasses)
             continue;
         for (const CSSSelector* subSelector = selector; subSelector; subSelector = subSelector->tagHistory()) {
-            if (subSelector->m_match == CSSSelector::PseudoClass)
+            if (includesDisallowedPseudoClass(*subSelector))
                 return false;
         }
     }

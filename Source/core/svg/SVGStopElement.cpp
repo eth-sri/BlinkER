@@ -24,11 +24,10 @@
 
 #include "core/rendering/svg/RenderSVGGradientStop.h"
 #include "core/rendering/svg/RenderSVGResource.h"
-#include "core/svg/SVGElementInstance.h"
 
 namespace WebCore {
 
-SVGStopElement::SVGStopElement(Document& document)
+inline SVGStopElement::SVGStopElement(Document& document)
     : SVGElement(SVGNames::stopTag, document)
     , m_offset(SVGAnimatedNumber::create(this, SVGNames::offsetAttr, SVGNumberAcceptPercentage::create()))
 {
@@ -36,6 +35,8 @@ SVGStopElement::SVGStopElement(Document& document)
 
     addToPropertyMap(m_offset);
 }
+
+DEFINE_NODE_FACTORY(SVGStopElement)
 
 bool SVGStopElement::isSupportedAttribute(const QualifiedName& attrName)
 {

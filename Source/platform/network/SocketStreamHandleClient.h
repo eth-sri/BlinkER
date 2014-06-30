@@ -38,17 +38,18 @@ class KURL;
 class SocketStreamError;
 class SocketStreamHandle;
 
-class SocketStreamHandleClient {
+class SocketStreamHandleClient : public WillBeGarbageCollectedMixin {
 public:
     virtual ~SocketStreamHandleClient() { }
 
-    virtual void willOpenSocketStream(SocketStreamHandle*) { }
     virtual void didOpenSocketStream(SocketStreamHandle*) { }
     virtual void didCloseSocketStream(SocketStreamHandle*) { }
     virtual void didReceiveSocketStreamData(SocketStreamHandle*, const char* /*data*/, int /*length*/) { }
-    virtual void didUpdateBufferedAmount(SocketStreamHandle*, size_t /*bufferedAmount*/) { }
+    virtual void didConsumeBufferedAmount(SocketStreamHandle*, size_t consumed) { }
 
     virtual void didFailSocketStream(SocketStreamHandle*, const SocketStreamError&) { }
+
+    virtual void trace(Visitor*) { }
 };
 
 } // namespace WebCore

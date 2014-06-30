@@ -36,7 +36,6 @@ namespace WebCore {
 class CompositingReasonFinder;
 class RenderLayer;
 class RenderObject;
-class RenderPart;
 class RenderView;
 
 class CompositingRequirementsUpdater {
@@ -60,7 +59,6 @@ private:
     class RecursionData;
 
     void updateRecursive(RenderLayer* ancestorLayer, RenderLayer* currentLayer, OverlapMap&, RecursionData&, bool& descendantHas3DTransform, Vector<RenderLayer*>& unclippedDescendants, IntRect& absoluteDecendantBoundingBox);
-    bool isRunningAcceleratedTransformAnimation(RenderObject*) const;
 
     RenderView& m_renderView;
     CompositingReasonFinder& m_compositingReasonFinder;

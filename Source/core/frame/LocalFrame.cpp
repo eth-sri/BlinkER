@@ -30,10 +30,8 @@
 #include "config.h"
 #include "core/frame/LocalFrame.h"
 
-#include "RuntimeEnabledFeatures.h"
 #include "bindings/v8/ScriptController.h"
 #include "core/dom/DocumentType.h"
-#include "core/dom/WheelController.h"
 #include "core/editing/Editor.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/InputMethodController.h"
@@ -42,7 +40,8 @@
 #include "core/editing/markup.h"
 #include "core/events/Event.h"
 #include "core/fetch/ResourceFetcher.h"
-#include "core/frame/DOMWindow.h"
+#include "core/frame/LocalDOMWindow.h"
+#include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/FrameConsole.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
@@ -53,6 +52,7 @@
 #include "core/page/Chrome.h"
 #include "core/page/EventHandler.h"
 #include "core/page/FocusController.h"
+#include "core/page/Page.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "core/rendering/HitTestResult.h"
 #include "core/rendering/RenderLayer.h"
@@ -60,13 +60,12 @@
 #include "core/rendering/compositing/RenderLayerCompositor.h"
 #include "core/svg/SVGDocumentExtensions.h"
 #include "platform/DragImage.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/text/TextStream.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/StdLibExtras.h"
-
-using namespace std;
 
 namespace WebCore {
 
@@ -74,30 +73,29 @@ using namespace HTMLNames;
 
 static inline float parentPageZoomFactor(LocalFrame* frame)
 {
-    LocalFrame* parent = frame->tree().parent();
-    if (!parent)
+    Frame* parent = frame->tree().parent();
+    if (!parent || !parent->isLocalFrame())
         return 1;
-    return parent->pageZoomFactor();
+    return toLocalFrame(parent)->pageZoomFactor();
 }
 
 static inline float parentTextZoomFactor(LocalFrame* frame)
 {
-    LocalFrame* parent = frame->tree().parent();
-    if (!parent)
+    Frame* parent = frame->tree().parent();
+    if (!parent || !parent->isLocalFrame())
         return 1;
-    return parent->textZoomFactor();
+    return toLocalFrame(parent)->textZoomFactor();
 }
 
-inline LocalFrame::LocalFrame(FrameLoaderClient* client, FrameHost* host, HTMLFrameOwnerElement* ownerElement)
-    : Frame(host, ownerElement)
-    , m_treeNode(this)
-    , m_loader(this, client)
+inline LocalFrame::LocalFrame(FrameLoaderClient* client, FrameHost* host, FrameOwner* owner)
+    : Frame(client, host, owner)
+    , m_loader(this)
     , m_navigationScheduler(this)
     , m_script(adoptPtr(new ScriptController(this)))
     , m_editor(Editor::create(*this))
     , m_spellChecker(SpellChecker::create(*this))
-    , m_selection(adoptPtr(new FrameSelection(this)))
-    , m_eventHandler(adoptPtr(new EventHandler(this)))
+    , m_selection(FrameSelection::create(this))
+    , m_eventHandler(adoptPtrWillBeNoop(new EventHandler(this)))
     , m_console(FrameConsole::create(*this))
     , m_inputMethodController(InputMethodController::create(*this))
     , m_pageZoomFactor(parentPageZoomFactor(this))
@@ -106,11 +104,9 @@ inline LocalFrame::LocalFrame(FrameLoaderClient* client, FrameHost* host, HTMLFr
 {
 }
 
-PassRefPtr<LocalFrame> LocalFrame::create(FrameLoaderClient* client, FrameHost* host, HTMLFrameOwnerElement* ownerElement)
+PassRefPtr<LocalFrame> LocalFrame::create(FrameLoaderClient* client, FrameHost* host, FrameOwner* owner)
 {
-    RefPtr<LocalFrame> frame = adoptRef(new LocalFrame(client, host, ownerElement));
-    if (!frame->ownerElement())
-        frame->page()->setMainFrame(frame);
+    RefPtr<LocalFrame> frame = adoptRef(new LocalFrame(client, host, owner));
     InspectorInstrumentation::frameAttachedToParent(frame.get());
     return frame.release();
 }
@@ -128,6 +124,7 @@ bool LocalFrame::inScope(TreeScope* scope) const
     Document* doc = document();
     if (!doc)
         return false;
+    // FIXME: This check is broken in for OOPI.
     HTMLFrameOwnerElement* owner = doc->ownerElement();
     if (!owner)
         return false;
@@ -142,7 +139,7 @@ void LocalFrame::setView(PassRefPtr<FrameView> view)
     if (m_view)
         m_view->prepareForDetach();
 
-    // Prepare for destruction now, so any unload event handlers get run and the DOMWindow is
+    // Prepare for destruction now, so any unload event handlers get run and the LocalDOMWindow is
     // notified. If we wait until the view is destroyed, then things won't be hooked up enough for
     // these calls to work.
     if (!view && document() && document()->isActive()) {
@@ -164,11 +161,26 @@ void LocalFrame::setView(PassRefPtr<FrameView> view)
 
 void LocalFrame::sendOrientationChangeEvent()
 {
-    if (!RuntimeEnabledFeatures::orientationEventEnabled())
+    if (!RuntimeEnabledFeatures::orientationEventEnabled() && !RuntimeEnabledFeatures::screenOrientationEnabled())
         return;
 
-    if (DOMWindow* window = domWindow())
-        window->dispatchEvent(Event::create(EventTypeNames::orientationchange));
+    if (page()->visibilityState() != PageVisibilityStateVisible)
+        return;
+
+    LocalDOMWindow* window = domWindow();
+    if (!window)
+        return;
+    window->dispatchEvent(Event::create(EventTypeNames::orientationchange));
+
+    // Notify subframes.
+    Vector<RefPtr<LocalFrame> > childFrames;
+    for (Frame* child = tree().firstChild(); child; child = child->tree().nextSibling()) {
+        if (child->isLocalFrame())
+            childFrames.append(toLocalFrame(child));
+    }
+
+    for (size_t i = 0; i < childFrames.size(); ++i)
+        childFrames[i]->sendOrientationChangeEvent();
 }
 
 void LocalFrame::setPrinting(bool printing, const FloatSize& pageSize, const FloatSize& originalPageSize, float maximumShrinkRatio)
@@ -180,7 +192,7 @@ void LocalFrame::setPrinting(bool printing, const FloatSize& pageSize, const Flo
     document()->setPrinting(printing);
     view()->adjustMediaTypeForPrinting(printing);
 
-    document()->styleResolverChanged(RecalcStyleDeferred);
+    document()->styleResolverChanged();
     if (shouldUsePrintingLayout()) {
         view()->forceLayoutForPagination(pageSize, originalPageSize, maximumShrinkRatio);
     } else {
@@ -189,15 +201,17 @@ void LocalFrame::setPrinting(bool printing, const FloatSize& pageSize, const Flo
     }
 
     // Subframes of the one we're printing don't lay out to the page size.
-    for (RefPtr<LocalFrame> child = tree().firstChild(); child; child = child->tree().nextSibling())
-        child->setPrinting(printing, FloatSize(), FloatSize(), 0);
+    for (RefPtr<Frame> child = tree().firstChild(); child; child = child->tree().nextSibling()) {
+        if (child->isLocalFrame())
+            toLocalFrame(child.get())->setPrinting(printing, FloatSize(), FloatSize(), 0);
+    }
 }
 
 bool LocalFrame::shouldUsePrintingLayout() const
 {
     // Only top frame being printed should be fit to page size.
     // Subframes should be constrained by parents only.
-    return document()->printing() && (!tree().parent() || !tree().parent()->document()->printing());
+    return document()->printing() && (!tree().parent() || !tree().parent()->isLocalFrame() || !toLocalFrame(tree().parent())->document()->printing());
 }
 
 FloatSize LocalFrame::resizePageRectsKeepingRatio(const FloatSize& originalSize, const FloatSize& expectedSize)
@@ -207,12 +221,12 @@ FloatSize LocalFrame::resizePageRectsKeepingRatio(const FloatSize& originalSize,
         return FloatSize();
 
     if (contentRenderer()->style()->isHorizontalWritingMode()) {
-        ASSERT(fabs(originalSize.width()) > numeric_limits<float>::epsilon());
+        ASSERT(fabs(originalSize.width()) > std::numeric_limits<float>::epsilon());
         float ratio = originalSize.height() / originalSize.width();
         resultSize.setWidth(floorf(expectedSize.width()));
         resultSize.setHeight(floorf(resultSize.width() * ratio));
     } else {
-        ASSERT(fabs(originalSize.height()) > numeric_limits<float>::epsilon());
+        ASSERT(fabs(originalSize.height()) > std::numeric_limits<float>::epsilon());
         float ratio = originalSize.width() / originalSize.height();
         resultSize.setHeight(floorf(expectedSize.height()));
         resultSize.setWidth(floorf(resultSize.height() * ratio));
@@ -220,7 +234,7 @@ FloatSize LocalFrame::resizePageRectsKeepingRatio(const FloatSize& originalSize,
     return resultSize;
 }
 
-void LocalFrame::setDOMWindow(PassRefPtrWillBeRawPtr<DOMWindow> domWindow)
+void LocalFrame::setDOMWindow(PassRefPtrWillBeRawPtr<LocalDOMWindow> domWindow)
 {
     InspectorInstrumentation::frameWindowDiscarded(this, m_domWindow.get());
     if (domWindow)
@@ -234,8 +248,10 @@ void LocalFrame::didChangeVisibilityState()
         document()->didChangeVisibilityState();
 
     Vector<RefPtr<LocalFrame> > childFrames;
-    for (LocalFrame* child = tree().firstChild(); child; child = child->tree().nextSibling())
-        childFrames.append(child);
+    for (Frame* child = tree().firstChild(); child; child = child->tree().nextSibling()) {
+        if (child->isLocalFrame())
+            childFrames.append(toLocalFrame(child));
+    }
 
     for (size_t i = 0; i < childFrames.size(); ++i)
         childFrames[i]->didChangeVisibilityState();
@@ -246,8 +262,9 @@ void LocalFrame::willDetachFrameHost()
     // We should never be detatching the page during a Layout.
     RELEASE_ASSERT(!m_view || !m_view->isInPerformLayout());
 
-    if (LocalFrame* parent = tree().parent())
-        parent->loader().checkLoadComplete();
+    Frame* parent = tree().parent();
+    if (parent && parent->isLocalFrame())
+        toLocalFrame(parent)->loader().checkLoadComplete();
 
     Frame::willDetachFrameHost();
     script().clearScriptObjects();
@@ -315,7 +332,7 @@ Document* LocalFrame::documentAtPoint(const IntPoint& point)
     HitTestResult result = HitTestResult(pt);
 
     if (contentRenderer())
-        result = eventHandler().hitTestResultAtPoint(pt, HitTestRequest::ReadOnly | HitTestRequest::Active | HitTestRequest::ConfusingAndOftenMisusedDisallowShadowContent);
+        result = eventHandler().hitTestResultAtPoint(pt, HitTestRequest::ReadOnly | HitTestRequest::Active);
     return result.innerNode() ? &result.innerNode()->document() : 0;
 }
 
@@ -370,19 +387,19 @@ void LocalFrame::createView(const IntSize& viewportSize, const Color& background
 
     setView(frameView);
 
-    if (backgroundColor.alpha())
-        frameView->updateBackgroundRecursively(backgroundColor, transparent);
+    frameView->updateBackgroundRecursively(backgroundColor, transparent);
 
     if (isMainFrame)
         frameView->setParentVisible(true);
 
+    // FIXME: Not clear what the right thing for OOPI is here.
     if (ownerRenderer()) {
-        HTMLFrameOwnerElement* owner = ownerElement();
+        HTMLFrameOwnerElement* owner = deprecatedLocalOwner();
         ASSERT(owner);
         owner->setWidget(frameView);
     }
 
-    if (HTMLFrameOwnerElement* owner = ownerElement())
+    if (HTMLFrameOwnerElement* owner = deprecatedLocalOwner())
         view()->setCanHaveScrollbars(owner->scrollingMode() != ScrollbarAlwaysOff);
 }
 
@@ -411,8 +428,10 @@ String LocalFrame::layerTreeAsText(LayerTreeFlags flags) const
     TextStream textStream;
     textStream << localLayerTreeAsText(flags);
 
-    for (LocalFrame* child = tree().firstChild(); child; child = child->tree().traverseNext(this)) {
-        String childLayerTree = child->localLayerTreeAsText(flags);
+    for (Frame* child = tree().firstChild(); child; child = child->tree().traverseNext(this)) {
+        if (!child->isLocalFrame())
+            continue;
+        String childLayerTree = toLocalFrame(child)->localLayerTreeAsText(flags);
         if (!childLayerTree.length())
             continue;
 
@@ -431,13 +450,6 @@ String LocalFrame::localLayerTreeAsText(unsigned flags) const
         return String();
 
     return contentRenderer()->compositor()->layerTreeAsText(static_cast<LayerTreeFlags>(flags));
-}
-
-String LocalFrame::trackedRepaintRectsAsText() const
-{
-    if (!m_view)
-        return String();
-    return m_view->trackedRepaintRectsAsText();
 }
 
 void LocalFrame::setPageZoomFactor(float factor)
@@ -482,8 +494,10 @@ void LocalFrame::setPageAndTextZoomFactors(float pageZoomFactor, float textZoomF
     m_pageZoomFactor = pageZoomFactor;
     m_textZoomFactor = textZoomFactor;
 
-    for (RefPtr<LocalFrame> child = tree().firstChild(); child; child = child->tree().nextSibling())
-        child->setPageAndTextZoomFactors(m_pageZoomFactor, m_textZoomFactor);
+    for (RefPtr<Frame> child = tree().firstChild(); child; child = child->tree().nextSibling()) {
+        if (child->isLocalFrame())
+            toLocalFrame(child.get())->setPageAndTextZoomFactors(m_pageZoomFactor, m_textZoomFactor);
+    }
 
     document->setNeedsStyleRecalc(SubtreeStyleChange);
     document->updateLayoutIgnorePendingStylesheets();
@@ -492,22 +506,10 @@ void LocalFrame::setPageAndTextZoomFactors(float pageZoomFactor, float textZoomF
 void LocalFrame::deviceOrPageScaleFactorChanged()
 {
     document()->mediaQueryAffectingValueChanged();
-    for (RefPtr<LocalFrame> child = tree().firstChild(); child; child = child->tree().nextSibling())
-        child->deviceOrPageScaleFactorChanged();
-}
-
-void LocalFrame::notifyChromeClientWheelEventHandlerCountChanged() const
-{
-    // Ensure that this method is being called on the main frame of the page.
-    ASSERT(isMainFrame());
-
-    unsigned count = 0;
-    for (const LocalFrame* frame = this; frame; frame = frame->tree().traverseNext()) {
-        if (frame->document())
-            count += WheelController::from(*frame->document())->wheelEventHandlerCount();
+    for (RefPtr<Frame> child = tree().firstChild(); child; child = child->tree().nextSibling()) {
+        if (child->isLocalFrame())
+            toLocalFrame(child.get())->deviceOrPageScaleFactorChanged();
     }
-
-    m_host->chrome().client().numWheelEventHandlersChanged(count);
 }
 
 bool LocalFrame::isURLAllowed(const KURL& url) const
@@ -517,8 +519,10 @@ bool LocalFrame::isURLAllowed(const KURL& url) const
     if (page()->subframeCount() >= Page::maxNumberOfFrames)
         return false;
     bool foundSelfReference = false;
-    for (const LocalFrame* frame = this; frame; frame = frame->tree().parent()) {
-        if (equalIgnoringFragmentIdentifier(frame->document()->url(), url)) {
+    for (const Frame* frame = this; frame; frame = frame->tree().parent()) {
+        if (!frame->isLocalFrame())
+            continue;
+        if (equalIgnoringFragmentIdentifier(toLocalFrame(frame)->document()->url(), url)) {
             if (foundSelfReference)
                 return false;
             foundSelfReference = true;
@@ -580,7 +584,7 @@ PassOwnPtr<DragImage> LocalFrame::nodeImage(Node& node)
     OwnPtr<ImageBuffer> buffer = ImageBuffer::create(paintingRect.size());
     if (!buffer)
         return nullptr;
-    buffer->context()->scale(FloatSize(deviceScaleFactor, deviceScaleFactor));
+    buffer->context()->scale(deviceScaleFactor, deviceScaleFactor);
     buffer->context()->translate(-paintingRect.x(), -paintingRect.y());
     buffer->context()->clip(FloatRect(0, 0, paintingRect.maxX(), paintingRect.maxY()));
 
@@ -609,7 +613,7 @@ PassOwnPtr<DragImage> LocalFrame::dragImageForSelection()
     OwnPtr<ImageBuffer> buffer = ImageBuffer::create(paintingRect.size());
     if (!buffer)
         return nullptr;
-    buffer->context()->scale(FloatSize(deviceScaleFactor, deviceScaleFactor));
+    buffer->context()->scale(deviceScaleFactor, deviceScaleFactor);
     buffer->context()->translate(-paintingRect.x(), -paintingRect.y());
     buffer->context()->clip(FloatRect(0, 0, paintingRect.maxX(), paintingRect.maxY()));
 
@@ -631,7 +635,7 @@ double LocalFrame::devicePixelRatio() const
 
 void LocalFrame::disconnectOwnerElement()
 {
-    if (ownerElement()) {
+    if (owner()) {
         if (Document* doc = document())
             doc->topDocument().clearAXObjectCache();
     }
@@ -642,7 +646,7 @@ LocalFrame* LocalFrame::localFrameRoot()
 {
     LocalFrame* curFrame = this;
     while (curFrame && curFrame->tree().parent() && curFrame->tree().parent()->isLocalFrame())
-        curFrame = curFrame->tree().parent();
+        curFrame = toLocalFrame(curFrame->tree().parent());
 
     return curFrame;
 }

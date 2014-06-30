@@ -21,14 +21,14 @@
 #ifndef SVGPolylineElement_h
 #define SVGPolylineElement_h
 
-#include "SVGNames.h"
+#include "core/SVGNames.h"
 #include "core/svg/SVGPolyElement.h"
 
 namespace WebCore {
 
 class SVGPolylineElement FINAL : public SVGPolyElement {
 public:
-    DEFINE_NODE_FACTORY(SVGPolylineElement);
+    DECLARE_NODE_FACTORY(SVGPolylineElement);
 
 private:
     explicit SVGPolylineElement(Document&);

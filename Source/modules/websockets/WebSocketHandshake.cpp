@@ -273,7 +273,7 @@ void WebSocketHandshake::reset()
 
 void WebSocketHandshake::clearDocument()
 {
-    m_document = 0;
+    m_document = nullptr;
 }
 
 int WebSocketHandshake::readServerHandshake(const char* header, size_t len)
@@ -452,7 +452,7 @@ const char* WebSocketHandshake::readHTTPHeaders(const char* start, const char* e
     bool sawSecWebSocketAcceptHeaderField = false;
     bool sawSecWebSocketProtocolHeaderField = false;
     const char* p = start;
-    for (; p < end; p++) {
+    while (p < end) {
         size_t consumedLength = parseHTTPHeader(p, end - p, m_failureReason, name, value);
         if (!consumedLength)
             return 0;
@@ -533,7 +533,7 @@ bool WebSocketHandshake::checkResponseHeaders()
             return false;
         }
         Vector<String> result;
-        m_clientProtocol.split(String(WebSocket::subProtocolSeperator()), result);
+        m_clientProtocol.split(String(WebSocket::subprotocolSeperator()), result);
         if (!result.contains(serverWebSocketProtocol)) {
             m_failureReason = formatHandshakeFailureReason("'Sec-WebSocket-Protocol' header value '" + serverWebSocketProtocol + "' in response does not match any of sent values");
             return false;
@@ -543,6 +543,11 @@ bool WebSocketHandshake::checkResponseHeaders()
         return false;
     }
     return true;
+}
+
+void WebSocketHandshake::trace(Visitor* visitor)
+{
+    visitor->trace(m_document);
 }
 
 } // namespace WebCore

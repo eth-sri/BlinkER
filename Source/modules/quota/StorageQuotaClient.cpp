@@ -32,6 +32,7 @@
 #include "StorageQuotaClient.h"
 
 #include "core/dom/Document.h"
+#include "core/page/Page.h"
 #include "core/workers/WorkerGlobalScope.h"
 
 namespace WebCore {
@@ -43,6 +44,8 @@ const char* StorageQuotaClient::supplementName()
 
 StorageQuotaClient* StorageQuotaClient::from(ExecutionContext* context)
 {
+    if (!context->isDocument())
+        return 0;
     return static_cast<StorageQuotaClient*>(WillBeHeapSupplement<Page>::from(toDocument(context)->page(), supplementName()));
 }
 

@@ -19,17 +19,20 @@
  */
 
 #include "config.h"
-#include "SVGNames.h"
 #include "core/svg/SVGSetElement.h"
+
+#include "core/SVGNames.h"
 
 namespace WebCore {
 
-SVGSetElement::SVGSetElement(Document& document)
+inline SVGSetElement::SVGSetElement(Document& document)
     : SVGAnimateElement(SVGNames::setTag, document)
 {
     setAnimationMode(ToAnimation);
     ScriptWrappable::init(this);
 }
+
+DEFINE_NODE_FACTORY(SVGSetElement)
 
 void SVGSetElement::updateAnimationMode()
 {

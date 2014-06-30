@@ -127,7 +127,7 @@ static void setViewportSettings(WebSettings* settings)
 static PageScaleConstraints runViewportTest(Page* page, int initialWidth, int initialHeight)
 {
     IntSize initialViewportSize(initialWidth, initialHeight);
-    page->mainFrame()->view()->setFrameRect(IntRect(IntPoint::zero(), initialViewportSize));
+    toLocalFrame(page->mainFrame())->view()->setFrameRect(IntRect(IntPoint::zero(), initialViewportSize));
     ViewportDescription description = page->viewportDescription();
     PageScaleConstraints constraints = description.resolve(initialViewportSize, WebCore::Length(980, WebCore::Fixed));
 
@@ -2529,6 +2529,24 @@ TEST_F(ViewportTest, viewport137)
     EXPECT_TRUE(page->viewportDescription().userZoom);
 }
 
+TEST_F(ViewportTest, viewport138)
+{
+    registerMockedHttpURLLoad("viewport/viewport-138.html");
+
+    FrameTestHelpers::WebViewHelper webViewHelper;
+    webViewHelper.initializeAndLoad(m_baseURL + "viewport/viewport-138.html", true, 0, 0, setViewportSettings);
+
+    Page* page = webViewHelper.webViewImpl()->page();
+    PageScaleConstraints constraints = runViewportTest(page, 320, 352);
+
+    EXPECT_NEAR(123.0f, constraints.layoutSize.width(), 0.01);
+    EXPECT_NEAR(135.3f, constraints.layoutSize.height(), 0.01);
+    EXPECT_NEAR(2.60f, constraints.initialScale, 0.01f);
+    EXPECT_NEAR(2.60f, constraints.minimumScale, 0.01f);
+    EXPECT_NEAR(5.0f, constraints.maximumScale, 0.01f);
+    EXPECT_TRUE(page->viewportDescription().userZoom);
+}
+
 TEST_F(ViewportTest, viewportLegacyHandheldFriendly)
 {
     UseMockScrollbarSettings mockScrollbarSettings;
@@ -2947,6 +2965,11 @@ TEST_F(ViewportTest, viewportTriggersGpuRasterization)
     webViewHelper.webView()->resize(WebSize(640, 480));
     EXPECT_TRUE(webViewHelper.webViewImpl()->matchesHeuristicsForGpuRasterizationForTesting());
 
+    registerMockedHttpURLLoad("viewport/viewport-gpu-rasterization-expanded-heuristics.html");
+    webViewHelper.initializeAndLoad(m_baseURL + "viewport/viewport-gpu-rasterization-expanded-heuristics.html", true, 0, 0, setViewportSettings);
+    webViewHelper.webView()->resize(WebSize(640, 480));
+    EXPECT_FALSE(webViewHelper.webViewImpl()->matchesHeuristicsForGpuRasterizationForTesting());
+
     registerMockedHttpURLLoad("viewport/viewport-inferred-values-do-not-trigger-gpu-rasterization.html");
     webViewHelper.initializeAndLoad(m_baseURL + "viewport/viewport-inferred-values-do-not-trigger-gpu-rasterization.html", true, 0, 0, setViewportSettings);
     webViewHelper.webView()->resize(WebSize(640, 480));
@@ -2964,6 +2987,48 @@ TEST_F(ViewportTest, viewportTriggersGpuRasterization)
 
     registerMockedHttpURLLoad("viewport/viewport-130.html");
     webViewHelper.initializeAndLoad(m_baseURL + "viewport/viewport-130.html", true, 0, 0, setViewportSettings);
+    webViewHelper.webView()->resize(WebSize(640, 480));
+    EXPECT_FALSE(webViewHelper.webViewImpl()->matchesHeuristicsForGpuRasterizationForTesting());
+}
+
+static void setViewportSettingsWithExpandedHeuristicsForGpuRasterization(WebSettings* settings)
+{
+    setViewportSettings(settings);
+    settings->setUseExpandedHeuristicsForGpuRasterization(true);
+}
+
+TEST_F(ViewportTest, viewportTriggersGpuRasterizationWithExpandedHeuristics)
+{
+    UseMockScrollbarSettings mockScrollbarSettings;
+
+    registerMockedHttpURLLoad("viewport/viewport-gpu-rasterization.html");
+    FrameTestHelpers::WebViewHelper webViewHelper;
+    webViewHelper.initializeAndLoad(m_baseURL + "viewport/viewport-gpu-rasterization.html", true, 0, 0, setViewportSettingsWithExpandedHeuristicsForGpuRasterization);
+    webViewHelper.webView()->resize(WebSize(640, 480));
+    EXPECT_TRUE(webViewHelper.webViewImpl()->matchesHeuristicsForGpuRasterizationForTesting());
+
+    registerMockedHttpURLLoad("viewport/viewport-gpu-rasterization-expanded-heuristics.html");
+    webViewHelper.initializeAndLoad(m_baseURL + "viewport/viewport-gpu-rasterization-expanded-heuristics.html", true, 0, 0, setViewportSettingsWithExpandedHeuristicsForGpuRasterization);
+    webViewHelper.webView()->resize(WebSize(640, 480));
+    EXPECT_TRUE(webViewHelper.webViewImpl()->matchesHeuristicsForGpuRasterizationForTesting());
+
+    registerMockedHttpURLLoad("viewport/viewport-inferred-values-do-not-trigger-gpu-rasterization.html");
+    webViewHelper.initializeAndLoad(m_baseURL + "viewport/viewport-inferred-values-do-not-trigger-gpu-rasterization.html", true, 0, 0, setViewportSettingsWithExpandedHeuristicsForGpuRasterization);
+    webViewHelper.webView()->resize(WebSize(640, 480));
+    EXPECT_FALSE(webViewHelper.webViewImpl()->matchesHeuristicsForGpuRasterizationForTesting());
+
+    registerMockedHttpURLLoad("viewport/viewport-1.html");
+    webViewHelper.initializeAndLoad(m_baseURL + "viewport/viewport-1.html", true, 0, 0, setViewportSettings);
+    webViewHelper.webView()->resize(WebSize(640, 480));
+    EXPECT_FALSE(webViewHelper.webViewImpl()->matchesHeuristicsForGpuRasterizationForTesting());
+
+    registerMockedHttpURLLoad("viewport/viewport-15.html");
+    webViewHelper.initializeAndLoad(m_baseURL + "viewport/viewport-15.html", true, 0, 0, setViewportSettingsWithExpandedHeuristicsForGpuRasterization);
+    webViewHelper.webView()->resize(WebSize(640, 480));
+    EXPECT_FALSE(webViewHelper.webViewImpl()->matchesHeuristicsForGpuRasterizationForTesting());
+
+    registerMockedHttpURLLoad("viewport/viewport-130.html");
+    webViewHelper.initializeAndLoad(m_baseURL + "viewport/viewport-130.html", true, 0, 0, setViewportSettingsWithExpandedHeuristicsForGpuRasterization);
     webViewHelper.webView()->resize(WebSize(640, 480));
     EXPECT_FALSE(webViewHelper.webViewImpl()->matchesHeuristicsForGpuRasterizationForTesting());
 }

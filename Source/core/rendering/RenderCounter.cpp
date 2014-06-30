@@ -22,8 +22,7 @@
 #include "config.h"
 #include "core/rendering/RenderCounter.h"
 
-#include "HTMLNames.h"
-#include "core/dom/Document.h"
+#include "core/HTMLNames.h"
 #include "core/dom/Element.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/html/HTMLOListElement.h"
@@ -425,7 +424,7 @@ void RenderCounter::invalidate()
     ASSERT(!m_counterNode);
     if (documentBeingDestroyed())
         return;
-    setNeedsLayoutAndPrefWidthsRecalcAndFullRepaint();
+    setNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation();
 }
 
 static void destroyCounterNodeWithoutMapRemoval(const AtomicString& identifier, CounterNode* node)

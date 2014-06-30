@@ -30,7 +30,7 @@
 #ifndef CSSPrimitiveValueMappings_h
 #define CSSPrimitiveValueMappings_h
 
-#include "CSSValueKeywords.h"
+#include "core/CSSValueKeywords.h"
 #include "core/css/CSSCalculationValue.h"
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSReflectionDirection.h"
@@ -1116,11 +1116,11 @@ template<> inline CSSPrimitiveValue::CSSPrimitiveValue(ECursor e)
     case CURSOR_NOT_ALLOWED:
         m_value.valueID = CSSValueNotAllowed;
         break;
-    case CURSOR_WEBKIT_ZOOM_IN:
-        m_value.valueID = CSSValueWebkitZoomIn;
+    case CURSOR_ZOOM_IN:
+        m_value.valueID = CSSValueZoomIn;
         break;
-    case CURSOR_WEBKIT_ZOOM_OUT:
-        m_value.valueID = CSSValueWebkitZoomOut;
+    case CURSOR_ZOOM_OUT:
+        m_value.valueID = CSSValueZoomOut;
         break;
     case CURSOR_E_RESIZE:
         m_value.valueID = CSSValueEResize;
@@ -1188,11 +1188,18 @@ template<> inline CSSPrimitiveValue::CSSPrimitiveValue(ECursor e)
 template<> inline CSSPrimitiveValue::operator ECursor() const
 {
     ASSERT(isValueID());
-    if (m_value.valueID == CSSValueCopy)
+    switch (m_value.valueID) {
+    case CSSValueCopy:
         return CURSOR_COPY;
-    if (m_value.valueID == CSSValueNone)
+    case CSSValueWebkitZoomIn:
+        return CURSOR_ZOOM_IN;
+    case CSSValueWebkitZoomOut:
+        return CURSOR_ZOOM_OUT;
+    case CSSValueNone:
         return CURSOR_NONE;
-    return static_cast<ECursor>(m_value.valueID - CSSValueAuto);
+    default:
+        return static_cast<ECursor>(m_value.valueID - CSSValueAuto);
+    }
 }
 
 template<> inline CSSPrimitiveValue::CSSPrimitiveValue(EDisplay e)
@@ -4018,6 +4025,9 @@ template<> inline CSSPrimitiveValue::CSSPrimitiveValue(EImageRendering e)
     case ImageRenderingOptimizeQuality:
         m_value.valueID = CSSValueOptimizequality;
         break;
+    case ImageRenderingPixelated:
+        m_value.valueID = CSSValuePixelated;
+        break;
     case ImageRenderingOptimizeContrast:
         m_value.valueID = CSSValueWebkitOptimizeContrast;
         break;
@@ -4034,6 +4044,8 @@ template<> inline CSSPrimitiveValue::operator EImageRendering() const
         return ImageRenderingOptimizeSpeed;
     case CSSValueOptimizequality:
         return ImageRenderingOptimizeQuality;
+    case CSSValuePixelated:
+        return ImageRenderingPixelated;
     case CSSValueWebkitOptimizeContrast:
         return ImageRenderingOptimizeContrast;
     default:

@@ -34,6 +34,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLDocument.h"
 #include "core/html/HTMLIFrameElement.h"
@@ -41,7 +42,11 @@
 #include "core/html/HTMLTextAreaElement.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/page/Chrome.h"
+#include "core/page/Page.h"
+#include "core/rendering/RenderLayer.h"
+#include "core/rendering/RenderView.h"
 #include "platform/KeyboardCodes.h"
+#include "platform/geometry/IntSize.h"
 #include "platform/graphics/Color.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebDragData.h"
@@ -215,8 +220,9 @@ TEST_F(WebViewTest, SetBaseBackgroundColor)
     const WebColor kBlue     = 0xFF0000FF;
     const WebColor kDarkCyan = 0xFF227788;
     const WebColor kTranslucentPutty = 0x80BFB196;
+    const WebColor kTransparent = 0x00000000;
 
-    WebView* webView = m_webViewHelper.initialize();
+    WebViewImpl* webView = m_webViewHelper.initialize();
     EXPECT_EQ(kWhite, webView->backgroundColor());
 
     webView->setBaseBackgroundColor(kBlue);
@@ -233,6 +239,21 @@ TEST_F(WebViewTest, SetBaseBackgroundColor)
     webView->setBaseBackgroundColor(kTranslucentPutty);
     // Expected: red (50% alpha) blended atop kTranslucentPutty. Note the alpha.
     EXPECT_EQ(0xBFE93B32, webView->backgroundColor());
+
+    webView->setBaseBackgroundColor(kTransparent);
+    FrameTestHelpers::loadHTMLString(webView->mainFrame(), "<html><head><style>body {background-color:transparent}</style></head></html>", baseURL);
+    // Expected: transparent on top of kTransparent will still be transparent.
+    EXPECT_EQ(kTransparent, webView->backgroundColor());
+
+    WebCore::LocalFrame* frame = webView->mainFrameImpl()->frame();
+
+    // Creating a new frame view with the background color having 0 alpha.
+    frame->createView(WebCore::IntSize(1024, 768), WebCore::Color::transparent, true);
+    EXPECT_EQ(kTransparent, frame->view()->baseBackgroundColor());
+
+    WebCore::Color kTransparentRed(100, 0, 0, 0);
+    frame->createView(WebCore::IntSize(1024, 768), kTransparentRed, true);
+    EXPECT_EQ(kTransparentRed, frame->view()->baseBackgroundColor());
 }
 
 TEST_F(WebViewTest, SetBaseBackgroundColorBeforeMainFrame)
@@ -243,11 +264,8 @@ TEST_F(WebViewTest, SetBaseBackgroundColorBeforeMainFrame)
     // webView does not have a frame yet, but we should still be able to set the background color.
     webView->setBaseBackgroundColor(kBlue);
     EXPECT_EQ(kBlue, webView->backgroundColor());
-}
-
-static void disableAccleratedCompositing(WebSettings* webSettings)
-{
-    webSettings->setAcceleratedCompositingEnabled(false);
+    webView->setMainFrame(WebLocalFrameImpl::create(0));
+    webView->close();
 }
 
 TEST_F(WebViewTest, SetBaseBackgroundColorAndBlendWithExistingContent)
@@ -257,11 +275,7 @@ TEST_F(WebViewTest, SetBaseBackgroundColorAndBlendWithExistingContent)
     const int kWidth = 100;
     const int kHeight = 100;
 
-    // Make a WebView that is not composited.
-    bool enableJavascript = false;
-    FrameTestHelpers::TestWebFrameClient* frameClient = 0;
-    WebViewClient* viewClient = 0;
-    WebView* webView = m_webViewHelper.initialize(enableJavascript, frameClient, viewClient, &disableAccleratedCompositing);
+    WebView* webView = m_webViewHelper.initialize();
 
     // Set WebView background to green with alpha.
     webView->setBaseBackgroundColor(kAlphaGreen);
@@ -274,7 +288,15 @@ TEST_F(WebViewTest, SetBaseBackgroundColorAndBlendWithExistingContent)
     ASSERT_TRUE(bitmap.allocN32Pixels(kWidth, kHeight));
     SkCanvas canvas(bitmap);
     canvas.clear(kAlphaRed);
-    webView->paint(&canvas, WebRect(0, 0, kWidth, kHeight));
+
+    WebCore::GraphicsContext context(&canvas);
+
+    // Paint the root of the main frame in the way that CompositedLayerMapping would.
+    WebCore::FrameView* view = m_webViewHelper.webViewImpl()->mainFrameImpl()->frameView();
+    WebCore::RenderLayer* rootLayer = view->renderView()->layer();
+    WebCore::IntRect paintRect(0, 0, kWidth, kHeight);
+    WebCore::LayerPaintingInfo paintingInfo(rootLayer, paintRect, WebCore::PaintBehaviorNormal, WebCore::LayoutSize());
+    rootLayer->paintLayerContents(&context, paintingInfo, WebCore::PaintLayerPaintingCompositingAllPhases);
 
     // The result should be a blend of red and green.
     SkColor color = bitmap.getColor(kWidth / 2, kHeight / 2);
@@ -336,14 +358,14 @@ TEST_F(WebViewTest, HitTestResultAtWithPageScale)
     // Image is at top left quandrant, so should not hit it.
     WebHitTestResult negativeResult = webView->hitTestResultAt(hitPoint);
     ASSERT_EQ(WebNode::ElementNode, negativeResult.node().nodeType());
-    EXPECT_FALSE(negativeResult.node().to<WebElement>().hasTagName("img"));
+    EXPECT_FALSE(negativeResult.node().to<WebElement>().hasHTMLTagName("img"));
     negativeResult.reset();
 
     // Scale page up 2x so image should occupy the whole viewport.
     webView->setPageScaleFactor(2.0f);
     WebHitTestResult positiveResult = webView->hitTestResultAt(hitPoint);
     ASSERT_EQ(WebNode::ElementNode, positiveResult.node().nodeType());
-    EXPECT_TRUE(positiveResult.node().to<WebElement>().hasTagName("img"));
+    EXPECT_TRUE(positiveResult.node().to<WebElement>().hasHTMLTagName("img"));
     positiveResult.reset();
 }
 
@@ -621,7 +643,7 @@ TEST_F(WebViewTest, SetCompositionFromExistingText)
     WebView* webView = m_webViewHelper.initializeAndLoad(m_baseURL + "input_field_populated.html");
     webView->setInitialFocus(false);
     WebVector<WebCompositionUnderline> underlines(static_cast<size_t>(1));
-    underlines[0] = blink::WebCompositionUnderline(0, 4, 0, false);
+    underlines[0] = blink::WebCompositionUnderline(0, 4, 0, false, 0);
     WebLocalFrameImpl* frame = toWebLocalFrameImpl(webView->mainFrame());
     frame->setEditableSelectionOffsets(4, 10);
     frame->setCompositionFromExistingText(8, 12, underlines);
@@ -648,7 +670,7 @@ TEST_F(WebViewTest, SetCompositionFromExistingTextInTextArea)
     WebView* webView = m_webViewHelper.initializeAndLoad(m_baseURL + "text_area_populated.html");
     webView->setInitialFocus(false);
     WebVector<WebCompositionUnderline> underlines(static_cast<size_t>(1));
-    underlines[0] = blink::WebCompositionUnderline(0, 4, 0, false);
+    underlines[0] = blink::WebCompositionUnderline(0, 4, 0, false, 0);
     WebLocalFrameImpl* frame = toWebLocalFrameImpl(webView->mainFrame());
     frame->setEditableSelectionOffsets(27, 27);
     std::string newLineText("\n");
@@ -772,10 +794,11 @@ TEST_F(WebViewTest, HistoryResetScrollAndScaleState)
     EXPECT_EQ(2.0f, webViewImpl->pageScaleFactor());
     EXPECT_EQ(116, webViewImpl->mainFrame()->scrollOffset().width);
     EXPECT_EQ(84, webViewImpl->mainFrame()->scrollOffset().height);
-    webViewImpl->page()->mainFrame()->loader().saveScrollState();
-    EXPECT_EQ(2.0f, webViewImpl->page()->mainFrame()->loader().currentItem()->pageScaleFactor());
-    EXPECT_EQ(116, webViewImpl->page()->mainFrame()->loader().currentItem()->scrollPoint().x());
-    EXPECT_EQ(84, webViewImpl->page()->mainFrame()->loader().currentItem()->scrollPoint().y());
+    WebCore::LocalFrame* mainFrameLocal = toLocalFrame(webViewImpl->page()->mainFrame());
+    mainFrameLocal->loader().saveScrollState();
+    EXPECT_EQ(2.0f, mainFrameLocal->loader().currentItem()->pageScaleFactor());
+    EXPECT_EQ(116, mainFrameLocal->loader().currentItem()->scrollPoint().x());
+    EXPECT_EQ(84, mainFrameLocal->loader().currentItem()->scrollPoint().y());
 
     // Confirm that resetting the page state resets the saved scroll position.
     // The HistoryController treats a page scale factor of 0.0f as special and avoids
@@ -784,9 +807,41 @@ TEST_F(WebViewTest, HistoryResetScrollAndScaleState)
     EXPECT_EQ(1.0f, webViewImpl->pageScaleFactor());
     EXPECT_EQ(0, webViewImpl->mainFrame()->scrollOffset().width);
     EXPECT_EQ(0, webViewImpl->mainFrame()->scrollOffset().height);
-    EXPECT_EQ(0.0f, webViewImpl->page()->mainFrame()->loader().currentItem()->pageScaleFactor());
-    EXPECT_EQ(0, webViewImpl->page()->mainFrame()->loader().currentItem()->scrollPoint().x());
-    EXPECT_EQ(0, webViewImpl->page()->mainFrame()->loader().currentItem()->scrollPoint().y());
+    EXPECT_EQ(0.0f, mainFrameLocal->loader().currentItem()->pageScaleFactor());
+    EXPECT_EQ(0, mainFrameLocal->loader().currentItem()->scrollPoint().x());
+    EXPECT_EQ(0, mainFrameLocal->loader().currentItem()->scrollPoint().y());
+}
+
+TEST_F(WebViewTest, BackForwardRestoreScroll)
+{
+    URLTestHelpers::registerMockedURLFromBaseURL(WebString::fromUTF8(m_baseURL.c_str()), WebString::fromUTF8("back_forward_restore_scroll.html"));
+    WebViewImpl* webViewImpl = m_webViewHelper.initializeAndLoad(m_baseURL + "back_forward_restore_scroll.html");
+    webViewImpl->resize(WebSize(640, 480));
+    webViewImpl->layout();
+
+    // Emulate a user scroll
+    webViewImpl->setMainFrameScrollOffset(WebPoint(0, 900));
+    WebCore::LocalFrame* mainFrameLocal = toLocalFrame(webViewImpl->page()->mainFrame());
+    RefPtr<WebCore::HistoryItem> item1 = mainFrameLocal->loader().currentItem();
+
+    // Click an anchor
+    mainFrameLocal->loader().load(WebCore::FrameLoadRequest(mainFrameLocal->document(), WebCore::ResourceRequest(mainFrameLocal->document()->completeURL("#a"))));
+    RefPtr<WebCore::HistoryItem> item2 = mainFrameLocal->loader().currentItem();
+
+    // Go back, then forward, then back again.
+    mainFrameLocal->loader().loadHistoryItem(item1.get(), WebCore::HistorySameDocumentLoad);
+    mainFrameLocal->loader().loadHistoryItem(item2.get(), WebCore::HistorySameDocumentLoad);
+    mainFrameLocal->loader().loadHistoryItem(item1.get(), WebCore::HistorySameDocumentLoad);
+
+    // Click a different anchor
+    mainFrameLocal->loader().load(WebCore::FrameLoadRequest(mainFrameLocal->document(), WebCore::ResourceRequest(mainFrameLocal->document()->completeURL("#b"))));
+    RefPtr<WebCore::HistoryItem> item3 = mainFrameLocal->loader().currentItem();
+
+    // Go back, then forward. The scroll position should be properly set on the forward navigation.
+    mainFrameLocal->loader().loadHistoryItem(item1.get(), WebCore::HistorySameDocumentLoad);
+    mainFrameLocal->loader().loadHistoryItem(item3.get(), WebCore::HistorySameDocumentLoad);
+    EXPECT_EQ(0, webViewImpl->mainFrame()->scrollOffset().width);
+    EXPECT_GT(webViewImpl->mainFrame()->scrollOffset().height, 2000);
 }
 
 class EnterFullscreenWebViewClient : public FrameTestHelpers::TestWebViewClient {
@@ -835,6 +890,37 @@ TEST_F(WebViewTest, EnterFullscreenResetScrollAndScaleState)
     EXPECT_EQ(84, webViewImpl->mainFrame()->scrollOffset().height);
 
     m_webViewHelper.reset(); // Explicitly reset to break dependency on locally scoped client.
+}
+
+class PrintWebViewClient : public FrameTestHelpers::TestWebViewClient {
+public:
+    PrintWebViewClient()
+        : m_printCalled(false)
+    {
+    }
+
+    // WebViewClient methods
+    virtual void printPage(WebLocalFrame*) OVERRIDE
+    {
+        m_printCalled = true;
+    }
+
+    bool printCalled() const { return m_printCalled; }
+
+private:
+    bool m_printCalled;
+};
+
+
+TEST_F(WebViewTest, PrintWithXHRInFlight)
+{
+    PrintWebViewClient client;
+    URLTestHelpers::registerMockedURLFromBaseURL(WebString::fromUTF8(m_baseURL.c_str()), WebString::fromUTF8("print_with_xhr_inflight.html"));
+    WebViewImpl* webViewImpl = m_webViewHelper.initializeAndLoad(m_baseURL + "print_with_xhr_inflight.html", true, 0, &client);
+
+    ASSERT_EQ(WebCore::FrameStateComplete, toLocalFrame(webViewImpl->page()->mainFrame())->loader().state());
+    EXPECT_TRUE(client.printCalled());
+    m_webViewHelper.reset();
 }
 
 class DropTask : public WebThread::Task {
@@ -1098,7 +1184,6 @@ TEST_F(WebViewTest, SelectionOnReadOnlyInput)
 
 static void configueCompositingWebView(WebSettings* settings)
 {
-    settings->setForceCompositingMode(true);
     settings->setAcceleratedCompositingEnabled(true);
     settings->setAcceleratedCompositingForFixedPositionEnabled(true);
     settings->setAcceleratedCompositingForOverflowScrollEnabled(true);
@@ -1310,7 +1395,7 @@ TEST_F(WebViewTest, FocusExistingFrameOnNavigate)
     WebURLRequest webURLRequest;
     webURLRequest.initialize();
     WebCore::FrameLoadRequest request(0, webURLRequest.toResourceRequest(), "_blank");
-    webViewImpl->page()->mainFrame()->loader().load(request);
+    toLocalFrame(webViewImpl->page()->mainFrame())->loader().load(request);
     ASSERT_TRUE(client.createdWebView());
     EXPECT_FALSE(client.didFocusCalled());
 
@@ -1318,7 +1403,7 @@ TEST_F(WebViewTest, FocusExistingFrameOnNavigate)
     WebURLRequest webURLRequestWithTargetStart;
     webURLRequestWithTargetStart.initialize();
     WebCore::FrameLoadRequest requestWithTargetStart(0, webURLRequestWithTargetStart.toResourceRequest(), "_start");
-    toWebViewImpl(client.createdWebView())->page()->mainFrame()->loader().load(requestWithTargetStart);
+    toLocalFrame(toWebViewImpl(client.createdWebView())->page()->mainFrame())->loader().load(requestWithTargetStart);
     EXPECT_TRUE(client.didFocusCalled());
 
     m_webViewHelper.reset(); // Remove dependency on locally scoped client.
@@ -1453,6 +1538,8 @@ TEST_F(WebViewTest, DispatchesFocusBlurOnViewToggle)
 
 TEST_F(WebViewTest, SmartClipData)
 {
+    WebString clipData;
+    WebRect clipRect;
     URLTestHelpers::registerMockedURLFromBaseURL(WebString::fromUTF8(m_baseURL.c_str()), WebString::fromUTF8("Ahem.ttf"));
     URLTestHelpers::registerMockedURLFromBaseURL(WebString::fromUTF8(m_baseURL.c_str()), WebString::fromUTF8("smartclip.html"));
     WebView* webView = m_webViewHelper.initializeAndLoad(m_baseURL + "smartclip.html");
@@ -1460,9 +1547,8 @@ TEST_F(WebViewTest, SmartClipData)
     webView->resize(WebSize(500, 500));
     webView->layout();
     WebRect cropRect(300, 125, 100, 50);
-
-    // FIXME: We should test the structure of the data we get back.
-    EXPECT_FALSE(webView->getSmartClipData(cropRect).isEmpty());
+    webView->getSmartClipData(cropRect, clipData, clipRect);
+    EXPECT_FALSE(clipData.isEmpty());
 }
 
 class CreateChildCounterFrameClient : public FrameTestHelpers::TestWebFrameClient {

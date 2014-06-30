@@ -53,130 +53,54 @@ namespace WebCore {
 
 RenderLayerRepainter::RenderLayerRepainter(RenderLayerModelObject& renderer)
     : m_renderer(renderer)
-    , m_repaintStatus(NeedsNormalRepaint)
 {
 }
 
-void RenderLayerRepainter::repaintAfterLayout(bool shouldCheckForRepaint)
+void RenderLayerRepainter::computeRepaintRectsIncludingNonCompositingDescendants()
 {
-    if (RuntimeEnabledFeatures::repaintAfterLayoutEnabled())
-        return;
-
-    // FIXME: really, we're in the repaint phase here, and the following queries are legal.
-    // Until those states are fully fledged, I'll just disable the ASSERTS.
-    DisableCompositingQueryAsserts disabler;
-    if (m_renderer.layer()->hasVisibleContent()) {
-        RenderView* view = m_renderer.view();
-        ASSERT(view);
-        // FIXME: LayoutState does not work with RenderLayers as there is not a 1-to-1
-        // mapping between them and the RenderObjects. It would be neat to enable
-        // LayoutState outside the layout() phase and use it here.
-        ASSERT(!view->layoutStateEnabled());
-
-        const RenderLayerModelObject* repaintContainer = m_renderer.containerForRepaint();
-        LayoutRect oldRepaintRect = m_repaintRect;
-        LayoutPoint oldOffset = m_offset;
-        computeRepaintRects(repaintContainer);
-        shouldCheckForRepaint &= shouldRepaintLayer();
-
-        if (shouldCheckForRepaint) {
-            if (view && !view->document().printing()) {
-                if (m_repaintStatus & NeedsFullRepaint) {
-                    m_renderer.repaintUsingContainer(repaintContainer, pixelSnappedIntRect(oldRepaintRect), InvalidationLayer);
-                    if (m_repaintRect != oldRepaintRect)
-                        m_renderer.repaintUsingContainer(repaintContainer, pixelSnappedIntRect(m_repaintRect), InvalidationLayer);
-                } else {
-                    m_renderer.repaintAfterLayoutIfNeeded(repaintContainer, m_renderer.selfNeedsLayout(), oldRepaintRect, oldOffset, &m_repaintRect, &m_offset);
-                }
-            }
-        }
-    } else {
-        clearRepaintRects();
-    }
-
-    m_repaintStatus = NeedsNormalRepaint;
-
-}
-
-void RenderLayerRepainter::clearRepaintRects()
-{
-    ASSERT(!m_renderer.layer()->hasVisibleContent());
-
-    m_repaintRect = IntRect();
-}
-
-void RenderLayerRepainter::computeRepaintRects(const RenderLayerModelObject* repaintContainer)
-{
-    if (RuntimeEnabledFeatures::repaintAfterLayoutEnabled()) {
-        // FIXME: We want RenderLayerRepainter to go away when
-        // repaint-after-layout is on by default so we need to figure out how to
-        // handle this update.
-        m_renderer.setPreviousRepaintRect(m_renderer.clippedOverflowRectForRepaint(m_renderer.containerForRepaint()));
-    } else {
-        m_repaintRect = m_renderer.clippedOverflowRectForRepaint(repaintContainer);
-        m_offset = m_renderer.positionFromRepaintContainer(repaintContainer);
-    }
-}
-
-void RenderLayerRepainter::computeRepaintRectsIncludingDescendants()
-{
-    // FIXME: computeRepaintRects() has to walk up the parent chain for every layer to compute the rects.
-    // We should make this more efficient.
+    // FIXME: boundsRectForPaintInvalidation() has to walk up the parent chain
+    // for every layer to compute the rects. We should make this more efficient.
     // FIXME: it's wrong to call this when layout is not up-to-date, which we do.
-    computeRepaintRects(m_renderer.containerForRepaint());
+    m_renderer.setPreviousPaintInvalidationRect(m_renderer.boundsRectForPaintInvalidation(m_renderer.containerForPaintInvalidation()));
 
-    for (RenderLayer* layer = m_renderer.layer()->firstChild(); layer; layer = layer->nextSibling())
-        layer->repainter().computeRepaintRectsIncludingDescendants();
-}
-
-inline bool RenderLayerRepainter::shouldRepaintLayer() const
-{
-    if (RuntimeEnabledFeatures::repaintAfterLayoutEnabled())
-        return false;
-
-    if (m_repaintStatus != NeedsFullRepaintForPositionedMovementLayout)
-        return true;
-
-    // Composited layers that were moved during a positioned movement only
-    // layout, don't need to be repainted. They just need to be recomposited.
-    return m_renderer.compositingState() != PaintsIntoOwnBacking;
+    for (RenderLayer* layer = m_renderer.layer()->firstChild(); layer; layer = layer->nextSibling()) {
+        if (layer->compositingState() != PaintsIntoOwnBacking && layer->compositingState() != PaintsIntoGroupedBacking)
+            layer->repainter().computeRepaintRectsIncludingNonCompositingDescendants();
+    }
 }
 
 // Since we're only painting non-composited layers, we know that they all share the same repaintContainer.
-void RenderLayerRepainter::repaintIncludingNonCompositingDescendants(const RenderLayerModelObject* repaintContainer)
+void RenderLayerRepainter::repaintIncludingNonCompositingDescendants()
 {
-    m_renderer.repaintUsingContainer(repaintContainer, pixelSnappedIntRect(m_renderer.clippedOverflowRectForRepaint(repaintContainer)), InvalidationLayer);
+    repaintIncludingNonCompositingDescendantsInternal(m_renderer.containerForPaintInvalidation());
+}
+
+void RenderLayerRepainter::repaintIncludingNonCompositingDescendantsInternal(const RenderLayerModelObject* repaintContainer)
+{
+    m_renderer.invalidatePaintUsingContainer(repaintContainer, pixelSnappedIntRect(m_renderer.boundsRectForPaintInvalidation(repaintContainer)), InvalidationLayer);
+
+    // FIXME: Repaints can be issued during style recalc at present, via RenderLayerModelObject::styleWillChange. This happens in scenarios when
+    // repaint is needed but not layout.
+    DisableCompositingQueryAsserts disabler;
 
     for (RenderLayer* curr = m_renderer.layer()->firstChild(); curr; curr = curr->nextSibling()) {
-        if (!curr->hasCompositedLayerMapping())
-            curr->repainter().repaintIncludingNonCompositingDescendants(repaintContainer);
+        if (curr->compositingState() != PaintsIntoOwnBacking && curr->compositingState() != PaintsIntoGroupedBacking)
+            curr->repainter().repaintIncludingNonCompositingDescendantsInternal(repaintContainer);
     }
 }
 
 LayoutRect RenderLayerRepainter::repaintRectIncludingNonCompositingDescendants() const
 {
-    LayoutRect repaintRect;
-    if (RuntimeEnabledFeatures::repaintAfterLayoutEnabled())
-        repaintRect = m_renderer.previousRepaintRect();
-    else
-        repaintRect = m_repaintRect;
+    LayoutRect repaintRect = m_renderer.previousPaintInvalidationRect();
 
     for (RenderLayer* child = m_renderer.layer()->firstChild(); child; child = child->nextSibling()) {
         // Don't include repaint rects for composited child layers; they will paint themselves and have a different origin.
-        if (child->hasCompositedLayerMapping())
+        if (child->compositingState() == PaintsIntoOwnBacking || child->compositingState() == PaintsIntoGroupedBacking)
             continue;
 
         repaintRect.unite(child->repainter().repaintRectIncludingNonCompositingDescendants());
     }
     return repaintRect;
-}
-
-void RenderLayerRepainter::setBackingNeedsRepaint()
-{
-    // There is only one call site, and that call site ensures that the compositing state is PaintsIntoOwnBacking.
-    ASSERT(m_renderer.compositingState() == PaintsIntoOwnBacking);
-
-    m_renderer.compositedLayerMapping()->setContentsNeedDisplay();
 }
 
 void RenderLayerRepainter::setBackingNeedsRepaintInRect(const LayoutRect& r)
@@ -200,39 +124,13 @@ void RenderLayerRepainter::setBackingNeedsRepaintInRect(const LayoutRect& r)
             view->repaintViewRectangle(absRect);
         return;
     }
-    if (m_renderer.compositingState() == PaintsIntoGroupedBacking) {
-        LayoutRect updatedRect(r);
-
-        ASSERT(m_renderer.layer());
-        ASSERT(m_renderer.layer()->enclosingTransformedAncestor());
-        ASSERT(m_renderer.layer()->enclosingTransformedAncestor()->renderer());
-
-        // FIXME: this defensive code should not have to exist. None of these pointers should ever be 0. See crbug.com/370410.
-        RenderLayerModelObject* transformedAncestor = 0;
-        if (RenderLayer* ancestor = m_renderer.layer()->enclosingTransformedAncestor())
-            transformedAncestor = ancestor->renderer();
-        if (!transformedAncestor)
-            return;
-
-        // If the transformedAncestor is actually the RenderView, we might get
-        // confused and think that we can use LayoutState. Ideally, we'd made
-        // LayoutState work for all composited layers as well, but until then
-        // we need to disable LayoutState for squashed layers.
-        LayoutStateDisabler layoutStateDisabler(*transformedAncestor);
-
-        // This code adjusts the repaint rectangle to be in the space of the transformed ancestor of the grouped (i.e. squashed)
-        // layer. This is because all layers that squash together need to repaint w.r.t. a single container that is
-        // an ancestor of all of them, in order to properly take into account any local transforms etc.
-        // FIXME: remove this special-case code that works around the repainting code structure.
-        m_renderer.computeRectForRepaint(transformedAncestor, updatedRect);
-        updatedRect.moveBy(-m_renderer.layer()->groupedMapping()->squashingOffsetFromTransformedAncestor());
-
-        IntRect repaintRect = pixelSnappedIntRect(updatedRect);
-        if (GraphicsLayer* squashingLayer = m_renderer.groupedMapping()->squashingLayer())
+    IntRect repaintRect = pixelSnappedIntRect(r);
+    // FIXME: generalize accessors to backing GraphicsLayers so that this code is squasphing-agnostic.
+    if (m_renderer.layer()->groupedMapping()) {
+        if (GraphicsLayer* squashingLayer = m_renderer.layer()->groupedMapping()->squashingLayer())
             squashingLayer->setNeedsDisplayInRect(repaintRect);
     } else {
-        IntRect repaintRect = pixelSnappedIntRect(r);
-        m_renderer.compositedLayerMapping()->setContentsNeedDisplayInRect(repaintRect);
+        m_renderer.layer()->compositedLayerMapping()->setContentsNeedDisplayInRect(repaintRect);
     }
 }
 
@@ -240,7 +138,6 @@ void RenderLayerRepainter::setFilterBackendNeedsRepaintingInRect(const LayoutRec
 {
     if (rect.isEmpty())
         return;
-
     LayoutRect rectForRepaint = rect;
     m_renderer.style()->filterOutsets().expandRect(rectForRepaint);
 

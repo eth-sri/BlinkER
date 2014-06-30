@@ -143,6 +143,9 @@ public:
     void addPathForRoundedRect(const FloatRect&, const FloatSize& topLeftRadius, const FloatSize& topRightRadius, const FloatSize& bottomLeftRadius, const FloatSize& bottomRightRadius);
     void addBeziersForRoundedRect(const FloatRect&, const FloatSize& topLeftRadius, const FloatSize& topRightRadius, const FloatSize& bottomLeftRadius, const FloatSize& bottomRightRadius);
 
+    bool subtractPath(const Path&);
+    bool intersectPath(const Path&);
+
     // Updates the path to the union (inclusive-or) of itself with the given argument.
     bool unionPath(const Path& other);
 
@@ -152,7 +155,7 @@ private:
     SkPath m_path;
 };
 
-#if !ASSERT_DISABLED
+#if ASSERT_ENABLED
 PLATFORM_EXPORT bool ellipseIsRenderable(float startAngle, float endAngle);
 #endif
 

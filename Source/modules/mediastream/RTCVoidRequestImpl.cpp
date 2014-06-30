@@ -29,7 +29,6 @@
  */
 
 #include "config.h"
-
 #include "modules/mediastream/RTCVoidRequestImpl.h"
 
 #include "core/html/VoidCallback.h"
@@ -38,18 +37,20 @@
 
 namespace WebCore {
 
-PassRefPtr<RTCVoidRequestImpl> RTCVoidRequestImpl::create(ExecutionContext* context, PassOwnPtr<VoidCallback> successCallback, PassOwnPtr<RTCErrorCallback> errorCallback)
+PassRefPtr<RTCVoidRequestImpl> RTCVoidRequestImpl::create(ExecutionContext* context, RTCPeerConnection* requester, PassOwnPtr<VoidCallback> successCallback, PassOwnPtr<RTCErrorCallback> errorCallback)
 {
-    RefPtr<RTCVoidRequestImpl> request = adoptRef(new RTCVoidRequestImpl(context, successCallback, errorCallback));
+    RefPtr<RTCVoidRequestImpl> request = adoptRef(new RTCVoidRequestImpl(context, requester, successCallback, errorCallback));
     request->suspendIfNeeded();
     return request.release();
 }
 
-RTCVoidRequestImpl::RTCVoidRequestImpl(ExecutionContext* context, PassOwnPtr<VoidCallback> successCallback, PassOwnPtr<RTCErrorCallback> errorCallback)
+RTCVoidRequestImpl::RTCVoidRequestImpl(ExecutionContext* context, RTCPeerConnection* requester, PassOwnPtr<VoidCallback> successCallback, PassOwnPtr<RTCErrorCallback> errorCallback)
     : ActiveDOMObject(context)
     , m_successCallback(successCallback)
     , m_errorCallback(errorCallback)
+    , m_requester(requester)
 {
+    ASSERT(m_requester);
 }
 
 RTCVoidRequestImpl::~RTCVoidRequestImpl()
@@ -58,7 +59,8 @@ RTCVoidRequestImpl::~RTCVoidRequestImpl()
 
 void RTCVoidRequestImpl::requestSucceeded()
 {
-    if (m_successCallback)
+    bool shouldFireCallback = m_requester ? m_requester->shouldFireDefaultCallbacks() : false;
+    if (shouldFireCallback && m_successCallback)
         m_successCallback->handleEvent();
 
     clear();
@@ -66,7 +68,8 @@ void RTCVoidRequestImpl::requestSucceeded()
 
 void RTCVoidRequestImpl::requestFailed(const String& error)
 {
-    if (m_errorCallback.get())
+    bool shouldFireCallback = m_requester ? m_requester->shouldFireDefaultCallbacks() : false;
+    if (shouldFireCallback && m_errorCallback.get())
         m_errorCallback->handleEvent(error);
 
     clear();
@@ -81,6 +84,7 @@ void RTCVoidRequestImpl::clear()
 {
     m_successCallback.clear();
     m_errorCallback.clear();
+    m_requester.clear();
 }
 
 } // namespace WebCore

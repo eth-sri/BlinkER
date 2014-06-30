@@ -24,12 +24,11 @@
 
 #include "core/rendering/svg/RenderSVGRect.h"
 #include "core/rendering/svg/RenderSVGResource.h"
-#include "core/svg/SVGElementInstance.h"
 #include "core/svg/SVGLength.h"
 
 namespace WebCore {
 
-SVGRectElement::SVGRectElement(Document& document)
+inline SVGRectElement::SVGRectElement(Document& document)
     : SVGGeometryElement(SVGNames::rectTag, document)
     , m_x(SVGAnimatedLength::create(this, SVGNames::xAttr, SVGLength::create(LengthModeWidth), AllowNegativeLengths))
     , m_y(SVGAnimatedLength::create(this, SVGNames::yAttr, SVGLength::create(LengthModeHeight), AllowNegativeLengths))
@@ -47,6 +46,8 @@ SVGRectElement::SVGRectElement(Document& document)
     addToPropertyMap(m_rx);
     addToPropertyMap(m_ry);
 }
+
+DEFINE_NODE_FACTORY(SVGRectElement)
 
 bool SVGRectElement::isSupportedAttribute(const QualifiedName& attrName)
 {
