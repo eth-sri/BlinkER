@@ -10,8 +10,13 @@ void EventRacerTimerBase::start(double nextFireInterval, double repeatInterval, 
     TimerBase::start(nextFireInterval, repeatInterval, caller);
 
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
-    if (!m_data)
+    if (m_data) {
+        if (!m_data->log)
+            m_data->log = log;
+        ASSERT(!log || log == m_data->log);
+    } else {
         m_data = EventRacerData::create(log);
+    }
 
     log = m_data->log;
     if (log) {
