@@ -1093,13 +1093,15 @@ void HTMLDocumentParser::appendBytes(const char* data, size_t length)
     // On the first data receival data only, set the next parser event-action to
     // be preceded by the current event-action. The second and following data
     // receivals will not have an associated event-action.
-    if (RefPtr<EventRacerLog> log = EventRacerContext::getLog()) {
-        if (log->hasAction() && m_joinActions.isEmpty()) {
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log) {
+        ASSERT(log->hasAction());
+        if (m_joinActions.isEmpty()) {
             ASSERT(!m_log);
             m_log = log;
-            m_joinActions.deferJoin(m_log->getCurrentAction());
+            if (shouldUseThreading())
+                m_joinActions.deferJoin(m_log->getCurrentAction());
         }
-        ASSERT(m_log == log);
     }
 
     if (shouldUseThreading()) {
@@ -1114,7 +1116,17 @@ void HTMLDocumentParser::appendBytes(const char* data, size_t length)
         return;
     }
 
-    DecodedDataDocumentParser::appendBytes(data, length);
+    if (log)
+        DecodedDataDocumentParser::appendBytes(data, length);
+    else {
+        ASSERT(m_log);
+        EventRacerContext ctx(m_log);
+        EventAction *parserAction = m_log->createEventAction();
+        EventActionScope act(parserAction);
+        m_joinActions.join(m_log, parserAction);
+        m_joinActions.deferJoin(parserAction);
+        DecodedDataDocumentParser::appendBytes(data, length);
+    }
 }
 
 void HTMLDocumentParser::flush()

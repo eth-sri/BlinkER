@@ -6,7 +6,7 @@
 #define HTMLImportTreeRoot_h
 
 #include "core/html/imports/HTMLImport.h"
-#include "platform/Timer.h"
+#include "core/eventracer/EventRacerTimer.h"
 #include "wtf/PassOwnPtr.h"
 
 namespace WebCore {
@@ -35,10 +35,10 @@ public:
 private:
     explicit HTMLImportTreeRoot(Document*);
 
-    void recalcTimerFired(Timer<HTMLImportTreeRoot>*);
+    void recalcTimerFired(EventRacerTimer<HTMLImportTreeRoot>*);
 
     RawPtrWillBeMember<Document> m_document;
-    Timer<HTMLImportTreeRoot> m_recalcTimer;
+    EventRacerTimer<HTMLImportTreeRoot> m_recalcTimer;
 
     // List of import which has been loaded or being loaded.
     typedef WillBeHeapVector<OwnPtrWillBeMember<HTMLImportChild> > ImportList;
