@@ -400,7 +400,15 @@ void FrameLoader::finishedParsing()
     if (client())
         client()->dispatchDidFinishDocumentLoad();
 
-    checkCompleted();
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    EventAction *action;
+    if (log && log->hasAction()) {
+        ASSERT(log == m_eventRacerLog);
+        action = log->getCurrentAction();
+    } else
+        action = 0;
+
+    checkCompleted(action);
 
     if (!m_frame->view())
         return; // We are being destroyed by something checkCompleted called.
@@ -413,7 +421,13 @@ void FrameLoader::finishedParsing()
 
 void FrameLoader::loadDone()
 {
-    checkCompleted();
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    EventAction *action;
+    if (log && log->hasAction())
+        action = log->getCurrentAction();
+    else
+        action = 0;
+    checkCompleted(action);
 }
 
 bool FrameLoader::allChildrenAreComplete() const
@@ -434,10 +448,13 @@ bool FrameLoader::allAncestorsAreComplete() const
     return true;
 }
 
-void FrameLoader::checkCompleted()
+void FrameLoader::checkCompleted(EventAction *action)
 {
     RefPtr<LocalFrame> protect(m_frame);
     m_shouldCallCheckCompleted = false;
+
+    if (action)
+        m_completeTriggers.deferJoin(action);
 
     if (m_frame->view())
         m_frame->view()->handleLoadCompleted();
@@ -466,15 +483,39 @@ void FrameLoader::checkCompleted()
     if (!allChildrenAreComplete())
         return;
 
+    // We want to create a new event action here, so give a chance for the
+    // current one to complete.
+    if (EventRacerContext::getLog()) {
+        scheduleCheckCompleted();
+        return;
+    }
+
     // OK, completed.
     m_isComplete = true;
+
+    OwnPtr<EventRacerContext> ctx;
+    OwnPtr<EventActionScope> act;
+    OwnPtr<OperationScope> op;
+    EventAction *completeAction = 0;
+
+    if (m_eventRacerLog) {
+        ctx = adoptPtr(new EventRacerContext(m_eventRacerLog));
+        completeAction = m_eventRacerLog->createEventAction();
+        act = adoptPtr(new EventActionScope(completeAction));
+        op = adoptPtr(new OperationScope("frm:complete"));
+
+        // Join with the completion triggers.
+        m_completeTriggers.join(m_eventRacerLog, completeAction);
+        m_completeTriggers.clear();
+    }
+
     m_frame->document()->setReadyState(Document::Complete);
     if (m_frame->document()->loadEventStillNeeded())
         m_frame->document()->implicitClose();
 
     m_frame->navigationScheduler().startTimer();
 
-    completed();
+    completed(completeAction);
     if (m_frame->page())
         checkLoadComplete();
 
@@ -598,7 +639,7 @@ void FrameLoader::loadInSameDocument(const KURL& url, PassRefPtr<SerializedScrip
     m_frame->domWindow()->statePopped(stateObject ? stateObject : SerializedScriptValue::nullValue());
 }
 
-void FrameLoader::completed()
+void FrameLoader::completed(EventAction *action)
 {
     RefPtr<LocalFrame> protect(m_frame);
 
@@ -609,7 +650,7 @@ void FrameLoader::completed()
 
     Frame* parent = m_frame->tree().parent();
     if (parent && parent->isLocalFrame())
-        toLocalFrame(parent)->loader().checkCompleted();
+        toLocalFrame(parent)->loader().checkCompleted(action);
 
     if (m_frame->view())
         m_frame->view()->maintainScrollPositionAtAnchor(0);
@@ -909,6 +950,8 @@ void FrameLoader::commitProvisionalLoad()
     }
 
     m_eventRacerLog = m_provisionalEventRacerLog.release();
+    m_completeTriggers.clear();
+
     m_documentLoader = m_provisionalDocumentLoader.release();
     m_state = FrameStateCommittedPage;
 

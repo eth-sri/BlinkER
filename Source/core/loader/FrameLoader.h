@@ -35,6 +35,7 @@
 #include "core/dom/IconURL.h"
 #include "core/dom/SandboxFlags.h"
 #include "core/dom/SecurityContext.h"
+#include "core/eventracer/EventRacerJoinActions.h"
 #include "core/fetch/ResourceLoaderOptions.h"
 #include "core/loader/FrameLoaderStateMachine.h"
 #include "core/loader/FrameLoaderTypes.h"
@@ -53,6 +54,7 @@ class Chrome;
 class DOMWrapperWorld;
 class DocumentLoader;
 class Event;
+class EventAction;
 class EventRacerLog;
 class FetchContext;
 class FormState;
@@ -161,7 +163,7 @@ public:
 
     void loadDone();
     void finishedParsing();
-    void checkCompleted();
+    void checkCompleted(EventAction * = 0);
 
     void commitProvisionalLoad();
 
@@ -192,7 +194,7 @@ public:
 private:
     bool allChildrenAreComplete() const; // immediate children, not all descendants
 
-    void completed();
+    void completed(EventAction *);
 
     void checkTimerFired(Timer<FrameLoader>*);
     void didAccessInitialDocumentTimerFired(Timer<FrameLoader>*);
@@ -283,6 +285,7 @@ private:
 
     RefPtr<EventRacerLog> m_eventRacerLog;
     RefPtr<EventRacerLog> m_provisionalEventRacerLog;
+    EventRacerJoinActions m_completeTriggers;
 };
 
 } // namespace WebCore

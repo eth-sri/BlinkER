@@ -2500,7 +2500,13 @@ void Document::explicitClose()
         return;
     }
 
-    m_frame->loader().checkCompleted();
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    EventAction *action;
+    if (log && log->hasAction())
+        action = log->getCurrentAction();
+    else
+        action = 0;
+    m_frame->loader().checkCompleted(action);
 }
 
 void Document::implicitClose()
@@ -5197,11 +5203,15 @@ bool Document::isDelayingLoadEvent()
 void Document::loadEventDelayTimerFired(EventRacerTimer<Document>*)
 {
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
-    if (log && log->hasAction())
-        m_loadEventDelayActions.join(log, log->getCurrentAction());
+    EventAction *action;
+    if (log && log->hasAction()) {
+        action = log->getCurrentAction();
+        m_loadEventDelayActions.join(log, action);
+    } else 
+        action = 0;
 
     if (frame())
-        frame()->loader().checkCompleted();
+        frame()->loader().checkCompleted(action);
 }
 
 void Document::loadPluginsSoon()
