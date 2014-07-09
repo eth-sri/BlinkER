@@ -314,7 +314,7 @@ bool EventTarget::fireEventListeners(Event* event)
     if (!prevAction)
         prevAction = getCreatorEventAction();
 
-    OwnPtr<EventRacerContext> ctx;
+    EventRacerContext ctx(log);
     OwnPtr<EventActionScope> act;
     OwnPtr<OperationScope> op;
 
@@ -323,7 +323,6 @@ bool EventTarget::fireEventListeners(Event* event)
         if (log->hasAction())
             thisAction = log->getCurrentAction();
         else {
-            ctx = adoptPtr(new EventRacerContext(log));
             thisAction = log->createEventAction();
             act = adoptPtr(new EventActionScope(thisAction));
         }
