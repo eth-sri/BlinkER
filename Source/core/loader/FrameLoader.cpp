@@ -926,22 +926,24 @@ void FrameLoader::commitProvisionalLoad()
         pdl->timing()->setHasSameOriginAsPreviousDocument(securityOrigin->canRequest(m_frame->document()->url()));
     }
 
-    // EventRacer data shoud be still collected in the "old" log.
-    EventRacerContext ctx(m_eventRacerLog);
+    // EventRacer data should still be collected in the "old" log.
+    {
+        EventRacerContext ctx(m_eventRacerLog);
 
-    // The call to closeURL() invokes the unload event handler, which can execute arbitrary
-    // JavaScript. If the script initiates a new load, we need to abandon the current load,
-    // or the two will stomp each other.
-    // detachChildren will similarly trigger child frame unload event handlers.
-    if (m_documentLoader) {
-        client()->dispatchWillClose();
-        closeURL();
+        // The call to closeURL() invokes the unload event handler, which can execute arbitrary
+        // JavaScript. If the script initiates a new load, we need to abandon the current load,
+        // or the two will stomp each other.
+        // detachChildren will similarly trigger child frame unload event handlers.
+        if (m_documentLoader) {
+            client()->dispatchWillClose();
+            closeURL();
+        }
+        detachChildren();
+        if (pdl != m_provisionalDocumentLoader)
+            return;
+        if (m_documentLoader)
+            m_documentLoader->detachFromFrame();
     }
-    detachChildren();
-    if (pdl != m_provisionalDocumentLoader)
-        return;
-    if (m_documentLoader)
-        m_documentLoader->detachFromFrame();
 
     // Connect the host side of the event racer log.  
     if (m_provisionalEventRacerLog && !m_provisionalEventRacerLog->isConnected()) {
