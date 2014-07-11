@@ -356,8 +356,15 @@ bool EventTarget::fireEventListeners(Event* event)
     EventRacerContext ctx(log);
     OwnPtr<EventActionScope> act;
     OwnPtr<OperationScope> op;
-
     EventAction *thisAction = 0;
+
+#ifndef NDEBUG
+    // In debug build, do not show mouse move events with no handler as it
+    // creates a lot of clutter in the visualisation of the graph.
+    if (event->type() == "mousemove" && !listenersVector && !legacyListenersVector)
+        goto out;
+#endif
+
     if (log) {
         if (log->hasAction())
             thisAction = log->getCurrentAction();
@@ -392,6 +399,9 @@ bool EventTarget::fireEventListeners(Event* event)
         d->eventListenerMap.setEventAction(event->type(), thisAction);
     }
 
+#ifndef NDEBUG
+  out:
+#endif
     Editor::countEvent(executionContext(), event);
     countLegacyEvents(legacyTypeName, listenersVector, legacyListenersVector);
     return !event->defaultPrevented();
