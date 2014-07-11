@@ -21,6 +21,7 @@
 #ifndef EventListener_h
 #define EventListener_h
 
+#include "wtf/Atomics.h"
 #include "wtf/RefCounted.h"
 
 namespace WebCore {
@@ -48,16 +49,21 @@ namespace WebCore {
         bool isAttribute() const { return virtualisAttribute(); }
         Type type() const { return m_type; }
 
+        unsigned int getSerial() const { return m_serial; }
+
     protected:
         explicit EventListener(Type type)
             : m_type(type)
         {
+            m_serial = WTF::atomicIncrement(reinterpret_cast<volatile int *>(&nextSerial));
         }
 
     private:
         virtual bool virtualisAttribute() const { return false; }
 
         Type m_type;
+        unsigned int m_serial;
+        static volatile unsigned int nextSerial;
     };
 
 }

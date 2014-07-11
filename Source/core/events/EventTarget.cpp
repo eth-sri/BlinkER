@@ -44,6 +44,7 @@
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/UseCounter.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "wtf/Atomics.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/Vector.h"
 
@@ -51,8 +52,11 @@ using namespace WTF;
 
 namespace WebCore {
 
+volatile unsigned int EventTargetData::nextSerial;
+
 EventTargetData::EventTargetData()
 {
+    serial = WTF::atomicIncrement(reinterpret_cast<volatile int *>(&nextSerial));
 }
 
 EventTargetData::~EventTargetData()

@@ -72,6 +72,8 @@ public:
 
     EventListenerMap eventListenerMap;
     OwnPtr<FiringEventIteratorVector> firingEventIterators;
+    unsigned int serial;
+    static volatile unsigned int nextSerial;
 };
 
 class EventTarget : public WillBeGarbageCollectedMixin {
@@ -117,6 +119,7 @@ public:
     virtual void setCreatorEventRacerContext(PassRefPtr<EventRacerLog>, EventAction *) = 0;
     virtual PassRefPtr<EventRacerLog> getCreatorEventRacerLog() const = 0;
     virtual EventAction *getCreatorEventAction() const = 0;
+    virtual unsigned int getSerial() { return ensureEventTargetData().serial; }
 
     virtual void trace(Visitor*) { }
 
