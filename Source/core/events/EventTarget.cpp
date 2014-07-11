@@ -114,8 +114,37 @@ inline LocalDOMWindow* EventTarget::executingWindow()
     return 0;
 }
 
-bool EventTarget::addEventListener(const AtomicString& eventType, PassRefPtr<EventListener> listener, bool useCapture)
+namespace {
+
+void eventTargetAccess(PassRefPtr<EventRacerLog> lg, Operation::Type op, EventTarget *target,
+                       const AtomicString &eventType)
 {
+    RefPtr<EventRacerLog> log = lg;
+    Node *node = target->toNode();
+    String name = node ? node->nodeName() : "";
+    log->logOperation(log->getCurrentAction(), op, log->internf("%s[0x%x].%s",
+                                                                name.isEmpty() ? "" : name.ascii().data(),
+                                                                target->getSerial(),
+                                                                eventType.string().ascii().data()));
+}
+
+}
+
+
+bool EventTarget::addEventListener(const AtomicString& eventType, PassRefPtr<EventListener> lstnr, bool useCapture)
+{
+    // Note that an attempt to add a null listener is still recorded as a write
+    // as it may race with another read or write and the listener being null
+    // might well be the result of an unrelated error.
+    RefPtr<EventListener> listener = lstnr;
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction()) {
+        OperationScope scope("addEventListener");
+        eventTargetAccess(log, Operation::WRITE_MEMORY, this, eventType);
+        log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE,
+                          log->internf("Event[0x%x]", !listener ? 0 : listener->getSerial()));
+    }
+
     // FIXME: listener null check should throw TypeError (and be done in
     // generated bindings), but breaks legacy content. http://crbug.com/249598
     if (!listener)
@@ -128,12 +157,18 @@ bool EventTarget::addEventListener(const AtomicString& eventType, PassRefPtr<Eve
         argv.append(eventType);
         activityLogger->logEvent("blinkAddEventListener", argv.size(), argv.data());
     }
-
     return ensureEventTargetData().eventListenerMap.add(eventType, listener, useCapture);
 }
 
 bool EventTarget::removeEventListener(const AtomicString& eventType, EventListener* listener, bool useCapture)
 {
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction()) {
+        OperationScope scope("removeEventListener");
+        eventTargetAccess(log, Operation::WRITE_MEMORY, this, eventType);
+        log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE, "undefined");
+    }
+
     EventTargetData* d = eventTargetData();
     if (!d)
         return false;
@@ -333,9 +368,14 @@ bool EventTarget::fireEventListeners(Event* event)
         if (prevAction && prevAction != thisAction)
             log->join(prevAction, thisAction);
 
-        String ev = "ev:";
-        ev.append(event->type().string());
-        op = adoptPtr(new OperationScope(ev));
+        eventTargetAccess(log, Operation::READ_MEMORY, this, event->type());
+        if (listenersVector || legacyListenersVector) {
+            String ev = String::format("fire:%s @ %s", event->type().string().ascii().data(),
+                                       event->eventPhase() == Event::AT_TARGET ? "TARGET"
+                                       : event->eventPhase() == Event::CAPTURING_PHASE ? "CAPTURE"
+                                       : "BUBBLE");
+            op = adoptPtr(new OperationScope(ev));
+        }
     }
 
     if (listenersVector) {
@@ -424,6 +464,11 @@ void EventTarget::fireEventListeners(Event* event, EventTargetData* d, EventList
 const EventListenerVector& EventTarget::getEventListeners(const AtomicString& eventType)
 {
     DEFINE_STATIC_LOCAL(EventListenerVector, emptyVector, ());
+
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction()) {
+        eventTargetAccess(log, Operation::READ_MEMORY, this, eventType);
+    }
 
     EventTargetData* d = eventTargetData();
     if (!d)
