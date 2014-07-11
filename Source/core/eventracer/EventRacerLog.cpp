@@ -1,6 +1,8 @@
 #include "config.h"
 #include "EventRacerLog.h"
 #include "EventRacerLogClient.h"
+#include <stdarg.h>
+#include <stdio.h>
 
 namespace WebCore {
 
@@ -173,6 +175,25 @@ void EventRacerLog::logOperation(EventAction *act, Operation::Type type,
 // Interns a string.
 size_t EventRacerLog::intern(const WTF::String &s) {
     return m_strings.put(s);
+}
+
+// Formats and interns a string.
+size_t EventRacerLog::internf(const char *fmt, ...) {
+    va_list ap;
+    Vector<char, 64> buf(64);
+
+    va_start(ap, fmt);
+    int len = vsnprintf(buf.data(), buf.size(), fmt, ap);
+    if (len < 0)
+        return 0;
+    if (static_cast<size_t>(len) >= buf.size()) {
+        buf.resize(len + 1);
+        len = vsnprintf(buf.data(), buf.size(), fmt, ap);
+    }
+    va_end(ap);
+
+    String str(buf.data(), len);
+    return intern(str);
 }
 
 } // end namespace WebCore

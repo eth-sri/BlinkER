@@ -69,6 +69,9 @@ public:
     // Interns a string.
     size_t intern(const WTF::String &);
 
+    // Formats and interns a string.
+    size_t internf(const char *, ...);
+
     // Checks if there is an active event-action.
     bool hasAction() const { return !!m_currentAction; }
 
