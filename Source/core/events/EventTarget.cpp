@@ -318,7 +318,7 @@ bool EventTarget::fireEventListeners(Event* event)
     OwnPtr<EventActionScope> act;
     OwnPtr<OperationScope> op;
 
-    EventAction *thisAction;
+    EventAction *thisAction = 0;
     if (log && (listenersVector || legacyListenersVector)) {
         if (log->hasAction())
             thisAction = log->getCurrentAction();
