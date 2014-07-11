@@ -319,7 +319,7 @@ bool EventTarget::fireEventListeners(Event* event)
     OwnPtr<OperationScope> op;
 
     EventAction *thisAction = 0;
-    if (log && (listenersVector || legacyListenersVector)) {
+    if (log) {
         if (log->hasAction())
             thisAction = log->getCurrentAction();
         else {
@@ -343,7 +343,7 @@ bool EventTarget::fireEventListeners(Event* event)
         event->setType(unprefixedTypeName);
     }
 
-    if (log && (listenersVector || legacyListenersVector)) {
+    if (log) {
         thisAction->willDeferJoin();
         d->eventListenerMap.setEventAction(event->type(), thisAction);
     }
