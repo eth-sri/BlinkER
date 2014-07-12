@@ -116,12 +116,6 @@ static bool addListenerToVector(EventListenerVector* vector, PassRefPtr<EventLis
     if (vector->find(registeredListener) != kNotFound)
         return false; // Duplicate listener.
 
-    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
-    if (log && log->hasAction()) {
-        registeredListener.action = log->getCurrentAction();
-        registeredListener.action->willDeferJoin();
-    }
-
     vector->append(registeredListener);
     return true;
 }
