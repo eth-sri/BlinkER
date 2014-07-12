@@ -184,13 +184,15 @@ size_t EventRacerLog::internf(const char *fmt, ...) {
 
     va_start(ap, fmt);
     int len = vsnprintf(buf.data(), buf.size(), fmt, ap);
+    va_end(ap);
     if (len < 0)
         return 0;
     if (static_cast<size_t>(len) >= buf.size()) {
         buf.resize(len + 1);
+        va_start(ap, fmt);
         len = vsnprintf(buf.data(), buf.size(), fmt, ap);
+        va_end(ap);
     }
-    va_end(ap);
 
     String str(buf.data(), len);
     return intern(str);
