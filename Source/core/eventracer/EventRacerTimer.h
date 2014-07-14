@@ -15,6 +15,8 @@ public:
     virtual void start(double nextFireInterval, double repeatInterval, const TraceLocation&) OVERRIDE;
     virtual void stop() OVERRIDE;
 
+    unsigned int getSerial() const { return m_data ? m_data->serial : 0; }
+
 protected:
     virtual void fired() OVERRIDE;
     virtual void didFire() = 0;
@@ -28,6 +30,8 @@ protected:
         RefPtr<EventRacerLog> log;
         EventRacerJoinActions pred;
         EventAction *act;
+        unsigned int serial;
+        static unsigned int nextSerial;
 
     private:
         EventRacerData(PassRefPtr<EventRacerLog>);

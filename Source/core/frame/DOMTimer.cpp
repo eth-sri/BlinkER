@@ -28,6 +28,8 @@
 #include "core/frame/DOMTimer.h"
 
 #include "core/dom/ExecutionContext.h"
+#include "core/eventracer/EventRacerContext.h"
+#include "core/eventracer/EventRacerLog.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InspectorTraceEvents.h"
 #include "platform/TraceEvent.h"
@@ -84,6 +86,13 @@ void DOMTimer::removeByID(ExecutionContext* context, int timeoutID)
     TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline.stack"), "CallStack", "stack", InspectorCallStackEvent::currentCallStack());
     // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentation::didRemoveTimer(context, timeoutID);
+
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction()) {
+        log->logOperation(log->getCurrentAction(), Operation::WRITE_MEMORY,
+                          log->internf("Timer:%d",  timeoutID));
+        log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE, "undefined");
+    }
 }
 
 DOMTimer::DOMTimer(ExecutionContext* context, PassOwnPtr<ScheduledAction> action, int interval, bool singleShot, int timeoutID)
@@ -103,6 +112,14 @@ DOMTimer::DOMTimer(ExecutionContext* context, PassOwnPtr<ScheduledAction> action
         startOneShot(intervalMilliseconds, FROM_HERE);
     else
         startRepeating(intervalMilliseconds, FROM_HERE);
+
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction()) {
+        log->logOperation(log->getCurrentAction(), Operation::WRITE_MEMORY,
+                          log->internf("Timer:%d", m_timeoutID));
+        log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE,
+                          log->internf("DOMTimer[0x%x]", getSerial()));
+    }
 }
 
 DOMTimer::~DOMTimer()
@@ -126,6 +143,13 @@ void DOMTimer::didFire()
     // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentationCookie cookie = InspectorInstrumentation::willFireTimer(context, m_timeoutID);
 
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    ASSERT(log && log->hasAction());
+    log->logOperation(log->getCurrentAction(), Operation::READ_MEMORY,
+                      log->internf("Timer:%d", m_timeoutID));
+    log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE,
+                      log->internf("DOMTimer[0x%x]", getSerial()));
+
     // Simple case for non-one-shot timers.
     if (isActive()) {
         if (repeatInterval() && repeatInterval() < minimumInterval) {
@@ -144,6 +168,10 @@ void DOMTimer::didFire()
 
     // Delete timer before executing the action for one-shot timers.
     OwnPtr<ScheduledAction> action = m_action.release();
+
+    log->logOperation(log->getCurrentAction(), Operation::WRITE_MEMORY,
+                      log->internf("Timer:%d",  m_timeoutID));
+    log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE, "undefined");
 
     // This timer is being deleted; no access to member variables allowed after this point.
     context->removeTimeoutByID(m_timeoutID);

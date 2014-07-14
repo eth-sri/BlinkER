@@ -86,8 +86,11 @@ PassRefPtr<EventRacerTimerBase::EventRacerData> EventRacerTimerBase::EventRacerD
 
 EventRacerTimerBase::EventRacerData::EventRacerData(PassRefPtr<EventRacerLog> lg)
     : log(lg), act(0) {
+    serial = WTF::atomicIncrement(reinterpret_cast<int *>(&nextSerial));
 }
 
 EventRacerTimerBase::EventRacerData::~EventRacerData() {}
+
+unsigned int EventRacerTimerBase::EventRacerData::nextSerial;
 
 } // end namespace
