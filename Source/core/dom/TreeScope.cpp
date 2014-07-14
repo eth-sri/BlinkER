@@ -37,6 +37,8 @@
 #include "core/dom/TreeScopeAdopter.h"
 #include "core/dom/shadow/ElementShadow.h"
 #include "core/dom/shadow/ShadowRoot.h"
+#include "core/eventracer/EventRacerContext.h"
+#include "core/eventracer/EventRacerLog.h"
 #include "core/events/EventPath.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
@@ -149,9 +151,26 @@ Element* TreeScope::getElementById(const AtomicString& elementId) const
 {
     if (elementId.isEmpty())
         return 0;
-    if (!m_elementsById)
-        return 0;
-    return m_elementsById->getElementById(elementId.impl(), this);
+
+    Element *elt;
+    if (m_elementsById)
+        elt = m_elementsById->getElementById(elementId.impl(), this);
+    else
+        elt = 0;
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction()) {
+        log->logOperation(log->getCurrentAction(), Operation::READ_MEMORY,
+                          log->internf("Tree[0x%x]:%s", document().getSerial(), 
+                                       elementId.string().ascii().data()));
+        if (elt) {
+            log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE,
+                              log->internf("DOMNode[0x%x]", elt->getSerial()));
+        } else {
+            log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE, "undefined");
+        }
+    }
+
+    return elt;
 }
 
 const Vector<Element*>& TreeScope::getAllElementsById(const AtomicString& elementId) const
@@ -159,9 +178,18 @@ const Vector<Element*>& TreeScope::getAllElementsById(const AtomicString& elemen
     DEFINE_STATIC_LOCAL(Vector<Element*>, emptyVector, ());
     if (elementId.isEmpty())
         return emptyVector;
+
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction()) {
+        log->logOperation(log->getCurrentAction(), Operation::READ_MEMORY,
+                          log->internf("Tree[0x%x]:%s", document().getSerial(), 
+                                       elementId.string().ascii().data()));
+    }
+
     if (!m_elementsById)
         return emptyVector;
-    return m_elementsById->getAllElementsById(elementId.impl(), this);
+    else
+        return m_elementsById->getAllElementsById(elementId.impl(), this);
 }
 
 void TreeScope::addElementById(const AtomicString& elementId, Element* element)
@@ -170,10 +198,36 @@ void TreeScope::addElementById(const AtomicString& elementId, Element* element)
         m_elementsById = adoptPtr(new DocumentOrderedMap);
     m_elementsById->add(elementId.impl(), element);
     m_idTargetObserverRegistry->notifyObservers(elementId);
+
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction()) {
+        log->logOperation(log->getCurrentAction(), Operation::WRITE_MEMORY,
+                          log->internf("Tree[0x%x]:%s", document().getSerial(), 
+                                       elementId.string().ascii().data()));
+        if (element) {
+            log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE,
+                              log->internf("DOMNode[0x%x]", element->getSerial()));
+        } else {
+            log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE, "undefined");
+        }
+    }
 }
 
 void TreeScope::removeElementById(const AtomicString& elementId, Element* element)
 {
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction()) {
+        log->logOperation(log->getCurrentAction(), Operation::WRITE_MEMORY,
+                          log->internf("Tree[0x%x]:%s", document().getSerial(), 
+                                       elementId.string().ascii().data()));
+        if (element) {
+            log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE,
+                              log->internf("DOMNode[0x%x]", element->getSerial()));
+        } else {
+            log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE, "undefined");
+        }
+    }
+
     if (!m_elementsById)
         return;
     m_elementsById->remove(elementId.impl(), element);
