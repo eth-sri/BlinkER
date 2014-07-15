@@ -72,6 +72,8 @@
 #include "core/editing/TextIterator.h"
 #include "core/editing/htmlediting.h"
 #include "core/editing/markup.h"
+#include "core/eventracer/EventRacerContext.h"
+#include "core/eventracer/EventRacerLog.h"
 #include "core/events/EventDispatcher.h"
 #include "core/events/FocusEvent.h"
 #include "core/frame/FrameView.h"
@@ -877,12 +879,23 @@ IntRect Element::screenRect() const
 
 const AtomicString& Element::getAttribute(const AtomicString& localName) const
 {
-    if (!elementData())
-        return nullAtom;
+    const Attribute *attr;
+    if (elementData())
+        attr = attributes().find(localName, shouldIgnoreAttributeCase());
+    else
+        attr = 0;
+
     synchronizeAttribute(localName);
-    if (const Attribute* attribute = elementData()->attributes().find(localName, shouldIgnoreAttributeCase()))
-        return attribute->value();
-    return nullAtom;
+    const AtomicString &value = attr ? attr->value() : nullAtom;
+
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction()) {
+        log->logOperation(log->getCurrentAction(), Operation::READ_MEMORY,
+                          log->internf("DOMNode[0x%x].%s", getSerial(), localName.string().ascii().data()));
+        log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE, value.string());
+    }
+
+    return value;
 }
 
 const AtomicString& Element::getAttributeNS(const AtomicString& namespaceURI, const AtomicString& localName) const
@@ -895,6 +908,13 @@ void Element::setAttribute(const AtomicString& localName, const AtomicString& va
     if (!Document::isValidName(localName)) {
         exceptionState.throwDOMException(InvalidCharacterError, "'" + localName + "' is not a valid attribute name.");
         return;
+    }
+
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction()) {
+        log->logOperation(log->getCurrentAction(), Operation::WRITE_MEMORY,
+                          log->internf("DOMNode[0x%x].%s", getSerial(), localName.string().ascii().data()));
+        log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE, value.string());
     }
 
     synchronizeAttribute(localName);
@@ -2025,6 +2045,13 @@ void Element::appendAttributeInternal(const QualifiedName& name, const AtomicStr
 
 void Element::removeAttribute(const AtomicString& name)
 {
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction()) {
+        log->logOperation(log->getCurrentAction(), Operation::WRITE_MEMORY,
+                          log->internf("DOMNode[0x%x].%s", getSerial(), name.string().ascii().data()));
+        log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE, "");
+    }
+
     if (!elementData())
         return;
 
