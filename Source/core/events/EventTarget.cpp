@@ -323,6 +323,14 @@ void EventTarget::countLegacyEvents(const AtomicString& legacyTypeName, EventLis
     }
 }
 
+#ifndef NDEBUG
+namespace {
+    bool shouldIgnoreEventLogging(const AtomicString &type) {
+        return type == "mousemove" || type == "mouseout" || type == "mouseover";
+    }
+}
+#endif
+
 bool EventTarget::fireEventListeners(Event* event)
 {
     ASSERT(!NoEventDispatchAssertion::isEventDispatchForbidden());
@@ -359,9 +367,9 @@ bool EventTarget::fireEventListeners(Event* event)
     EventAction *thisAction = 0;
 
 #ifndef NDEBUG
-    // In debug build, do not show mouse move events with no handler as it
-    // creates a lot of clutter in the visualisation of the graph.
-    if (event->type() == "mousemove" && !listenersVector && !legacyListenersVector)
+    // In debug build, do not show certain events with no handler as it creates
+    // a lot of clutter in the visualisation of the graph.
+    if (shouldIgnoreEventLogging(event->type()) && !listenersVector && !legacyListenersVector)
         goto out;
 #endif
 
