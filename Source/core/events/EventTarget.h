@@ -119,7 +119,7 @@ public:
     virtual void setCreatorEventRacerContext(PassRefPtr<EventRacerLog>, EventAction *) = 0;
     virtual PassRefPtr<EventRacerLog> getCreatorEventRacerLog() const = 0;
     virtual EventAction *getCreatorEventAction() const = 0;
-    virtual unsigned int getSerial() { return ensureEventTargetData().serial; }
+    virtual unsigned int getSerial() const { return ensureEventTargetData().serial; }
 
     virtual void trace(Visitor*) { }
 
@@ -128,7 +128,9 @@ protected:
 
     // Subclasses should likely not override these themselves; instead, they should subclass EventTargetWithInlineData.
     virtual EventTargetData* eventTargetData() = 0;
+    virtual const EventTargetData* eventTargetData() const = 0;
     virtual EventTargetData& ensureEventTargetData() = 0;
+    virtual const EventTargetData& ensureEventTargetData() const = 0;
 
 private:
 #if !ENABLE(OILPAN)
@@ -157,7 +159,9 @@ protected:
     ~EventTargetWithInlineData();
 
     virtual EventTargetData* eventTargetData() OVERRIDE FINAL { return &m_eventTargetData; }
+    virtual const EventTargetData* eventTargetData() const OVERRIDE FINAL { return &m_eventTargetData; }
     virtual EventTargetData& ensureEventTargetData() OVERRIDE FINAL { return m_eventTargetData; }
+    virtual const EventTargetData& ensureEventTargetData() const OVERRIDE FINAL { return m_eventTargetData; }
 
 private:
     EventTargetData m_eventTargetData;

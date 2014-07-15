@@ -387,8 +387,8 @@ public:
 
     void setIsLink(bool f);
 
-    bool hasEventTargetData() const { return getFlag(HasEventTargetDataFlag); }
-    void setHasEventTargetData(bool flag) { setFlag(flag, HasEventTargetDataFlag); }
+    bool hasEventTargetData() const { return m_hasEventTargetData; }
+    void setHasEventTargetData(bool flag) const { m_hasEventTargetData = flag; }
 
     bool isV8CollectableDuringMinorGC() const { return getFlag(V8CollectableDuringMinorGCFlag); }
     void markV8CollectableDuringMinorGC() { setFlag(true, V8CollectableDuringMinorGCFlag); }
@@ -652,7 +652,10 @@ public:
     virtual void willCallDefaultEventHandler(const Event&);
 
     virtual EventTargetData* eventTargetData() OVERRIDE;
+    virtual const EventTargetData* eventTargetData() const OVERRIDE;
     virtual EventTargetData& ensureEventTargetData() OVERRIDE;
+    virtual const EventTargetData& ensureEventTargetData() const OVERRIDE;
+
     virtual void setCreatorEventRacerContext(PassRefPtr<EventRacerLog>, EventAction *) OVERRIDE FINAL;
     virtual PassRefPtr<EventRacerLog> getCreatorEventRacerLog() const OVERRIDE FINAL;
     virtual EventAction *getCreatorEventAction() const OVERRIDE FINAL { return m_creatorAction; }
@@ -725,7 +728,6 @@ private:
         HasWeakReferencesFlag = 1 << 24,
         V8CollectableDuringMinorGCFlag = 1 << 25,
         HasSyntheticAttrChildNodesFlag = 1 << 26,
-        HasEventTargetDataFlag = 1 << 27,
         AlreadySpellCheckedFlag = 1 << 28,
 
         // HTML dir=auto.
@@ -840,6 +842,7 @@ private:
         NodeRareDataBase* m_rareData;
     } m_data;
 
+    mutable bool m_hasEventTargetData;
     RefPtr<EventRacerLog> m_log;
     EventAction *m_creatorAction;
 };

@@ -259,6 +259,7 @@ Node::Node(TreeScope* treeScope, ConstructionType type)
     , m_treeScope(treeScope)
     , m_previous(nullptr)
     , m_next(nullptr)
+    , m_hasEventTargetData(false)
     , m_creatorAction(0)
 {
     ASSERT(m_treeScope || type == CreateDocument || type == CreateShadowRoot);
@@ -2036,7 +2037,7 @@ void Node::removeAllEventListenersRecursively()
     }
 }
 
-typedef WillBeHeapHashMap<RawPtrWillBeWeakMember<Node>, OwnPtr<EventTargetData> > EventTargetDataMap;
+typedef WillBeHeapHashMap<RawPtrWillBeWeakMember<const Node>, OwnPtr<EventTargetData> > EventTargetDataMap;
 
 static EventTargetDataMap& eventTargetDataMap()
 {
@@ -2054,7 +2055,17 @@ EventTargetData* Node::eventTargetData()
     return hasEventTargetData() ? eventTargetDataMap().get(this) : 0;
 }
 
+const EventTargetData* Node::eventTargetData() const
+{
+    return hasEventTargetData() ? eventTargetDataMap().get(this) : 0;
+}
+
 EventTargetData& Node::ensureEventTargetData()
+{
+    return const_cast<EventTargetData &>(static_cast<const Node *>(this)->ensureEventTargetData());
+}
+
+const EventTargetData& Node::ensureEventTargetData() const
 {
     if (hasEventTargetData())
         return *eventTargetDataMap().get(this);
