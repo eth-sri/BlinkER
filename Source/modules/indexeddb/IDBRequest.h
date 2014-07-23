@@ -29,9 +29,8 @@
 #ifndef IDBRequest_h
 #define IDBRequest_h
 
-#include "bindings/v8/ScriptState.h"
-#include "bindings/v8/ScriptValue.h"
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ScriptState.h"
+#include "bindings/core/v8/ScriptValue.h"
 #include "core/dom/ActiveDOMObject.h"
 #include "core/dom/DOMError.h"
 #include "core/dom/DOMStringList.h"
@@ -46,7 +45,7 @@
 #include "public/platform/WebIDBCursor.h"
 #include "public/platform/WebIDBTypes.h"
 
-namespace WebCore {
+namespace blink {
 
 class ExceptionState;
 class IDBCursor;
@@ -55,7 +54,6 @@ class SharedBuffer;
 
 class IDBRequest
     : public RefCountedGarbageCollectedWillBeGarbageCollectedFinalized<IDBRequest>
-    , public ScriptWrappable
     , public EventTargetWithInlineData
     , public ActiveDOMObject {
     DEFINE_EVENT_TARGET_REFCOUNTING_WILL_BE_REMOVED(RefCountedGarbageCollected<IDBRequest>);
@@ -168,6 +166,6 @@ private:
     bool m_resultDirty;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // IDBRequest_h

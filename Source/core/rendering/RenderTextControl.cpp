@@ -25,10 +25,11 @@
 #include "core/html/HTMLTextFormControlElement.h"
 #include "core/rendering/HitTestResult.h"
 #include "core/rendering/RenderTheme.h"
+#include "core/rendering/TextRunConstructor.h"
 #include "platform/scroll/ScrollbarTheme.h"
 #include "wtf/unicode/CharacterNames.h"
 
-namespace WebCore {
+namespace blink {
 
 RenderTextControl::RenderTextControl(HTMLTextFormControlElement* element)
     : RenderBlockFlow(element)
@@ -230,7 +231,6 @@ float RenderTextControl::getAvgCharWidth(AtomicString family)
     const String str = String(&ch, 1);
     const Font& font = style()->font();
     TextRun textRun = constructTextRun(this, font, str, style(), TextRun::AllowTrailingExpansion);
-    textRun.disableRoundingHacks();
     return font.width(textRun);
 }
 
@@ -300,4 +300,4 @@ RenderObject* RenderTextControl::layoutSpecialExcludedChild(bool relayoutChildre
     return placeholderRenderer;
 }
 
-} // namespace WebCore
+} // namespace blink

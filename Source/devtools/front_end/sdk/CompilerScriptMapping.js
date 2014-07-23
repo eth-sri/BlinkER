@@ -93,7 +93,11 @@ WebInspector.CompilerScriptMapping.prototype = {
             return null;
         var script = /** @type {!WebInspector.Script} */ (this._scriptForSourceMap.get(sourceMap));
         console.assert(script);
-        var entry = sourceMap.findEntryReversed(uiSourceCode.url, lineNumber);
+        var mappingSearchLinesCount = 5;
+        // We do not require precise (breakpoint) location but limit the number of lines to search or mapping.
+        var entry = sourceMap.findEntryReversed(uiSourceCode.url, lineNumber, mappingSearchLinesCount);
+        if (!entry)
+            return null;
         return this._debuggerModel.createRawLocation(script, /** @type {number} */ (entry[0]), /** @type {number} */ (entry[1]));
     },
 
@@ -103,6 +107,24 @@ WebInspector.CompilerScriptMapping.prototype = {
     addScript: function(script)
     {
         script.pushSourceMapping(this);
+        script.addEventListener(WebInspector.Script.Events.SourceMapURLAdded, this._sourceMapURLAdded.bind(this));
+        this._processScript(script);
+    },
+
+    /**
+     * @param {!WebInspector.Event} event
+     */
+    _sourceMapURLAdded: function(event)
+    {
+        var script = /** @type {!WebInspector.Script} */ (event.target);
+        this._processScript(script);
+    },
+
+    /**
+     * @param {!WebInspector.Script} script
+     */
+    _processScript: function(script)
+    {
         this.loadSourceMapForScript(script, sourceMapLoaded.bind(this));
 
         /**
@@ -137,7 +159,7 @@ WebInspector.CompilerScriptMapping.prototype = {
                 if (uiSourceCode)
                     this._bindUISourceCode(uiSourceCode);
                 else
-                    this._target.consoleModel.showErrorMessage(WebInspector.UIString("Failed to locate workspace file mapped to URL %s from source map %s", sourceURL, sourceMap.url()));
+                    WebInspector.console.error(WebInspector.UIString("Failed to locate workspace file mapped to URL %s from source map %s", sourceURL, sourceMap.url()));
             }
             script.updateLocations();
         }
@@ -149,6 +171,21 @@ WebInspector.CompilerScriptMapping.prototype = {
     isIdentity: function()
     {
         return false;
+    },
+
+    /**
+     * @param {!WebInspector.UISourceCode} uiSourceCode
+     * @param {number} lineNumber
+     * @return {boolean}
+     */
+    uiLineHasMapping: function(uiSourceCode, lineNumber)
+    {
+        if (!uiSourceCode.url)
+            return true;
+        var sourceMap = this._sourceMapForURL.get(uiSourceCode.url);
+        if (!sourceMap)
+            return true;
+        return !!sourceMap.findEntryReversed(uiSourceCode.url, lineNumber, 0);
     },
 
     /**

@@ -31,8 +31,13 @@
 #include "config.h"
 #include "bindings/core/v8/V8Document.h"
 
+#include "bindings/core/v8/ExceptionMessages.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ScriptController.h"
+#include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8CanvasRenderingContext2D.h"
 #include "bindings/core/v8/V8DOMImplementation.h"
+#include "bindings/core/v8/V8DOMWrapper.h"
 #include "bindings/core/v8/V8Node.h"
 #include "bindings/core/v8/V8Touch.h"
 #include "bindings/core/v8/V8TouchList.h"
@@ -40,11 +45,6 @@
 #include "bindings/core/v8/V8XPathNSResolver.h"
 #include "bindings/core/v8/V8XPathResult.h"
 #include "bindings/core/v8/custom/V8CustomXPathNSResolver.h"
-#include "bindings/v8/ExceptionMessages.h"
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ScriptController.h"
-#include "bindings/v8/V8Binding.h"
-#include "bindings/v8/V8DOMWrapper.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/Node.h"
@@ -56,7 +56,7 @@
 #include "core/xml/XPathResult.h"
 #include "wtf/RefPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 void V8Document::evaluateMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
@@ -83,4 +83,4 @@ void V8Document::evaluateMethodCustom(const v8::FunctionCallbackInfo<v8::Value>&
     v8SetReturnValueFast(info, result.release(), document.get());
 }
 
-} // namespace WebCore
+} // namespace blink

@@ -31,9 +31,9 @@
 #include "config.h"
 #include "core/inspector/PageDebuggerAgent.h"
 
-#include "bindings/v8/DOMWrapperWorld.h"
-#include "bindings/v8/ScriptController.h"
-#include "bindings/v8/ScriptSourceCode.h"
+#include "bindings/core/v8/DOMWrapperWorld.h"
+#include "bindings/core/v8/ScriptController.h"
+#include "bindings/core/v8/ScriptSourceCode.h"
 #include "core/frame/FrameConsole.h"
 #include "core/frame/LocalFrame.h"
 #include "core/inspector/InspectorOverlay.h"
@@ -42,7 +42,7 @@
 #include "core/loader/DocumentLoader.h"
 #include "core/page/Page.h"
 
-namespace WebCore {
+namespace blink {
 
 PassOwnPtr<PageDebuggerAgent> PageDebuggerAgent::create(PageScriptDebugServer* pageScriptDebugServer, InspectorPageAgent* pageAgent, InjectedScriptManager* injectedScriptManager, InspectorOverlay* overlay)
 {
@@ -162,5 +162,5 @@ void PageDebuggerAgent::didCommitLoad(LocalFrame* frame, DocumentLoader* loader)
         pageDidCommitLoad();
 }
 
-} // namespace WebCore
+} // namespace blink
 

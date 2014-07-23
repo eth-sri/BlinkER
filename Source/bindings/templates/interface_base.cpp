@@ -12,7 +12,7 @@
 #include "{{filename}}"
 {% endfor %}
 
-namespace WebCore {
+namespace blink {
 
 static void initializeScriptWrappableForInterface({{cpp_class}}* object)
 {
@@ -22,7 +22,7 @@ static void initializeScriptWrappableForInterface({{cpp_class}}* object)
         ASSERT_NOT_REACHED();
 }
 
-} // namespace WebCore
+} // namespace blink
 
 {#
 In ScriptWrappable::init, the use of a local function declaration has an
@@ -32,12 +32,12 @@ More info on the MSVC bug here (Bug 664619):
 The namespace of local function declarations in C++ by Uray M. János
 http://connect.microsoft.com/VisualStudio/feedback/details/664619/the-namespace-of-local-function-declarations-in-c
 #}
-void webCoreInitializeScriptWrappableForInterface(WebCore::{{cpp_class}}* object)
+void webCoreInitializeScriptWrappableForInterface(blink::{{cpp_class}}* object)
 {
-    WebCore::initializeScriptWrappableForInterface(object);
+    blink::initializeScriptWrappableForInterface(object);
 }
 
-namespace WebCore {
+namespace blink {
 {% set to_active_dom_object = '%s::toActiveDOMObject' % v8_class
                               if is_active_dom_object else '0' %}
 {% set to_event_target = '%s::toEventTarget' % v8_class
@@ -57,9 +57,17 @@ template <typename T> void V8_USE(T) { }
 {# Attributes #}
 {% from 'attributes.cpp' import constructor_getter_callback,
        attribute_getter, attribute_getter_callback,
-       attribute_setter, attribute_setter_callback
-   with context %}
+       attribute_setter, attribute_setter_callback,
+       attribute_getter_implemented_in_private_script,
+       attribute_setter_implemented_in_private_script
+       with context %}
 {% for attribute in attributes if not attribute.constructor_type %}
+{% if attribute.is_implemented_in_private_script %}
+{{attribute_getter_implemented_in_private_script(attribute)}}
+{% if not attribute.is_read_only or attribute.put_forwards %}
+{{attribute_setter_implemented_in_private_script(attribute)}}
+{% endif %}
+{% endif %}
 {% for world_suffix in attribute.world_suffixes %}
 {% if not attribute.has_custom_getter %}
 {{attribute_getter(attribute, world_suffix)}}
@@ -83,9 +91,13 @@ template <typename T> void V8_USE(T) { }
 {% block security_check_functions %}{% endblock %}
 {# Methods #}
 {% from 'methods.cpp' import generate_method, overload_resolution_method,
-       method_callback, origin_safe_method_getter, generate_constructor
+       method_callback, origin_safe_method_getter, generate_constructor,
+       method_implemented_in_private_script
        with context %}
 {% for method in methods %}
+{% if method.is_implemented_in_private_script %}
+{{method_implemented_in_private_script(method)}}
+{% endif %}
 {% for world_suffix in method.world_suffixes %}
 {% if not method.is_custom %}
 {{generate_method(method, world_suffix)}}
@@ -130,15 +142,15 @@ template <typename T> void V8_USE(T) { }
 
 {% block visit_dom_wrapper %}{% endblock %}
 {% block shadow_attributes %}{% endblock %}
-{% block class_attributes %}{% endblock %}
-{% block class_accessors %}{% endblock %}
-{% block class_methods %}{% endblock %}
+{% block install_attributes %}{% endblock %}
+{% block install_accessors %}{% endblock %}
+{% block install_methods %}{% endblock %}
 {% block named_constructor %}{% endblock %}
 {% block initialize_event %}{% endblock %}
 {% block constructor_callback %}{% endblock %}
 {% block configure_shadow_object_template %}{% endblock %}
-{% block configure_class_template %}{% endblock %}
-{% block get_template %}{% endblock %}
+{% block install_dom_template %}{% endblock %}
+{% block get_dom_template %}{% endblock %}
 {% block has_instance %}{% endblock %}
 {% block to_native_with_type_check %}{% endblock %}
 {% block install_per_context_attributes %}{% endblock %}
@@ -149,5 +161,5 @@ template <typename T> void V8_USE(T) { }
 {% block wrap %}{% endblock %}
 {% block create_wrapper %}{% endblock %}
 {% block deref_object_and_to_v8_no_inline %}{% endblock %}
-} // namespace WebCore
+} // namespace blink
 {% endfilter %}

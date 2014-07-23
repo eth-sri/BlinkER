@@ -72,14 +72,14 @@
 #include "config.h"
 #include "web/WebLocalFrameImpl.h"
 
-#include "bindings/v8/DOMWrapperWorld.h"
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ExceptionStatePlaceholder.h"
-#include "bindings/v8/ScriptController.h"
-#include "bindings/v8/ScriptSourceCode.h"
-#include "bindings/v8/ScriptValue.h"
-#include "bindings/v8/V8GCController.h"
-#include "bindings/v8/V8PerIsolateData.h"
+#include "bindings/core/v8/DOMWrapperWorld.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ScriptController.h"
+#include "bindings/core/v8/ScriptSourceCode.h"
+#include "bindings/core/v8/ScriptValue.h"
+#include "bindings/core/v8/V8GCController.h"
+#include "bindings/core/v8/V8PerIsolateData.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/IconURL.h"
@@ -101,6 +101,7 @@
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/Settings.h"
+#include "core/html/HTMLAnchorElement.h"
 #include "core/html/HTMLCollection.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLFrameElementBase.h"
@@ -133,6 +134,7 @@
 #include "core/timing/Performance.h"
 #include "modules/geolocation/GeolocationController.h"
 #include "modules/notifications/NotificationController.h"
+#include "modules/notifications/NotificationPermissionClient.h"
 #include "modules/screen_orientation/ScreenOrientationController.h"
 #include "platform/TraceEvent.h"
 #include "platform/UserGestureIndicator.h"
@@ -182,6 +184,7 @@
 #include "web/GeolocationClientProxy.h"
 #include "web/LocalFileSystemClient.h"
 #include "web/MIDIClientProxy.h"
+#include "web/NotificationPermissionClientImpl.h"
 #include "web/PageOverlay.h"
 #include "web/SharedWorkerRepositoryClientImpl.h"
 #include "web/TextFinder.h"
@@ -193,7 +196,7 @@
 #include "wtf/HashMap.h"
 #include <algorithm>
 
-using namespace WebCore;
+using namespace blink;
 
 namespace blink {
 
@@ -210,10 +213,6 @@ static void frameContentAsPlainText(size_t maxChars, LocalFrame* frame, StringBu
 
     if (!frame->view())
         return;
-
-    // TextIterator iterates over the visual representation of the DOM. As such,
-    // it requires you to do a layout before using it (otherwise it'll crash).
-    document->updateLayout();
 
     // Select the document body.
     RefPtrWillBeRawPtr<Range> range(document->createRange());
@@ -276,7 +275,7 @@ WebPluginContainerImpl* WebLocalFrameImpl::pluginContainerFromFrame(LocalFrame* 
     return toWebPluginContainerImpl(pluginDocument->pluginWidget());
 }
 
-WebPluginContainerImpl* WebLocalFrameImpl::pluginContainerFromNode(WebCore::LocalFrame* frame, const WebNode& node)
+WebPluginContainerImpl* WebLocalFrameImpl::pluginContainerFromNode(blink::LocalFrame* frame, const WebNode& node)
 {
     WebPluginContainerImpl* pluginContainer = pluginContainerFromFrame(frame);
     if (pluginContainer)
@@ -401,7 +400,7 @@ private:
 // Simple class to override some of PrintContext behavior. This is used when
 // the frame hosts a plugin that supports custom printing. In this case, we
 // want to delegate all printing related calls to the plugin.
-class ChromePluginPrintContext : public ChromePrintContext {
+class ChromePluginPrintContext FINAL : public ChromePrintContext {
 public:
     ChromePluginPrintContext(LocalFrame* frame, WebPluginContainerImpl* plugin, const WebPrintParams& printParams)
         : ChromePrintContext(frame), m_plugin(plugin), m_pageCount(0), m_printParams(printParams)
@@ -555,16 +554,7 @@ void WebLocalFrameImpl::setRemoteWebLayer(WebLayer* webLayer)
     if (!frame())
         return;
 
-    if (frame()->remotePlatformLayer())
-        GraphicsLayer::unregisterContentsLayer(frame()->remotePlatformLayer());
-    if (webLayer)
-        GraphicsLayer::registerContentsLayer(webLayer);
     frame()->setRemotePlatformLayer(webLayer);
-    // FIXME: This should be moved to WebRemoteFrame.
-    ASSERT(frame()->deprecatedLocalOwner());
-    frame()->deprecatedLocalOwner()->setNeedsCompositingUpdate();
-    if (RenderPart* renderer = frame()->ownerRenderer())
-        renderer->layer()->updateSelfPaintingLayer();
 }
 
 void WebLocalFrameImpl::setPermissionClient(WebPermissionClient* permissionClient)
@@ -775,7 +765,7 @@ void WebLocalFrameImpl::collectGarbage()
 bool WebLocalFrameImpl::checkIfRunInsecureContent(const WebURL& url) const
 {
     ASSERT(frame());
-    return frame()->loader().mixedContentChecker()->canRunInsecureContent(frame()->document()->securityOrigin(), url);
+    return frame()->loader().mixedContentChecker()->canFrameInsecureContent(frame()->document()->securityOrigin(), url);
 }
 
 v8::Handle<v8::Value> WebLocalFrameImpl::executeScriptAndReturnValue(const WebScriptSource& source)
@@ -888,6 +878,14 @@ void WebLocalFrameImpl::loadHTMLString(const WebData& data, const WebURL& baseUR
 {
     ASSERT(frame());
     loadData(data, WebString::fromUTF8("text/html"), WebString::fromUTF8("UTF-8"), baseURL, unreachableURL, replace);
+}
+
+void WebLocalFrameImpl::sendPings(const WebNode& linkNode, const WebURL& destinationURL)
+{
+    ASSERT(frame());
+    const blink::Node* node = linkNode.constUnwrap<Node>();
+    if (isHTMLAnchorElement(node))
+        toHTMLAnchorElement(node)->sendPings(destinationURL);
 }
 
 bool WebLocalFrameImpl::isLoading() const
@@ -1051,50 +1049,18 @@ bool WebLocalFrameImpl::executeCommand(const WebString& name, const WebNode& nod
     if (pluginContainer && pluginContainer->executeEditCommand(name))
         return true;
 
-    bool result = true;
-
-    // Specially handling commands that Editor::execCommand does not directly
-    // support.
-    if (command == "DeleteToEndOfParagraph") {
-        if (!frame()->editor().deleteWithDirection(DirectionForward, ParagraphBoundary, true, false))
-            frame()->editor().deleteWithDirection(DirectionForward, CharacterGranularity, true, false);
-    } else if (command == "DeleteBackward") {
-        result = frame()->editor().command(AtomicString("BackwardDelete")).execute();
-    } else if (command == "DeleteForward") {
-        result = frame()->editor().command(AtomicString("ForwardDelete")).execute();
-    } else if (command == "AdvanceToNextMisspelling") {
-        // Wee need to pass false here or else the currently selected word will never be skipped.
-        frame()->spellChecker().advanceToNextMisspelling(false);
-    } else if (command == "ToggleSpellPanel") {
-        frame()->spellChecker().showSpellingGuessPanel();
-    } else {
-        result = frame()->editor().command(command).execute();
-    }
-    return result;
+    return frame()->editor().executeCommand(command);
 }
 
 bool WebLocalFrameImpl::executeCommand(const WebString& name, const WebString& value, const WebNode& node)
 {
     ASSERT(frame());
-    String webName = name;
 
     WebPluginContainerImpl* pluginContainer = pluginContainerFromNode(frame(), node);
     if (pluginContainer && pluginContainer->executeEditCommand(name, value))
         return true;
 
-    // moveToBeginningOfDocument and moveToEndfDocument are only handled by WebKit for editable nodes.
-    if (!frame()->editor().canEdit() && webName == "moveToBeginningOfDocument")
-        return viewImpl()->bubblingScroll(ScrollUp, ScrollByDocument);
-
-    if (!frame()->editor().canEdit() && webName == "moveToEndOfDocument")
-        return viewImpl()->bubblingScroll(ScrollDown, ScrollByDocument);
-
-    if (webName == "showGuessPanel") {
-        frame()->spellChecker().showSpellingGuessPanel();
-        return true;
-    }
-
-    return frame()->editor().command(webName).execute(value);
+    return frame()->editor().executeCommand(name, value);
 }
 
 bool WebLocalFrameImpl::isCommandEnabled(const WebString& name) const
@@ -1207,7 +1173,7 @@ void WebLocalFrameImpl::selectRange(const WebPoint& base, const WebPoint& extent
 void WebLocalFrameImpl::selectRange(const WebRange& webRange)
 {
     if (RefPtrWillBeRawPtr<Range> range = static_cast<PassRefPtrWillBeRawPtr<Range> >(webRange))
-        frame()->selection().setSelectedRange(range.get(), WebCore::VP_DEFAULT_AFFINITY, FrameSelection::NonDirectional, NotUserTriggered);
+        frame()->selection().setSelectedRange(range.get(), blink::VP_DEFAULT_AFFINITY, FrameSelection::NonDirectional, NotUserTriggered);
 }
 
 void WebLocalFrameImpl::moveRangeSelection(const WebPoint& base, const WebPoint& extent)
@@ -1303,9 +1269,9 @@ int WebLocalFrameImpl::printBegin(const WebPrintParams& printParams, const WebNo
     }
 
     if (pluginContainer && pluginContainer->supportsPaginatedPrint())
-        m_printContext = adoptPtr(new ChromePluginPrintContext(frame(), pluginContainer, printParams));
+        m_printContext = adoptPtrWillBeNoop(new ChromePluginPrintContext(frame(), pluginContainer, printParams));
     else
-        m_printContext = adoptPtr(new ChromePrintContext(frame()));
+        m_printContext = adoptPtrWillBeNoop(new ChromePrintContext(frame()));
 
     FloatRect rect(0, 0, static_cast<float>(printParams.printContentArea.width), static_cast<float>(printParams.printContentArea.height));
     m_printContext->begin(rect.width(), rect.height());
@@ -1415,8 +1381,16 @@ void WebLocalFrameImpl::resetMatchCount()
 
 void WebLocalFrameImpl::sendOrientationChangeEvent()
 {
-    if (frame())
-        frame()->sendOrientationChangeEvent();
+    if (!frame())
+        return;
+
+    // Screen Orientation API
+    if (ScreenOrientationController::from(*frame()))
+        ScreenOrientationController::from(*frame())->notifyOrientationChanged();
+
+    // Legacy window.orientation API.
+    if (RuntimeEnabledFeatures::orientationEventEnabled() && frame()->domWindow())
+        frame()->domWindow()->dispatchEvent(Event::create(EventTypeNames::orientationchange));
 }
 
 void WebLocalFrameImpl::dispatchMessageEventWithOriginCheck(const WebSecurityOrigin& intendedTargetOrigin, const WebDOMEvent& event)
@@ -1497,7 +1471,7 @@ WebString WebLocalFrameImpl::renderTreeAsText(RenderAsTextControls toShow) const
 
 WebString WebLocalFrameImpl::markerTextForListItem(const WebElement& webElement) const
 {
-    return WebCore::markerTextForListItem(const_cast<Element*>(webElement.constUnwrap<Element>()));
+    return blink::markerTextForListItem(const_cast<Element*>(webElement.constUnwrap<Element>()));
 }
 
 void WebLocalFrameImpl::printPagesWithBoundaries(WebCanvas* canvas, const WebSize& pageSizeInPixels)
@@ -1562,7 +1536,7 @@ WebLocalFrameImpl::~WebLocalFrameImpl()
     cancelPendingScopingEffort();
 }
 
-void WebLocalFrameImpl::setWebCoreFrame(PassRefPtr<WebCore::LocalFrame> frame)
+void WebLocalFrameImpl::setWebCoreFrame(PassRefPtr<blink::LocalFrame> frame)
 {
     m_frame = frame;
 
@@ -1573,23 +1547,28 @@ void WebLocalFrameImpl::setWebCoreFrame(PassRefPtr<WebCore::LocalFrame> frame)
             notificationPresenter->initialize(m_client->notificationPresenter());
 
         provideNotification(*m_frame, notificationPresenter.release());
+        proviceNotificationPermissionClientTo(*m_frame, NotificationPermissionClientImpl::create());
         provideUserMediaTo(*m_frame, &m_userMediaClientImpl);
         provideGeolocationTo(*m_frame, m_geolocationClientProxy.get());
         m_geolocationClientProxy->setController(GeolocationController::from(m_frame.get()));
         provideMIDITo(*m_frame, MIDIClientProxy::create(m_client ? m_client->webMIDIClient() : 0));
+        provideLocalFileSystemTo(*m_frame, LocalFileSystemClient::create());
+
         if (RuntimeEnabledFeatures::screenOrientationEnabled())
             ScreenOrientationController::provideTo(*m_frame, m_client ? m_client->webScreenOrientationClient() : 0);
-        provideLocalFileSystemTo(*m_frame, LocalFileSystemClient::create());
     }
 }
 
-void WebLocalFrameImpl::initializeAsMainFrame(WebCore::Page* page)
+PassRefPtr<LocalFrame> WebLocalFrameImpl::initializeWebCoreFrame(FrameHost* host, FrameOwner* owner, const AtomicString& name, const AtomicString& fallbackName)
 {
-    setWebCoreFrame(LocalFrame::create(&m_frameLoaderClientImpl, &page->frameHost(), 0));
-
+    RefPtr<LocalFrame> frame = LocalFrame::create(&m_frameLoaderClientImpl, host, owner);
+    setWebCoreFrame(frame);
+    frame->tree().setName(name, fallbackName);
     // We must call init() after m_frame is assigned because it is referenced
-    // during init().
-    m_frame->init();
+    // during init(). Note that this may dispatch JS events; the frame may be
+    // detached after init() returns.
+    frame->init();
+    return frame;
 }
 
 PassRefPtr<LocalFrame> WebLocalFrameImpl::createChildFrame(const FrameLoadRequest& request, HTMLFrameOwnerElement* ownerElement)
@@ -1603,7 +1582,7 @@ PassRefPtr<LocalFrame> WebLocalFrameImpl::createChildFrame(const FrameLoadReques
     // solution. subResourceAttributeName returns just one attribute name. The
     // element might not have the attribute, and there might be other attributes
     // which can identify the element.
-    RefPtr<LocalFrame> child = webframeChild->initializeAsChildFrame(frame()->host(), ownerElement, request.frameName(), ownerElement->getAttribute(ownerElement->subResourceAttributeName()));
+    RefPtr<LocalFrame> child = webframeChild->initializeWebCoreFrame(frame()->host(), ownerElement, request.frameName(), ownerElement->getAttribute(ownerElement->subResourceAttributeName()));
     // Initializing the WebCore frame may cause the new child to be detached, since it may dispatch a load event in the parent.
     if (!child->tree().parent())
         return nullptr;
@@ -1643,17 +1622,17 @@ void WebLocalFrameImpl::createFrameView()
     ASSERT(frame()); // If frame() doesn't exist, we probably didn't init properly.
 
     WebViewImpl* webView = viewImpl();
-    bool isMainFrame = webView->mainFrameImpl()->frame() == frame();
-    if (isMainFrame)
+    bool isLocalRoot = frame()->isLocalRoot();
+    if (isLocalRoot)
         webView->suppressInvalidations(true);
 
     frame()->createView(webView->size(), webView->baseBackgroundColor(), webView->isTransparent());
-    if (webView->shouldAutoResize() && isMainFrame)
+    if (webView->shouldAutoResize() && isLocalRoot)
         frame()->view()->enableAutoSizeMode(true, webView->minAutoSize(), webView->maxAutoSize());
 
     frame()->view()->setInputEventsTransformForEmulation(m_inputEventsOffsetForEmulation, m_inputEventsScaleFactorForEmulation);
 
-    if (isMainFrame)
+    if (isLocalRoot)
         webView->suppressInvalidations(false);
 }
 
@@ -1853,7 +1832,7 @@ WebLocalFrameImpl* WebLocalFrameImpl::activeMatchFrame() const
     return 0;
 }
 
-WebCore::Range* WebLocalFrameImpl::activeMatch() const
+blink::Range* WebLocalFrameImpl::activeMatch() const
 {
     if (m_textFinder)
         return m_textFinder->activeMatch();
@@ -1884,16 +1863,6 @@ void WebLocalFrameImpl::invalidateAll() const
     FrameView* view = frame()->view();
     view->invalidateRect(view->frameRect());
     invalidateScrollbar();
-}
-
-PassRefPtr<LocalFrame> WebLocalFrameImpl::initializeAsChildFrame(FrameHost* host, FrameOwner* owner, const AtomicString& name, const AtomicString& fallbackName)
-{
-    RefPtr<LocalFrame> frame = LocalFrame::create(&m_frameLoaderClientImpl, host, owner);
-    setWebCoreFrame(frame);
-    frame->tree().setName(name, fallbackName);
-    // May dispatch JS events; frame may be detached after this.
-    frame->init();
-    return frame;
 }
 
 } // namespace blink

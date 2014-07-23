@@ -25,6 +25,7 @@
 
 #include "core/rendering/svg/RenderSVGResourceFilter.h"
 
+#include "core/dom/ElementTraversal.h"
 #include "core/frame/Settings.h"
 #include "core/rendering/svg/RenderSVGResourceFilterPrimitive.h"
 #include "core/rendering/svg/SVGRenderingContext.h"
@@ -34,7 +35,7 @@
 #include "platform/graphics/filters/SourceAlpha.h"
 #include "platform/graphics/filters/SourceGraphic.h"
 
-namespace WebCore {
+namespace blink {
 
 const RenderSVGResourceType RenderSVGResourceFilter::s_resourceType = FilterResourceType;
 
@@ -94,7 +95,7 @@ PassRefPtr<SVGFilterBuilder> RenderSVGResourceFilter::buildPrimitives(SVGFilter*
         effectElement->setStandardAttributes(effect.get());
         effect->setEffectBoundaries(SVGLengthContext::resolveRectangle<SVGFilterPrimitiveStandardAttributes>(effectElement, filterElement->primitiveUnits()->currentValue()->enumValue(), targetBoundingBox));
         effect->setOperatingColorSpace(
-            effectElement->renderer()->style()->svgStyle()->colorInterpolationFilters() == CI_LINEARRGB ? ColorSpaceLinearRGB : ColorSpaceDeviceRGB);
+            effectElement->renderer()->style()->svgStyle().colorInterpolationFilters() == CI_LINEARRGB ? ColorSpaceLinearRGB : ColorSpaceDeviceRGB);
         builder->add(AtomicString(effectElement->result()->currentValue()->value()), effect);
     }
     return builder.release();

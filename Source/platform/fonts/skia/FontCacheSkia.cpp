@@ -59,18 +59,45 @@ static SkStream* streamForFontconfigInterfaceId(int fontconfigInterfaceId)
 }
 #endif
 
-namespace WebCore {
+namespace blink {
 
 void FontCache::platformInit()
 {
 }
 
+PassRefPtr<SimpleFontData> FontCache::fallbackOnStandardFontStyle(
+    const FontDescription& fontDescription, UChar32 character)
+{
+    FontDescription substituteDescription(fontDescription);
+    substituteDescription.setStyle(FontStyleNormal);
+    substituteDescription.setWeight(FontWeightNormal);
+
+    FontFaceCreationParams creationParams(substituteDescription.family().family());
+    FontPlatformData* substitutePlatformData = getFontPlatformData(substituteDescription, creationParams);
+    if (substitutePlatformData && substitutePlatformData->fontContainsCharacter(character)) {
+        FontPlatformData platformData = FontPlatformData(*substitutePlatformData);
+        platformData.setSyntheticBold(fontDescription.weight() >= FontWeight600);
+        platformData.setSyntheticItalic(fontDescription.style() == FontStyleItalic);
+        return fontDataFromFontPlatformData(&platformData, DoNotRetain);
+    }
+
+    return nullptr;
+}
+
 #if !OS(WIN) && !OS(ANDROID)
 PassRefPtr<SimpleFontData> FontCache::fallbackFontForCharacter(const FontDescription& fontDescription, UChar32 c, const SimpleFontData*)
 {
-    icu::Locale locale = icu::Locale::getDefault();
+    // First try the specified font with standard style & weight.
+    if (fontDescription.style() == FontStyleItalic
+        || fontDescription.weight() >= FontWeight600) {
+        RefPtr<SimpleFontData> fontData = fallbackOnStandardFontStyle(
+            fontDescription, c);
+        if (fontData)
+            return fontData;
+    }
+
     FontCache::PlatformFallbackFont fallbackFont;
-    FontCache::getFontForCharacter(c, locale.getLanguage(), &fallbackFont);
+    FontCache::getFontForCharacter(c, "", &fallbackFont);
     if (fallbackFont.name.isEmpty())
         return nullptr;
 
@@ -121,6 +148,17 @@ PassRefPtr<SimpleFontData> FontCache::getLastResortFallbackFont(const FontDescri
         DEFINE_STATIC_LOCAL(const FontFaceCreationParams, arialCreationParams, (AtomicString("Arial", AtomicString::ConstructFromLiteral)));
         fontPlatformData = getFontPlatformData(description, arialCreationParams);
     }
+#if OS(WIN)
+    // Try some more Windows-specific fallbacks.
+    if (!fontPlatformData) {
+        DEFINE_STATIC_LOCAL(const FontFaceCreationParams, msuigothicCreationParams, (AtomicString("MS UI Gothic", AtomicString::ConstructFromLiteral)));
+        fontPlatformData = getFontPlatformData(description, msuigothicCreationParams);
+    }
+    if (!fontPlatformData) {
+        DEFINE_STATIC_LOCAL(const FontFaceCreationParams, mssansserifCreationParams, (AtomicString("Microsoft Sans Serif", AtomicString::ConstructFromLiteral)));
+        fontPlatformData = getFontPlatformData(description, mssansserifCreationParams);
+    }
+#endif
 
     ASSERT(fontPlatformData);
     return fontDataFromFontPlatformData(fontPlatformData, shouldRetain);
@@ -154,7 +192,7 @@ PassRefPtr<SkTypeface> FontCache::createTypeface(const FontDescription& fontDesc
     }
 
     int style = SkTypeface::kNormal;
-    if (fontDescription.weight() >= FontWeightBold)
+    if (fontDescription.weight() >= FontWeight600)
         style |= SkTypeface::kBold;
     if (fontDescription.style())
         style |= SkTypeface::kItalic;
@@ -185,7 +223,7 @@ FontPlatformData* FontCache::createFontPlatformData(const FontDescription& fontD
     FontPlatformData* result = new FontPlatformData(tf,
         name.data(),
         fontSize,
-        (fontDescription.weight() >= FontWeightBold && !tf->isBold()) || fontDescription.isSyntheticBold(),
+        (fontDescription.weight() >= FontWeight600 && !tf->isBold()) || fontDescription.isSyntheticBold(),
         (fontDescription.style() && !tf->isItalic()) || fontDescription.isSyntheticItalic(),
         fontDescription.orientation(),
         fontDescription.useSubpixelPositioning());
@@ -193,4 +231,4 @@ FontPlatformData* FontCache::createFontPlatformData(const FontDescription& fontD
 }
 #endif // !OS(WIN)
 
-} // namespace WebCore
+} // namespace blink

@@ -31,21 +31,19 @@
 #include "config.h"
 #include "core/clipboard/DataTransferItem.h"
 
-#include "bindings/v8/V8Binding.h"
+#include "bindings/core/v8/V8Binding.h"
 #include "core/clipboard/DataObjectItem.h"
 #include "core/clipboard/DataTransfer.h"
 #include "core/dom/StringCallback.h"
 #include "wtf/StdLibExtras.h"
 
-namespace WebCore {
+namespace blink {
+
+DEFINE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(DataTransferItem);
 
 PassRefPtrWillBeRawPtr<DataTransferItem> DataTransferItem::create(PassRefPtrWillBeRawPtr<DataTransfer> dataTransfer, PassRefPtrWillBeRawPtr<DataObjectItem> item)
 {
     return adoptRefWillBeNoop(new DataTransferItem(dataTransfer, item));
-}
-
-DataTransferItem::~DataTransferItem()
-{
 }
 
 String DataTransferItem::kind() const
@@ -78,7 +76,7 @@ void DataTransferItem::getAsString(ExecutionContext* context, PassOwnPtr<StringC
     if (!callback || m_item->kind() != DataObjectItem::StringKind)
         return;
 
-    StringCallback::scheduleCallback(callback, context, m_item->getAsString());
+    StringCallback::scheduleCallback(callback, context, m_item->getAsString(), "DataTransferItem.getAsString");
 }
 
 PassRefPtrWillBeRawPtr<Blob> DataTransferItem::getAsFile() const
@@ -102,5 +100,5 @@ void DataTransferItem::trace(Visitor* visitor)
     visitor->trace(m_item);
 }
 
-} // namespace WebCore
+} // namespace blink
 

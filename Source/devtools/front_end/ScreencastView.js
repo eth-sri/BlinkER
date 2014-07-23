@@ -94,13 +94,13 @@ WebInspector.ScreencastView.prototype = {
         WebInspector.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.ScreencastFrame, this._screencastFrame, this);
         WebInspector.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.ScreencastVisibilityChanged, this._screencastVisibilityChanged, this);
 
-        WebInspector.timelineManager.addEventListener(WebInspector.TimelineManager.EventTypes.TimelineStarted, this._onTimeline.bind(this, true), this);
-        WebInspector.timelineManager.addEventListener(WebInspector.TimelineManager.EventTypes.TimelineStopped, this._onTimeline.bind(this, false), this);
-        this._timelineActive = WebInspector.timelineManager.isStarted();
+        WebInspector.targetManager.addModelListener(WebInspector.TimelineManager, WebInspector.TimelineManager.EventTypes.TimelineStarted, this._onTimeline.bind(this), this);
+        WebInspector.targetManager.addModelListener(WebInspector.TimelineManager, WebInspector.TimelineManager.EventTypes.TimelineStopped, this._onTimeline.bind(this), this);
+        this._timelineActive = this._isTimelineActive();
 
-        WebInspector.cpuProfilerModel.addEventListener(WebInspector.CPUProfilerModel.EventTypes.ProfileStarted, this._onProfiler.bind(this, true), this);
-        WebInspector.cpuProfilerModel.addEventListener(WebInspector.CPUProfilerModel.EventTypes.ProfileStopped, this._onProfiler.bind(this, false), this);
-        this._profilerActive = WebInspector.cpuProfilerModel.isRecordingProfile();
+        WebInspector.targetManager.addModelListener(WebInspector.CPUProfilerModel, WebInspector.CPUProfilerModel.EventTypes.ProfileStarted, this._onProfiler.bind(this), this);
+        WebInspector.targetManager.addModelListener(WebInspector.CPUProfilerModel, WebInspector.CPUProfilerModel.EventTypes.ProfileStopped, this._onProfiler.bind(this), this);
+        this._profilerActive = this._isProfilerActive();
 
         this._updateGlasspane();
     },
@@ -123,14 +123,14 @@ WebInspector.ScreencastView.prototype = {
             return;
         this._isCasting = true;
 
-        const maxImageDimension = 1024;
+        const maxImageDimension = 2048;
         var dimensions = this._viewportDimensions();
         if (dimensions.width < 0 || dimensions.height < 0) {
             this._isCasting = false;
             return;
         }
-        dimensions.width *= WebInspector.zoomManager.zoomFactor();
-        dimensions.height *= WebInspector.zoomManager.zoomFactor();
+        dimensions.width *= window.devicePixelRatio;
+        dimensions.height *= window.devicePixelRatio;
         this._target.pageAgent().startScreencast("jpeg", 80, Math.min(maxImageDimension, dimensions.width), Math.min(maxImageDimension, dimensions.height));
         this._target.domModel.setHighlighter(this);
     },
@@ -150,28 +150,27 @@ WebInspector.ScreencastView.prototype = {
     _screencastFrame: function(event)
     {
         var metadata = /** type {PageAgent.ScreencastFrameMetadata} */(event.data.metadata);
-
-        if (!metadata.deviceScaleFactor) {
-          console.log(event.data.data);
-          return;
-        }
-
         var base64Data = /** type {string} */(event.data.data);
         this._imageElement.src = "data:image/jpg;base64," + base64Data;
-        this._deviceScaleFactor = metadata.deviceScaleFactor;
         this._pageScaleFactor = metadata.pageScaleFactor;
-        this._viewport = metadata.viewport;
-        if (!this._viewport)
-            return;
-        var offsetTop = metadata.offsetTop || 0;
-        var offsetBottom = metadata.offsetBottom || 0;
+        this._screenOffsetTop = metadata.offsetTop;
+        this._deviceWidth = metadata.deviceWidth;
+        this._deviceHeight = metadata.deviceHeight;
+        this._scrollOffsetX = metadata.scrollOffsetX;
+        this._scrollOffsetY = metadata.scrollOffsetY;
 
-        var screenWidthDIP = this._viewport.width * this._pageScaleFactor;
-        var screenHeightDIP = this._viewport.height * this._pageScaleFactor + offsetTop + offsetBottom;
-        this._screenOffsetTop = offsetTop;
-        this._resizeViewport(screenWidthDIP, screenHeightDIP);
+        var deviceSizeRatio = metadata.deviceHeight / metadata.deviceWidth;
+        var dimensionsCSS = this._viewportDimensions();
 
-        this._imageZoom = this._imageElement.naturalWidth ? this._canvasElement.offsetWidth / this._imageElement.naturalWidth : 1;
+        this._imageZoom = Math.min(dimensionsCSS.width / this._imageElement.naturalWidth, dimensionsCSS.height / (this._imageElement.naturalWidth * deviceSizeRatio));
+        this._viewportElement.classList.remove("hidden");
+        var bordersSize = WebInspector.ScreencastView._bordersSize;
+        if (this._imageZoom < 1.01 / window.devicePixelRatio)
+            this._imageZoom = 1 / window.devicePixelRatio;
+        this._screenZoom = this._imageElement.naturalWidth * this._imageZoom / metadata.deviceWidth;
+        this._viewportElement.style.width = metadata.deviceWidth * this._screenZoom + bordersSize + "px";
+        this._viewportElement.style.height = metadata.deviceHeight * this._screenZoom + bordersSize + "px";
+
         this.highlightDOMNode(this._highlightNode, this._highlightConfig);
     },
 
@@ -189,13 +188,9 @@ WebInspector.ScreencastView.prototype = {
         this._updateGlasspane();
     },
 
-    /**
-     * @param {boolean} on
-     * @private
-     */
-    _onTimeline: function(on)
+    _onTimeline: function()
     {
-        this._timelineActive = on;
+        this._timelineActive = this._isTimelineActive();
         if (this._timelineActive)
             this._stopCasting();
         else
@@ -204,12 +199,11 @@ WebInspector.ScreencastView.prototype = {
     },
 
     /**
-     * @param {boolean} on
      * @param {!WebInspector.Event} event
-     * @private
      */
-    _onProfiler: function(on, event) {
-        this._profilerActive = on;
+    _onProfiler: function(event)
+    {
+        this._profilerActive = this._isProfilerActive();
         if (this._profilerActive)
             this._stopCasting();
         else
@@ -234,22 +228,7 @@ WebInspector.ScreencastView.prototype = {
     },
 
     /**
-     * @param {number} screenWidthDIP
-     * @param {number} screenHeightDIP
-     */
-    _resizeViewport: function(screenWidthDIP, screenHeightDIP)
-    {
-        var dimensions = this._viewportDimensions();
-        this._screenZoom = Math.min(dimensions.width / screenWidthDIP, dimensions.height / screenHeightDIP);
-
-        var bordersSize = WebInspector.ScreencastView._bordersSize;
-        this._viewportElement.classList.remove("hidden");
-        this._viewportElement.style.width = screenWidthDIP * this._screenZoom + bordersSize + "px";
-        this._viewportElement.style.height = screenHeightDIP * this._screenZoom + bordersSize + "px";
-    },
-
-    /**
-     * @param {?Event} event
+     * @param {!Event} event
      */
     _handleMouseEvent: function(event)
     {
@@ -258,7 +237,7 @@ WebInspector.ScreencastView.prototype = {
           return;
         }
 
-        if (!this._viewport)
+        if (!this._pageScaleFactor)
             return;
 
         if (!this._inspectModeConfig || event.type === "mousewheel") {
@@ -270,7 +249,7 @@ WebInspector.ScreencastView.prototype = {
         }
 
         var position = this._convertIntoScreenSpace(event);
-        this._target.domModel.nodeForLocation(position.x / this._pageScaleFactor, position.y / this._pageScaleFactor, callback.bind(this));
+        this._target.domModel.nodeForLocation(position.x / this._pageScaleFactor + this._scrollOffsetX, position.y / this._pageScaleFactor + this._scrollOffsetY, callback.bind(this));
 
         /**
          * @param {?WebInspector.DOMNode} node
@@ -283,12 +262,12 @@ WebInspector.ScreencastView.prototype = {
             if (event.type === "mousemove")
                 this.highlightDOMNode(node, this._inspectModeConfig);
             else if (event.type === "click")
-                node.reveal();
+                WebInspector.Revealer.reveal(node);
         }
     },
 
     /**
-     * @param {?Event} event
+     * @param {!Event} event
      */
     _handleKeyEvent: function(event)
     {
@@ -320,7 +299,7 @@ WebInspector.ScreencastView.prototype = {
     },
 
     /**
-     * @param {?Event} event
+     * @param {!Event} event
      */
     _handleContextMenuEvent: function(event)
     {
@@ -328,7 +307,7 @@ WebInspector.ScreencastView.prototype = {
     },
 
     /**
-     * @param {?Event} event
+     * @param {!Event} event
      */
     _simulateTouchGestureForMouseEvent: function(event)
     {
@@ -489,20 +468,19 @@ WebInspector.ScreencastView.prototype = {
     },
 
     /**
-     * @param {?Event} event
+     * @param {!Event} event
      * @return {!{x: number, y: number}}
      */
     _zoomIntoScreenSpace: function(event)
     {
-        var zoom = this._canvasElement.offsetWidth / this._viewport.width / this._pageScaleFactor;
         var position  = {};
-        position.x = Math.round(event.offsetX / zoom);
-        position.y = Math.round(event.offsetY / zoom);
+        position.x = Math.round(event.offsetX / this._screenZoom);
+        position.y = Math.round(event.offsetY / this._screenZoom);
         return position;
     },
 
     /**
-     * @param {?Event} event
+     * @param {!Event} event
      * @return {!{x: number, y: number}}
      */
     _convertIntoScreenSpace: function(event)
@@ -513,7 +491,7 @@ WebInspector.ScreencastView.prototype = {
     },
 
     /**
-     * @param {?Event} event
+     * @param {!Event} event
      * @return {number}
      */
     _modifiersForEvent: function(event)
@@ -568,7 +546,7 @@ WebInspector.ScreencastView.prototype = {
          */
         function callback(model)
         {
-            if (!model) {
+            if (!model || !this._pageScaleFactor) {
                 this._repaint();
                 return;
             }
@@ -584,8 +562,6 @@ WebInspector.ScreencastView.prototype = {
      */
     _scaleModel: function(model)
     {
-        var scale = this._canvasElement.offsetWidth / this._viewport.width;
-
         /**
          * @param {!DOMAgent.Quad} quad
          * @this {WebInspector.ScreencastView}
@@ -593,8 +569,8 @@ WebInspector.ScreencastView.prototype = {
         function scaleQuad(quad)
         {
             for (var i = 0; i < quad.length; i += 2) {
-                quad[i] = (quad[i] - this._viewport.x) * scale;
-                quad[i + 1] = (quad[i + 1] - this._viewport.y) * scale + this._screenOffsetTop * this._screenZoom;
+                quad[i] = (quad[i] - this._scrollOffsetX) * this._pageScaleFactor * this._screenZoom;
+                quad[i + 1] = ((quad[i + 1] - this._scrollOffsetY) * this._pageScaleFactor + this._screenOffsetTop) * this._screenZoom;
             }
         }
 
@@ -610,8 +586,10 @@ WebInspector.ScreencastView.prototype = {
         var model = this._model;
         var config = this._config;
 
-        this._canvasElement.width = window.devicePixelRatio * this._canvasElement.offsetWidth;
-        this._canvasElement.height = window.devicePixelRatio * this._canvasElement.offsetHeight;
+        var canvasWidth = this._canvasElement.getBoundingClientRect().width;
+        var canvasHeight = this._canvasElement.getBoundingClientRect().height;
+        this._canvasElement.width = window.devicePixelRatio * canvasWidth;
+        this._canvasElement.height = window.devicePixelRatio * canvasHeight;
 
         this._context.save();
         this._context.scale(window.devicePixelRatio, window.devicePixelRatio);
@@ -619,8 +597,8 @@ WebInspector.ScreencastView.prototype = {
         // Paint top and bottom gutter.
         this._context.save();
         this._context.fillStyle = this._checkerboardPattern;
-        this._context.fillRect(0, 0, this._canvasElement.offsetWidth, this._screenOffsetTop * this._screenZoom);
-        this._context.fillRect(0, this._screenOffsetTop * this._screenZoom + this._imageElement.naturalHeight * this._imageZoom, this._canvasElement.offsetWidth, this._canvasElement.offsetHeight);
+        this._context.fillRect(0, 0, canvasWidth, this._screenOffsetTop * this._screenZoom);
+        this._context.fillRect(0, this._screenOffsetTop * this._screenZoom + this._imageElement.naturalHeight * this._imageZoom, canvasWidth, canvasHeight);
         this._context.restore();
 
         if (model && config) {
@@ -654,8 +632,8 @@ WebInspector.ScreencastView.prototype = {
         }
 
         this._context.drawImage(this._imageElement, 0, this._screenOffsetTop * this._screenZoom, this._imageElement.naturalWidth * this._imageZoom, this._imageElement.naturalHeight * this._imageZoom);
-
         this._context.restore();
+
     },
 
 
@@ -735,8 +713,8 @@ WebInspector.ScreencastView.prototype = {
         if (!this._node)
             return;
 
-        var canvasWidth = this._canvasElement.offsetWidth;
-        var canvasHeight = this._canvasElement.offsetHeight;
+        var canvasWidth = this._canvasElement.getBoundingClientRect().width;
+        var canvasHeight = this._canvasElement.getBoundingClientRect().height;
 
         var lowerCaseName = this._node.localName() || this._node.nodeName().toLowerCase();
         this._tagNameElement.textContent = lowerCaseName;
@@ -817,8 +795,9 @@ WebInspector.ScreencastView.prototype = {
     {
         const gutterSize = 30;
         const bordersSize = WebInspector.ScreencastView._bordersSize;
-        return { width: this.element.offsetWidth - bordersSize - gutterSize,
-                 height: this.element.offsetHeight - bordersSize - gutterSize - WebInspector.ScreencastView._navBarHeight};
+        var width = this.element.offsetWidth - bordersSize - gutterSize;
+        var height = this.element.offsetHeight - bordersSize - gutterSize - WebInspector.ScreencastView._navBarHeight;
+        return { width: width, height: height };
     },
 
     /**
@@ -856,7 +835,7 @@ WebInspector.ScreencastView.prototype = {
 
     _createNavigationBar: function()
     {
-        this._navigationBar = this.element.createChild("div", "toolbar-background screencast-navigation");
+        this._navigationBar = this.element.createChild("div", "toolbar-background toolbar-colors screencast-navigation");
         if (WebInspector.queryParam("hideNavigation"))
             this._navigationBar.classList.add("hidden");
 
@@ -939,6 +918,16 @@ WebInspector.ScreencastView.prototype = {
         return true;
     },
 
+    _isTimelineActive: function()
+    {
+        return WebInspector.targetManager.targets().some(function(target){ return target.timelineManager.isStarted();});
+    },
+
+    _isProfilerActive: function()
+    {
+        return WebInspector.targetManager.targets().some(function(target){ return target.cpuProfilerModel.isRecordingProfile();});
+    },
+
   __proto__: WebInspector.VBox.prototype
 }
 
@@ -946,15 +935,15 @@ WebInspector.ScreencastView.prototype = {
  * @param {!Element} element
  * @constructor
  */
-WebInspector.ScreencastView.ProgressTracker = function(element) {
+WebInspector.ScreencastView.ProgressTracker = function(element)
+{
     this._element = element;
 
-    WebInspector.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, this._onMainFrameNavigated, this);
-    WebInspector.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.Load, this._onLoad, this);
-
-    WebInspector.networkManager.addEventListener(WebInspector.NetworkManager.EventTypes.RequestStarted, this._onRequestStarted, this);
-    WebInspector.networkManager.addEventListener(WebInspector.NetworkManager.EventTypes.RequestFinished, this._onRequestFinished, this);
-};
+    WebInspector.targetManager.addModelListener(WebInspector.ResourceTreeModel, WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, this._onMainFrameNavigated, this);
+    WebInspector.targetManager.addModelListener(WebInspector.ResourceTreeModel, WebInspector.ResourceTreeModel.EventTypes.Load, this._onLoad, this);
+    WebInspector.targetManager.addModelListener(WebInspector.NetworkManager, WebInspector.NetworkManager.EventTypes.RequestStarted, this._onRequestStarted, this);
+    WebInspector.targetManager.addModelListener(WebInspector.NetworkManager, WebInspector.NetworkManager.EventTypes.RequestFinished, this._onRequestFinished, this);
+}
 
 WebInspector.ScreencastView.ProgressTracker.prototype = {
     _onMainFrameNavigated: function()

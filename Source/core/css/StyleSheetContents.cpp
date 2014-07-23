@@ -36,7 +36,7 @@
 #include "platform/weborigin/SecurityOrigin.h"
 #include "wtf/Deque.h"
 
-namespace WebCore {
+namespace blink {
 
 // Rough size estimate for the memory cache.
 unsigned StyleSheetContents::estimatedSizeInBytes() const
@@ -685,12 +685,14 @@ void StyleSheetContents::findFontFaceRules(WillBeHeapVector<RawPtrWillBeMember<c
 
 void StyleSheetContents::trace(Visitor* visitor)
 {
+#if ENABLE(OILPAN)
     visitor->trace(m_ownerRule);
     visitor->trace(m_importRules);
     visitor->trace(m_childRules);
     visitor->trace(m_loadingClients);
     visitor->trace(m_completedClients);
     visitor->trace(m_ruleSet);
+#endif
 }
 
 }

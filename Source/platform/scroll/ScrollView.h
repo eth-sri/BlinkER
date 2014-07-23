@@ -37,7 +37,7 @@
 #include "wtf/HashSet.h"
 #include "wtf/TemporaryChange.h"
 
-namespace WebCore {
+namespace blink {
 
 class HostWindow;
 class Scrollbar;
@@ -287,7 +287,7 @@ protected:
         FirstPass,
         Incremental
     };
-    void computeScrollbarExistence(bool& newHasHorizontalScrollbar, bool& newHasVerticalScrollbar, ComputeScrollbarExistenceOption = FirstPass) const;
+    void computeScrollbarExistence(bool& newHasHorizontalScrollbar, bool& newHasVerticalScrollbar, const IntSize& docSize, ComputeScrollbarExistenceOption = FirstPass) const;
     void updateScrollbarGeometry();
 
     // Called to update the scrollbars to accurately reflect the state of the view.
@@ -306,6 +306,7 @@ protected:
 
 private:
     bool adjustScrollbarExistence(ComputeScrollbarExistenceOption = FirstPass);
+    void adjustScrollbarOpacity();
 
     RefPtr<Scrollbar> m_horizontalScrollbar;
     RefPtr<Scrollbar> m_verticalScrollbar;
@@ -344,6 +345,6 @@ private:
 
 DEFINE_TYPE_CASTS(ScrollView, Widget, widget, widget->isScrollView(), widget.isScrollView());
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // ScrollView_h

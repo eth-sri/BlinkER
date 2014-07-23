@@ -49,7 +49,7 @@ WebInspector.installDragHandle = function(element, elementDragStart, elementDrag
  * @param {function(!MouseEvent)} elementDrag
  * @param {?function(!MouseEvent)} elementDragEnd
  * @param {string} cursor
- * @param {?Event} event
+ * @param {!Event} event
  */
 WebInspector.elementDragStart = function(elementDragStart, elementDrag, elementDragEnd, cursor, event)
 {
@@ -157,13 +157,13 @@ WebInspector.GlassPane.prototype = {
     {
         delete WebInspector._glassPane;
         if (WebInspector.GlassPane.DefaultFocusedViewStack.length)
-            WebInspector.GlassPane.DefaultFocusedViewStack[0].focus();
+            WebInspector.GlassPane.DefaultFocusedViewStack.peekLast().focus();
         this.element.remove();
     }
 }
 
 /**
- * @type {!Array.<!WebInspector.View>}
+ * @type {!Array.<!WebInspector.View|!WebInspector.Dialog>}
  */
 WebInspector.GlassPane.DefaultFocusedViewStack = [];
 
@@ -313,7 +313,7 @@ WebInspector._modifiedFloatNumber = function(number, event)
 }
 
 /**
-  * @param {?Event} event
+  * @param {!Event} event
   * @param {!Element} element
   * @param {function(string,string)=} finishHandler
   * @param {function(string)=} suggestionHandler
@@ -639,17 +639,17 @@ WebInspector.setToolbarColors = function(backgroundColor, color)
     var prefix = WebInspector.isMac() ? "body:not(.undocked)" : "";
     WebInspector._themeStyleElement.textContent =
         String.sprintf(
-            "%s .toolbar-background {\
+            "%s .toolbar-colors {\
                  background-image: none !important;\
                  background-color: %s !important;\
                  color: %s !important;\
              }", prefix, backgroundColor, color) +
         String.sprintf(
-             "%s .toolbar-background button.status-bar-item .glyph, %s .toolbar-background button.status-bar-item .long-click-glyph {\
+             "%s .toolbar-colors button.status-bar-item .glyph, %s .toolbar-colors button.status-bar-item .long-click-glyph {\
                  background-color: %s;\
              }", prefix, prefix, color) +
         String.sprintf(
-             "%s .toolbar-background button.status-bar-item .glyph.shadow, %s .toolbar-background button.status-bar-item .long-click-glyph.shadow {\
+             "%s .toolbar-colors button.status-bar-item .glyph.shadow, %s .toolbar-colors button.status-bar-item .long-click-glyph.shadow {\
                  background-color: %s;\
              }", prefix, prefix, shadowColor);
 }

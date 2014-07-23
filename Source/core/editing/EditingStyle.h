@@ -35,6 +35,7 @@
 #include "core/CSSPropertyNames.h"
 #include "core/CSSValueKeywords.h"
 #include "core/editing/WritingDirection.h"
+#include "platform/fonts/FixedPitchFontType.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
 #include "wtf/RefCounted.h"
@@ -43,7 +44,7 @@
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 class CSSStyleDeclaration;
 class CSSComputedStyleDeclaration;
@@ -132,6 +133,7 @@ public:
     void mergeStyleFromRulesForSerialization(Element*);
     void removeStyleFromRulesAndContext(Element*, Node* context);
     void removePropertiesInElementDefaultStyle(Element*);
+    void addAbsolutePositioningFromElement(const Element&);
     void forceInline();
     int legacyFontSize(Document*) const;
 
@@ -160,7 +162,7 @@ private:
     void mergeStyle(const StylePropertySet*, CSSPropertyOverrideMode);
 
     RefPtrWillBeMember<MutableStylePropertySet> m_mutableStyle;
-    bool m_shouldUseFixedDefaultFontSize;
+    FixedPitchFontType m_fixedPitchFontType;
     float m_fontSizeDelta;
 
     friend class HTMLElementEquivalent;
@@ -213,7 +215,7 @@ public:
         return !(*this == other);
     }
 private:
-    void extractTextStyles(Document*, MutableStylePropertySet*, bool shouldUseFixedFontDefaultSize);
+    void extractTextStyles(Document*, MutableStylePropertySet*, FixedPitchFontType);
 
     String m_cssStyle;
     bool m_applyBold;
@@ -231,6 +233,6 @@ private:
 CSSValueID getIdentifierValue(CSSStyleDeclaration*, CSSPropertyID);
 CSSValueID getIdentifierValue(StylePropertySet*, CSSPropertyID);
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // EditingStyle_h

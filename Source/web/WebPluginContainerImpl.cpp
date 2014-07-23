@@ -31,20 +31,7 @@
 #include "config.h"
 #include "web/WebPluginContainerImpl.h"
 
-#include "core/page/Chrome.h"
-#include "core/page/EventHandler.h"
-#include "platform/exported/WrappedResourceResponse.h"
-#include "public/web/WebElement.h"
-#include "public/web/WebInputEvent.h"
-#include "public/web/WebPlugin.h"
-#include "public/web/WebViewClient.h"
-#include "web/ChromeClientImpl.h"
-#include "web/ScrollbarGroup.h"
-#include "web/WebDataSourceImpl.h"
-#include "web/WebInputEventConversion.h"
-#include "web/WebViewImpl.h"
-
-#include "bindings/v8/ScriptController.h"
+#include "bindings/core/v8/ScriptController.h"
 #include "core/HTMLNames.h"
 #include "core/clipboard/DataObject.h"
 #include "core/clipboard/DataTransfer.h"
@@ -59,6 +46,8 @@
 #include "core/html/HTMLPlugInElement.h"
 #include "core/loader/FormState.h"
 #include "core/loader/FrameLoadRequest.h"
+#include "core/page/Chrome.h"
+#include "core/page/EventHandler.h"
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
@@ -66,10 +55,12 @@
 #include "core/rendering/HitTestResult.h"
 #include "core/rendering/RenderBox.h"
 #include "core/rendering/RenderLayer.h"
+#include "core/rendering/RenderPart.h"
 #include "platform/HostWindow.h"
 #include "platform/KeyboardCodes.h"
 #include "platform/PlatformGestureEvent.h"
 #include "platform/UserGestureIndicator.h"
+#include "platform/exported/WrappedResourceResponse.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/scroll/ScrollAnimator.h"
@@ -87,9 +78,19 @@
 #include "public/platform/WebURLError.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/WebVector.h"
+#include "public/web/WebElement.h"
+#include "public/web/WebInputEvent.h"
+#include "public/web/WebPlugin.h"
 #include "public/web/WebPrintParams.h"
+#include "public/web/WebViewClient.h"
+#include "web/ChromeClientImpl.h"
+#include "web/ScrollbarGroup.h"
+#include "web/WebDataSourceImpl.h"
+#include "web/WebInputEventConversion.h"
+#include "web/WebViewImpl.h"
 
-using namespace WebCore;
+
+using namespace blink;
 
 namespace blink {
 
@@ -333,7 +334,7 @@ int WebPluginContainerImpl::printBegin(const WebPrintParams& printParams) const
 }
 
 bool WebPluginContainerImpl::printPage(int pageNumber,
-                                       WebCore::GraphicsContext* gc)
+                                       blink::GraphicsContext* gc)
 {
     if (gc->paintingDisabled())
         return true;
@@ -655,8 +656,8 @@ bool WebPluginContainerImpl::paintCustomOverhangArea(GraphicsContext* context, c
 
 // Private methods -------------------------------------------------------------
 
-WebPluginContainerImpl::WebPluginContainerImpl(WebCore::HTMLPlugInElement* element, WebPlugin* webPlugin)
-    : WebCore::FrameDestructionObserver(element->document().frame())
+WebPluginContainerImpl::WebPluginContainerImpl(blink::HTMLPlugInElement* element, WebPlugin* webPlugin)
+    : blink::FrameDestructionObserver(element->document().frame())
     , m_element(element)
     , m_webPlugin(webPlugin)
     , m_webLayer(0)
@@ -682,6 +683,8 @@ WebPluginContainerImpl::~WebPluginContainerImpl()
     if (m_touchEventRequestType != TouchEventRequestTypeNone)
         m_element->document().didRemoveTouchEventHandler(m_element);
 #endif
+
+    ScriptForbiddenScope::AllowSuperUnsafeScript thisShouldBeRemoved;
 
     for (size_t i = 0; i < m_pluginLoadObservers.size(); ++i)
         m_pluginLoadObservers[i]->clearPluginContainer();
@@ -920,7 +923,7 @@ void WebPluginContainerImpl::calculateGeometry(const IntRect& frameRect,
         cutOutRects[i].move(-frameRect.x(), -frameRect.y());
 }
 
-WebCore::IntRect WebPluginContainerImpl::windowClipRect() const
+blink::IntRect WebPluginContainerImpl::windowClipRect() const
 {
     // Start by clipping to our bounds.
     IntRect clipRect =

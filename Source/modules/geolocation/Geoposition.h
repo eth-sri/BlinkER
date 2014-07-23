@@ -26,12 +26,12 @@
 #ifndef Geoposition_h
 #define Geoposition_h
 
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "modules/EventModules.h"
 #include "modules/geolocation/Coordinates.h"
 #include "platform/heap/Handle.h"
 
-namespace WebCore {
+namespace blink {
 
 class Geoposition : public GarbageCollectedFinalized<Geoposition>, public ScriptWrappable {
 public:
@@ -61,6 +61,6 @@ private:
     DOMTimeStamp m_timestamp;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // Geoposition_h

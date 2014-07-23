@@ -52,6 +52,7 @@
 #include "public/platform/WebExternalTextureMailbox.h"
 #include "public/platform/WebGraphicsContext3D.h"
 #include "public/platform/WebGraphicsContext3DProvider.h"
+#include "third_party/skia/include/core/SkPicture.h"
 #include "third_party/skia/include/effects/SkTableColorFilter.h"
 #include "wtf/MathExtras.h"
 #include "wtf/text/Base64.h"
@@ -59,7 +60,7 @@
 
 using namespace std;
 
-namespace WebCore {
+namespace blink {
 
 PassOwnPtr<ImageBuffer> ImageBuffer::create(PassOwnPtr<ImageBufferSurface> surface)
 {
@@ -80,12 +81,12 @@ ImageBuffer::ImageBuffer(PassOwnPtr<ImageBufferSurface> surface)
     : m_surface(surface)
     , m_client(0)
 {
-    m_surface->setImageBuffer(this);
     if (m_surface->canvas()) {
         m_context = adoptPtr(new GraphicsContext(m_surface->canvas()));
         m_context->setCertainlyOpaque(m_surface->opacityMode() == Opaque);
         m_context->setAccelerated(m_surface->isAccelerated());
     }
+    m_surface->setImageBuffer(this);
 }
 
 ImageBuffer::~ImageBuffer()
@@ -121,6 +122,12 @@ void ImageBuffer::notifySurfaceInvalid()
 {
     if (m_client)
         m_client->notifySurfaceInvalid();
+}
+
+void ImageBuffer::didPresent()
+{
+    if (m_client)
+        m_client->didPresent();
 }
 
 static SkBitmap deepSkBitmapCopy(const SkBitmap& bitmap)
@@ -236,6 +243,12 @@ void ImageBuffer::draw(GraphicsContext* context, const FloatRect& destRect, cons
         return;
 
     FloatRect srcRect = srcPtr ? *srcPtr : FloatRect(FloatPoint(), size());
+    RefPtr<SkPicture> picture = m_surface->getPicture();
+    if (picture) {
+        context->drawPicture(picture.release(), destRect, srcRect, op, blink::WebBlendModeNormal);
+        return;
+    }
+
     SkBitmap bitmap = m_surface->bitmap();
     // For ImageBufferSurface that enables cachedBitmap, Use the cached Bitmap for CPU side usage
     // if it is available, otherwise generate and use it.
@@ -281,7 +294,7 @@ void ImageBuffer::transformColorSpace(ColorSpace srcColorSpace, ColorSpace dstCo
     if (bitmap.isNull())
         return;
 
-    ASSERT(bitmap.colorType() == kPMColor_SkColorType);
+    ASSERT(bitmap.colorType() == kN32_SkColorType);
     IntSize size = m_surface->size();
     SkAutoLockPixels bitmapLock(bitmap);
     for (int y = 0; y < size.height(); ++y) {
@@ -415,4 +428,4 @@ String ImageDataToDataURL(const ImageDataBuffer& imageData, const String& mimeTy
     return "data:" + mimeType + ";base64," + base64Data;
 }
 
-} // namespace WebCore
+} // namespace blink

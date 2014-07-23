@@ -5,6 +5,7 @@
 #ifndef FetchHeaderList_h
 #define FetchHeaderList_h
 
+#include "platform/heap/Handle.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
@@ -12,13 +13,16 @@
 #include "wtf/text/WTFString.h"
 #include <utility>
 
-namespace WebCore {
+namespace blink {
+
+class Header;
 
 // http://fetch.spec.whatwg.org/#terminology-headers
-class FetchHeaderList FINAL : public RefCounted<FetchHeaderList> {
+class FetchHeaderList FINAL : public RefCountedWillBeGarbageCollectedFinalized<FetchHeaderList> {
 public:
     typedef std::pair<String, String> Header;
-    static PassRefPtr<FetchHeaderList> create();
+    static PassRefPtrWillBeRawPtr<FetchHeaderList> create();
+    PassRefPtrWillBeRawPtr<FetchHeaderList> createCopy();
 
     ~FetchHeaderList();
     void append(const String&, const String&);
@@ -41,11 +45,13 @@ public:
     static bool isForbiddenHeaderName(const String&);
     static bool isForbiddenResponseHeaderName(const String&);
 
+    void trace(Visitor*) { }
+
 private:
     FetchHeaderList();
     Vector<OwnPtr<Header> > m_headerList;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // FetchHeaderList_h

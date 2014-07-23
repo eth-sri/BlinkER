@@ -1,0 +1,37 @@
+Unittests for private scripts.
+
+On success, you will see a series of "PASS" messages, followed by "TEST COMPLETE".
+
+
+PASS privateScriptTest.return123() is 123
+PASS privateScriptTest.echoInteger(111) is 111
+PASS privateScriptTest.echoString("foo") is "foo"
+PASS privateScriptTest.addInteger(111, 222) is 333
+PASS privateScriptTest.addString("foo", "bar") is "foobar"
+PASS privateScriptTest.getIntegerFromPrototype() is 0
+PASS privateScriptTest.getIntegerFromPrototype() is 123
+PASS privateScriptTest.getIntegerFromDocument(document) is 0
+PASS privateScriptTest.getIntegerFromDocument(document) is 123
+PASS privateScriptTest.firstChild(node1) is node2
+PASS privateScriptTest.nextSibling(node2) is node3
+PASS privateScriptTest.nextSibling(node3) is node4
+PASS privateScriptTest.nextSibling(node4) is null
+PASS privateScriptTest.innerHTML(node5) is ""
+PASS privateScriptTest.innerHTML(node5) is "<div>foo</div>"
+PASS privateScriptTest.innerHTML(node6) is "foo"
+PASS privateScriptTest.innerHTML(node7) is ""
+PASS privateScriptTest.innerHTML(node7) is "clicked"
+PASS privateScriptTest.readonlyShortAttribute is 123
+PASS privateScriptTest.shortAttribute is -1
+PASS privateScriptTest.shortAttribute is 111
+PASS privateScriptTest.stringAttribute is "xxx"
+PASS privateScriptTest.stringAttribute is "foo"
+PASS privateScriptTest.nodeAttribute is null
+PASS privateScriptTest.nodeAttribute is node8
+PASS privateScriptTest.nodeAttributeThrowsIndexSizeError threw exception IndexSizeError: Failed to read the 'nodeAttributeThrowsIndexSizeError' property from 'PrivateScriptTest': getter threw error.
+PASS privateScriptTest.nodeAttributeThrowsIndexSizeError = null threw exception IndexSizeError: Failed to set the 'nodeAttributeThrowsIndexSizeError' property on 'PrivateScriptTest': setter threw error.
+PASS privateScriptTest.voidMethodThrowsSyntaxError() threw exception SyntaxError: Failed to execute 'voidMethodThrowsSyntaxError' on 'PrivateScriptTest': method threw error.
+PASS successfullyParsed is true
+
+TEST COMPLETE
+

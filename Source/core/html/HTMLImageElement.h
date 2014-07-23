@@ -30,7 +30,7 @@
 #include "platform/graphics/GraphicsTypes.h"
 #include "wtf/WeakPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 class HTMLFormElement;
 class ImageCandidate;
@@ -60,9 +60,7 @@ public:
     ImageResource* cachedImage() const { return imageLoader().image(); }
     void setImageResource(ImageResource* i) { imageLoader().setImage(i); };
 
-    void setLoadManually(bool loadManually) { imageLoader().setLoadManually(loadManually); }
-
-    const AtomicString& alt() const;
+    void setLoadingImageDocument() { imageLoader().setLoadingImageDocument(); }
 
     void setHeight(int);
 
@@ -95,12 +93,8 @@ public:
     virtual FloatSize defaultDestinationSize() const OVERRIDE;
     virtual const KURL& sourceURL() const OVERRIDE;
 
-    enum UpdateFromElementBehavior {
-        UpdateNormal,
-        UpdateIgnorePreviousError
-    };
     // public so that HTMLPictureElement can call this as well.
-    void selectSourceURL(UpdateFromElementBehavior);
+    void selectSourceURL(ImageLoader::UpdateFromElementBehavior);
 protected:
     explicit HTMLImageElement(Document&, HTMLFormElement* = 0, bool createdByParser = false);
 

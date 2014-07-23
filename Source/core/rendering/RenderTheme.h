@@ -35,7 +35,7 @@
 #include "wtf/RefCounted.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 class Element;
 class FileList;
@@ -187,7 +187,9 @@ public:
     // Functions for <select> elements.
     virtual bool delegatesMenuListRendering() const { return false; }
     virtual bool popsMenuByArrowKeys() const { return false; }
-    virtual bool popsMenuBySpaceOrReturn() const { return false; }
+    virtual bool popsMenuBySpaceKey() const { return false; }
+    virtual bool popsMenuByReturnKey() const { return false; }
+    virtual bool popsMenuByAltDownUpOrF4Key() const { return false; }
 
     virtual String fileListNameForWidth(Locale&, const FileList*, const Font&, int width) const;
 
@@ -311,6 +313,6 @@ private:
 #endif
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // RenderTheme_h

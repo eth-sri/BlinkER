@@ -31,9 +31,9 @@
 #ifndef V8BlobCustomHelpers_h
 #define V8BlobCustomHelpers_h
 
-#include "bindings/v8/V8Binding.h"
+#include "bindings/core/v8/V8Binding.h"
 
-namespace WebCore {
+namespace blink {
 
 class BlobData;
 class ExceptionState;
@@ -76,18 +76,18 @@ private:
     bool m_hasFileProperties;
 
     double m_lastModified;
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     bool m_hasLastModified;
-#endif // NDEBUG
+#endif // ENABLE(ASSERT)
 };
 
 // Appends the blobParts passed to a Blob or File constructor into a BlobData.
 // http://www.w3.org/TR/FileAPI/#constructorParams
 // Returns true if everything went well, false if a JS exception was thrown.
-bool processBlobParts(v8::Local<v8::Object> blobParts, uint32_t blobPartsLength, bool normalizeLineEndingsToNative, BlobData&, v8::Isolate*);
+bool processBlobParts(v8::Local<v8::Object> blobParts, bool normalizeLineEndingsToNative, BlobData&, v8::Isolate*);
 
 } // namespace V8BlobCustomHelpers
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // V8BlobCustomHelpers_h

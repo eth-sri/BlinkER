@@ -32,7 +32,6 @@
 #include "core/css/FontFaceSet.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/DocumentMarkerController.h"
-#include "core/dom/ScriptForbiddenScope.h"
 #include "core/editing/FrameSelection.h"
 #include "core/events/OverflowEvent.h"
 #include "core/fetch/ResourceFetcher.h"
@@ -73,6 +72,7 @@
 #include "core/svg/SVGDocumentExtensions.h"
 #include "core/svg/SVGSVGElement.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "platform/ScriptForbiddenScope.h"
 #include "platform/TraceEvent.h"
 #include "platform/fonts/FontCache.h"
 #include "platform/geometry/FloatRect.h"
@@ -84,7 +84,7 @@
 #include "wtf/CurrentTime.h"
 #include "wtf/TemporaryChange.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -612,6 +612,10 @@ void FrameView::recalcOverflowAfterStyleChange()
 
     renderView->recalcOverflowAfterStyleChange();
 
+    IntRect documentRect = renderView->documentRect();
+    if (scrollOrigin() == -documentRect.location() && contentsSize() == documentRect.size())
+        return;
+
     if (needsLayout())
         return;
 
@@ -619,7 +623,7 @@ void FrameView::recalcOverflowAfterStyleChange()
 
     bool shouldHaveHorizontalScrollbar = false;
     bool shouldHaveVerticalScrollbar = false;
-    computeScrollbarExistence(shouldHaveHorizontalScrollbar, shouldHaveVerticalScrollbar);
+    computeScrollbarExistence(shouldHaveHorizontalScrollbar, shouldHaveVerticalScrollbar, documentRect.size());
 
     bool hasHorizontalScrollbar = horizontalScrollbar();
     bool hasVerticalScrollbar = verticalScrollbar();
@@ -689,13 +693,7 @@ bool FrameView::isEnclosedInCompositingLayer() const
     DisableCompositingQueryAsserts disabler;
 
     RenderObject* frameOwnerRenderer = m_frame->ownerRenderer();
-    if (frameOwnerRenderer && frameOwnerRenderer->enclosingLayer()->enclosingCompositingLayerForPaintInvalidation())
-        return true;
-
-    if (FrameView* parentView = parentFrameView())
-        return parentView->isEnclosedInCompositingLayer();
-
-    return false;
+    return frameOwnerRenderer && frameOwnerRenderer->enclosingLayer()->enclosingLayerForPaintInvalidationCrossingFrameBoundaries();
 }
 
 RenderObject* FrameView::layoutRoot(bool onlyDuringLayout) const
@@ -840,6 +838,8 @@ void FrameView::layout(bool allowSubtree)
     ASSERT(m_frame->view() == this);
     ASSERT(m_frame->page());
 
+    ScriptForbiddenScope forbidScript;
+
     if (isInPerformLayout() || !m_frame->document()->isActive())
         return;
 
@@ -958,6 +958,11 @@ void FrameView::layout(bool allowSubtree)
         performLayout(rootForThisLayout, inSubtreeLayout);
 
         m_layoutSubtreeRoot = 0;
+        // We need to ensure that we mark up all renderers up to the RenderView
+        // for paint invalidation. This simplifies our code as we just always
+        // do a full tree walk.
+        if (RenderObject* container = rootForThisLayout->container())
+            container->setMayNeedPaintInvalidation(true);
     } // Reset m_layoutSchedulingEnabled to its previous value.
 
     if (!inSubtreeLayout && !toRenderView(rootForThisLayout)->document().printing())
@@ -990,11 +995,7 @@ void FrameView::layout(bool allowSubtree)
     if (m_nestedLayoutCount)
         return;
 
-    invalidateTree(rootForThisLayout);
-
-    m_doFullPaintInvalidation = false;
-
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     // Post-layout assert that nobody was re-marked as needing layout during layout.
     document->renderView()->assertSubtreeIsLaidOut();
 #endif
@@ -1013,22 +1014,16 @@ void FrameView::layout(bool allowSubtree)
 // method would setNeedsRedraw on the GraphicsLayers with invalidations and
 // let the compositor pick which to actually draw.
 // See http://crbug.com/306706
-void FrameView::invalidateTree(RenderObject* root)
+void FrameView::invalidateTreeIfNeeded()
 {
-    ASSERT(!root->needsLayout());
-    // We should only invalidate paints for the outer most layout. This works as
-    // we continue to track paint invalidation rects until this function is called.
-    ASSERT(!m_nestedLayoutCount);
+    RenderObject* rootForPaintInvalidation = renderView();
+    ASSERT(!rootForPaintInvalidation->needsLayout());
 
-    TRACE_EVENT1("blink", "FrameView::invalidateTree", "root", root->debugName().ascii());
+    TRACE_EVENT1("blink", "FrameView::invalidateTree", "root", rootForPaintInvalidation->debugName().ascii());
 
-    // FIXME: really, we're in the paint invalidation phase here, and the compositing queries are legal.
-    // Until those states are fully fledged, I'll just disable the ASSERTS.
-    DisableCompositingQueryAsserts compositingQueryAssertsDisabler;
+    PaintInvalidationState rootPaintInvalidationState(*rootForPaintInvalidation);
 
-    LayoutState rootLayoutState(*root);
-
-    root->invalidateTreeAfterLayout(*root->containerForPaintInvalidation());
+    rootForPaintInvalidation->invalidateTreeIfNeeded(rootPaintInvalidationState);
 
     // Invalidate the paint of the frameviews scrollbars if needed
     if (hasVerticalBarDamage())
@@ -1036,6 +1031,8 @@ void FrameView::invalidateTree(RenderObject* root)
     if (hasHorizontalBarDamage())
         invalidateRect(horizontalBarDamage());
     resetScrollbarDamage();
+
+    m_doFullPaintInvalidation = false;
 }
 
 DocumentLifecycle& FrameView::lifecycle() const
@@ -1168,7 +1165,7 @@ bool FrameView::useSlowRepaints(bool considerOverlap) const
 
     // The chromium compositor does not support scrolling a non-composited frame within a composited page through
     // the fast scrolling path, so force slow scrolling in that case.
-    if (m_frame->owner() && !hasCompositedContent() && m_frame->page() && m_frame->page()->mainFrame()->isLocalFrame() && m_frame->page()->deprecatedLocalMainFrame()->view()->hasCompositedContent())
+    if (m_frame->owner() && !hasCompositedContent() && m_frame->page() && m_frame->localFrameRoot()->view()->hasCompositedContent())
         return true;
 
     if (m_isOverlapped && considerOverlap)
@@ -1302,25 +1299,6 @@ void FrameView::viewportConstrainedVisibleContentSizeChanged(bool widthChanged, 
                 renderer->setNeedsLayoutAndFullPaintInvalidation();
         }
     }
-}
-
-bool FrameView::shouldPlaceVerticalScrollbarOnLeft() const
-{
-    // FIXME: Mainframe scrollbar placement should respect the embedding application RTL UI policy.
-    // See crbug.com/249860.
-    if (m_frame->isMainFrame())
-        return false;
-
-    Document* document = m_frame->document();
-    if (!document)
-        return false;
-
-    // <body> inherits 'direction' from <html>, so it can safaly be used
-    // to dictate the frame vertical scrollbar placement.
-    if (!document->body() || !document->body()->renderer())
-        return false;
-
-    return document->body()->renderer()->style()->shouldPlaceBlockDirectionScrollbarOnLogicalLeft();
 }
 
 IntSize FrameView::scrollOffsetForFixedPosition() const
@@ -1675,10 +1653,8 @@ void FrameView::updateLayersAndCompositingAfterScrollIfNeeded()
     // layout.
     if (!m_nestedLayoutCount) {
         updateWidgetPositions();
-        if (RenderView* renderView = this->renderView()) {
-            renderView->layer()->updateLayerPositionsAfterDocumentScroll();
+        if (RenderView* renderView = this->renderView())
             renderView->layer()->setNeedsCompositingInputsUpdate();
-        }
     }
 }
 
@@ -1711,6 +1687,23 @@ void FrameView::updateFixedElementPaintInvalidationRectsAfterScroll()
 
         layer->repainter().computeRepaintRectsIncludingNonCompositingDescendants();
     }
+}
+
+void FrameView::updateCompositedSelectionBoundsIfNeeded()
+{
+    if (!RuntimeEnabledFeatures::compositedSelectionUpdatesEnabled())
+        return;
+
+    Page* page = frame().page();
+    ASSERT(page);
+
+    LocalFrame* frame = toLocalFrame(page->focusController().focusedOrMainFrame());
+    if (!frame || !frame->selection().isCaretOrRange()) {
+        page->chrome().client().clearCompositedSelectionBounds();
+        return;
+    }
+
+    // TODO(jdduke): Compute and route selection bounds through ChromeClient.
 }
 
 bool FrameView::isRubberBandInProgress() const
@@ -2747,7 +2740,7 @@ void FrameView::paintContents(GraphicsContext* p, const IntRect& rect)
     RenderObject* renderer = m_nodeToDraw ? m_nodeToDraw->renderer() : 0;
     RenderLayer* rootLayer = renderView->layer();
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     renderView->assertSubtreeIsLaidOut();
     RenderObject::SetLayoutNeededForbiddenScope forbidSetNeedsLayout(*rootLayer->renderer());
 #endif
@@ -2820,17 +2813,24 @@ void FrameView::updateLayoutAndStyleForPainting()
     updateLayoutAndStyleIfNeededRecursive();
 
     if (RenderView* view = renderView()) {
-        InspectorInstrumentation::willUpdateLayerTree(view->frame());
+        TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "UpdateLayerTree", "frame", m_frame.get());
+        // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
+        InspectorInstrumentation::willUpdateLayerTree(m_frame.get());
 
         view->compositor()->updateIfNeededRecursive();
 
-        if (view->compositor()->inCompositingMode() && m_frame->isMainFrame())
+        if (view->compositor()->inCompositingMode() && m_frame->isLocalRoot())
             m_frame->page()->scrollingCoordinator()->updateAfterCompositingChangeIfNeeded();
 
-        InspectorInstrumentation::didUpdateLayerTree(view->frame());
+        updateCompositedSelectionBoundsIfNeeded();
+
+        InspectorInstrumentation::didUpdateLayerTree(m_frame.get());
+
+        invalidateTreeIfNeededRecursive();
     }
 
     scrollContentsIfNeededRecursive();
+    ASSERT(lifecycle().state() == DocumentLifecycle::PaintInvalidationClean);
 }
 
 void FrameView::updateLayoutAndStyleIfNeededRecursive()
@@ -2877,10 +2877,25 @@ void FrameView::updateLayoutAndStyleIfNeededRecursive()
     // These asserts ensure that parent frames are clean, when child frames finished updating layout and style.
     ASSERT(!needsLayout());
     ASSERT(!m_frame->document()->hasSVGFilterElementsRequiringLayerUpdate());
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     m_frame->document()->renderView()->assertRendererLaidOut();
 #endif
 
+}
+
+void FrameView::invalidateTreeIfNeededRecursive()
+{
+    // FIXME: We should be more aggressive at cutting tree traversals.
+    lifecycle().advanceTo(DocumentLifecycle::InPaintInvalidation);
+    invalidateTreeIfNeeded();
+    lifecycle().advanceTo(DocumentLifecycle::PaintInvalidationClean);
+
+    for (Frame* child = m_frame->tree().firstChild(); child; child = child->tree().nextSibling()) {
+        if (!child->isLocalFrame())
+            continue;
+
+        toLocalFrame(child)->view()->invalidateTreeIfNeededRecursive();
+    }
 }
 
 void FrameView::enableAutoSizeMode(bool enable, const IntSize& minSize, const IntSize& maxSize)
@@ -3177,6 +3192,12 @@ void FrameView::removeScrollableArea(ScrollableArea* scrollableArea)
     m_scrollableAreas->remove(scrollableArea);
 }
 
+void FrameView::setParent(Widget* widget)
+{
+    ScrollView::setParent(widget);
+    updateScrollableAreaSet();
+}
+
 void FrameView::removeChild(Widget* widget)
 {
     if (widget->isFrameView())
@@ -3273,4 +3294,4 @@ void FrameView::willRemoveScrollbar(Scrollbar* scrollbar, ScrollbarOrientation o
     }
 }
 
-} // namespace WebCore
+} // namespace blink

@@ -50,7 +50,7 @@
 #include "wtf/StdLibExtras.h"
 #include "wtf/text/StringBuilder.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -65,10 +65,10 @@ bool isLegacyAppleStyleSpan(const Node *node)
     if (!node || !node->isHTMLElement())
         return false;
 
-    const HTMLElement* elem = toHTMLElement(node);
-    if (!elem->hasLocalName(spanAttr) || elem->getAttribute(classAttr) != styleSpanClassString())
+    const HTMLElement& element = toHTMLElement(*node);
+    if (!isHTMLSpanElement(element) || element.getAttribute(classAttr) != styleSpanClassString())
         return false;
-    UseCounter::count(elem->document(), UseCounter::EditingAppleStyleSpanClass);
+    UseCounter::count(element.document(), UseCounter::EditingAppleStyleSpanClass);
     return true;
 }
 
@@ -84,8 +84,8 @@ static bool hasNoAttributeOrOnlyStyleAttribute(const Element* element, ShouldSty
         || !element->inlineStyle() || element->inlineStyle()->isEmpty()))
         matchedAttributes++;
 
-    ASSERT(matchedAttributes <= element->attributeCount());
-    return matchedAttributes == element->attributeCount();
+    ASSERT(matchedAttributes <= element->attributes().size());
+    return matchedAttributes == element->attributes().size();
 }
 
 bool isStyleSpanOrSpanWithOnlyStyleAttribute(const Element* element)
@@ -275,7 +275,7 @@ void ApplyStyleCommand::applyBlockStyle(EditingStyle *style)
                 if (newBlock)
                     block = newBlock;
             }
-            ASSERT(!block || block->isHTMLElement());
+            ASSERT(!block || block->isElementNode());
             if (block && block->isHTMLElement()) {
                 removeCSSStyle(style, toHTMLElement(block));
                 if (!m_removeOnly)
@@ -375,7 +375,7 @@ void ApplyStyleCommand::applyRelativeFontStyleChange(EditingStyle* style)
 
     // Store away font size before making any changes to the document.
     // This ensures that changes to one node won't effect another.
-    HashMap<Node*, float> startingFontSizes;
+    WillBeHeapHashMap<RawPtrWillBeMember<Node>, float> startingFontSizes;
     for (Node* node = startNode; node != beyondEnd; node = NodeTraversal::next(*node)) {
         ASSERT(node);
         startingFontSizes.set(node, computedFontSize(node));
@@ -717,12 +717,12 @@ void ApplyStyleCommand::fixRangeAndApplyInlineStyle(EditingStyle* style, const P
 
 static bool containsNonEditableRegion(Node& node)
 {
-    if (!node.rendererIsEditable())
+    if (!node.hasEditableStyle())
         return true;
 
     Node* sibling = NodeTraversal::nextSkippingChildren(node);
     for (Node* descendent = node.firstChild(); descendent && descendent != sibling; descendent = NodeTraversal::next(*descendent)) {
-        if (!descendent->rendererIsEditable())
+        if (!descendent->hasEditableStyle())
             return true;
     }
 
@@ -762,11 +762,11 @@ public:
     StyleChange change;
 };
 
-} // namespace WebCore
+} // namespace blink
 
-WTF_ALLOW_INIT_WITH_MEM_FUNCTIONS(WebCore::InlineRunToApplyStyle);
+WTF_ALLOW_INIT_WITH_MEM_FUNCTIONS(blink::InlineRunToApplyStyle);
 
-namespace WebCore {
+namespace blink {
 
 void ApplyStyleCommand::applyInlineStyleToNodeRange(EditingStyle* style, PassRefPtrWillBeRawPtr<Node> startNode, PassRefPtrWillBeRawPtr<Node> pastEndNode)
 {
@@ -780,7 +780,7 @@ void ApplyStyleCommand::applyInlineStyleToNodeRange(EditingStyle* style, PassRef
     for (RefPtrWillBeRawPtr<Node> next; node && node != pastEndNode; node = next) {
         next = NodeTraversal::next(*node);
 
-        if (!node->renderer() || !node->rendererIsEditable())
+        if (!node->renderer() || !node->hasEditableStyle())
             continue;
 
         if (!node->rendererIsRichlyEditable() && node->isHTMLElement()) {
@@ -804,7 +804,7 @@ void ApplyStyleCommand::applyInlineStyleToNodeRange(EditingStyle* style, PassRef
             continue;
 
         if (node->hasChildren()) {
-            if (node->contains(pastEndNode.get()) || containsNonEditableRegion(*node) || !node->parentNode()->rendererIsEditable())
+            if (node->contains(pastEndNode.get()) || containsNonEditableRegion(*node) || !node->parentNode()->hasEditableStyle())
                 continue;
             if (editingIgnoresContent(node.get())) {
                 next = NodeTraversal::nextSkippingChildren(*node);
@@ -1155,7 +1155,7 @@ void ApplyStyleCommand::removeInlineStyle(EditingStyle* style, const Position &s
                 if (s.deprecatedNode() == elem) {
                     // Since elem must have been fully selected, and it is at the start
                     // of the selection, it is clear we can set the new s offset to 0.
-                    ASSERT(s.anchorType() == Position::PositionIsBeforeAnchor || s.offsetInContainerNode() <= 0);
+                    ASSERT(s.anchorType() == Position::PositionIsBeforeAnchor || s.anchorType() == Position::PositionIsBeforeChildren || s.offsetInContainerNode() <= 0);
                     s = firstPositionInOrBeforeNode(next.get());
                 }
                 if (e.deprecatedNode() == elem) {
@@ -1369,13 +1369,13 @@ void ApplyStyleCommand::surroundNodeRangeWithElement(PassRefPtrWillBeRawPtr<Node
 
     RefPtrWillBeRawPtr<Node> nextSibling = element->nextSibling();
     RefPtrWillBeRawPtr<Node> previousSibling = element->previousSibling();
-    if (nextSibling && nextSibling->isElementNode() && nextSibling->rendererIsEditable()
+    if (nextSibling && nextSibling->isElementNode() && nextSibling->hasEditableStyle()
         && areIdenticalElements(element.get(), toElement(nextSibling)))
         mergeIdenticalElements(element.get(), toElement(nextSibling));
 
-    if (previousSibling && previousSibling->isElementNode() && previousSibling->rendererIsEditable()) {
+    if (previousSibling && previousSibling->isElementNode() && previousSibling->hasEditableStyle()) {
         Node* mergedElement = previousSibling->nextSibling();
-        if (mergedElement->isElementNode() && mergedElement->rendererIsEditable()
+        if (mergedElement->isElementNode() && mergedElement->hasEditableStyle()
             && areIdenticalElements(toElement(previousSibling), toElement(mergedElement)))
             mergeIdenticalElements(toElement(previousSibling), toElement(mergedElement));
     }

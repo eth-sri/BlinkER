@@ -40,14 +40,14 @@
 #include "platform/heap/ThreadState.h"
 #include "wtf/CurrentTime.h"
 
-namespace WebCore {
+namespace blink {
 
 class WorkerRunLoopTask : public blink::WebThread::Task {
     WTF_MAKE_NONCOPYABLE(WorkerRunLoopTask); WTF_MAKE_FAST_ALLOCATED;
 public:
-    static PassOwnPtr<WorkerRunLoopTask> create(const WorkerRunLoop& runLoop, PassOwnPtr<ExecutionContextTask> task)
+    static PassOwnPtr<WorkerRunLoopTask> create(const WorkerRunLoop& runLoop, PassOwnPtr<ExecutionContextTask> task, bool isInstrumented)
     {
-        return adoptPtr(new WorkerRunLoopTask(runLoop, task));
+        return adoptPtr(new WorkerRunLoopTask(runLoop, task, isInstrumented));
     }
 
     virtual ~WorkerRunLoopTask() { }
@@ -55,19 +55,29 @@ public:
     virtual void run() OVERRIDE
     {
         WorkerGlobalScope* workerGlobalScope = m_runLoop.context();
+        if (m_isInstrumented)
+            InspectorInstrumentation::willPerformExecutionContextTask(workerGlobalScope, m_task.get());
         if ((!workerGlobalScope->isClosing() && !m_runLoop.terminated()) || m_task->isCleanupTask())
             m_task->performTask(workerGlobalScope);
+        if (m_isInstrumented)
+            InspectorInstrumentation::didPerformExecutionContextTask(workerGlobalScope);
     }
 
 private:
-    WorkerRunLoopTask(const WorkerRunLoop& runLoop, PassOwnPtr<ExecutionContextTask> task)
+    WorkerRunLoopTask(const WorkerRunLoop& runLoop, PassOwnPtr<ExecutionContextTask> task, bool isInstrumented)
         : m_runLoop(runLoop)
         , m_task(task)
+        , m_isInstrumented(isInstrumented)
     {
+        if (m_isInstrumented)
+            m_isInstrumented = !m_task->taskNameForInstrumentation().isEmpty();
+        if (m_isInstrumented)
+            InspectorInstrumentation::didPostExecutionContextTask(m_runLoop.context(), m_task.get());
     }
 
     const WorkerRunLoop& m_runLoop;
     OwnPtr<ExecutionContextTask> m_task;
+    bool m_isInstrumented;
 };
 
 class TickleDebuggerQueueTask FINAL : public ExecutionContextTask {
@@ -255,27 +265,29 @@ void WorkerRunLoop::runCleanupTasks()
 
 void WorkerRunLoop::terminate()
 {
+    InspectorInstrumentation::didKillAllExecutionContextTasks(m_context);
     m_messageQueue.kill();
     m_debuggerMessageQueue.kill();
 }
 
 bool WorkerRunLoop::postTask(PassOwnPtr<ExecutionContextTask> task)
 {
-    return m_messageQueue.append(WorkerRunLoopTask::create(*this, task));
+    return m_messageQueue.append(WorkerRunLoopTask::create(*this, task, true));
 }
 
 void WorkerRunLoop::postTaskAndTerminate(PassOwnPtr<ExecutionContextTask> task)
 {
+    InspectorInstrumentation::didKillAllExecutionContextTasks(m_context);
     m_debuggerMessageQueue.kill();
-    m_messageQueue.appendAndKill(WorkerRunLoopTask::create(*this, task));
+    m_messageQueue.appendAndKill(WorkerRunLoopTask::create(*this, task, false));
 }
 
 bool WorkerRunLoop::postDebuggerTask(PassOwnPtr<ExecutionContextTask> task)
 {
-    bool posted = m_debuggerMessageQueue.append(WorkerRunLoopTask::create(*this, task));
+    bool posted = m_debuggerMessageQueue.append(WorkerRunLoopTask::create(*this, task, false));
     if (posted)
         postTask(TickleDebuggerQueueTask::create(this));
     return posted;
 }
 
-} // namespace WebCore
+} // namespace blink

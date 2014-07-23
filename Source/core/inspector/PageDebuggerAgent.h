@@ -31,11 +31,11 @@
 #ifndef PageDebuggerAgent_h
 #define PageDebuggerAgent_h
 
-#include "bindings/v8/PageScriptDebugServer.h"
+#include "bindings/core/v8/PageScriptDebugServer.h"
 #include "core/inspector/InspectorDebuggerAgent.h"
 #include "core/inspector/InspectorOverlayHost.h"
 
-namespace WebCore {
+namespace blink {
 
 class DocumentLoader;
 class InspectorOverlay;
@@ -82,7 +82,7 @@ private:
     InspectorOverlay* m_overlay;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 
 #endif // !defined(PageDebuggerAgent_h)

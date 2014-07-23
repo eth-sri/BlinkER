@@ -30,14 +30,14 @@
 #ifndef InjectedScriptHost_h
 #define InjectedScriptHost_h
 
-#include "bindings/v8/ScriptState.h"
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ScriptState.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 class Database;
 class EventTarget;
@@ -102,6 +102,6 @@ private:
     OwnPtr<InspectableObject> m_defaultInspectableObject;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // !defined(InjectedScriptHost_h)

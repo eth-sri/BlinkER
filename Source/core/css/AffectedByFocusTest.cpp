@@ -7,13 +7,14 @@
 #include "core/dom/Element.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/NodeRenderStyle.h"
+#include "core/dom/StyleEngine.h"
 #include "core/frame/FrameView.h"
 #include "core/html/HTMLDocument.h"
 #include "core/html/HTMLElement.h"
 #include "core/testing/DummyPageHolder.h"
 #include <gtest/gtest.h>
 
-using namespace WebCore;
+using namespace blink;
 using namespace HTMLNames;
 
 namespace {
@@ -23,7 +24,7 @@ class AffectedByFocusTest : public ::testing::Test {
 protected:
 
     struct ElementResult {
-        const WebCore::QualifiedName tag;
+        const blink::HTMLQualifiedName tag;
         bool affectedBy;
         bool childrenOrSiblingsAffectedBy;
     };

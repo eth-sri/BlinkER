@@ -25,11 +25,12 @@
 #include "config.h"
 #include "core/dom/Node.h"
 
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ScriptCallStackFactory.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ScriptCallStackFactory.h"
 #include "core/HTMLNames.h"
 #include "core/XMLNames.h"
 #include "core/accessibility/AXObjectCache.h"
+#include "core/css/resolver/StyleResolver.h"
 #include "core/dom/Attr.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/ChildListMutationScope.h"
@@ -98,9 +99,16 @@
 #include "wtf/text/CString.h"
 #include "wtf/text/StringBuilder.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
+
+struct SameSizeAsNode : NODE_BASE_CLASSES {
+    uint32_t m_nodeFlags;
+    void* m_pointer[8];
+};
+
+COMPILE_ASSERT(sizeof(Node) <= sizeof(SameSizeAsNode), Node_should_stay_small);
 
 #if !ENABLE(OILPAN)
 void* Node::operator new(size_t size)
@@ -117,10 +125,11 @@ void Node::operator delete(void* ptr)
 #endif
 
 #if DUMP_NODE_STATISTICS
-static HashSet<Node*>& liveNodeSet()
+typedef WillBeHeapHashSet<RawPtrWillBeWeakMember<Node> > WeakNodeSet;
+static WeakNodeSet& liveNodeSet()
 {
-    DEFINE_STATIC_LOCAL(HashSet<Node*>, s_liveNodeSet, ());
-    return s_liveNodeSet;
+    DEFINE_STATIC_LOCAL(OwnPtrWillBePersistent<WeakNodeSet>, set, (adoptPtrWillBeNoop(new WeakNodeSet())));
+    return *set;
 }
 #endif
 
@@ -147,7 +156,7 @@ void Node::dumpStatistics()
     size_t elementsWithRareData = 0;
     size_t elementsWithNamedNodeMap = 0;
 
-    for (HashSet<Node*>::iterator it = liveNodeSet().begin(); it != liveNodeSet().end(); ++it) {
+    for (WeakNodeSet::iterator it = liveNodeSet().begin(); it != liveNodeSet().end(); ++it) {
         Node* node = *it;
 
         if (node->hasRareData()) {
@@ -170,7 +179,7 @@ void Node::dumpStatistics()
                     result.storedValue->value++;
 
                 if (const ElementData* elementData = element->elementData()) {
-                    attributes += elementData->length();
+                    attributes += elementData->attributes().size();
                     ++elementsWithAttributeStorage;
                 }
                 break;
@@ -289,11 +298,11 @@ Node::~Node()
     nodeCounter.decrement();
 #endif
 
+#if !ENABLE(OILPAN)
 #if DUMP_NODE_STATISTICS
     liveNodeSet().remove(this);
 #endif
 
-#if !ENABLE(OILPAN)
     if (hasRareData())
         clearRareData();
 
@@ -309,6 +318,9 @@ Node::~Node()
 
     if (m_treeScope)
         m_treeScope->guardDeref();
+
+    if (getFlag(HasWeakReferencesFlag))
+        WeakNodeMap::notifyNodeDestroyed(this);
 #else
     // With Oilpan, the rare data finalizer also asserts for
     // this condition (we cannot directly access it here.)
@@ -316,9 +328,6 @@ Node::~Node()
 #endif
 
     InspectorCounters::decrementCounter(InspectorCounters::NodeCounter);
-
-    if (getFlag(HasWeakReferencesFlag))
-        WeakNodeMap::notifyNodeDestroyed(this);
 }
 
 #if !ENABLE(OILPAN)
@@ -333,9 +342,10 @@ void Node::willBeDeletedFromDocument()
     if (hasEventTargetData()) {
         clearEventTargetData();
         document.didClearTouchEventHandlers(this);
-        if (document.frameHost())
-            document.frameHost()->eventHandlerRegistry().didRemoveAllEventHandlers(*this);
     }
+
+    if (document.frameHost())
+        document.frameHost()->eventHandlerRegistry().didRemoveAllEventHandlers(*this);
 
     if (AXObjectCache* cache = document.existingAXObjectCache())
         cache->remove(this);
@@ -474,36 +484,40 @@ Node* Node::pseudoAwareLastChild() const
     return lastChild();
 }
 
-void Node::insertBefore(PassRefPtrWillBeRawPtr<Node> newChild, Node* refChild, ExceptionState& exceptionState)
+PassRefPtrWillBeRawPtr<Node> Node::insertBefore(PassRefPtrWillBeRawPtr<Node> newChild, Node* refChild, ExceptionState& exceptionState)
 {
     if (isContainerNode())
-        toContainerNode(this)->insertBefore(newChild, refChild, exceptionState);
-    else
-        exceptionState.throwDOMException(HierarchyRequestError, "This node type does not support this method.");
+        return toContainerNode(this)->insertBefore(newChild, refChild, exceptionState);
+
+    exceptionState.throwDOMException(HierarchyRequestError, "This node type does not support this method.");
+    return nullptr;
 }
 
-void Node::replaceChild(PassRefPtrWillBeRawPtr<Node> newChild, Node* oldChild, ExceptionState& exceptionState)
+PassRefPtrWillBeRawPtr<Node> Node::replaceChild(PassRefPtrWillBeRawPtr<Node> newChild, PassRefPtrWillBeRawPtr<Node> oldChild, ExceptionState& exceptionState)
 {
     if (isContainerNode())
-        toContainerNode(this)->replaceChild(newChild, oldChild, exceptionState);
-    else
-        exceptionState.throwDOMException(HierarchyRequestError,  "This node type does not support this method.");
+        return toContainerNode(this)->replaceChild(newChild, oldChild, exceptionState);
+
+    exceptionState.throwDOMException(HierarchyRequestError,  "This node type does not support this method.");
+    return nullptr;
 }
 
-void Node::removeChild(Node* oldChild, ExceptionState& exceptionState)
+PassRefPtrWillBeRawPtr<Node> Node::removeChild(PassRefPtrWillBeRawPtr<Node> oldChild, ExceptionState& exceptionState)
 {
     if (isContainerNode())
-        toContainerNode(this)->removeChild(oldChild, exceptionState);
-    else
-        exceptionState.throwDOMException(NotFoundError, "This node type does not support this method.");
+        return toContainerNode(this)->removeChild(oldChild, exceptionState);
+
+    exceptionState.throwDOMException(NotFoundError, "This node type does not support this method.");
+    return nullptr;
 }
 
-void Node::appendChild(PassRefPtrWillBeRawPtr<Node> newChild, ExceptionState& exceptionState)
+PassRefPtrWillBeRawPtr<Node> Node::appendChild(PassRefPtrWillBeRawPtr<Node> newChild, ExceptionState& exceptionState)
 {
     if (isContainerNode())
-        toContainerNode(this)->appendChild(newChild, exceptionState);
-    else
-        exceptionState.throwDOMException(HierarchyRequestError, "This node type does not support this method.");
+        return toContainerNode(this)->appendChild(newChild, exceptionState);
+
+    exceptionState.throwDOMException(HierarchyRequestError, "This node type does not support this method.");
+    return nullptr;
 }
 
 void Node::remove(ExceptionState& exceptionState)
@@ -547,16 +561,16 @@ const AtomicString& Node::namespaceURI() const
 bool Node::isContentEditable(UserSelectAllTreatment treatment)
 {
     document().updateRenderTreeIfNeeded();
-    return rendererIsEditable(Editable, treatment);
+    return hasEditableStyle(Editable, treatment);
 }
 
 bool Node::isContentRichlyEditable()
 {
     document().updateRenderTreeIfNeeded();
-    return rendererIsEditable(RichlyEditable, UserSelectAllIsAlwaysNonEditable);
+    return hasEditableStyle(RichlyEditable, UserSelectAllIsAlwaysNonEditable);
 }
 
-bool Node::rendererIsEditable(EditableLevel editableLevel, UserSelectAllTreatment treatment) const
+bool Node::hasEditableStyle(EditableLevel editableLevel, UserSelectAllTreatment treatment) const
 {
     if (isPseudoElement())
         return false;
@@ -589,7 +603,7 @@ bool Node::rendererIsEditable(EditableLevel editableLevel, UserSelectAllTreatmen
 
 bool Node::isEditableToAccessibility(EditableLevel editableLevel) const
 {
-    if (rendererIsEditable(editableLevel))
+    if (hasEditableStyle(editableLevel))
         return true;
 
     // FIXME: Respect editableLevel for ARIA editable elements.
@@ -603,11 +617,6 @@ bool Node::isEditableToAccessibility(EditableLevel editableLevel) const
         return cache->rootAXEditableElement(this);
 
     return false;
-}
-
-bool Node::shouldUseInputMethod()
-{
-    return isContentEditable(UserSelectAllIsAlwaysNonEditable);
 }
 
 RenderBox* Node::renderBox() const
@@ -997,7 +1006,7 @@ void Node::attach(const AttachContext&)
         cache->updateCacheAfterNodeIsAttached(this);
 }
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
 static Node* detachingNode;
 
 bool Node::inDetach() const
@@ -1011,7 +1020,7 @@ void Node::detach(const AttachContext& context)
     ASSERT(document().lifecycle().stateAllowsDetach());
     DocumentLifecycle::DetachScope willDetach(document().lifecycle());
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     ASSERT(!detachingNode);
     detachingNode = this;
 #endif
@@ -1041,7 +1050,7 @@ void Node::detach(const AttachContext& context)
     clearChildNeedsStyleInvalidation();
     clearNeedsStyleInvalidation();
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     detachingNode = 0;
 #endif
 }
@@ -1131,7 +1140,7 @@ int Node::maxCharacterOffset() const
 // is obviously misplaced.
 bool Node::canStartSelection() const
 {
-    if (rendererIsEditable())
+    if (hasEditableStyle())
         return true;
 
     if (renderer()) {
@@ -1149,14 +1158,6 @@ Element* Node::shadowHost() const
     if (ShadowRoot* root = containingShadowRoot())
         return root->host();
     return 0;
-}
-
-Node* Node::deprecatedShadowAncestorNode() const
-{
-    if (ShadowRoot* root = containingShadowRoot())
-        return root->host();
-
-    return const_cast<Node*>(this);
 }
 
 ShadowRoot* Node::containingShadowRoot() const
@@ -1231,7 +1232,7 @@ Element *Node::enclosingBlockFlowElement() const
 
 bool Node::isRootEditableElement() const
 {
-    return rendererIsEditable() && isElementNode() && (!parentNode() || !parentNode()->rendererIsEditable()
+    return hasEditableStyle() && isElementNode() && (!parentNode() || !parentNode()->hasEditableStyle()
         || !parentNode()->isElementNode() || isHTMLBodyElement((*this)));
 }
 
@@ -1248,7 +1249,7 @@ Element* Node::rootEditableElement(EditableType editableType) const
 Element* Node::rootEditableElement() const
 {
     Element* result = 0;
-    for (Node* n = const_cast<Node*>(this); n && n->rendererIsEditable(); n = n->parentNode()) {
+    for (Node* n = const_cast<Node*>(this); n && n->hasEditableStyle(); n = n->parentNode()) {
         if (n->isElementNode())
             result = toElement(n);
         if (isHTMLBodyElement(*n))
@@ -1525,9 +1526,13 @@ void Node::setTextContent(const String& text)
         case DOCUMENT_FRAGMENT_NODE: {
             // FIXME: Merge this logic into replaceChildrenWithText.
             RefPtrWillBeRawPtr<ContainerNode> container = toContainerNode(this);
+
+            // Note: This is an intentional optimization.
+            // See crbug.com/352836 also.
             // No need to do anything if the text is identical.
             if (container->hasOneTextChild() && toText(container->firstChild())->data() == text)
                 return;
+
             ChildListMutationScope mutation(*this);
             container->removeChildren();
             // Note: This API will not insert empty text nodes:
@@ -1999,7 +2004,7 @@ bool Node::addEventListener(const AtomicString& eventType, PassRefPtr<EventListe
     return tryAddEventListener(this, eventType, listener, useCapture);
 }
 
-static inline bool tryRemoveEventListener(Node* targetNode, const AtomicString& eventType, EventListener* listener, bool useCapture)
+static inline bool tryRemoveEventListener(Node* targetNode, const AtomicString& eventType, PassRefPtr<EventListener> listener, bool useCapture)
 {
     if (!targetNode->EventTarget::removeEventListener(eventType, listener, useCapture))
         return false;
@@ -2015,7 +2020,7 @@ static inline bool tryRemoveEventListener(Node* targetNode, const AtomicString& 
     return true;
 }
 
-bool Node::removeEventListener(const AtomicString& eventType, EventListener* listener, bool useCapture)
+bool Node::removeEventListener(const AtomicString& eventType, PassRefPtr<EventListener> listener, bool useCapture)
 {
     return tryRemoveEventListener(this, eventType, listener, useCapture);
 }
@@ -2041,13 +2046,8 @@ typedef WillBeHeapHashMap<RawPtrWillBeWeakMember<const Node>, OwnPtr<EventTarget
 
 static EventTargetDataMap& eventTargetDataMap()
 {
-#if ENABLE(OILPAN)
-    DEFINE_STATIC_LOCAL(Persistent<EventTargetDataMap>, map, (new EventTargetDataMap()));
+    DEFINE_STATIC_LOCAL(OwnPtrWillBePersistent<EventTargetDataMap>, map, (adoptPtrWillBeNoop(new EventTargetDataMap())));
     return *map;
-#else
-    DEFINE_STATIC_LOCAL(EventTargetDataMap, map, ());
-    return map;
-#endif
 }
 
 EventTargetData* Node::eventTargetData()
@@ -2403,16 +2403,16 @@ inline void TreeScope::removedLastRefToScope()
         // extra self-only ref.
         guardRef();
         dispose();
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
         // We need to do this right now since guardDeref() can delete this.
         rootNode().m_inRemovedLastRefFunction = false;
 #endif
         guardDeref();
     } else {
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
         rootNode().m_inRemovedLastRefFunction = false;
 #endif
-#if SECURITY_ASSERT_ENABLED
+#if ENABLE(SECURITY_ASSERT)
         beginDeletion();
 #endif
         delete this;
@@ -2431,7 +2431,7 @@ void Node::removedLastRef()
         return;
     }
 
-#if SECURITY_ASSERT_ENABLED
+#if ENABLE(SECURITY_ASSERT)
     m_deletionHasBegun = true;
 #endif
     delete this;
@@ -2558,12 +2558,14 @@ void Node::setCustomElementState(CustomElementState newState)
 
 void Node::trace(Visitor* visitor)
 {
+#if ENABLE(OILPAN)
     visitor->trace(m_parentOrShadowHostNode);
     visitor->trace(m_previous);
     visitor->trace(m_next);
     if (hasRareData())
         visitor->trace(rareData());
     visitor->trace(m_treeScope);
+#endif
     EventTarget::trace(visitor);
 }
 
@@ -2589,23 +2591,23 @@ unsigned Node::lengthOfContents() const
     return 0;
 }
 
-} // namespace WebCore
+} // namespace blink
 
 #ifndef NDEBUG
 
-void showNode(const WebCore::Node* node)
+void showNode(const blink::Node* node)
 {
     if (node)
         node->showNode("");
 }
 
-void showTree(const WebCore::Node* node)
+void showTree(const blink::Node* node)
 {
     if (node)
         node->showTreeForThis();
 }
 
-void showNodePath(const WebCore::Node* node)
+void showNodePath(const blink::Node* node)
 {
     if (node)
         node->showNodePathForThis();

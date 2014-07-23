@@ -31,8 +31,8 @@
 #include "config.h"
 #include "web/InspectorFrontendClientImpl.h"
 
-#include "V8InspectorFrontendHost.h"
-#include "bindings/v8/ScriptController.h"
+#include "bindings/core/v8/V8InspectorFrontendHost.h"
+#include "bindings/core/v8/ScriptController.h"
 #include "core/frame/LocalFrame.h"
 #include "core/inspector/InspectorFrontendHost.h"
 #include "core/page/Page.h"
@@ -42,7 +42,7 @@
 #include "web/WebDevToolsFrontendImpl.h"
 #include "wtf/text/WTFString.h"
 
-using namespace WebCore;
+using namespace blink;
 
 namespace blink {
 
@@ -119,13 +119,13 @@ void InspectorFrontendClientImpl::windowObjectCleared()
             "     ['resetZoom', 0],"
             "     ['save', 3],"
             "     ['searchInPath', 3],"
+            "     ['setDeviceCountUpdatesEnabled', 1],"
+            "     ['setDevicesUpdatesEnabled', 1],"
             "     ['setWhitelistedShortcuts', 1],"
             "     ['setContentsResizingStrategy', 2],"
             "     ['setInspectedPageBounds', 1],"
             "     ['setIsDocked', 1],"
-            "     ['subscribe', 1],"
             "     ['stopIndexing', 1],"
-            "     ['unsubscribe', 1],"
             "     ['zoomIn', 0],"
             "     ['zoomOut', 0]]);"
             ""

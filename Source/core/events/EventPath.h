@@ -33,7 +33,7 @@
 #include "wtf/HashMap.h"
 #include "wtf/Vector.h"
 
-namespace WebCore {
+namespace blink {
 
 class Event;
 class EventTarget;
@@ -91,7 +91,7 @@ private:
     static void buildRelatedNodeMap(const Node*, RelatedTargetMap&);
     static EventTarget* findRelatedNode(TreeScope*, RelatedTargetMap&);
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     static void checkReachability(TreeScope&, TouchList&);
 #endif
 

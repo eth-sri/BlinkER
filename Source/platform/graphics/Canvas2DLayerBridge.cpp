@@ -50,18 +50,14 @@ enum {
 DEFINE_DEBUG_ONLY_GLOBAL(WTF::RefCountedLeakCounter, canvas2DLayerBridgeInstanceCounter, ("Canvas2DLayerBridge"));
 }
 
-namespace WebCore {
+namespace blink {
 
 static PassRefPtr<SkSurface> createSkSurface(GrContext* gr, const IntSize& size, int msaaSampleCount = 0)
 {
     if (!gr)
         return nullptr;
     gr->resetContext();
-    SkImageInfo info;
-    info.fWidth = size.width();
-    info.fHeight = size.height();
-    info.fColorType = kPMColor_SkColorType;
-    info.fAlphaType = kPremul_SkAlphaType;
+    SkImageInfo info = SkImageInfo::MakeN32Premul(size.width(), size.height());
     return adoptRef(SkSurface::NewRenderTarget(gr, info,  msaaSampleCount));
 }
 
@@ -121,7 +117,7 @@ Canvas2DLayerBridge::~Canvas2DLayerBridge()
     ASSERT(!Canvas2DLayerManager::get().isInList(this));
     m_layer.clear();
     freeReleasedMailbox();
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     Vector<MailboxInfo>::iterator mailboxInfo;
     for (mailboxInfo = m_mailboxes.begin(); mailboxInfo < m_mailboxes.end(); ++mailboxInfo) {
         ASSERT(mailboxInfo->m_status != MailboxInUse);
@@ -310,7 +306,7 @@ bool Canvas2DLayerBridge::hasReleasedMailbox() const
 
 void Canvas2DLayerBridge::freeReleasedMailbox()
 {
-    if (m_contextProvider->context3d()->isContextLost() || !m_isSurfaceValid)
+    if (!m_isSurfaceValid || m_contextProvider->context3d()->isContextLost())
         return;
     MailboxInfo* mailboxInfo = releasedMailboxInfo();
     if (!mailboxInfo)
@@ -339,7 +335,7 @@ blink::WebGraphicsContext3D* Canvas2DLayerBridge::context()
     // the destruction of m_layer
     if (m_layer && !m_destructionInProgress)
         checkSurfaceValid(); // To ensure rate limiter is disabled if context is lost.
-    return m_contextProvider->context3d();
+    return m_contextProvider ? m_contextProvider->context3d() : 0;
 }
 
 bool Canvas2DLayerBridge::checkSurfaceValid()
@@ -462,6 +458,10 @@ bool Canvas2DLayerBridge::prepareMailbox(blink::WebExternalTextureMailbox* outMa
     ASSERT(!mailboxInfo->m_parentLayerBridge);
     mailboxInfo->m_parentLayerBridge = this;
     *outMailbox = mailboxInfo->m_mailbox;
+
+    if (m_imageBuffer)
+        m_imageBuffer->didPresent();
+
     return true;
 }
 

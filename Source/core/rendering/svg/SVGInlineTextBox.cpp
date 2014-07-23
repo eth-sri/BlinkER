@@ -41,10 +41,9 @@
 #include "core/rendering/svg/SVGTextRunRenderingContext.h"
 #include "platform/FloatConversion.h"
 #include "platform/fonts/FontCache.h"
-#include "platform/graphics/DrawLooperBuilder.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
 
-namespace WebCore {
+namespace blink {
 
 struct ExpectedSVGInlineTextBoxSize : public InlineTextBox {
     float float1;
@@ -269,23 +268,21 @@ void SVGInlineTextBox::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffse
 
     paintDocumentMarkers(paintInfo.context, paintOffset, style, textRenderer.scaledFont(), true);
 
-    const SVGRenderStyle* svgStyle = style->svgStyle();
-    ASSERT(svgStyle);
+    const SVGRenderStyle& svgStyle = style->svgStyle();
 
-    bool hasFill = svgStyle->hasFill();
-    bool hasVisibleStroke = svgStyle->hasVisibleStroke();
+    bool hasFill = svgStyle.hasFill();
+    bool hasVisibleStroke = svgStyle.hasVisibleStroke();
 
     RenderStyle* selectionStyle = style;
     if (hasSelection) {
         selectionStyle = parentRenderer.getCachedPseudoStyle(SELECTION);
         if (selectionStyle) {
-            const SVGRenderStyle* svgSelectionStyle = selectionStyle->svgStyle();
-            ASSERT(svgSelectionStyle);
+            const SVGRenderStyle& svgSelectionStyle = selectionStyle->svgStyle();
 
             if (!hasFill)
-                hasFill = svgSelectionStyle->hasFill();
+                hasFill = svgSelectionStyle.hasFill();
             if (!hasVisibleStroke)
-                hasVisibleStroke = svgSelectionStyle->hasVisibleStroke();
+                hasVisibleStroke = svgSelectionStyle.hasVisibleStroke();
         } else {
             selectionStyle = style;
         }
@@ -317,7 +314,7 @@ void SVGInlineTextBox::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffse
             paintDecoration(paintInfo.context, TextDecorationOverline, fragment);
 
         for (int i = 0; i < 3; i++) {
-            switch (svgStyle->paintOrderType(i)) {
+            switch (svgStyle.paintOrderType(i)) {
             case PT_FILL:
                 // Fill text
                 if (hasFill) {
@@ -454,8 +451,6 @@ TextRun SVGInlineTextBox::constructTextRun(RenderStyle* style, const SVGTextFrag
     if (textRunNeedsRenderingContext(style->font()))
         run.setRenderingContext(SVGTextRunRenderingContext::create(text));
 
-    run.disableRoundingHacks();
-
     // We handle letter & word spacing ourselves.
     run.disableSpacing();
 
@@ -544,17 +539,16 @@ void SVGInlineTextBox::paintDecoration(GraphicsContext* context, TextDecoration 
     if (decorationStyle->visibility() == HIDDEN)
         return;
 
-    const SVGRenderStyle* svgDecorationStyle = decorationStyle->svgStyle();
-    ASSERT(svgDecorationStyle);
+    const SVGRenderStyle& svgDecorationStyle = decorationStyle->svgStyle();
 
     for (int i = 0; i < 3; i++) {
-        switch (svgDecorationStyle->paintOrderType(i)) {
+        switch (svgDecorationStyle.paintOrderType(i)) {
         case PT_FILL:
-            if (svgDecorationStyle->hasFill())
+            if (svgDecorationStyle.hasFill())
                 paintDecorationWithStyle(context, decoration, fragment, decorationRenderer, ApplyToFillMode);
             break;
         case PT_STROKE:
-            if (svgDecorationStyle->hasVisibleStroke())
+            if (svgDecorationStyle.hasVisibleStroke())
                 paintDecorationWithStyle(context, decoration, fragment, decorationRenderer, ApplyToStrokeMode);
             break;
         case PT_MARKERS:
@@ -633,17 +627,8 @@ void SVGInlineTextBox::paintTextWithShadows(GraphicsContext* context, RenderStyl
         context->scale(1 / scalingFactor, 1 / scalingFactor);
     }
 
-    if (hasShadow) {
-        OwnPtr<DrawLooperBuilder> drawLooperBuilder = DrawLooperBuilder::create();
-        for (size_t i = shadowList->shadows().size(); i--; ) {
-            const ShadowData& shadow = shadowList->shadows()[i];
-            FloatSize offset(shadow.x(), shadow.y());
-            drawLooperBuilder->addShadow(offset, shadow.blur(), shadow.color(),
-                DrawLooperBuilder::ShadowRespectsTransforms, DrawLooperBuilder::ShadowRespectsAlpha);
-        }
-        drawLooperBuilder->addUnmodifiedContent();
-        context->setDrawLooper(drawLooperBuilder.release());
-    }
+    if (hasShadow)
+        context->setDrawLooper(shadowList->createDrawLooper(DrawLooperBuilder::ShadowRespectsAlpha));
 
     if (prepareGraphicsContextForTextPainting(context, scalingFactor, textRun, style, resourceMode)) {
         TextRunPaintInfo textRunPaintInfo(textRun);
@@ -799,8 +784,8 @@ bool SVGInlineTextBox::nodeAtPoint(const HitTestRequest& request, HitTestResult&
     bool isVisible = renderer().style()->visibility() == VISIBLE;
     if (isVisible || !hitRules.requireVisible) {
         if (hitRules.canHitBoundingBox
-            || (hitRules.canHitStroke && (renderer().style()->svgStyle()->hasStroke() || !hitRules.requireStroke))
-            || (hitRules.canHitFill && (renderer().style()->svgStyle()->hasFill() || !hitRules.requireFill))) {
+            || (hitRules.canHitStroke && (renderer().style()->svgStyle().hasStroke() || !hitRules.requireStroke))
+            || (hitRules.canHitFill && (renderer().style()->svgStyle().hasFill() || !hitRules.requireFill))) {
             FloatPoint boxOrigin(x(), y());
             boxOrigin.moveBy(accumulatedOffset);
             FloatRect rect(boxOrigin, size());
@@ -814,4 +799,4 @@ bool SVGInlineTextBox::nodeAtPoint(const HitTestRequest& request, HitTestResult&
     return false;
 }
 
-} // namespace WebCore
+} // namespace blink

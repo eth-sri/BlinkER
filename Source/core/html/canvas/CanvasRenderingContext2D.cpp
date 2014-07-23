@@ -33,15 +33,16 @@
 #include "config.h"
 #include "core/html/canvas/CanvasRenderingContext2D.h"
 
-#include "bindings/v8/ExceptionMessages.h"
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionMessages.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/CSSPropertyNames.h"
 #include "core/css/CSSFontSelector.h"
 #include "core/css/parser/BisonCSSParser.h"
 #include "core/css/StylePropertySet.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/dom/StyleEngine.h"
 #include "core/events/Event.h"
 #include "core/fetch/ImageResource.h"
 #include "core/frame/ImageBitmap.h"
@@ -69,7 +70,7 @@
 #include "wtf/Uint8ClampedArray.h"
 #include "wtf/text/StringBuilder.h"
 
-namespace WebCore {
+namespace blink {
 
 static const int defaultFontSize = 10;
 static const char defaultFontFamily[] = "sans-serif";
@@ -114,7 +115,7 @@ CanvasRenderingContext2D::~CanvasRenderingContext2D()
 
 void CanvasRenderingContext2D::validateStateStack()
 {
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     GraphicsContext* context = canvas()->existingDrawingContext();
     if (context && !context->contextDisabled())
         ASSERT(context->saveCount() == m_stateStack.size());
@@ -258,6 +259,7 @@ CanvasRenderingContext2D::State::State()
     , m_textBaseline(AlphabeticTextBaseline)
     , m_unparsedFont(defaultFont)
     , m_realizedFont(false)
+    , m_hasClip(false)
 {
 }
 
@@ -287,6 +289,7 @@ CanvasRenderingContext2D::State::State(const State& other)
     , m_unparsedFont(other.m_unparsedFont)
     , m_font(other.m_font)
     , m_realizedFont(other.m_realizedFont)
+    , m_hasClip(other.m_hasClip)
 {
     if (m_realizedFont)
         static_cast<CSSFontSelector*>(m_font.fontSelector())->registerForInvalidationCallbacks(this);
@@ -325,6 +328,7 @@ CanvasRenderingContext2D::State& CanvasRenderingContext2D::State::operator=(cons
     m_unparsedFont = other.m_unparsedFont;
     m_font = other.m_font;
     m_realizedFont = other.m_realizedFont;
+    m_hasClip = other.m_hasClip;
 
     if (m_realizedFont)
         static_cast<CSSFontSelector*>(m_font.fontSelector())->registerForInvalidationCallbacks(this);
@@ -346,6 +350,13 @@ void CanvasRenderingContext2D::State::fontsNeedUpdate(CSSFontSelector* fontSelec
     ASSERT(m_realizedFont);
 
     m_font.update(fontSelector);
+}
+
+void CanvasRenderingContext2D::State::trace(Visitor* visitor)
+{
+    visitor->trace(m_strokeStyle);
+    visitor->trace(m_fillStyle);
+    CSSFontSelectorClient::trace(visitor);
 }
 
 void CanvasRenderingContext2D::realizeSaves()
@@ -394,9 +405,9 @@ CanvasStyle* CanvasRenderingContext2D::strokeStyle() const
     return state().m_strokeStyle.get();
 }
 
-void CanvasRenderingContext2D::setStrokeStyle(PassRefPtr<CanvasStyle> prpStyle)
+void CanvasRenderingContext2D::setStrokeStyle(PassRefPtrWillBeRawPtr<CanvasStyle> prpStyle)
 {
-    RefPtr<CanvasStyle> style = prpStyle;
+    RefPtrWillBeRawPtr<CanvasStyle> style = prpStyle;
 
     if (!style)
         return;
@@ -427,9 +438,9 @@ CanvasStyle* CanvasRenderingContext2D::fillStyle() const
     return state().m_fillStyle.get();
 }
 
-void CanvasRenderingContext2D::setFillStyle(PassRefPtr<CanvasStyle> prpStyle)
+void CanvasRenderingContext2D::setFillStyle(PassRefPtrWillBeRawPtr<CanvasStyle> prpStyle)
 {
-    RefPtr<CanvasStyle> style = prpStyle;
+    RefPtrWillBeRawPtr<CanvasStyle> style = prpStyle;
 
     if (!style)
         return;
@@ -1096,6 +1107,7 @@ void CanvasRenderingContext2D::clipInternal(const Path& path, const String& wind
 
     realizeSaves();
     c->canvasClip(path, parseWinding(windingRuleString));
+    modifiableState().m_hasClip = true;
 }
 
 void CanvasRenderingContext2D::clip(const String& windingRuleString)
@@ -1180,7 +1192,9 @@ void CanvasRenderingContext2D::scrollPathIntoView(Path2D* path2d)
 
 void CanvasRenderingContext2D::scrollPathIntoViewInternal(const Path& path)
 {
-    if (!state().m_invertibleCTM || path.isEmpty())
+    RenderObject* renderer = canvas()->renderer();
+    RenderBox* renderBox = canvas()->renderBox();
+    if (!renderer || !renderBox || !state().m_invertibleCTM || path.isEmpty())
         return;
 
     canvas()->document().updateLayoutIgnorePendingStylesheets();
@@ -1190,18 +1204,13 @@ void CanvasRenderingContext2D::scrollPathIntoViewInternal(const Path& path)
     transformedPath.transform(state().m_transform);
     FloatRect boundingRect = transformedPath.boundingRect();
 
-    // Offset by the canvas rect (We should take border and padding into account).
-    RenderBoxModelObject* rbmo = canvas()->renderBoxModelObject();
-    IntRect canvasRect = canvas()->renderer()->absoluteBoundingBoxRect();
-    canvasRect.move(rbmo->borderLeft() + rbmo->paddingLeft(),
-        rbmo->borderTop() + rbmo->paddingTop());
-    LayoutRect pathRect = enclosingLayoutRect(boundingRect);
-    pathRect.moveBy(canvasRect.location());
+    // Offset by the canvas rect
+    LayoutRect pathRect(boundingRect);
+    IntRect canvasRect = renderBox->absoluteContentBox();
+    pathRect.move(canvasRect.x(), canvasRect.y());
 
-    if (canvas()->renderer()) {
-        canvas()->renderer()->scrollRectToVisible(
-            pathRect, ScrollAlignment::alignCenterAlways, ScrollAlignment::alignTopAlways);
-    }
+    renderer->scrollRectToVisible(
+        pathRect, ScrollAlignment::alignCenterAlways, ScrollAlignment::alignTopAlways);
 
     // TODO: should implement "inform the user" that the caret and/or
     // selection the specified rectangle of the canvas. See http://crbug.com/357987
@@ -1470,7 +1479,7 @@ void CanvasRenderingContext2D::drawImageInternal(CanvasImageSource* imageSource,
     CompositeOperator op, blink::WebBlendMode blendMode)
 {
     RefPtr<Image> image;
-    SourceImageStatus sourceImageStatus;
+    SourceImageStatus sourceImageStatus = InvalidSourceImageStatus;
     if (!imageSource->isVideoElement()) {
         SourceImageMode mode = canvas() == imageSource ? CopySourceImageIfVolatile : DontCopySourceImage; // Thunking for ==
         image = imageSource->getSourceImageForCanvas(mode, &sourceImageStatus);
@@ -1655,24 +1664,24 @@ template<class T> void CanvasRenderingContext2D::fullCanvasCompositedStroke(cons
     c->endLayer();
 }
 
-PassRefPtr<CanvasGradient> CanvasRenderingContext2D::createLinearGradient(float x0, float y0, float x1, float y1)
+PassRefPtrWillBeRawPtr<CanvasGradient> CanvasRenderingContext2D::createLinearGradient(float x0, float y0, float x1, float y1)
 {
-    RefPtr<CanvasGradient> gradient = CanvasGradient::create(FloatPoint(x0, y0), FloatPoint(x1, y1));
+    RefPtrWillBeRawPtr<CanvasGradient> gradient = CanvasGradient::create(FloatPoint(x0, y0), FloatPoint(x1, y1));
     return gradient.release();
 }
 
-PassRefPtr<CanvasGradient> CanvasRenderingContext2D::createRadialGradient(float x0, float y0, float r0, float x1, float y1, float r1, ExceptionState& exceptionState)
+PassRefPtrWillBeRawPtr<CanvasGradient> CanvasRenderingContext2D::createRadialGradient(float x0, float y0, float r0, float x1, float y1, float r1, ExceptionState& exceptionState)
 {
     if (r0 < 0 || r1 < 0) {
         exceptionState.throwDOMException(IndexSizeError, String::format("The %s provided is less than 0.", r0 < 0 ? "r0" : "r1"));
         return nullptr;
     }
 
-    RefPtr<CanvasGradient> gradient = CanvasGradient::create(FloatPoint(x0, y0), r0, FloatPoint(x1, y1), r1);
+    RefPtrWillBeRawPtr<CanvasGradient> gradient = CanvasGradient::create(FloatPoint(x0, y0), r0, FloatPoint(x1, y1), r1);
     return gradient.release();
 }
 
-PassRefPtr<CanvasPattern> CanvasRenderingContext2D::createPattern(CanvasImageSource* imageSource,
+PassRefPtrWillBeRawPtr<CanvasPattern> CanvasRenderingContext2D::createPattern(CanvasImageSource* imageSource,
     const String& repetitionType, ExceptionState& exceptionState)
 {
     bool repeatX, repeatY;
@@ -1742,14 +1751,6 @@ void CanvasRenderingContext2D::didDraw(const FloatRect& dirtyRect)
 {
     if (dirtyRect.isEmpty())
         return;
-
-    // If we are drawing to hardware and we have a composited layer, just invalidate layer.
-    if (isAccelerated() && platformLayer()) {
-        platformLayer()->invalidateRect(dirtyRect);
-        canvas()->clearCopiedImage();
-        canvas()->notifyObserversCanvasChanged(dirtyRect);
-        return;
-    }
 
     canvas()->didDraw(dirtyRect);
 }
@@ -2062,9 +2063,9 @@ static String normalizeSpaces(const String& text)
     return String(charVector);
 }
 
-PassRefPtr<TextMetrics> CanvasRenderingContext2D::measureText(const String& text)
+PassRefPtrWillBeRawPtr<TextMetrics> CanvasRenderingContext2D::measureText(const String& text)
 {
-    RefPtr<TextMetrics> metrics = TextMetrics::create();
+    RefPtrWillBeRawPtr<TextMetrics> metrics = TextMetrics::create();
 
     // The style resolution required for rendering text is not available in frame-less documents.
     if (!canvas()->document().frame())
@@ -2147,7 +2148,7 @@ void CanvasRenderingContext2D::drawTextInternal(const String& text, float x, flo
     bool isRTL = direction == RTL;
     bool override = computedStyle ? isOverride(computedStyle->unicodeBidi()) : false;
 
-    TextRun textRun(normalizedText, 0, 0, TextRun::AllowTrailingExpansion, direction, override, true, TextRun::NoRounding);
+    TextRun textRun(normalizedText, 0, 0, TextRun::AllowTrailingExpansion, direction, override, true);
     // Draw the item text at the correct point.
     FloatPoint location(x, y + getFontBaseline(fontMetrics));
 
@@ -2286,9 +2287,9 @@ void CanvasRenderingContext2D::setImageSmoothingEnabled(bool enabled)
         c->setImageInterpolationQuality(enabled ? CanvasDefaultInterpolationQuality : InterpolationNone);
 }
 
-PassRefPtr<Canvas2DContextAttributes> CanvasRenderingContext2D::getContextAttributes() const
+PassRefPtrWillBeRawPtr<Canvas2DContextAttributes> CanvasRenderingContext2D::getContextAttributes() const
 {
-    RefPtr<Canvas2DContextAttributes> attributes = Canvas2DContextAttributes::create();
+    RefPtrWillBeRawPtr<Canvas2DContextAttributes> attributes = Canvas2DContextAttributes::create();
     attributes->setAlpha(m_hasAlpha);
     return attributes.release();
 }
@@ -2373,19 +2374,22 @@ void CanvasRenderingContext2D::addHitRegion(const Dictionary& options, Exception
         return;
     }
 
+    RefPtrWillBeMember<Path2D> path2d;
+    options.getWithUndefinedOrNullCheck("path", path2d);
+    Path hitRegionPath = path2d ? path2d->path() : m_path;
+
     FloatRect clipBounds;
     GraphicsContext* context = drawingContext();
 
-    if (m_path.isEmpty() || !context || !state().m_invertibleCTM
+    if (hitRegionPath.isEmpty() || !context || !state().m_invertibleCTM
         || !context->getTransformedClipBounds(&clipBounds)) {
         exceptionState.throwDOMException(NotSupportedError, "The specified path has no pixels.");
         return;
     }
 
-    Path specifiedPath = m_path;
-    specifiedPath.transform(state().m_transform);
+    hitRegionPath.transform(state().m_transform);
 
-    if (context->isClipMode()) {
+    if (hasClip()) {
         // FIXME: The hit regions should take clipping region into account.
         // However, we have no way to get the region from canvas state stack by now.
         // See http://crbug.com/387057
@@ -2393,7 +2397,15 @@ void CanvasRenderingContext2D::addHitRegion(const Dictionary& options, Exception
         return;
     }
 
-    passOptions.path = specifiedPath;
+    passOptions.path = hitRegionPath;
+
+    String fillRuleString;
+    options.getWithUndefinedOrNullCheck("fillRule", fillRuleString);
+    if (fillRuleString.isEmpty() || fillRuleString != "evenodd")
+        passOptions.fillRule = RULE_NONZERO;
+    else
+        passOptions.fillRule = RULE_EVENODD;
+
     addHitRegionInternal(passOptions, exceptionState);
 }
 
@@ -2439,4 +2451,4 @@ unsigned CanvasRenderingContext2D::hitRegionsCount() const
     return 0;
 }
 
-} // namespace WebCore
+} // namespace blink

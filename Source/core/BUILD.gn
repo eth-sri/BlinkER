@@ -40,11 +40,6 @@ core_config_add += [ "//build/config/compiler:wexit_time_destructors" ]
 config("core_include_dirs") {
   include_dirs = [
     "..",
-    "../..",
-    # FIXME: Remove two lines below once core scripts generates qualified
-    # includes correctly: http://crbug.com/358074
-    bindings_core_v8_output_dir,
-    bindings_modules_v8_output_dir,
     "$root_gen_dir/blink",
   ]
   if (is_android && use_openmax_dl_fft) {
@@ -281,7 +276,7 @@ source_set("remaining") {
     # prefix header injected.
     cflags = [
       "-include",
-      rebase_path("WebCorePrefixMac.h", root_build_dir),
+      rebase_path("../build/mac/Prefix.h", root_build_dir),
     ]
   } else {  # !is_mac
     sources -= [
@@ -341,7 +336,7 @@ source_set("testing") {
 
 # GYP version: //third_party/WebKit/Source/core/core.gyp:webcore_generated
 source_set("core_generated") {
-  sources = bindings_v8_files
+  sources = bindings_core_v8_files
   # These files include all the .cpp files generated from the .idl files
   # in webcore_files.
   sources += bindings_core_generated_aggregate_files
@@ -478,10 +473,11 @@ source_set("core_generated") {
     cflags += [
       # In generated bindings code: "switch contains default but no case".
       # Disable c4267 warnings until we fix size_t to int truncations.
-      # 4702 is disabled because of issues in Bison-generated
+      # 4701 and 4702 are disabled because of issues in Bison-generated
       # XPathGrammar.cpp and CSSGrammar.cpp.
       "/wd4065",
       "/wd4267",
+      "/wd4701",
       "/wd4702",
     ]
   }
@@ -518,7 +514,7 @@ group("generated_testing_idls") {
 action("generated_testing_idls_settings") {
   script = "../build/scripts/make_settings.py"
 
-  source_prereqs = scripts_for_in_files + [
+  inputs = scripts_for_in_files + [
     "../build/scripts/make_settings.py",
     "../build/scripts/templates/InternalSettingsGenerated.idl.tmpl",
     "../build/scripts/templates/InternalSettingsGenerated.cpp.tmpl",
@@ -543,7 +539,7 @@ action("generated_testing_idls_settings") {
 action("generated_testing_idls_internal_runtime_flags") {
   script = "../build/scripts/make_internal_runtime_flags.py"
 
-  source_prereqs = scripts_for_in_files + [
+  inputs = scripts_for_in_files + [
     "../build/scripts/make_internal_runtime_flags.py",
     "../platform/RuntimeEnabledFeatures.in",
     "../build/scripts/templates/InternalRuntimeFlags.h.tmpl",
@@ -565,8 +561,7 @@ action("generated_testing_idls_internal_runtime_flags") {
 # GYP version: WebKit/Source/core/core_generated.gyp:make_core_generated
 group("make_core_generated") {
   deps = [
-    ":make_core_generated_xml_viewer_css",
-    ":make_core_generated_xml_viewer_js",
+    ":make_core_generated_private_script",
     ":make_core_generated_html_entity_table",
     ":make_core_generated_css_property_names",
     ":make_core_generated_media_feature_names",
@@ -612,7 +607,6 @@ process_in_files("make_core_generated_css_property_names") {
     "$blink_core_output_dir/CSSPropertyNames.cpp",
     "$blink_core_output_dir/CSSPropertyNames.h",
   ]
-  other_args = [ "--defines", feature_defines_string ]
 }
 
 # "MediaFeatures" in make_core_generated from GYP.
@@ -628,7 +622,6 @@ process_in_files("make_core_generated_media_features") {
   outputs = [
     "$blink_core_output_dir/MediaFeatures.h",
   ]
-  other_args = [ "--defines", feature_defines_string ]
 }
 
 # "StylePropertyShorthand" in make_core_generated from GYP.
@@ -680,7 +673,6 @@ process_in_files("make_core_generated_css_value_keywords") {
   ]
   other_args = [
     "--gperf", gperf_exe,
-    "--defines", feature_defines_string
   ]
 }
 
@@ -788,7 +780,6 @@ process_in_files("make_core_generated_media_feature_names") {
     "$blink_core_output_dir/MediaFeatureNames.cpp",
     "$blink_core_output_dir/MediaFeatureNames.h",
   ]
-  other_args = [ "--defines", feature_defines_string ]
 }
 
 # make_names -------------------------------------------------------------------
@@ -940,61 +931,40 @@ make_token_matcher("make_core_generated_make_token_matcher_for_viewport") {
 # One-off scripts --------------------------------------------------------------
 
 # "generatePrivateScript" in make_core_generated from GYP.
+# FIXME: The implementation of Blink-in-JS is not yet mature.
+# You can use Blink-in-JS in your local experiment, but don't ship it.
+# crbug.com/341031
 action("make_core_generated_private_script") {
   visibility = ":make_core_generated"
   script = "../build/scripts/make_private_script_source.py"
 
-  source_prereqs = [
-    "../bindings/v8/PrivateScriptRunner.js",
+  inputs = [
+    "../bindings/core/v8/PrivateScriptRunner.js",
+    "../core/html/HTMLMarqueeElement.js",
   ]
   outputs = [
     "$blink_core_output_dir/PrivateScriptSources.h",
   ]
 
   args = rebase_path(outputs, root_build_dir)
-  args += rebase_path(source_prereqs, root_build_dir)
+  args += rebase_path(inputs, root_build_dir)
 
   deps = make_core_generated_deps
 }
 
-# "generateXMLViewerCSS" in make_core_generated from GYP.
-action("make_core_generated_xml_viewer_css") {
+action("make_core_generated_private_script_for_testing") {
   visibility = ":make_core_generated"
-  script = "../build/scripts/xxd.py"
+  script = "../build/scripts/make_private_script_source.py"
 
-  source_prereqs = [
-    "xml/XMLViewer.css",
+  inputs = [
+    "testing/PrivateScriptTest.js",
   ]
   outputs = [
-    "$blink_core_output_dir/XMLViewerCSS.h",
+    "$blink_core_output_dir/PrivateScriptSourcesForTesting.h",
   ]
 
-  args = [
-    "XMLViewer_css",
-    rebase_path(source_prereqs[0], root_build_dir),
-    rebase_path(outputs[0], root_build_dir),
-  ]
-
-  deps = make_core_generated_deps
-}
-
-# "generateXMLViewerJS" in make_core_generated from GYP.
-action("make_core_generated_xml_viewer_js") {
-  visibility = ":make_core_generated"
-  script = "../build/scripts/xxd.py"
-
-  source_prereqs = [
-    "xml/XMLViewer.js",
-  ]
-  outputs = [
-    "$blink_core_output_dir/XMLViewerJS.h",
-  ]
-
-  args = [
-    "XMLViewer_js",
-    rebase_path(source_prereqs[0], root_build_dir),
-    rebase_path(outputs[0], root_build_dir),
-  ]
+  args = rebase_path(outputs, root_build_dir)
+  args += rebase_path(inputs, root_build_dir)
 
   deps = make_core_generated_deps
 }
@@ -1004,7 +974,7 @@ action("make_core_generated_html_entity_table") {
   visibility = ":make_core_generated"
   script = "html/parser/create-html-entity-table"
 
-  source_prereqs = [
+  inputs = [
     "html/parser/HTMLEntityNames.in",
   ]
   outputs = [
@@ -1012,7 +982,7 @@ action("make_core_generated_html_entity_table") {
   ]
 
   args = [ "-o" ] + rebase_path(outputs, root_build_dir) 
-  args += rebase_path(source_prereqs, root_build_dir)
+  args += rebase_path(inputs, root_build_dir)
 
   deps = make_core_generated_deps
 }
@@ -1028,7 +998,6 @@ action("make_core_generated_media_query_tokenizer_codepoints") {
 
   args = [
     "--output_dir", rel_blink_core_gen_dir,
-    "--defines", feature_defines_string
   ]
 
   deps = make_core_generated_deps
@@ -1037,13 +1006,9 @@ action("make_core_generated_media_query_tokenizer_codepoints") {
 # "UserAgentStyleSheets" in make_core_generated from GYP.
 action("make_core_generated_user_agent_style_sheets") {
   visibility = ":make_core_generated"
-  script = "../build/scripts/action_useragentstylesheets.py"
+  script = "../build/scripts/make-file-arrays.py"
 
-  scripts = [
-    "css/make-css-file-arrays.pl",
-    "../build/scripts/preprocessor.pm",
-  ]
-  stylesheets = [
+  inputs = [
     "css/html.css",
     "css/quirks.css",
     "css/view-source.css",
@@ -1051,6 +1016,7 @@ action("make_core_generated_user_agent_style_sheets") {
     "css/themeChromiumAndroid.css",
     "css/themeChromiumLinux.css",
     "css/themeChromiumSkia.css",
+    "css/themeInputMultipleFields.css",
     "css/themeMac.css",
     "css/themeWin.css",
     "css/themeWinQuirks.css",
@@ -1064,20 +1030,16 @@ action("make_core_generated_user_agent_style_sheets") {
     "css/viewportAndroid.css",
   ]
 
-  source_prereqs = scripts + stylesheets
   outputs = [
     "$blink_core_output_dir/UserAgentStyleSheets.h",
     "$blink_core_output_dir/UserAgentStyleSheetsData.cpp",
   ]
 
   args =
-    rebase_path(outputs, root_build_dir) +
-    rebase_path(stylesheets, root_build_dir) +
-    [ "--" ] +
-    rebase_path(scripts, root_build_dir) +
-    [ "--", "--defines", feature_defines_string ] +
-    [ preprocessor ] +
-    [ "--perl", perl_exe ]
+    [ "--namespace", "WebCore" ] +
+    [ "--out-h=" + rebase_path(outputs[0], root_build_dir) ] +
+    [ "--out-cpp=" + rebase_path(outputs[1], root_build_dir) ] +
+    rebase_path(inputs, root_build_dir)
 
   deps = make_core_generated_deps
 }
@@ -1088,7 +1050,7 @@ action("make_core_generated_html_element_lookup_trie") {
   script = "../build/scripts/make_element_lookup_trie.py"
 
   input_file = "html/HTMLTagNames.in"
-  source_prereqs = scripts_for_in_files + [
+  inputs = scripts_for_in_files + [
     input_file,
     "../build/scripts/templates/ElementLookupTrie.cpp.tmpl",
     "../build/scripts/templates/ElementLookupTrie.h.tmpl",

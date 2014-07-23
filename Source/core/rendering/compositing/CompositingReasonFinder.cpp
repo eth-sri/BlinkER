@@ -5,6 +5,7 @@
 #include "config.h"
 #include "core/rendering/compositing/CompositingReasonFinder.h"
 
+#include "core/CSSPropertyNames.h"
 #include "core/dom/Document.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/Settings.h"
@@ -12,7 +13,7 @@
 #include "core/rendering/RenderView.h"
 #include "core/rendering/compositing/RenderLayerCompositor.h"
 
-namespace WebCore {
+namespace blink {
 
 CompositingReasonFinder::CompositingReasonFinder(RenderView& renderView)
     : m_renderView(renderView)
@@ -40,8 +41,6 @@ void CompositingReasonFinder::updateTriggers()
     if (settings.acceleratedCompositingForOverflowScrollEnabled() || settings.compositorDrivenAcceleratedScrollingEnabled())
         m_compositingTriggers |= OverflowScrollTrigger;
 
-    // FIXME: acceleratedCompositingForFixedPositionEnabled should be renamed acceleratedCompositingForViewportConstrainedPositionEnabled().
-    // Or the sticky and fixed position elements should be behind different flags.
     if (settings.acceleratedCompositingForFixedPositionEnabled())
         m_compositingTriggers |= ViewportConstrainedPositionedTrigger;
 }
@@ -99,6 +98,9 @@ CompositingReasons CompositingReasonFinder::potentialCompositingReasonsFromStyle
     if (style->hasWillChangeCompositingHint() && !style->subtreeWillChangeContents())
         reasons |= CompositingReasonWillChangeCompositingHint;
 
+    if (style->hasInlineTransform())
+        reasons |= CompositingReasonInlineTransform;
+
     if (style->transformStyle3D() == TransformStyle3DPreserve3D)
         reasons |= CompositingReasonPreserve3DWith3DDescendants;
 
@@ -152,14 +154,15 @@ CompositingReasons CompositingReasonFinder::nonStyleDeterminedDirectReasons(cons
     RenderObject* renderer = layer->renderer();
 
     if (hasOverflowScrollTrigger()) {
-        // IsUnclippedDescendant is only actually stale during the chicken/egg code path.
-        // FIXME: Use compositingInputs().isUnclippedDescendant to ASSERT that
-        // this value isn't stale.
-        if (layer->compositingInputs().isUnclippedDescendant)
-            directReasons |= CompositingReasonOutOfFlowClipping;
+        if (const RenderLayer* scrollingAncestor = layer->ancestorScrollingLayer()) {
+            if (scrollingAncestor->needsCompositedScrolling()) {
+                if (layer->clipParent())
+                    directReasons |= CompositingReasonOutOfFlowClipping;
 
-        if (layer->scrollParent())
-            directReasons |= CompositingReasonOverflowScrollingParent;
+                if (layer->scrollParent())
+                    directReasons |= CompositingReasonOverflowScrollingParent;
+            }
+        }
 
         if (layer->needsCompositedScrolling())
             directReasons |= CompositingReasonOverflowScrollingTouch;

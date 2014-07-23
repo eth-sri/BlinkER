@@ -4,15 +4,18 @@
 
 /**
  * @constructor
+ * @implements {WebInspector.Console.UIDelegate}
  */
 WebInspector.App = function()
 {
-    if (WebInspector.overridesSupport.canEmulate()) {
-        this._toggleEmulationButton = new WebInspector.StatusBarButton(WebInspector.UIString("Toggle emulation enabled."), "emulation-status-bar-item");
+    if (WebInspector.overridesSupport.responsiveDesignAvailable()) {
+        this._toggleEmulationButton = new WebInspector.StatusBarButton(WebInspector.UIString("Toggle device mode."), "emulation-status-bar-item");
         this._toggleEmulationButton.toggled = WebInspector.overridesSupport.emulationEnabled();
         this._toggleEmulationButton.addEventListener("click", this._toggleEmulationEnabled, this);
         WebInspector.overridesSupport.addEventListener(WebInspector.OverridesSupport.Events.EmulationStateChanged, this._emulationEnabledChanged, this);
+        WebInspector.overridesSupport.addEventListener(WebInspector.OverridesSupport.Events.OverridesWarningUpdated, this._overridesWarningUpdated, this);
     }
+    WebInspector.console.setUIDelegate(this);
 };
 
 WebInspector.App.prototype = {
@@ -28,17 +31,35 @@ WebInspector.App.prototype = {
             WebInspector.inspectorView.showViewInDrawer("emulation", true);
     },
 
+    _overridesWarningUpdated: function()
+    {
+        if (!this._toggleEmulationButton)
+            return;
+        var message = WebInspector.overridesSupport.warningMessage();
+        this._toggleEmulationButton.title = message || WebInspector.UIString("Toggle device mode.");
+        this._toggleEmulationButton.element.classList.toggle("warning", !!message);
+    },
+
     createRootView: function()
     {
     },
 
-    presentUI: function()
+    /**
+     * @param {!WebInspector.Target} mainTarget
+     */
+    presentUI: function(mainTarget)
     {
         WebInspector.inspectorView.showInitialPanel();
 
         WebInspector.overridesSupport.applyInitialOverrides();
         if (!WebInspector.overridesSupport.responsiveDesignAvailable() && WebInspector.overridesSupport.emulationEnabled())
             WebInspector.inspectorView.showViewInDrawer("emulation", true);
+        this._overridesWarningUpdated();
+    },
+
+    showConsole: function()
+    {
+        WebInspector.Revealer.reveal(WebInspector.console);
     }
 };
 

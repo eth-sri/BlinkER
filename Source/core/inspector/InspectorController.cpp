@@ -31,7 +31,7 @@
 #include "config.h"
 #include "core/inspector/InspectorController.h"
 
-#include "bindings/v8/DOMWrapperWorld.h"
+#include "bindings/core/v8/DOMWrapperWorld.h"
 #include "core/InspectorBackendDispatcher.h"
 #include "core/InspectorFrontend.h"
 #include "core/inspector/IdentifiersFactory.h"
@@ -64,17 +64,19 @@
 #include "core/inspector/PageConsoleAgent.h"
 #include "core/inspector/PageDebuggerAgent.h"
 #include "core/inspector/PageRuntimeAgent.h"
+#include "core/page/ContextMenuProvider.h"
 #include "core/page/Page.h"
 #include "core/rendering/RenderLayer.h"
 #include "platform/PlatformMouseEvent.h"
 
-namespace WebCore {
+namespace blink {
 
 InspectorController::InspectorController(Page* page, InspectorClient* inspectorClient)
     : m_instrumentingAgents(InstrumentingAgents::create())
     , m_injectedScriptManager(InjectedScriptManager::createForPage())
     , m_state(adoptPtr(new InspectorCompositeState(inspectorClient)))
     , m_overlay(InspectorOverlay::create(page, inspectorClient))
+    , m_resourceAgent(0)
     , m_cssAgent(0)
     , m_layerTreeAgent(0)
     , m_page(page)
@@ -326,6 +328,13 @@ void InspectorController::setInjectedScriptForOrigin(const String& origin, const
         inspectorAgent->setInjectedScriptForOrigin(origin, source);
 }
 
+void InspectorController::showContextMenu(float x, float y, PassRefPtr<ContextMenuProvider> menuProvider)
+{
+    if (!m_inspectorClient)
+        return;
+    m_inspectorClient->showContextMenu(x, y, menuProvider);
+}
+
 void InspectorController::dispatchMessageFromFrontend(const String& message)
 {
     if (m_inspectorBackendDispatcher)
@@ -374,9 +383,9 @@ bool InspectorController::handleKeyboardEvent(LocalFrame* frame, const PlatformK
     return false;
 }
 
-void InspectorController::requestPageScaleFactor(float scale, const IntPoint& origin)
+void InspectorController::deviceOrPageScaleFactorChanged()
 {
-    m_inspectorClient->requestPageScaleFactor(scale, origin);
+    m_pageAgent->deviceOrPageScaleFactorChanged();
 }
 
 bool InspectorController::deviceEmulationEnabled()
@@ -478,4 +487,4 @@ void InspectorController::didRemovePageOverlay(const GraphicsLayer* layer)
         m_layerTreeAgent->didRemovePageOverlay(layer);
 }
 
-} // namespace WebCore
+} // namespace blink

@@ -26,13 +26,13 @@
 #include "config.h"
 #include "core/editing/SplitElementCommand.h"
 
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Element.h"
 #include "wtf/Assertions.h"
 
-namespace WebCore {
+namespace blink {
 
 SplitElementCommand::SplitElementCommand(PassRefPtrWillBeRawPtr<Element> element, PassRefPtrWillBeRawPtr<Node> atChild)
     : SimpleEditCommand(element->document())
@@ -56,7 +56,7 @@ void SplitElementCommand::executeApply()
     TrackExceptionState exceptionState;
 
     ContainerNode* parent = m_element2->parentNode();
-    if (!parent || !parent->rendererIsEditable())
+    if (!parent || !parent->hasEditableStyle())
         return;
     parent->insertBefore(m_element1.get(), m_element2.get(), exceptionState);
     if (exceptionState.hadException())
@@ -79,7 +79,7 @@ void SplitElementCommand::doApply()
 
 void SplitElementCommand::doUnapply()
 {
-    if (!m_element1 || !m_element1->rendererIsEditable() || !m_element2->rendererIsEditable())
+    if (!m_element1 || !m_element1->hasEditableStyle() || !m_element2->hasEditableStyle())
         return;
 
     WillBeHeapVector<RefPtrWillBeMember<Node> > children;
@@ -116,4 +116,4 @@ void SplitElementCommand::trace(Visitor* visitor)
     SimpleEditCommand::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink

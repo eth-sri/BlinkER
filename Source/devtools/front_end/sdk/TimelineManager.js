@@ -30,12 +30,12 @@
 
 /**
  * @constructor
- * @extends {WebInspector.TargetAwareObject}
+ * @extends {WebInspector.SDKModel}
  * @param {!WebInspector.Target} target
  */
 WebInspector.TimelineManager = function(target)
 {
-    WebInspector.TargetAwareObject.call(this, target);
+    WebInspector.SDKModel.call(this, WebInspector.TimelineManager, target);
     this._dispatcher = new WebInspector.TimelineDispatcher(this);
     this._enablementCount = 0;
     this._jsProfilerStarted = false;
@@ -73,10 +73,10 @@ WebInspector.TimelineManager.prototype = {
         if (WebInspector.experimentsSettings.timelineJSCPUProfile.isEnabled() && maxCallStackDepth) {
             this._configureCpuProfilerSamplingInterval();
             this._jsProfilerStarted = true;
-            ProfilerAgent.start();
+            this.target().profilerAgent().start();
         }
         if (this._enablementCount === 1)
-            TimelineAgent.start(maxCallStackDepth, bufferEvents, liveEvents, includeCounters, includeGPUEvents, callback);
+            this.target().timelineAgent().start(maxCallStackDepth, bufferEvents, liveEvents, includeCounters, includeGPUEvents, callback);
         else if (callback)
             callback(null);
     },
@@ -97,11 +97,12 @@ WebInspector.TimelineManager.prototype = {
         var callbackBarrier = new CallbackBarrier();
 
         if (this._jsProfilerStarted) {
-            ProfilerAgent.stop(callbackBarrier.createCallback(profilerCallback));
+            this.target().profilerAgent().stop(callbackBarrier.createCallback(profilerCallback));
             this._jsProfilerStarted = false;
         }
         if (!this._enablementCount)
-            TimelineAgent.stop(callbackBarrier.createCallback(this._processBufferedEvents.bind(this, timelineCallback)));
+            this.target().timelineAgent().stop(callbackBarrier.createCallback(timelineCallback));
+            TimelineAgent.stop(callbackBarrier.createCallback(timelineCallback));
 
         callbackBarrier.callWhenDone(allDoneCallback.bind(this));
 
@@ -134,36 +135,29 @@ WebInspector.TimelineManager.prototype = {
     },
 
     /**
-     * @param {function(?Protocol.Error)|undefined} callback
-     * @param {?Protocol.Error} error
      * @param {!Array.<!TimelineAgent.TimelineEvent>=} events
      */
-    _processBufferedEvents: function(callback, error, events)
+    _processBufferedEvents: function(events)
     {
         if (events) {
             for (var i = 0; i < events.length; ++i)
                 this._dispatcher.eventRecorded(events[i]);
         }
-        if (callback)
-            callback(error);
     },
 
     _configureCpuProfilerSamplingInterval: function()
     {
         var intervalUs = WebInspector.settings.highResolutionCpuProfiling.get() ? 100 : 1000;
-        ProfilerAgent.setSamplingInterval(intervalUs, didChangeInterval.bind(this));
+        this.target().profilerAgent().setSamplingInterval(intervalUs, didChangeInterval);
 
-        /**
-         * @this {WebInspector.TimelineManager}
-         */
         function didChangeInterval(error)
         {
             if (error)
-                this.target().consoleModel.showErrorMessage(error);
+                WebInspector.console.error(error);
         }
     },
 
-    __proto__: WebInspector.TargetAwareObject.prototype
+    __proto__: WebInspector.SDKModel.prototype
 }
 
 /**
@@ -208,11 +202,13 @@ WebInspector.TimelineDispatcher.prototype = {
 
     /**
      * @param {boolean=} consoleTimeline
+     * @param {!Array.<!TimelineAgent.TimelineEvent>=} events
      */
-    stopped: function(consoleTimeline)
+    stopped: function(consoleTimeline, events)
     {
         this._started = false;
         this._manager.dispatchEventToListeners(WebInspector.TimelineManager.EventTypes.TimelineStopped, consoleTimeline);
+        this._manager._processBufferedEvents(events);
     },
 
     /**
@@ -223,8 +219,3 @@ WebInspector.TimelineDispatcher.prototype = {
         this._manager.dispatchEventToListeners(WebInspector.TimelineManager.EventTypes.TimelineProgress, count);
     }
 }
-
-/**
- * @type {!WebInspector.TimelineManager}
- */
-WebInspector.timelineManager;

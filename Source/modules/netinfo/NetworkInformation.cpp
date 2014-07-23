@@ -37,7 +37,7 @@ String connectionTypeToString(blink::WebConnectionType type)
 
 } // namespace
 
-namespace WebCore {
+namespace blink {
 
 PassRefPtrWillBeRawPtr<NetworkInformation> NetworkInformation::create(ExecutionContext* context)
 {
@@ -93,7 +93,7 @@ bool NetworkInformation::addEventListener(const AtomicString& eventType, PassRef
     return true;
 }
 
-bool NetworkInformation::removeEventListener(const AtomicString& eventType, EventListener* listener, bool useCapture)
+bool NetworkInformation::removeEventListener(const AtomicString& eventType, PassRefPtr<EventListener> listener, bool useCapture)
 {
     if (!EventTargetWithInlineData::removeEventListener(eventType, listener, useCapture))
         return false;
@@ -149,4 +149,4 @@ NetworkInformation::NetworkInformation(ExecutionContext* context)
     ScriptWrappable::init(this);
 }
 
-} // namespace WebCore
+} // namespace blink

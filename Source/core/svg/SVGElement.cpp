@@ -25,7 +25,7 @@
 
 #include "core/svg/SVGElement.h"
 
-#include "bindings/v8/ScriptEventListener.h"
+#include "bindings/core/v8/ScriptEventListener.h"
 #include "core/HTMLNames.h"
 #include "core/SVGNames.h"
 #include "core/XLinkNames.h"
@@ -50,28 +50,14 @@
 
 #include "wtf/TemporaryChange.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 using namespace SVGNames;
 
-void mapAttributeToCSSProperty(HashMap<StringImpl*, CSSPropertyID>* propertyNameToIdMap, const QualifiedName& attrName)
-{
-    // FIXME: when CSS supports "transform-origin" the special case for transform_originAttr can be removed.
-    // FIXME: It's not clear the above is strictly true, as -webkit-transform-origin has non-standard behavior.
-    CSSPropertyID propertyId = cssPropertyID(attrName.localName());
-    if (!propertyId && attrName == transform_originAttr) {
-        propertyId = CSSPropertyWebkitTransformOrigin; // cssPropertyID("-webkit-transform-origin")
-    } else if (propertyId == CSSPropertyTransformOrigin) {
-        propertyId = CSSPropertyWebkitTransformOrigin;
-    }
-    ASSERT(propertyId > 0);
-    propertyNameToIdMap->set(attrName.localName().impl(), propertyId);
-}
-
 SVGElement::SVGElement(const QualifiedName& tagName, Document& document, ConstructionType constructionType)
     : Element(tagName, &document, constructionType)
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     , m_inRelativeLengthClientsInvalidation(false)
 #endif
     // |m_isContextElement| must be initialized before |m_className|, as SVGAnimatedString tear-off c-tor currently set this to true.
@@ -258,36 +244,6 @@ AffineTransform SVGElement::localCoordinateSpaceTransform(CTMScope) const
     return AffineTransform();
 }
 
-const AtomicString& SVGElement::xmlbase() const
-{
-    return fastGetAttribute(XMLNames::baseAttr);
-}
-
-void SVGElement::setXMLbase(const AtomicString& value)
-{
-    setAttribute(XMLNames::baseAttr, value);
-}
-
-const AtomicString& SVGElement::xmllang() const
-{
-    return fastGetAttribute(XMLNames::langAttr);
-}
-
-void SVGElement::setXMLlang(const AtomicString& value)
-{
-    setAttribute(XMLNames::langAttr, value);
-}
-
-const AtomicString& SVGElement::xmlspace() const
-{
-    return fastGetAttribute(XMLNames::spaceAttr);
-}
-
-void SVGElement::setXMLspace(const AtomicString& value)
-{
-    setAttribute(XMLNames::spaceAttr, value);
-}
-
 Node::InsertionNotificationRequest SVGElement::insertedInto(ContainerNode* rootParent)
 {
     Element::insertedInto(rootParent);
@@ -324,13 +280,20 @@ void SVGElement::removedFrom(ContainerNode* rootParent)
     invalidateInstances();
 }
 
-void SVGElement::childrenChanged(bool changedByParser, Node* beforeChange, Node* afterChange, int childCountDelta)
+void SVGElement::childrenChanged(const ChildrenChange& change)
 {
-    Element::childrenChanged(changedByParser, beforeChange, afterChange, childCountDelta);
+    Element::childrenChanged(change);
 
     // Invalidate all instances associated with us.
-    if (!changedByParser)
+    if (!change.byParser)
         invalidateInstances();
+}
+
+void mapAttributeToCSSProperty(HashMap<StringImpl*, CSSPropertyID>* propertyNameToIdMap, const QualifiedName& attrName)
+{
+    CSSPropertyID propertyId = cssPropertyID(attrName.localName());
+    ASSERT(propertyId > 0);
+    propertyNameToIdMap->set(attrName.localName().impl(), propertyId);
 }
 
 CSSPropertyID SVGElement::cssPropertyIdForSVGAttributeName(const QualifiedName& attrName)
@@ -453,7 +416,7 @@ void SVGElement::invalidateRelativeLengthClients(SubtreeLayoutScope* layoutScope
         return;
 
     ASSERT(!m_inRelativeLengthClientsInvalidation);
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     TemporaryChange<bool> inRelativeLengthClientsInvalidationChange(m_inRelativeLengthClientsInvalidation, true);
 #endif
 
@@ -533,13 +496,8 @@ void SVGElement::removeInstanceMapping(SVGElement* instance)
 
 static WillBeHeapHashSet<RawPtrWillBeWeakMember<SVGElement> >& emptyInstances()
 {
-#if ENABLE(OILPAN)
-    DEFINE_STATIC_LOCAL(Persistent<HeapHashSet<WeakMember<SVGElement> > >, emptyInstances, (new HeapHashSet<WeakMember<SVGElement> >));
+    DEFINE_STATIC_LOCAL(OwnPtrWillBePersistent<WillBeHeapHashSet<RawPtrWillBeWeakMember<SVGElement> > >, emptyInstances, (adoptPtrWillBeNoop(new WillBeHeapHashSet<RawPtrWillBeWeakMember<SVGElement> >())));
     return *emptyInstances;
-#else
-    DEFINE_STATIC_LOCAL(HashSet<RawPtr<SVGElement> >, emptyInstances, ());
-    return emptyInstances;
-#endif
 }
 
 const WillBeHeapHashSet<RawPtrWillBeWeakMember<SVGElement> >& SVGElement::instancesForElement() const
@@ -619,26 +577,6 @@ void SVGElement::setCorrespondingElement(SVGElement* correspondingElement)
 bool SVGElement::inUseShadowTree() const
 {
     return correspondingUseElement();
-}
-
-bool SVGElement::supportsSpatialNavigationFocus() const
-{
-    // This function checks whether the element satisfies the extended criteria
-    // for the element to be focusable, introduced by spatial navigation feature,
-    // i.e. checks if click or keyboard event handler is specified.
-    // This is the way to make it possible to navigate to (focus) elements
-    // which web designer meant for being active (made them respond to click events).
-
-    if (!document().settings() || !document().settings()->spatialNavigationEnabled())
-        return false;
-    return hasEventListeners(EventTypeNames::click)
-        || hasEventListeners(EventTypeNames::keydown)
-        || hasEventListeners(EventTypeNames::keypress)
-        || hasEventListeners(EventTypeNames::keyup)
-        || hasEventListeners(EventTypeNames::focus)
-        || hasEventListeners(EventTypeNames::blur)
-        || hasEventListeners(EventTypeNames::focusin)
-        || hasEventListeners(EventTypeNames::focusout);
 }
 
 void SVGElement::parseAttribute(const QualifiedName& name, const AtomicString& value)
@@ -802,22 +740,23 @@ bool SVGElement::addEventListener(const AtomicString& eventType, PassRefPtr<Even
     return true;
 }
 
-bool SVGElement::removeEventListener(const AtomicString& eventType, EventListener* listener, bool useCapture)
+bool SVGElement::removeEventListener(const AtomicString& eventType, PassRefPtr<EventListener> listener, bool useCapture)
 {
     WillBeHeapHashSet<RawPtrWillBeWeakMember<SVGElement> > instances;
     collectInstancesForSVGElement(this, instances);
     if (instances.isEmpty())
-        return Node::removeEventListener(eventType, listener, useCapture);
+        return Node::removeEventListener(eventType, listener.get(), useCapture);
 
     // EventTarget::removeEventListener creates a PassRefPtr around the given EventListener
     // object when creating a temporary RegisteredEventListener object used to look up the
     // event listener in a cache. If we want to be able to call removeEventListener() multiple
     // times on different nodes, we have to delay its immediate destruction, which would happen
     // after the first call below.
+    // XXX is that true?
     RefPtr<EventListener> protector(listener);
 
     // Remove event listener from regular DOM element
-    if (!Node::removeEventListener(eventType, listener, useCapture))
+    if (!Node::removeEventListener(eventType, listener.get(), useCapture))
         return false;
 
     // Remove event listener from all shadow tree DOM element instances
@@ -826,7 +765,7 @@ bool SVGElement::removeEventListener(const AtomicString& eventType, EventListene
         SVGElement* shadowTreeElement = *it;
         ASSERT(shadowTreeElement);
 
-        shadowTreeElement->Node::removeEventListener(eventType, listener, useCapture);
+        shadowTreeElement->Node::removeEventListener(eventType, listener.get(), useCapture);
     }
 
     return true;
@@ -848,32 +787,35 @@ static bool hasLoadListener(Element* element)
     return false;
 }
 
-void SVGElement::sendSVGLoadEventIfPossible(bool sendParentLoadEvents)
+bool SVGElement::sendSVGLoadEventIfPossible()
 {
-    RefPtrWillBeRawPtr<SVGElement> currentTarget = this;
-    while (currentTarget && currentTarget->haveLoadedRequiredResources()) {
-        RefPtrWillBeRawPtr<Element> parent = nullptr;
-        if (sendParentLoadEvents)
-            parent = currentTarget->parentOrShadowHostElement(); // save the next parent to dispatch too incase dispatching the event changes the tree
-        if (hasLoadListener(currentTarget.get())
-            && (currentTarget->isStructurallyExternal() || isSVGSVGElement(*currentTarget)))
-            currentTarget->dispatchEvent(Event::create(EventTypeNames::load));
-        currentTarget = (parent && parent->isSVGElement()) ? static_pointer_cast<SVGElement>(parent) : nullptr;
-        SVGElement* element = currentTarget.get();
-        if (!element || !element->isOutermostSVGSVGElement())
-            continue;
+    if (!haveLoadedRequiredResources())
+        return false;
+    if ((isStructurallyExternal() || isSVGSVGElement(*this)) && hasLoadListener(this))
+        dispatchEvent(Event::create(EventTypeNames::load));
+    return true;
+}
 
-        // Consider <svg onload="foo()"><image xlink:href="foo.png" externalResourcesRequired="true"/></svg>.
-        // If foo.png is not yet loaded, the first SVGLoad event will go to the <svg> element, sent through
-        // Document::implicitClose(). Then the SVGLoad event will fire for <image>, once its loaded.
-        ASSERT(sendParentLoadEvents);
+void SVGElement::sendSVGLoadEventToSelfAndAncestorChainIfPossible()
+{
+    // Let Document::implicitClose() dispatch the 'load' to the outermost SVG root.
+    if (isOutermostSVGSVGElement())
+        return;
 
-        // If the load event was not sent yet by Document::implicitClose(), but the <image> from the example
-        // above, just appeared, don't send the SVGLoad event to the outermost <svg>, but wait for the document
-        // to be "ready to render", first.
-        if (!document().loadEventFinished())
-            break;
-    }
+    // Save the next parent to dispatch to in case dispatching the event mutates the tree.
+    RefPtrWillBeRawPtr<Element> parent = parentOrShadowHostElement();
+    if (!sendSVGLoadEventIfPossible())
+        return;
+
+    // If document/window 'load' has been sent already, then only deliver to
+    // the element in question.
+    if (document().loadEventFinished())
+        return;
+
+    if (!parent || !parent->isSVGElement())
+        return;
+
+    toSVGElement(parent)->sendSVGLoadEventToSelfAndAncestorChainIfPossible();
 }
 
 void SVGElement::sendSVGLoadEventIfPossibleAsynchronously()
@@ -1045,7 +987,7 @@ SVGElement::InstanceUpdateBlocker::~InstanceUpdateBlocker()
         m_targetElement->setInstanceUpdatesBlocked(false);
 }
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
 bool SVGElement::isAnimatableAttribute(const QualifiedName& name) const
 {
     DEFINE_STATIC_LOCAL(HashSet<QualifiedName>, animatableAttributes, ());
@@ -1218,8 +1160,10 @@ void SVGElement::removeAllOutgoingReferences()
 
 void SVGElement::trace(Visitor* visitor)
 {
+#if ENABLE(OILPAN)
     visitor->trace(m_elementsWithRelativeLengths);
     visitor->trace(m_SVGRareData);
+#endif
     Element::trace(visitor);
 }
 

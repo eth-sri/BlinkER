@@ -28,9 +28,9 @@
 #include "config.h"
 #include "core/html/HTMLSelectElement.h"
 
-#include "bindings/v8/ExceptionMessages.h"
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionMessages.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/HTMLNames.h"
 #include "core/accessibility/AXObjectCache.h"
 #include "core/dom/Attribute.h"
@@ -39,22 +39,29 @@
 #include "core/events/GestureEvent.h"
 #include "core/events/KeyboardEvent.h"
 #include "core/events/MouseEvent.h"
+#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/FormDataList.h"
 #include "core/html/HTMLFormElement.h"
+#include "core/html/HTMLOptGroupElement.h"
 #include "core/html/HTMLOptionElement.h"
 #include "core/html/forms/FormController.h"
+#include "core/page/AutoscrollController.h"
 #include "core/page/EventHandler.h"
+#include "core/page/Page.h"
 #include "core/page/SpatialNavigation.h"
+#include "core/rendering/HitTestRequest.h"
+#include "core/rendering/HitTestResult.h"
 #include "core/rendering/RenderListBox.h"
 #include "core/rendering/RenderMenuList.h"
 #include "core/rendering/RenderTheme.h"
+#include "core/rendering/RenderView.h"
 #include "platform/PlatformMouseEvent.h"
 #include "platform/text/PlatformLocale.h"
 
 using namespace WTF::Unicode;
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -80,12 +87,16 @@ HTMLSelectElement::HTMLSelectElement(Document& document, HTMLFormElement* form)
 
 PassRefPtrWillBeRawPtr<HTMLSelectElement> HTMLSelectElement::create(Document& document)
 {
-    return adoptRefWillBeNoop(new HTMLSelectElement(document, 0));
+    RefPtrWillBeRawPtr<HTMLSelectElement> select = adoptRefWillBeNoop(new HTMLSelectElement(document, 0));
+    select->ensureUserAgentShadowRoot();
+    return select.release();
 }
 
 PassRefPtrWillBeRawPtr<HTMLSelectElement> HTMLSelectElement::create(Document& document, HTMLFormElement* form)
 {
-    return adoptRefWillBeNoop(new HTMLSelectElement(document, form));
+    RefPtrWillBeRawPtr<HTMLSelectElement> select = adoptRefWillBeNoop(new HTMLSelectElement(document, form));
+    select->ensureUserAgentShadowRoot();
+    return select.release();
 }
 
 const AtomicString& HTMLSelectElement::formControlType() const
@@ -392,13 +403,13 @@ void HTMLSelectElement::updateListItemSelectedStates()
     setNeedsValidityCheck();
 }
 
-void HTMLSelectElement::childrenChanged(bool changedByParser, Node* beforeChange, Node* afterChange, int childCountDelta)
+void HTMLSelectElement::childrenChanged(const ChildrenChange& change)
 {
     setRecalcListItems();
     setNeedsValidityCheck();
     m_lastOnChangeSelection.clear();
 
-    HTMLFormControlElementWithState::childrenChanged(changedByParser, beforeChange, afterChange, childCountDelta);
+    HTMLFormControlElementWithState::childrenChanged(change);
 }
 
 void HTMLSelectElement::optionElementChildrenChanged()
@@ -523,7 +534,11 @@ int HTMLSelectElement::nextValidIndex(int listIndex, SkipDirection direction, in
     for (listIndex += direction; listIndex >= 0 && listIndex < size; listIndex += direction) {
         --skip;
         HTMLElement* element = listItems[listIndex];
-        if (!isHTMLOptionElement(*element) || toHTMLOptionElement(element)->isDisabledFormControl() || toHTMLOptionElement(element)->isDisplayNone())
+        if (!isHTMLOptionElement(*element))
+            continue;
+        if (element->isDisabledFormControl())
+            continue;
+        if (!usesMenuList() && !element->renderer())
             continue;
         lastGoodIndex = listIndex;
         if (skip <= 0)
@@ -626,7 +641,10 @@ void HTMLSelectElement::setActiveSelectionAnchorIndex(int index)
 
 void HTMLSelectElement::setActiveSelectionEndIndex(int index)
 {
+    if (index == m_activeSelectionEndIndex)
+        return;
     m_activeSelectionEndIndex = index;
+    setNeedsStyleRecalc(SubtreeStyleChange);
 }
 
 void HTMLSelectElement::updateListBoxSelection(bool deselectOtherOptions)
@@ -640,7 +658,7 @@ void HTMLSelectElement::updateListBoxSelection(bool deselectOtherOptions)
     const WillBeHeapVector<RawPtrWillBeMember<HTMLElement> >& items = listItems();
     for (unsigned i = 0; i < items.size(); ++i) {
         HTMLElement* element = items[i];
-        if (!isHTMLOptionElement(*element) || toHTMLOptionElement(element)->isDisabledFormControl() || toHTMLOptionElement(element)->isDisplayNone())
+        if (!isHTMLOptionElement(*element) || toHTMLOptionElement(element)->isDisabledFormControl() || !toHTMLOptionElement(element)->renderer())
             continue;
 
         if (i >= start && i <= end)
@@ -651,8 +669,8 @@ void HTMLSelectElement::updateListBoxSelection(bool deselectOtherOptions)
             toHTMLOptionElement(element)->setSelectedState(m_cachedStateForActiveSelection[i]);
     }
 
-    scrollToSelection();
     setNeedsValidityCheck();
+    scrollToSelection();
     notifyFormStateChanged();
 }
 
@@ -703,11 +721,13 @@ void HTMLSelectElement::dispatchInputAndChangeEventForMenuList(bool requiresUser
 
 void HTMLSelectElement::scrollToSelection()
 {
+    if (!isFinishedParsingChildren())
+        return;
     if (usesMenuList())
         return;
-
-    if (RenderObject* renderer = this->renderer())
-        toRenderListBox(renderer)->selectionChanged();
+    scrollTo(activeSelectionEndListIndex());
+    if (AXObjectCache* cache = document().existingAXObjectCache())
+        cache->selectedChildrenChanged(this);
 }
 
 void HTMLSelectElement::setOptionsChangedOnRenderer()
@@ -715,8 +735,6 @@ void HTMLSelectElement::setOptionsChangedOnRenderer()
     if (RenderObject* renderer = this->renderer()) {
         if (usesMenuList())
             toRenderMenuList(renderer)->setOptionsChanged(true);
-        else
-            toRenderListBox(renderer)->setOptionsChanged(true);
     }
 }
 
@@ -725,7 +743,7 @@ const WillBeHeapVector<RawPtrWillBeMember<HTMLElement> >& HTMLSelectElement::lis
     if (m_shouldRecalcListItems)
         recalcListItems();
     else {
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
         WillBeHeapVector<RawPtrWillBeMember<HTMLElement> > items = m_listItems;
         recalcListItems(false);
         ASSERT(items == m_listItems);
@@ -858,9 +876,19 @@ void HTMLSelectElement::setSuggestedIndex(int suggestedIndex)
 
     if (RenderObject* renderer = this->renderer())  {
         renderer->updateFromElement();
-        if (renderer->isListBox())
-            toRenderListBox(renderer)->scrollToRevealElementAtListIndex(suggestedIndex);
+        scrollTo(suggestedIndex);
     }
+}
+
+void HTMLSelectElement::scrollTo(int listIndex)
+{
+    if (listIndex < 0)
+        return;
+    const WillBeHeapVector<RawPtrWillBeMember<HTMLElement> >& items = listItems();
+    int listSize = static_cast<int>(items.size());
+    if (listIndex >= listSize)
+        return;
+    items[listIndex]->scrollIntoViewIfNeeded(false);
 }
 
 void HTMLSelectElement::optionSelectionStateChanged(HTMLOptionElement* option, bool optionIsSelected)
@@ -872,6 +900,17 @@ void HTMLSelectElement::optionSelectionStateChanged(HTMLOptionElement* option, b
         selectOption(-1);
     else
         selectOption(nextSelectableListIndex(-1));
+}
+
+void HTMLSelectElement::optionRemoved(const HTMLOptionElement& option)
+{
+    if (m_activeSelectionAnchorIndex < 0 && m_activeSelectionEndIndex < 0)
+        return;
+    int listIndex = optionToListIndex(option.index());
+    if (listIndex <= m_activeSelectionAnchorIndex)
+        m_activeSelectionAnchorIndex--;
+    if (listIndex <= m_activeSelectionEndIndex)
+        m_activeSelectionEndIndex--;
 }
 
 void HTMLSelectElement::selectOption(int optionIndex, SelectOptionFlags flags)
@@ -909,10 +948,12 @@ void HTMLSelectElement::selectOption(int optionIndex, SelectOptionFlags flags)
         if (flags & DispatchInputAndChangeEvent)
             dispatchInputAndChangeEventForMenuList();
         if (RenderObject* renderer = this->renderer()) {
-            if (usesMenuList())
+            if (usesMenuList()) {
                 toRenderMenuList(renderer)->didSetSelectedIndex(listIndex);
-            else if (renderer->isListBox())
-                toRenderListBox(renderer)->selectionChanged();
+            } else if (renderer->isListBox()) {
+                if (AXObjectCache* cache = document().existingAXObjectCache())
+                    cache->selectedChildrenChanged(this);
+            }
         }
     }
 
@@ -1053,11 +1094,10 @@ void HTMLSelectElement::restoreFormControlState(const FormControlState& state)
 
 void HTMLSelectElement::parseMultipleAttribute(const AtomicString& value)
 {
-    bool oldUsesMenuList = usesMenuList();
     m_multiple = !value.isNull();
     setNeedsValidityCheck();
-    if (oldUsesMenuList != usesMenuList())
-        lazyReattachIfAttached();
+
+    lazyReattachIfAttached();
 }
 
 bool HTMLSelectElement::appendFormData(FormDataList& list, bool)
@@ -1114,47 +1154,62 @@ void HTMLSelectElement::resetImpl()
     setNeedsValidityCheck();
 }
 
-#if !OS(WIN)
-bool HTMLSelectElement::platformHandleKeydownEvent(KeyboardEvent* event)
+void HTMLSelectElement::handlePopupOpenKeyboardEvent(Event* event)
 {
-    if (!RenderTheme::theme().popsMenuByArrowKeys())
+    focus();
+    // Calling focus() may cause us to lose our renderer. Return true so
+    // that our caller doesn't process the event further, but don't set
+    // the event as handled.
+    if (!renderer() || !renderer()->isMenuList() || isDisabledFormControl())
+        return;
+    // Save the selection so it can be compared to the new selection
+    // when dispatching change events during selectOption, which
+    // gets called from RenderMenuList::valueChanged, which gets called
+    // after the user makes a selection from the menu.
+    saveLastSelection();
+    if (RenderMenuList* menuList = toRenderMenuList(renderer()))
+        menuList->showPopup();
+    int index = selectedIndex();
+    ASSERT(index >= 0);
+    ASSERT_WITH_SECURITY_IMPLICATION(index < static_cast<int>(listItems().size()));
+    setSelectedIndex(index);
+    event->setDefaultHandled();
+    return;
+}
+
+bool HTMLSelectElement::shouldOpenPopupForKeyDownEvent(KeyboardEvent* keyEvent)
+{
+    const String& keyIdentifier = keyEvent->keyIdentifier();
+    RenderTheme& renderTheme = RenderTheme::theme();
+
+    if (isSpatialNavigationEnabled(document().frame()))
         return false;
 
-    if (!isSpatialNavigationEnabled(document().frame())) {
-        if (event->keyIdentifier() == "Down" || event->keyIdentifier() == "Up") {
-            focus();
-            // Calling focus() may cause us to lose our renderer. Return true so
-            // that our caller doesn't process the event further, but don't set
-            // the event as handled.
-            if (!renderer() || !renderer()->isMenuList() || isDisabledFormControl())
-                return true;
-
-            // Save the selection so it can be compared to the new selection
-            // when dispatching change events during selectOption, which
-            // gets called from RenderMenuList::valueChanged, which gets called
-            // after the user makes a selection from the menu.
-            saveLastSelection();
-            if (RenderMenuList* menuList = toRenderMenuList(renderer()))
-                menuList->showPopup();
-            event->setDefaultHandled();
-        }
-        return true;
-    }
-
-    return false;
+    return ((renderTheme.popsMenuByArrowKeys() &&  (keyIdentifier == "Down" || keyIdentifier == "Up"))
+        || (renderTheme.popsMenuByAltDownUpOrF4Key() && (keyIdentifier == "Down" || keyIdentifier == "Up") && (keyEvent->altKey() || keyEvent->altGraphKey()))
+        || (renderTheme.popsMenuByAltDownUpOrF4Key() && (!keyEvent->altKey() && !keyEvent->ctrlKey() && keyIdentifier == "F4")));
 }
-#endif
+
+bool HTMLSelectElement::shouldOpenPopupForKeyPressEvent(KeyboardEvent *event)
+{
+    RenderTheme& renderTheme = RenderTheme::theme();
+    int keyCode = event->keyCode();
+
+    return ((renderTheme.popsMenuBySpaceKey() && event->keyCode() == ' ')
+        || (renderTheme.popsMenuByReturnKey() && keyCode == '\r'));
+}
 
 void HTMLSelectElement::menuListDefaultEventHandler(Event* event)
 {
-    RenderTheme& renderTheme = RenderTheme::theme();
-
     if (event->type() == EventTypeNames::keydown) {
         if (!renderer() || !event->isKeyboardEvent())
             return;
 
-        if (platformHandleKeydownEvent(toKeyboardEvent(event)))
+        KeyboardEvent* keyEvent = toKeyboardEvent(event);
+        if (shouldOpenPopupForKeyDownEvent(keyEvent)) {
+            handlePopupOpenKeyboardEvent(event);
             return;
+        }
 
         // When using spatial navigation, we want to be able to navigate away
         // from the select element when the user hits any of the arrow keys,
@@ -1164,7 +1219,11 @@ void HTMLSelectElement::menuListDefaultEventHandler(Event* event)
                 return;
         }
 
-        const String& keyIdentifier = toKeyboardEvent(event)->keyIdentifier();
+        // The key handling below shouldn't be used for non spatial navigation mode Mac
+        if (RenderTheme::theme().popsMenuByArrowKeys() && !isSpatialNavigationEnabled(document().frame()))
+            return;
+
+        const String& keyIdentifier = keyEvent->keyIdentifier();
         bool handled = true;
         const WillBeHeapVector<RawPtrWillBeMember<HTMLElement> >& listItems = this->listItems();
         int listIndex = optionToListIndex(selectedIndex());
@@ -1191,15 +1250,11 @@ void HTMLSelectElement::menuListDefaultEventHandler(Event* event)
             event->setDefaultHandled();
     }
 
-    // Use key press event here since sending simulated mouse events
-    // on key down blocks the proper sending of the key press event.
     if (event->type() == EventTypeNames::keypress) {
         if (!renderer() || !event->isKeyboardEvent())
             return;
 
         int keyCode = toKeyboardEvent(event)->keyCode();
-        bool handled = false;
-
         if (keyCode == ' ' && isSpatialNavigationEnabled(document().frame())) {
             // Use space to toggle arrow key handling for selection change or spatial navigation.
             m_activeSelectionState = !m_activeSelectionState;
@@ -1207,51 +1262,18 @@ void HTMLSelectElement::menuListDefaultEventHandler(Event* event)
             return;
         }
 
-        if (renderTheme.popsMenuBySpaceOrReturn()) {
-            if (keyCode == ' ' || keyCode == '\r') {
-                focus();
-
-                // Calling focus() may remove the renderer or change the
-                // renderer type.
-                if (!renderer() || !renderer()->isMenuList() || isDisabledFormControl())
-                    return;
-
-                // Save the selection so it can be compared to the new selection
-                // when dispatching change events during selectOption, which
-                // gets called from RenderMenuList::valueChanged, which gets called
-                // after the user makes a selection from the menu.
-                saveLastSelection();
-                if (RenderMenuList* menuList = toRenderMenuList(renderer()))
-                    menuList->showPopup();
-                handled = true;
-            }
-        } else if (renderTheme.popsMenuByArrowKeys()) {
-            if (keyCode == ' ') {
-                focus();
-
-                // Calling focus() may remove the renderer or change the
-                // renderer type.
-                if (!renderer() || !renderer()->isMenuList() || isDisabledFormControl())
-                    return;
-
-                // Save the selection so it can be compared to the new selection
-                // when dispatching change events during selectOption, which
-                // gets called from RenderMenuList::valueChanged, which gets called
-                // after the user makes a selection from the menu.
-                saveLastSelection();
-                if (RenderMenuList* menuList = toRenderMenuList(renderer()))
-                    menuList->showPopup();
-                handled = true;
-            } else if (keyCode == '\r') {
-                if (form())
-                    form()->submitImplicitly(event, false);
-                dispatchInputAndChangeEventForMenuList();
-                handled = true;
-            }
+        KeyboardEvent* keyEvent = toKeyboardEvent(event);
+        if (shouldOpenPopupForKeyPressEvent(keyEvent)) {
+            handlePopupOpenKeyboardEvent(event);
+            return;
         }
 
-        if (handled)
+        if (!RenderTheme::theme().popsMenuByReturnKey() && keyCode == '\r') {
+            if (form())
+                form()->submitImplicitly(event, false);
+            dispatchInputAndChangeEventForMenuList();
             event->setDefaultHandled();
+        }
     }
 
     if (event->type() == EventTypeNames::mousedown && event->isMouseEvent() && toMouseEvent(event)->button() == LeftButton) {
@@ -1335,6 +1357,40 @@ void HTMLSelectElement::updateSelectedState(int listIndex, bool multi, bool shif
     updateListBoxSelection(!multiSelect);
 }
 
+int HTMLSelectElement::listIndexForEventTargetOption(const Event& event)
+{
+    Node* targetNode = event.target()->toNode();
+    if (!targetNode || !isHTMLOptionElement(*targetNode))
+        return -1;
+    return listIndexForOption(toHTMLOptionElement(*targetNode));
+}
+
+int HTMLSelectElement::listIndexForOption(const HTMLOptionElement& option)
+{
+    const WillBeHeapVector<RawPtrWillBeMember<HTMLElement> >& items = this->listItems();
+    size_t length = items.size();
+    for (size_t i = 0; i < length; ++i) {
+        if (items[i].get() == &option)
+            return i;
+    }
+    return -1;
+}
+
+AutoscrollController* HTMLSelectElement::autoscrollController() const
+{
+    if (Page* page = document().page())
+        return &page->autoscrollController();
+    return 0;
+}
+
+void HTMLSelectElement::handleMouseRelease()
+{
+    // We didn't start this click/drag on any options.
+    if (m_lastOnChangeSelection.isEmpty())
+        return;
+    listBoxOnChange();
+}
+
 void HTMLSelectElement::listBoxDefaultEventHandler(Event* event)
 {
     const WillBeHeapVector<RawPtrWillBeMember<HTMLElement> >& listItems = this->listItems();
@@ -1346,8 +1402,7 @@ void HTMLSelectElement::listBoxDefaultEventHandler(Event* event)
 
         // Convert to coords relative to the list box if needed.
         GestureEvent& gestureEvent = toGestureEvent(*event);
-        IntPoint localOffset = roundedIntPoint(renderer()->absoluteToLocal(gestureEvent.absoluteLocation(), UseTransforms));
-        int listIndex = toRenderListBox(renderer())->listIndexAtOffset(toIntSize(localOffset));
+        int listIndex = listIndexForEventTargetOption(gestureEvent);
         if (listIndex >= 0) {
             if (!isDisabledFormControl())
                 updateSelectedState(listIndex, true, gestureEvent.shiftKey());
@@ -1361,8 +1416,7 @@ void HTMLSelectElement::listBoxDefaultEventHandler(Event* event)
 
         // Convert to coords relative to the list box if needed.
         MouseEvent* mouseEvent = toMouseEvent(event);
-        IntPoint localOffset = roundedIntPoint(renderer()->absoluteToLocal(mouseEvent->absoluteLocation(), UseTransforms));
-        int listIndex = toRenderListBox(renderer())->listIndexAtOffset(toIntSize(localOffset));
+        int listIndex = listIndexForEventTargetOption(*mouseEvent);
         if (listIndex >= 0) {
             if (!isDisabledFormControl()) {
 #if OS(MACOSX)
@@ -1376,13 +1430,15 @@ void HTMLSelectElement::listBoxDefaultEventHandler(Event* event)
 
             event->setDefaultHandled();
         }
-    } else if (event->type() == EventTypeNames::mousemove && event->isMouseEvent() && !toRenderBox(renderer())->canBeScrolledAndHasScrollableArea()) {
+    } else if (event->type() == EventTypeNames::mousemove && event->isMouseEvent()) {
         MouseEvent* mouseEvent = toMouseEvent(event);
         if (mouseEvent->button() != LeftButton || !mouseEvent->buttonDown())
             return;
 
-        IntPoint localOffset = roundedIntPoint(renderer()->absoluteToLocal(mouseEvent->absoluteLocation(), UseTransforms));
-        int listIndex = toRenderListBox(renderer())->listIndexAtOffset(toIntSize(localOffset));
+        if (Page* page = document().page())
+            page->autoscrollController().startAutoscrollForSelection(renderer());
+
+        int listIndex = listIndexForEventTargetOption(*mouseEvent);
         if (listIndex >= 0) {
             if (!isDisabledFormControl()) {
                 if (m_multiple) {
@@ -1399,11 +1455,11 @@ void HTMLSelectElement::listBoxDefaultEventHandler(Event* event)
                 }
             }
         }
-    } else if (event->type() == EventTypeNames::mouseup && event->isMouseEvent() && toMouseEvent(event)->button() == LeftButton && renderer() && !toRenderBox(renderer())->autoscrollInProgress()) {
-        // We didn't start this click/drag on any options.
-        if (m_lastOnChangeSelection.isEmpty())
-            return;
-        listBoxOnChange();
+    } else if (event->type() == EventTypeNames::mouseup && event->isMouseEvent() && toMouseEvent(event)->button() == LeftButton && renderer()) {
+        if (document().page() && document().page()->autoscrollController().autoscrollInProgress(toRenderBox(renderer())))
+            document().page()->autoscrollController().stopAutoscroll();
+        else
+            handleMouseRelease();
     } else if (event->type() == EventTypeNames::keydown) {
         if (!event->isKeyboardEvent())
             return;
@@ -1478,7 +1534,7 @@ void HTMLSelectElement::listBoxDefaultEventHandler(Event* event)
                 setActiveSelectionAnchorIndex(m_activeSelectionEndIndex);
             }
 
-            toRenderListBox(renderer())->scrollToRevealElementAtListIndex(endIndex);
+            scrollTo(endIndex);
             if (selectNewItem) {
                 updateListBoxSelection(deselectOthers);
                 listBoxOnChange();
@@ -1629,6 +1685,7 @@ void HTMLSelectElement::finishParsingChildren()
 {
     HTMLFormControlElementWithState::finishParsingChildren();
     updateListItemSelectedStates();
+    scrollToSelection();
 }
 
 bool HTMLSelectElement::anonymousIndexedSetter(unsigned index, PassRefPtrWillBeRawPtr<HTMLOptionElement> value, ExceptionState& exceptionState)
@@ -1662,6 +1719,26 @@ void HTMLSelectElement::trace(Visitor* visitor)
     visitor->trace(m_listItems);
 #endif
     HTMLFormControlElementWithState::trace(visitor);
+}
+
+void HTMLSelectElement::didAddUserAgentShadowRoot(ShadowRoot& root)
+{
+    RefPtrWillBeRawPtr<HTMLContentElement> content = HTMLContentElement::create(document());
+    content->setAttribute(selectAttr, "option,optgroup");
+    root.appendChild(content);
+}
+
+HTMLOptionElement* HTMLSelectElement::spatialNavigationFocusedOption()
+{
+    if (!isSpatialNavigationEnabled(document().frame()))
+        return nullptr;
+    int focusedIndex = activeSelectionEndListIndex();
+    if (focusedIndex < 0)
+        focusedIndex = firstSelectableListIndex();
+    if (focusedIndex < 0)
+        return nullptr;
+    HTMLElement* focused = listItems()[focusedIndex];
+    return isHTMLOptionElement(focused) ? toHTMLOptionElement(focused) : nullptr;
 }
 
 } // namespace

@@ -21,6 +21,7 @@
 #include "core/rendering/RootInlineBox.h"
 
 #include "core/dom/Document.h"
+#include "core/dom/StyleEngine.h"
 #include "core/rendering/EllipsisBox.h"
 #include "core/rendering/HitTestResult.h"
 #include "core/rendering/InlineTextBox.h"
@@ -33,7 +34,7 @@
 #include "platform/text/BidiResolver.h"
 #include "wtf/unicode/Unicode.h"
 
-namespace WebCore {
+namespace blink {
 
 struct SameSizeAsRootInlineBox : public InlineFlowBox {
     unsigned unsignedVariable;
@@ -87,18 +88,6 @@ void RootInlineBox::clearTruncation()
         detachEllipsisBox();
         InlineFlowBox::clearTruncation();
     }
-}
-
-bool RootInlineBox::isHyphenated() const
-{
-    for (InlineBox* box = firstLeafChild(); box; box = box->nextLeafChild()) {
-        if (box->isInlineTextBox()) {
-            if (toInlineTextBox(box)->hasHyphen())
-                return true;
-        }
-    }
-
-    return false;
 }
 
 int RootInlineBox::baselinePosition(FontBaseline baselineType) const
@@ -437,13 +426,15 @@ LayoutUnit RootInlineBox::selectionTopAdjustedForPrecedingBlock() const
 
     LayoutSize offsetToBlockBefore;
     if (RenderBlock* block = root().block().blockBeforeWithinSelectionRoot(offsetToBlockBefore)) {
-        if (RootInlineBox* lastLine = block->lastRootBox()) {
-            RenderObject::SelectionState lastLineSelectionState = lastLine->selectionState();
-            if (lastLineSelectionState != RenderObject::SelectionInside && lastLineSelectionState != RenderObject::SelectionStart)
-                return top;
+        if (block->isRenderBlockFlow()) {
+            if (RootInlineBox* lastLine = toRenderBlockFlow(block)->lastRootBox()) {
+                RenderObject::SelectionState lastLineSelectionState = lastLine->selectionState();
+                if (lastLineSelectionState != RenderObject::SelectionInside && lastLineSelectionState != RenderObject::SelectionStart)
+                    return top;
 
-            LayoutUnit lastLineSelectionBottom = lastLine->selectionBottom() + offsetToBlockBefore.height();
-            top = std::max(top, lastLineSelectionBottom);
+                LayoutUnit lastLineSelectionBottom = lastLine->selectionBottom() + offsetToBlockBefore.height();
+                top = std::max(top, lastLineSelectionBottom);
+            }
         }
     }
 
@@ -488,7 +479,7 @@ RenderBlockFlow& RootInlineBox::block() const
 
 static bool isEditableLeaf(InlineBox* leaf)
 {
-    return leaf && leaf->renderer().node() && leaf->renderer().node()->rendererIsEditable();
+    return leaf && leaf->renderer().node() && leaf->renderer().node()->hasEditableStyle();
 }
 
 InlineBox* RootInlineBox::closestLeafChildForPoint(const IntPoint& pointInContents, bool onlyEditableLeaves)
@@ -880,4 +871,4 @@ const char* RootInlineBox::boxName() const
 }
 #endif
 
-} // namespace WebCore
+} // namespace blink

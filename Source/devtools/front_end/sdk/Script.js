@@ -25,7 +25,7 @@
 
 /**
  * @constructor
- * @extends {WebInspector.TargetAwareObject}
+ * @extends {WebInspector.SDKObject}
  * @implements {WebInspector.ContentProvider}
  * @param {!WebInspector.Target} target
  * @param {string} scriptId
@@ -40,7 +40,7 @@
  */
 WebInspector.Script = function(target, scriptId, sourceURL, startLine, startColumn, endLine, endColumn, isContentScript, sourceMapURL, hasSourceURL)
 {
-    WebInspector.TargetAwareObject.call(this, target);
+    WebInspector.SDKObject.call(this, target);
     this.scriptId = scriptId;
     this.sourceURL = sourceURL;
     this.lineOffset = startLine;
@@ -58,6 +58,7 @@ WebInspector.Script = function(target, scriptId, sourceURL, startLine, startColu
 
 WebInspector.Script.Events = {
     ScriptEdited: "ScriptEdited",
+    SourceMapURLAdded: "SourceMapURLAdded",
 }
 
 WebInspector.Script.snippetSourceURLPrefix = "snippets:///";
@@ -213,6 +214,17 @@ WebInspector.Script.prototype = {
     },
 
     /**
+     * @param {string} sourceMapURL
+     */
+    addSourceMapURL: function(sourceMapURL)
+    {
+        if (this.sourceMapURL)
+            return;
+        this.sourceMapURL = sourceMapURL;
+        this.dispatchEventToListeners(WebInspector.Script.Events.SourceMapURLAdded, this.sourceMapURL);
+    },
+
+    /**
      * @return {boolean}
      */
     isAnonymousScript: function()
@@ -234,8 +246,6 @@ WebInspector.Script.prototype = {
     isFramework: function()
     {
         if (!WebInspector.experimentsSettings.frameworksDebuggingSupport.isEnabled())
-            return false;
-        if (!WebInspector.settings.skipStackFramesSwitch.get())
             return false;
         var regex = WebInspector.settings.skipStackFramesPattern.asRegExp();
         return regex ? regex.test(this.sourceURL) : false;
@@ -296,7 +306,7 @@ WebInspector.Script.prototype = {
         return location;
     },
 
-    __proto__: WebInspector.TargetAwareObject.prototype
+    __proto__: WebInspector.SDKObject.prototype
 }
 
 /**

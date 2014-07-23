@@ -31,11 +31,11 @@
 #ifndef SVGStringList_h
 #define SVGStringList_h
 
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/svg/SVGString.h"
 #include "core/svg/properties/SVGPropertyHelper.h"
 
-namespace WebCore {
+namespace blink {
 
 class SVGStringListTearOff;
 
@@ -93,6 +93,6 @@ private:
     Vector<String> m_values;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // SVGStringList_h

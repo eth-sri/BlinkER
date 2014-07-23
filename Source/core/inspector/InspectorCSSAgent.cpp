@@ -25,8 +25,8 @@
 #include "config.h"
 #include "core/inspector/InspectorCSSAgent.h"
 
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/CSSPropertyNames.h"
 #include "core/InspectorTypeBuilder.h"
 #include "core/StylePropertyShorthand.h"
@@ -48,6 +48,7 @@
 #include "core/css/StyleSheetList.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/Node.h"
+#include "core/dom/StyleEngine.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLHeadElement.h"
 #include "core/html/VoidCallback.h"
@@ -61,6 +62,7 @@
 #include "core/page/Page.h"
 #include "core/rendering/InlineTextBox.h"
 #include "core/rendering/RenderObject.h"
+#include "core/rendering/RenderObjectInlines.h"
 #include "core/rendering/RenderText.h"
 #include "core/rendering/RenderTextFragment.h"
 #include "platform/fonts/Font.h"
@@ -75,9 +77,9 @@ namespace CSSAgentState {
 static const char cssAgentEnabled[] = "cssAgentEnabled";
 }
 
-typedef WebCore::InspectorBackendDispatcher::CSSCommandHandler::EnableCallback EnableCallback;
+typedef blink::InspectorBackendDispatcher::CSSCommandHandler::EnableCallback EnableCallback;
 
-namespace WebCore {
+namespace blink {
 
 enum ForcePseudoClassFlags {
     PseudoNone = 0,
@@ -420,7 +422,7 @@ void InspectorCSSAgent::enable(ErrorString*, PassRefPtr<EnableCallback> prpCallb
         prpCallback->sendSuccess();
         return;
     }
-    m_pageAgent->resourceContentLoader()->addListener(adoptPtr(new InspectorCSSAgent::InspectorResourceContentLoaderCallback(this, prpCallback)));
+    m_pageAgent->resourceContentLoader()->ensureResourcesContentLoaded(adoptPtr(new InspectorCSSAgent::InspectorResourceContentLoaderCallback(this, prpCallback)));
 }
 
 void InspectorCSSAgent::wasEnabled()
@@ -733,7 +735,7 @@ void InspectorCSSAgent::getPlatformFontsForNode(ErrorString* errorString, int no
     RefPtrWillBeRawPtr<CSSComputedStyleDeclaration> computedStyleInfo = CSSComputedStyleDeclaration::create(node, true);
     *cssFamilyName = computedStyleInfo->getPropertyValue(CSSPropertyFontFamily);
 
-    Vector<Node*> textNodes;
+    WillBeHeapVector<RawPtrWillBeMember<Node> > textNodes;
     if (node->nodeType() == Node::TEXT_NODE) {
         if (node->renderer())
             textNodes.append(node);
@@ -804,18 +806,18 @@ static bool extractRangeComponent(ErrorString* errorString, const RefPtr<JSONObj
 
 static bool jsonRangeToSourceRange(ErrorString* errorString, InspectorStyleSheetBase* inspectorStyleSheet, const RefPtr<JSONObject>& range, SourceRange* sourceRange)
 {
-    unsigned startLineNumber;
-    unsigned startColumn;
-    unsigned endLineNumber;
-    unsigned endColumn;
+    unsigned startLineNumber = 0;
+    unsigned startColumn = 0;
+    unsigned endLineNumber = 0;
+    unsigned endColumn = 0;
     if (!extractRangeComponent(errorString, range, "startLine", startLineNumber)
         || !extractRangeComponent(errorString, range, "startColumn", startColumn)
         || !extractRangeComponent(errorString, range, "endLine", endLineNumber)
         || !extractRangeComponent(errorString, range, "endColumn", endColumn))
         return false;
 
-    unsigned startOffset;
-    unsigned endOffset;
+    unsigned startOffset = 0;
+    unsigned endOffset = 0;
     bool success = inspectorStyleSheet->lineNumberAndColumnToOffset(startLineNumber, startColumn, &startOffset)
         && inspectorStyleSheet->lineNumberAndColumnToOffset(endLineNumber, endColumn, &endOffset);
     if (!success) {
@@ -1404,5 +1406,5 @@ void InspectorCSSAgent::resetPseudoStates()
         (*it)->setNeedsStyleRecalc(SubtreeStyleChange);
 }
 
-} // namespace WebCore
+} // namespace blink
 

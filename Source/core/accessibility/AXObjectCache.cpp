@@ -77,7 +77,7 @@
 #include "platform/scroll/ScrollView.h"
 #include "wtf/PassRefPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -290,6 +290,9 @@ static PassRefPtr<AXObject> createFromRenderer(RenderObject* renderer)
     if (node && node->isMediaControlElement())
         return AccessibilityMediaControl::create(renderer);
 
+    if (isHTMLOptionElement(node))
+        return AXListBoxOption::create(renderer);
+
     if (renderer->isSVGRoot())
         return AXSVGRoot::create(renderer);
 
@@ -460,9 +463,6 @@ AXObject* AXObjectCache::getOrCreate(AccessibilityRole role)
 
     // will be filled in...
     switch (role) {
-    case ListBoxOptionRole:
-        obj = AXListBoxOption::create();
-        break;
     case ImageMapLinkRole:
         obj = AXImageMapLink::create();
         break;
@@ -704,7 +704,7 @@ void AXObjectCache::notificationPostTimerFired(Timer<AXObjectCache>*)
         if (!obj->axObjectCache())
             continue;
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
         // Make sure none of the render views are in the process of being layed out.
         // Notifications should only be sent after the renderer has finished
         if (obj->isAXRenderObject()) {
@@ -1027,4 +1027,4 @@ void AXObjectCache::setCanvasObjectBounds(Element* element, const LayoutRect& re
     obj->setElementRect(rect);
 }
 
-} // namespace WebCore
+} // namespace blink

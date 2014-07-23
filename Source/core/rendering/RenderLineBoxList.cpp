@@ -36,9 +36,9 @@
 #include "core/rendering/RenderView.h"
 #include "core/rendering/RootInlineBox.h"
 
-namespace WebCore {
+namespace blink {
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
 RenderLineBoxList::~RenderLineBoxList()
 {
     ASSERT(!m_firstLineBox);
@@ -356,7 +356,7 @@ void RenderLineBoxList::dirtyLinesFromChangedChild(RenderObject* container, Rend
     }
 }
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
 
 void RenderLineBoxList::checkConsistency() const
 {

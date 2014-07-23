@@ -44,7 +44,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-using namespace WebCore;
+using namespace blink;
 using namespace blink;
 using testing::Test;
 using testing::_;
@@ -87,10 +87,11 @@ public:
         memset(mailbox, m_currentMailboxByte, sizeof(temp.name));
     }
 
-    virtual void produceTextureCHROMIUM(WGC3Denum target, const WGC3Dbyte* mailbox)
+    virtual void produceTextureDirectCHROMIUM(WebGLId texture, WGC3Denum target, const WGC3Dbyte* mailbox)
     {
         ASSERT_EQ(target, static_cast<WGC3Denum>(GL_TEXTURE_2D));
-        m_mostRecentlyProducedSize = m_textureSizes.get(m_boundTexture);
+        ASSERT_TRUE(m_textureSizes.contains(texture));
+        m_mostRecentlyProducedSize = m_textureSizes.get(texture);
     }
 
     IntSize mostRecentlyProducedSize()
@@ -325,11 +326,16 @@ public:
         return !memcmp(m_mailbox.name, other.m_mailbox.name, sizeof(m_mailbox.name));
     }
 
+    bool operator!=(const TextureMailboxWrapper& other) const
+    {
+        return !(*this == other);
+    }
+
 private:
     blink::WebExternalTextureMailbox m_mailbox;
 };
 
-TEST_F(DrawingBufferTest, verifyRecyclingMailboxesByFIFO)
+TEST_F(DrawingBufferTest, verifyOnlyOneRecycledMailboxMustBeKept)
 {
     blink::WebExternalTextureMailbox mailbox1;
     blink::WebExternalTextureMailbox mailbox2;
@@ -343,33 +349,31 @@ TEST_F(DrawingBufferTest, verifyRecyclingMailboxesByFIFO)
     m_drawingBuffer->markContentsChanged();
     EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&mailbox3, 0));
 
-    // Release mailboxes by specific order; 2, 3, 1.
+    // Release mailboxes by specific order; 1, 3, 2.
     m_drawingBuffer->markContentsChanged();
-    m_drawingBuffer->mailboxReleased(mailbox2);
+    m_drawingBuffer->mailboxReleased(mailbox1);
     m_drawingBuffer->markContentsChanged();
     m_drawingBuffer->mailboxReleased(mailbox3);
     m_drawingBuffer->markContentsChanged();
-    m_drawingBuffer->mailboxReleased(mailbox1);
-
-    // The first recycled mailbox must be 2.
-    blink::WebExternalTextureMailbox recycledMailbox;
-    m_drawingBuffer->markContentsChanged();
-    EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&recycledMailbox, 0));
-    EXPECT_EQ(TextureMailboxWrapper(mailbox2), TextureMailboxWrapper(recycledMailbox));
-
-    // The second recycled mailbox must be 3.
-    m_drawingBuffer->markContentsChanged();
-    EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&recycledMailbox, 0));
-    EXPECT_EQ(TextureMailboxWrapper(mailbox3), TextureMailboxWrapper(recycledMailbox));
-
-    // The third recycled mailbox must be 1.
-    m_drawingBuffer->markContentsChanged();
-    EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&recycledMailbox, 0));
-    EXPECT_EQ(TextureMailboxWrapper(mailbox1), TextureMailboxWrapper(recycledMailbox));
-
-    m_drawingBuffer->mailboxReleased(mailbox1);
     m_drawingBuffer->mailboxReleased(mailbox2);
-    m_drawingBuffer->mailboxReleased(mailbox3);
+
+    // The first recycled mailbox must be 2. 1 and 3 were deleted by FIFO order because
+    // DrawingBuffer never keeps more than one mailbox.
+    blink::WebExternalTextureMailbox recycledMailbox1;
+    m_drawingBuffer->markContentsChanged();
+    EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&recycledMailbox1, 0));
+    EXPECT_EQ(TextureMailboxWrapper(mailbox2), TextureMailboxWrapper(recycledMailbox1));
+
+    // The second recycled mailbox must be a new mailbox.
+    blink::WebExternalTextureMailbox recycledMailbox2;
+    m_drawingBuffer->markContentsChanged();
+    EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&recycledMailbox2, 0));
+    EXPECT_NE(TextureMailboxWrapper(mailbox1), TextureMailboxWrapper(recycledMailbox2));
+    EXPECT_NE(TextureMailboxWrapper(mailbox2), TextureMailboxWrapper(recycledMailbox2));
+    EXPECT_NE(TextureMailboxWrapper(mailbox3), TextureMailboxWrapper(recycledMailbox2));
+
+    m_drawingBuffer->mailboxReleased(recycledMailbox1);
+    m_drawingBuffer->mailboxReleased(recycledMailbox2);
     m_drawingBuffer->beginDestruction();
 }
 

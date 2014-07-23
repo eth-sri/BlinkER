@@ -30,7 +30,7 @@
 #include "config.h"
 #include "core/html/shadow/MediaControlElements.h"
 
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/DOMTokenList.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/events/MouseEvent.h"
@@ -47,7 +47,7 @@
 #include "core/rendering/RenderVideo.h"
 #include "platform/RuntimeEnabledFeatures.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -283,7 +283,7 @@ void MediaControlOverlayPlayButtonElement::defaultEventHandler(Event* event)
 
 void MediaControlOverlayPlayButtonElement::updateDisplayType()
 {
-    if (mediaElement().togglePlayStateWillPlay()) {
+    if (mediaElement().shouldShowControls() && mediaElement().togglePlayStateWillPlay()) {
         show();
     } else
         hide();
@@ -681,4 +681,4 @@ void MediaControlTextTrackContainerElement::updateSizes()
 
 // ----------------------------
 
-} // namespace WebCore
+} // namespace blink

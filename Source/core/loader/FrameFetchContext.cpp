@@ -43,7 +43,7 @@
 #include "core/frame/Settings.h"
 #include "platform/weborigin/SecurityPolicy.h"
 
-namespace WebCore {
+namespace blink {
 
 FrameFetchContext::FrameFetchContext(LocalFrame* frame)
     : m_frame(frame)
@@ -83,9 +83,6 @@ void FrameFetchContext::addAdditionalRequestHeaders(Document* document, Resource
         return;
 
     m_frame->loader().applyUserAgent(request);
-
-    // Default to sending an empty Origin header if one hasn't been set yet.
-    request.addHTTPOriginIfNeeded(nullAtom);
 }
 
 void FrameFetchContext::setFirstPartyForCookies(ResourceRequest& request)
@@ -203,4 +200,4 @@ void FrameFetchContext::sendRemainingDelegateMessages(DocumentLoader* loader, un
     dispatchDidFinishLoading(ensureLoader(loader), identifier, 0, 0);
 }
 
-} // namespace WebCore
+} // namespace blink

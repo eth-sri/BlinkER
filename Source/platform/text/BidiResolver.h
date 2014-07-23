@@ -31,7 +31,7 @@
 #include "wtf/PassRefPtr.h"
 #include "wtf/Vector.h"
 
-namespace WebCore {
+namespace blink {
 
 class RenderObject;
 
@@ -201,7 +201,7 @@ public:
     {
     }
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     ~BidiResolver();
 #endif
 
@@ -315,7 +315,7 @@ private:
     HashMap<Run *, MidpointState<Iterator> > m_midpointStateForIsolatedRun;
 };
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
 template <class Iterator, class Run>
 BidiResolver<Iterator, Run>::~BidiResolver()
 {
@@ -1082,6 +1082,6 @@ MidpointState<Iterator> BidiResolver<Iterator, Run>::midpointStateForIsolatedRun
 }
 
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // BidiResolver_h

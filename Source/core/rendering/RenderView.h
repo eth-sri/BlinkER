@@ -24,12 +24,13 @@
 
 #include "core/frame/FrameView.h"
 #include "core/rendering/LayoutState.h"
+#include "core/rendering/PaintInvalidationState.h"
 #include "core/rendering/RenderBlockFlow.h"
 #include "platform/PODFreeListArena.h"
 #include "platform/scroll/ScrollableArea.h"
 #include "wtf/OwnPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 class FlowThreadController;
 class RenderLayerCompositor;
@@ -78,13 +79,13 @@ public:
 
     FrameView* frameView() const { return m_frameView; }
 
-    virtual void mapRectToPaintInvalidationBacking(const RenderLayerModelObject* paintInvalidationContainer, LayoutRect&, bool fixed = false) const OVERRIDE;
+    virtual void mapRectToPaintInvalidationBacking(const RenderLayerModelObject* paintInvalidationContainer, LayoutRect&, bool fixed = false, const PaintInvalidationState* = 0) const OVERRIDE;
     void repaintViewRectangle(const LayoutRect&) const;
 
     void repaintViewAndCompositedLayers();
 
     virtual void paint(PaintInfo&, const LayoutPoint&) OVERRIDE;
-    virtual void paintBoxDecorations(PaintInfo&, const LayoutPoint&) OVERRIDE;
+    virtual void paintBoxDecorationBackground(PaintInfo&, const LayoutPoint&) OVERRIDE;
 
     enum SelectionRepaintMode { RepaintNewXOROld, RepaintNewMinusOld, RepaintNothing };
     void setSelection(RenderObject* start, int startPos, RenderObject* end, int endPos, SelectionRepaintMode = RepaintNewXOROld);
@@ -104,15 +105,7 @@ public:
     bool shouldDoFullRepaintForNextLayout() const;
     bool doingFullRepaint() const { return m_frameView->needsFullPaintInvalidation(); }
 
-    // Returns true if layoutState should be used for its cached offset and clip.
-    bool layoutStateCachedOffsetsEnabled() const { return m_layoutState && m_layoutState->cachedOffsetsEnabled(); }
     LayoutState* layoutState() const { return m_layoutState; }
-
-    bool canMapUsingLayoutStateForContainer(const RenderObject* repaintContainer) const
-    {
-        // FIXME: LayoutState should be enabled for other repaint containers than the RenderView. crbug.com/363834
-        return layoutStateCachedOffsetsEnabled() && (repaintContainer == this);
-    }
 
     virtual void updateHitTestResult(HitTestResult&, const LayoutPoint&) OVERRIDE;
 
@@ -164,19 +157,19 @@ public:
     void popLayoutState();
 
 private:
-    virtual void mapLocalToContainer(const RenderLayerModelObject* repaintContainer, TransformState&, MapCoordinatesFlags = ApplyContainerFlip, bool* wasFixed = 0) const OVERRIDE;
+    virtual void mapLocalToContainer(const RenderLayerModelObject* repaintContainer, TransformState&, MapCoordinatesFlags = ApplyContainerFlip, bool* wasFixed = 0, const PaintInvalidationState* = 0) const OVERRIDE;
     virtual const RenderObject* pushMappingToContainer(const RenderLayerModelObject* ancestorToStopAt, RenderGeometryMap&) const OVERRIDE;
     virtual void mapAbsoluteToLocalPoint(MapCoordinatesFlags, TransformState&) const OVERRIDE;
     virtual void computeSelfHitTestRects(Vector<LayoutRect>&, const LayoutPoint& layerOffset) const OVERRIDE;
 
-    virtual void invalidateTreeAfterLayout(const RenderLayerModelObject& paintInvalidationContainer) OVERRIDE FINAL;
+    virtual void invalidateTreeIfNeeded(const PaintInvalidationState&) OVERRIDE FINAL;
 
     bool shouldRepaint(const LayoutRect&) const;
 
     bool rootFillsViewportBackground(RenderBox* rootBox) const;
 
     void layoutContent();
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     void checkLayoutState();
 #endif
 
@@ -220,31 +213,24 @@ DEFINE_RENDER_OBJECT_TYPE_CASTS(RenderView, isRenderView());
 class ForceHorriblySlowRectMapping {
     WTF_MAKE_NONCOPYABLE(ForceHorriblySlowRectMapping);
 public:
-    ForceHorriblySlowRectMapping(const RenderObject& root)
-        : m_view(*root.view())
-        , m_didDisable(m_view.layoutState() && m_view.layoutState()->cachedOffsetsEnabled())
+    ForceHorriblySlowRectMapping(const PaintInvalidationState* paintInvalidationState)
+        : m_paintInvalidationState(paintInvalidationState)
+        , m_didDisable(m_paintInvalidationState && m_paintInvalidationState->cachedOffsetsEnabled())
     {
-        if (m_view.layoutState())
-            m_view.layoutState()->m_cachedOffsetsEnabled = false;
-#if ASSERT_ENABLED
-        m_layoutState = m_view.layoutState();
-#endif
+        if (m_paintInvalidationState)
+            m_paintInvalidationState->m_cachedOffsetsEnabled = false;
     }
 
     ~ForceHorriblySlowRectMapping()
     {
-        ASSERT(m_view.layoutState() == m_layoutState);
         if (m_didDisable)
-            m_view.layoutState()->m_cachedOffsetsEnabled = true;
+            m_paintInvalidationState->m_cachedOffsetsEnabled = true;
     }
 private:
-    RenderView& m_view;
+    const PaintInvalidationState* m_paintInvalidationState;
     bool m_didDisable;
-#if ASSERT_ENABLED
-    LayoutState* m_layoutState;
-#endif
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // RenderView_h

@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <script src="../resources/js-test.js"></script>
 <script>
 if (window.testRunner) {
@@ -35,9 +36,10 @@ function goFullScreen() {
         }, 0);
     }, 0);
     element.webkitRequestFullScreen();
+    shouldNotBe("document.webkitFullscreenElement", "null");
 }
 </script>
 <body onload="init()">
-    <iframe webkitallowfullscreen src="resources/inner.html" id="block1"></iframe>
+    <iframe allowfullscreen src="resources/inner.html" id="block1"></iframe>
     PASS
 </body>

@@ -26,9 +26,9 @@
 #include "config.h"
 #include "modules/indexeddb/IDBCursor.h"
 
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/IDBBindingUtilities.h"
-#include "bindings/v8/ScriptState.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ScriptState.h"
+#include "bindings/modules/v8/IDBBindingUtilities.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/inspector/ScriptCallStack.h"
@@ -46,7 +46,7 @@
 using blink::WebIDBCursor;
 using blink::WebIDBDatabase;
 
-namespace WebCore {
+namespace blink {
 
 IDBCursor* IDBCursor::create(PassOwnPtr<blink::WebIDBCursor> backend, blink::WebIDBCursorDirection direction, IDBRequest* request, IDBAny* source, IDBTransaction* transaction)
 {
@@ -139,16 +139,6 @@ IDBRequest* IDBCursor::update(ScriptState* scriptState, ScriptValue& value, Exce
     }
 
     IDBObjectStore* objectStore = effectiveObjectStore();
-    const IDBKeyPath& keyPath = objectStore->metadata().keyPath;
-    const bool usesInLineKeys = !keyPath.isNull();
-    if (usesInLineKeys) {
-        IDBKey* keyPathKey = createIDBKeyFromScriptValueAndKeyPath(scriptState->isolate(), value, keyPath);
-        if (!keyPathKey || !keyPathKey->isEqual(m_primaryKey.get())) {
-            exceptionState.throwDOMException(DataError, "The effective object store of this cursor uses in-line keys and evaluating the key path of the value parameter results in a different value than the cursor's effective key.");
-            return 0;
-        }
-    }
-
     return objectStore->put(scriptState, blink::WebIDBPutModeCursorUpdate, IDBAny::create(this), value, m_primaryKey, exceptionState);
 }
 
@@ -330,7 +320,7 @@ ScriptValue IDBCursor::value(ScriptState* scriptState)
     IDBAny* value;
     if (metadata.autoIncrement && !metadata.keyPath.isNull()) {
         value = IDBAny::create(m_value, m_blobInfo.get(), m_primaryKey, metadata.keyPath);
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
         assertPrimaryKeyValidOrInjectable(scriptState, m_value, m_blobInfo.get(), m_primaryKey, metadata.keyPath);
 #endif
     } else {
@@ -426,4 +416,4 @@ const AtomicString& IDBCursor::directionToString(unsigned short direction)
     }
 }
 
-} // namespace WebCore
+} // namespace blink

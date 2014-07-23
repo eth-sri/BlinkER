@@ -1,0 +1,41 @@
+<!--
+Copyright 2014 The Chromium Authors. All rights reserved.
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
+
+<link rel="import" href="ct-commit.html">
+
+<polymer-element name="ct-commit-list" attributes="first last commits" noscript>
+  <template>
+    <style>
+      :host {
+        display: block;
+      }
+    </style>
+    <template repeat="{{revision in _revisions}}">
+      <template if="{{commits[revision]}}">
+        <ct-commit data="{{commits[revision]}}"></ct-commit>
+      </template>
+    </template>
+  </template>
+  <script>
+    Polymer({
+      commits: {},
+      first: 0,
+      last: 0,
+      _revisions: [],
+
+      observe: {
+        first: '_update',
+        last: '_update',
+      },
+
+      _update: function() {
+        if (!this.first || !this.last)
+          return;
+        this._revisions = Number.range(this.first, this.last).every();
+      },
+    });
+  </script>
+</polymer-element>

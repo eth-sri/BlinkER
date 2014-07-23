@@ -3,6 +3,7 @@ CONSOLE MESSAGE: line 10: [object NodeList]
 CONSOLE MESSAGE: line 11: [object XPathResult]
 CONSOLE MESSAGE: line 21: [object Object]
 CONSOLE MESSAGE: line 24: function () {}
+CONSOLE MESSAGE: line 28: [object Object]
 Tests that console logging dumps proper messages.
 
 Array[2]
@@ -15,13 +16,13 @@ NodeList[1]
     length: 1
     __proto__: NodeList console-dir.html:10
 XPathResult
-    booleanValue: [Exception: TypeError]
+    booleanValue: [Exception: TypeError: Failed to read the 'booleanValue' property from 'XPathResult': The result type is not a boolean.]
     invalidIteratorState: false
-    numberValue: [Exception: TypeError]
+    numberValue: [Exception: TypeError: Failed to read the 'numberValue' property from 'XPathResult': The result type is not a number.]
     resultType: 4
-    singleNodeValue: [Exception: TypeError]
-    snapshotLength: [Exception: TypeError]
-    stringValue: [Exception: TypeError]
+    singleNodeValue: [Exception: TypeError: Failed to read the 'singleNodeValue' property from 'XPathResult': The result type is not a single node.]
+    snapshotLength: [Exception: TypeError: Failed to read the 'snapshotLength' property from 'XPathResult': The result type is not a snapshot.]
+    stringValue: [Exception: TypeError: Failed to read the 'stringValue' property from 'XPathResult': The result type is not a string.]
     __proto__: XPathResult console-dir.html:11
 Object
     "": ""
@@ -40,4 +41,6 @@ function () {}
     prototype: Object
     __proto__: function Empty() {}
     <function scope> console-dir.html:24
+outer.inner
+    __proto__: outer.inner console-dir.html:28
 

@@ -12,7 +12,7 @@ namespace blink {
 class WebContentDecryptionModule;
 }
 
-namespace WebCore {
+namespace blink {
 
 class ExecutionContext;
 class Page;
@@ -25,9 +25,7 @@ protected:
     virtual ~MediaKeysClient() { }
 };
 
-void provideMediaKeysTo(Page&, MediaKeysClient*);
-
-} // namespace WebCore
+} // namespace blink
 
 #endif // MediaKeysClient_h
 

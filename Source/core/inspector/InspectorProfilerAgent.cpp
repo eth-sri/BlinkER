@@ -30,8 +30,8 @@
 #include "config.h"
 #include "core/inspector/InspectorProfilerAgent.h"
 
-#include "bindings/v8/ScriptCallStackFactory.h"
-#include "bindings/v8/ScriptProfiler.h"
+#include "bindings/core/v8/ScriptCallStackFactory.h"
+#include "bindings/core/v8/ScriptProfiler.h"
 #include "core/inspector/InjectedScript.h"
 #include "core/inspector/InjectedScriptHost.h"
 #include "core/inspector/InspectorOverlay.h"
@@ -43,7 +43,7 @@
 #include "wtf/CurrentTime.h"
 #include "wtf/text/StringConcatenate.h"
 
-namespace WebCore {
+namespace blink {
 
 namespace ProfilerAgentState {
 static const char samplingInterval[] = "samplingInterval";
@@ -295,5 +295,5 @@ void InspectorProfilerAgent::didLeaveNestedRunLoop()
     idleFinished();
 }
 
-} // namespace WebCore
+} // namespace blink
 

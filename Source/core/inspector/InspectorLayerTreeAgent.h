@@ -40,7 +40,7 @@
 #include "wtf/PassRefPtr.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 class GraphicsContextSnapshot;
 class InstrumentingAgents;
@@ -76,7 +76,7 @@ public:
     virtual void makeSnapshot(ErrorString*, const String& layerId, String* snapshotId) OVERRIDE;
     virtual void loadSnapshot(ErrorString*, const String& data, String* snapshotId) OVERRIDE;
     virtual void releaseSnapshot(ErrorString*, const String& snapshotId) OVERRIDE;
-    virtual void replaySnapshot(ErrorString*, const String& snapshotId, const int* fromStep, const int* toStep, String* dataURL) OVERRIDE;
+    virtual void replaySnapshot(ErrorString*, const String& snapshotId, const int* fromStep, const int* toStep, const double* scale, String* dataURL) OVERRIDE;
     virtual void profileSnapshot(ErrorString*, const String& snapshotId, const int* minRepeatCount, const double* minDuration, RefPtr<TypeBuilder::Array<TypeBuilder::Array<double> > >&) OVERRIDE;
     virtual void snapshotCommandLog(ErrorString*, const String& snapshotId, RefPtr<TypeBuilder::Array<JSONObject> >&) OVERRIDE;
 
@@ -105,7 +105,7 @@ private:
     SnapshotById m_snapshotById;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 
 #endif // !defined(InspectorLayerTreeAgent_h)

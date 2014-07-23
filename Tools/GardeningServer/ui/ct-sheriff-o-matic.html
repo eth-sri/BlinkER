@@ -1,0 +1,77 @@
+<!--
+Copyright 2014 The Chromium Authors. All rights reserved.
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
+
+<script src="../bower_components/sugar/release/sugar-full.development.js"></script>
+<script src="../scripts/net.js"></script>
+<script src="../scripts/results.js"></script>
+<script src="../scripts/treestatus.js"></script>
+<script src="../scripts/ui.js"></script>
+
+<link rel="import" href="../bower_components/core-animated-pages/core-animated-pages.html">
+<link rel="import" href="../bower_components/core-animated-pages/transitions/slide-from-right.html">
+<link rel="import" href="ct-results-panel.html">
+<link rel="import" href="ct-unexpected-failures.html">
+
+<polymer-element name="ct-sheriff-o-matic">
+  <template>
+    <style>
+      :host {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+      }
+      header {
+        -webkit-user-select: none;
+        align-items: center;
+        background-color: #212121;
+        color: white;
+        cursor: default;
+        display: flex;
+        font-size: 1.1em;
+      }
+      header a, header span {
+        color: white;
+        display: inline-block;
+        padding: 0.25em 4px;
+        text-decoration: none;
+      }
+      core-animated-pages {
+        flex: 1;
+      }
+    </style>
+
+    <header>
+      <template if="{{ selected == 0 }}">
+        <span><img src="../favicon.ico"> Auto-sheriff-o-maticon</span>
+      </template>
+      <template if="{{ selected == 1 }}">
+        <a on-click="{{ onBack }}">
+          &lt;&lt; Go back
+        </a>
+      </template>
+    </header>
+
+    <core-animated-pages selected="{{ selected }}" transitions="slide-from-right">
+      <ct-unexpected-failures on-ct-examine-failures="{{ onExamine }}"></ct-unexpected-failures>
+      <ct-results-panel failures="{{ currentFailures }}"></ct-results-panel>
+    </core-animated-pages>
+  </template>
+  <script>
+    Polymer({
+      selected: 0,
+      currentFailures: [],
+
+      onBack: function() {
+        this.selected = 0;
+      },
+
+      onExamine: function(event) {
+        this.currentFailures = event.detail;
+        this.selected = 1;
+      },
+    });
+  </script>
+</polymer-element>

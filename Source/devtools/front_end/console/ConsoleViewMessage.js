@@ -86,7 +86,7 @@ WebInspector.ConsoleViewMessage.prototype = {
 
     cacheFastHeight: function()
     {
-        this._cachedHeight = this.contentElement().clientHeight;
+        this._cachedHeight = this.contentElement().offsetHeight;
     },
 
     willHide: function()
@@ -105,7 +105,7 @@ WebInspector.ConsoleViewMessage.prototype = {
     {
         if (this._cachedHeight)
             return this._cachedHeight;
-        const defaultConsoleRowHeight = 17;
+        const defaultConsoleRowHeight = 16;
         if (this._message.type === WebInspector.ConsoleMessage.MessageType.Table) {
             var table = this._message.parameters[0];
             if (table && table.preview)
@@ -217,6 +217,8 @@ WebInspector.ConsoleViewMessage.prototype = {
 
             var content = this._formattedMessage;
             var root = new TreeElement(content, null, true);
+            root.toggleOnClick = true;
+            root.selectable = false;
             content.treeElementForTest = root;
             treeOutline.appendChild(root);
             if (consoleMessage.type === WebInspector.ConsoleMessage.MessageType.Trace)
@@ -260,8 +262,8 @@ WebInspector.ConsoleViewMessage.prototype = {
         columnNumber = columnNumber ? columnNumber - 1 : 0;
         if (this._message.source === WebInspector.ConsoleMessage.MessageSource.CSS) {
             var headerIds = target.cssModel.styleSheetIdsForURL(url);
-            var cssLocation = new WebInspector.CSSLocation(target, url, lineNumber, columnNumber);
-            return this._linkifier.linkifyCSSLocation(headerIds[0] || null, cssLocation, "console-message-url");
+            var cssLocation = new WebInspector.CSSLocation(target, headerIds[0] || null, url, lineNumber, columnNumber);
+            return this._linkifier.linkifyCSSLocation(cssLocation, "console-message-url");
         }
 
         return this._linkifier.linkifyLocation(target, url, lineNumber, columnNumber, "console-message-url");
@@ -294,8 +296,6 @@ WebInspector.ConsoleViewMessage.prototype = {
             return null;
         var callFrame = stackTrace[0].scriptId ? stackTrace[0] : null;
         if (!WebInspector.experimentsSettings.frameworksDebuggingSupport.isEnabled())
-            return callFrame;
-        if (!WebInspector.settings.skipStackFramesSwitch.get())
             return callFrame;
         var regex = WebInspector.settings.skipStackFramesPattern.asRegExp();
         if (!regex)
@@ -344,7 +344,7 @@ WebInspector.ConsoleViewMessage.prototype = {
         }
 
         // There can be string log and string eval result. We distinguish between them based on message type.
-        var shouldFormatMessage = WebInspector.RemoteObject.type(parameters[0]) === "string" && this._message.type !== WebInspector.ConsoleMessage.MessageType.Result;
+        var shouldFormatMessage = WebInspector.RemoteObject.type(parameters[0]) === "string" && (this._message.type !== WebInspector.ConsoleMessage.MessageType.Result || this._message.level === WebInspector.ConsoleMessage.MessageLevel.Error);
 
         // Multiple parameters with the first being a format string. Save unused substitutions.
         if (shouldFormatMessage) {
@@ -440,7 +440,7 @@ WebInspector.ConsoleViewMessage.prototype = {
 
     /**
      * @param {!WebInspector.RemoteObject} obj
-     * @param {?Event} event
+     * @param {!Event} event
      */
     _contextMenuEventFired: function(obj, event)
     {
@@ -471,8 +471,9 @@ WebInspector.ConsoleViewMessage.prototype = {
             var name = property.name;
             if (!isArray || name != i) {
                 if (/^\s|\s$|^$|\n/.test(name))
-                    name = "\"" + name.replace(/\n/g, "\u21B5") + "\"";
-                titleElement.createChild("span", "name").textContent = name;
+                    titleElement.createChild("span", "name").createTextChildren("\"", name.replace(/\n/g, "\u21B5"), "\"");
+                else
+                    titleElement.createChild("span", "name").textContent = name;
                 titleElement.createTextChild(": ");
             }
 
@@ -526,7 +527,7 @@ WebInspector.ConsoleViewMessage.prototype = {
         }
 
         if (type === "string") {
-            span.textContent = "\"" + description.replace(/\n/g, "\u21B5") + "\"";
+            span.createTextChildren("\"", description.replace(/\n/g, "\u21B5"), "\"");
             return span;
         }
 
@@ -665,9 +666,9 @@ WebInspector.ConsoleViewMessage.prototype = {
 
         // Make black quotes.
         elem.classList.remove("console-formatted-string");
-        elem.appendChild(document.createTextNode("\""));
+        elem.createTextChild("\"");
         elem.appendChild(span);
-        elem.appendChild(document.createTextNode("\""));
+        elem.createTextChild("\"");
     },
 
     /**
@@ -906,8 +907,6 @@ WebInspector.ConsoleViewMessage.prototype = {
         this._highlightSearchResultsInElement(regexObject, this._messageElement);
         if (this._anchorElement)
             this._highlightSearchResultsInElement(regexObject, this._anchorElement);
-
-        this._element.scrollIntoViewIfNeeded();
     },
 
     _highlightSearchResultsInElement: function(regexObject, element)
@@ -1045,28 +1044,49 @@ WebInspector.ConsoleViewMessage.prototype = {
         return this._wrapperElement;
     },
 
+    /**
+     * @param {!TreeElement} parentTreeElement
+     */
     _populateStackTraceTreeElement: function(parentTreeElement)
     {
-        for (var i = 0; i < this._message.stackTrace.length; i++) {
-            var frame = this._message.stackTrace[i];
+        /**
+         * @param {!Array.<!ConsoleAgent.CallFrame>=} stackTrace
+         * @this {WebInspector.ConsoleViewMessage}
+         */
+        function appendStackTrace(stackTrace)
+        {
+            if (!stackTrace)
+                return;
 
-            var content = document.createElementWithClass("div", "stacktrace-entry");
-            var messageTextElement = document.createElement("span");
-            messageTextElement.className = "console-message-text source-code";
-            var functionName = frame.functionName || WebInspector.UIString("(anonymous function)");
-            messageTextElement.appendChild(document.createTextNode(functionName));
-            content.appendChild(messageTextElement);
+            for (var i = 0; i < stackTrace.length; i++) {
+                var frame = stackTrace[i];
 
-            if (frame.scriptId) {
-                content.appendChild(document.createTextNode(" "));
-                var urlElement = this._linkifyCallFrame(frame);
-                if (!urlElement)
-                    continue;
-                content.appendChild(urlElement);
+                var content = document.createElementWithClass("div", "stacktrace-entry");
+                var functionName = frame.functionName || WebInspector.UIString("(anonymous function)");
+                content.createChild("span", "console-message-text source-code").textContent = functionName;
+
+                if (frame.scriptId) {
+                    content.createTextChild(" ");
+                    var urlElement = this._linkifyCallFrame(frame);
+                    if (!urlElement)
+                        continue;
+                    content.appendChild(urlElement);
+                }
+
+                parentTreeElement.appendChild(new TreeElement(content));
             }
+        }
 
-            var treeElement = new TreeElement(content);
-            parentTreeElement.appendChild(treeElement);
+        appendStackTrace.call(this, this._message.stackTrace);
+
+        for (var asyncTrace = this._message.asyncStackTrace; asyncTrace; asyncTrace = asyncTrace.asyncStackTrace) {
+            if (!asyncTrace.callFrames || !asyncTrace.callFrames.length)
+                break;
+            var content = document.createElementWithClass("div", "stacktrace-entry");
+            var description = asyncTrace.description ? asyncTrace.description + " " + WebInspector.UIString("(async)") : WebInspector.UIString("Async Call");
+            content.createChild("span", "console-message-text source-code console-async-trace-text").textContent = description;
+            parentTreeElement.appendChild(new TreeElement(content));
+            appendStackTrace.call(this, asyncTrace.callFrames);
         }
     },
 

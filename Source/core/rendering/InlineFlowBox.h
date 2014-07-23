@@ -22,10 +22,11 @@
 #define InlineFlowBox_h
 
 #include "core/rendering/InlineBox.h"
+#include "core/rendering/RenderObjectInlines.h"
 #include "core/rendering/RenderOverflow.h"
 #include "core/rendering/style/ShadowData.h"
 
-namespace WebCore {
+namespace blink {
 
 class HitTestRequest;
 class HitTestResult;
@@ -55,7 +56,7 @@ public:
         , m_lineBreakBidiStatusEor(WTF::Unicode::LeftToRight)
         , m_lineBreakBidiStatusLastStrong(WTF::Unicode::LeftToRight)
         , m_lineBreakBidiStatusLast(WTF::Unicode::LeftToRight)
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
         , m_hasBadChildList(false)
 #endif
     {
@@ -68,9 +69,11 @@ public:
         m_hasTextDescendants = m_hasTextChildren;
     }
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     virtual ~InlineFlowBox();
+#endif
 
+#ifndef NDEBUG
     virtual void showLineTreeAndMark(const InlineBox* = 0, const char* = 0, const InlineBox* = 0, const char* = 0, const RenderObject* = 0, int = 0) const OVERRIDE;
     virtual const char* boxName() const OVERRIDE;
 #endif
@@ -112,11 +115,6 @@ public:
 
     IntRect roundedFrameRect() const;
 
-    void paintBoxDecorations(PaintInfo&, const LayoutPoint&);
-    void paintMask(PaintInfo&, const LayoutPoint&);
-    void paintFillLayers(const PaintInfo&, const Color&, const FillLayer*, const LayoutRect&, CompositeOperator = CompositeSourceOver);
-    void paintFillLayer(const PaintInfo&, const Color&, const FillLayer*, const LayoutRect&, CompositeOperator = CompositeSourceOver);
-    void paintBoxShadow(const PaintInfo&, RenderStyle*, ShadowStyle, const LayoutRect&);
     virtual void paint(PaintInfo&, const LayoutPoint&, LayoutUnit lineTop, LayoutUnit lineBottom) OVERRIDE;
     virtual bool nodeAtPoint(const HitTestRequest&, HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, LayoutUnit lineTop, LayoutUnit lineBottom) OVERRIDE;
 
@@ -301,6 +299,12 @@ public:
     }
 
 private:
+    void paintBoxDecorationBackground(PaintInfo&, const LayoutPoint&);
+    void paintMask(PaintInfo&, const LayoutPoint&);
+    void paintFillLayers(const PaintInfo&, const Color&, const FillLayer&, const LayoutRect&, CompositeOperator = CompositeSourceOver);
+    void paintFillLayer(const PaintInfo&, const Color&, const FillLayer&, const LayoutRect&, CompositeOperator = CompositeSourceOver);
+    void paintBoxShadow(const PaintInfo&, RenderStyle*, ShadowStyle, const LayoutRect&);
+
     void addBoxShadowVisualOverflow(LayoutRect& logicalVisualOverflow);
     void addBorderOutsetVisualOverflow(LayoutRect& logicalVisualOverflow);
     void addOutlineVisualOverflow(LayoutRect& logicalVisualOverflow);
@@ -349,7 +353,7 @@ protected:
 
     // End of RootInlineBox-specific members.
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
 private:
     unsigned m_hasBadChildList : 1;
 #endif
@@ -357,7 +361,7 @@ private:
 
 DEFINE_INLINE_BOX_TYPE_CASTS(InlineFlowBox);
 
-#ifdef NDEBUG
+#if !ENABLE(ASSERT)
 inline void InlineFlowBox::checkConsistency() const
 {
 }
@@ -365,16 +369,16 @@ inline void InlineFlowBox::checkConsistency() const
 
 inline void InlineFlowBox::setHasBadChildList()
 {
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     m_hasBadChildList = true;
 #endif
 }
 
-} // namespace WebCore
+} // namespace blink
 
 #ifndef NDEBUG
 // Outside the WebCore namespace for ease of invocation from gdb.
-void showTree(const WebCore::InlineFlowBox*);
+void showTree(const blink::InlineFlowBox*);
 #endif
 
 #endif // InlineFlowBox_h

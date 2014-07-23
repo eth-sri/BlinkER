@@ -23,8 +23,8 @@
 #include "config.h"
 #include "modules/mediastream/NavigatorMediaStream.h"
 
-#include "bindings/v8/Dictionary.h"
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/Dictionary.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/frame/LocalFrame.h"
@@ -37,7 +37,7 @@
 #include "modules/mediastream/UserMediaController.h"
 #include "modules/mediastream/UserMediaRequest.h"
 
-namespace WebCore {
+namespace blink {
 
 NavigatorMediaStream::NavigatorMediaStream()
 {
@@ -85,4 +85,4 @@ void NavigatorMediaStream::getMediaDevices(Navigator& navigator, PassOwnPtr<Medi
     request->start();
 }
 
-} // namespace WebCore
+} // namespace blink

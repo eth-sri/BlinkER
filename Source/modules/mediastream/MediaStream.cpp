@@ -26,14 +26,14 @@
 #include "config.h"
 #include "modules/mediastream/MediaStream.h"
 
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "modules/mediastream/MediaStreamRegistry.h"
 #include "modules/mediastream/MediaStreamTrackEvent.h"
 #include "platform/mediastream/MediaStreamCenter.h"
 #include "platform/mediastream/MediaStreamSource.h"
 
-namespace WebCore {
+namespace blink {
 
 static bool containsSource(MediaStreamTrackVector& trackVector, MediaStreamSource* source)
 {
@@ -156,6 +156,16 @@ MediaStream::~MediaStream()
 bool MediaStream::ended() const
 {
     return m_stopped || m_descriptor->ended();
+}
+
+MediaStreamTrackVector MediaStream::getTracks()
+{
+    MediaStreamTrackVector tracks;
+    for (MediaStreamTrackVector::iterator iter = m_audioTracks.begin(); iter != m_audioTracks.end(); ++iter)
+        tracks.append(iter->get());
+    for (MediaStreamTrackVector::iterator iter = m_videoTracks.begin(); iter != m_videoTracks.end(); ++iter)
+        tracks.append(iter->get());
+    return tracks;
 }
 
 void MediaStream::addTrack(MediaStreamTrack* track, ExceptionState& exceptionState)
@@ -388,4 +398,4 @@ void MediaStream::trace(Visitor* visitor)
     EventTargetWithInlineData::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink

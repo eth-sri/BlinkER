@@ -32,7 +32,7 @@
 #define InspectorTimelineAgent_h
 
 
-#include "bindings/v8/ScriptGCEvent.h"
+#include "bindings/core/v8/ScriptGCEvent.h"
 #include "core/InspectorFrontend.h"
 #include "core/InspectorTypeBuilder.h"
 #include "core/events/EventPath.h"
@@ -48,7 +48,7 @@
 #include "wtf/Vector.h"
 #include "wtf/WeakPtr.h"
 
-namespace WebCore {
+namespace blink {
 struct FetchInitiatorInfo;
 struct TimelineImageInfo;
 struct TimelineThreadState;
@@ -129,7 +129,7 @@ public:
     virtual void enable(ErrorString*) OVERRIDE;
     virtual void disable(ErrorString*) OVERRIDE;
     virtual void start(ErrorString*, const int* maxCallStackDepth, const bool* bufferEvents, const String* liveEvents, const bool* includeCounters, const bool* includeGPUEvents) OVERRIDE;
-    virtual void stop(ErrorString*, RefPtr<TypeBuilder::Array<TypeBuilder::Timeline::TimelineEvent> >& events) OVERRIDE;
+    virtual void stop(ErrorString*) OVERRIDE;
 
     void setLayerTreeId(int layerTreeId) { m_layerTreeId = layerTreeId; }
     int id() const { return m_id; }
@@ -320,6 +320,6 @@ private:
     double m_lastProgressTimestamp;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // !defined(InspectorTimelineAgent_h)

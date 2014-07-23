@@ -48,12 +48,13 @@
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/CompositingReasons.h"
 #include "platform/graphics/GraphicsContextRecorder.h"
+#include "platform/image-encoders/skia/PNGImageEncoder.h"
 #include "platform/transforms/TransformationMatrix.h"
 #include "public/platform/WebFloatPoint.h"
 #include "public/platform/WebLayer.h"
 #include "wtf/text/Base64.h"
 
-namespace WebCore {
+namespace blink {
 
 unsigned InspectorLayerTreeAgent::s_lastSnapshotId;
 
@@ -302,12 +303,12 @@ void InspectorLayerTreeAgent::compositingReasons(ErrorString* errorString, const
         return;
     CompositingReasons reasonsBitmask = graphicsLayer->compositingReasons();
     reasonStrings = TypeBuilder::Array<String>::create();
-    for (size_t i = 0; i < WTF_ARRAY_LENGTH(compositingReasonStringMap); ++i) {
-        if (!(reasonsBitmask & compositingReasonStringMap[i].reason))
+    for (size_t i = 0; i < kNumberOfCompositingReasons; ++i) {
+        if (!(reasonsBitmask & kCompositingReasonStringMap[i].reason))
             continue;
-        reasonStrings->addItem(compositingReasonStringMap[i].shortName);
+        reasonStrings->addItem(kCompositingReasonStringMap[i].shortName);
 #ifndef _NDEBUG
-        reasonsBitmask &= ~compositingReasonStringMap[i].reason;
+        reasonsBitmask &= ~kCompositingReasonStringMap[i].reason;
 #endif
     }
     ASSERT(!reasonsBitmask);
@@ -366,13 +367,17 @@ const GraphicsContextSnapshot* InspectorLayerTreeAgent::snapshotById(ErrorString
     return it->value.get();
 }
 
-void InspectorLayerTreeAgent::replaySnapshot(ErrorString* errorString, const String& snapshotId, const int* fromStep, const int* toStep, String* dataURL)
+void InspectorLayerTreeAgent::replaySnapshot(ErrorString* errorString, const String& snapshotId, const int* fromStep, const int* toStep, const double* scale, String* dataURL)
 {
     const GraphicsContextSnapshot* snapshot = snapshotById(errorString, snapshotId);
     if (!snapshot)
         return;
-    OwnPtr<ImageBuffer> imageBuffer = snapshot->replay(fromStep ? *fromStep : 0, toStep ? *toStep : 0);
-    *dataURL = imageBuffer->toDataURL("image/png");
+    OwnPtr<Vector<char> > base64Data = snapshot->replay(fromStep ? *fromStep : 0, toStep ? *toStep : 0, scale ? *scale : 1.0);
+    if (!base64Data) {
+        *errorString = "Image encoding failed";
+        return;
+    }
+    *dataURL = "data:image/png;base64," + *base64Data;
 }
 
 void InspectorLayerTreeAgent::profileSnapshot(ErrorString* errorString, const String& snapshotId, const int* minRepeatCount, const double* minDuration, RefPtr<TypeBuilder::Array<TypeBuilder::Array<double> > >& outTimings)
@@ -385,8 +390,8 @@ void InspectorLayerTreeAgent::profileSnapshot(ErrorString* errorString, const St
     for (size_t i = 0; i < timings->size(); ++i) {
         const Vector<double>& row = (*timings)[i];
         RefPtr<TypeBuilder::Array<double> > outRow = TypeBuilder::Array<double>::create();
-        for (size_t j = 1; j < row.size(); ++j)
-            outRow->addItem(row[j] - row[j - 1]);
+        for (size_t j = 0; j < row.size(); ++j)
+            outRow->addItem(row[j]);
         outTimings->addItem(outRow.release());
     }
 }
@@ -413,4 +418,4 @@ void InspectorLayerTreeAgent::didRemovePageOverlay(const GraphicsLayer* layer)
 }
 
 
-} // namespace WebCore
+} // namespace blink

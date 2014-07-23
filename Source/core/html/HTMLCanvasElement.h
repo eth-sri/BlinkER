@@ -41,7 +41,7 @@
 
 #define CanvasDefaultInterpolationQuality InterpolationLow
 
-namespace WebCore {
+namespace blink {
 
 class AffineTransform;
 class CanvasContextAttributes;
@@ -151,6 +151,7 @@ public:
 
     // ImageBufferClient implementation
     virtual void notifySurfaceInvalid() OVERRIDE;
+    virtual void didPresent() OVERRIDE;
 
     virtual void trace(Visitor*) OVERRIDE;
 

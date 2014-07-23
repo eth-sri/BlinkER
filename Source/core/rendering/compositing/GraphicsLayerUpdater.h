@@ -29,7 +29,7 @@
 
 #include "platform/graphics/GraphicsLayer.h"
 
-namespace WebCore {
+namespace blink {
 
 class RenderLayer;
 
@@ -48,7 +48,7 @@ public:
 
     bool needsRebuildTree() const { return m_needsRebuildTree; }
 
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     static void assertNeedsToUpdateGraphicsLayerBitsCleared(RenderLayer&);
 #endif
 
@@ -60,6 +60,6 @@ private:
     bool m_needsRebuildTree;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // GraphicsLayerUpdater_h

@@ -38,8 +38,9 @@
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
+class ContextMenuProvider;
 class DOMWrapperWorld;
 class LocalFrame;
 class GraphicsContext;
@@ -88,6 +89,7 @@ public:
     void setInspectorFrontendClient(PassOwnPtr<InspectorFrontendClient>);
     void didClearDocumentOfWindowObject(LocalFrame*);
     void setInjectedScriptForOrigin(const String& origin, const String& source);
+    void showContextMenu(float x, float y, PassRefPtr<ContextMenuProvider>);
 
     void dispatchMessageFromFrontend(const String& message);
 
@@ -106,7 +108,7 @@ public:
     bool handleTouchEvent(LocalFrame*, const PlatformTouchEvent&);
     bool handleKeyboardEvent(LocalFrame*, const PlatformKeyboardEvent&);
 
-    void requestPageScaleFactor(float scale, const IntPoint& origin);
+    void deviceOrPageScaleFactorChanged();
     bool deviceEmulationEnabled();
 
     bool isUnderTest();

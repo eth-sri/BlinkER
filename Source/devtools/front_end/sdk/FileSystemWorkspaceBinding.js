@@ -46,6 +46,11 @@ WebInspector.FileSystemWorkspaceBinding = function(isolatedFileSystemManager, wo
     this._callbacks = {};
     /** @type {!Object.<number, !WebInspector.Progress>} */
     this._progresses = {};
+
+    InspectorFrontendHost.events.addEventListener(InspectorFrontendHostAPI.Events.IndexingTotalWorkCalculated, this._onIndexingTotalWorkCalculated, this);
+    InspectorFrontendHost.events.addEventListener(InspectorFrontendHostAPI.Events.IndexingWorked, this._onIndexingWorked, this);
+    InspectorFrontendHost.events.addEventListener(InspectorFrontendHostAPI.Events.IndexingDone, this._onIndexingDone, this);
+    InspectorFrontendHost.events.addEventListener(InspectorFrontendHostAPI.Events.SearchCompleted, this._onSearchCompleted, this);
 }
 
 WebInspector.FileSystemWorkspaceBinding._scriptExtensions = ["js", "java", "coffee", "ts", "dart"].keySet();
@@ -128,12 +133,14 @@ WebInspector.FileSystemWorkspaceBinding.prototype = {
     },
 
     /**
-     * @param {number} requestId
-     * @param {string} fileSystemPath
-     * @param {number} totalWork
+     * @param {!WebInspector.Event} event
      */
-    indexingTotalWorkCalculated: function(requestId, fileSystemPath, totalWork)
+    _onIndexingTotalWorkCalculated: function(event)
     {
+        var requestId = /** @type {number} */ (event.data["requestId"]);
+        var fileSystemPath = /** @type {string} */ (event.data["fileSystemPath"]);
+        var totalWork = /** @type {number} */ (event.data["totalWork"]);
+
         var progress = this._progresses[requestId];
         if (!progress)
             return;
@@ -141,12 +148,14 @@ WebInspector.FileSystemWorkspaceBinding.prototype = {
     },
 
     /**
-     * @param {number} requestId
-     * @param {string} fileSystemPath
-     * @param {number} worked
+     * @param {!WebInspector.Event} event
      */
-    indexingWorked: function(requestId, fileSystemPath, worked)
+    _onIndexingWorked: function(event)
     {
+        var requestId = /** @type {number} */ (event.data["requestId"]);
+        var fileSystemPath = /** @type {string} */ (event.data["fileSystemPath"]);
+        var worked = /** @type {number} */ (event.data["worked"]);
+
         var progress = this._progresses[requestId];
         if (!progress)
             return;
@@ -154,11 +163,13 @@ WebInspector.FileSystemWorkspaceBinding.prototype = {
     },
 
     /**
-     * @param {number} requestId
-     * @param {string} fileSystemPath
+     * @param {!WebInspector.Event} event
      */
-    indexingDone: function(requestId, fileSystemPath)
+    _onIndexingDone: function(event)
     {
+        var requestId = /** @type {number} */ (event.data["requestId"]);
+        var fileSystemPath = /** @type {string} */ (event.data["fileSystemPath"]);
+
         var progress = this._progresses[requestId];
         if (!progress)
             return;
@@ -167,12 +178,14 @@ WebInspector.FileSystemWorkspaceBinding.prototype = {
     },
 
     /**
-     * @param {number} requestId
-     * @param {string} fileSystemPath
-     * @param {!Array.<string>} files
+     * @param {!WebInspector.Event} event
      */
-    searchCompleted: function(requestId, fileSystemPath, files)
+    _onSearchCompleted: function(event)
     {
+        var requestId = /** @type {number} */ (event.data["requestId"]);
+        var fileSystemPath = /** @type {string} */ (event.data["fileSystemPath"]);
+        var files = /** @type {!Array.<string>} */ (event.data["files"]);
+
         var callback = this._callbacks[requestId];
         if (!callback)
             return;
@@ -343,12 +356,13 @@ WebInspector.FileSystemWorkspaceBinding.FileSystem.prototype = {
 
     /**
      * @param {!WebInspector.ProjectSearchConfig} searchConfig
+     * @param {!Array.<string>} filesMathingFileQuery
      * @param {!WebInspector.Progress} progress
      * @param {function(!Array.<string>)} callback
      */
-    findFilesMatchingSearchRequest: function(searchConfig, progress, callback)
+    findFilesMatchingSearchRequest: function(searchConfig, filesMathingFileQuery, progress, callback)
     {
-        var result = null;
+        var result = filesMathingFileQuery;
         var queriesToRun = searchConfig.queries().slice();
         if (!queriesToRun.length)
             queriesToRun.push("");
@@ -361,7 +375,8 @@ WebInspector.FileSystemWorkspaceBinding.FileSystem.prototype = {
         function searchNextQuery()
         {
             if (!queriesToRun.length) {
-                matchFileQueries.call(null, result);
+                progress.done();
+                callback(result);
                 return;
             }
             var query = queriesToRun.shift();
@@ -376,21 +391,8 @@ WebInspector.FileSystemWorkspaceBinding.FileSystem.prototype = {
         {
             files = files.sort();
             progress.worked(1);
-            if (!result)
-                result = files;
-            else
-                result = result.intersectOrdered(files, String.naturalOrderComparator);
+            result = result.intersectOrdered(files, String.naturalOrderComparator);
             searchNextQuery.call(this);
-        }
-
-        /**
-         * @param {!Array.<string>} files
-         */
-        function matchFileQueries(files)
-        {
-            files = files.filter(searchConfig.filePathMatchesFileQuery.bind(searchConfig));
-            progress.done();
-            callback(files);
         }
     },
 
@@ -481,10 +483,11 @@ WebInspector.FileSystemWorkspaceBinding.FileSystem.prototype = {
 
     /**
      * @param {string} path
+     * @param {function()=} callback
      */
-    refresh: function(path)
+    refresh: function(path, callback)
     {
-        this._fileSystem.requestFilesRecursive(path, this._addFile.bind(this));
+        this._fileSystem.requestFilesRecursive(path, this._addFile.bind(this), callback);
     },
 
     /**

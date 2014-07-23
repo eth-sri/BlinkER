@@ -26,7 +26,7 @@
 #include "config.h"
 #include "core/html/track/InbandTextTrack.h"
 
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/track/vtt/VTTCue.h"
 #include "platform/Logging.h"
@@ -37,7 +37,7 @@
 using blink::WebInbandTextTrack;
 using blink::WebString;
 
-namespace WebCore {
+namespace blink {
 
 PassRefPtrWillBeRawPtr<InbandTextTrack> InbandTextTrack::create(WebInbandTextTrack* webTrack)
 {
@@ -111,4 +111,4 @@ void InbandTextTrack::addWebVTTCue(double start, double end, const WebString& id
     addCue(cue);
 }
 
-} // namespace WebCore
+} // namespace blink

@@ -6,6 +6,7 @@
 #include "public/web/WebFrame.h"
 
 #include "core/frame/RemoteFrame.h"
+#include "core/html/HTMLFrameOwnerElement.h"
 #include "web/OpenedFrameTracker.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebRemoteFrameImpl.h"
@@ -14,19 +15,25 @@
 
 namespace blink {
 
-WebCore::Frame* toWebCoreFrame(const WebFrame* frame)
+blink::Frame* toWebCoreFrame(const WebFrame* frame)
 {
     if (!frame)
         return 0;
 
     return frame->isWebLocalFrame()
-        ? static_cast<WebCore::Frame*>(toWebLocalFrameImpl(frame)->frame())
+        ? static_cast<blink::Frame*>(toWebLocalFrameImpl(frame)->frame())
         : toWebRemoteFrameImpl(frame)->frame();
 }
 
 void WebFrame::swap(WebFrame* frame)
 {
     using std::swap;
+
+    // All child frames must have been detached first.
+    ASSERT(!m_firstChild && !m_lastChild);
+    // The frame being swapped in should not have a blink::Frame associated
+    // with it yet.
+    ASSERT(!toWebCoreFrame(frame));
 
     if (m_parent) {
         if (m_parent->m_firstChild == this)
@@ -35,6 +42,7 @@ void WebFrame::swap(WebFrame* frame)
             m_parent->m_lastChild = frame;
         swap(m_parent, frame->m_parent);
     }
+
     if (m_previousSibling) {
         m_previousSibling->m_nextSibling = frame;
         swap(m_previousSibling, frame->m_previousSibling);
@@ -43,6 +51,7 @@ void WebFrame::swap(WebFrame* frame)
         m_nextSibling->m_previousSibling = frame;
         swap(m_nextSibling, frame->m_nextSibling);
     }
+
     if (m_opener) {
         m_opener->m_openedFrameTracker->remove(this);
         m_opener->m_openedFrameTracker->add(frame);
@@ -51,6 +60,19 @@ void WebFrame::swap(WebFrame* frame)
     if (!m_openedFrameTracker->isEmpty()) {
         m_openedFrameTracker->updateOpener(frame);
         frame->m_openedFrameTracker.reset(m_openedFrameTracker.release());
+    }
+
+    // Finally, clone the state of the current blink::Frame into one matching
+    // the type of the passed in WebFrame.
+    // FIXME: This is a bit clunky; this results in pointless decrements and
+    // increments of connected subframes.
+    blink::Frame* oldFrame = toWebCoreFrame(this);
+    blink::FrameOwner* owner = oldFrame->owner();
+    oldFrame->disconnectOwnerElement();
+    if (frame->isWebLocalFrame()) {
+        toWebLocalFrameImpl(frame)->initializeWebCoreFrame(oldFrame->host(), owner, oldFrame->tree().name(), nullAtom);
+    } else {
+        toWebRemoteFrameImpl(frame)->initializeWebCoreFrame(oldFrame->host(), owner, oldFrame->tree().name());
     }
 }
 
@@ -140,7 +162,7 @@ WebFrame* WebFrame::nextSibling() const
 
 WebFrame* WebFrame::traversePrevious(bool wrap) const
 {
-    WebCore::Frame* frame = toWebCoreFrame(this);
+    blink::Frame* frame = toWebCoreFrame(this);
     if (!frame)
         return 0;
     return fromFrame(frame->tree().traversePreviousWithWrap(wrap));
@@ -148,7 +170,7 @@ WebFrame* WebFrame::traversePrevious(bool wrap) const
 
 WebFrame* WebFrame::traverseNext(bool wrap) const
 {
-    WebCore::Frame* frame = toWebCoreFrame(this);
+    blink::Frame* frame = toWebCoreFrame(this);
     if (!frame)
         return 0;
     return fromFrame(frame->tree().traverseNextWithWrap(wrap));
@@ -156,7 +178,7 @@ WebFrame* WebFrame::traverseNext(bool wrap) const
 
 WebFrame* WebFrame::findChildByName(const WebString& name) const
 {
-    WebCore::Frame* frame = toWebCoreFrame(this);
+    blink::Frame* frame = toWebCoreFrame(this);
     if (!frame)
         return 0;
     // FIXME: It's not clear this should ever be called to find a remote frame.
@@ -164,7 +186,7 @@ WebFrame* WebFrame::findChildByName(const WebString& name) const
     return fromFrame(frame->tree().child(name));
 }
 
-WebFrame* WebFrame::fromFrame(WebCore::Frame* frame)
+WebFrame* WebFrame::fromFrame(blink::Frame* frame)
 {
     if (!frame)
         return 0;

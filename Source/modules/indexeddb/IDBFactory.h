@@ -28,13 +28,13 @@
 #ifndef IDBFactory_h
 #define IDBFactory_h
 
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "modules/indexeddb/IDBOpenDBRequest.h"
 #include "modules/indexeddb/IndexedDBClient.h"
 #include "platform/heap/Handle.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 class ExceptionState;
 class IDBKey;
@@ -66,6 +66,6 @@ private:
     Member<IndexedDBClient> m_permissionClient;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // IDBFactory_h

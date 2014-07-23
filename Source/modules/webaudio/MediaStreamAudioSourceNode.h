@@ -35,7 +35,7 @@
 #include "wtf/PassRefPtr.h"
 #include "wtf/Threading.h"
 
-namespace WebCore {
+namespace blink {
 
 class AudioContext;
 
@@ -49,6 +49,7 @@ public:
     MediaStream* mediaStream() { return m_mediaStream.get(); }
 
     // AudioNode
+    virtual void dispose() OVERRIDE;
     virtual void process(size_t framesToProcess) OVERRIDE;
 
     // AudioSourceProviderClient
@@ -73,7 +74,7 @@ private:
     unsigned m_sourceNumberOfChannels;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // ENABLE(WEB_AUDIO)
 

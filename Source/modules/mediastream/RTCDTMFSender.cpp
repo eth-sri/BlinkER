@@ -26,8 +26,8 @@
 #include "config.h"
 #include "modules/mediastream/RTCDTMFSender.h"
 
-#include "bindings/v8/ExceptionMessages.h"
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionMessages.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "modules/mediastream/MediaStreamTrack.h"
@@ -36,7 +36,7 @@
 #include "public/platform/WebRTCDTMFSenderHandler.h"
 #include "public/platform/WebRTCPeerConnectionHandler.h"
 
-namespace WebCore {
+namespace blink {
 
 static const long minToneDurationMs = 70;
 static const long defaultToneDurationMs = 100;
@@ -172,4 +172,4 @@ void RTCDTMFSender::trace(Visitor* visitor)
     EventTargetWithInlineData::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink

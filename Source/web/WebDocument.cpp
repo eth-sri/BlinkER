@@ -31,10 +31,10 @@
 #include "config.h"
 #include "public/web/WebDocument.h"
 
-#include "bindings/v8/Dictionary.h"
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ScriptState.h"
-#include "bindings/v8/ScriptValue.h"
+#include "bindings/core/v8/Dictionary.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ScriptState.h"
+#include "bindings/core/v8/ScriptValue.h"
 #include "core/accessibility/AXObjectCache.h"
 #include "core/css/CSSParserMode.h"
 #include "core/css/StyleSheetContents.h"
@@ -66,7 +66,7 @@
 #include "wtf/PassRefPtr.h"
 #include <v8.h>
 
-using namespace WebCore;
+using namespace blink;
 
 namespace blink {
 
@@ -97,9 +97,9 @@ WebString WebDocument::referrer() const
     return constUnwrap<Document>()->referrer();
 }
 
-WebColor WebDocument::brandColor() const
+WebColor WebDocument::themeColor() const
 {
-    return constUnwrap<Document>()->brandColor().rgb();
+    return constUnwrap<Document>()->themeColor().rgb();
 }
 
 WebURL WebDocument::openSearchDescriptionURL() const
@@ -231,7 +231,7 @@ void WebDocument::watchCSSSelectors(const WebVector<WebString>& webSelectors)
 void WebDocument::cancelFullScreen()
 {
     if (FullscreenElementStack* fullscreen = FullscreenElementStack::fromIfExists(*unwrap<Document>()))
-        fullscreen->webkitCancelFullScreen();
+        fullscreen->fullyExitFullscreen();
 }
 
 WebElement WebDocument::fullScreenElement() const
@@ -287,7 +287,7 @@ WebVector<WebDraggableRegion> WebDocument::draggableRegions() const
         for (size_t i = 0; i < regions.size(); i++) {
             const AnnotatedRegionValue& value = regions[i];
             draggableRegions[i].draggable = value.draggable;
-            draggableRegions[i].bounds = WebCore::IntRect(value.bounds);
+            draggableRegions[i].bounds = blink::IntRect(value.bounds);
         }
     }
     return draggableRegions;

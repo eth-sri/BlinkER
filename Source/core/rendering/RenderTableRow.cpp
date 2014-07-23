@@ -35,7 +35,7 @@
 #include "core/rendering/SubtreeLayoutScope.h"
 #include "core/rendering/style/StyleInheritedData.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -183,7 +183,7 @@ void RenderTableRow::layout()
     if (selfNeedsLayout() && checkForPaintInvalidation()) {
         for (RenderTableCell* cell = firstCell(); cell; cell = cell->nextCell()) {
             // FIXME: Is this needed with Repaint After Layout?
-            cell->setShouldDoFullPaintInvalidationAfterLayout(true);
+            cell->setShouldDoFullPaintInvalidation(true);
         }
     }
 
@@ -257,4 +257,4 @@ RenderTableRow* RenderTableRow::createAnonymousWithParentRenderer(const RenderOb
     return newRow;
 }
 
-} // namespace WebCore
+} // namespace blink

@@ -34,7 +34,7 @@
 #include "core/animation/Animation.h"
 #include "core/animation/AnimationPlayer.h"
 #include "core/animation/InertAnimation.h"
-#include "core/animation/interpolation/Interpolation.h"
+#include "core/animation/Interpolation.h"
 #include "core/css/StylePropertySet.h"
 #include "core/dom/Document.h"
 #include "core/rendering/style/RenderStyleConstants.h"
@@ -42,7 +42,7 @@
 #include "wtf/Vector.h"
 #include "wtf/text/AtomicString.h"
 
-namespace WebCore {
+namespace blink {
 
 class CSSTransitionData;
 class Element;
@@ -251,12 +251,8 @@ private:
     };
 };
 
-} // namespace WebCore
+} // namespace blink
 
-namespace WTF {
-template<> struct VectorTraits<WebCore::CSSAnimationUpdate::NewAnimation> : VectorTraitsBase<WebCore::CSSAnimationUpdate::NewAnimation> {
-    static const bool canInitializeWithMemset = true;
-};
-}
+WTF_ALLOW_INIT_WITH_MEM_FUNCTIONS(blink::CSSAnimationUpdate::NewAnimation);
 
 #endif

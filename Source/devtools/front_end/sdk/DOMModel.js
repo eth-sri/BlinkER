@@ -31,14 +31,14 @@
 
 /**
  * @constructor
- * @extends {WebInspector.TargetAware}
+ * @extends {WebInspector.SDKObject}
  * @param {!WebInspector.DOMModel} domModel
  * @param {?WebInspector.DOMDocument} doc
  * @param {boolean} isInShadowTree
  * @param {!DOMAgent.Node} payload
  */
 WebInspector.DOMNode = function(domModel, doc, isInShadowTree, payload) {
-    WebInspector.TargetAware.call(this, domModel.target());
+    WebInspector.SDKObject.call(this, domModel.target());
     this._domModel = domModel;
     this._agent = domModel._agent;
     this.ownerDocument = doc;
@@ -823,11 +823,6 @@ WebInspector.DOMNode.prototype = {
         this._domModel.highlightDOMNodeForTwoSeconds(this.id);
     },
 
-    reveal: function()
-    {
-        WebInspector.Revealer.reveal(this);
-    },
-
     /**
      * @param {string=} objectGroup
      * @param {function(?WebInspector.RemoteObject)=} callback
@@ -861,7 +856,41 @@ WebInspector.DOMNode.prototype = {
         this._agent.getBoxModel(this.id, this._domModel._wrapClientCallback(callback));
     },
 
-    __proto__: WebInspector.TargetAware.prototype
+    __proto__: WebInspector.SDKObject.prototype
+}
+
+/**
+ * @param {!WebInspector.Target} target
+ * @param {number} backendNodeId
+ * @constructor
+ */
+WebInspector.DeferredDOMNode = function(target, backendNodeId)
+{
+    this._target = target;
+    this._backendNodeId = backendNodeId;
+}
+
+WebInspector.DeferredDOMNode.prototype = {
+    /**
+     * @param {function(?WebInspector.DOMNode)} callback
+     */
+    resolve: function(callback)
+    {
+        this._target.domModel.pushNodesByBackendIdsToFrontend([this._backendNodeId], onGotNode.bind(this));
+
+        /**
+         * @param {?Array.<number>} nodeIds
+         * @this {WebInspector.DeferredDOMNode}
+         */
+        function onGotNode(nodeIds)
+        {
+            if (!nodeIds || !nodeIds[0]) {
+                callback(null);
+                return;
+            }
+            callback(this._target.domModel.nodeForId(nodeIds[0]));
+        }
+    }
 }
 
 /**
@@ -885,11 +914,11 @@ WebInspector.DOMDocument.prototype = {
 
 /**
  * @constructor
- * @extends {WebInspector.TargetAwareObject}
+ * @extends {WebInspector.SDKModel}
  * @param {!WebInspector.Target} target
  */
 WebInspector.DOMModel = function(target) {
-    WebInspector.TargetAwareObject.call(this, target);
+    WebInspector.SDKModel.call(this, WebInspector.DOMModel, target);
 
     this._agent = target.domAgent();
 
@@ -903,6 +932,10 @@ WebInspector.DOMModel = function(target) {
 
     this._defaultHighlighter = new WebInspector.DefaultDOMNodeHighlighter(this._agent);
     this._highlighter = this._defaultHighlighter;
+
+    if (WebInspector.experimentsSettings.disableAgentsWhenProfile.isEnabled())
+        target.profilingLock.addEventListener(WebInspector.Lock.Events.StateChanged, this._profilingStateChanged, this);
+
     this._agent.enable();
 }
 
@@ -911,6 +944,7 @@ WebInspector.DOMModel.Events = {
     AttrRemoved: "AttrRemoved",
     CharacterDataModified: "CharacterDataModified",
     NodeInserted: "NodeInserted",
+    NodeInspected: "NodeInspected",
     NodeRemoved: "NodeRemoved",
     DocumentUpdated: "DocumentUpdated",
     ChildNodeCountUpdated: "ChildNodeCountUpdated",
@@ -919,6 +953,14 @@ WebInspector.DOMModel.Events = {
 }
 
 WebInspector.DOMModel.prototype = {
+    _profilingStateChanged: function()
+    {
+        if (this.target().profilingLock.isAcquired())
+            this._agent.disable();
+        else
+            this._agent.enable();
+    },
+
     /**
      * @param {function(!WebInspector.DOMDocument)=} callback
      */
@@ -1308,7 +1350,7 @@ WebInspector.DOMModel.prototype = {
      */
     _inspectNodeRequested: function(nodeId)
     {
-        WebInspector.Revealer.reveal(this.nodeForId(nodeId))
+        this.dispatchEventToListeners(WebInspector.DOMModel.Events.NodeInspected, this.nodeForId(nodeId));
     },
 
     /**
@@ -1331,6 +1373,38 @@ WebInspector.DOMModel.prototype = {
             searchCallback(resultsCount);
         }
         this._agent.performSearch(query, callback.bind(this));
+    },
+
+    /**
+     * @param {string} query
+     * @return {!Promise.<number>}
+     */
+    performSearchPromise: function(query)
+    {
+        return new Promise(performSearch.bind(this));
+
+        /**
+         * @param {function(number)} resolve
+         * @this {WebInspector.DOMModel}
+         */
+        function performSearch(resolve)
+        {
+            this._agent.performSearch(query, callback.bind(this));
+
+            /**
+             * @param {?Protocol.Error} error
+             * @param {string} searchId
+             * @param {number} resultsCount
+             * @this {WebInspector.DOMModel}
+             */
+            function callback(error, searchId, resultsCount)
+            {
+                if (error)
+                    return;
+                this._searchId = searchId;
+                resolve(error ? 0 : resultsCount);
+            }
+        }
     },
 
     /**
@@ -1616,7 +1690,7 @@ WebInspector.DOMModel.prototype = {
         }
     },
 
-    __proto__: WebInspector.TargetAwareObject.prototype
+    __proto__: WebInspector.SDKModel.prototype
 }
 
 /**
@@ -1755,13 +1829,13 @@ WebInspector.DOMDispatcher.prototype = {
 
 /**
  * @constructor
- * @extends {WebInspector.TargetAware}
+ * @extends {WebInspector.SDKObject}
  * @param {!WebInspector.Target} target
  * @param {!DOMAgent.EventListener} payload
  */
 WebInspector.DOMModel.EventListener = function(target, payload)
 {
-    WebInspector.TargetAware.call(this, target);
+    WebInspector.SDKObject.call(this, target);
     this._payload = payload;
 }
 
@@ -1798,7 +1872,7 @@ WebInspector.DOMModel.EventListener.prototype = {
         return this._payload.handler ? this.target().runtimeModel.createRemoteObject(this._payload.handler) : null;
     },
 
-    __proto__: WebInspector.TargetAware.prototype
+    __proto__: WebInspector.SDKObject.prototype
 }
 
 /**
@@ -1860,8 +1934,3 @@ WebInspector.DefaultDOMNodeHighlighter.prototype = {
         this._agent.setInspectModeEnabled(enabled, inspectUAShadowDOM, config, callback);
     }
 }
-
-/**
- * @type {!WebInspector.DOMModel}
- */
-WebInspector.domModel;

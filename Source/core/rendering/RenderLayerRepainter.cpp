@@ -49,7 +49,7 @@
 #include "core/rendering/RenderView.h"
 #include "core/rendering/compositing/CompositedLayerMapping.h"
 
-namespace WebCore {
+namespace blink {
 
 RenderLayerRepainter::RenderLayerRepainter(RenderLayerModelObject& renderer)
     : m_renderer(renderer)
@@ -62,6 +62,9 @@ void RenderLayerRepainter::computeRepaintRectsIncludingNonCompositingDescendants
     // for every layer to compute the rects. We should make this more efficient.
     // FIXME: it's wrong to call this when layout is not up-to-date, which we do.
     m_renderer.setPreviousPaintInvalidationRect(m_renderer.boundsRectForPaintInvalidation(m_renderer.containerForPaintInvalidation()));
+    // FIXME: We are only updating the paint invalidation bounds but not
+    // the positionFromPaintInvalidationContainer. This means that we may
+    // forcing a full invaliation of the new position. Is this really correct?
 
     for (RenderLayer* layer = m_renderer.layer()->firstChild(); layer; layer = layer->nextSibling()) {
         if (layer->compositingState() != PaintsIntoOwnBacking && layer->compositingState() != PaintsIntoGroupedBacking)
@@ -77,10 +80,9 @@ void RenderLayerRepainter::repaintIncludingNonCompositingDescendants()
 
 void RenderLayerRepainter::repaintIncludingNonCompositingDescendantsInternal(const RenderLayerModelObject* repaintContainer)
 {
-    m_renderer.invalidatePaintUsingContainer(repaintContainer, pixelSnappedIntRect(m_renderer.boundsRectForPaintInvalidation(repaintContainer)), InvalidationLayer);
+    m_renderer.invalidatePaintUsingContainer(repaintContainer, m_renderer.previousPaintInvalidationRect(), InvalidationLayer);
 
-    // FIXME: Repaints can be issued during style recalc at present, via RenderLayerModelObject::styleWillChange. This happens in scenarios when
-    // repaint is needed but not layout.
+    // Disable for reading compositingState() below.
     DisableCompositingQueryAsserts disabler;
 
     for (RenderLayer* curr = m_renderer.layer()->firstChild(); curr; curr = curr->nextSibling()) {
@@ -124,13 +126,14 @@ void RenderLayerRepainter::setBackingNeedsRepaintInRect(const LayoutRect& r)
             view->repaintViewRectangle(absRect);
         return;
     }
-    IntRect repaintRect = pixelSnappedIntRect(r);
     // FIXME: generalize accessors to backing GraphicsLayers so that this code is squasphing-agnostic.
     if (m_renderer.layer()->groupedMapping()) {
+        LayoutRect repaintRect = r;
+        repaintRect.move(m_renderer.layer()->subpixelAccumulation());
         if (GraphicsLayer* squashingLayer = m_renderer.layer()->groupedMapping()->squashingLayer())
-            squashingLayer->setNeedsDisplayInRect(repaintRect);
+            squashingLayer->setNeedsDisplayInRect(pixelSnappedIntRect(repaintRect));
     } else {
-        m_renderer.layer()->compositedLayerMapping()->setContentsNeedDisplayInRect(repaintRect);
+        m_renderer.layer()->compositedLayerMapping()->setContentsNeedDisplayInRect(r);
     }
 }
 

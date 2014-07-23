@@ -30,8 +30,8 @@
 #include "config.h"
 #include "bindings/core/v8/custom/V8CustomXPathNSResolver.h"
 
-#include "bindings/v8/ScriptController.h"
-#include "bindings/v8/V8Binding.h"
+#include "bindings/core/v8/ScriptController.h"
+#include "bindings/core/v8/V8Binding.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/FrameConsole.h"
 #include "core/frame/FrameHost.h"
@@ -40,7 +40,7 @@
 #include "core/inspector/ScriptCallStack.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 PassRefPtrWillBeRawPtr<V8CustomXPathNSResolver> V8CustomXPathNSResolver::create(v8::Handle<v8::Object> resolver, v8::Isolate* isolate)
 {
@@ -50,10 +50,6 @@ PassRefPtrWillBeRawPtr<V8CustomXPathNSResolver> V8CustomXPathNSResolver::create(
 V8CustomXPathNSResolver::V8CustomXPathNSResolver(v8::Handle<v8::Object> resolver, v8::Isolate* isolate)
     : m_resolver(resolver)
     , m_isolate(isolate)
-{
-}
-
-V8CustomXPathNSResolver::~V8CustomXPathNSResolver()
 {
 }
 
@@ -90,7 +86,7 @@ AtomicString V8CustomXPathNSResolver::lookupNamespaceURI(const String& prefix)
     if (tryCatch.HasCaught())
         return nullAtom;
 
-    TOSTRING_DEFAULT(V8StringResource<WithNullCheck>, returnString, retval, nullAtom);
+    TOSTRING_DEFAULT(V8StringResource<TreatNullAsNullString>, returnString, retval, nullAtom);
     return returnString;
 }
 
@@ -99,4 +95,4 @@ void V8CustomXPathNSResolver::trace(Visitor* visitor)
     XPathNSResolver::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink

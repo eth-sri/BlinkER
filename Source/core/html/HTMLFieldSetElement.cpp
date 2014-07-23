@@ -34,7 +34,7 @@
 #include "core/rendering/RenderFieldset.h"
 #include "wtf/StdLibExtras.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -73,9 +73,9 @@ void HTMLFieldSetElement::disabledAttributeChanged()
     invalidateDisabledStateUnder(*this);
 }
 
-void HTMLFieldSetElement::childrenChanged(bool changedByParser, Node* beforeChange, Node* afterChange, int childCountDelta)
+void HTMLFieldSetElement::childrenChanged(const ChildrenChange& change)
 {
-    HTMLFormControlElement::childrenChanged(changedByParser, beforeChange, afterChange, childCountDelta);
+    HTMLFormControlElement::childrenChanged(change);
     for (HTMLLegendElement* legend = Traversal<HTMLLegendElement>::firstChild(*this); legend; legend = Traversal<HTMLLegendElement>::nextSibling(*legend))
         invalidateDisabledStateUnder(*legend);
 }

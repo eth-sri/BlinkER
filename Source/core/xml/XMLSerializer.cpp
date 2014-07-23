@@ -21,12 +21,12 @@
 #include "config.h"
 #include "core/xml/XMLSerializer.h"
 
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/editing/MarkupAccumulator.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 String XMLSerializer::serializeToString(Node* node, ExceptionState& exceptionState)
 {
@@ -39,4 +39,4 @@ String XMLSerializer::serializeToString(Node* node, ExceptionState& exceptionSta
     return accumulator.serializeNodes(*node, IncludeNode);
 }
 
-} // namespace WebCore
+} // namespace blink

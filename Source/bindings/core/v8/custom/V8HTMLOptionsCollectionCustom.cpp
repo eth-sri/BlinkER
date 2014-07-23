@@ -31,18 +31,18 @@
 #include "config.h"
 #include "bindings/core/v8/V8HTMLOptionsCollection.h"
 
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8HTMLOptionElement.h"
 #include "bindings/core/v8/V8Node.h"
 #include "bindings/core/v8/V8NodeList.h"
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/V8Binding.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/NamedNodesCollection.h"
 #include "core/html/HTMLOptionElement.h"
 #include "core/html/HTMLOptionsCollection.h"
 #include "core/html/HTMLSelectElement.h"
 
-namespace WebCore {
+namespace blink {
 
 void V8HTMLOptionsCollection::addMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
@@ -88,4 +88,4 @@ void V8HTMLOptionsCollection::lengthAttributeSetterCustom(v8::Local<v8::Value> v
     impl->setLength(newLength, exceptionState);
 }
 
-} // namespace WebCore
+} // namespace blink

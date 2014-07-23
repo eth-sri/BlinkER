@@ -78,7 +78,7 @@ WebInspector.TimelineUIUtilsImpl.prototype = {
      */
     titleForRecord: function(record)
     {
-        return WebInspector.TimelineUIUtilsImpl.recordTitle(record);
+        return WebInspector.TimelineUIUtilsImpl._recordTitle(record);
     },
 
     /**
@@ -93,12 +93,11 @@ WebInspector.TimelineUIUtilsImpl.prototype = {
     /**
      * @param {!WebInspector.TimelineModel.Record} record
      * @param {!WebInspector.Linkifier} linkifier
-     * @param {boolean} loadedFromFile
      * @return {?Node}
      */
-    buildDetailsNode: function(record, linkifier, loadedFromFile)
+    buildDetailsNode: function(record, linkifier)
     {
-        return WebInspector.TimelineUIUtilsImpl.buildDetailsNode(record, linkifier, loadedFromFile);
+        return WebInspector.TimelineUIUtilsImpl.buildDetailsNode(record, linkifier);
     },
 
     /**
@@ -106,11 +105,10 @@ WebInspector.TimelineUIUtilsImpl.prototype = {
      * @param {!WebInspector.TimelineModel} model
      * @param {!WebInspector.Linkifier} linkifier
      * @param {function(!DocumentFragment)} callback
-     * @param {boolean} loadedFromFile
      */
-    generateDetailsContent: function(record, model, linkifier, callback, loadedFromFile)
+    generateDetailsContent: function(record, model, linkifier, callback)
     {
-        WebInspector.TimelineUIUtilsImpl.generateDetailsContent(record, model, linkifier, callback, loadedFromFile);
+        WebInspector.TimelineUIUtilsImpl.generateDetailsContent(record, model, linkifier, callback);
     },
 
     /**
@@ -138,7 +136,7 @@ WebInspector.TimelineUIUtilsImpl.prototype = {
      */
     testContentMatching: function(record, regExp)
     {
-        var tokens = [WebInspector.TimelineUIUtilsImpl.recordTitle(record)];
+        var tokens = [WebInspector.TimelineUIUtilsImpl._recordTitle(record)];
         var data = record.data();
         for (var key in data)
             tokens.push(data[key])
@@ -172,8 +170,8 @@ WebInspector.TimelineUIUtilsImpl.prototype = {
             recordTypes.RequestMainThreadFrame,
             recordTypes.ScheduleStyleRecalculation,
             recordTypes.UpdateCounters
-        ]
-        return new WebInspector.TimelineRecordTypeFilter(hiddenRecords);
+        ];
+        return new WebInspector.TimelineRecordHiddenTypeFilter(hiddenRecords);
     },
 
     __proto__: WebInspector.TimelineUIUtils.prototype
@@ -207,7 +205,7 @@ WebInspector.TimelineUIUtils._initRecordStyles = function()
     recordStyles[recordTypes.RecalculateStyles] = { title: WebInspector.UIString("Recalculate Style"), category: categories["rendering"] };
     recordStyles[recordTypes.InvalidateLayout] = { title: WebInspector.UIString("Invalidate Layout"), category: categories["rendering"] };
     recordStyles[recordTypes.Layout] = { title: WebInspector.UIString("Layout"), category: categories["rendering"] };
-    recordStyles[recordTypes.UpdateLayerTree] = { title: WebInspector.UIString("Update layer tree"), category: categories["rendering"] };
+    recordStyles[recordTypes.UpdateLayerTree] = { title: WebInspector.UIString("Update Layer Tree"), category: categories["rendering"] };
     recordStyles[recordTypes.PaintSetup] = { title: WebInspector.UIString("Paint Setup"), category: categories["painting"] };
     recordStyles[recordTypes.Paint] = { title: WebInspector.UIString("Paint"), category: categories["painting"] };
     recordStyles[recordTypes.Rasterize] = { title: WebInspector.UIString("Paint"), category: categories["painting"] };
@@ -270,18 +268,19 @@ WebInspector.TimelineUIUtilsImpl.recordStyle = function(record)
  * @param {!WebInspector.TimelineModel.Record} record
  * @return {string}
  */
-WebInspector.TimelineUIUtilsImpl.recordTitle = function(record)
+WebInspector.TimelineUIUtilsImpl._recordTitle = function(record)
 {
     var recordData = record.data();
     if (record.type() === WebInspector.TimelineModel.RecordType.TimeStamp)
         return recordData["message"];
     if (record.type() === WebInspector.TimelineModel.RecordType.JSFrame)
         return recordData["functionName"];
+    var title = WebInspector.TimelineUIUtilsImpl.recordStyle(record).title;
     if (WebInspector.TimelineUIUtilsImpl.isEventDivider(record)) {
         var startTime = Number.millisToString(record.startTime() - record._model.minimumRecordTime());
-        return WebInspector.UIString("%s at %s", WebInspector.TimelineUIUtilsImpl.recordStyle(record).title, startTime, true);
+        return WebInspector.UIString("%s at %s", title, startTime);
     }
-    return WebInspector.TimelineUIUtilsImpl.recordStyle(record).title;
+    return title;
 }
 
 /**
@@ -316,10 +315,9 @@ WebInspector.TimelineUIUtilsImpl.aggregateTimeForRecord = function(total, record
 /**
  * @param {!WebInspector.TimelineModel.Record} record
  * @param {!WebInspector.Linkifier} linkifier
- * @param {boolean} loadedFromFile
  * @return {?Node}
  */
-WebInspector.TimelineUIUtilsImpl.buildDetailsNode = function(record, linkifier, loadedFromFile)
+WebInspector.TimelineUIUtilsImpl.buildDetailsNode = function(record, linkifier)
 {
     var details;
     var detailsText;
@@ -407,21 +405,12 @@ WebInspector.TimelineUIUtilsImpl.buildDetailsNode = function(record, linkifier, 
      */
     function linkifyLocation(scriptId, url, lineNumber, columnNumber)
     {
-        if (!loadedFromFile && scriptId !== "0") {
-            var location = new WebInspector.DebuggerModel.Location(
-                record.target(),
-                scriptId,
-                lineNumber - 1,
-                (columnNumber || 1) - 1);
-            return linkifier.linkifyRawLocation(location, "timeline-details");
-        }
-
         if (!url)
             return null;
 
         // FIXME(62725): stack trace line/column numbers are one-based.
         columnNumber = columnNumber ? columnNumber - 1 : 0;
-        return linkifier.linkifyLocation(record.target(), url, lineNumber - 1, columnNumber, "timeline-details");
+        return linkifier.linkifyLocationByScriptId(record.target(), scriptId, url, lineNumber - 1, columnNumber, "timeline-details");
     }
 
     /**
@@ -470,18 +459,18 @@ WebInspector.TimelineUIUtilsImpl._needsPreviewElement = function(recordType)
  * @param {!WebInspector.TimelineModel} model
  * @param {!WebInspector.Linkifier} linkifier
  * @param {function(!DocumentFragment)} callback
- * @param {boolean} loadedFromFile
  */
-WebInspector.TimelineUIUtilsImpl.generateDetailsContent = function(record, model, linkifier, callback, loadedFromFile)
+WebInspector.TimelineUIUtilsImpl.generateDetailsContent = function(record, model, linkifier, callback)
 {
     var imageElement = /** @type {?Element} */ (record.getUserObject("TimelineUIUtils::preview-element") || null);
     var relatedNode = null;
     var recordData = record.data();
     var barrier = new CallbackBarrier();
-    if (!imageElement && WebInspector.TimelineUIUtilsImpl._needsPreviewElement(record.type()))
-        WebInspector.DOMPresentationUtils.buildImagePreviewContents(record.target(), recordData["url"], false, barrier.createCallback(saveImage));
-    if (recordData["backendNodeId"])
-        record.target().domModel.pushNodesByBackendIdsToFrontend([recordData["backendNodeId"]], barrier.createCallback(setRelatedNode));
+    var target = record.target();
+    if (!imageElement && WebInspector.TimelineUIUtilsImpl._needsPreviewElement(record.type()) && target)
+        WebInspector.DOMPresentationUtils.buildImagePreviewContents(target, recordData["url"], false, barrier.createCallback(saveImage));
+    if (recordData["backendNodeId"] && target)
+        target.domModel.pushNodesByBackendIdsToFrontend([recordData["backendNodeId"]], barrier.createCallback(setRelatedNode));
     barrier.callWhenDone(callbackWrapper);
 
     /**
@@ -498,13 +487,13 @@ WebInspector.TimelineUIUtilsImpl.generateDetailsContent = function(record, model
      */
     function setRelatedNode(nodeIds)
     {
-        if (nodeIds)
-            relatedNode = record.target().domModel.nodeForId(nodeIds[0]);
+        if (nodeIds && target)
+            relatedNode = target.domModel.nodeForId(nodeIds[0]);
     }
 
     function callbackWrapper()
     {
-        callback(WebInspector.TimelineUIUtilsImpl._generateDetailsContentSynchronously(record, model, linkifier, imageElement, relatedNode, loadedFromFile));
+        callback(WebInspector.TimelineUIUtilsImpl._generateDetailsContentSynchronously(record, model, linkifier, imageElement, relatedNode));
     }
 }
 
@@ -514,10 +503,9 @@ WebInspector.TimelineUIUtilsImpl.generateDetailsContent = function(record, model
  * @param {!WebInspector.Linkifier} linkifier
  * @param {?Element} imagePreviewElement
  * @param {?WebInspector.DOMNode} relatedNode
- * @param {boolean} loadedFromFile
  * @return {!DocumentFragment}
  */
-WebInspector.TimelineUIUtilsImpl._generateDetailsContentSynchronously = function(record, model, linkifier, imagePreviewElement, relatedNode, loadedFromFile)
+WebInspector.TimelineUIUtilsImpl._generateDetailsContentSynchronously = function(record, model, linkifier, imagePreviewElement, relatedNode)
 {
     var fragment = document.createDocumentFragment();
     var aggregatedStats = {};
@@ -647,7 +635,7 @@ WebInspector.TimelineUIUtilsImpl._generateDetailsContentSynchronously = function
             contentHelper.appendTextRow(WebInspector.UIString("Callback Function"), recordData["callbackName"]);
             break;
         default:
-            var detailsNode = WebInspector.TimelineUIUtilsImpl.buildDetailsNode(record, linkifier, loadedFromFile);
+            var detailsNode = WebInspector.TimelineUIUtilsImpl.buildDetailsNode(record, linkifier);
             if (detailsNode)
                 contentHelper.appendElementRow(WebInspector.UIString("Details"), detailsNode);
             break;

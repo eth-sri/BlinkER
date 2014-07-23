@@ -5,7 +5,7 @@
 #ifndef HitRegion_h
 #define HitRegion_h
 
-#include "bindings/v8/Dictionary.h"
+#include "bindings/core/v8/Dictionary.h"
 #include "core/dom/Element.h"
 #include "platform/graphics/Path.h"
 #include "platform/heap/Handle.h"
@@ -15,7 +15,7 @@
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 struct HitRegionOptions {
     STACK_ALLOCATED();
@@ -24,6 +24,7 @@ public:
     String id;
     RefPtrWillBeMember<Element> control;
     Path path;
+    WindRule fillRule;
 };
 
 class HitRegion FINAL : public RefCountedWillBeGarbageCollectedFinalized<HitRegion> {
@@ -43,6 +44,7 @@ public:
     const String& id() const { return m_id; }
     const Path& path() const { return m_path; }
     Element* control() const { return m_control.get(); }
+    WindRule fillRule() const { return m_fillRule; }
 
     void trace(Visitor*);
 
@@ -52,6 +54,7 @@ private:
     String m_id;
     RefPtrWillBeMember<Element> m_control;
     Path m_path;
+    WindRule m_fillRule;
 };
 
 class HitRegionManager FINAL : public NoBaseWillBeGarbageCollected<HitRegionManager> {
@@ -89,6 +92,6 @@ private:
     HitRegionControlMap m_hitRegionControlMap;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif

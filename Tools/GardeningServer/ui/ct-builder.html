@@ -1,0 +1,58 @@
+<!--
+Copyright 2014 The Chromium Authors. All rights reserved.
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
+
+<!--
+Styled link to a builder composed of the version and architecture, or the
+builder name if the builder is unknown. If an array is passed to |steps|, the
+link will show the builder name and architecture followed by the steps instead.
+-->
+<polymer-element name="ct-builder" attributes="builder steps">
+  <template>
+    <style>
+      a {
+        border: 1px solid gray;
+        color: black;
+        display: inline-block;
+        font-size: 11px;
+        margin-bottom: 2px;
+        padding: 1px;
+        text-decoration: none;
+      }
+
+      span {
+        padding: 0 2px;
+      }
+
+      .builder {
+        background-color: #555;
+        color: white;
+      }
+    </style>
+    <a href="{{ builder|builderURL }}">
+      <span class="builder">{{ builder }}</span>
+      <template if="{{ stepList }}">
+        <span class="details">{{ stepList }}</span>
+      </template>
+    </a>
+  </template>
+  <script>
+    Polymer({
+      steps: [],
+
+      stepsChanged: function() {
+        this.stepList = this.steps.join(', ');
+      },
+
+      builderURL: function() {
+        // FIXME: Pass in the waterfall URL instead so this can work with different waterfalls.
+        var waterfall = 'http://build.chromium.org/p/chromium.webkit';
+        return waterfall + '/waterfall?' + Object.toQueryString({
+          builder: this.builder,
+        });
+      },
+    });
+  </script>
+</polymer-element>

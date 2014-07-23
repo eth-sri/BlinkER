@@ -5,9 +5,9 @@
 #ifndef HeadersForEachCallback_h
 #define HeadersForEachCallback_h
 
-#include "bindings/v8/ScriptValue.h"
+#include "bindings/core/v8/ScriptValue.h"
 
-namespace WebCore {
+namespace blink {
 
 class Headers;
 
@@ -18,6 +18,6 @@ public:
     virtual bool handleItem(const String& value, const String& key, Headers*) = 0;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // HeadersForEachCallback_h

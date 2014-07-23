@@ -39,7 +39,7 @@ function test()
             break;
         }
 
-        var resource = new WebInspector.Resource(null, url, documentURL, frameId, loaderId, type, mimeType);
+        var resource = new WebInspector.Resource(WebInspector.resourceTreeModel.target(), null, url, documentURL, frameId, loaderId, type, mimeType);
         mockContentsMap[url] = content;
         WebInspector.resourceTreeModel.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.ResourceAdded, resource);
 
@@ -64,16 +64,14 @@ function test()
     function createNetworkUISourceCodeProvider()
     {
         InspectorTest.createWorkspace();
-        var target = WebInspector.targetManager.activeTarget();
-        target.resourceTreeModel = new WebInspector.Object();
+        var target = WebInspector.targetManager.mainTarget();
+        target.resourceTreeModel = new WebInspector.SDKModel(WebInspector.ResourceTreeModel, target);
         target.resourceTreeModel.inspectedPageURL = function() { return "foo"; };
-        target.debuggerModel = new WebInspector.Object();
-        target.debuggerModel._registerScript = function(){};
+        target.debuggerModel = new WebInspector.SDKModel(WebInspector.DebuggerModel, target);
+        target.debuggerModel._registerScript = function() {};
         WebInspector.resourceTreeModel = target.resourceTreeModel;
         WebInspector.debuggerModel = target.debuggerModel;
-        var networkUISourceCodeProvider = new WebInspector.NetworkUISourceCodeProvider(InspectorTest.testNetworkWorkspaceBinding, InspectorTest.testWorkspace);
-        networkUISourceCodeProvider.targetAdded(target);
-        return networkUISourceCodeProvider;
+        return new WebInspector.NetworkUISourceCodeProvider(InspectorTest.testNetworkWorkspaceBinding, InspectorTest.testWorkspace);
     }
 
     InspectorTest.runTestSuite([

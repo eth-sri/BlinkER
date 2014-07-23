@@ -27,7 +27,7 @@
 #include "config.h"
 #include "core/editing/TextIterator.h"
 
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/NodeTraversal.h"
@@ -35,6 +35,7 @@
 #include "core/editing/VisiblePosition.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/editing/htmlediting.h"
+#include "core/frame/FrameView.h"
 #include "core/html/HTMLElement.h"
 #include "core/html/HTMLTextFormControlElement.h"
 #include "core/rendering/InlineTextBox.h"
@@ -56,7 +57,7 @@
 
 using namespace WTF::Unicode;
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -157,7 +158,7 @@ unsigned BitStack::size() const
 
 // --------
 
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
 
 static unsigned depthCrossingShadowBoundaries(Node* node)
 {
@@ -224,7 +225,7 @@ static void pushFullyClippedState(BitStack& stack, Node* node)
 static void setUpFullyClippedStack(BitStack& stack, Node* node)
 {
     // Put the nodes in a vector so we can iterate in reverse order.
-    Vector<Node*, 100> ancestry;
+    WillBeHeapVector<RawPtrWillBeMember<Node>, 100> ancestry;
     for (Node* parent = node->parentOrShadowHostNode(); parent; parent = parent->parentOrShadowHostNode())
         ancestry.append(parent);
 
@@ -341,6 +342,8 @@ void TextIterator::initialize(const Position& start, const Position& end)
     if (!m_node)
         return;
 
+    m_node->document().updateLayoutIgnorePendingStylesheets();
+
     setUpFullyClippedStack(m_fullyClippedStack, m_node);
     m_offset = m_node == m_startContainer ? m_startOffset : 0;
     m_iterationProgress = HandledNone;
@@ -356,10 +359,21 @@ TextIterator::~TextIterator()
 {
 }
 
+bool TextIterator::isInsideReplacedElement() const
+{
+    if (atEnd() || length() != 1 || !m_node)
+        return false;
+
+    RenderObject* renderer = m_node->renderer();
+    return renderer && renderer->isReplaced();
+}
+
 void TextIterator::advance()
 {
     if (m_shouldStop)
         return;
+
+    ASSERT(!m_node || !m_node->document().needsRenderTreeUpdate());
 
     // reset the run information
     m_positionNode = nullptr;
@@ -891,6 +905,11 @@ static bool shouldEmitNewlinesBeforeAndAfterNode(Node& node)
             || node.hasTagName(ulTag));
     }
 
+    // Need to make an exception for option and optgroup, because we want to
+    // keep the legacy behavior before we added renderers to them.
+    if (isHTMLOptionElement(node) || isHTMLOptGroupElement(node))
+        return false;
+
     // Need to make an exception for table cells, because they are blocks, but we
     // want them tab-delimited rather than having newlines before and after.
     if (isTableCell(&node))
@@ -916,10 +935,11 @@ static bool shouldEmitNewlineAfterNode(Node& node)
     // Check if this is the very last renderer in the document.
     // If so, then we should not emit a newline.
     Node* next = &node;
-    while ((next = NodeTraversal::nextSkippingChildren(*next))) {
-        if (next->renderer())
+    do {
+        next = NodeTraversal::nextSkippingChildren(*next);
+        if (next && next->renderer())
             return true;
-    }
+    } while (next);
     return false;
 }
 
@@ -1262,7 +1282,7 @@ SimplifiedBackwardsTextIterator::SimplifiedBackwardsTextIterator(const Range* r,
     m_endNode = endNode;
     m_endOffset = endOffset;
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     // Need this just because of the assert.
     m_positionNode = endNode;
 #endif
@@ -1736,7 +1756,7 @@ UChar WordAwareIterator::characterAt(unsigned index) const
 
 static const size_t minimumSearchBufferSize = 8192;
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
 static bool searcherInUse;
 #endif
 
@@ -1760,7 +1780,7 @@ static UStringSearch* searcher()
 
 static inline void lockSearcher()
 {
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     ASSERT(!searcherInUse);
     searcherInUse = true;
 #endif
@@ -1768,7 +1788,7 @@ static inline void lockSearcher()
 
 static inline void unlockSearcher()
 {
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     ASSERT(searcherInUse);
     searcherInUse = false;
 #endif
@@ -1810,7 +1830,7 @@ inline SearchBuffer::SearchBuffer(const String& target, FindOptions options)
     // to move to multiple searchers.
     lockSearcher();
 
-    UStringSearch* searcher = WebCore::searcher();
+    UStringSearch* searcher = blink::searcher();
     UCollator* collator = usearch_getCollator(searcher);
 
     UCollationStrength strength = m_options & CaseInsensitive ? UCOL_PRIMARY : UCOL_TERTIARY;
@@ -1832,7 +1852,7 @@ inline SearchBuffer::~SearchBuffer()
 {
     // Leave the static object pointing to a valid string.
     UErrorCode status = U_ZERO_ERROR;
-    usearch_setPattern(WebCore::searcher(), &newlineCharacter, 1, &status);
+    usearch_setPattern(blink::searcher(), &newlineCharacter, 1, &status);
     ASSERT(status == U_ZERO_ERROR);
 
     unlockSearcher();
@@ -1982,7 +2002,7 @@ inline size_t SearchBuffer::search(size_t& start)
             return 0;
     }
 
-    UStringSearch* searcher = WebCore::searcher();
+    UStringSearch* searcher = blink::searcher();
 
     UErrorCode status = U_ZERO_ERROR;
     usearch_setText(searcher, m_buffer.data(), size, &status);
@@ -2043,7 +2063,10 @@ nextMatch:
 int TextIterator::rangeLength(const Range* r, bool forSelectionPreservation)
 {
     int length = 0;
-    for (TextIterator it(r, forSelectionPreservation ? TextIteratorEmitsCharactersBetweenAllVisiblePositions : TextIteratorDefaultBehavior); !it.atEnd(); it.advance())
+    TextIteratorBehaviorFlags behaviorFlags = TextIteratorEmitsObjectReplacementCharacter;
+    if (forSelectionPreservation)
+        behaviorFlags |= TextIteratorEmitsCharactersBetweenAllVisiblePositions;
+    for (TextIterator it(r, behaviorFlags); !it.atEnd(); it.advance())
         length += it.length();
 
     return length;
@@ -2158,9 +2181,6 @@ static const TextIteratorBehaviorFlags iteratorFlagsForFindPlainText = TextItera
 
 PassRefPtrWillBeRawPtr<Range> findPlainText(const Range* range, const String& target, FindOptions options)
 {
-    // CharacterIterator requires renderers to be up-to-date
-    range->ownerDocument().updateLayout();
-
     // First, find the text.
     size_t matchStart;
     size_t matchLength;
@@ -2187,7 +2207,6 @@ void findPlainText(const Position& inputStart, const Position& inputEnd, const S
     if (!inputStart.inDocument())
         return;
     ASSERT(inputStart.document() == inputEnd.document());
-    inputStart.document()->updateLayout();
 
     // FIXME: Reduce the code duplication with above (but how?).
     size_t matchStart;

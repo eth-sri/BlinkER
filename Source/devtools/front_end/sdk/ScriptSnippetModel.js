@@ -239,7 +239,7 @@ WebInspector.ScriptSnippetModel.prototype = {
         mapping._setEvaluationIndex(evaluationIndex, uiSourceCode);
         var evaluationUrl = mapping._evaluationSourceURL(uiSourceCode);
         var expression = uiSourceCode.workingCopy();
-        target.consoleModel.show();
+        WebInspector.console.show();
         target.debuggerAgent().compileScript(expression, evaluationUrl, executionContext.id, compileCallback.bind(this, target));
 
         /**
@@ -534,7 +534,8 @@ WebInspector.SnippetScriptMapping.prototype = {
         if (!script)
             return;
 
-        var scriptUISourceCode = script.rawLocationToUILocation(0, 0).uiSourceCode;
+        var rawLocation = /** @type {!WebInspector.DebuggerModel.Location} */ (script.target().debuggerModel.createRawLocation(script, 0, 0));
+        var scriptUISourceCode = WebInspector.debuggerWorkspaceBinding.rawLocationToUILocation(rawLocation).uiSourceCode;
         if (scriptUISourceCode)
             this._scriptSnippetModel._restoreBreakpoints(scriptUISourceCode, breakpointLocations);
     },
@@ -545,6 +546,16 @@ WebInspector.SnippetScriptMapping.prototype = {
     isIdentity: function()
     {
         return false;
+    },
+
+    /**
+     * @param {!WebInspector.UISourceCode} uiSourceCode
+     * @param {number} lineNumber
+     * @return {boolean}
+     */
+    uiLineHasMapping: function(uiSourceCode, lineNumber)
+    {
+        return true;
     }
 }
 

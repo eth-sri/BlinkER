@@ -31,15 +31,15 @@
 #include "config.h"
 #include "bindings/core/v8/V8JavaScriptCallFrame.h"
 
-#include "bindings/v8/V8Binding.h"
+#include "bindings/core/v8/V8Binding.h"
 
-namespace WebCore {
+namespace blink {
 
-void V8JavaScriptCallFrame::evaluateMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
+void V8JavaScriptCallFrame::evaluateWithExceptionDetailsMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     JavaScriptCallFrame* impl = V8JavaScriptCallFrame::toNative(info.Holder());
     String expression = toCoreStringWithUndefinedOrNullCheck(info[0]);
-    v8SetReturnValue(info, impl->evaluate(expression));
+    v8SetReturnValue(info, impl->evaluateWithExceptionDetails(expression));
 }
 
 void V8JavaScriptCallFrame::restartMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -78,5 +78,5 @@ void V8JavaScriptCallFrame::typeAttributeGetterCustom(const v8::PropertyCallback
     v8SetReturnValue(info, v8AtomicString(info.GetIsolate(), "function"));
 }
 
-} // namespace WebCore
+} // namespace blink
 

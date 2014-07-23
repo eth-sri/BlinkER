@@ -26,8 +26,8 @@
 #include "config.h"
 #include "core/html/HTMLTextAreaElement.h"
 
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/CSSValueKeywords.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
@@ -52,7 +52,7 @@
 #include "wtf/StdLibExtras.h"
 #include "wtf/text/StringBuilder.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -116,9 +116,9 @@ void HTMLTextAreaElement::restoreFormControlState(const FormControlState& state)
     setValue(state[0]);
 }
 
-void HTMLTextAreaElement::childrenChanged(bool changedByParser, Node* beforeChange, Node* afterChange, int childCountDelta)
+void HTMLTextAreaElement::childrenChanged(const ChildrenChange& change)
 {
-    HTMLElement::childrenChanged(changedByParser, beforeChange, afterChange, childCountDelta);
+    HTMLElement::childrenChanged(change);
     setLastChangeWasNotUserEdit();
     if (m_isDirty)
         setInnerEditorValue(value());
@@ -521,11 +521,6 @@ void HTMLTextAreaElement::setCols(int cols)
 void HTMLTextAreaElement::setRows(int rows)
 {
     setIntegralAttribute(rowsAttr, rows);
-}
-
-bool HTMLTextAreaElement::shouldUseInputMethod()
-{
-    return true;
 }
 
 bool HTMLTextAreaElement::matchesReadOnlyPseudoClass() const

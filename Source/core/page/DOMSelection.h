@@ -31,14 +31,14 @@
 #ifndef DOMSelection_h
 #define DOMSelection_h
 
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/frame/DOMWindowProperty.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
 
-namespace WebCore {
+namespace blink {
 
 class ExceptionState;
 class LocalFrame;
@@ -57,6 +57,7 @@ public:
 
     void clearTreeScope();
 
+    // FIXME: Reorder API functions according to Selection.idl.
     // Safari Selection Object API
     // These methods return the valid equivalents of internal editing positions.
     Node* baseNode() const;
@@ -84,6 +85,7 @@ public:
     void collapseToEnd(ExceptionState&);
     void collapseToStart(ExceptionState&);
     void extend(Node*, int offset, ExceptionState&);
+    void extend(Node*, ExceptionState&);
     PassRefPtrWillBeRawPtr<Range> getRangeAt(int, ExceptionState&);
     void removeAllRanges();
     void addRange(Range*);
@@ -114,6 +116,6 @@ private:
     RawPtrWillBeMember<const TreeScope> m_treeScope;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // DOMSelection_h

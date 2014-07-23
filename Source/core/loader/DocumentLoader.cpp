@@ -52,6 +52,7 @@
 #include "core/frame/Settings.h"
 #include "platform/Logging.h"
 #include "platform/UserGestureIndicator.h"
+#include "platform/mhtml/ArchiveResource.h"
 #include "platform/mhtml/ArchiveResourceCollection.h"
 #include "platform/mhtml/MHTMLArchive.h"
 #include "platform/plugins/PluginData.h"
@@ -63,7 +64,7 @@
 #include "wtf/Assertions.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 static bool isArchiveMIMEType(const String& mimeType)
 {
@@ -296,7 +297,7 @@ bool DocumentLoader::isRedirectAfterPost(const ResourceRequest& newRequest, cons
     return false;
 }
 
-bool DocumentLoader::shouldContinueForNavigationPolicy(const ResourceRequest& request, ContentSecurityPolicyCheck shouldCheckMainWorldContentSecurityPolicy)
+bool DocumentLoader::shouldContinueForNavigationPolicy(const ResourceRequest& request, ContentSecurityPolicyCheck shouldCheckMainWorldContentSecurityPolicy, bool isTransitionNavigation)
 {
     // Don't ask if we are loading an empty URL.
     if (request.url().isEmpty() || m_substituteData.isValid())
@@ -315,7 +316,7 @@ bool DocumentLoader::shouldContinueForNavigationPolicy(const ResourceRequest& re
     }
 
     NavigationPolicy policy = m_triggeringAction.policy();
-    policy = frameLoader()->client()->decidePolicyForNavigation(request, this, policy);
+    policy = frameLoader()->client()->decidePolicyForNavigation(request, this, policy, isTransitionNavigation);
     if (policy == NavigationPolicyCurrentTab)
         return true;
     if (policy == NavigationPolicyIgnore)
@@ -378,7 +379,7 @@ void DocumentLoader::willSendRequest(ResourceRequest& newRequest, const Resource
     if (m_frame->tree().parent()) {
         // FIXME: This does not yet work with out-of-process iframes.
         Frame* top = m_frame->tree().top();
-        if (top->isLocalFrame() && !toLocalFrame(top)->loader().mixedContentChecker()->canRunInsecureContent(toLocalFrame(top)->document()->securityOrigin(), newRequest.url())) {
+        if (top->isLocalFrame() && !toLocalFrame(top)->loader().mixedContentChecker()->canFrameInsecureContent(toLocalFrame(top)->document()->securityOrigin(), newRequest.url())) {
             cancelMainResourceLoad(ResourceError::cancelledError(newRequest.url()));
             return;
         }
@@ -622,7 +623,7 @@ void DocumentLoader::addAllArchiveResources(MHTMLArchive* archive)
 {
     ASSERT(archive);
     if (!m_archiveResourceCollection)
-        m_archiveResourceCollection = adoptPtr(new ArchiveResourceCollection);
+        m_archiveResourceCollection = ArchiveResourceCollection::create();
     m_archiveResourceCollection->addAllResources(archive);
 }
 
@@ -834,4 +835,4 @@ void DocumentLoader::replaceDocument(const String& source, Document* ownerDocume
     endWriting(m_writer.get());
 }
 
-} // namespace WebCore
+} // namespace blink

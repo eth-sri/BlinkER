@@ -27,7 +27,7 @@
 #include "config.h"
 #include "core/editing/ApplyBlockElementCommand.h"
 
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/HTMLNames.h"
 #include "core/dom/NodeRenderStyle.h"
 #include "core/dom/Text.h"
@@ -38,7 +38,7 @@
 #include "core/rendering/RenderObject.h"
 #include "core/rendering/style/RenderStyle.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 

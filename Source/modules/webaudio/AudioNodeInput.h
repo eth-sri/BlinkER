@@ -31,7 +31,7 @@
 #include "wtf/HashSet.h"
 #include "wtf/Vector.h"
 
-namespace WebCore {
+namespace blink {
 
 class AudioNode;
 class AudioNodeOutput;
@@ -42,24 +42,25 @@ class AudioNodeOutput;
 
 class AudioNodeInput FINAL : public AudioSummingJunction {
 public:
-    static PassOwnPtr<AudioNodeInput> create(AudioNode*);
+    static PassOwnPtrWillBeRawPtr<AudioNodeInput> create(AudioNode&);
 
     // AudioSummingJunction
-    virtual bool canUpdateState() OVERRIDE { return !node()->isMarkedForDeletion(); }
+    virtual void trace(Visitor*) OVERRIDE;
+    virtual bool canUpdateState() OVERRIDE { return !node().isMarkedForDeletion(); }
     virtual void didUpdate() OVERRIDE;
 
     // Can be called from any thread.
-    AudioNode* node() const { return m_node; }
+    AudioNode& node() const { return *m_node; }
 
     // Must be called with the context's graph lock.
-    void connect(AudioNodeOutput*);
-    void disconnect(AudioNodeOutput*);
+    void connect(AudioNodeOutput&);
+    void disconnect(AudioNodeOutput&);
 
     // disable() will take the output out of the active connections list and set aside in a disabled list.
     // enable() will put the output back into the active connections list.
     // Must be called with the context's graph lock.
-    void enable(AudioNodeOutput*);
-    void disable(AudioNodeOutput*);
+    void enable(AudioNodeOutput&);
+    void disable(AudioNodeOutput&);
 
     // pull() processes all of the AudioNodes connected to us.
     // In the case of multiple connections it sums the result into an internal summing bus.
@@ -80,9 +81,9 @@ public:
     unsigned numberOfChannels() const;
 
 private:
-    explicit AudioNodeInput(AudioNode*);
+    explicit AudioNodeInput(AudioNode&);
 
-    AudioNode* m_node;
+    RawPtrWillBeMember<AudioNode> m_node;
 
     // m_disabledOutputs contains the AudioNodeOutputs which are disabled (will not be processed) by the audio graph rendering.
     // But, from JavaScript's perspective, these outputs are still connected to us.
@@ -96,6 +97,6 @@ private:
     RefPtr<AudioBus> m_internalSummingBus;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // AudioNodeInput_h

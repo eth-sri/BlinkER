@@ -31,8 +31,8 @@
 #include "config.h"
 #include "web/SharedWorkerRepositoryClientImpl.h"
 
-#include "bindings/v8/ExceptionMessages.h"
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionMessages.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/events/Event.h"
@@ -52,7 +52,7 @@
 #include "public/web/WebSharedWorkerRepositoryClient.h"
 #include "web/WebLocalFrameImpl.h"
 
-using namespace WebCore;
+using namespace blink;
 
 namespace blink {
 
@@ -83,11 +83,12 @@ private:
 
 SharedWorkerConnector::~SharedWorkerConnector()
 {
-    m_worker->unsetPreventGC();
+    m_worker->setIsBeingConnected(false);
 }
+
 void SharedWorkerConnector::connect()
 {
-    m_worker->setPreventGC();
+    m_worker->setIsBeingConnected(true);
     m_webWorkerConnector->connect(m_channel.leakPtr(), this);
 }
 

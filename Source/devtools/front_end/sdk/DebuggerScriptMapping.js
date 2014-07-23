@@ -40,6 +40,9 @@ WebInspector.DebuggerScriptMapping = function(debuggerModel, workspace, networkW
     this._resourceMapping = new WebInspector.ResourceScriptMapping(debuggerModel, workspace);
     this._compilerMapping = new WebInspector.CompilerScriptMapping(debuggerModel, workspace, networkWorkspaceBinding);
 
+    /** @type {!WebInspector.LiveEditSupport} */
+    this._liveEditSupport = new WebInspector.LiveEditSupport(debuggerModel.target(), WebInspector.workspace);
+
     debuggerModel.addEventListener(WebInspector.DebuggerModel.Events.ParsedScriptSource, this._parsedScriptSource, this);
     debuggerModel.addEventListener(WebInspector.DebuggerModel.Events.FailedToParseScriptSource, this._parsedScriptSource, this);
 }
@@ -69,5 +72,58 @@ WebInspector.DebuggerScriptMapping.prototype = {
         this._compilerMapping.dispose();
         this._resourceMapping.dispose();
         this._defaultMapping.dispose();
+    },
+
+    /**
+     * @return {!WebInspector.LiveEditSupport}
+     */
+    liveEditSupport: function()
+    {
+        return this._liveEditSupport;
     }
 }
+
+/**
+ * @constructor
+ * @implements {WebInspector.TargetManager.Observer}
+ */
+WebInspector.DebuggerScriptMapping.Registry = function()
+{
+    /** @type {!Map.<!WebInspector.Target, !WebInspector.DebuggerScriptMapping>} */
+    this._targetToMapping = new Map();
+
+    WebInspector.targetManager.observeTargets(this);
+}
+
+WebInspector.DebuggerScriptMapping.Registry.prototype = {
+      /**
+       * @param {!WebInspector.Target} target
+       */
+      targetAdded: function(target)
+      {
+          var mapping = new WebInspector.DebuggerScriptMapping(target.debuggerModel, WebInspector.workspace, WebInspector.networkWorkspaceBinding);
+          this._targetToMapping.put(target, mapping);
+      },
+
+      /**
+       * @param {!WebInspector.Target} target
+       */
+      targetRemoved: function(target)
+      {
+          var mapping = this._targetToMapping.remove(target);
+          mapping.dispose();
+      },
+
+      /**
+       * @param {?WebInspector.Target} target
+       * @return {?WebInspector.DebuggerScriptMapping}
+       */
+      instance: function(target)
+      {
+          if (!target)
+              return null;
+          return this._targetToMapping.get(target) || null;
+      }
+}
+
+WebInspector.DebuggerScriptMapping.registry = new WebInspector.DebuggerScriptMapping.Registry();

@@ -36,7 +36,7 @@
 #include "WebReferrerPolicy.h"
 
 #if INSIDE_BLINK
-namespace WebCore { class ResourceRequest; }
+namespace blink { class ResourceRequest; }
 #endif
 
 namespace blink {
@@ -86,6 +86,52 @@ public:
         TargetIsPing = 15,
         TargetIsServiceWorker = 16,
         TargetIsUnspecified = 17,
+    };
+
+    // Corresponds to Fetch's "context": http://fetch.spec.whatwg.org/#concept-request-context
+    //
+    // FIXME: Drop the TargetType enum once embedders are updated upstream.
+    enum RequestContext {
+        RequestContextUnspecified = 0,
+        RequestContextInternal, // FIXME: This isn't part of Fetch. It should be.
+        RequestContextAudio,
+        RequestContextBeacon,
+        RequestContextCSPReport,
+        RequestContextDownload,
+        RequestContextEmbed,
+        RequestContextEventSource,
+        RequestContextFavicon,
+        RequestContextFetch,
+        RequestContextFont,
+        RequestContextForm,
+        RequestContextFrame,
+        RequestContextHyperlink,
+        RequestContextIframe,
+        RequestContextImage,
+        RequestContextLocation,
+        RequestContextManifest,
+        RequestContextObject,
+        RequestContextPing,
+        RequestContextPlugin,
+        RequestContextPrefetch,
+        RequestContextScript,
+        RequestContextServiceWorker,
+        RequestContextSharedWorker,
+        RequestContextSubresource,
+        RequestContextStyle,
+        RequestContextTrack,
+        RequestContextVideo,
+        RequestContextWorker,
+        RequestContextXMLHttpRequest,
+        RequestContextXSLT
+    };
+
+    // Corresponds to Fetch's "context frame type": http://fetch.spec.whatwg.org/#concept-request-context-frame-type
+    enum FrameType {
+        FrameTypeAuxiliary,
+        FrameTypeNested,
+        FrameTypeNone,
+        FrameTypeTopLevel
     };
 
     class ExtraData {
@@ -154,8 +200,15 @@ public:
     BLINK_PLATFORM_EXPORT bool reportRawHeaders() const;
     BLINK_PLATFORM_EXPORT void setReportRawHeaders(bool);
 
+    // FIXME: Remove these once content/ and net/ are updated.
     BLINK_PLATFORM_EXPORT TargetType targetType() const;
     BLINK_PLATFORM_EXPORT void setTargetType(TargetType);
+
+    BLINK_PLATFORM_EXPORT RequestContext requestContext() const;
+    BLINK_PLATFORM_EXPORT void setRequestContext(RequestContext);
+
+    BLINK_PLATFORM_EXPORT FrameType frameType() const;
+    BLINK_PLATFORM_EXPORT void setFrameType(FrameType);
 
     BLINK_PLATFORM_EXPORT WebReferrerPolicy referrerPolicy() const;
 
@@ -199,9 +252,13 @@ public:
     BLINK_PLATFORM_EXPORT void setPriority(Priority);
 
 #if INSIDE_BLINK
-    BLINK_PLATFORM_EXPORT WebCore::ResourceRequest& toMutableResourceRequest();
-    BLINK_PLATFORM_EXPORT const WebCore::ResourceRequest& toResourceRequest() const;
+    BLINK_PLATFORM_EXPORT blink::ResourceRequest& toMutableResourceRequest();
+    BLINK_PLATFORM_EXPORT const blink::ResourceRequest& toResourceRequest() const;
 #endif
+
+    // FIXME: Drop these once we replace TargetType upstream.
+    static RequestContext requestContextFromTargetType(TargetType);
+    static TargetType targetTypeFromRequestContextAndFrameType(RequestContext, FrameType);
 
 protected:
     BLINK_PLATFORM_EXPORT void assign(WebURLRequestPrivate*);

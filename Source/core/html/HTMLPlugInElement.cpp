@@ -23,8 +23,8 @@
 #include "config.h"
 #include "core/html/HTMLPlugInElement.h"
 
-#include "bindings/v8/ScriptController.h"
-#include "bindings/v8/npruntime_impl.h"
+#include "bindings/core/v8/ScriptController.h"
+#include "bindings/core/v8/npruntime_impl.h"
 #include "core/CSSPropertyNames.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
@@ -51,7 +51,7 @@
 #include "platform/Widget.h"
 #include "platform/plugins/PluginData.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -66,7 +66,6 @@ HTMLPlugInElement::HTMLPlugInElement(const QualifiedName& tagName, Document& doc
     // the same codepath in this class.
     , m_needsWidgetUpdate(!createdByParser)
     , m_shouldPreferPlugInsForImages(preferPlugInsForImagesOption == ShouldPreferPlugInsForImages)
-    , m_displayState(Playing)
 {
     setHasCustomStyleCallbacks();
 }
@@ -336,8 +335,6 @@ void HTMLPlugInElement::defaultEventHandler(Event* event)
         return;
     if (r->isEmbeddedObject()) {
         if (toRenderEmbeddedObject(r)->showsUnavailablePluginIndicator())
-            return;
-        if (displayState() < Playing)
             return;
     }
     RefPtr<Widget> widget = toRenderWidget(r)->widget();

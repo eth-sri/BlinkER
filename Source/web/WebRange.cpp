@@ -31,8 +31,8 @@
 #include "config.h"
 #include "public/web/WebRange.h"
 
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/Range.h"
@@ -48,7 +48,7 @@
 #include "web/WebLocalFrameImpl.h"
 #include "wtf/PassRefPtr.h"
 
-using namespace WebCore;
+using namespace blink;
 
 namespace blink {
 
@@ -108,7 +108,7 @@ WebRange WebRange::expandedToParagraph() const
 // static
 WebRange WebRange::fromDocumentRange(WebLocalFrame* frame, int start, int length)
 {
-    WebCore::LocalFrame* webFrame = toWebLocalFrameImpl(frame)->frame();
+    blink::LocalFrame* webFrame = toWebLocalFrameImpl(frame)->frame();
     Element* selectionRoot = webFrame->selection().rootEditableElement();
     ContainerNode* scope = selectionRoot ? selectionRoot : webFrame->document()->documentElement();
     return PlainTextRange(start, start + length).createRange(*scope);
@@ -135,12 +135,12 @@ WebVector<WebFloatQuad> WebRange::textQuads() const
     return quads;
 }
 
-WebRange::WebRange(const PassRefPtrWillBeRawPtr<WebCore::Range>& range)
+WebRange::WebRange(const PassRefPtrWillBeRawPtr<blink::Range>& range)
     : m_private(range)
 {
 }
 
-WebRange::operator PassRefPtrWillBeRawPtr<WebCore::Range>() const
+WebRange::operator PassRefPtrWillBeRawPtr<blink::Range>() const
 {
     return m_private.get();
 }

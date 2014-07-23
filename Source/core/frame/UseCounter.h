@@ -33,7 +33,7 @@
 #include "wtf/PassOwnPtr.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 class CSSStyleSheet;
 class LocalDOMWindow;
@@ -309,7 +309,6 @@ public:
         NamedNodeMapRemoveNamedItemNS = 312,
         OpenWebDatabaseInWorker = 313, // This didn't work because of crbug.com/376039. Available since M37.
         OpenWebDatabaseSyncInWorker = 314, // This didn't work because of crbug.com/376039. Available since M37.
-        PrefixedAllowFullscreenAttribute = 315,
         XHRProgressEventPosition = 316,
         XHRProgressEventTotalSize = 317,
         PrefixedDocumentIsFullscreen = 318,
@@ -473,6 +472,21 @@ public:
         // The above items are available in M37 branch.
 
         UseAsm = 473,
+        KeyEventNotAllowedInFullScreen = 474,
+        DOMWindowOpen = 475,
+        DOMWindowOpenFeatures = 476,
+        LegacyFullScreenErrorExemption = 477,
+        MediaStreamTrackGetSources = 478,
+        AspectRatioFlexItem = 479,
+        DetailsElement = 480,
+        DialogElement = 481,
+        MapElement = 482,
+        MeterElement = 483,
+        ProgressElement = 484,
+        VideoFullscreenAllowedExemption = 485,
+        PPAPIRequestAllowedByObjectSrc = 486,
+        PPAPIRequestBypassedObjectSrc = 487,
+        WebKitPoint = 488,
         // Add new features immediately above this line. Don't change assigned
         // numbers of any item, and don't reuse removed slots.
         // Also, run update_use_counter_feature_enum.py in chromium/src/tools/metrics/histograms/
@@ -540,6 +554,6 @@ private:
     BitVector m_CSSFeatureBits;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // UseCounter_h

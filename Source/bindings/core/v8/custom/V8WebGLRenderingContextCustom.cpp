@@ -31,7 +31,9 @@
 #include "config.h"
 #include "bindings/core/v8/V8WebGLRenderingContext.h"
 
+#include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/V8ANGLEInstancedArrays.h"
+#include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8EXTBlendMinMax.h"
 #include "bindings/core/v8/V8EXTFragDepth.h"
 #include "bindings/core/v8/V8EXTShaderTextureLOD.h"
@@ -39,6 +41,7 @@
 #include "bindings/core/v8/V8HTMLCanvasElement.h"
 #include "bindings/core/v8/V8HTMLImageElement.h"
 #include "bindings/core/v8/V8HTMLVideoElement.h"
+#include "bindings/core/v8/V8HiddenValue.h"
 #include "bindings/core/v8/V8ImageData.h"
 #include "bindings/core/v8/V8OESElementIndexUint.h"
 #include "bindings/core/v8/V8OESStandardDerivatives.h"
@@ -72,16 +75,13 @@
 #include "bindings/core/v8/custom/V8Uint16ArrayCustom.h"
 #include "bindings/core/v8/custom/V8Uint32ArrayCustom.h"
 #include "bindings/core/v8/custom/V8Uint8ArrayCustom.h"
-#include "bindings/v8/ExceptionMessages.h"
-#include "bindings/v8/V8Binding.h"
-#include "bindings/v8/V8HiddenValue.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/html/canvas/WebGLRenderingContext.h"
 #include "platform/NotImplemented.h"
 #include "wtf/FastMalloc.h"
 #include <limits>
 
-namespace WebCore {
+namespace blink {
 
 // Allocates new storage via fastMalloc.
 // Returns 0 if array failed to convert for any reason.
@@ -292,12 +292,14 @@ static void getObjectParameter(const v8::FunctionCallbackInfo<v8::Value>& info, 
     }
 
     WebGLRenderingContext* context = V8WebGLRenderingContext::toNative(info.Holder());
-    unsigned target = toInt32(info[0], exceptionState);
-    if (exceptionState.throwIfNeeded())
-        return;
-    unsigned pname = toInt32(info[1], exceptionState);
-    if (exceptionState.throwIfNeeded())
-        return;
+    unsigned target;
+    unsigned pname;
+    {
+        v8::TryCatch block;
+        V8RethrowTryCatchScope rethrow(block);
+        TONATIVE_VOID_EXCEPTIONSTATE_INTERNAL(target, toUInt32(info[0], exceptionState), exceptionState);
+        TONATIVE_VOID_EXCEPTIONSTATE_INTERNAL(pname, toUInt32(info[1], exceptionState), exceptionState);
+    }
     WebGLGetInfo args;
     switch (objectType) {
     case kBuffer:
@@ -325,39 +327,6 @@ static WebGLUniformLocation* toWebGLUniformLocation(v8::Handle<v8::Value> value,
     return V8WebGLUniformLocation::toNativeWithTypeCheck(isolate, value);
 }
 
-enum WhichProgramCall {
-    kProgramParameter, kUniform
-};
-
-void V8WebGLRenderingContext::getAttachedShadersMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
-    ExceptionState exceptionState(ExceptionState::ExecutionContext, "getAttachedShaders", "WebGLRenderingContext", info.Holder(), info.GetIsolate());
-    if (info.Length() < 1) {
-        exceptionState.throwTypeError(ExceptionMessages::notEnoughArguments(1, info.Length()));
-        exceptionState.throwIfNeeded();
-        return;
-    }
-
-    const int programArgumentIndex = 0;
-    WebGLRenderingContext* context = V8WebGLRenderingContext::toNative(info.Holder());
-    if (info.Length() > 0 && !isUndefinedOrNull(info[programArgumentIndex]) && !V8WebGLProgram::hasInstance(info[programArgumentIndex], info.GetIsolate())) {
-        exceptionState.throwTypeError(ExceptionMessages::argumentNullOrIncorrectType(programArgumentIndex + 1, "WebGLProgram"));
-        exceptionState.throwIfNeeded();
-        return;
-    }
-    WebGLProgram* program = V8WebGLProgram::toNativeWithTypeCheck(info.GetIsolate(), info[programArgumentIndex]);
-    Vector<RefPtr<WebGLShader> > shaders;
-    bool succeed = context->getAttachedShaders(program, shaders);
-    if (!succeed) {
-        v8SetReturnValueNull(info);
-        return;
-    }
-    v8::Local<v8::Array> array = v8::Array::New(info.GetIsolate(), shaders.size());
-    for (size_t ii = 0; ii < shaders.size(); ++ii)
-        array->Set(v8::Integer::New(info.GetIsolate(), ii), toV8(shaders[ii].get(), info.Holder(), info.GetIsolate()));
-    v8SetReturnValue(info, array);
-}
-
 void V8WebGLRenderingContext::getBufferParameterMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "getBufferParameter", "WebGLRenderingContext", info.Holder(), info.GetIsolate());
@@ -374,7 +343,7 @@ void V8WebGLRenderingContext::getExtensionMethodCustom(const v8::FunctionCallbac
         return;
     }
     TOSTRING_VOID(V8StringResource<>, name, info[0]);
-    RefPtr<WebGLExtension> extension(impl->getExtension(name));
+    RefPtrWillBeRawPtr<WebGLExtension> extension(impl->getExtension(name));
     v8SetReturnValue(info, toV8Object(extension.get(), info.Holder(), info.GetIsolate()));
 }
 
@@ -388,13 +357,16 @@ void V8WebGLRenderingContext::getFramebufferAttachmentParameterMethodCustom(cons
     }
 
     WebGLRenderingContext* context = V8WebGLRenderingContext::toNative(info.Holder());
-    unsigned target = toInt32(info[0]);
-    unsigned attachment = toInt32(info[1], exceptionState);
-    if (exceptionState.throwIfNeeded())
-        return;
-    unsigned pname = toInt32(info[2], exceptionState);
-    if (exceptionState.throwIfNeeded())
-        return;
+    unsigned target;
+    unsigned attachment;
+    unsigned pname;
+    {
+        v8::TryCatch block;
+        V8RethrowTryCatchScope rethrow(block);
+        TONATIVE_VOID_EXCEPTIONSTATE_INTERNAL(target, toUInt32(info[0], exceptionState), exceptionState);
+        TONATIVE_VOID_EXCEPTIONSTATE_INTERNAL(attachment, toUInt32(info[1], exceptionState), exceptionState);
+        TONATIVE_VOID_EXCEPTIONSTATE_INTERNAL(pname, toUInt32(info[2], exceptionState), exceptionState);
+    }
     WebGLGetInfo args = context->getFramebufferAttachmentParameter(target, attachment, pname);
     v8SetReturnValue(info, toV8Object(args, info.Holder(), info.GetIsolate()));
 }
@@ -409,9 +381,12 @@ void V8WebGLRenderingContext::getParameterMethodCustom(const v8::FunctionCallbac
     }
 
     WebGLRenderingContext* context = V8WebGLRenderingContext::toNative(info.Holder());
-    unsigned pname = toInt32(info[0], exceptionState);
-    if (exceptionState.throwIfNeeded())
-        return;
+    unsigned pname;
+    {
+        v8::TryCatch block;
+        V8RethrowTryCatchScope rethrow(block);
+        TONATIVE_VOID_EXCEPTIONSTATE_INTERNAL(pname, toUInt32(info[0], exceptionState), exceptionState);
+    }
     WebGLGetInfo args = context->getParameter(pname);
     v8SetReturnValue(info, toV8Object(args, info.Holder(), info.GetIsolate()));
 }
@@ -425,17 +400,20 @@ void V8WebGLRenderingContext::getProgramParameterMethodCustom(const v8::Function
         return;
     }
 
-    const int programArgumentIndex = 0;
     WebGLRenderingContext* context = V8WebGLRenderingContext::toNative(info.Holder());
-    if (info.Length() > 0 && !isUndefinedOrNull(info[programArgumentIndex]) && !V8WebGLProgram::hasInstance(info[programArgumentIndex], info.GetIsolate())) {
-        exceptionState.throwTypeError(ExceptionMessages::argumentNullOrIncorrectType(programArgumentIndex + 1, "WebGLProgram"));
-        exceptionState.throwIfNeeded();
-        return;
+    WebGLProgram* program;
+    unsigned pname;
+    {
+        v8::TryCatch block;
+        V8RethrowTryCatchScope rethrow(block);
+        if (info.Length() > 0 && !isUndefinedOrNull(info[0]) && !V8WebGLProgram::hasInstance(info[0], info.GetIsolate())) {
+            exceptionState.throwTypeError("parameter 1 is not of type 'WebGLProgram'.");
+            exceptionState.throwIfNeeded();
+            return;
+        }
+        TONATIVE_VOID_INTERNAL(program, V8WebGLProgram::toNativeWithTypeCheck(info.GetIsolate(), info[0]));
+        TONATIVE_VOID_EXCEPTIONSTATE_INTERNAL(pname, toUInt32(info[1], exceptionState), exceptionState);
     }
-    WebGLProgram* program = V8WebGLProgram::toNativeWithTypeCheck(info.GetIsolate(), info[programArgumentIndex]);
-    unsigned pname = toInt32(info[1], exceptionState);
-    if (exceptionState.throwIfNeeded())
-        return;
     WebGLGetInfo args = context->getProgramParameter(program, pname);
     v8SetReturnValue(info, toV8Object(args, info.Holder(), info.GetIsolate()));
 }
@@ -455,34 +433,22 @@ void V8WebGLRenderingContext::getShaderParameterMethodCustom(const v8::FunctionC
         return;
     }
 
-    const int shaderArgumentIndex = 0;
     WebGLRenderingContext* context = V8WebGLRenderingContext::toNative(info.Holder());
-    if (info.Length() > 0 && !isUndefinedOrNull(info[shaderArgumentIndex]) && !V8WebGLShader::hasInstance(info[shaderArgumentIndex], info.GetIsolate())) {
-        exceptionState.throwTypeError(ExceptionMessages::argumentNullOrIncorrectType(shaderArgumentIndex + 1, "WebGLShader"));
-        exceptionState.throwIfNeeded();
-        return;
+    WebGLShader* shader;
+    unsigned pname;
+    {
+        v8::TryCatch block;
+        V8RethrowTryCatchScope rethrow(block);
+        if (info.Length() > 0 && !isUndefinedOrNull(info[0]) && !V8WebGLShader::hasInstance(info[0], info.GetIsolate())) {
+            exceptionState.throwTypeError("parameter 1 is not of type 'WebGLShader'.");
+            exceptionState.throwIfNeeded();
+            return;
+        }
+        TONATIVE_VOID_INTERNAL(shader, V8WebGLShader::toNativeWithTypeCheck(info.GetIsolate(), info[0]));
+        TONATIVE_VOID_EXCEPTIONSTATE_INTERNAL(pname, toUInt32(info[1], exceptionState), exceptionState);
     }
-    WebGLShader* shader = V8WebGLShader::toNativeWithTypeCheck(info.GetIsolate(), info[shaderArgumentIndex]);
-    unsigned pname = toInt32(info[1], exceptionState);
-    if (exceptionState.throwIfNeeded())
-        return;
     WebGLGetInfo args = context->getShaderParameter(shader, pname);
     v8SetReturnValue(info, toV8Object(args, info.Holder(), info.GetIsolate()));
-}
-
-void V8WebGLRenderingContext::getSupportedExtensionsMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
-    WebGLRenderingContext* impl = V8WebGLRenderingContext::toNative(info.Holder());
-    if (impl->isContextLost()) {
-        v8SetReturnValueNull(info);
-        return;
-    }
-
-    Vector<String> value = impl->getSupportedExtensions();
-    v8::Local<v8::Array> array = v8::Array::New(info.GetIsolate(), value.size());
-    for (size_t ii = 0; ii < value.size(); ++ii)
-        array->Set(v8::Integer::New(info.GetIsolate(), ii), v8String(info.GetIsolate(), value[ii]));
-    v8SetReturnValue(info, array);
 }
 
 void V8WebGLRenderingContext::getTexParameterMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -500,24 +466,23 @@ void V8WebGLRenderingContext::getUniformMethodCustom(const v8::FunctionCallbackI
         return;
     }
 
-    const int programArgumentIndex = 0;
     WebGLRenderingContext* context = V8WebGLRenderingContext::toNative(info.Holder());
-    if (info.Length() > 0 && !isUndefinedOrNull(info[programArgumentIndex]) && !V8WebGLProgram::hasInstance(info[programArgumentIndex], info.GetIsolate())) {
-        exceptionState.throwTypeError(ExceptionMessages::argumentNullOrIncorrectType(programArgumentIndex + 1, "WebGLProgram"));
-        exceptionState.throwIfNeeded();
-        return;
+    WebGLProgram* program;
+    WebGLUniformLocation* location;
+    {
+        v8::TryCatch block;
+        V8RethrowTryCatchScope rethrow(block);
+        if (info.Length() > 0 && !isUndefinedOrNull(info[0]) && !V8WebGLProgram::hasInstance(info[0], info.GetIsolate())) {
+            throwTypeError(ExceptionMessages::failedToExecute("getUniform", "WebGLRenderingContext", "parameter 1 is not of type 'WebGLProgram'."), info.GetIsolate());
+            return;
+        }
+        TONATIVE_VOID_INTERNAL(program, V8WebGLProgram::toNativeWithTypeCheck(info.GetIsolate(), info[0]));
+        if (info.Length() > 1 && !isUndefinedOrNull(info[1]) && !V8WebGLUniformLocation::hasInstance(info[1], info.GetIsolate())) {
+            throwTypeError(ExceptionMessages::failedToExecute("getUniform", "WebGLRenderingContext", "parameter 2 is not of type 'WebGLUniformLocation'."), info.GetIsolate());
+            return;
+        }
+        TONATIVE_VOID_INTERNAL(location, V8WebGLUniformLocation::toNativeWithTypeCheck(info.GetIsolate(), info[1]));
     }
-    WebGLProgram* program = V8WebGLProgram::toNativeWithTypeCheck(info.GetIsolate(), info[programArgumentIndex]);
-
-    const int uniformArgumentIndex = 1;
-    if (info.Length() > 1 && !isUndefinedOrNull(info[uniformArgumentIndex]) && !V8WebGLUniformLocation::hasInstance(info[uniformArgumentIndex], info.GetIsolate())) {
-        exceptionState.throwTypeError(ExceptionMessages::argumentNullOrIncorrectType(uniformArgumentIndex + 1, "WebGLUniformLocation"));
-        exceptionState.throwIfNeeded();
-        return;
-    }
-    const int uniformLocationArgumentIndex = 1;
-    WebGLUniformLocation* location = toWebGLUniformLocation(info[uniformLocationArgumentIndex], info.GetIsolate());
-
     WebGLGetInfo args = context->getUniform(program, location);
     v8SetReturnValue(info, toV8Object(args, info.Holder(), info.GetIsolate()));
 }
@@ -863,4 +828,4 @@ void V8WebGLRenderingContext::vertexAttrib4fvMethodCustom(const v8::FunctionCall
     vertexAttribAndUniformHelperf(info, kVertexAttrib4v, exceptionState);
 }
 
-} // namespace WebCore
+} // namespace blink

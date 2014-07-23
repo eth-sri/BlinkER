@@ -21,14 +21,16 @@
 #include "config.h"
 #include "core/html/HTMLDetailsElement.h"
 
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/CSSPropertyNames.h"
 #include "core/CSSValueKeywords.h"
 #include "core/HTMLNames.h"
+#include "core/dom/ElementTraversal.h"
 #include "core/dom/Text.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/events/Event.h"
 #include "core/events/EventSender.h"
+#include "core/frame/UseCounter.h"
 #include "core/html/HTMLContentElement.h"
 #include "core/html/HTMLDivElement.h"
 #include "core/html/HTMLSummaryElement.h"
@@ -36,7 +38,7 @@
 #include "core/rendering/RenderBlockFlow.h"
 #include "platform/text/PlatformLocale.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -58,6 +60,7 @@ HTMLDetailsElement::HTMLDetailsElement(Document& document)
     , m_isOpen(false)
 {
     ScriptWrappable::init(this);
+    UseCounter::count(document, UseCounter::DetailsElement);
 }
 
 HTMLDetailsElement::~HTMLDetailsElement()

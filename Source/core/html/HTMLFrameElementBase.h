@@ -27,7 +27,7 @@
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "platform/scroll/ScrollTypes.h"
 
-namespace WebCore {
+namespace blink {
 
 class HTMLFrameElementBase : public HTMLFrameOwnerElement {
 public:
@@ -78,11 +78,6 @@ private:
     int m_marginHeight;
 };
 
-inline bool isHTMLFrameElementBase(const Element& element)
-{
-    return isHTMLFrameElement(element) || isHTMLIFrameElement(element);
-}
-
 inline bool isHTMLFrameElementBase(const HTMLElement& element)
 {
     return isHTMLFrameElement(element) || isHTMLIFrameElement(element);
@@ -90,6 +85,6 @@ inline bool isHTMLFrameElementBase(const HTMLElement& element)
 
 DEFINE_HTMLELEMENT_TYPE_CASTS_WITH_FUNCTION(HTMLFrameElementBase);
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // HTMLFrameElementBase_h

@@ -8,7 +8,7 @@
 #include "core/frame/FrameHost.h"
 #include "wtf/HashCountedSet.h"
 
-namespace WebCore {
+namespace blink {
 
 class Document;
 class EventTarget;
@@ -28,7 +28,7 @@ public:
     enum EventHandlerClass {
         ScrollEvent,
         WheelEvent,
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
         // Additional event categories for verifying handler tracking logic.
         EventsForTesting,
 #endif
@@ -93,6 +93,6 @@ private:
     EventTargetSet m_targets[EventHandlerClassCount];
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // EventHandlerRegistry_h

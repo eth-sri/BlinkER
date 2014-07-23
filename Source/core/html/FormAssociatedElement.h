@@ -28,7 +28,7 @@
 #include "wtf/WeakPtr.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 class ContainerNode;
 class Document;
@@ -37,7 +37,6 @@ class FormDataList;
 class HTMLElement;
 class HTMLFormElement;
 class Node;
-class ValidationMessage;
 class ValidityState;
 class VisibleSelection;
 

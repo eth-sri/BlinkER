@@ -26,6 +26,7 @@
 #include "config.h"
 #include "modules/mediastream/MediaStreamTrackSourcesRequestImpl.h"
 
+#include "core/dom/CrossThreadTask.h"
 #include "core/dom/ExecutionContext.h"
 #include "modules/mediastream/MediaStreamTrackSourcesCallback.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -33,7 +34,7 @@
 #include "wtf/Functional.h"
 #include "wtf/PassOwnPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 MediaStreamTrackSourcesRequestImpl* MediaStreamTrackSourcesRequestImpl::create(ExecutionContext& context, PassOwnPtr<MediaStreamTrackSourcesCallback> callback)
 {
@@ -61,7 +62,7 @@ void MediaStreamTrackSourcesRequestImpl::requestSucceeded(const blink::WebVector
 
     for (size_t i = 0; i < webSourceInfos.size(); ++i)
         m_sourceInfos.append(SourceInfo::create(webSourceInfos[i]));
-    m_executionContext->postTask(bind(&MediaStreamTrackSourcesRequestImpl::performCallback, this));
+    m_executionContext->postTask(createCrossThreadTask(&MediaStreamTrackSourcesRequestImpl::performCallback, this));
 }
 
 void MediaStreamTrackSourcesRequestImpl::performCallback()
@@ -77,4 +78,4 @@ void MediaStreamTrackSourcesRequestImpl::trace(Visitor* visitor)
     MediaStreamTrackSourcesRequest::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink

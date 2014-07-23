@@ -28,7 +28,7 @@
 #include "core/dom/ContainerNode.h"
 #include "core/dom/QualifiedName.h"
 
-namespace WebCore {
+namespace blink {
 
 // Attr can have Text children
 // therefore it has to be a fullblown Node. The plan
@@ -81,7 +81,7 @@ private:
     virtual bool isAttributeNode() const OVERRIDE { return true; }
     virtual bool childTypeAllowed(NodeType) const OVERRIDE;
 
-    virtual void childrenChanged(bool changedByParser = false, Node* beforeChange = 0, Node* afterChange = 0, int childCountDelta = 0) OVERRIDE;
+    virtual void childrenChanged(const ChildrenChange&) OVERRIDE;
 
     Attribute& elementAttribute();
 
@@ -99,6 +99,6 @@ private:
 
 DEFINE_NODE_TYPE_CASTS(Attr, isAttributeNode());
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // Attr_h

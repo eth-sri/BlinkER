@@ -72,13 +72,23 @@ WebInspector.StylesSourceMapping.prototype = {
      */
     uiLocationToRawLocation: function(uiSourceCode, lineNumber, columnNumber)
     {
-        return new WebInspector.CSSLocation(this._cssModel.target(), uiSourceCode.url || "", lineNumber, columnNumber);
+        return new WebInspector.CSSLocation(this._cssModel.target(), null, uiSourceCode.url || "", lineNumber, columnNumber);
     },
 
     /**
      * @return {boolean}
      */
     isIdentity: function()
+    {
+        return true;
+    },
+
+    /**
+     * @param {!WebInspector.UISourceCode} uiSourceCode
+     * @param {number} lineNumber
+     * @return {boolean}
+     */
+    uiLineHasMapping: function(uiSourceCode, lineNumber)
     {
         return true;
     },
@@ -368,7 +378,7 @@ WebInspector.StyleFile.prototype = {
     _styleContentSet: function(finishCallback, error)
     {
         if (error)
-            this._mapping._cssModel.target().consoleModel.showErrorMessage(error);
+            WebInspector.console.error(error);
         finishCallback();
     },
 

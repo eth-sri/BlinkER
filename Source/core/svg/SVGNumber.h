@@ -31,10 +31,10 @@
 #ifndef SVGNumber_h
 #define SVGNumber_h
 
-#include "bindings/v8/ExceptionMessages.h"
+#include "bindings/core/v8/ExceptionMessages.h"
 #include "core/svg/properties/SVGPropertyHelper.h"
 
-namespace WebCore {
+namespace blink {
 
 class SVGNumberTearOff;
 
@@ -97,6 +97,6 @@ private:
     SVGNumberAcceptPercentage(float value);
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // SVGNumber_h

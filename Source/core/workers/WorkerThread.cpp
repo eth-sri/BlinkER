@@ -28,7 +28,7 @@
 
 #include "core/workers/WorkerThread.h"
 
-#include "bindings/v8/ScriptSourceCode.h"
+#include "bindings/core/v8/ScriptSourceCode.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/workers/DedicatedWorkerGlobalScope.h"
 #include "core/workers/WorkerClients.h"
@@ -45,7 +45,7 @@
 
 #include <utility>
 
-namespace WebCore {
+namespace blink {
 
 static Mutex& threadSetMutex()
 {
@@ -70,7 +70,6 @@ WorkerThread::WorkerThread(WorkerLoaderProxy& workerLoaderProxy, WorkerReporting
     , m_workerLoaderProxy(workerLoaderProxy)
     , m_workerReportingProxy(workerReportingProxy)
     , m_startupData(startupData)
-    , m_notificationClient(0)
     , m_shutdownEvent(adoptPtr(blink::Platform::current()->createWaitableEvent()))
 {
     MutexLocker lock(threadSetMutex());
@@ -246,4 +245,19 @@ bool WorkerThread::isCurrentThread() const
     return m_threadID == currentThread();
 }
 
-} // namespace WebCore
+void WorkerThread::postTask(PassOwnPtr<ExecutionContextTask> task)
+{
+    m_runLoop.postTask(task);
+}
+
+void WorkerThread::postDebuggerTask(PassOwnPtr<ExecutionContextTask> task)
+{
+    m_runLoop.postDebuggerTask(task);
+}
+
+MessageQueueWaitResult WorkerThread::runDebuggerTask(WorkerRunLoop::WaitMode waitMode)
+{
+    return m_runLoop.runDebuggerTask(waitMode);
+}
+
+} // namespace blink

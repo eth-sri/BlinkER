@@ -28,8 +28,8 @@
 #include "config.h"
 #include "core/html/forms/InputType.h"
 
-#include "bindings/v8/ExceptionMessages.h"
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionMessages.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/InputTypeNames.h"
 #include "core/accessibility/AXObjectCache.h"
 #include "core/dom/NodeRenderStyle.h"
@@ -70,7 +70,7 @@
 #include "platform/text/PlatformLocale.h"
 #include "platform/text/TextBreakIterator.h"
 
-namespace WebCore {
+namespace blink {
 
 using blink::WebLocalizedString;
 using namespace HTMLNames;
@@ -467,11 +467,6 @@ bool InputType::shouldShowFocusRingOnMouseFocus() const
     return false;
 }
 
-bool InputType::shouldUseInputMethod() const
-{
-    return false;
-}
-
 void InputType::enableSecureTextInput()
 {
 }
@@ -601,10 +596,6 @@ String InputType::droppedFileSystemId()
 {
     ASSERT_NOT_REACHED();
     return String();
-}
-
-void InputType::copyNonAttributeProperties(const HTMLInputElement&)
-{
 }
 
 bool InputType::shouldRespectListAttribute()
@@ -974,4 +965,4 @@ StepRange InputType::createStepRange(AnyStepHandling anyStepHandling, const Deci
     return StepRange(stepBase, minimum, maximum, step, stepDescription);
 }
 
-} // namespace WebCore
+} // namespace blink

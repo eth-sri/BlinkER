@@ -31,16 +31,16 @@
 #include "config.h"
 #include "bindings/core/v8/V8CustomEvent.h"
 
+#include "bindings/core/v8/Dictionary.h"
+#include "bindings/core/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8DOMWrapper.h"
 #include "bindings/core/v8/V8Event.h"
-#include "bindings/v8/Dictionary.h"
-#include "bindings/v8/SerializedScriptValue.h"
-#include "bindings/v8/V8Binding.h"
-#include "bindings/v8/V8DOMWrapper.h"
-#include "bindings/v8/V8HiddenValue.h"
+#include "bindings/core/v8/V8HiddenValue.h"
 #include "core/dom/ContextFeatures.h"
 #include "platform/RuntimeEnabledFeatures.h"
 
-namespace WebCore {
+namespace blink {
 
 static v8::Handle<v8::Value> cacheState(v8::Handle<v8::Object> customEvent, v8::Handle<v8::Value> detail, v8::Isolate* isolate)
 {
@@ -96,4 +96,4 @@ void V8CustomEvent::initCustomEventMethodCustom(const v8::FunctionCallbackInfo<v
     }
 }
 
-} // namespace WebCore
+} // namespace blink

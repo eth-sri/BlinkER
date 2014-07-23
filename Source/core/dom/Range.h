@@ -25,8 +25,8 @@
 #ifndef Range_h
 #define Range_h
 
-#include "bindings/v8/ExceptionStatePlaceholder.h"
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/dom/RangeBoundaryPoint.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/geometry/IntRect.h"
@@ -34,7 +34,7 @@
 #include "wtf/Forward.h"
 #include "wtf/RefCounted.h"
 
-namespace WebCore {
+namespace blink {
 
 class ClientRect;
 class ClientRectList;
@@ -72,7 +72,7 @@ public:
     enum CompareResults { NODE_BEFORE, NODE_AFTER, NODE_BEFORE_AND_AFTER, NODE_INSIDE };
     CompareResults compareNode(Node* refNode, ExceptionState&) const;
     enum CompareHow { START_TO_START, START_TO_END, END_TO_END, END_TO_START };
-    short compareBoundaryPoints(CompareHow, const Range* sourceRange, ExceptionState&) const;
+    short compareBoundaryPoints(CompareHow, const PassRefPtrWillBeRawPtr<Range> sourceRange, ExceptionState&) const;
     static short compareBoundaryPoints(Node* containerA, int offsetA, Node* containerB, int offsetB, ExceptionState&);
     static short compareBoundaryPoints(const RangeBoundaryPoint& boundaryA, const RangeBoundaryPoint& boundaryB, ExceptionState&);
     bool boundaryPointsValid() const;
@@ -178,7 +178,7 @@ bool areRangesEqual(const Range*, const Range*);
 
 #ifndef NDEBUG
 // Outside the WebCore namespace for ease of invocation from gdb.
-void showTree(const WebCore::Range*);
+void showTree(const blink::Range*);
 #endif
 
 #endif

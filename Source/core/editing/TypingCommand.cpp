@@ -44,7 +44,7 @@
 #include "core/html/HTMLBRElement.h"
 #include "core/rendering/RenderObject.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -303,8 +303,14 @@ void TypingCommand::markMisspellingsAfterTyping(ETypingCommand commandType)
     // get this by being at the end of a word and typing a space.
     VisiblePosition start(endingSelection().start(), endingSelection().affinity());
     VisiblePosition previous = start.previous();
-    if (previous.isNotNull()) {
-        VisiblePosition p1 = startOfWord(previous, LeftWordIfOnBoundary);
+
+    VisiblePosition p1 = startOfWord(previous, LeftWordIfOnBoundary);
+
+    if (commandType == InsertParagraphSeparator) {
+        VisiblePosition p2 = nextWordPosition(start);
+        VisibleSelection words(p1, endOfWord(p2));
+        frame->spellChecker().markMisspellingsAfterLineBreak(words);
+    } else if (previous.isNotNull()) {
         VisiblePosition p2 = startOfWord(start, LeftWordIfOnBoundary);
         if (p1 != p2)
             frame->spellChecker().markMisspellingsAfterTypingToWord(p1, endingSelection());
@@ -625,4 +631,4 @@ bool TypingCommand::isTypingCommand() const
     return true;
 }
 
-} // namespace WebCore
+} // namespace blink

@@ -31,14 +31,14 @@
 #include "config.h"
 #include "modules/webmidi/MIDIOutput.h"
 
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/timing/Performance.h"
 #include "modules/webmidi/MIDIAccess.h"
 
-namespace WebCore {
+namespace blink {
 
 namespace {
 
@@ -236,4 +236,4 @@ void MIDIOutput::trace(Visitor* visitor)
     MIDIPort::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink

@@ -45,7 +45,7 @@
 #include "wtf/Vector.h"
 #include "wtf/text/AtomicString.h"
 
-namespace WebCore {
+namespace blink {
 
 class CharacterData;
 class DOMEditor;
@@ -217,6 +217,9 @@ private:
 
     InspectorDOMAgent(InspectorPageAgent*, InjectedScriptManager*, InspectorOverlay*);
 
+    void innerEnable();
+    void notifyDocumentUpdated();
+
     void setSearchingForNode(ErrorString*, SearchMode, JSONObject* highlightConfig);
     PassOwnPtr<HighlightConfig> highlightConfigFromInspectorObject(ErrorString*, JSONObject* highlightInspectorObject);
 
@@ -279,6 +282,6 @@ private:
 };
 
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // !defined(InspectorDOMAgent_h)

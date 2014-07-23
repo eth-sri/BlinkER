@@ -30,7 +30,6 @@
 
 /**
  * @constructor
- * @implements {WebInspector.TargetManager.Observer}
  * @param {!WebInspector.NetworkWorkspaceBinding} networkWorkspaceBinding
  * @param {!WebInspector.Workspace} workspace
  */
@@ -38,35 +37,19 @@ WebInspector.NetworkUISourceCodeProvider = function(networkWorkspaceBinding, wor
 {
     this._networkWorkspaceBinding = networkWorkspaceBinding;
     this._workspace = workspace;
-    WebInspector.targetManager.observeTargets(this);
     this._processedURLs = {};
+    WebInspector.targetManager.addModelListener(WebInspector.ResourceTreeModel, WebInspector.ResourceTreeModel.EventTypes.ResourceAdded, this._resourceAdded, this);
+    WebInspector.targetManager.addModelListener(WebInspector.ResourceTreeModel, WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, this._mainFrameNavigated, this);
+    WebInspector.targetManager.addModelListener(WebInspector.DebuggerModel, WebInspector.DebuggerModel.Events.ParsedScriptSource, this._parsedScriptSource, this);
+    WebInspector.targetManager.addModelListener(WebInspector.DebuggerModel, WebInspector.DebuggerModel.Events.FailedToParseScriptSource, this._parsedScriptSource, this);
+    WebInspector.targetManager.addModelListener(WebInspector.CSSStyleModel, WebInspector.CSSStyleModel.Events.StyleSheetAdded, this._styleSheetAdded, this);
 }
 
 WebInspector.NetworkUISourceCodeProvider.prototype = {
     /**
      * @param {!WebInspector.Target} target
      */
-    targetAdded: function(target)
-    {
-        target.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.ResourceAdded, this._resourceAdded, this);
-        target.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, this._mainFrameNavigated, this);
-        target.debuggerModel.addEventListener(WebInspector.DebuggerModel.Events.ParsedScriptSource, this._parsedScriptSource, this);
-        target.cssModel.addEventListener(WebInspector.CSSStyleModel.Events.StyleSheetAdded, this._styleSheetAdded, this);
-    },
-
-    /**
-     * @param {!WebInspector.Target} target
-     */
-    targetRemoved: function(target)
-    {
-        // FIXME: add workspace cleanup here.
-        target.resourceTreeModel.removeEventListener(WebInspector.ResourceTreeModel.EventTypes.ResourceAdded, this._resourceAdded, this);
-        target.resourceTreeModel.removeEventListener(WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, this._mainFrameNavigated, this);
-        target.debuggerModel.removeEventListener(WebInspector.DebuggerModel.Events.ParsedScriptSource, this._parsedScriptSource, this);
-        target.cssModel.removeEventListener(WebInspector.CSSStyleModel.Events.StyleSheetAdded, this._styleSheetAdded, this);
-    },
-
-    _populate: function()
+    _populate: function(target)
     {
         /**
          * @param {!WebInspector.ResourceTreeFrame} frame
@@ -79,10 +62,12 @@ WebInspector.NetworkUISourceCodeProvider.prototype = {
 
             var resources = frame.resources();
             for (var i = 0; i < resources.length; ++i)
-                this._resourceAdded({data:resources[i]});
+                this._addFile(resources[i].url, new WebInspector.NetworkUISourceCodeProvider.FallbackResource(resources[i]));
         }
 
-        populateFrame.call(this, WebInspector.resourceTreeModel.mainFrame);
+        var mainFrame = target.resourceTreeModel.mainFrame;
+        if (mainFrame)
+            populateFrame.call(this, mainFrame);
     },
 
     /**
@@ -115,7 +100,7 @@ WebInspector.NetworkUISourceCodeProvider.prototype = {
     },
 
     /**
-     * @param {!WebInspector.Event|!{data: !WebInspector.Resource}} event
+     * @param {!WebInspector.Event} event
      */
     _resourceAdded: function(event)
     {
@@ -128,7 +113,9 @@ WebInspector.NetworkUISourceCodeProvider.prototype = {
      */
     _mainFrameNavigated: function(event)
     {
-        this._reset();
+        var resourceTreeModel = /** @type {!WebInspector.ResourceTreeModel} */ (event.target);
+        //We assume that mainFrameNavigated could be fired only in one main target
+        this._reset(resourceTreeModel.target());
     },
 
     /**
@@ -150,11 +137,14 @@ WebInspector.NetworkUISourceCodeProvider.prototype = {
         this._networkWorkspaceBinding.addFileForURL(url, contentProvider, isContentScript);
     },
 
-    _reset: function()
+    /**
+     * @param {!WebInspector.Target} target
+     */
+    _reset: function(target)
     {
         this._processedURLs = {};
         this._networkWorkspaceBinding.reset();
-        this._populate();
+        this._populate(target);
     }
 }
 
@@ -196,7 +186,7 @@ WebInspector.NetworkUISourceCodeProvider.FallbackResource.prototype = {
          */
         function loadFallbackContent()
         {
-            var scripts = WebInspector.debuggerModel.scriptsForSourceURL(this._resource.url);
+            var scripts = this._resource.target().debuggerModel.scriptsForSourceURL(this._resource.url);
             if (!scripts.length) {
                 callback(null);
                 return;

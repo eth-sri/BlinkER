@@ -26,13 +26,13 @@
 #ifndef TextTrackCueList_h
 #define TextTrackCueList_h
 
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/html/track/TextTrackCue.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
 
-namespace WebCore {
+namespace blink {
 
 class TextTrackCueList FINAL : public RefCountedWillBeGarbageCollectedFinalized<TextTrackCueList>, public ScriptWrappable {
 public:
@@ -69,6 +69,6 @@ private:
 
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif

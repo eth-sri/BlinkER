@@ -51,7 +51,7 @@
 
 using namespace WTF;
 
-namespace WebCore {
+namespace blink {
 
 #if !OS(WIN)
 FontCache::FontCache()
@@ -151,7 +151,7 @@ PassRefPtr<SimpleFontData> FontCache::fontDataFromFontPlatformData(const FontPla
     if (!gFontDataCache)
         gFontDataCache = new FontDataCache;
 
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     if (shouldRetain == DoNotRetain)
         ASSERT(m_purgePreventCount);
 #endif
@@ -235,11 +235,7 @@ static bool invalidateFontCache = false;
 
 WillBeHeapHashSet<RawPtrWillBeWeakMember<FontCacheClient> >& fontCacheClients()
 {
-#if ENABLE(OILPAN)
-    DEFINE_STATIC_LOCAL(Persistent<HeapHashSet<WeakMember<FontCacheClient> > >, clients, (new HeapHashSet<WeakMember<FontCacheClient> >()));
-#else
-    DEFINE_STATIC_LOCAL(HashSet<RawPtr<FontCacheClient> >*, clients, (new HashSet<RawPtr<FontCacheClient> >()));
-#endif
+    DEFINE_STATIC_LOCAL(OwnPtrWillBePersistent<WillBeHeapHashSet<RawPtrWillBeWeakMember<FontCacheClient> > >, clients, (adoptPtrWillBeNoop(new WillBeHeapHashSet<RawPtrWillBeWeakMember<FontCacheClient> >())));
     invalidateFontCache = true;
     return *clients;
 }
@@ -293,4 +289,4 @@ void FontCache::invalidate()
     purge(ForcePurge);
 }
 
-} // namespace WebCore
+} // namespace blink

@@ -32,10 +32,10 @@
 #include "bindings/core/v8/V8StyleSheet.h"
 
 #include "bindings/core/v8/V8CSSStyleSheet.h"
+#include "bindings/core/v8/V8DOMWrapper.h"
 #include "bindings/core/v8/V8Node.h"
-#include "bindings/v8/V8DOMWrapper.h"
 
-namespace WebCore {
+namespace blink {
 
 v8::Handle<v8::Object> wrap(StyleSheet* impl, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
 {
@@ -45,4 +45,4 @@ v8::Handle<v8::Object> wrap(StyleSheet* impl, v8::Handle<v8::Object> creationCon
     return V8StyleSheet::createWrapper(impl, creationContext, isolate);
 }
 
-} // namespace WebCore
+} // namespace blink

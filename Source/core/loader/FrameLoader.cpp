@@ -35,9 +35,9 @@
 #include "config.h"
 #include "core/loader/FrameLoader.h"
 
-#include "bindings/v8/DOMWrapperWorld.h"
-#include "bindings/v8/ScriptController.h"
-#include "bindings/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/DOMWrapperWorld.h"
+#include "bindings/core/v8/ScriptController.h"
+#include "bindings/core/v8/SerializedScriptValue.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
@@ -92,11 +92,14 @@
 #include "platform/scroll/ScrollAnimator.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/weborigin/SecurityPolicy.h"
+#include "public/platform/WebURLRequest.h"
 #include "wtf/TemporaryChange.h"
 #include "wtf/text/CString.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+using blink::WebURLRequest;
+
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -134,7 +137,10 @@ FrameLoader::~FrameLoader()
 
 void FrameLoader::init()
 {
-    m_provisionalDocumentLoader = client()->createDocumentLoader(m_frame, ResourceRequest(KURL(ParsedURLString, emptyString())), SubstituteData());
+    ResourceRequest initialRequest(KURL(ParsedURLString, emptyString()));
+    initialRequest.setRequestContext(WebURLRequest::RequestContextInternal);
+    initialRequest.setFrameType(m_frame->isMainFrame() ? WebURLRequest::FrameTypeTopLevel : WebURLRequest::FrameTypeNested);
+    m_provisionalDocumentLoader = client()->createDocumentLoader(m_frame, initialRequest, SubstituteData());
     m_provisionalDocumentLoader->startLoadingMainResource();
     m_frame->document()->cancelParsing();
     m_stateMachine.advanceTo(FrameLoaderStateMachine::DisplayingInitialEmptyDocument);
@@ -717,7 +723,9 @@ FrameLoadType FrameLoader::determineFrameLoadType(const FrameLoadRequest& reques
 
 bool FrameLoader::prepareRequestForThisFrame(FrameLoadRequest& request)
 {
-    // If no origin Document* was specified, skip security checks and assume the caller has fully initialized the FrameLoadRequest.
+    request.resourceRequest().setFrameType(m_frame->isMainFrame() ? WebURLRequest::FrameTypeTopLevel : WebURLRequest::FrameTypeNested);
+
+    // If no origin Document* was specified, skip remaining security checks and assume the caller has fully initialized the FrameLoadRequest.
     if (!request.originDocument())
         return true;
 
@@ -746,6 +754,27 @@ static bool shouldOpenInNewWindow(LocalFrame* targetFrame, const FrameLoadReques
     return request.formState() && action.shouldOpenInNewWindow();
 }
 
+static WebURLRequest::RequestContext determineRequestContextFromNavigationType(const NavigationType navigationType)
+{
+    switch (navigationType) {
+    case NavigationTypeLinkClicked:
+        return WebURLRequest::RequestContextHyperlink;
+
+    case NavigationTypeOther:
+        return WebURLRequest::RequestContextLocation;
+
+    case NavigationTypeFormResubmitted:
+    case NavigationTypeFormSubmitted:
+        return WebURLRequest::RequestContextForm;
+
+    case NavigationTypeBackForward:
+    case NavigationTypeReload:
+        return WebURLRequest::RequestContextInternal;
+    }
+    ASSERT_NOT_REACHED();
+    return WebURLRequest::RequestContextHyperlink;
+}
+
 void FrameLoader::load(const FrameLoadRequest& passedRequest)
 {
     ASSERT(m_frame->document());
@@ -770,6 +799,8 @@ void FrameLoader::load(const FrameLoadRequest& passedRequest)
 
     FrameLoadType newLoadType = determineFrameLoadType(request);
     NavigationAction action(request.resourceRequest(), newLoadType, request.formState(), request.triggeringEvent());
+    if (action.resourceRequest().requestContext() == WebURLRequest::RequestContextUnspecified)
+        action.mutableResourceRequest().setRequestContext(determineRequestContextFromNavigationType(action.type()));
     if (shouldOpenInNewWindow(targetFrame.get(), request, action)) {
         if (action.policy() == NavigationPolicyDownload)
             client()->loadURLExternally(action.resourceRequest(), NavigationPolicyDownload);
@@ -814,7 +845,8 @@ void FrameLoader::reportLocalLoadFailed(LocalFrame* frame, const String& url)
     frame->document()->addConsoleMessage(SecurityMessageSource, ErrorMessageLevel, "Not allowed to load local resource: " + url);
 }
 
-static ResourceRequest requestFromHistoryItem(HistoryItem* item, ResourceRequestCachePolicy cachePolicy)
+// static
+ResourceRequest FrameLoader::requestFromHistoryItem(HistoryItem* item, ResourceRequestCachePolicy cachePolicy)
 {
     RefPtr<FormData> formData = item->formData();
     ResourceRequest request(item->url(), item->referrer());
@@ -836,6 +868,8 @@ void FrameLoader::reload(ReloadPolicy reloadPolicy, const KURL& overrideURL, con
 
     ResourceRequestCachePolicy cachePolicy = reloadPolicy == EndToEndReload ? ReloadBypassingCache : ReloadIgnoringCacheData;
     ResourceRequest request = requestFromHistoryItem(m_currentItem.get(), cachePolicy);
+    request.setFrameType(m_frame->isMainFrame() ? WebURLRequest::FrameTypeTopLevel : WebURLRequest::FrameTypeNested);
+    request.setRequestContext(WebURLRequest::RequestContextInternal);
     if (!overrideURL.isEmpty()) {
         request.setURL(overrideURL);
         request.clearHTTPReferrer();
@@ -1314,6 +1348,31 @@ bool FrameLoader::shouldClose()
     return shouldClose;
 }
 
+bool FrameLoader::validateTransitionNavigationMode()
+{
+    if (frame()->document()->inQuirksMode()) {
+        frame()->document()->addConsoleMessage(JSMessageSource, ErrorMessageLevel, "Ignoring transition elements due to quirks mode.");
+        return false;
+    }
+
+    // FIXME(oysteine): Also check for width=device-width here, to avoid zoom/scaling issues.
+    return true;
+}
+
+bool FrameLoader::dispatchNavigationTransitionData()
+{
+    Vector<Document::TransitionElementData> elementData;
+    frame()->document()->getTransitionElementData(elementData);
+    if (elementData.isEmpty() || !validateTransitionNavigationMode())
+        return false;
+
+    Vector<Document::TransitionElementData>::iterator iter = elementData.begin();
+    for (; iter != elementData.end(); ++iter)
+        client()->dispatchAddNavigationTransitionData(iter->scope, iter->selector, iter->markup);
+
+    return true;
+}
+
 void FrameLoader::loadWithNavigationAction(const NavigationAction& action, FrameLoadType type, PassRefPtrWillBeRawPtr<FormState> formState, const SubstituteData& substituteData, ContentSecurityPolicyCheck shouldCheckMainWorldContentSecurityPolicy, ClientRedirectPolicy clientRedirect, const AtomicString& overrideEncoding)
 {
     ASSERT(client()->hasWebView());
@@ -1343,9 +1402,14 @@ void FrameLoader::loadWithNavigationAction(const NavigationAction& action, Frame
     else if (m_documentLoader)
         m_policyDocumentLoader->setOverrideEncoding(m_documentLoader->overrideEncoding());
 
+
+    bool isTransitionNavigation = false;
+    if (RuntimeEnabledFeatures::navigationTransitionsEnabled())
+        isTransitionNavigation = dispatchNavigationTransitionData();
+
     // stopAllLoaders can detach the LocalFrame, so protect it.
     RefPtr<LocalFrame> protect(m_frame);
-    if ((!m_policyDocumentLoader->shouldContinueForNavigationPolicy(request, shouldCheckMainWorldContentSecurityPolicy) || !shouldClose()) && m_policyDocumentLoader) {
+    if ((!m_policyDocumentLoader->shouldContinueForNavigationPolicy(request, shouldCheckMainWorldContentSecurityPolicy, isTransitionNavigation) || !shouldClose()) && m_policyDocumentLoader) {
         m_policyDocumentLoader->detachFromFrame();
         m_policyDocumentLoader = nullptr;
         return;
@@ -1379,7 +1443,7 @@ void FrameLoader::loadWithNavigationAction(const NavigationAction& action, Frame
     if (m_provisionalDocumentLoader->isClientRedirect())
         m_provisionalDocumentLoader->appendRedirect(m_frame->document()->url());
     m_provisionalDocumentLoader->appendRedirect(m_provisionalDocumentLoader->request().url());
-    client()->dispatchDidStartProvisionalLoad();
+    client()->dispatchDidStartProvisionalLoad(isTransitionNavigation);
     ASSERT(m_provisionalDocumentLoader);
 
     if (RefPtr<EventRacerLog> log = EventRacerContext::getLog()) {
@@ -1487,7 +1551,11 @@ void FrameLoader::loadHistoryItem(HistoryItem* item, HistoryLoadType historyLoad
         restoreScrollPositionAndViewState();
         return;
     }
-    loadWithNavigationAction(NavigationAction(requestFromHistoryItem(item, cachePolicy), FrameLoadTypeBackForward), FrameLoadTypeBackForward, nullptr, SubstituteData(), CheckContentSecurityPolicy);
+
+    ResourceRequest request = requestFromHistoryItem(item, cachePolicy);
+    request.setFrameType(m_frame->isMainFrame() ? WebURLRequest::FrameTypeTopLevel : WebURLRequest::FrameTypeNested);
+    request.setRequestContext(WebURLRequest::RequestContextInternal);
+    loadWithNavigationAction(NavigationAction(request, FrameLoadTypeBackForward), FrameLoadTypeBackForward, nullptr, SubstituteData(), CheckContentSecurityPolicy);
 }
 
 void FrameLoader::dispatchDocumentElementAvailable()
@@ -1529,4 +1597,4 @@ SandboxFlags FrameLoader::effectiveSandboxFlags() const
     return flags;
 }
 
-} // namespace WebCore
+} // namespace blink

@@ -27,8 +27,7 @@
 #ifndef DOMWindow_h
 #define DOMWindow_h
 
-#include "bindings/v8/Dictionary.h"
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/Dictionary.h"
 #include "core/events/EventTarget.h"
 #include "core/frame/DOMWindowBase64.h"
 #include "core/frame/FrameDestructionObserver.h"
@@ -38,13 +37,13 @@
 
 #include "wtf/Forward.h"
 
-namespace WebCore {
+namespace blink {
     class ApplicationCache;
     class BarProp;
     class CSSRuleList;
     class CSSStyleDeclaration;
     class Console;
-    class DOMPoint;
+    class WebKitPoint;
     class DOMSelection;
     class DOMURL;
     class DOMWindowProperty;
@@ -92,7 +91,7 @@ enum PageshowEventPersistence {
 
     enum SetLocationLocking { LockHistoryBasedOnGestureState, LockHistoryAndBackForwardList };
 
-    class LocalDOMWindow FINAL : public RefCountedWillBeGarbageCollectedFinalized<LocalDOMWindow>, public ScriptWrappable, public EventTargetWithInlineData, public DOMWindowBase64, public FrameDestructionObserver, public WillBeHeapSupplementable<LocalDOMWindow>, public LifecycleContext<LocalDOMWindow> {
+    class LocalDOMWindow FINAL : public RefCountedWillBeGarbageCollectedFinalized<LocalDOMWindow>, public EventTargetWithInlineData, public DOMWindowBase64, public FrameDestructionObserver, public WillBeHeapSupplementable<LocalDOMWindow>, public LifecycleContext<LocalDOMWindow> {
         WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(LocalDOMWindow);
         DEFINE_EVENT_TARGET_REFCOUNTING_WILL_BE_REMOVED(RefCounted<LocalDOMWindow>);
     public:
@@ -219,8 +218,8 @@ enum PageshowEventPersistence {
         PassRefPtrWillBeRawPtr<CSSRuleList> getMatchedCSSRules(Element*, const String& pseudoElt) const;
         double devicePixelRatio() const;
 
-        PassRefPtrWillBeRawPtr<DOMPoint> webkitConvertPointFromPageToNode(Node*, const DOMPoint*) const;
-        PassRefPtrWillBeRawPtr<DOMPoint> webkitConvertPointFromNodeToPage(Node*, const DOMPoint*) const;
+        PassRefPtrWillBeRawPtr<WebKitPoint> webkitConvertPointFromPageToNode(Node*, const WebKitPoint*) const;
+        PassRefPtrWillBeRawPtr<WebKitPoint> webkitConvertPointFromNodeToPage(Node*, const WebKitPoint*) const;
 
         Console& console() const;
         FrameConsole* frameConsole() const;
@@ -230,7 +229,7 @@ enum PageshowEventPersistence {
         String sanitizedCrossDomainAccessErrorMessage(LocalDOMWindow* callingWindow);
 
         void postMessage(PassRefPtr<SerializedScriptValue> message, const MessagePortArray*, const String& targetOrigin, LocalDOMWindow* source, ExceptionState&);
-        void postMessageTimerFired(PassOwnPtr<PostMessageTimer>);
+        void postMessageTimerFired(PostMessageTimer*);
         void dispatchMessageEventWithOriginCheck(SecurityOrigin* intendedTargetOrigin, PassRefPtrWillBeRawPtr<Event>, PassRefPtrWillBeRawPtr<ScriptCallStack>);
 
         void scrollBy(int x, int y) const;
@@ -256,7 +255,7 @@ enum PageshowEventPersistence {
         // Events
         // EventTarget API
         virtual bool addEventListener(const AtomicString& eventType, PassRefPtr<EventListener>, bool useCapture = false) OVERRIDE;
-        virtual bool removeEventListener(const AtomicString& eventType, EventListener*, bool useCapture = false) OVERRIDE;
+        virtual bool removeEventListener(const AtomicString& eventType, PassRefPtr<EventListener>, bool useCapture = false) OVERRIDE;
         virtual void removeAllEventListeners() OVERRIDE;
 
         using EventTarget::dispatchEvent;
@@ -363,7 +362,7 @@ enum PageshowEventPersistence {
         RefPtrWillBeMember<Document> m_document;
 
         bool m_shouldPrintWhenFinishedLoading;
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
         bool m_hasBeenReset;
 #endif
 
@@ -395,6 +394,8 @@ enum PageshowEventPersistence {
 
         RefPtrWillBeMember<DOMWindowEventQueue> m_eventQueue;
         RefPtr<SerializedScriptValue> m_pendingStateObject;
+
+        HashSet<OwnPtr<PostMessageTimer> > m_postMessageTimers;
     };
 
     inline String LocalDOMWindow::status() const
@@ -407,6 +408,6 @@ enum PageshowEventPersistence {
         return m_defaultStatus;
     }
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // DOMWindow_h

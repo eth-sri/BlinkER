@@ -31,7 +31,7 @@
 #include "platform/heap/Handle.h"
 #include "wtf/text/AtomicString.h"
 
-namespace WebCore {
+namespace blink {
 
 class ContainerNode;
 class DOMSelection;
@@ -55,7 +55,7 @@ public:
 
     Element* adjustedFocusedElement() const;
     Element* getElementById(const AtomicString&) const;
-    const Vector<Element*>& getAllElementsById(const AtomicString&) const;
+    const WillBeHeapVector<RawPtrWillBeMember<Element> >& getAllElementsById(const AtomicString&) const;
     bool hasElementWithId(StringImpl* id) const;
     bool containsMultipleElementsWithId(const AtomicString& id) const;
     void addElementById(const AtomicString& elementId, Element*);
@@ -95,7 +95,7 @@ public:
     // Used by the basic DOM mutation methods (e.g., appendChild()).
     void adoptIfNeeded(Node&);
 
-    Node& rootNode() const { return *m_rootNode; }
+    ContainerNode& rootNode() const { return *m_rootNode; }
 
     IdTargetObserverRegistry& idTargetObserverRegistry() const { return *m_idTargetObserverRegistry.get(); }
 
@@ -160,7 +160,7 @@ private:
 #if !ENABLE(OILPAN)
     int refCount() const;
 
-#if SECURITY_ASSERT_ENABLED
+#if ENABLE(SECURITY_ASSERT)
     bool deletionHasBegun();
     void beginDeletion();
 #else
@@ -171,7 +171,7 @@ private:
 
     bool rootNodeHasTreeSharedParent() const;
 
-    RawPtrWillBeMember<Node> m_rootNode;
+    RawPtrWillBeMember<ContainerNode> m_rootNode;
     RawPtrWillBeMember<Document> m_document;
     RawPtrWillBeMember<TreeScope> m_parentTreeScope;
 
@@ -179,9 +179,9 @@ private:
     int m_guardRefCount;
 #endif
 
-    OwnPtr<DocumentOrderedMap> m_elementsById;
-    OwnPtr<DocumentOrderedMap> m_imageMapsByName;
-    OwnPtr<DocumentOrderedMap> m_labelsByForAttribute;
+    OwnPtrWillBeMember<DocumentOrderedMap> m_elementsById;
+    OwnPtrWillBeMember<DocumentOrderedMap> m_imageMapsByName;
+    OwnPtrWillBeMember<DocumentOrderedMap> m_labelsByForAttribute;
 
     OwnPtrWillBeMember<IdTargetObserverRegistry> m_idTargetObserverRegistry;
 
@@ -199,16 +199,11 @@ inline bool TreeScope::containsMultipleElementsWithId(const AtomicString& id) co
     return m_elementsById && m_elementsById->containsMultiple(id.impl());
 }
 
-inline bool operator==(const TreeScope& a, const TreeScope& b) { return &a == &b; }
-inline bool operator==(const TreeScope& a, const TreeScope* b) { return &a == b; }
-inline bool operator==(const TreeScope* a, const TreeScope& b) { return a == &b; }
-inline bool operator!=(const TreeScope& a, const TreeScope& b) { return !(a == b); }
-inline bool operator!=(const TreeScope& a, const TreeScope* b) { return !(a == b); }
-inline bool operator!=(const TreeScope* a, const TreeScope& b) { return !(a == b); }
+DEFINE_COMPARISON_OPERATORS_WITH_REFERENCES(TreeScope)
 
 HitTestResult hitTestInDocument(const Document*, int x, int y);
 TreeScope* commonTreeScope(Node*, Node*);
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // TreeScope_h

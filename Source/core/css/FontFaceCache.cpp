@@ -39,7 +39,7 @@
 #include "platform/fonts/FontDescription.h"
 #include "wtf/text/AtomicString.h"
 
-namespace WebCore {
+namespace blink {
 
 FontFaceCache::FontFaceCache()
     : m_version(0)
@@ -62,7 +62,7 @@ void FontFaceCache::addFontFace(CSSFontSelector* cssFontSelector, PassRefPtrWill
     if (!traitsResult.storedValue->value)
         traitsResult.storedValue->value = adoptPtrWillBeNoop(new TraitsMap);
 
-    TraitsMap::AddResult segmentedFontFaceResult = traitsResult.storedValue->value->add(fontFace->traits().mask(), nullptr);
+    TraitsMap::AddResult segmentedFontFaceResult = traitsResult.storedValue->value->add(fontFace->traits().bitfield(), nullptr);
     if (!segmentedFontFaceResult.storedValue->value)
         segmentedFontFaceResult.storedValue->value = CSSSegmentedFontFace::create(cssFontSelector, fontFace->traits());
 
@@ -89,7 +89,7 @@ void FontFaceCache::removeFontFace(FontFace* fontFace, bool cssConnected)
         return;
     TraitsMap* familyFontFaces = fontFacesIter->value.get();
 
-    TraitsMap::iterator familyFontFacesIter = familyFontFaces->find(fontFace->traits().mask());
+    TraitsMap::iterator familyFontFacesIter = familyFontFaces->find(fontFace->traits().bitfield());
     if (familyFontFacesIter == familyFontFaces->end())
         return;
     RefPtrWillBeRawPtr<CSSSegmentedFontFace> segmentedFontFace = familyFontFacesIter->value;
@@ -198,7 +198,7 @@ CSSSegmentedFontFace* FontFaceCache::get(const FontDescription& fontDescription,
         traitsResult.storedValue->value = adoptPtrWillBeNoop(new TraitsMap);
 
     FontTraits traits = fontDescription.traits();
-    TraitsMap::AddResult faceResult = traitsResult.storedValue->value->add(traits.mask(), nullptr);
+    TraitsMap::AddResult faceResult = traitsResult.storedValue->value->add(traits.bitfield(), nullptr);
     if (!faceResult.storedValue->value) {
         for (TraitsMap::const_iterator i = familyFontFaces->begin(); i != familyFontFaces->end(); ++i) {
             CSSSegmentedFontFace* candidate = i->value.get();
@@ -216,10 +216,12 @@ CSSSegmentedFontFace* FontFaceCache::get(const FontDescription& fontDescription,
 
 void FontFaceCache::trace(Visitor* visitor)
 {
+#if ENABLE(OILPAN)
     visitor->trace(m_fontFaces);
     visitor->trace(m_fonts);
     visitor->trace(m_styleRuleToFontFace);
     visitor->trace(m_cssConnectedFontFaces);
+#endif
 }
 
 }

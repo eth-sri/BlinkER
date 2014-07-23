@@ -31,7 +31,7 @@
 #include "platform/graphics/GraphicsLayerClient.h"
 #include "wtf/HashMap.h"
 
-namespace WebCore {
+namespace blink {
 
 class DocumentLifecycle;
 class GraphicsLayer;
@@ -95,14 +95,6 @@ public:
 
     void didLayout();
 
-    enum UpdateLayerCompositingStateOptions {
-        Normal,
-        UseChickenEggHacks, // Use this to trigger temporary chicken-egg hacks. See crbug.com/339892.
-    };
-
-    // Update the compositing dirty bits, based on the compositing-impacting properties of the layer.
-    void updateLayerCompositingState(RenderLayer*, UpdateLayerCompositingStateOptions = Normal);
-
     // Whether layer's compositedLayerMapping needs a GraphicsLayer to clip z-order children of the given RenderLayer.
     bool clipsCompositingDescendants(const RenderLayer*) const;
 
@@ -117,7 +109,6 @@ public:
     // Repaint the appropriate layers when the given RenderLayer starts or stops being composited.
     void repaintOnCompositingChange(RenderLayer*);
 
-    void repaintInCompositedAncestor(RenderLayer*, const LayoutRect&);
     void repaintCompositedLayers();
 
     RenderLayer* rootRenderLayer() const;
@@ -184,7 +175,7 @@ public:
 private:
     class OverlapMap;
 
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     void assertNoUnresolvedDirtyBits();
 #endif
 
@@ -228,7 +219,6 @@ private:
     bool requiresVerticalScrollbarLayer() const;
     bool requiresScrollCornerLayer() const;
 
-    void applyUpdateLayerCompositingStateChickenEggHacks(RenderLayer*, CompositingStateTransitionType compositedLayerUpdate);
     void applyOverlayFullscreenVideoAdjustment();
 
     RenderView& m_renderView;
@@ -273,6 +263,6 @@ private:
     bool m_inOverlayFullscreenVideo;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // RenderLayerCompositor_h

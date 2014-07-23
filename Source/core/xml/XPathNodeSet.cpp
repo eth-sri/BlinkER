@@ -31,7 +31,7 @@
 #include "core/dom/Element.h"
 #include "core/dom/NodeTraversal.h"
 
-namespace WebCore {
+namespace blink {
 namespace XPath {
 
 // When a node set is large, sorting it by traversing the whole document is
@@ -144,7 +144,7 @@ static void sortBlock(unsigned from, unsigned to, WillBeHeapVector<NodeSetVector
 
             ASSERT(previousGroupEnd != groupEnd);
             previousGroupEnd = groupEnd;
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
             parentNodes.remove(n);
 #endif
         }
@@ -181,7 +181,7 @@ void NodeSet::sort() const
             parentsVector.append(n);
             containsAttributeNodes = true;
         }
-        while ((n = n->parentNode()))
+        for (n = n->parentNode(); n; n = n->parentNode())
             parentsVector.append(n);
     }
     sortBlock(0, nodeCount, parentMatrix, containsAttributeNodes);

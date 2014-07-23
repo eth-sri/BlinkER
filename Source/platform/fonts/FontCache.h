@@ -56,7 +56,7 @@ struct IDWriteFactory;
 
 class SkTypeface;
 
-namespace WebCore {
+namespace blink {
 
 class FontCacheClient;
 class FontFaceCreationParams;
@@ -155,6 +155,7 @@ private:
     PassRefPtr<SkTypeface> createTypeface(const FontDescription&, const FontFaceCreationParams&, CString& name);
 
     PassRefPtr<SimpleFontData> fontDataFromFontPlatformData(const FontPlatformData*, ShouldRetain = Retain);
+    PassRefPtr<SimpleFontData> fallbackOnStandardFontStyle(const FontDescription&, UChar32);
 
     // Don't purge if this count is > 0;
     int m_purgePreventCount;

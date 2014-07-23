@@ -30,8 +30,8 @@
 #include "config.h"
 #include "core/inspector/InspectorFrontendHost.h"
 
-#include "bindings/v8/ScriptFunctionCall.h"
-#include "bindings/v8/ScriptState.h"
+#include "bindings/core/v8/ScriptFunctionCall.h"
+#include "bindings/core/v8/ScriptState.h"
 #include "core/clipboard/Pasteboard.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/events/Event.h"
@@ -55,7 +55,7 @@
 #include "platform/network/ResourceRequest.h"
 #include "platform/network/ResourceResponse.h"
 
-namespace WebCore {
+namespace blink {
 
 class FrontendMenuProvider FINAL : public ContextMenuProvider {
 public:
@@ -110,6 +110,7 @@ private:
             m_frontendHost->m_menuProvider = 0;
         }
         m_items.clear();
+        m_frontendHost = 0;
     }
 
     InspectorFrontendHost* m_frontendHost;
@@ -195,6 +196,19 @@ void InspectorFrontendHost::sendMessageToEmbedder(const String& message)
         m_client->sendMessageToEmbedder(escapeUnicodeNonCharacters(message));
 }
 
+void InspectorFrontendHost::showContextMenu(Page* page, float x, float y, const Vector<ContextMenuItem>& items)
+{
+    ASSERT(m_frontendPage);
+    ScriptState* frontendScriptState = ScriptState::forMainWorld(m_frontendPage->deprecatedLocalMainFrame());
+    ScriptValue frontendApiObject = frontendScriptState->getFromGlobalObject("InspectorFrontendAPI");
+    ASSERT(frontendApiObject.isObject());
+
+    RefPtr<FrontendMenuProvider> menuProvider = FrontendMenuProvider::create(this, frontendApiObject, items);
+    m_menuProvider = menuProvider.get();
+    float zoom = page->deprecatedLocalMainFrame()->pageZoomFactor();
+    page->inspectorController().showContextMenu(x * zoom, y * zoom, menuProvider);
+}
+
 void InspectorFrontendHost::showContextMenu(Event* event, const Vector<ContextMenuItem>& items)
 {
     if (!event)
@@ -232,4 +246,9 @@ bool InspectorFrontendHost::isUnderTest()
     return m_client && m_client->isUnderTest();
 }
 
-} // namespace WebCore
+bool InspectorFrontendHost::isHostedMode()
+{
+    return false;
+}
+
+} // namespace blink

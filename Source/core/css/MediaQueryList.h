@@ -20,13 +20,15 @@
 #ifndef MediaQueryList_h
 #define MediaQueryList_h
 
+#include "core/dom/ActiveDOMObject.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
 #include "wtf/RefCounted.h"
 #include "wtf/RefPtr.h"
 
-namespace WebCore {
+namespace blink {
 
+class ExecutionContext;
 class MediaQueryListListener;
 class MediaQueryEvaluator;
 class MediaQueryMatcher;
@@ -37,9 +39,9 @@ class MediaQuerySet;
 // retrieve the current value of the given media query and to add/remove listeners that
 // will be called whenever the value of the query changes.
 
-class MediaQueryList FINAL : public RefCountedWillBeGarbageCollectedFinalized<MediaQueryList> {
+class MediaQueryList FINAL : public RefCountedWillBeGarbageCollectedFinalized<MediaQueryList>, public ActiveDOMObject {
 public:
-    static PassRefPtrWillBeRawPtr<MediaQueryList> create(PassRefPtrWillBeRawPtr<MediaQueryMatcher>, PassRefPtrWillBeRawPtr<MediaQuerySet>);
+    static PassRefPtrWillBeRawPtr<MediaQueryList> create(ExecutionContext*, PassRefPtrWillBeRawPtr<MediaQueryMatcher>, PassRefPtrWillBeRawPtr<MediaQuerySet>);
     virtual ~MediaQueryList();
 
     String media() const;
@@ -48,14 +50,16 @@ public:
     void addListener(PassRefPtrWillBeRawPtr<MediaQueryListListener>);
     void removeListener(PassRefPtrWillBeRawPtr<MediaQueryListListener>);
 
-    void mediaFeaturesChanged(WillBeHeapVector<RefPtrWillBeMember<MediaQueryListListener> >* toNotify);
+    void mediaFeaturesChanged(WillBeHeapVector<RefPtrWillBeMember<MediaQueryListListener> >* listenersToNotify);
 
     void trace(Visitor*);
 
-    void documentDetached();
+    // From ActiveDOMObject
+    virtual bool hasPendingActivity() const OVERRIDE;
+    virtual void stop() OVERRIDE;
 
 private:
-    MediaQueryList(PassRefPtrWillBeRawPtr<MediaQueryMatcher>, PassRefPtrWillBeRawPtr<MediaQuerySet>);
+    MediaQueryList(ExecutionContext*, PassRefPtrWillBeRawPtr<MediaQueryMatcher>, PassRefPtrWillBeRawPtr<MediaQuerySet>);
 
     bool updateMatches();
 

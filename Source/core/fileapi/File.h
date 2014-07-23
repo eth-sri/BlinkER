@@ -31,7 +31,7 @@
 #include "wtf/PassRefPtr.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 class ExceptionState;
 class ExecutionContext;
@@ -126,7 +126,7 @@ private:
 
     void invalidateSnapshotMetadata() { m_snapshotSize = -1; }
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     bool hasValidFileSystemURL() const { return hasBackingFile(); }
     // Instances not backed by a file must have an empty path set.
     bool hasValidFilePath() const { return hasBackingFile() || m_path.isEmpty(); }
@@ -148,6 +148,6 @@ private:
 
 DEFINE_TYPE_CASTS(File, Blob, blob, blob->isFile(), blob.isFile());
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // File_h

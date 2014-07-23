@@ -31,14 +31,14 @@
 #include "config.h"
 #include "bindings/core/v8/V8MessageChannel.h"
 
+#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8HiddenValue.h"
 #include "bindings/core/v8/V8MessagePort.h"
-#include "bindings/v8/V8Binding.h"
-#include "bindings/v8/V8HiddenValue.h"
 #include "core/dom/MessageChannel.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "wtf/RefPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 void V8MessageChannel::constructorCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
@@ -58,4 +58,4 @@ void V8MessageChannel::constructorCustom(const v8::FunctionCallbackInfo<v8::Valu
     info.GetReturnValue().Set(wrapper);
 }
 
-} // namespace WebCore
+} // namespace blink

@@ -32,15 +32,15 @@
 
 #include "modules/mediastream/MediaConstraintsImpl.h"
 
-#include "bindings/v8/ArrayValue.h"
-#include "bindings/v8/Dictionary.h"
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ArrayValue.h"
+#include "bindings/core/v8/Dictionary.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "wtf/HashMap.h"
 #include "wtf/Vector.h"
 #include "wtf/text/StringHash.h"
 
-namespace WebCore {
+namespace blink {
 namespace MediaConstraintsImpl {
 
 static bool parse(const Dictionary& constraintsDictionary, blink::WebVector<blink::WebMediaConstraint>& optional, blink::WebVector<blink::WebMediaConstraint>& mandatory)
@@ -79,7 +79,7 @@ static bool parse(const Dictionary& constraintsDictionary, blink::WebVector<blin
     Vector<blink::WebMediaConstraint> optionalConstraintsVector;
     if (names.contains(optionalName)) {
         ArrayValue optionalConstraints;
-        bool ok = constraintsDictionary.get(optionalName, optionalConstraints);
+        bool ok = DictionaryHelper::get(constraintsDictionary, optionalName, optionalConstraints);
         if (!ok || optionalConstraints.isUndefinedOrNull())
             return false;
 
@@ -99,7 +99,7 @@ static bool parse(const Dictionary& constraintsDictionary, blink::WebVector<blin
                 return false;
             String key = localNames[0];
             String value;
-            ok = constraint.get(key, value);
+            ok = DictionaryHelper::get(constraint, key, value);
             if (!ok)
                 return false;
             optionalConstraintsVector.append(blink::WebMediaConstraint(key, value));
@@ -134,4 +134,4 @@ blink::WebMediaConstraints create()
 }
 
 } // namespace MediaConstraintsImpl
-} // namespace WebCore
+} // namespace blink

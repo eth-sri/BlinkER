@@ -26,7 +26,7 @@
 #ifndef FileList_h
 #define FileList_h
 
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/fileapi/File.h"
 #include "platform/heap/Handle.h"
 #include "wtf/PassRefPtr.h"
@@ -34,9 +34,9 @@
 #include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
 
-namespace WebCore {
+namespace blink {
 
-class FileList : public RefCountedWillBeGarbageCollectedFinalized<FileList>, public ScriptWrappable {
+class FileList FINAL : public RefCountedWillBeGarbageCollected<FileList>, public ScriptWrappable {
 public:
     static PassRefPtrWillBeRawPtr<FileList> create()
     {
@@ -59,6 +59,6 @@ private:
     WillBeHeapVector<RefPtrWillBeMember<File> > m_files;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // FileList_h

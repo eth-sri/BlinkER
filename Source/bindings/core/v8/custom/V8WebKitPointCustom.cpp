@@ -31,12 +31,12 @@
 #include "config.h"
 #include "bindings/core/v8/V8WebKitPoint.h"
 
-#include "bindings/v8/V8Binding.h"
-#include "bindings/v8/V8DOMWrapper.h"
-#include "bindings/v8/WrapperTypeInfo.h"
+#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8DOMWrapper.h"
+#include "bindings/core/v8/WrapperTypeInfo.h"
 #include "wtf/MathExtras.h"
 
-namespace WebCore {
+namespace blink {
 
 void V8WebKitPoint::constructorCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
@@ -54,10 +54,10 @@ void V8WebKitPoint::constructorCustom(const v8::FunctionCallbackInfo<v8::Value>&
                 y = 0;
         }
     }
-    RefPtrWillBeRawPtr<DOMPoint> point = DOMPoint::create(x, y);
+    RefPtrWillBeRawPtr<WebKitPoint> point = WebKitPoint::create(x, y);
     v8::Handle<v8::Object> wrapper = info.Holder();
     V8DOMWrapper::associateObjectWithWrapper<V8WebKitPoint>(point.release(), &wrapperTypeInfo, wrapper, info.GetIsolate(), WrapperConfiguration::Dependent);
     info.GetReturnValue().Set(wrapper);
 }
 
-} // namespace WebCore
+} // namespace blink

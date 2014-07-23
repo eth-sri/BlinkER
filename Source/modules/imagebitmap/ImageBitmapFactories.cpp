@@ -31,8 +31,8 @@
 #include "config.h"
 #include "modules/imagebitmap/ImageBitmapFactories.h"
 
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ScriptPromiseResolver.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/fileapi/Blob.h"
 #include "core/frame/ImageBitmap.h"
@@ -49,7 +49,7 @@
 #include "platform/graphics/skia/NativeImageSkia.h"
 #include <v8.h>
 
-namespace WebCore {
+namespace blink {
 
 static LayoutSize sizeFor(HTMLImageElement* image)
 {
@@ -127,8 +127,7 @@ ScriptPromise ImageBitmapFactories::createImageBitmap(ScriptState* scriptState, 
         exceptionState.throwDOMException(InvalidStateError, "The provided element has not retrieved data.");
         return ScriptPromise();
     }
-    // FIXME: Remove the below null check once we fix the bug 382721
-    if (video->readyState() <= HTMLMediaElement::HAVE_METADATA || !video->webMediaPlayer()) {
+    if (video->readyState() <= HTMLMediaElement::HAVE_METADATA) {
         exceptionState.throwDOMException(InvalidStateError, "The provided element's player has no current data.");
         return ScriptPromise();
     }
@@ -337,4 +336,4 @@ void ImageBitmapFactories::ImageBitmapLoader::trace(Visitor* visitor)
     visitor->trace(m_factory);
 }
 
-} // namespace WebCore
+} // namespace blink

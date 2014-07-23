@@ -31,13 +31,13 @@
 #ifndef LayerRectList_h
 #define LayerRectList_h
 
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 class ClientRect;
 class ClientRectList;
@@ -64,6 +64,6 @@ private:
     WillBeHeapVector<RefPtrWillBeMember<LayerRect> > m_list;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // ClientRectList_h

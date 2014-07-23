@@ -2,7 +2,7 @@
  * Copyright (C) 1999 Lars Knoll (knoll@kde.org)
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
  *           (C) 2001 Dirk Mueller (mueller@kde.org)
- * Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011 Apple Inc. All rights reserved.
+ * Copyright (C) 2004-2011, 2014 Apple Inc. All rights reserved.
  * Copyright (C) 2008, 2009 Torch Mobile Inc. All rights reserved. (http://www.torchmobile.com/)
  *
  * This library is free software; you can redistribute it and/or
@@ -25,8 +25,7 @@
 #ifndef Node_h
 #define Node_h
 
-#include "bindings/v8/ExceptionStatePlaceholder.h"
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/MutationObserver.h"
 #include "core/dom/SimulatedClickOptions.h"
 #include "core/dom/TreeScope.h"
@@ -43,7 +42,7 @@
 // This needs to be here because Document.h also depends on it.
 #define DUMP_NODE_STATISTICS 0
 
-namespace WebCore {
+namespace blink {
 
 class Attribute;
 class ClassCollection;
@@ -58,6 +57,7 @@ class ExceptionState;
 class FloatPoint;
 class LocalFrame;
 class HTMLInputElement;
+class HTMLQualifiedName;
 class IntRect;
 class KeyboardEvent;
 class NSResolver;
@@ -78,6 +78,7 @@ class RenderBox;
 class RenderBoxModelObject;
 class RenderObject;
 class RenderStyle;
+class SVGQualifiedName;
 class ShadowRoot;
 class StaticNodeList;
 class TagCollection;
@@ -109,11 +110,11 @@ private:
 };
 
 #if ENABLE(OILPAN)
-#define NODE_BASE_CLASSES public GarbageCollectedFinalized<Node>, public EventTarget, public ScriptWrappable
+#define NODE_BASE_CLASSES public GarbageCollectedFinalized<Node>, public EventTarget
 #else
 // TreeShared should be the last to pack TreeShared::m_refCount and
 // Node::m_nodeFlags on 64bit platforms.
-#define NODE_BASE_CLASSES public EventTarget, public ScriptWrappable, public TreeShared<Node>
+#define NODE_BASE_CLASSES public EventTarget, public TreeShared<Node>
 #endif
 
 class Node : NODE_BASE_CLASSES {
@@ -171,6 +172,8 @@ public:
     // DOM methods & attributes for Node
 
     bool hasTagName(const QualifiedName&) const;
+    bool hasTagName(const HTMLQualifiedName&) const;
+    bool hasTagName(const SVGQualifiedName&) const;
     virtual String nodeName() const = 0;
     virtual String nodeValue() const;
     virtual void setNodeValue(const String&);
@@ -196,10 +199,10 @@ public:
 
     // These should all actually return a node, but this is only important for language bindings,
     // which will already know and hold a ref on the right node to return.
-    void insertBefore(PassRefPtrWillBeRawPtr<Node> newChild, Node* refChild, ExceptionState& = ASSERT_NO_EXCEPTION);
-    void replaceChild(PassRefPtrWillBeRawPtr<Node> newChild, Node* oldChild, ExceptionState& = ASSERT_NO_EXCEPTION);
-    void removeChild(Node* child, ExceptionState&);
-    void appendChild(PassRefPtrWillBeRawPtr<Node> newChild, ExceptionState& = ASSERT_NO_EXCEPTION);
+    PassRefPtrWillBeRawPtr<Node> insertBefore(PassRefPtrWillBeRawPtr<Node> newChild, Node* refChild, ExceptionState& = ASSERT_NO_EXCEPTION);
+    PassRefPtrWillBeRawPtr<Node> replaceChild(PassRefPtrWillBeRawPtr<Node> newChild, PassRefPtrWillBeRawPtr<Node> oldChild, ExceptionState& = ASSERT_NO_EXCEPTION);
+    PassRefPtrWillBeRawPtr<Node> removeChild(PassRefPtrWillBeRawPtr<Node> child, ExceptionState& = ASSERT_NO_EXCEPTION);
+    PassRefPtrWillBeRawPtr<Node> appendChild(PassRefPtrWillBeRawPtr<Node> newChild, ExceptionState& = ASSERT_NO_EXCEPTION);
 
     bool hasChildren() const { return firstChild(); }
     virtual PassRefPtrWillBeRawPtr<Node> cloneNode(bool deep = false) = 0;
@@ -263,7 +266,7 @@ public:
     bool isStyledElement() const { return isHTMLElement() || isSVGElement(); }
 
     bool isDocumentNode() const;
-    bool isTreeScope() const { return &treeScope().rootNode() == this; }
+    bool isTreeScope() const;
     bool isDocumentFragment() const { return getFlag(IsDocumentFragmentFlag); }
     bool isShadowRoot() const { return isDocumentFragment() && isTreeScope(); }
     bool isInsertionPoint() const { return getFlag(IsInsertionPointFlag); }
@@ -275,9 +278,6 @@ public:
 
     // If this node is in a shadow tree, returns its shadow host. Otherwise, returns 0.
     Element* shadowHost() const;
-    // If this node is in a shadow tree, returns its shadow host. Otherwise, returns this.
-    // Deprecated. Should use shadowHost() and check the return value.
-    Node* deprecatedShadowAncestorNode() const;
     ShadowRoot* containingShadowRoot() const;
     ShadowRoot* youngestShadowRoot() const;
 
@@ -415,11 +415,11 @@ public:
     bool isContentEditable(UserSelectAllTreatment = UserSelectAllDoesNotAffectEditability);
     bool isContentRichlyEditable();
 
-    bool rendererIsEditable(EditableType editableType = ContentIsEditable, UserSelectAllTreatment treatment = UserSelectAllIsAlwaysNonEditable) const
+    bool hasEditableStyle(EditableType editableType = ContentIsEditable, UserSelectAllTreatment treatment = UserSelectAllIsAlwaysNonEditable) const
     {
         switch (editableType) {
         case ContentIsEditable:
-            return rendererIsEditable(Editable, treatment);
+            return hasEditableStyle(Editable, treatment);
         case HasEditableAXRole:
             return isEditableToAccessibility(Editable);
         }
@@ -431,7 +431,7 @@ public:
     {
         switch (editableType) {
         case ContentIsEditable:
-            return rendererIsEditable(RichlyEditable, UserSelectAllIsAlwaysNonEditable);
+            return hasEditableStyle(RichlyEditable, UserSelectAllIsAlwaysNonEditable);
         case HasEditableAXRole:
             return isEditableToAccessibility(RichlyEditable);
         }
@@ -439,7 +439,6 @@ public:
         return false;
     }
 
-    virtual bool shouldUseInputMethod();
     virtual LayoutRect boundingBox() const;
     IntRect pixelSnappedBoundingBox() const { return pixelSnappedIntRect(boundingBox()); }
 
@@ -535,7 +534,7 @@ public:
     // the node's rendering object from the rendering tree and delete it.
     virtual void detach(const AttachContext& = AttachContext());
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     bool inDetach() const;
 #endif
 
@@ -617,7 +616,7 @@ public:
     virtual ExecutionContext* executionContext() const OVERRIDE FINAL;
 
     virtual bool addEventListener(const AtomicString& eventType, PassRefPtr<EventListener>, bool useCapture = false) OVERRIDE;
-    virtual bool removeEventListener(const AtomicString& eventType, EventListener*, bool useCapture = false) OVERRIDE;
+    virtual bool removeEventListener(const AtomicString& eventType, PassRefPtr<EventListener>, bool useCapture = false) OVERRIDE;
     virtual void removeAllEventListeners() OVERRIDE;
     void removeAllEventListenersRecursively();
 
@@ -809,7 +808,7 @@ private:
     bool hasTreeSharedParent() const { return !!parentOrShadowHostNode(); }
 
     enum EditableLevel { Editable, RichlyEditable };
-    bool rendererIsEditable(EditableLevel, UserSelectAllTreatment = UserSelectAllIsAlwaysNonEditable) const;
+    bool hasEditableStyle(EditableLevel, UserSelectAllTreatment = UserSelectAllIsAlwaysNonEditable) const;
     bool isEditableToAccessibility(EditableLevel) const;
 
     bool isUserActionElementActive() const;
@@ -914,13 +913,13 @@ PassRefPtrWillBeRawPtr<T> T::create(Document& document) \
     return adoptRefWillBeNoop(new T(document)); \
 }
 
-} // namespace WebCore
+} // namespace blink
 
 #ifndef NDEBUG
 // Outside the WebCore namespace for ease of invocation from gdb.
-void showNode(const WebCore::Node*);
-void showTree(const WebCore::Node*);
-void showNodePath(const WebCore::Node*);
+void showNode(const blink::Node*);
+void showTree(const blink::Node*);
+void showNodePath(const blink::Node*);
 #endif
 
 #endif

@@ -49,7 +49,7 @@ _log = logging.getLogger(__name__)
 def main(argv, stdout, stderr):
     options, args = parse_args(argv)
 
-    if options.platform and 'test' in options.platform:
+    if options.platform and 'test' in options.platform and not 'browser_test' in options.platform:
         # It's a bit lame to import mocks into real code, but this allows the user
         # to run tests against the test platform interactively, which is useful for
         # debugging test failures.
@@ -255,10 +255,6 @@ def parse_args(args):
             help="Print detailed logging of the driver/content_shell"),
         optparse.make_option("--disable-breakpad", action="store_true",
             help="Don't use breakpad to symbolize unexpected crashes."),
-        optparse.make_option("--use-apache", action="store_true",
-            help="Use Apache instead of LigHTTPd (default is port-specific)."),
-        optparse.make_option("--no-use-apache", action="store_false", dest="use_apache",
-            help="Use LigHTTPd instead of Apache (default is port-specific)."),
         optparse.make_option("--enable-leak-detection", action="store_true",
             help="Enable the leak detection of DOM objects."),
         optparse.make_option("--enable-sanitizer", action="store_true",

@@ -28,12 +28,12 @@
 
 #include "modules/webaudio/DelayNode.h"
 
-#include "bindings/v8/ExceptionMessages.h"
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionMessages.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "wtf/MathExtras.h"
 
-namespace WebCore {
+namespace blink {
 
 const double maximumAllowedDelayTime = 180;
 
@@ -58,6 +58,6 @@ AudioParam* DelayNode::delayTime()
     return delayProcessor()->delayTime();
 }
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // ENABLE(WEB_AUDIO)

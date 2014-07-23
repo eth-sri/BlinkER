@@ -26,7 +26,7 @@
 
 #include "core/html/HTMLTextFormControlElement.h"
 
-namespace WebCore {
+namespace blink {
 
 class BeforeTextInsertedEvent;
 class ExceptionState;
@@ -103,7 +103,7 @@ private:
 
     virtual bool isTextFormControl() const OVERRIDE { return true; }
 
-    virtual void childrenChanged(bool changedByParser = false, Node* beforeChange = 0, Node* afterChange = 0, int childCountDelta = 0) OVERRIDE;
+    virtual void childrenChanged(const ChildrenChange&) OVERRIDE;
     virtual void parseAttribute(const QualifiedName&, const AtomicString&) OVERRIDE;
     virtual bool isPresentationAttribute(const QualifiedName&) const OVERRIDE;
     virtual void collectStyleForPresentationAttribute(const QualifiedName&, const AtomicString&, MutableStylePropertySet*) OVERRIDE;
@@ -117,7 +117,6 @@ private:
 
     virtual void accessKeyAction(bool sendMouseEvents) OVERRIDE;
 
-    virtual bool shouldUseInputMethod() OVERRIDE;
     virtual bool matchesReadOnlyPseudoClass() const OVERRIDE;
     virtual bool matchesReadWritePseudoClass() const OVERRIDE;
 

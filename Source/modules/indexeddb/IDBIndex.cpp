@@ -26,8 +26,8 @@
 #include "config.h"
 #include "modules/indexeddb/IDBIndex.h"
 
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/IDBBindingUtilities.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/modules/v8/IDBBindingUtilities.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "modules/indexeddb/IDBDatabase.h"
@@ -42,7 +42,7 @@ using blink::WebIDBCallbacks;
 using blink::WebIDBCursor;
 using blink::WebIDBDatabase;
 
-namespace WebCore {
+namespace blink {
 
 IDBIndex::IDBIndex(const IDBIndexMetadata& metadata, IDBObjectStore* objectStore, IDBTransaction* transaction)
     : m_metadata(metadata)
@@ -227,4 +227,4 @@ bool IDBIndex::isDeleted() const
     return m_deleted || m_objectStore->isDeleted();
 }
 
-} // namespace WebCore
+} // namespace blink

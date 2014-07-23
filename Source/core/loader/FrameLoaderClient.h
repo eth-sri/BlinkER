@@ -50,7 +50,7 @@ class WebApplicationCacheHost;
 class WebApplicationCacheHostClient;
 }
 
-namespace WebCore {
+namespace blink {
 
     class Color;
     class DOMWindowExtension;
@@ -91,7 +91,6 @@ namespace WebCore {
 
         virtual void detachedFromParent() = 0;
 
-        virtual void dispatchWillRequestAfterPreconnect(ResourceRequest&) { }
         virtual void dispatchWillSendRequest(DocumentLoader*, unsigned long identifier, ResourceRequest&, const ResourceResponse& redirectResponse) = 0;
         virtual void dispatchDidReceiveResponse(DocumentLoader*, unsigned long identifier, const ResourceResponse&) = 0;
         virtual void dispatchDidFinishLoading(DocumentLoader*, unsigned long identifier) = 0;
@@ -101,7 +100,7 @@ namespace WebCore {
         virtual void dispatchDidReceiveServerRedirectForProvisionalLoad() = 0;
         virtual void dispatchDidNavigateWithinPage(HistoryItem*, HistoryCommitType) { }
         virtual void dispatchWillClose() = 0;
-        virtual void dispatchDidStartProvisionalLoad() = 0;
+        virtual void dispatchDidStartProvisionalLoad(bool isTransitionNavigation) = 0;
         virtual void dispatchDidReceiveTitle(const String&) = 0;
         virtual void dispatchDidChangeIcons(IconType) = 0;
         virtual void dispatchDidCommitLoad(LocalFrame*, HistoryItem*, HistoryCommitType) = 0;
@@ -110,10 +109,11 @@ namespace WebCore {
         virtual void dispatchDidFinishDocumentLoad() = 0;
         virtual void dispatchDidFinishLoad() = 0;
         virtual void dispatchDidFirstVisuallyNonEmptyLayout() = 0;
-        virtual void dispatchDidChangeBrandColor() = 0;
+        virtual void dispatchDidChangeThemeColor() = 0;
 
-        virtual NavigationPolicy decidePolicyForNavigation(const ResourceRequest&, DocumentLoader*, NavigationPolicy) = 0;
+        virtual NavigationPolicy decidePolicyForNavigation(const ResourceRequest&, DocumentLoader*, NavigationPolicy, bool isTransitionNavigation) = 0;
 
+        virtual void dispatchAddNavigationTransitionData(const String& origin, const String& selector, const String& markup) { }
         virtual void dispatchWillRequestResource(FetchRequest*) { }
 
         virtual void dispatchWillSendSubmitEvent(HTMLFormElement*) = 0;
@@ -235,6 +235,6 @@ namespace WebCore {
         virtual PassOwnPtr<EventRacerLogClient> createEventRacerLogClient() = 0;
     };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // FrameLoaderClient_h

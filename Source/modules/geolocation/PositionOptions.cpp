@@ -5,10 +5,10 @@
 #include "config.h"
 #include "modules/geolocation/PositionOptions.h"
 
-#include "bindings/v8/Dictionary.h"
+#include "bindings/core/v8/Dictionary.h"
 #include <limits.h>
 
-namespace WebCore {
+namespace blink {
 
 PositionOptions* PositionOptions::create(const Dictionary& options)
 {
@@ -20,28 +20,33 @@ PositionOptions::PositionOptions(const Dictionary& options)
     , m_maximumAge(0)
     , m_timeout(std::numeric_limits<unsigned>::max())
 {
-    if (options.hasProperty("enableHighAccuracy"))
-        options.get("enableHighAccuracy", m_highAccuracy);
+    if (options.hasProperty("enableHighAccuracy")) {
+        bool highAccuracy;
+        if (DictionaryHelper::get(options, "enableHighAccuracy", highAccuracy))
+            m_highAccuracy = highAccuracy;
+    }
     if (options.hasProperty("maximumAge")) {
         double maximumAge;
-        options.get("maximumAge", maximumAge);
-        if (maximumAge < 0)
-            m_maximumAge = 0;
-        else if (maximumAge > std::numeric_limits<unsigned>::max())
-            m_maximumAge = std::numeric_limits<unsigned>::max();
-        else
-            m_maximumAge = maximumAge;
+        if (DictionaryHelper::get(options, "maximumAge", maximumAge)) {
+            if (maximumAge < 0)
+                m_maximumAge = 0;
+            else if (maximumAge > std::numeric_limits<unsigned>::max())
+                m_maximumAge = std::numeric_limits<unsigned>::max();
+            else
+                m_maximumAge = maximumAge;
+        }
     }
     if (options.hasProperty("timeout")) {
         double timeout;
-        options.get("timeout", timeout);
-        if (timeout < 0)
-            m_timeout = 0;
-        else if (timeout > std::numeric_limits<unsigned>::max())
-            m_timeout = std::numeric_limits<unsigned>::max();
-        else
-            m_timeout = timeout;
+        if (DictionaryHelper::get(options, "timeout", timeout)) {
+            if (timeout < 0)
+                m_timeout = 0;
+            else if (timeout > std::numeric_limits<unsigned>::max())
+                m_timeout = std::numeric_limits<unsigned>::max();
+            else
+                m_timeout = timeout;
+        }
     }
 }
 
-} // namespace WebCore
+} // namespace blink

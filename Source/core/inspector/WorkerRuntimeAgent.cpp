@@ -32,7 +32,7 @@
 
 #include "core/inspector/WorkerRuntimeAgent.h"
 
-#include "bindings/v8/ScriptState.h"
+#include "bindings/core/v8/ScriptState.h"
 #include "core/inspector/InjectedScript.h"
 #include "core/inspector/InstrumentingAgents.h"
 #include "core/inspector/WorkerDebuggerAgent.h"
@@ -40,7 +40,7 @@
 #include "core/workers/WorkerRunLoop.h"
 #include "core/workers/WorkerThread.h"
 
-namespace WebCore {
+namespace blink {
 
 WorkerRuntimeAgent::WorkerRuntimeAgent(InjectedScriptManager* injectedScriptManager, ScriptDebugServer* scriptDebugServer, WorkerGlobalScope* workerGlobalScope)
     : InspectorRuntimeAgent(injectedScriptManager, scriptDebugServer)
@@ -112,4 +112,4 @@ void WorkerRuntimeAgent::willEvaluateWorkerScript(WorkerGlobalScope* context, in
     } while (result == MessageQueueMessageReceived && m_paused);
 }
 
-} // namespace WebCore
+} // namespace blink

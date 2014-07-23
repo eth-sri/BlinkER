@@ -33,7 +33,7 @@
 #include "core/css/resolver/StyleResolverState.h"
 #include "core/rendering/style/RenderStyle.h"
 
-namespace WebCore {
+namespace blink {
 
 #if ENABLE(OILPAN)
 bool CachedMatchedPropertiesHashTraits::traceInCollection(Visitor* visitor, Member<CachedMatchedProperties>& cachedProperties, WTF::ShouldWeakPointersBeMarkedStrongly strongify)
@@ -202,7 +202,9 @@ bool MatchedPropertiesCache::isCacheable(const Element* element, const RenderSty
 
 void MatchedPropertiesCache::trace(Visitor* visitor)
 {
+#if ENABLE(OILPAN)
     visitor->trace(m_cache);
+#endif
 }
 
 }

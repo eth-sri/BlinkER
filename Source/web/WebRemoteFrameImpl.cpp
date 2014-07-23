@@ -17,7 +17,7 @@
 #include "web/WebViewImpl.h"
 #include <v8/include/v8.h>
 
-using namespace WebCore;
+using namespace blink;
 
 namespace blink {
 
@@ -130,7 +130,7 @@ WebRemoteFrame* WebRemoteFrameImpl::toWebRemoteFrame()
 
 void WebRemoteFrameImpl::close()
 {
-    ASSERT_NOT_REACHED();
+    deref();
 }
 
 WebString WebRemoteFrameImpl::uniqueName() const
@@ -161,9 +161,12 @@ void WebRemoteFrameImpl::setIsRemote(bool)
     ASSERT_NOT_REACHED();
 }
 
-void WebRemoteFrameImpl::setRemoteWebLayer(WebLayer*)
+void WebRemoteFrameImpl::setRemoteWebLayer(WebLayer* webLayer)
 {
-    ASSERT_NOT_REACHED();
+    if (!frame())
+        return;
+
+    frame()->setRemotePlatformLayer(webLayer);
 }
 
 void WebRemoteFrameImpl::setPermissionClient(WebPermissionClient*)
@@ -236,8 +239,9 @@ bool WebRemoteFrameImpl::hasVerticalScrollbar() const
 
 WebView* WebRemoteFrameImpl::view() const
 {
-    ASSERT_NOT_REACHED();
-    return 0;
+    if (!frame())
+        return 0;
+    return WebViewImpl::fromPage(frame()->page());
 }
 
 void WebRemoteFrameImpl::removeChild(WebFrame* frame)
@@ -248,7 +252,6 @@ void WebRemoteFrameImpl::removeChild(WebFrame* frame)
 
 WebDocument WebRemoteFrameImpl::document() const
 {
-    ASSERT_NOT_REACHED();
     return WebDocument();
 }
 
@@ -507,12 +510,10 @@ bool WebRemoteFrameImpl::isCommandEnabled(const WebString&) const
 
 void WebRemoteFrameImpl::enableContinuousSpellChecking(bool)
 {
-    ASSERT_NOT_REACHED();
 }
 
 bool WebRemoteFrameImpl::isContinuousSpellCheckingEnabled() const
 {
-    ASSERT_NOT_REACHED();
     return false;
 }
 
@@ -793,16 +794,17 @@ WebLocalFrame* WebRemoteFrameImpl::createLocalChild(const WebString& name, WebFr
     // result in the browser observing two navigations to about:blank (one from the initial
     // frame creation, and one from swapping it into the remote process). FrameLoader might
     // need a special initialization function for this case to avoid that duplicate navigation.
-    child->initializeAsChildFrame(frame()->host(), result.storedValue->value.get(), name, AtomicString());
+    child->initializeWebCoreFrame(frame()->host(), result.storedValue->value.get(), name, nullAtom);
     // Partially related with the above FIXME--the init() call may trigger JS dispatch. However,
     // if the parent is remote, it should never be detached synchronously...
     ASSERT(child->frame());
     return child;
 }
 
-void WebRemoteFrameImpl::initializeAsMainFrame(Page* page)
+void WebRemoteFrameImpl::initializeWebCoreFrame(FrameHost* host, FrameOwner* owner, const AtomicString& name)
 {
-    setWebCoreFrame(RemoteFrame::create(&m_frameClient, &page->frameHost(), 0));
+    setWebCoreFrame(RemoteFrame::create(&m_frameClient, host, owner));
+    m_frame->tree().setName(name, nullAtom);
 }
 
 WebRemoteFrame* WebRemoteFrameImpl::createRemoteChild(const WebString& name, WebFrameClient* client)
@@ -811,9 +813,7 @@ WebRemoteFrame* WebRemoteFrameImpl::createRemoteChild(const WebString& name, Web
     HashMap<WebFrame*, OwnPtr<FrameOwner> >::AddResult result =
         m_ownersForChildren.add(child, adoptPtr(new PlaceholderFrameOwner));
     appendChild(child);
-    RefPtr<RemoteFrame> childFrame = RemoteFrame::create(&child->m_frameClient, frame()->host(), result.storedValue->value.get());
-    child->setWebCoreFrame(childFrame);
-    childFrame->tree().setName(name, AtomicString());
+    child->initializeWebCoreFrame(frame()->host(), result.storedValue->value.get(), name);
     return child;
 }
 

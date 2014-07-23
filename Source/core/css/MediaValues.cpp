@@ -14,6 +14,7 @@
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
+#include "core/html/imports/HTMLImportsController.h"
 #include "core/page/Page.h"
 #include "core/rendering/RenderObject.h"
 #include "core/rendering/RenderView.h"
@@ -21,7 +22,7 @@
 #include "core/rendering/style/RenderStyle.h"
 #include "platform/PlatformScreen.h"
 
-namespace WebCore {
+namespace blink {
 
 PassRefPtr<MediaValues> MediaValues::createDynamicIfFrameExists(LocalFrame* frame)
 {
@@ -98,7 +99,9 @@ int MediaValues::calculateDefaultFontSize(LocalFrame* frame) const
 
 const String MediaValues::calculateMediaType(LocalFrame* frame) const
 {
-    ASSERT(frame && frame->view());
+    ASSERT(frame);
+    if (!frame->view())
+        return emptyAtom;
     return frame->view()->mediaType();
 }
 
@@ -188,6 +191,13 @@ bool MediaValues::computeLengthImpl(double value, CSSPrimitiveValue::UnitType ty
     ASSERT(factor > 0);
     result = value * factor;
     return true;
+}
+
+LocalFrame* MediaValues::frameFrom(Document& document)
+{
+    Document* executingDocument = document.importsController() ? document.importsController()->master() : &document;
+    ASSERT(executingDocument);
+    return executingDocument->frame();
 }
 
 } // namespace

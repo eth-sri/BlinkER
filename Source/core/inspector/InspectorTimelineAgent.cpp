@@ -62,7 +62,7 @@
 #include "wtf/CurrentTime.h"
 #include "wtf/DateMath.h"
 
-namespace WebCore {
+namespace blink {
 
 namespace TimelineAgentState {
 static const char enabled[] = "enabled";
@@ -163,7 +163,7 @@ private:
         Entry(PassRefPtr<TimelineEvent> record, const String& type)
             : record(record)
             , children(TypeBuilder::Array<TimelineEvent>::create())
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
             , type(type)
 #endif
         {
@@ -171,7 +171,7 @@ private:
 
         RefPtr<TimelineEvent> record;
         RefPtr<TypeBuilder::Array<TimelineEvent> > children;
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
         String type;
 #endif
     };
@@ -184,7 +184,7 @@ public:
     void closeScopedRecord(double endTime);
     void addInstantRecord(PassRefPtr<TimelineEvent> record);
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     bool isOpenRecordOfType(const String& type);
 #endif
 
@@ -269,8 +269,7 @@ void InspectorTimelineAgent::setFrontend(InspectorFrontend* frontend)
 void InspectorTimelineAgent::clearFrontend()
 {
     ErrorString error;
-    RefPtr<TypeBuilder::Array<TimelineEvent> > events;
-    stop(&error, events);
+    stop(&error);
     disable(&error);
     m_frontend = 0;
 }
@@ -288,7 +287,7 @@ void InspectorTimelineAgent::restore()
         // Tell front-end timline is no longer collecting.
         m_state->setBoolean(TimelineAgentState::started, false);
         bool fromConsole = true;
-        m_frontend->stopped(&fromConsole);
+        m_frontend->stopped(&fromConsole, nullptr);
     }
 }
 
@@ -376,7 +375,7 @@ void InspectorTimelineAgent::innerStart()
     }
 }
 
-void InspectorTimelineAgent::stop(ErrorString* errorString, RefPtr<TypeBuilder::Array<TimelineEvent> >& events)
+void InspectorTimelineAgent::stop(ErrorString* errorString)
 {
     m_state->setBoolean(TimelineAgentState::startedFromProtocol, false);
     m_state->setBoolean(TimelineAgentState::bufferEvents, false);
@@ -387,8 +386,6 @@ void InspectorTimelineAgent::stop(ErrorString* errorString, RefPtr<TypeBuilder::
         return;
     }
     innerStop(false);
-    if (m_bufferedEvents)
-        events = m_bufferedEvents.release();
     m_liveEvents.clear();
 }
 
@@ -415,11 +412,11 @@ void InspectorTimelineAgent::innerStop(bool fromConsole)
 
     for (size_t i = 0; i < m_consoleTimelines.size(); ++i) {
         String message = String::format("Timeline '%s' terminated.", m_consoleTimelines[i].utf8().data());
-        mainFrame()->console().addMessage(ConsoleAPIMessageSource, DebugMessageLevel, message);
+        mainFrame()->console().addMessage(JSMessageSource, DebugMessageLevel, message);
     }
     m_consoleTimelines.clear();
 
-    m_frontend->stopped(&fromConsole);
+    m_frontend->stopped(&fromConsole, m_bufferedEvents.release());
     if (m_overlay)
         m_overlay->finishedRecordingProfile();
 }
@@ -778,7 +775,8 @@ void InspectorTimelineAgent::consoleTimeline(ExecutionContext* context, const St
         return;
 
     String message = String::format("Timeline '%s' started.", title.utf8().data());
-    mainFrame()->console().addMessage(ConsoleAPIMessageSource, DebugMessageLevel, message, String(), 0, 0, nullptr, scriptState);
+
+    mainFrame()->console().addMessage(JSMessageSource, DebugMessageLevel, message, String(), 0, 0, nullptr, scriptState);
     m_consoleTimelines.append(title);
     if (!isStarted()) {
         innerStart();
@@ -796,7 +794,7 @@ void InspectorTimelineAgent::consoleTimelineEnd(ExecutionContext* context, const
     size_t index = m_consoleTimelines.find(title);
     if (index == kNotFound) {
         String message = String::format("Timeline '%s' was not started.", title.utf8().data());
-        mainFrame()->console().addMessage(ConsoleAPIMessageSource, DebugMessageLevel, message, String(), 0, 0, nullptr, scriptState);
+        mainFrame()->console().addMessage(JSMessageSource, DebugMessageLevel, message, String(), 0, 0, nullptr, scriptState);
         return;
     }
 
@@ -807,7 +805,7 @@ void InspectorTimelineAgent::consoleTimelineEnd(ExecutionContext* context, const
         unwindRecordStack();
         innerStop(true);
     }
-    mainFrame()->console().addMessage(ConsoleAPIMessageSource, DebugMessageLevel, message, String(), 0, 0, nullptr, scriptState);
+    mainFrame()->console().addMessage(JSMessageSource, DebugMessageLevel, message, String(), 0, 0, nullptr, scriptState);
 }
 
 void InspectorTimelineAgent::domContentLoadedEventFired(LocalFrame* frame)
@@ -1268,7 +1266,7 @@ void InspectorTimelineAgent::setLiveEvents(const String& liveEvents)
     if (liveEvents.isNull() || liveEvents.isEmpty())
         return;
     Vector<String> eventList;
-    liveEvents.split(",", eventList);
+    liveEvents.split(',', eventList);
     for (Vector<String>::iterator it = eventList.begin(); it != eventList.end(); ++it)
         m_liveEvents.add(*it);
 }
@@ -1303,12 +1301,12 @@ void TimelineRecordStack::addInstantRecord(PassRefPtr<TimelineEvent> record)
         m_stack.last().children->addItem(record);
 }
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
 bool TimelineRecordStack::isOpenRecordOfType(const String& type)
 {
     return !m_stack.isEmpty() && m_stack.last().type == type;
 }
 #endif
 
-} // namespace WebCore
+} // namespace blink
 

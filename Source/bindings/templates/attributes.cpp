@@ -8,8 +8,9 @@ const v8::FunctionCallbackInfo<v8::Value>& info
 const v8::PropertyCallbackInfo<v8::Value>& info
 {%- endif %})
 {
-    {% if attribute.is_reflect and not attribute.is_url and
-          attribute.idl_type == 'DOMString' and is_node %}
+    {% if attribute.is_reflect and not attribute.is_url
+          and attribute.idl_type == 'DOMString' and is_node
+          and not attribute.is_implemented_in_private_script %}
     {% set cpp_class, v8_class = 'Element', 'V8Element' %}
     {% endif %}
     {# holder #}
@@ -45,10 +46,14 @@ const v8::PropertyCallbackInfo<v8::Value>& info
           attribute.is_getter_raises_exception %}
     ExceptionState exceptionState(ExceptionState::GetterContext, "{{attribute.name}}", "{{interface_name}}", holder, info.GetIsolate());
     {% endif %}
-    {% if attribute.is_nullable and not attribute.has_type_checking_nullable %}
+    {% if attribute.is_explicit_nullable %}
     bool isNull = false;
     {% endif %}
-    {% if attribute.cpp_value_original %}
+    {% if attribute.is_implemented_in_private_script %}
+    {{attribute.cpp_type}} result{{attribute.cpp_type_initializer}};
+    if (!{{attribute.cpp_value_original}})
+        return;
+    {% elif attribute.cpp_value_original %}
     {{attribute.cpp_type}} {{attribute.cpp_value}}({{attribute.cpp_value_original}});
     {% endif %}
     {# Checks #}
@@ -69,12 +74,8 @@ const v8::PropertyCallbackInfo<v8::Value>& info
                          attribute.cpp_value)
       | indent}}
     {% endif %}
-    {% if attribute.is_nullable %}
-    {% if attribute.has_type_checking_nullable %}
-    if (!{{attribute.cpp_value}}) {
-    {% else %}
+    {% if attribute.is_explicit_nullable %}
     if (isNull) {
-    {% endif %}
         v8SetReturnValueNull(info);
         return;
     }
@@ -201,8 +202,8 @@ v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info
 v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info
 {%- endif %})
 {
-    {% if attribute.is_reflect and attribute.idl_type == 'DOMString' and
-          is_node %}
+    {% if attribute.is_reflect and attribute.idl_type == 'DOMString'
+          and is_node and not attribute.is_implemented_in_private_script %}
     {% set cpp_class, v8_class = 'Element', 'V8Element' %}
     {% endif %}
     {# Local variables #}
@@ -315,9 +316,7 @@ v8::Local<v8::String>, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackI
         {% if attribute.activity_logging_include_old_value_for_setter %}
         {{cpp_class}}* impl = {{v8_class}}::toNative(info.Holder());
         {% if attribute.cpp_value_original %}
-        {{attribute.cpp_type}} original = {{attribute.cpp_value_original}};
-        {% else %}
-        {{attribute.cpp_type}} original = {{attribute.cpp_value}};
+        {{attribute.cpp_type}} {{attribute.cpp_value}}({{attribute.cpp_value_original}});
         {% endif %}
         v8::Handle<v8::Value> originalValue = {{attribute.cpp_value_to_v8_value}};
         contextData->activityLogger()->logSetter("{{interface_name}}.{{attribute.name}}", v8Value, originalValue);
@@ -337,4 +336,70 @@ v8::Local<v8::String>, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackI
     TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 {% endfilter %}
+{% endmacro %}
+
+
+{##############################################################################}
+{% macro attribute_getter_implemented_in_private_script(attribute) %}
+static bool {{attribute.name}}AttributeGetterImplementedInPrivateScript(LocalFrame* frame, {{cpp_class}}* holderImpl, {{attribute.cpp_type}}* result)
+{
+    if (!frame)
+        return false;
+    v8::Handle<v8::Context> context = toV8Context(frame, DOMWrapperWorld::privateScriptIsolatedWorld());
+    if (context.IsEmpty())
+        return false;
+    ScriptState* scriptState = ScriptState::from(context);
+    if (!scriptState->executionContext())
+        return false;
+
+    ScriptState::Scope scope(scriptState);
+    v8::Handle<v8::Value> holder = toV8(holderImpl, scriptState->context()->Global(), scriptState->isolate());
+
+    ExceptionState exceptionState(ExceptionState::GetterContext, "{{attribute.name}}", "{{cpp_class}}", scriptState->context()->Global(), scriptState->isolate());
+    v8::TryCatch block;
+    V8RethrowTryCatchScope rethrow(block);
+    v8::Handle<v8::Value> v8Value = PrivateScriptRunner::runDOMAttributeGetter(scriptState, "{{cpp_class}}", "{{attribute.name}}", holder);
+    if (block.HasCaught()) {
+        if (!PrivateScriptRunner::throwDOMExceptionInPrivateScriptIfNeeded(scriptState->isolate(), exceptionState, block.Exception())) {
+            // FIXME: We should support exceptions other than DOM exceptions.
+            RELEASE_ASSERT_NOT_REACHED();
+        }
+        return false;
+    }
+    {{attribute.private_script_v8_value_to_local_cpp_value}};
+    RELEASE_ASSERT(!exceptionState.hadException());
+    *result = cppValue;
+    return true;
+}
+{% endmacro %}
+
+
+{% macro attribute_setter_implemented_in_private_script(attribute) %}
+static bool {{attribute.name}}AttributeSetterImplementedInPrivateScript(LocalFrame* frame, {{cpp_class}}* holderImpl, {{attribute.argument_cpp_type}} cppValue)
+{
+    if (!frame)
+        return false;
+    v8::Handle<v8::Context> context = toV8Context(frame, DOMWrapperWorld::privateScriptIsolatedWorld());
+    if (context.IsEmpty())
+        return false;
+    ScriptState* scriptState = ScriptState::from(context);
+    if (!scriptState->executionContext())
+        return false;
+
+    ScriptState::Scope scope(scriptState);
+    v8::Handle<v8::Value> holder = toV8(holderImpl, scriptState->context()->Global(), scriptState->isolate());
+
+    ExceptionState exceptionState(ExceptionState::SetterContext, "{{attribute.name}}", "{{cpp_class}}", scriptState->context()->Global(), scriptState->isolate());
+    v8::TryCatch block;
+    V8RethrowTryCatchScope rethrow(block);
+    PrivateScriptRunner::runDOMAttributeSetter(scriptState, "{{cpp_class}}", "{{attribute.name}}", holder, {{attribute.private_script_cpp_value_to_v8_value}});
+    if (block.HasCaught()) {
+        if (!PrivateScriptRunner::throwDOMExceptionInPrivateScriptIfNeeded(scriptState->isolate(), exceptionState, block.Exception())) {
+            // FIXME: We should support exceptions other than DOM exceptions.
+            RELEASE_ASSERT_NOT_REACHED();
+        }
+        return false;
+    }
+    return true;
+}
 {% endmacro %}

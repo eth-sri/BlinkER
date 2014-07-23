@@ -38,7 +38,7 @@ namespace blink {
 class WebLayer;
 }
 
-namespace WebCore {
+namespace blink {
 
 class ChromeClient;
 class FrameClient;
@@ -74,6 +74,7 @@ public:
     FrameHost* host() const; // Null when the frame is detached.
 
     bool isMainFrame() const;
+    bool isLocalRoot() const;
 
     virtual void disconnectOwnerElement();
 
@@ -91,7 +92,7 @@ public:
     RenderPart* ownerRenderer() const; // Renderer for the element that contains this frame.
 
     // FIXME: These should move to RemoteFrame when that is instantiated.
-    void setRemotePlatformLayer(blink::WebLayer* remotePlatformLayer) { m_remotePlatformLayer = remotePlatformLayer; }
+    void setRemotePlatformLayer(blink::WebLayer*);
     blink::WebLayer* remotePlatformLayer() const { return m_remotePlatformLayer; }
 
     Settings* settings() const; // can be null
@@ -147,6 +148,6 @@ inline FrameTree& Frame::tree() const
 // Allow equality comparisons of Frames by reference or pointer, interchangeably.
 DEFINE_COMPARISON_OPERATORS_WITH_REFERENCES_REFCOUNTED(Frame)
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // Frame_h

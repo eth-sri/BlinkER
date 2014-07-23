@@ -43,7 +43,7 @@
 #include "core/svg/SVGFontElement.h"
 #endif
 
-namespace WebCore {
+namespace blink {
 
 static const double fontLoadWaitLimitSec = 3.0;
 
@@ -78,6 +78,7 @@ FontResource::FontResource(const ResourceRequest& resourceRequest)
     : Resource(resourceRequest, Font)
     , m_loadInitiated(false)
     , m_exceedsFontLoadWaitLimit(false)
+    , m_corsFailed(false)
     , m_fontLoadWaitLimitTimer(this, &FontResource::fontLoadWaitLimitCallback)
 {
 }
@@ -177,7 +178,7 @@ SVGFontElement* FontResource::getSVGFontById(const String& fontName) const
     if (!collectionLength)
         return 0;
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     for (unsigned i = 0; i < collectionLength; ++i) {
         ASSERT(collection->item(i));
         ASSERT(isSVGFontElement(collection->item(i)));

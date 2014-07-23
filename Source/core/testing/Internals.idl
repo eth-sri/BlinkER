@@ -70,7 +70,6 @@
     [RaisesException] unsigned long hitTestCount(Document document);
 
     // CSS Animation and Transition testing.
-    unsigned long numberOfActiveAnimations();
     [RaisesException] void pauseAnimations(double pauseTime);
 
     [RaisesException] Node nextSiblingByWalker(Node node);
@@ -81,7 +80,7 @@
 
     DOMString visiblePlaceholder(Element element);
 
-    void selectColorInColorChooser(Element element, DOMString colorValue);
+    [TypeChecking=Interface] void selectColorInColorChooser(Element element, DOMString colorValue);
 
     // If the argument is omitted, the top-level document is used.
     boolean hasAutofocusRequest(optional Document document);
@@ -186,8 +185,6 @@
     [RaisesException] void garbageCollectDocumentResources(Document document);
     void evictAllResources();
 
-    void allowRoundingHacks();
-
     unsigned long numberOfLiveNodes();
     unsigned long numberOfLiveDocuments();
     DOMString dumpRefCountedInstanceCounts();
@@ -207,11 +204,6 @@
 
     [RaisesException] void setIsCursorVisible(Document document, boolean isVisible);
 
-    void webkitWillEnterFullScreenForElement(Document document, Element element);
-    void webkitDidEnterFullScreenForElement(Document document, Element element);
-    void webkitWillExitFullScreenForElement(Document document, Element element);
-    void webkitDidExitFullScreenForElement(Document document, Element element);
-
     void mediaPlayerRequestFullscreen(HTMLMediaElement mediaElement);
 
     void registerURLSchemeAsBypassingContentSecurityPolicy(DOMString scheme);
@@ -219,6 +211,11 @@
 
     MallocStatistics mallocStatistics();
     TypeConversions typeConversions();
+
+    // This is enabled only in Debug builds.
+    // This is because we want to avoid putting the byte stream of testing private scripts
+    // into the binary of Release builds.
+    PrivateScriptTest privateScriptTest();
 
     DOMString[] getReferencedFilePaths();
 
@@ -283,4 +280,6 @@
 
     // This function is for testing HitRegions on Canvas2D.
     unsigned long countHitRegions(CanvasRenderingContext2D context);
+
+    DOMString serializeNavigationMarkup(Document document);
 };

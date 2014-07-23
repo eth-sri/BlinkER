@@ -29,12 +29,12 @@
 #ifndef InspectorFrontendHost_h
 #define InspectorFrontendHost_h
 
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 class ContextMenuItem;
 class Event;
@@ -61,6 +61,7 @@ public:
 
     // Called from [Custom] implementations.
     void showContextMenu(Event*, const Vector<ContextMenuItem>& items);
+    void showContextMenu(Page*, float x, float y, const Vector<ContextMenuItem>& items);
     void sendMessageToBackend(const String& message);
     void sendMessageToEmbedder(const String& message);
 
@@ -68,6 +69,7 @@ public:
     String getSelectionForegroundColor();
 
     bool isUnderTest();
+    bool isHostedMode();
 
     Page* frontendPage() { return m_frontendPage; }
 
@@ -80,6 +82,6 @@ private:
     FrontendMenuProvider* m_menuProvider;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // !defined(InspectorFrontendHost_h)

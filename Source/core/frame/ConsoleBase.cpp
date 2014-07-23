@@ -29,14 +29,15 @@
 #include "config.h"
 #include "core/frame/Console.h"
 
-#include "bindings/v8/ScriptCallStackFactory.h"
+#include "bindings/core/v8/ScriptCallStackFactory.h"
 #include "core/inspector/InspectorConsoleInstrumentation.h"
+#include "core/inspector/InspectorTraceEvents.h"
 #include "core/inspector/ScriptArguments.h"
 #include "platform/TraceEvent.h"
 #include "wtf/text/CString.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 ConsoleBase::~ConsoleBase()
 {
@@ -84,7 +85,7 @@ void ConsoleBase::table(ScriptState* scriptState, PassRefPtrWillBeRawPtr<ScriptA
 
 void ConsoleBase::clear(ScriptState* scriptState, PassRefPtrWillBeRawPtr<ScriptArguments> arguments)
 {
-    InspectorInstrumentation::addMessageToConsole(context(), ConsoleAPIMessageSource, ClearMessageType, LogMessageLevel, String(), scriptState, arguments);
+    InspectorInstrumentation::addConsoleAPIMessageToConsole(context(), ClearMessageType, LogMessageLevel, String(), scriptState, arguments);
 }
 
 void ConsoleBase::trace(ScriptState* scriptState, PassRefPtrWillBeRawPtr<ScriptArguments> arguments)
@@ -107,7 +108,7 @@ void ConsoleBase::count(ScriptState* scriptState, PassRefPtrWillBeRawPtr<ScriptA
 
 void ConsoleBase::markTimeline(const String& title)
 {
-    InspectorInstrumentation::consoleTimeStamp(context(), title);
+    timeStamp(title);
 }
 
 void ConsoleBase::profile(ScriptState* scriptState, const String& title)
@@ -134,6 +135,8 @@ void ConsoleBase::timeEnd(ScriptState* scriptState, const String& title)
 
 void ConsoleBase::timeStamp(const String& title)
 {
+    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "TimeStamp", "data", InspectorTimeStampEvent::data(context(), title));
+    // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentation::consoleTimeStamp(context(), title);
 }
 
@@ -149,17 +152,17 @@ void ConsoleBase::timelineEnd(ScriptState* scriptState, const String& title)
 
 void ConsoleBase::group(ScriptState* scriptState, PassRefPtrWillBeRawPtr<ScriptArguments> arguments)
 {
-    InspectorInstrumentation::addMessageToConsole(context(), ConsoleAPIMessageSource, StartGroupMessageType, LogMessageLevel, String(), scriptState, arguments);
+    InspectorInstrumentation::addConsoleAPIMessageToConsole(context(), StartGroupMessageType, LogMessageLevel, String(), scriptState, arguments);
 }
 
 void ConsoleBase::groupCollapsed(ScriptState* scriptState, PassRefPtrWillBeRawPtr<ScriptArguments> arguments)
 {
-    InspectorInstrumentation::addMessageToConsole(context(), ConsoleAPIMessageSource, StartGroupCollapsedMessageType, LogMessageLevel, String(), scriptState, arguments);
+    InspectorInstrumentation::addConsoleAPIMessageToConsole(context(), StartGroupCollapsedMessageType, LogMessageLevel, String(), scriptState, arguments);
 }
 
 void ConsoleBase::groupEnd()
 {
-    InspectorInstrumentation::addMessageToConsole(context(), ConsoleAPIMessageSource, EndGroupMessageType, LogMessageLevel, String(), nullptr);
+    InspectorInstrumentation::addConsoleAPIMessageToConsole(context(), EndGroupMessageType, LogMessageLevel, String(), nullptr, nullptr);
 }
 
 void ConsoleBase::internalAddMessage(MessageType type, MessageLevel level, ScriptState* scriptState, PassRefPtrWillBeRawPtr<ScriptArguments> scriptArguments, bool acceptNoArguments, bool printTrace)
@@ -176,9 +179,9 @@ void ConsoleBase::internalAddMessage(MessageType type, MessageLevel level, Scrip
 
     String message;
     bool gotStringMessage = arguments->getFirstArgumentAsString(message);
-    InspectorInstrumentation::addMessageToConsole(context(), ConsoleAPIMessageSource, type, level, message, scriptState, arguments);
+    InspectorInstrumentation::addConsoleAPIMessageToConsole(context(), type, level, message, scriptState, arguments);
     if (gotStringMessage)
         reportMessageToClient(level, message, callStack);
 }
 
-} // namespace WebCore
+} // namespace blink

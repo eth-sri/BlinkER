@@ -25,7 +25,6 @@
 #ifndef RTCDataChannel_h
 #define RTCDataChannel_h
 
-#include "bindings/v8/ScriptWrappable.h"
 #include "modules/EventTargetModules.h"
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
@@ -38,7 +37,7 @@ class WebRTCPeerConnectionHandler;
 struct WebRTCDataChannelInit;
 }
 
-namespace WebCore {
+namespace blink {
 
 class Blob;
 class ExceptionState;
@@ -46,7 +45,6 @@ class RTCPeerConnection;
 
 class RTCDataChannel FINAL
     : public RefCountedGarbageCollectedWillBeGarbageCollectedFinalized<RTCDataChannel>
-    , public ScriptWrappable
     , public EventTargetWithInlineData
     , public blink::WebRTCDataChannelHandlerClient {
     DEFINE_EVENT_TARGET_REFCOUNTING_WILL_BE_REMOVED(RefCountedGarbageCollectedWillBeGarbageCollectedFinalized<RTCDataChannel>);
@@ -126,6 +124,6 @@ private:
     WeakMember<RTCPeerConnection> m_connection;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // RTCDataChannel_h

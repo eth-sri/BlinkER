@@ -23,8 +23,8 @@
 #include "config.h"
 #include "core/dom/Attr.h"
 
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/Text.h"
@@ -33,7 +33,7 @@
 #include "wtf/text/AtomicString.h"
 #include "wtf/text/StringBuilder.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -165,7 +165,7 @@ bool Attr::childTypeAllowed(NodeType type) const
     return TEXT_NODE == type;
 }
 
-void Attr::childrenChanged(bool, Node*, Node*, int)
+void Attr::childrenChanged(const ChildrenChange&)
 {
     if (m_ignoreChildrenChanged > 0)
         return;

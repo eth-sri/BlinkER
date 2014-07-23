@@ -31,7 +31,7 @@
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 class AudioBus;
 class AudioContext;
@@ -46,6 +46,7 @@ public:
     virtual ~OfflineAudioDestinationNode();
 
     // AudioNode
+    virtual void dispose() OVERRIDE;
     virtual void initialize() OVERRIDE;
     virtual void uninitialize() OVERRIDE;
 
@@ -64,7 +65,9 @@ private:
 
     // This AudioNode renders into this AudioBuffer.
     RefPtrWillBeMember<AudioBuffer> m_renderTarget;
-
+    // Oilpan: This object must be alive during audio rendering.
+    GC_PLUGIN_IGNORE("http://crbug.com/395941")
+    RefPtrWillBePersistent<OfflineAudioDestinationNode> m_keepAliveWhileRendering;
     // Temporary AudioBus for each render quantum.
     RefPtr<AudioBus> m_renderBus;
 
@@ -78,6 +81,6 @@ private:
     void notifyComplete();
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // OfflineAudioDestinationNode_h

@@ -27,7 +27,7 @@
 #include "config.h"
 #include "core/page/DragController.h"
 
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/HTMLNames.h"
 #include "core/clipboard/DataObject.h"
 #include "core/clipboard/DataTransfer.h"
@@ -82,7 +82,7 @@
 #include <windows.h>
 #endif
 
-namespace WebCore {
+namespace blink {
 
 const int DragController::DragIconRightInset = 7;
 const int DragController::DragIconBottomInset = 3;
@@ -91,7 +91,7 @@ static const int MaxOriginalImageArea = 1500 * 1500;
 static const int LinkDragBorderInset = 2;
 static const float DragImageAlpha = 0.75f;
 
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
 static bool dragTypeIsValid(DragSourceAction action)
 {
     switch (action) {
@@ -322,8 +322,8 @@ static Element* elementUnderMouse(Document* documentUnderMouse, const IntPoint& 
     Node* n = result.innerNode();
     while (n && !n->isElementNode())
         n = n->parentOrShadowHostNode();
-    if (n)
-        n = n->deprecatedShadowAncestorNode();
+    if (n && n->isInShadowTree())
+        n = n->shadowHost();
 
     return toElement(n);
 }
@@ -418,7 +418,7 @@ DragOperation DragController::operationForLoad(DragData* dragData)
     ASSERT(dragData);
     Document* doc = m_page->deprecatedLocalMainFrame()->documentAtPoint(dragData->clientPosition());
 
-    if (doc && (m_didInitiateDrag || doc->isPluginDocument() || doc->rendererIsEditable()))
+    if (doc && (m_didInitiateDrag || doc->isPluginDocument() || doc->hasEditableStyle()))
         return DragOperationNone;
     return dragOperation(dragData);
 }
@@ -555,9 +555,9 @@ bool DragController::canProcessDrag(DragData* dragData)
 
     if (isHTMLPlugInElement(*result.innerNonSharedNode())) {
         HTMLPlugInElement* plugin = toHTMLPlugInElement(result.innerNonSharedNode());
-        if (!plugin->canProcessDrag() && !result.innerNonSharedNode()->rendererIsEditable())
+        if (!plugin->canProcessDrag() && !result.innerNonSharedNode()->hasEditableStyle())
             return false;
-    } else if (!result.innerNonSharedNode()->rendererIsEditable())
+    } else if (!result.innerNonSharedNode()->hasEditableStyle())
         return false;
 
     if (m_didInitiateDrag && m_documentUnderMouse == m_dragInitiator && result.isSelected())
@@ -730,7 +730,7 @@ bool DragController::populateDragDataTransfer(LocalFrame* src, const DragState& 
     HitTestResult hitTestResult = src->eventHandler().hitTestResultAtPoint(dragOrigin);
     // FIXME: Can this even happen? I guess it's possible, but should verify
     // with a layout test.
-    if (!state.m_dragSrc->contains(hitTestResult.innerNode())) {
+    if (!state.m_dragSrc->containsIncludingShadowDOM(hitTestResult.innerNode())) {
         // The original node being dragged isn't under the drag origin anymore... maybe it was
         // hidden or moved out from under the cursor. Regardless, we don't want to start a drag on
         // something that's not actually under the drag origin.
@@ -830,7 +830,7 @@ static PassOwnPtr<DragImage> dragImageForImage(Element* element, Image* image, c
 static PassOwnPtr<DragImage> dragImageForLink(const KURL& linkURL, const String& linkText, float deviceScaleFactor, const IntPoint& mouseDraggedPoint, IntPoint& dragLoc)
 {
     FontDescription fontDescription;
-    RenderTheme::theme().systemFont(WebCore::CSSValueNone, fontDescription);
+    RenderTheme::theme().systemFont(blink::CSSValueNone, fontDescription);
     OwnPtr<DragImage> dragImage = DragImage::create(linkURL, linkText, fontDescription, deviceScaleFactor);
 
     IntSize size = dragImage ? dragImage->size() : IntSize();
@@ -848,7 +848,7 @@ bool DragController::startDrag(LocalFrame* src, const DragState& state, const Pl
         return false;
 
     HitTestResult hitTestResult = src->eventHandler().hitTestResultAtPoint(dragOrigin);
-    if (!state.m_dragSrc->contains(hitTestResult.innerNode())) {
+    if (!state.m_dragSrc->containsIncludingShadowDOM(hitTestResult.innerNode())) {
         // The original node being dragged isn't under the drag origin anymore... maybe it was
         // hidden or moved out from under the cursor. Regardless, we don't want to start a drag on
         // something that's not actually under the drag origin.
@@ -971,4 +971,4 @@ void DragController::trace(Visitor* visitor)
     visitor->trace(m_fileInputElementUnderMouse);
 }
 
-} // namespace WebCore
+} // namespace blink

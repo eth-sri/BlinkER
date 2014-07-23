@@ -5,15 +5,15 @@
 #include "config.h"
 #include "core/animation/StringKeyframe.h"
 
+#include "core/animation/DefaultStyleInterpolation.h"
+#include "core/animation/DeferredLegacyStyleInterpolation.h"
+#include "core/animation/LegacyStyleInterpolation.h"
+#include "core/animation/LengthStyleInterpolation.h"
 #include "core/animation/css/CSSAnimations.h"
-#include "core/animation/interpolation/DefaultStyleInterpolation.h"
-#include "core/animation/interpolation/DeferredLegacyStyleInterpolation.h"
-#include "core/animation/interpolation/LegacyStyleInterpolation.h"
-#include "core/animation/interpolation/LengthStyleInterpolation.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/rendering/style/RenderStyle.h"
 
-namespace WebCore {
+namespace blink {
 
 StringKeyframe::StringKeyframe(const StringKeyframe& copyFrom)
     : Keyframe(copyFrom.m_offset, copyFrom.m_composite, copyFrom.m_easing)

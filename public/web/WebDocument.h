@@ -40,7 +40,7 @@
 #include "WebSecurityOrigin.h"
 
 #if BLINK_IMPLEMENTATION
-namespace WebCore {
+namespace blink {
 class Document;
 class DocumentType;
 }
@@ -82,8 +82,7 @@ public:
     BLINK_EXPORT WebString encoding() const;
     BLINK_EXPORT WebString contentLanguage() const;
     BLINK_EXPORT WebString referrer() const;
-    BLINK_EXPORT WebColor brandColor() const;
-
+    BLINK_EXPORT WebColor themeColor() const;
     // The url of the OpenSearch Desription Document (if any).
     BLINK_EXPORT WebURL openSearchDescriptionURL() const;
 
@@ -138,9 +137,9 @@ public:
     BLINK_EXPORT v8::Handle<v8::Value> registerEmbedderCustomElement(const WebString& name, v8::Handle<v8::Value> options, WebExceptionCode&);
 
 #if BLINK_IMPLEMENTATION
-    WebDocument(const PassRefPtrWillBeRawPtr<WebCore::Document>&);
-    WebDocument& operator=(const PassRefPtrWillBeRawPtr<WebCore::Document>&);
-    operator PassRefPtrWillBeRawPtr<WebCore::Document>() const;
+    WebDocument(const PassRefPtrWillBeRawPtr<blink::Document>&);
+    WebDocument& operator=(const PassRefPtrWillBeRawPtr<blink::Document>&);
+    operator PassRefPtrWillBeRawPtr<blink::Document>() const;
 #endif
 };
 

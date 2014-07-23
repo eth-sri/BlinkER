@@ -26,7 +26,6 @@
 #ifndef MediaStreamTrack_h
 #define MediaStreamTrack_h
 
-#include "bindings/v8/ScriptWrappable.h"
 #include "core/dom/ActiveDOMObject.h"
 #include "modules/EventTargetModules.h"
 #include "modules/mediastream/SourceInfo.h"
@@ -34,7 +33,7 @@
 #include "platform/mediastream/MediaStreamSource.h"
 #include "wtf/Forward.h"
 
-namespace WebCore {
+namespace blink {
 
 class AudioSourceProvider;
 class ExceptionState;
@@ -43,7 +42,6 @@ class MediaStreamTrackSourcesCallback;
 
 class MediaStreamTrack FINAL
     : public RefCountedGarbageCollectedWillBeGarbageCollectedFinalized<MediaStreamTrack>
-    , public ScriptWrappable
     , public ActiveDOMObject
     , public EventTargetWithInlineData
     , public MediaStreamSource::Observer {
@@ -59,6 +57,8 @@ public:
 
     bool enabled() const;
     void setEnabled(bool);
+
+    bool muted() const;
 
     String readyState() const;
 
@@ -104,6 +104,6 @@ private:
 
 typedef HeapVector<Member<MediaStreamTrack> > MediaStreamTrackVector;
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // MediaStreamTrack_h

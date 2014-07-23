@@ -36,7 +36,7 @@
 #include "wtf/Forward.h"
 #include "wtf/Noncopyable.h"
 
-namespace WebCore {
+namespace blink {
 
 class InjectedScript;
 class InjectedScriptManager;
@@ -64,7 +64,8 @@ public:
         const bool* returnByValue,
         const bool* generatePreview,
         RefPtr<TypeBuilder::Runtime::RemoteObject>& result,
-        TypeBuilder::OptOutput<bool>* wasThrown) OVERRIDE FINAL;
+        TypeBuilder::OptOutput<bool>* wasThrown,
+        RefPtr<TypeBuilder::Debugger::ExceptionDetails>&) OVERRIDE FINAL;
     virtual void callFunctionOn(ErrorString*,
                         const String& objectId,
                         const String& expression,
@@ -105,6 +106,6 @@ private:
     ScriptDebugServer* m_scriptDebugServer;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // InspectorRuntimeAgent_h

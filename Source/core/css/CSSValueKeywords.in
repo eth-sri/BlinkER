@@ -518,8 +518,12 @@ row-reverse
 column
 column-reverse
 // nowrap
-// wrap
+wrap
 wrap-reverse
+
+// grid-auto-flow
+dense
+stack
 
 // -internal-marquee-direction
 forwards
@@ -886,22 +890,7 @@ at
 // closest-side
 // farthest-side
 
-// -webkit-wrap-flow
-// auto
-// both
-// left
-// right
-maximum
-// clear
-
-// -webkit-wrap-through
-wrap
-// none
-
 alphabetic
-
-// position
-sticky
 
 // (pointer:) media feature
 // none
@@ -977,10 +966,11 @@ pan-x
 pan-y
 manipulation
 
-// justify-self
+// justify-items / justify-self
 // auto
 // stretch
 // baseline
+last-baseline
 // center
 // start
 // end
@@ -992,6 +982,7 @@ self-end
 // right
 true
 safe
+legacy
 
 // scroll-behavior
 instant

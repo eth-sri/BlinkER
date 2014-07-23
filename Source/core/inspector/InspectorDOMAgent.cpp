@@ -31,8 +31,8 @@
 #include "config.h"
 #include "core/inspector/InspectorDOMAgent.h"
 
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ScriptEventListener.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ScriptEventListener.h"
 #include "core/dom/Attr.h"
 #include "core/dom/CharacterData.h"
 #include "core/dom/ContainerNode.h"
@@ -83,7 +83,7 @@
 #include "wtf/text/CString.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -276,9 +276,10 @@ void InspectorDOMAgent::clearFrontend()
 
 void InspectorDOMAgent::restore()
 {
-    // Reset document to avoid early return from setDocument.
-    m_document = nullptr;
-    setDocument(m_pageAgent->mainFrame()->document());
+    if (!enabled())
+        return;
+    innerEnable();
+    notifyDocumentUpdated();
 }
 
 Vector<Document*> InspectorDOMAgent::documents()
@@ -486,13 +487,25 @@ Element* InspectorDOMAgent::assertEditableElement(ErrorString* errorString, int 
     return element;
 }
 
+void InspectorDOMAgent::innerEnable()
+{
+    m_state->setBoolean(DOMAgentState::domAgentEnabled, true);
+    if (m_listener)
+        m_listener->domAgentWasEnabled();
+}
+
 void InspectorDOMAgent::enable(ErrorString*)
 {
     if (enabled())
         return;
-    m_state->setBoolean(DOMAgentState::domAgentEnabled, true);
-    if (m_listener)
-        m_listener->domAgentWasEnabled();
+    innerEnable();
+    notifyDocumentUpdated();
+}
+
+void InspectorDOMAgent::notifyDocumentUpdated()
+{
+    m_document = nullptr;
+    setDocument(m_pageAgent->mainFrame()->document());
 }
 
 bool InspectorDOMAgent::enabled() const
@@ -513,7 +526,8 @@ void InspectorDOMAgent::disable(ErrorString*)
 void InspectorDOMAgent::getDocument(ErrorString* errorString, RefPtr<TypeBuilder::DOM::Node>& root)
 {
     // Backward compatibility. Mark agent as enabled when it requests document.
-    enable(errorString);
+    if (!enabled())
+        innerEnable();
 
     if (!m_document) {
         *errorString = "Document is not available";
@@ -649,7 +663,7 @@ int InspectorDOMAgent::pushNodePathToFrontend(Node* nodeToPush)
         return result;
 
     Node* node = nodeToPush;
-    Vector<Node*> path;
+    WillBeHeapVector<RawPtrWillBeMember<Node> > path;
     NodeToIdMap* danglingMap = 0;
 
     while (true) {
@@ -673,7 +687,7 @@ int InspectorDOMAgent::pushNodePathToFrontend(Node* nodeToPush)
 
     NodeToIdMap* map = danglingMap ? danglingMap : m_documentNodeToIdMap.get();
     for (int i = path.size() - 1; i >= 0; --i) {
-        int nodeId = map->get(path.at(i));
+        int nodeId = map->get(path.at(i).get());
         ASSERT(nodeId);
         pushChildNodesToFrontend(nodeId);
     }
@@ -781,8 +795,7 @@ void InspectorDOMAgent::setNodeName(ErrorString* errorString, int nodeId, const 
     newElem->cloneAttributesFromElement(*toElement(oldNode));
 
     // Copy over the original node's children.
-    Node* child;
-    while ((child = oldNode->firstChild())) {
+    for (Node* child = oldNode->firstChild(); child; child = oldNode->firstChild()) {
         if (!m_domEditor->insertBefore(newElem.get(), child, 0, errorString))
             return;
     }
@@ -952,7 +965,7 @@ void InspectorDOMAgent::performSearch(ErrorString*, const String& whitespaceTrim
         attributeQuery = attributeQuery.left(attributeQuery.length() - 1);
 
     Vector<Document*> docs = documents();
-    ListHashSet<Node*> resultCollector;
+    WillBeHeapListHashSet<RawPtrWillBeMember<Node> > resultCollector;
 
     for (Vector<Document*>::iterator it = docs.begin(); it != docs.end(); ++it) {
         Document* document = *it;
@@ -961,7 +974,7 @@ void InspectorDOMAgent::performSearch(ErrorString*, const String& whitespaceTrim
             continue;
 
         // Manual plain text search.
-        while ((node = NodeTraversal::next(*node, document->documentElement()))) {
+        for (node = NodeTraversal::next(*node, document->documentElement()); node; node = NodeTraversal::next(*node, document->documentElement())) {
             switch (node->nodeType()) {
             case Node::TEXT_NODE:
             case Node::COMMENT_NODE:
@@ -1045,7 +1058,7 @@ void InspectorDOMAgent::performSearch(ErrorString*, const String& whitespaceTrim
     *searchId = IdentifiersFactory::createIdentifier();
     WillBeHeapVector<RefPtrWillBeMember<Node> >* resultsIt = &m_searchResults.add(*searchId, WillBeHeapVector<RefPtrWillBeMember<Node> >()).storedValue->value;
 
-    for (ListHashSet<Node*>::iterator it = resultCollector.begin(); it != resultCollector.end(); ++it)
+    for (WillBeHeapListHashSet<RawPtrWillBeMember<Node> >::iterator it = resultCollector.begin(); it != resultCollector.end(); ++it)
         resultsIt->append(*it);
 
     *resultCount = resultsIt->size();
@@ -1411,8 +1424,12 @@ void InspectorDOMAgent::getNodeForLocation(ErrorString* errorString, int x, int 
 {
     if (!pushDocumentUponHandlelessOperation(errorString))
         return;
-
-    Node* node = hoveredNodeForPoint(m_document->frame(), IntPoint(x, y), false);
+    HitTestRequest request(HitTestRequest::Move | HitTestRequest::ReadOnly | HitTestRequest::AllowChildFrameContent);
+    HitTestResult result(IntPoint(x, y));
+    m_document->frame()->contentRenderer()->hitTest(request, result);
+    Node* node = result.innerPossiblyPseudoNode();
+    while (node && node->nodeType() == Node::TEXT_NODE)
+        node = node->parentNode();
     if (!node) {
         *errorString = "No node found at given location";
         return;
@@ -2011,7 +2028,7 @@ Node* InspectorDOMAgent::nodeForPath(const String& path)
 
     Node* node = m_document.get();
     Vector<String> pathTokens;
-    path.split(",", false, pathTokens);
+    path.split(',', pathTokens);
     if (!pathTokens.size())
         return 0;
     for (size_t i = 0; i < pathTokens.size() - 1; i += 2) {
@@ -2106,5 +2123,5 @@ bool InspectorDOMAgent::pushDocumentUponHandlelessOperation(ErrorString* errorSt
     return true;
 }
 
-} // namespace WebCore
+} // namespace blink
 

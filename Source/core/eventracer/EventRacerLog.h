@@ -1,8 +1,8 @@
 #ifndef EventRacerLog_h
 #define EventRacerLog_h
 
-#include "bindings/v8/ScriptValue.h"
-#include "bindings/v8/V8StringResource.h"
+#include "bindings/core/v8/ScriptValue.h"
+#include "bindings/core/v8/V8StringResource.h"
 #include "EventAction.h"
 #include "StringSet.h"
 #include "wtf/HashMap.h"

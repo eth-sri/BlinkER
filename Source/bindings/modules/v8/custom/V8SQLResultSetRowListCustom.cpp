@@ -31,13 +31,13 @@
 #include "config.h"
 #include "bindings/modules/v8/V8SQLResultSetRowList.h"
 
-#include "bindings/v8/ExceptionMessages.h"
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/V8Binding.h"
+#include "bindings/core/v8/ExceptionMessages.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/V8Binding.h"
 #include "core/dom/ExceptionCode.h"
 #include "modules/webdatabase/SQLResultSetRowList.h"
 
-namespace WebCore {
+namespace blink {
 
 void V8SQLResultSetRowList::itemMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
@@ -84,10 +84,10 @@ void V8SQLResultSetRowList::itemMethodCustom(const v8::FunctionCallbackInfo<v8::
             ASSERT_NOT_REACHED();
         }
 
-        item->Set(v8String(info.GetIsolate(), rowList->columnNames()[i]), value, static_cast<v8::PropertyAttribute>(v8::DontDelete | v8::ReadOnly));
+        item->ForceSet(v8String(info.GetIsolate(), rowList->columnNames()[i]), value, static_cast<v8::PropertyAttribute>(v8::DontDelete | v8::ReadOnly));
     }
 
     v8SetReturnValue(info, item);
 }
 
-} // namespace WebCore
+} // namespace blink

@@ -31,7 +31,7 @@
 #include "core/editing/VisibleSelection.h"
 #include "platform/text/TextChecking.h"
 
-namespace WebCore {
+namespace blink {
 
 class LocalFrame;
 class SpellCheckerClient;
@@ -57,6 +57,7 @@ public:
     void ignoreSpelling();
     bool isSpellCheckingEnabledInFocusedNode() const;
     bool isSpellCheckingEnabledFor(Node*) const;
+    void markMisspellingsAfterLineBreak(const VisibleSelection& wordSelection);
     void markMisspellingsAfterTypingToWord(const VisiblePosition &wordStart, const VisibleSelection& selectionAfterTyping);
     void markMisspellings(const VisibleSelection&, RefPtrWillBeRawPtr<Range>& firstMisspellingRange);
     void markBadGrammar(const VisibleSelection&);
@@ -100,6 +101,6 @@ private:
     void markAllMisspellingsAndBadGrammarInRanges(TextCheckingTypeMask textCheckingOptions, Range* checkingRange, Range* paragraphRange, bool asynchronous, int requestNumber, int* checkingLength = 0);
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // SpellChecker_h

@@ -21,7 +21,7 @@
 #include "config.h"
 #include "core/css/CSSPrimitiveValue.h"
 
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/css/CSSBasicShapes.h"
 #include "core/css/CSSCalculationValue.h"
 #include "core/css/CSSHelper.h"
@@ -44,7 +44,7 @@
 
 using namespace WTF;
 
-namespace WebCore {
+namespace blink {
 
 // Max/min values for CSS, needs to slightly smaller/larger than the true max/min values to allow for rounding without overflowing.
 // Subtract two (rather than one) to allow for values to be converted to float and back without exceeding the LayoutUnit::max.
@@ -292,7 +292,8 @@ CSSPrimitiveValue::CSSPrimitiveValue(const String& str, UnitType type)
     : CSSValue(PrimitiveClass)
 {
     m_primitiveUnitType = type;
-    if ((m_value.string = str.impl()))
+    m_value.string = str.impl();
+    if (m_value.string)
         m_value.string->ref();
 }
 
@@ -1413,6 +1414,7 @@ bool CSSPrimitiveValue::equals(const CSSPrimitiveValue& other) const
 
 void CSSPrimitiveValue::traceAfterDispatch(Visitor* visitor)
 {
+#if ENABLE(OILPAN)
     switch (m_primitiveUnitType) {
     case CSS_COUNTER:
         visitor->trace(m_value.counter);
@@ -1435,7 +1437,8 @@ void CSSPrimitiveValue::traceAfterDispatch(Visitor* visitor)
     default:
         break;
     }
+#endif
     CSSValue::traceAfterDispatch(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink

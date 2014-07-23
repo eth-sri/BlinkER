@@ -37,7 +37,7 @@
 // FIXME(crbug.com/352043): This is temporarily enabled even on RELEASE to diagnose a wild crash.
 #define ENABLE_RESOURCE_IS_DELETED_CHECK
 
-namespace WebCore {
+namespace blink {
 
 class EventAction;
 class EventRacerLog;
@@ -86,6 +86,7 @@ public:
 
     Resource(const ResourceRequest&, Type);
     virtual ~Resource();
+    virtual void dispose();
 
     virtual void load(ResourceFetcher*, const ResourceLoaderOptions&);
 
@@ -205,6 +206,7 @@ public:
     DataBufferingPolicy dataBufferingPolicy() const { return m_options.dataBufferingPolicy; }
     void setDataBufferingPolicy(DataBufferingPolicy);
 
+    bool isUnusedPreload() const { return isPreloaded() && preloadResult() == PreloadNotReferenced; }
     bool isPreloaded() const { return m_preloadCount; }
     void increasePreloadCount() { ++m_preloadCount; }
     void decreasePreloadCount() { ASSERT(m_preloadCount); --m_preloadCount; }

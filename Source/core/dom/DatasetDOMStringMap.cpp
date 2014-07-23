@@ -26,14 +26,14 @@
 #include "config.h"
 #include "core/dom/DatasetDOMStringMap.h"
 
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/Element.h"
 #include "core/dom/ExceptionCode.h"
 #include "wtf/ASCIICType.h"
 #include "wtf/text/StringBuilder.h"
 
-namespace WebCore {
+namespace blink {
 
 static bool isValidAttributeName(const String& name)
 {
@@ -222,4 +222,4 @@ void DatasetDOMStringMap::trace(Visitor* visitor)
     DOMStringMap::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink

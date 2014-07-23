@@ -25,7 +25,7 @@
 #ifndef RTCStatsResponse_h
 #define RTCStatsResponse_h
 
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "modules/mediastream/RTCStatsReport.h"
 #include "platform/heap/Handle.h"
 #include "platform/mediastream/RTCStatsResponseBase.h"
@@ -33,7 +33,7 @@
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 class RTCStatsResponse FINAL : public RTCStatsResponseBase, public ScriptWrappable {
 public:
@@ -55,6 +55,6 @@ private:
     HashMap<String, int> m_idmap;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // RTCStatsResponse_h

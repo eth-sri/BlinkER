@@ -31,12 +31,12 @@
 #include "config.h"
 #include "bindings/core/v8/V8HTMLDocument.h"
 
+#include "bindings/core/v8/ScriptController.h"
+#include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8HTMLAllCollection.h"
 #include "bindings/core/v8/V8HTMLCollection.h"
 #include "bindings/core/v8/V8Node.h"
 #include "bindings/core/v8/V8Window.h"
-#include "bindings/v8/ScriptController.h"
-#include "bindings/v8/V8Binding.h"
 #include "core/HTMLNames.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLAllCollection.h"
@@ -47,7 +47,7 @@
 #include "wtf/RefPtr.h"
 #include "wtf/StdLibExtras.h"
 
-namespace WebCore {
+namespace blink {
 
 // HTMLDocument ----------------------------------------------------------------
 
@@ -91,4 +91,4 @@ void V8HTMLDocument::openMethodCustom(const v8::FunctionCallbackInfo<v8::Value>&
     v8SetReturnValue(info, info.Holder());
 }
 
-} // namespace WebCore
+} // namespace blink

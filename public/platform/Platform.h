@@ -83,6 +83,7 @@ class WebMediaStreamCenter;
 class WebMediaStreamCenterClient;
 class WebMessagePortChannel;
 class WebMimeRegistry;
+class WebNotificationPresenter;
 class WebPluginListBuilder;
 class WebPrescientNetworking;
 class WebPublicSuffixList;
@@ -269,18 +270,6 @@ public:
     // memory currently allocated to this process that cannot be shared. Returns
     // false on platform specific error conditions.
     virtual bool processMemorySizesInBytes(size_t* privateBytes, size_t* sharedBytes) { return false; }
-
-    // A callback interface for requestProcessMemorySizes
-    class ProcessMemorySizesCallback {
-    public:
-        virtual ~ProcessMemorySizesCallback() { }
-        virtual void dataReceived(size_t privateBytes, size_t sharedBytes) = 0;
-    };
-
-    // Requests private and shared usage, in bytes. Private bytes is the amount of
-    // memory currently allocated to this process that cannot be shared.
-    // The callback ownership is passed to the callee.
-    virtual void requestProcessMemorySizes(ProcessMemorySizesCallback* requestCallback) { }
 
     // Reports number of bytes used by memory allocator for internal needs.
     // Returns true if the size has been reported, or false otherwise.
@@ -645,6 +634,11 @@ public:
     // WebDatabase --------------------------------------------------------
 
     virtual WebDatabaseObserver* databaseObserver() { return 0; }
+
+
+    // Web Notifications --------------------------------------------------
+
+    virtual WebNotificationPresenter* notificationPresenter() { return 0; }
 
 
 protected:

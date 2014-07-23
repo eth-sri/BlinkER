@@ -39,7 +39,7 @@
 const unsigned minSampleRate = 8000;
 const unsigned maxSampleRate = 192000;
 
-namespace WebCore {
+namespace blink {
 
 PassRefPtrWillBeRawPtr<MediaElementAudioSourceNode> MediaElementAudioSourceNode::create(AudioContext* context, HTMLMediaElement* mediaElement)
 {
@@ -64,10 +64,16 @@ MediaElementAudioSourceNode::MediaElementAudioSourceNode(AudioContext* context, 
 
 MediaElementAudioSourceNode::~MediaElementAudioSourceNode()
 {
+    ASSERT(!isInitialized());
+}
+
+void MediaElementAudioSourceNode::dispose()
+{
 #if !ENABLE(OILPAN)
     m_mediaElement->setAudioSourceNode(0);
 #endif
     uninitialize();
+    AudioSourceNode::dispose();
 }
 
 void MediaElementAudioSourceNode::setFormat(size_t numberOfChannels, float sourceSampleRate)
@@ -141,14 +147,14 @@ void MediaElementAudioSourceNode::process(size_t numberOfFrames)
 
 void MediaElementAudioSourceNode::lock()
 {
-    ref();
+    m_keepAliveWhileLocking = this;
     m_processLock.lock();
 }
 
 void MediaElementAudioSourceNode::unlock()
 {
     m_processLock.unlock();
-    deref();
+    m_keepAliveWhileLocking.clear();
 }
 
 void MediaElementAudioSourceNode::trace(Visitor* visitor)
@@ -158,6 +164,6 @@ void MediaElementAudioSourceNode::trace(Visitor* visitor)
     AudioSourceProviderClient::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // ENABLE(WEB_AUDIO)

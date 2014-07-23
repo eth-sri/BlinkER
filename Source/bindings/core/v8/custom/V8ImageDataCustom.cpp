@@ -33,7 +33,7 @@
 
 #include "bindings/core/v8/custom/V8Uint8ClampedArrayCustom.h"
 
-namespace WebCore {
+namespace blink {
 
 v8::Handle<v8::Object> wrap(ImageData* impl, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
 {
@@ -46,10 +46,10 @@ v8::Handle<v8::Object> wrap(ImageData* impl, v8::Handle<v8::Object> creationCont
         // the created v8 object, eliminating the C++ callback
         // when accessing the "data" property.
         if (!pixelArray.IsEmpty())
-            wrapper->Set(v8AtomicString(isolate, "data"), pixelArray, v8::ReadOnly);
+            wrapper->ForceSet(v8AtomicString(isolate, "data"), pixelArray, v8::ReadOnly);
     }
 
     return wrapper;
 }
 
-} // namespace WebCore
+} // namespace blink

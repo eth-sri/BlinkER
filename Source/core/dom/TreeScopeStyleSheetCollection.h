@@ -31,7 +31,6 @@
 #include "core/dom/Document.h"
 #include "core/dom/DocumentOrderedList.h"
 #include "core/dom/StyleSheetCollection.h"
-#include "core/dom/StyleSheetScopingNodeList.h"
 #include "core/dom/TreeScope.h"
 #include "wtf/FastAllocBase.h"
 #include "wtf/HashMap.h"
@@ -40,7 +39,7 @@
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 class ContainerNode;
 class Node;
@@ -56,16 +55,11 @@ public:
     bool usesRemUnits() const { return m_usesRemUnits; }
 
     DocumentOrderedList& styleSheetCandidateNodes() { return m_styleSheetCandidateNodes; }
-    DocumentOrderedList* scopingNodesForStyleScoped() { return m_scopingNodesForStyleScoped.scopingNodes(); }
-    ListHashSet<Node*, 4>* scopingNodesRemoved() { return m_scopingNodesForStyleScoped.scopingNodesRemoved(); }
 
     void clearMediaQueryRuleSetStyleSheets();
     void enableExitTransitionStylesheets();
 
-    virtual void trace(Visitor* visitor) OVERRIDE
-    {
-        StyleSheetCollection::trace(visitor);
-    }
+    virtual void trace(Visitor*) OVERRIDE;
 
 protected:
     explicit TreeScopeStyleSheetCollection(TreeScope&);
@@ -91,7 +85,6 @@ protected:
     };
 
     void analyzeStyleSheetChange(StyleResolverUpdateMode, const StyleSheetCollection&, StyleSheetChange&);
-    void resetAllRuleSetsInTreeScope(StyleResolver*);
     void updateUsesRemUnits();
 
 private:
@@ -104,10 +97,8 @@ protected:
     bool m_usesRemUnits;
 
     DocumentOrderedList m_styleSheetCandidateNodes;
-    StyleSheetScopingNodeList m_scopingNodesForStyleScoped;
 };
 
 }
 
 #endif
-

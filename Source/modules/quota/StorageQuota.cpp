@@ -31,8 +31,8 @@
 #include "config.h"
 #include "modules/quota/StorageQuota.h"
 
-#include "bindings/v8/ScriptPromise.h"
-#include "bindings/v8/ScriptPromiseResolver.h"
+#include "bindings/core/v8/ScriptPromise.h"
+#include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "core/dom/DOMError.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
@@ -44,7 +44,7 @@
 #include "public/platform/WebStorageQuotaCallbacks.h"
 #include "public/platform/WebStorageQuotaType.h"
 
-namespace WebCore {
+namespace blink {
 
 namespace {
 
@@ -117,4 +117,4 @@ StorageQuota::~StorageQuota()
 {
 }
 
-} // namespace WebCore
+} // namespace blink

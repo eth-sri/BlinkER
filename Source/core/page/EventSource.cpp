@@ -33,10 +33,10 @@
 #include "config.h"
 #include "core/page/EventSource.h"
 
-#include "bindings/v8/Dictionary.h"
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ScriptController.h"
-#include "bindings/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/Dictionary.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ScriptController.h"
+#include "bindings/core/v8/SerializedScriptValue.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
@@ -51,9 +51,10 @@
 #include "platform/network/ResourceRequest.h"
 #include "platform/network/ResourceResponse.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "public/platform/WebURLRequest.h"
 #include "wtf/text/StringBuilder.h"
 
-namespace WebCore {
+namespace blink {
 
 const unsigned long long EventSource::defaultReconnectDelay = 3000;
 
@@ -69,7 +70,7 @@ inline EventSource::EventSource(ExecutionContext* context, const KURL& url, cons
     , m_reconnectDelay(defaultReconnectDelay)
 {
     ScriptWrappable::init(this);
-    eventSourceInit.get("withCredentials", m_withCredentials);
+    DictionaryHelper::get(eventSourceInit, "withCredentials", m_withCredentials);
 }
 
 PassRefPtrWillBeRawPtr<EventSource> EventSource::create(ExecutionContext* context, const String& url, const Dictionary& eventSourceInit, ExceptionState& exceptionState)
@@ -99,7 +100,6 @@ PassRefPtrWillBeRawPtr<EventSource> EventSource::create(ExecutionContext* contex
 
     RefPtrWillBeRawPtr<EventSource> source = adoptRefWillBeRefCountedGarbageCollected(new EventSource(context, fullURL, eventSourceInit));
 
-    source->setPendingActivity(source.get());
     source->scheduleInitialConnect();
     source->suspendIfNeeded();
 
@@ -131,6 +131,7 @@ void EventSource::connect()
     request.setHTTPMethod("GET");
     request.setHTTPHeaderField("Accept", "text/event-stream");
     request.setHTTPHeaderField("Cache-Control", "no-cache");
+    request.setRequestContext(blink::WebURLRequest::RequestContextEventSource);
     if (!m_lastEventId.isEmpty())
         request.setHTTPHeaderField("Last-Event-ID", m_lastEventId);
 
@@ -146,6 +147,7 @@ void EventSource::connect()
     resourceLoaderOptions.credentialsRequested = m_withCredentials ? ClientRequestedCredentials : ClientDidNotRequestCredentials;
     resourceLoaderOptions.dataBufferingPolicy = DoNotBufferData;
     resourceLoaderOptions.securityOrigin = origin;
+    resourceLoaderOptions.mixedContentBlockingTreatment = TreatAsActiveContent;
 
     m_loader = ThreadableLoader::create(executionContext, this, request, options, resourceLoaderOptions);
 
@@ -162,8 +164,6 @@ void EventSource::networkRequestEnded()
 
     if (m_state != CLOSED)
         scheduleReconnect();
-    else
-        unsetPendingActivity(this);
 }
 
 void EventSource::scheduleReconnect()
@@ -203,7 +203,6 @@ void EventSource::close()
     // Stop trying to reconnect if EventSource was explicitly closed or if ActiveDOMObject::stop() was called.
     if (m_connectTimer.isActive()) {
         m_connectTimer.stop();
-        unsetPendingActivity(this);
     }
 
     if (m_requestInFlight)
@@ -321,7 +320,6 @@ void EventSource::abortConnectionAttempt()
         m_loader->cancel();
     } else {
         m_state = CLOSED;
-        unsetPendingActivity(this);
     }
 
     ASSERT(m_state == CLOSED);
@@ -427,6 +425,11 @@ void EventSource::stop()
     close();
 }
 
+bool EventSource::hasPendingActivity() const
+{
+    return m_state != CLOSED;
+}
+
 PassRefPtrWillBeRawPtr<MessageEvent> EventSource::createMessageEvent()
 {
     RefPtrWillBeRawPtr<MessageEvent> event = MessageEvent::create();
@@ -435,4 +438,4 @@ PassRefPtrWillBeRawPtr<MessageEvent> EventSource::createMessageEvent()
     return event.release();
 }
 
-} // namespace WebCore
+} // namespace blink

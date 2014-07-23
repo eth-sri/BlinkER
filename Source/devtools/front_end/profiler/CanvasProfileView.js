@@ -160,7 +160,7 @@ WebInspector.CanvasProfileView.prototype = {
     },
 
     /**
-     * @param {?Event} event
+     * @param {!Event} event
      */
     _onMouseClick: function(event)
     {
@@ -639,7 +639,7 @@ WebInspector.CanvasProfileType = function()
     this._frameSelector.element.title = WebInspector.UIString("Frame containing the canvases to capture.");
     this._frameSelector.element.classList.add("hidden");
 
-    this._target = /** @type {!WebInspector.Target} */ (WebInspector.targetManager.activeTarget());
+    this._target = /** @type {!WebInspector.Target} */ (WebInspector.targetManager.mainTarget());
     this._target.resourceTreeModel.frames().forEach(this._addFrame, this);
     this._target.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.FrameAdded, this._frameAdded, this);
     this._target.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.FrameDetached, this._frameRemoved, this);
@@ -995,7 +995,7 @@ WebInspector.CanvasDispatcher.prototype = {
  */
 WebInspector.CanvasProfileHeader = function(target, type, traceLogId, frameId)
 {
-    WebInspector.ProfileHeader.call(this, target, type, WebInspector.UIString("Trace Log %d", type._nextProfileUid));
+    WebInspector.ProfileHeader.call(this, target, type, WebInspector.UIString("Trace Log %d", type.nextProfileUid()));
     /** @type {!CanvasAgent.TraceLogId} */
     this._traceLogId = traceLogId || "";
     this._frameId = frameId;

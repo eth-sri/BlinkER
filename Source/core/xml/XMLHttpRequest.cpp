@@ -23,7 +23,7 @@
 #include "config.h"
 #include "core/xml/XMLHttpRequest.h"
 
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/FetchInitiatorTypeNames.h"
 #include "core/dom/ContextFeatures.h"
 #include "core/dom/DOMImplementation.h"
@@ -34,7 +34,6 @@
 #include "core/fetch/CrossOriginAccessControl.h"
 #include "core/fileapi/Blob.h"
 #include "core/fileapi/File.h"
-#include "core/fileapi/Stream.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
@@ -44,6 +43,7 @@
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InspectorTraceEvents.h"
 #include "core/loader/ThreadableLoader.h"
+#include "core/streams/Stream.h"
 #include "core/xml/XMLHttpRequestProgressEvent.h"
 #include "core/xml/XMLHttpRequestUpload.h"
 #include "platform/Logging.h"
@@ -54,7 +54,7 @@
 #include "platform/network/ParsedContentType.h"
 #include "platform/network/ResourceError.h"
 #include "platform/network/ResourceRequest.h"
-#include "public/platform/Platform.h"
+#include "public/platform/WebURLRequest.h"
 #include "wtf/ArrayBuffer.h"
 #include "wtf/ArrayBufferView.h"
 #include "wtf/Assertions.h"
@@ -62,16 +62,9 @@
 #include "wtf/StdLibExtras.h"
 #include "wtf/text/CString.h"
 
-namespace WebCore {
+namespace blink {
 
 DEFINE_DEBUG_ONLY_GLOBAL(WTF::RefCountedLeakCounter, xmlHttpRequestCounter, ("XMLHttpRequest"));
-
-// Histogram enum to see when we can deprecate xhr.send(ArrayBuffer).
-enum XMLHttpRequestSendArrayBufferOrView {
-    XMLHttpRequestSendArrayBuffer,
-    XMLHttpRequestSendArrayBufferView,
-    XMLHttpRequestSendArrayBufferOrViewMax,
-};
 
 struct XMLHttpRequestStaticData {
     WTF_MAKE_NONCOPYABLE(XMLHttpRequestStaticData); WTF_MAKE_FAST_ALLOCATED;
@@ -92,10 +85,10 @@ XMLHttpRequestStaticData::XMLHttpRequestStaticData()
     m_forbiddenRequestHeaders.add("access-control-request-method");
     m_forbiddenRequestHeaders.add("connection");
     m_forbiddenRequestHeaders.add("content-length");
-    m_forbiddenRequestHeaders.add("content-transfer-encoding");
     m_forbiddenRequestHeaders.add("cookie");
     m_forbiddenRequestHeaders.add("cookie2");
     m_forbiddenRequestHeaders.add("date");
+    m_forbiddenRequestHeaders.add("dnt");
     m_forbiddenRequestHeaders.add("expect");
     m_forbiddenRequestHeaders.add("host");
     m_forbiddenRequestHeaders.add("keep-alive");
@@ -175,7 +168,6 @@ XMLHttpRequest::XMLHttpRequest(ExecutionContext* context, PassRefPtr<SecurityOri
     , m_exceptionCode(0)
     , m_progressEventThrottle(this)
     , m_responseTypeCode(ResponseTypeDefault)
-    , m_dropProtectionRunner(this, &XMLHttpRequest::dropProtection)
     , m_securityOrigin(securityOrigin)
     , m_async(true)
     , m_includeCredentials(false)
@@ -767,19 +759,12 @@ void XMLHttpRequest::send(ArrayBuffer* body, ExceptionState& exceptionState)
 {
     WTF_LOG(Network, "XMLHttpRequest %p send() ArrayBuffer %p", this, body);
 
-    String consoleMessage("ArrayBuffer is deprecated in XMLHttpRequest.send(). Use ArrayBufferView instead.");
-    executionContext()->addConsoleMessage(JSMessageSource, WarningMessageLevel, consoleMessage);
-
-    blink::Platform::current()->histogramEnumeration("WebCore.XHR.send.ArrayBufferOrView", XMLHttpRequestSendArrayBuffer, XMLHttpRequestSendArrayBufferOrViewMax);
-
     sendBytesData(body->data(), body->byteLength(), exceptionState);
 }
 
 void XMLHttpRequest::send(ArrayBufferView* body, ExceptionState& exceptionState)
 {
     WTF_LOG(Network, "XMLHttpRequest %p send() ArrayBufferView %p", this, body);
-
-    blink::Platform::current()->histogramEnumeration("WebCore.XHR.send.ArrayBufferOrView", XMLHttpRequestSendArrayBufferView, XMLHttpRequestSendArrayBufferOrViewMax);
 
     sendBytesData(body->baseAddress(), body->byteLength(), exceptionState);
 }
@@ -837,7 +822,7 @@ void XMLHttpRequest::createRequest(PassRefPtr<FormData> httpBody, ExceptionState
 
     ResourceRequest request(m_url);
     request.setHTTPMethod(m_method);
-    request.setTargetType(ResourceRequest::TargetIsXHR);
+    request.setRequestContext(blink::WebURLRequest::RequestContextXMLHttpRequest);
 
     InspectorInstrumentation::willLoadXHR(&executionContext, this, this, m_method, m_url, m_async, httpBody ? httpBody->deepCopy() : nullptr, m_requestHeaders, m_includeCredentials);
 
@@ -861,7 +846,7 @@ void XMLHttpRequest::createRequest(PassRefPtr<FormData> httpBody, ExceptionState
     resourceLoaderOptions.allowCredentials = (m_sameOriginRequest || m_includeCredentials) ? AllowStoredCredentials : DoNotAllowStoredCredentials;
     resourceLoaderOptions.credentialsRequested = m_includeCredentials ? ClientRequestedCredentials : ClientDidNotRequestCredentials;
     resourceLoaderOptions.securityOrigin = securityOrigin();
-    resourceLoaderOptions.mixedContentBlockingTreatment = TreatAsActiveContent;
+    resourceLoaderOptions.mixedContentBlockingTreatment = RuntimeEnabledFeatures::laxMixedContentCheckingEnabled() ? TreatAsPassiveContent : TreatAsActiveContent;
 
     // When responseType is set to "blob", we redirect the downloaded data to a
     // file-handle directly.
@@ -883,12 +868,6 @@ void XMLHttpRequest::createRequest(PassRefPtr<FormData> httpBody, ExceptionState
         // FIXME: Maybe create() can return null for other reasons too?
         ASSERT(!m_loader);
         m_loader = ThreadableLoader::create(executionContext, this, request, options, resourceLoaderOptions);
-        if (m_loader) {
-            // Neither this object nor the JavaScript wrapper should be deleted while
-            // a request is in progress because we need to keep the listeners alive,
-            // and they are referenced by the JavaScript wrapper.
-            setPendingActivity(this);
-        }
     } else {
         // Use count for XHR synchronous requests.
         UseCounter::count(&executionContext, UseCounter::XMLHttpRequestSynchronous);
@@ -904,9 +883,6 @@ void XMLHttpRequest::createRequest(PassRefPtr<FormData> httpBody, ExceptionState
 void XMLHttpRequest::abort()
 {
     WTF_LOG(Network, "XMLHttpRequest %p abort()", this);
-
-    // internalAbort() calls dropProtection(), which may release the last reference.
-    RefPtrWillBeRawPtr<XMLHttpRequest> protect(this);
 
     bool sendFlag = m_loader;
 
@@ -936,7 +912,7 @@ void XMLHttpRequest::clearVariablesForLoading()
     m_responseEncoding = String();
 }
 
-bool XMLHttpRequest::internalAbort(DropProtection async)
+bool XMLHttpRequest::internalAbort()
 {
     m_error = true;
 
@@ -952,31 +928,21 @@ bool XMLHttpRequest::internalAbort(DropProtection async)
 
     // Cancelling the ThreadableLoader m_loader may result in calling
     // window.onload synchronously. If such an onload handler contains open()
-    // call on the same XMLHttpRequest object, reentry happens. If m_loader
-    // is left to be non 0, internalAbort() call for the inner open() makes
-    // an extra dropProtection() call (when we're back to the outer open(),
-    // we'll call dropProtection()). To avoid that, clears m_loader before
-    // calling cancel.
+    // call on the same XMLHttpRequest object, reentry happens.
     //
     // If, window.onload contains open() and send(), m_loader will be set to
     // non 0 value. So, we cannot continue the outer open(). In such case,
     // just abort the outer open() by returning false.
+    RefPtrWillBeRawPtr<XMLHttpRequest> protect(this);
     RefPtr<ThreadableLoader> loader = m_loader.release();
     loader->cancel();
-
-    // Save to a local variable since we're going to drop protection.
-    bool newLoadStarted = m_loader;
 
     // If abort() called internalAbort() and a nested open() ended up
     // clearing the error flag, but didn't send(), make sure the error
     // flag is still set.
+    bool newLoadStarted = hasPendingActivity();
     if (!newLoadStarted)
         m_error = true;
-
-    if (async == DropProtectionAsync)
-        dropProtectionSoon();
-    else
-        dropProtection();
 
     return !newLoadStarted;
 }
@@ -1025,6 +991,9 @@ void XMLHttpRequest::dispatchProgressEvent(const AtomicString& type, long long r
     unsigned long long total = lengthComputable ? static_cast<unsigned long long>(expectedLength) : 0;
 
     m_progressEventThrottle.dispatchProgressEvent(type, lengthComputable, loaded, total);
+
+    if (type == EventTypeNames::loadend)
+        InspectorInstrumentation::didDispatchXHRLoadendEvent(executionContext(), this);
 }
 
 void XMLHttpRequest::dispatchProgressEventFromSnapshot(const AtomicString& type)
@@ -1081,19 +1050,12 @@ void XMLHttpRequest::handleRequestError(ExceptionCode exceptionCode, const Atomi
             m_upload->handleRequestError(type);
     }
 
+    // Note: The below event dispatch may be called while |hasPendingActivity() == false|,
+    // when |handleRequestError| is called after |internalAbort()|.
+    // This is safe, however, as |this| will be kept alive from a strong ref |Event::m_target|.
     dispatchProgressEvent(EventTypeNames::progress, receivedLength, expectedLength);
     dispatchProgressEvent(type, receivedLength, expectedLength);
     dispatchProgressEvent(EventTypeNames::loadend, receivedLength, expectedLength);
-}
-
-void XMLHttpRequest::dropProtectionSoon()
-{
-    m_dropProtectionRunner.runAsync();
-}
-
-void XMLHttpRequest::dropProtection()
-{
-    unsetPendingActivity(this);
 }
 
 void XMLHttpRequest::overrideMimeType(const AtomicString& override)
@@ -1288,13 +1250,8 @@ void XMLHttpRequest::didFinishLoading(unsigned long identifier, double)
 
     InspectorInstrumentation::didFinishXHRLoading(executionContext(), this, this, identifier, m_responseText, m_method, m_url, m_lastSendURL, m_lastSendLineNumber);
 
-    // Prevent dropProtection releasing the last reference, and retain |this| until the end of this method.
-    RefPtrWillBeRawPtr<XMLHttpRequest> protect(this);
-
-    if (m_loader) {
+    if (m_loader)
         m_loader = nullptr;
-        dropProtection();
-    }
 
     changeState(DONE);
 }
@@ -1413,9 +1370,6 @@ void XMLHttpRequest::handleDidTimeout()
 {
     WTF_LOG(Network, "XMLHttpRequest %p handleDidTimeout()", this);
 
-    // internalAbort() calls dropProtection(), which may release the last reference.
-    RefPtrWillBeRawPtr<XMLHttpRequest> protect(this);
-
     // Response is cleared next, save needed progress event data.
     long long expectedLength = m_response.expectedContentLength();
     long long receivedLength = m_receivedLength;
@@ -1439,7 +1393,15 @@ void XMLHttpRequest::resume()
 
 void XMLHttpRequest::stop()
 {
-    internalAbort(DropProtectionAsync);
+    internalAbort();
+}
+
+bool XMLHttpRequest::hasPendingActivity() const
+{
+    // Neither this object nor the JavaScript wrapper should be deleted while
+    // a request is in progress because we need to keep the listeners alive,
+    // and they are referenced by the JavaScript wrapper.
+    return m_loader;
 }
 
 void XMLHttpRequest::contextDestroyed()
@@ -1468,4 +1430,4 @@ void XMLHttpRequest::trace(Visitor* visitor)
     XMLHttpRequestEventTarget::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink

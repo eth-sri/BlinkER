@@ -31,11 +31,11 @@
 #include "config.h"
 #include "bindings/core/v8/V8FileReader.h"
 
+#include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/custom/V8ArrayBufferCustom.h"
-#include "bindings/v8/V8Binding.h"
 #include "core/dom/ExecutionContext.h"
 
-namespace WebCore {
+namespace blink {
 
 void V8FileReader::resultAttributeGetterCustom(const v8::PropertyCallbackInfo<v8::Value>& info)
 {
@@ -48,4 +48,4 @@ void V8FileReader::resultAttributeGetterCustom(const v8::PropertyCallbackInfo<v8
     v8SetReturnValueStringOrNull(info, impl->stringResult(), info.GetIsolate());
 }
 
-} // namespace WebCore
+} // namespace blink

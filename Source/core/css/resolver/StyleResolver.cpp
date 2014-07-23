@@ -33,12 +33,12 @@
 #include "core/HTMLNames.h"
 #include "core/StylePropertyShorthand.h"
 #include "core/animation/ActiveAnimations.h"
-#include "core/animation/AnimatableValue.h"
 #include "core/animation/Animation.h"
 #include "core/animation/AnimationTimeline.h"
+#include "core/animation/StyleInterpolation.h"
+#include "core/animation/animatable/AnimatableValue.h"
 #include "core/animation/css/CSSAnimatableValueFactory.h"
 #include "core/animation/css/CSSAnimations.h"
-#include "core/animation/interpolation/StyleInterpolation.h"
 #include "core/css/CSSCalculationValue.h"
 #include "core/css/CSSDefaultStyleSheets.h"
 #include "core/css/CSSFontSelector.h"
@@ -87,7 +87,7 @@
 
 namespace {
 
-using namespace WebCore;
+using namespace blink;
 
 void setAnimationUpdateIfNeeded(StyleResolverState& state, Element& element)
 {
@@ -99,7 +99,7 @@ void setAnimationUpdateIfNeeded(StyleResolverState& state, Element& element)
 
 } // namespace
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -322,7 +322,7 @@ void StyleResolver::addToStyleSharingList(Element& element)
     INCREMENT_STYLE_STATS_COUNTER(*this, sharedStyleCandidates);
     StyleSharingList& list = styleSharingList();
     if (list.size() >= styleSharingListSize)
-        list.remove(--list.end());
+        list.removeLast();
     list.prepend(&element);
 }
 
@@ -333,7 +333,6 @@ StyleSharingList& StyleResolver::styleSharingList()
     // We never put things at depth 0 into the list since that's only the <html> element
     // and it has no siblings or cousins to share with.
     unsigned depth = std::max(std::min(m_styleSharingDepth, styleSharingMaxDepth), 1u) - 1u;
-    ASSERT(depth >= 0);
 
     if (!m_styleSharingLists[depth])
         m_styleSharingLists[depth] = adoptPtr(new StyleSharingList);
@@ -751,16 +750,16 @@ PassRefPtrWillBeRawPtr<AnimatableValue> StyleResolver::createAnimatableValueSnap
         style = RenderStyle::clone(element.renderStyle());
     else
         style = RenderStyle::create();
-    return createAnimatableValueSnapshot(element, property, value, *style);
+    StyleResolverState state(element.document(), &element);
+    state.setStyle(style);
+    state.fontBuilder().initForStyleResolve(state.document(), state.style());
+    return createAnimatableValueSnapshot(state, property, value);
 }
 
-PassRefPtrWillBeRawPtr<AnimatableValue> StyleResolver::createAnimatableValueSnapshot(Element& element, CSSPropertyID property, CSSValue& value, RenderStyle& style)
+PassRefPtrWillBeRawPtr<AnimatableValue> StyleResolver::createAnimatableValueSnapshot(StyleResolverState& state, CSSPropertyID property, CSSValue& value)
 {
-    StyleResolverState state(element.document(), &element);
-    state.setStyle(&style);
-    state.fontBuilder().initForStyleResolve(state.document(), state.style());
     StyleBuilder::applyProperty(property, state, &value);
-    return CSSAnimatableValueFactory::create(property, style);
+    return CSSAnimatableValueFactory::create(property, *state.style());
 }
 
 PassRefPtrWillBeRawPtr<PseudoElement> StyleResolver::createPseudoElementIfNeeded(Element& parent, PseudoId pseudoId)
@@ -1358,12 +1357,12 @@ void StyleResolver::applyMatchedProperties(StyleResolverState& state, const Matc
     if (state.style()->insideLink() != NotInsideLink) {
         for (int i = startIndex; i <= endIndex; ++i) {
             const MatchedProperties& matchedProperties = matchResult.matchedProperties[i];
-            unsigned linkMatchType = matchedProperties.linkMatchType;
+            unsigned linkMatchType = matchedProperties.m_types.linkMatchType;
             // FIXME: It would be nicer to pass these as arguments but that requires changes in many places.
             state.setApplyPropertyToRegularStyle(linkMatchType & SelectorChecker::MatchLink);
             state.setApplyPropertyToVisitedLinkStyle(linkMatchType & SelectorChecker::MatchVisited);
 
-            applyProperties<pass>(state, matchedProperties.properties.get(), matchResult.matchedRules[i], isImportant, inheritedOnly, static_cast<PropertyWhitelistType>(matchedProperties.whitelistType));
+            applyProperties<pass>(state, matchedProperties.properties.get(), matchResult.matchedRules[i], isImportant, inheritedOnly, static_cast<PropertyWhitelistType>(matchedProperties.m_types.whitelistType));
         }
         state.setApplyPropertyToRegularStyle(true);
         state.setApplyPropertyToVisitedLinkStyle(false);
@@ -1371,7 +1370,7 @@ void StyleResolver::applyMatchedProperties(StyleResolverState& state, const Matc
     }
     for (int i = startIndex; i <= endIndex; ++i) {
         const MatchedProperties& matchedProperties = matchResult.matchedProperties[i];
-        applyProperties<pass>(state, matchedProperties.properties.get(), matchResult.matchedRules[i], isImportant, inheritedOnly, static_cast<PropertyWhitelistType>(matchedProperties.whitelistType));
+        applyProperties<pass>(state, matchedProperties.properties.get(), matchResult.matchedRules[i], isImportant, inheritedOnly, static_cast<PropertyWhitelistType>(matchedProperties.m_types.whitelistType));
     }
 }
 
@@ -1400,10 +1399,9 @@ void StyleResolver::applyMatchedProperties(StyleResolverState& state, const Matc
 
     unsigned cacheHash = matchResult.isCacheable ? computeMatchedPropertiesHash(matchResult.matchedProperties.data(), matchResult.matchedProperties.size()) : 0;
     bool applyInheritedOnly = false;
-    const CachedMatchedProperties* cachedMatchedProperties = 0;
+    const CachedMatchedProperties* cachedMatchedProperties = cacheHash ? m_matchedPropertiesCache.find(cacheHash, state, matchResult) : 0;
 
-    if (cacheHash && (cachedMatchedProperties = m_matchedPropertiesCache.find(cacheHash, state, matchResult))
-        && MatchedPropertiesCache::isCacheable(element, state.style(), state.parentStyle())) {
+    if (cachedMatchedProperties && MatchedPropertiesCache::isCacheable(element, state.style(), state.parentStyle())) {
         INCREMENT_STYLE_STATS_COUNTER(*this, matchedPropertyCacheHit);
         // We can build up the style by copying non-inherited properties from an earlier style object built using the same exact
         // style declarations. We then only need to apply the inherited properties, if any, as their values can depend on the
@@ -1559,6 +1557,7 @@ bool StyleResolver::mediaQueryAffectedByViewportChange() const
 
 void StyleResolver::trace(Visitor* visitor)
 {
+#if ENABLE(OILPAN)
     visitor->trace(m_keyframesRuleMap);
     visitor->trace(m_matchedPropertiesCache);
     visitor->trace(m_viewportDependentMediaQueryResults);
@@ -1569,6 +1568,7 @@ void StyleResolver::trace(Visitor* visitor)
     visitor->trace(m_watchedSelectorsRules);
     visitor->trace(m_treeBoundaryCrossingRules);
     visitor->trace(m_pendingStyleSheets);
+#endif
 }
 
-} // namespace WebCore
+} // namespace blink

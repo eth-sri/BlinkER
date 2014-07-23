@@ -39,7 +39,7 @@
 #include "platform/graphics/skia/SkiaUtils.h"
 #include "public/platform/WebPoint.h"
 
-namespace WebCore {
+namespace blink {
 
 SkiaImageFilterBuilder::SkiaImageFilterBuilder()
     : m_context(0)
@@ -84,11 +84,8 @@ PassRefPtr<SkImageFilter> SkiaImageFilterBuilder::transformColorSpace(
     return adoptRef(SkColorFilterImageFilter::Create(colorFilter.get(), input));
 }
 
-bool SkiaImageFilterBuilder::buildFilterOperations(const FilterOperations& operations, blink::WebFilterOperations* filters)
+void SkiaImageFilterBuilder::buildFilterOperations(const FilterOperations& operations, blink::WebFilterOperations* filters)
 {
-    if (!filters)
-        return false;
-
     ColorSpace currentColorSpace = ColorSpaceDeviceRGB;
     SkImageFilter* const nullFilter = 0;
 
@@ -185,7 +182,6 @@ bool SkiaImageFilterBuilder::buildFilterOperations(const FilterOperations& opera
         RefPtr<SkImageFilter> filter = transformColorSpace(nullFilter, currentColorSpace, ColorSpaceDeviceRGB);
         filters->appendReferenceFilter(filter.get());
     }
-    return true;
 }
 
 PassRefPtr<SkImageFilter> SkiaImageFilterBuilder::buildTransform(const AffineTransform& transform, SkImageFilter* input)

@@ -38,6 +38,7 @@
 #include "core/rendering/RenderCombineText.h"
 #include "core/rendering/RenderLayer.h"
 #include "core/rendering/RenderView.h"
+#include "core/rendering/TextRunConstructor.h"
 #include "core/rendering/break_lines.h"
 #include "platform/fonts/Character.h"
 #include "platform/fonts/FontCache.h"
@@ -52,7 +53,7 @@
 using namespace WTF;
 using namespace Unicode;
 
-namespace WebCore {
+namespace blink {
 
 struct SameSizeAsRenderText : public RenderObject {
     uint32_t bitfields : 16;
@@ -162,7 +163,7 @@ RenderText::RenderText(Node* node, PassRefPtr<StringImpl> str)
     view()->frameView()->incrementVisuallyNonEmptyCharacterCount(m_text.length());
 }
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
 
 RenderText::~RenderText()
 {
@@ -309,7 +310,7 @@ PassRefPtr<StringImpl> RenderText::originalText() const
 String RenderText::plainText() const
 {
     if (node())
-        return WebCore::plainText(rangeOfContents(node()).get());
+        return blink::plainText(rangeOfContents(node()).get());
 
     // FIXME: this is just a stopgap until TextIterator is adapted to support generated text.
     StringBuilder plainTextBuilder;
@@ -744,7 +745,7 @@ ALWAYS_INLINE float RenderText::widthFromCache(const Font& f, int start, int len
         return w;
     }
 
-    TextRun run = RenderBlockFlow::constructTextRun(const_cast<RenderText*>(this), f, this, start, len, style(), textDirection);
+    TextRun run = constructTextRun(const_cast<RenderText*>(this), f, this, start, len, style(), textDirection);
     run.setCharactersLength(textLength() - start);
     ASSERT(run.charactersLength() >= run.length());
 
@@ -801,7 +802,7 @@ void RenderText::trimmedPrefWidths(float leadWidth,
         const Font& font = style()->font(); // FIXME: This ignores first-line.
         if (stripFrontSpaces) {
             const UChar space = ' ';
-            float spaceWidth = font.width(RenderBlockFlow::constructTextRun(this, font, &space, 1, style(), direction));
+            float spaceWidth = font.width(constructTextRun(this, font, &space, 1, style(), direction));
             maxWidth -= spaceWidth;
         } else {
             maxWidth += font.fontDescription().wordSpacing();
@@ -875,7 +876,7 @@ void RenderText::computePreferredLogicalWidths(float leadWidth)
 static inline float hyphenWidth(RenderText* renderer, const Font& font, TextDirection direction)
 {
     RenderStyle* style = renderer->style();
-    return font.width(RenderBlockFlow::constructTextRun(renderer, font, style->hyphenString().string(), style, direction));
+    return font.width(constructTextRun(renderer, font, style->hyphenString().string(), style, direction));
 }
 
 void RenderText::computePreferredLogicalWidths(float leadWidth, HashSet<const SimpleFontData*>& fallbackFonts, GlyphOverflow& glyphOverflow)
@@ -925,8 +926,7 @@ void RenderText::computePreferredLogicalWidths(float leadWidth, HashSet<const Si
     if (isOverride(styleToUse->unicodeBidi())) {
         run = 0;
     } else {
-        BidiStatus status(LTR, false);
-        status.last = status.lastStrong = WTF::Unicode::OtherNeutral;
+        BidiStatus status(textDirection, false);
         bidiResolver.setStatus(status);
         bidiResolver.setPositionIgnoringNestedIsolates(TextRunIterator(&textRun, 0));
         bool hardLineBreak = false;
@@ -943,7 +943,7 @@ void RenderText::computePreferredLogicalWidths(float leadWidth, HashSet<const Si
             // Treat adjacent runs with the same resolved directionality
             // (TextDirection as opposed to WTF::Unicode::Direction) as belonging
             // to the same run to avoid breaking unnecessarily.
-            while (i > run->stop() || (run->next() && run->next()->direction() == run->direction()))
+            while (i >= run->stop() || (run->next() && run->next()->direction() == run->direction()))
                 run = run->next();
 
             ASSERT(run);
@@ -1025,7 +1025,7 @@ void RenderText::computePreferredLogicalWidths(float leadWidth, HashSet<const Si
             if (isSpace && (f.fontDescription().typesettingFeatures() & Kerning)) {
                 ASSERT(textDirection >=0 && textDirection <= 1);
                 if (!cachedWordTrailingSpaceWidth[textDirection])
-                    cachedWordTrailingSpaceWidth[textDirection] = f.width(RenderBlockFlow::constructTextRun(this, f, &space, 1, styleToUse, textDirection)) + wordSpacing;
+                    cachedWordTrailingSpaceWidth[textDirection] = f.width(constructTextRun(this, f, &space, 1, styleToUse, textDirection)) + wordSpacing;
                 wordTrailingSpaceWidth = cachedWordTrailingSpaceWidth[textDirection];
             }
 
@@ -1096,7 +1096,7 @@ void RenderText::computePreferredLogicalWidths(float leadWidth, HashSet<const Si
                     m_maxWidth = currMaxWidth;
                 currMaxWidth = 0;
             } else {
-                TextRun run = RenderBlockFlow::constructTextRun(this, f, this, i, 1, styleToUse, textDirection);
+                TextRun run = constructTextRun(this, f, this, i, 1, styleToUse, textDirection);
                 run.setCharactersLength(len - i);
                 ASSERT(run.charactersLength() >= run.length());
                 run.setTabSize(!style()->collapseWhiteSpace(), style()->tabSize());
@@ -1308,8 +1308,8 @@ static inline bool isInlineFlowOrEmptyText(const RenderObject* o)
 UChar RenderText::previousCharacter() const
 {
     // find previous text renderer if one exists
-    const RenderObject* previousText = this;
-    while ((previousText = previousText->previousInPreOrder()))
+    const RenderObject* previousText = previousInPreOrder();
+    for (; previousText; previousText = previousText->previousInPreOrder())
         if (!isInlineFlowOrEmptyText(previousText))
             break;
     UChar prev = ' ';
@@ -1504,7 +1504,7 @@ float RenderText::width(unsigned from, unsigned len, const Font& f, float xPos, 
             w = widthFromCache(f, from, len, xPos, textDirection, fallbackFonts, glyphOverflow);
         }
     } else {
-        TextRun run = RenderBlockFlow::constructTextRun(const_cast<RenderText*>(this), f, this, from, len, style(), textDirection);
+        TextRun run = constructTextRun(const_cast<RenderText*>(this), f, this, from, len, style(), textDirection);
         run.setCharactersLength(textLength() - from);
         ASSERT(run.charactersLength() >= run.length());
 
@@ -1569,7 +1569,7 @@ LayoutRect RenderText::linesVisualOverflowBoundingBox() const
     return rect;
 }
 
-LayoutRect RenderText::clippedOverflowRectForPaintInvalidation(const RenderLayerModelObject* paintInvalidationContainer) const
+LayoutRect RenderText::clippedOverflowRectForPaintInvalidation(const RenderLayerModelObject* paintInvalidationContainer, const PaintInvalidationState* paintInvalidationState) const
 {
     RenderObject* rendererToRepaint = containingBlock();
 
@@ -1580,9 +1580,9 @@ LayoutRect RenderText::clippedOverflowRectForPaintInvalidation(const RenderLayer
 
     // The renderer we chose to repaint may be an ancestor of paintInvalidationContainer, but we need to do a paintInvalidationContainer-relative repaint.
     if (paintInvalidationContainer && paintInvalidationContainer != rendererToRepaint && !rendererToRepaint->isDescendantOf(paintInvalidationContainer))
-        return paintInvalidationContainer->clippedOverflowRectForPaintInvalidation(paintInvalidationContainer);
+        return paintInvalidationContainer->clippedOverflowRectForPaintInvalidation(paintInvalidationContainer, paintInvalidationState);
 
-    return rendererToRepaint->clippedOverflowRectForPaintInvalidation(paintInvalidationContainer);
+    return rendererToRepaint->clippedOverflowRectForPaintInvalidation(paintInvalidationContainer, paintInvalidationState);
 }
 
 LayoutRect RenderText::selectionRectForPaintInvalidation(const RenderLayerModelObject* paintInvalidationContainer, bool clipToVisibleContent)
@@ -1839,7 +1839,7 @@ bool RenderText::computeCanUseSimpleFontCodePath() const
     return Character::characterRangeCodePath(characters16(), length()) == SimplePath;
 }
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
 
 void RenderText::checkConsistency() const
 {
@@ -1874,4 +1874,4 @@ PassRefPtr<AbstractInlineTextBox> RenderText::firstAbstractInlineTextBox()
     return AbstractInlineTextBox::getOrCreate(this, m_firstTextBox);
 }
 
-} // namespace WebCore
+} // namespace blink

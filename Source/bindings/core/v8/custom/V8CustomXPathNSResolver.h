@@ -37,7 +37,7 @@
 #include "wtf/RefPtr.h"
 #include <v8.h>
 
-namespace WebCore {
+namespace blink {
 
 // V8CustomXPathNSResolver does not create a persistent handle to the
 // given resolver object. So the lifetime of V8CustomXPathNSResolver
@@ -46,7 +46,6 @@ class V8CustomXPathNSResolver FINAL : public XPathNSResolver {
 public:
     static PassRefPtrWillBeRawPtr<V8CustomXPathNSResolver> create(v8::Handle<v8::Object> resolver, v8::Isolate*);
 
-    virtual ~V8CustomXPathNSResolver();
     virtual AtomicString lookupNamespaceURI(const String& prefix) OVERRIDE;
 
     virtual void trace(Visitor*) OVERRIDE;
@@ -58,6 +57,6 @@ private:
     v8::Isolate* m_isolate;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // V8CustomXPathNSResolver_h

@@ -61,7 +61,7 @@ WebInspector.JavaScriptSourceFrame = function(scriptsPanel, uiSourceCode)
     this._uiSourceCode.addEventListener(WebInspector.UISourceCode.Events.WorkingCopyChanged, this._workingCopyChanged, this);
     this._uiSourceCode.addEventListener(WebInspector.UISourceCode.Events.WorkingCopyCommitted, this._workingCopyCommitted, this);
 
-    /** @type {!Map.<!WebInspector.Target, !WebInspector.ScriptFile>}*/
+    /** @type {!Map.<!WebInspector.Target, !WebInspector.ResourceScriptFile>}*/
     this._scriptFileForTarget = new Map();
     this._registerShortcuts();
     var targets = WebInspector.targetManager.targets();
@@ -247,6 +247,13 @@ WebInspector.JavaScriptSourceFrame.prototype = {
         WebInspector.UISourceCodeFrame.prototype.onUISourceCodeContentChanged.call(this);
     },
 
+    onTextChanged: function(oldRange, newRange)
+    {
+        this._scriptsPanel.setIgnoreExecutionLineEvents(true);
+        WebInspector.UISourceCodeFrame.prototype.onTextChanged.call(this, oldRange, newRange);
+        this._scriptsPanel.setIgnoreExecutionLineEvents(false);
+    },
+
     populateLineGutterContextMenu: function(contextMenu, lineNumber)
     {
         contextMenu.appendItem(WebInspector.UIString(WebInspector.useLowerCaseMenuTitles() ? "Continue to here" : "Continue to Here"), this._continueToLine.bind(this, lineNumber));
@@ -280,20 +287,54 @@ WebInspector.JavaScriptSourceFrame.prototype = {
             // FIXME: Change condition above to explicitly check that current uiSourceCode is created by default debugger mapping
             // and move the code adding this menu item to generic context menu provider for UISourceCode.
             var liveEditLabel = WebInspector.UIString(WebInspector.useLowerCaseMenuTitles() ? "Live edit" : "Live Edit");
-            contextMenu.appendItem(liveEditLabel, liveEdit.bind(this));
+            var liveEditSupport = WebInspector.LiveEditSupport.liveEditSupportForUISourceCode(this._uiSourceCode);
+            if (!liveEditSupport)
+                return;
+
+            contextMenu.appendItem(liveEditLabel, liveEdit.bind(this, liveEditSupport));
             contextMenu.appendSeparator();
         }
 
         /**
          * @this {WebInspector.JavaScriptSourceFrame}
+         * @param {!WebInspector.LiveEditSupport} liveEditSupport
          */
-        function liveEdit()
+        function liveEdit(liveEditSupport)
         {
-            var liveEditUISourceCode = WebInspector.liveEditSupport.uiSourceCodeForLiveEdit(this._uiSourceCode);
+            var liveEditUISourceCode = liveEditSupport.uiSourceCodeForLiveEdit(this._uiSourceCode);
             WebInspector.Revealer.reveal(liveEditUISourceCode.uiLocation(lineNumber));
         }
 
+        /**
+         * @this {WebInspector.JavaScriptSourceFrame}
+         * @param {!WebInspector.ResourceScriptFile} scriptFile
+         */
+        function addSourceMapURL(scriptFile)
+        {
+            WebInspector.AddSourceMapURLDialog.show(this.element, addSourceMapURLDialogCallback.bind(null, scriptFile));
+        }
+
+        /**
+         * @param {!WebInspector.ResourceScriptFile} scriptFile
+         * @param {string} url
+         */
+        function addSourceMapURLDialogCallback(scriptFile, url)
+        {
+            if (!url)
+                return;
+            scriptFile.addSourceMapURL(url);
+        }
+
         WebInspector.UISourceCodeFrame.prototype.populateTextAreaContextMenu.call(this, contextMenu, lineNumber);
+
+        if (this._uiSourceCode.project().type() === WebInspector.projectTypes.Network && WebInspector.settings.jsSourceMapsEnabled.get()) {
+            if (this._scriptFileForTarget.size()) {
+                var scriptFile = this._scriptFileForTarget.values()[0];
+                var addSourceMapURLLabel = WebInspector.UIString(WebInspector.useLowerCaseMenuTitles() ? "Add source map" : "Add Source Map");
+                contextMenu.appendItem(addSourceMapURLLabel, addSourceMapURL.bind(this, scriptFile));
+                contextMenu.appendSeparator();
+            }
+        }
     },
 
     _workingCopyChanged: function(event)
@@ -311,14 +352,49 @@ WebInspector.JavaScriptSourceFrame.prototype = {
     {
         if (this._supportsEnabledBreakpointsWhileEditing())
             return;
-        if (this._scriptFileForTarget.size()) {
-            this._hasCommittedLiveEdit = true;
-            var scriptFiles = this._scriptFileForTarget.values();
-            for (var i = 0; i < scriptFiles.length; ++i)
-                scriptFiles[i].commitLiveEdit();
+
+        if (!this._scriptFileForTarget.size()) {
+            this._restoreBreakpointsAfterEditing();
             return;
         }
-        this._restoreBreakpointsAfterEditing();
+
+        var liveEditError;
+        var liveEditErrorData;
+        var contextScript;
+        var succeededEdits = 0;
+        var failedEdits = 0;
+
+        /**
+         * @this {WebInspector.JavaScriptSourceFrame}
+         * @param {?string} error
+         * @param {!DebuggerAgent.SetScriptSourceError=} errorData
+         * @param {!WebInspector.Script=} script
+         */
+        function liveEditCallback(error, errorData, script)
+        {
+            if (error) {
+                liveEditError = error;
+                liveEditErrorData = errorData;
+                contextScript = script;
+                failedEdits++;
+            } else
+                succeededEdits++;
+
+            if (succeededEdits + failedEdits !== scriptFiles.length)
+                return;
+
+            if (!failedEdits)
+                WebInspector.LiveEditSupport.logSuccess();
+            else
+                WebInspector.LiveEditSupport.logDetailedError(liveEditError, liveEditErrorData, contextScript)
+            this._scriptsPanel.setIgnoreExecutionLineEvents(false);
+        }
+
+        this._scriptsPanel.setIgnoreExecutionLineEvents(true);
+        this._hasCommittedLiveEdit = true;
+        var scriptFiles = this._scriptFileForTarget.values();
+        for (var i = 0; i < scriptFiles.length; ++i)
+            scriptFiles[i].commitLiveEdit(liveEditCallback.bind(this));
     },
 
     _didMergeToVM: function()
@@ -599,20 +675,15 @@ WebInspector.JavaScriptSourceFrame.prototype = {
 
     _createConditionElement: function(lineNumber)
     {
-        var conditionElement = document.createElement("div");
-        conditionElement.className = "source-frame-breakpoint-condition";
+        var conditionElement = document.createElementWithClass("div", "source-frame-breakpoint-condition");
 
-        var labelElement = document.createElement("label");
-        labelElement.className = "source-frame-breakpoint-message";
+        var labelElement = conditionElement.createChild("label", "source-frame-breakpoint-message");
         labelElement.htmlFor = "source-frame-breakpoint-condition";
-        labelElement.appendChild(document.createTextNode(WebInspector.UIString("The breakpoint on line %d will stop only if this expression is true:", lineNumber + 1)));
-        conditionElement.appendChild(labelElement);
+        labelElement.createTextChild(WebInspector.UIString("The breakpoint on line %d will stop only if this expression is true:", lineNumber + 1));
 
-        var editorElement = document.createElement("input");
+        var editorElement = conditionElement.createChild("input", "monospace");
         editorElement.id = "source-frame-breakpoint-condition";
-        editorElement.className = "monospace";
         editorElement.type = "text";
-        conditionElement.appendChild(editorElement);
         this._conditionEditorElement = editorElement;
 
         return conditionElement;
@@ -705,6 +776,14 @@ WebInspector.JavaScriptSourceFrame.prototype = {
     {
         var data = /** @type {{target: !WebInspector.Target}} */ (event.data);
         this._updateScriptFile(data.target);
+        this._updateLinesWithoutMappingHighlight();
+    },
+
+    _updateLinesWithoutMappingHighlight: function()
+    {
+        var linesCount = this.textEditor.linesCount;
+        for (var i = 0; i < linesCount; ++i)
+            this.textEditor.toggleLineClass(i, "cm-line-without-source-mapping", !this._uiSourceCode.uiLineHasMapping(i));
     },
 
     /**
@@ -716,8 +795,8 @@ WebInspector.JavaScriptSourceFrame.prototype = {
         var newScriptFile = this._uiSourceCode.scriptFileForTarget(target);
         this._scriptFileForTarget.remove(target);
         if (oldScriptFile) {
-            oldScriptFile.removeEventListener(WebInspector.ScriptFile.Events.DidMergeToVM, this._didMergeToVM, this);
-            oldScriptFile.removeEventListener(WebInspector.ScriptFile.Events.DidDivergeFromVM, this._didDivergeFromVM, this);
+            oldScriptFile.removeEventListener(WebInspector.ResourceScriptFile.Events.DidMergeToVM, this._didMergeToVM, this);
+            oldScriptFile.removeEventListener(WebInspector.ResourceScriptFile.Events.DidDivergeFromVM, this._didDivergeFromVM, this);
             if (this._muted && !this._uiSourceCode.isDirty())
                 this._restoreBreakpointsIfConsistentScripts();
         }
@@ -728,8 +807,8 @@ WebInspector.JavaScriptSourceFrame.prototype = {
         this._updateDivergedInfobar();
 
         if (newScriptFile) {
-            newScriptFile.addEventListener(WebInspector.ScriptFile.Events.DidMergeToVM, this._didMergeToVM, this);
-            newScriptFile.addEventListener(WebInspector.ScriptFile.Events.DidDivergeFromVM, this._didDivergeFromVM, this);
+            newScriptFile.addEventListener(WebInspector.ResourceScriptFile.Events.DidMergeToVM, this._didMergeToVM, this);
+            newScriptFile.addEventListener(WebInspector.ResourceScriptFile.Events.DidDivergeFromVM, this._didDivergeFromVM, this);
             if (this.loaded)
                 newScriptFile.checkMapping();
         }
@@ -753,6 +832,8 @@ WebInspector.JavaScriptSourceFrame.prototype = {
         var scriptFiles = this._scriptFileForTarget.values();
         for (var i = 0; i < scriptFiles.length; ++i)
             scriptFiles[i].checkMapping();
+
+        this._updateLinesWithoutMappingHighlight();
     },
 
     /**
@@ -765,7 +846,7 @@ WebInspector.JavaScriptSourceFrame.prototype = {
 
         var eventData = /** @type {!WebInspector.TextEditor.GutterClickEventData} */ (event.data);
         var lineNumber = eventData.lineNumber;
-        var eventObject = /** @type {!Event} */ (eventData.event);
+        var eventObject = eventData.event;
 
         if (eventObject.button != 0 || eventObject.altKey || eventObject.ctrlKey || eventObject.metaKey)
             return;
@@ -827,7 +908,7 @@ WebInspector.JavaScriptSourceFrame.prototype = {
         var executionContext = WebInspector.context.flavor(WebInspector.ExecutionContext);
         if (!executionContext)
             return;
-        var rawLocation = /** @type {!WebInspector.DebuggerModel.Location} */ (this._uiSourceCode.uiLocationToRawLocation(executionContext.target(), lineNumber, 0));
+        var rawLocation = WebInspector.debuggerWorkspaceBinding.uiLocationToRawLocation(executionContext.target(), this._uiSourceCode, lineNumber, 0);
         this._scriptsPanel.continueToLocation(rawLocation);
     },
 

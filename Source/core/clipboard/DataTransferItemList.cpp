@@ -27,21 +27,19 @@
 #include "config.h"
 #include "core/clipboard/DataTransferItemList.h"
 
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/clipboard/DataObject.h"
 #include "core/clipboard/DataTransfer.h"
 #include "core/clipboard/DataTransferItem.h"
 #include "core/dom/ExceptionCode.h"
 
-namespace WebCore {
+namespace blink {
+
+DEFINE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(DataTransferItemList);
 
 PassRefPtrWillBeRawPtr<DataTransferItemList> DataTransferItemList::create(PassRefPtrWillBeRawPtr<DataTransfer> dataTransfer, PassRefPtrWillBeRawPtr<DataObject> list)
 {
     return adoptRefWillBeNoop(new DataTransferItemList(dataTransfer, list));
-}
-
-DataTransferItemList::~DataTransferItemList()
-{
 }
 
 size_t DataTransferItemList::length() const
@@ -113,4 +111,4 @@ void DataTransferItemList::trace(Visitor* visitor)
     visitor->trace(m_dataObject);
 }
 
-} // namespace WebCore
+} // namespace blink

@@ -5,9 +5,11 @@
 #ifndef Request_h
 #define Request_h
 
-#include "bindings/v8/Dictionary.h"
-#include "bindings/v8/ScriptWrappable.h"
-#include "modules/serviceworkers/HeaderMap.h"
+#include "bindings/core/v8/Dictionary.h"
+#include "bindings/core/v8/ScriptWrappable.h"
+#include "modules/serviceworkers/FetchRequestData.h"
+#include "modules/serviceworkers/Headers.h"
+#include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
 #include "wtf/RefCounted.h"
 #include "wtf/RefPtr.h"
@@ -15,36 +17,47 @@
 
 namespace blink { class WebServiceWorkerRequest; }
 
-namespace WebCore {
+namespace blink {
 
-struct RequestInit;
+class RequestInit;
 class ResourceRequest;
+struct ResourceLoaderOptions;
+struct ThreadableLoaderOptions;
 
-class Request FINAL : public ScriptWrappable, public RefCounted<Request> {
+class Request FINAL : public RefCountedWillBeGarbageCollected<Request>, public ScriptWrappable {
+    DECLARE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(Request);
 public:
-    static PassRefPtr<Request> create();
-    static PassRefPtr<Request> create(const Dictionary&);
-    static PassRefPtr<Request> create(const blink::WebServiceWorkerRequest&);
-    ~Request() { };
+    static PassRefPtrWillBeRawPtr<Request> create(ExecutionContext*, const String&, ExceptionState&);
+    static PassRefPtrWillBeRawPtr<Request> create(ExecutionContext*, const String&, const Dictionary&, ExceptionState&);
+    static PassRefPtrWillBeRawPtr<Request> create(ExecutionContext*, Request*, ExceptionState&);
+    static PassRefPtrWillBeRawPtr<Request> create(ExecutionContext*, Request*, const Dictionary&, ExceptionState&);
 
-    void setURL(const String& value);
-    void setMethod(const String& value);
+    static PassRefPtrWillBeRawPtr<Request> create(PassRefPtrWillBeRawPtr<FetchRequestData>);
 
-    String url() const { return m_url.string(); }
-    String method() const { return m_method; }
-    String origin() const;
-    PassRefPtr<HeaderMap> headers() const { return m_headers; }
+    static PassRefPtrWillBeRawPtr<Request> create(const blink::WebServiceWorkerRequest&);
+
+    PassRefPtrWillBeRawPtr<FetchRequestData> request() { return m_request; }
+
+    String method() const;
+    String url() const;
+    PassRefPtrWillBeRawPtr<Headers> headers() const { return m_headers; }
+    // FIXME: Support body.
+    String referrer() const;
+    String mode() const;
+    String credentials() const;
 
     PassOwnPtr<ResourceRequest> createResourceRequest() const;
 
+    void trace(Visitor*);
+
 private:
-    explicit Request(const RequestInit&);
+    explicit Request(PassRefPtrWillBeRawPtr<FetchRequestData>);
     explicit Request(const blink::WebServiceWorkerRequest&);
-    KURL m_url;
-    String m_method;
-    RefPtr<HeaderMap> m_headers;
+
+    RefPtrWillBeMember<FetchRequestData> m_request;
+    RefPtrWillBeMember<Headers> m_headers;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // Request_h

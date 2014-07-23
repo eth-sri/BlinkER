@@ -124,7 +124,7 @@ WebInspector.UISourceCodeFrame.prototype = {
     _didEditContent: function(error)
     {
         if (error) {
-            WebInspector.messageSink.addErrorMessage(error, true);
+            WebInspector.console.error(error);
             return;
         }
     },
@@ -151,6 +151,10 @@ WebInspector.UISourceCodeFrame.prototype = {
         }
         this._textEditor.markClean();
         this._updateStyle();
+        WebInspector.notifications.dispatchEventToListeners(WebInspector.UserMetrics.UserAction, {
+            action: WebInspector.UserMetrics.UserActionNames.FileSaved,
+            url: this._uiSourceCode.url
+        });
     },
 
     _updateStyle: function()

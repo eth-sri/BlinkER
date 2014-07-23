@@ -131,9 +131,14 @@ class Writer(in_generator.Writer):
             # Avoid duplicate includes.
             if cpp_name in includes:
                 continue
-            include = '#include "%(path)s"\n#include "V8%(script_name)s.h"' % {
+            if self.suffix == 'Modules':
+                subdir_name = 'modules'
+            else:
+                subdir_name = 'core'
+            include = '#include "%(path)s"\n#include "bindings/%(subdir_name)s/v8/V8%(script_name)s.h"' % {
                 'path': self._headers_header_include_path(entry),
                 'script_name': name_utilities.script_name(entry),
+                'subdir_name': subdir_name,
             }
             includes[cpp_name] = self.wrap_with_condition(include, entry['Conditional'])
         return includes.values()

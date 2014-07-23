@@ -31,11 +31,11 @@
 #include "config.h"
 #include "core/inspector/JavaScriptCallFrame.h"
 
-#include "bindings/v8/ScriptValue.h"
-#include "bindings/v8/V8Binding.h"
+#include "bindings/core/v8/ScriptValue.h"
+#include "bindings/core/v8/V8Binding.h"
 #include <v8-debug.h>
 
-namespace WebCore {
+namespace blink {
 
 JavaScriptCallFrame::JavaScriptCallFrame(v8::Handle<v8::Context> debuggerContext, v8::Handle<v8::Object> callFrame)
     : m_isolate(v8::Isolate::GetCurrent())
@@ -98,6 +98,11 @@ int JavaScriptCallFrame::column() const
     return callV8FunctionReturnInt("column");
 }
 
+String JavaScriptCallFrame::scriptName() const
+{
+    return callV8FunctionReturnString("scriptName");
+}
+
 String JavaScriptCallFrame::functionName() const
 {
     return callV8FunctionReturnString("functionName");
@@ -145,12 +150,23 @@ v8::Handle<v8::Value> JavaScriptCallFrame::returnValue() const
     return m_callFrame.newLocal(m_isolate)->Get(v8AtomicString(m_isolate, "returnValue"));
 }
 
-v8::Handle<v8::Value> JavaScriptCallFrame::evaluate(const String& expression)
+v8::Handle<v8::Value> JavaScriptCallFrame::evaluateWithExceptionDetails(const String& expression)
 {
     v8::Handle<v8::Object> callFrame = m_callFrame.newLocal(m_isolate);
     v8::Handle<v8::Function> evalFunction = v8::Handle<v8::Function>::Cast(callFrame->Get(v8AtomicString(m_isolate, "evaluate")));
     v8::Handle<v8::Value> argv[] = { v8String(m_debuggerContext.newLocal(m_isolate)->GetIsolate(), expression) };
-    return evalFunction->Call(callFrame, WTF_ARRAY_LENGTH(argv), argv);
+    v8::TryCatch tryCatch;
+    v8::Handle<v8::Value> result = evalFunction->Call(callFrame, WTF_ARRAY_LENGTH(argv), argv);
+
+    v8::Handle<v8::Object> wrappedResult = v8::Object::New(m_isolate);
+    if (tryCatch.HasCaught()) {
+        wrappedResult->Set(v8::String::NewFromUtf8(m_isolate, "result"), tryCatch.Exception());
+        wrappedResult->Set(v8::String::NewFromUtf8(m_isolate, "exceptionDetails"), createExceptionDetails(tryCatch.Message(), m_isolate));
+    } else {
+        wrappedResult->Set(v8::String::NewFromUtf8(m_isolate, "result"), result);
+        wrappedResult->Set(v8::String::NewFromUtf8(m_isolate, "exceptionDetails"), v8::Undefined(m_isolate));
+    }
+    return wrappedResult;
 }
 
 v8::Handle<v8::Value> JavaScriptCallFrame::restart()
@@ -176,9 +192,23 @@ ScriptValue JavaScriptCallFrame::setVariableValue(ScriptState* scriptState, int 
     return ScriptValue(scriptState, setVariableValueFunction->Call(callFrame, WTF_ARRAY_LENGTH(argv), argv));
 }
 
+v8::Handle<v8::Object> JavaScriptCallFrame::createExceptionDetails(v8::Handle<v8::Message> message, v8::Isolate* isolate)
+{
+    v8::Handle<v8::Object> exceptionDetails = v8::Object::New(isolate);
+    exceptionDetails->Set(v8::String::NewFromUtf8(isolate, "text"), message->Get());
+    exceptionDetails->Set(v8::String::NewFromUtf8(isolate, "url"), message->GetScriptOrigin().ResourceName());
+    exceptionDetails->Set(v8::String::NewFromUtf8(isolate, "line"), v8::Integer::New(isolate, message->GetLineNumber()));
+    exceptionDetails->Set(v8::String::NewFromUtf8(isolate, "column"), v8::Integer::New(isolate, message->GetStartColumn()));
+    if (!message->GetStackTrace().IsEmpty())
+        exceptionDetails->Set(v8::String::NewFromUtf8(isolate, "stackTrace"), message->GetStackTrace()->AsArray());
+    else
+        exceptionDetails->Set(v8::String::NewFromUtf8(isolate, "stackTrace"), v8::Undefined(isolate));
+    return exceptionDetails;
+}
+
 void JavaScriptCallFrame::trace(Visitor* visitor)
 {
     visitor->trace(m_caller);
 }
 
-} // namespace WebCore
+} // namespace blink

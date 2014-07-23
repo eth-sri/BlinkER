@@ -29,15 +29,16 @@
 #include "config.h"
 #include "core/inspector/InspectorOverlay.h"
 
+#include "bindings/core/v8/ScriptController.h"
+#include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/V8InspectorOverlayHost.h"
-#include "bindings/v8/ScriptController.h"
-#include "bindings/v8/ScriptSourceCode.h"
 #include "core/InspectorOverlayPage.h"
 #include "core/dom/Element.h"
 #include "core/dom/Node.h"
 #include "core/dom/PseudoElement.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/Settings.h"
 #include "core/inspector/InspectorClient.h"
 #include "core/inspector/InspectorOverlayHost.h"
 #include "core/loader/EmptyClients.h"
@@ -45,18 +46,20 @@
 #include "core/page/Chrome.h"
 #include "core/page/EventHandler.h"
 #include "core/page/Page.h"
-#include "core/frame/Settings.h"
+#include "core/rendering/RenderBox.h"
 #include "core/rendering/RenderBoxModelObject.h"
 #include "core/rendering/RenderInline.h"
 #include "core/rendering/RenderObject.h"
+#include "core/rendering/shapes/ShapeOutsideInfo.h"
 #include "core/rendering/style/RenderStyleConstants.h"
 #include "platform/JSONValues.h"
 #include "platform/PlatformMouseEvent.h"
+#include "platform/ScriptForbiddenScope.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
 #include "wtf/text/StringBuilder.h"
 #include <v8.h>
 
-namespace WebCore {
+namespace blink {
 
 namespace {
 
@@ -491,7 +494,7 @@ static void appendPathCommandAndPoints(PathApplyInfo* info, const String& comman
     info->array->addItem(JSONString::create(command));
     for (unsigned i = 0; i < length; i++) {
         point = info->shapeOutsideInfo->shapeToRendererPoint(points[i]);
-        point = info->view->contentsToRootView(roundedIntPoint(info->renderer->localToAbsolute(point))) + info->rootView->scrollOffset();
+        point = info->view->contentsToRootView(roundedIntPoint(info->renderer->localToAbsolute(point)));
         info->array->addItem(JSONBasicValue::create(point.x()));
         info->array->addItem(JSONBasicValue::create(point.y()));
     }
@@ -678,6 +681,8 @@ Page* InspectorOverlay::overlayPage()
     if (m_overlayPage)
         return m_overlayPage.get();
 
+    ScriptForbiddenScope::AllowUserAgentScript allowScript;
+
     static FrameLoaderClient* dummyFrameLoaderClient =  new EmptyFrameLoaderClient;
     Page::PageClients pageClients;
     fillWithEmptyClients(pageClients);
@@ -689,12 +694,12 @@ Page* InspectorOverlay::overlayPage()
     Settings& settings = m_page->settings();
     Settings& overlaySettings = m_overlayPage->settings();
 
-    overlaySettings.genericFontFamilySettings().setStandard(settings.genericFontFamilySettings().standard());
-    overlaySettings.genericFontFamilySettings().setSerif(settings.genericFontFamilySettings().serif());
-    overlaySettings.genericFontFamilySettings().setSansSerif(settings.genericFontFamilySettings().sansSerif());
-    overlaySettings.genericFontFamilySettings().setCursive(settings.genericFontFamilySettings().cursive());
-    overlaySettings.genericFontFamilySettings().setFantasy(settings.genericFontFamilySettings().fantasy());
-    overlaySettings.genericFontFamilySettings().setPictograph(settings.genericFontFamilySettings().pictograph());
+    overlaySettings.genericFontFamilySettings().updateStandard(settings.genericFontFamilySettings().standard());
+    overlaySettings.genericFontFamilySettings().updateSerif(settings.genericFontFamilySettings().serif());
+    overlaySettings.genericFontFamilySettings().updateSansSerif(settings.genericFontFamilySettings().sansSerif());
+    overlaySettings.genericFontFamilySettings().updateCursive(settings.genericFontFamilySettings().cursive());
+    overlaySettings.genericFontFamilySettings().updateFantasy(settings.genericFontFamilySettings().fantasy());
+    overlaySettings.genericFontFamilySettings().updatePictograph(settings.genericFontFamilySettings().pictograph());
     overlaySettings.setMinimumFontSize(settings.minimumFontSize());
     overlaySettings.setMinimumLogicalFontSize(settings.minimumLogicalFontSize());
     overlaySettings.setScriptEnabled(true);
@@ -747,6 +752,7 @@ void InspectorOverlay::reset(const IntSize& viewportSize, int scrollX, int scrol
 
 void InspectorOverlay::evaluateInOverlay(const String& method, const String& argument)
 {
+    ScriptForbiddenScope::AllowUserAgentScript allowScript;
     RefPtr<JSONArray> command = JSONArray::create();
     command->pushString(method);
     command->pushString(argument);
@@ -755,6 +761,7 @@ void InspectorOverlay::evaluateInOverlay(const String& method, const String& arg
 
 void InspectorOverlay::evaluateInOverlay(const String& method, PassRefPtr<JSONValue> argument)
 {
+    ScriptForbiddenScope::AllowUserAgentScript allowScript;
     RefPtr<JSONArray> command = JSONArray::create();
     command->pushString(method);
     command->pushValue(argument);
@@ -791,4 +798,4 @@ void InspectorOverlay::startedRecordingProfile()
         freePage();
 }
 
-} // namespace WebCore
+} // namespace blink

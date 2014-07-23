@@ -30,7 +30,7 @@
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 class CSSRule;
 class CSSStyleDeclaration;
@@ -94,6 +94,7 @@ public:
     bool isEmpty() const;
     PropertyReference propertyAt(unsigned index) const { return PropertyReference(*this, index); }
     int findPropertyIndex(CSSPropertyID) const;
+    bool hasProperty(CSSPropertyID property) const { return findPropertyIndex(property) != -1; }
 
     PassRefPtrWillBeRawPtr<CSSValue> getPropertyCSSValue(CSSPropertyID) const;
     String getPropertyValue(CSSPropertyID) const;
@@ -303,6 +304,6 @@ inline int StylePropertySet::findPropertyIndex(CSSPropertyID propertyID) const
     return toImmutableStylePropertySet(this)->findPropertyIndex(propertyID);
 }
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // StylePropertySet_h

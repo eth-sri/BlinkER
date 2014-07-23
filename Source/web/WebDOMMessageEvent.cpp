@@ -31,7 +31,7 @@
 #include "config.h"
 #include "public/web/WebDOMMessageEvent.h"
 
-#include "bindings/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/SerializedScriptValue.h"
 #include "core/dom/Document.h"
 #include "core/dom/MessagePort.h"
 #include "core/events/MessageEvent.h"
@@ -41,7 +41,7 @@
 #include "public/web/WebSerializedScriptValue.h"
 #include "web/WebLocalFrameImpl.h"
 
-using namespace WebCore;
+using namespace blink;
 
 namespace blink {
 

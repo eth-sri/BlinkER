@@ -31,8 +31,8 @@ G*     * Redistributions in binary form must reproduce the above
 #ifndef SVGAnimatedProperty_h
 #define SVGAnimatedProperty_h
 
-#include "bindings/v8/ExceptionStatePlaceholder.h"
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/svg/SVGParsingError.h"
 #include "core/svg/properties/SVGPropertyInfo.h"
@@ -41,7 +41,7 @@ G*     * Redistributions in binary form must reproduce the above
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
 
-namespace WebCore {
+namespace blink {
 
 class SVGElement;
 
@@ -198,7 +198,7 @@ public:
         return this->baseValue()->value();
     }
 
-    void setBaseVal(PrimitiveType value, WebCore::ExceptionState& exceptionState)
+    void setBaseVal(PrimitiveType value, blink::ExceptionState& exceptionState)
     {
         if (this->isReadOnly()) {
             exceptionState.throwDOMException(NoModificationAllowedError, "The attribute is read-only.");

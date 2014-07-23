@@ -26,8 +26,8 @@
 #include "config.h"
 #include "core/svg/animation/SVGSMILElement.h"
 
-#include "bindings/v8/ExceptionStatePlaceholder.h"
-#include "bindings/v8/ScriptEventListener.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ScriptEventListener.h"
 #include "core/XLinkNames.h"
 #include "core/dom/Document.h"
 #include "core/events/Event.h"
@@ -42,7 +42,7 @@
 #include "wtf/StdLibExtras.h"
 #include "wtf/Vector.h"
 
-namespace WebCore {
+namespace blink {
 
 class RepeatEvent FINAL : public Event {
 public:
@@ -1343,10 +1343,12 @@ void SVGSMILElement::Condition::trace(Visitor* visitor)
 
 void SVGSMILElement::trace(Visitor* visitor)
 {
+#if ENABLE(OILPAN)
     visitor->trace(m_targetElement);
     visitor->trace(m_timeContainer);
     visitor->trace(m_conditions);
     visitor->trace(m_syncBaseDependents);
+#endif
     SVGElement::trace(visitor);
 }
 

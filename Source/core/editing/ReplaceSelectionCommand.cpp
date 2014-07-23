@@ -27,7 +27,7 @@
 #include "config.h"
 #include "core/editing/ReplaceSelectionCommand.h"
 
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/CSSPropertyNames.h"
 #include "core/HTMLNames.h"
 #include "core/css/CSSStyleDeclaration.h"
@@ -56,7 +56,7 @@
 #include "wtf/StdLibExtras.h"
 #include "wtf/Vector.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -157,7 +157,11 @@ ReplacementFragment::ReplacementFragment(Document* document, DocumentFragment* f
     if (!editableRoot)
         return;
 
-    Node* shadowAncestorNode = editableRoot->deprecatedShadowAncestorNode();
+    Node* shadowAncestorNode;
+    if (editableRoot->isInShadowTree())
+        shadowAncestorNode = editableRoot->shadowHost();
+    else
+        shadowAncestorNode = editableRoot.get();
 
     if (!editableRoot->getAttributeEventListener(EventTypeNames::webkitBeforeTextInserted) &&
         // FIXME: Remove these checks once textareas and textfields actually register an event handler.
@@ -433,15 +437,16 @@ static bool isMailPasteAsQuotationNode(const Node* node)
 
 static bool isHeaderElement(const Node* a)
 {
-    if (!a)
+    if (!a || !a->isHTMLElement())
         return false;
 
-    return a->hasTagName(h1Tag)
-        || a->hasTagName(h2Tag)
-        || a->hasTagName(h3Tag)
-        || a->hasTagName(h4Tag)
-        || a->hasTagName(h5Tag)
-        || a->hasTagName(h6Tag);
+    const HTMLElement& element = toHTMLElement(*a);
+    return element.hasTagName(h1Tag)
+        || element.hasTagName(h2Tag)
+        || element.hasTagName(h3Tag)
+        || element.hasTagName(h4Tag)
+        || element.hasTagName(h5Tag)
+        || element.hasTagName(h6Tag);
 }
 
 static bool haveSameTagName(Node* a, Node* b)
@@ -456,8 +461,8 @@ bool ReplaceSelectionCommand::shouldMerge(const VisiblePosition& source, const V
 
     Node* sourceNode = source.deepEquivalent().deprecatedNode();
     Node* destinationNode = destination.deepEquivalent().deprecatedNode();
-    Node* sourceBlock = enclosingBlock(sourceNode);
-    Node* destinationBlock = enclosingBlock(destinationNode);
+    Element* sourceBlock = enclosingBlock(sourceNode);
+    Element* destinationBlock = enclosingBlock(destinationNode);
     return !enclosingNodeOfType(source.deepEquivalent(), &isMailPasteAsQuotationNode) &&
            sourceBlock && (!sourceBlock->hasTagName(blockquoteTag) || isMailBlockquote(sourceBlock))  &&
            enclosingListChild(sourceBlock) == enclosingListChild(destinationNode) &&
@@ -647,7 +652,7 @@ void ReplaceSelectionCommand::moveNodeOutOfAncestor(PassRefPtrWillBeRawPtr<Node>
     RefPtrWillBeRawPtr<Node> node = prpNode;
     RefPtrWillBeRawPtr<Node> ancestor = prpAncestor;
 
-    if (!ancestor->parentNode()->rendererIsEditable())
+    if (!ancestor->parentNode()->hasEditableStyle())
         return;
 
     VisiblePosition positionAtEndOfNode(lastPositionInOrAfterNode(node.get()));
@@ -929,7 +934,7 @@ void ReplaceSelectionCommand::doApply()
     bool selectionEndWasEndOfParagraph = isEndOfParagraph(visibleEnd);
     bool selectionStartWasStartOfParagraph = isStartOfParagraph(visibleStart);
 
-    Node* startBlock = enclosingBlock(visibleStart.deepEquivalent().deprecatedNode());
+    Node* enclosingBlockOfVisibleStart = enclosingBlock(visibleStart.deepEquivalent().deprecatedNode());
 
     Position insertionPos = selection.start();
     bool startIsInsideMailBlockquote = enclosingNodeOfType(insertionPos, isMailBlockquote, CanCrossEditingBoundary);
@@ -937,7 +942,7 @@ void ReplaceSelectionCommand::doApply()
     Element* currentRoot = selection.rootEditableElement();
 
     if ((selectionStartWasStartOfParagraph && selectionEndWasEndOfParagraph && !startIsInsideMailBlockquote) ||
-        startBlock == currentRoot || isListItem(startBlock) || selectionIsPlainText)
+        enclosingBlockOfVisibleStart == currentRoot || isListItem(enclosingBlockOfVisibleStart) || selectionIsPlainText)
         m_preventNesting = false;
 
     if (selection.isRange()) {
@@ -1011,17 +1016,17 @@ void ReplaceSelectionCommand::doApply()
     if (endBR)
         originalVisPosBeforeEndBR = VisiblePosition(positionBeforeNode(endBR), DOWNSTREAM).previous();
 
-    RefPtrWillBeRawPtr<Node> insertionBlock = enclosingBlock(insertionPos.deprecatedNode());
+    RefPtrWillBeRawPtr<Node> enclosingBlockOfInsertionPos = enclosingBlock(insertionPos.deprecatedNode());
 
     // Adjust insertionPos to prevent nesting.
     // If the start was in a Mail blockquote, we will have already handled adjusting insertionPos above.
-    if (m_preventNesting && insertionBlock && !isTableCell(insertionBlock.get()) && !startIsInsideMailBlockquote) {
-        ASSERT(insertionBlock != currentRoot);
+    if (m_preventNesting && enclosingBlockOfInsertionPos && !isTableCell(enclosingBlockOfInsertionPos.get()) && !startIsInsideMailBlockquote) {
+        ASSERT(enclosingBlockOfInsertionPos != currentRoot);
         VisiblePosition visibleInsertionPos(insertionPos);
         if (isEndOfBlock(visibleInsertionPos) && !(isStartOfBlock(visibleInsertionPos) && fragment.hasInterchangeNewlineAtEnd()))
-            insertionPos = positionInParentAfterNode(*insertionBlock);
+            insertionPos = positionInParentAfterNode(*enclosingBlockOfInsertionPos);
         else if (isStartOfBlock(visibleInsertionPos))
-            insertionPos = positionInParentBeforeNode(*insertionBlock);
+            insertionPos = positionInParentBeforeNode(*enclosingBlockOfInsertionPos);
     }
 
     // Paste at start or end of link goes outside of link.
@@ -1131,16 +1136,16 @@ void ReplaceSelectionCommand::doApply()
     if (!insertedNodes.firstNodeInserted() || !insertedNodes.firstNodeInserted()->inDocument())
         return;
 
-    // Scripts specified in javascript protocol may remove |insertionBlock|
+    // Scripts specified in javascript protocol may remove |enclosingBlockOfInsertionPos|
     // during insertion, e.g. <iframe src="javascript:...">
-    if (insertionBlock && !insertionBlock->inDocument())
-        insertionBlock = nullptr;
+    if (enclosingBlockOfInsertionPos && !enclosingBlockOfInsertionPos->inDocument())
+        enclosingBlockOfInsertionPos = nullptr;
 
     VisiblePosition startOfInsertedContent(firstPositionInOrBeforeNode(insertedNodes.firstNodeInserted()));
 
-    // We inserted before the insertionBlock to prevent nesting, and the content before the insertionBlock wasn't in its own block and
+    // We inserted before the enclosingBlockOfInsertionPos to prevent nesting, and the content before the enclosingBlockOfInsertionPos wasn't in its own block and
     // didn't have a br after it, so the inserted content ended up in the same paragraph.
-    if (!startOfInsertedContent.isNull() && insertionBlock && insertionPos.deprecatedNode() == insertionBlock->parentNode() && (unsigned)insertionPos.deprecatedEditingOffset() < insertionBlock->nodeIndex() && !isStartOfParagraph(startOfInsertedContent))
+    if (!startOfInsertedContent.isNull() && enclosingBlockOfInsertionPos && insertionPos.deprecatedNode() == enclosingBlockOfInsertionPos->parentNode() && (unsigned)insertionPos.deprecatedEditingOffset() < enclosingBlockOfInsertionPos->nodeIndex() && !isStartOfParagraph(startOfInsertedContent))
         insertNodeAt(createBreakElement(document()).get(), startOfInsertedContent.deepEquivalent());
 
     if (endBR && (plainTextFragment || (shouldRemoveEndBR(endBR, originalVisPosBeforeEndBR) && !(fragment.hasInterchangeNewlineAtEnd() && selectionIsPlainText)))) {
@@ -1530,4 +1535,4 @@ void ReplaceSelectionCommand::trace(Visitor* visitor)
     CompositeEditCommand::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink

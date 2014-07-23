@@ -25,9 +25,9 @@
 #include "config.h"
 #include "core/html/HTMLFormElement.h"
 
-#include <limits>
-#include "bindings/v8/ScriptController.h"
-#include "bindings/v8/ScriptEventListener.h"
+#include "bindings/core/v8/ScriptController.h"
+#include "bindings/core/v8/ScriptEventListener.h"
+#include "bindings/core/v8/V8DOMActivityLogger.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/Document.h"
@@ -55,8 +55,9 @@
 #include "core/rendering/RenderTextControl.h"
 #include "platform/UserGestureIndicator.h"
 #include "wtf/text/AtomicString.h"
+#include <limits>
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -136,6 +137,16 @@ bool HTMLFormElement::rendererIsNeeded(const RenderStyle& style)
 
 Node::InsertionNotificationRequest HTMLFormElement::insertedInto(ContainerNode* insertionPoint)
 {
+    if (insertionPoint->inDocument()) {
+        V8DOMActivityLogger* activityLogger = V8DOMActivityLogger::currentActivityLoggerIfIsolatedWorld();
+        if (activityLogger) {
+            Vector<String> argv;
+            argv.append("form");
+            argv.append(fastGetAttribute(methodAttr));
+            argv.append(fastGetAttribute(actionAttr));
+            activityLogger->logEvent("blinkAddElement", argv.size(), argv.data());
+        }
+    }
     HTMLElement::insertedInto(insertionPoint);
     if (insertionPoint->inDocument())
         this->document().didAssociateFormControl(this);
@@ -487,10 +498,10 @@ void HTMLFormElement::finishRequestAutocomplete(AutocompleteResult result)
 void HTMLFormElement::parseAttribute(const QualifiedName& name, const AtomicString& value)
 {
     if (name == actionAttr) {
-        m_attributes.parseAction(document(), value);
+        m_attributes.parseAction(value);
         // If the new action attribute is pointing to insecure "action" location from a secure page
         // it is marked as "passive" mixed content.
-        KURL actionURL = m_attributes.action().isEmpty() ? document().url() : m_attributes.action();
+        KURL actionURL = document().completeURL(m_attributes.action().isEmpty() ? document().url().string() : m_attributes.action());
         if (MixedContentChecker::isMixedContent(document().securityOrigin(), actionURL))
             document().frame()->loader().mixedContentChecker()->canSubmitToInsecureForm(document().securityOrigin(), actionURL);
     } else if (name == targetAttr)
@@ -507,6 +518,22 @@ void HTMLFormElement::parseAttribute(const QualifiedName& name, const AtomicStri
         setAttributeEventListener(EventTypeNames::autocompleteerror, createAttributeEventListener(this, name, value, eventParameterName()));
     else
         HTMLElement::parseAttribute(name, value);
+}
+
+void HTMLFormElement::attributeWillChange(const QualifiedName& name, const AtomicString& oldValue, const AtomicString& newValue)
+{
+    if (name == actionAttr && inDocument()) {
+        V8DOMActivityLogger* activityLogger = V8DOMActivityLogger::currentActivityLoggerIfIsolatedWorld();
+        if (activityLogger) {
+            Vector<String> argv;
+            argv.append("form");
+            argv.append(actionAttr.toString());
+            argv.append(oldValue);
+            argv.append(newValue);
+            activityLogger->logEvent("blinkSetAttribute", argv.size(), argv.data());
+        }
+    }
+    HTMLElement::attributeWillChange(name, oldValue, newValue);
 }
 
 void HTMLFormElement::associate(FormAssociatedElement& e)
@@ -700,7 +727,7 @@ Element* HTMLFormElement::elementFromPastNamesMap(const AtomicString& pastName)
     if (pastName.isEmpty() || !m_pastNamesMap)
         return 0;
     Element* element = m_pastNamesMap->get(pastName);
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     if (!element)
         return 0;
     ASSERT_WITH_SECURITY_IMPLICATION(toHTMLElement(element)->formOwner() == this);

@@ -24,7 +24,7 @@
 #include "config.h"
 #include "core/html/HTMLBodyElement.h"
 
-#include "bindings/v8/ScriptEventListener.h"
+#include "bindings/core/v8/ScriptEventListener.h"
 #include "core/CSSValueKeywords.h"
 #include "core/HTMLNames.h"
 #include "core/css/CSSImageValue.h"
@@ -37,7 +37,7 @@
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/rendering/RenderBox.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -194,7 +194,7 @@ bool HTMLBodyElement::supportsFocus() const
 {
     // This override is needed because the inherited method bails if the parent is editable.
     // The <body> should be focusable even if <html> is editable.
-    return rendererIsEditable() || HTMLElement::supportsFocus();
+    return hasEditableStyle() || HTMLElement::supportsFocus();
 }
 
 static int adjustForZoom(int value, Document* document)
@@ -330,4 +330,4 @@ int HTMLBodyElement::scrollWidth()
     return view ? adjustForZoom(view->contentsWidth(), &document) : 0;
 }
 
-} // namespace WebCore
+} // namespace blink

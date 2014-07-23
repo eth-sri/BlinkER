@@ -28,8 +28,8 @@
 #ifndef Document_h
 #define Document_h
 
-#include "bindings/v8/ExceptionStatePlaceholder.h"
-#include "bindings/v8/ScriptValue.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ScriptValue.h"
 #include "core/animation/AnimationClock.h"
 #include "core/animation/CompositorPendingAnimations.h"
 #include "core/dom/ContainerNode.h"
@@ -60,7 +60,7 @@
 #include "wtf/PassRefPtr.h"
 #include "wtf/WeakPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 class AnimationTimeline;
 class AXObjectCache;
@@ -73,6 +73,7 @@ class Chrome;
 class Comment;
 class ContentSecurityPolicyResponseHeaders;
 class ContextFeatures;
+class CustomElementMicrotaskRunQueue;
 class CustomElementRegistrationContext;
 class DOMImplementation;
 class DocumentFragment;
@@ -87,6 +88,8 @@ class ElementDataCache;
 class Event;
 class EventFactoryBase;
 class EventListener;
+template <typename EventType>
+class EventWithHitTestResults;
 class ExceptionState;
 class FastTextAutosizer;
 class FloatQuad;
@@ -114,8 +117,8 @@ class LocalDOMWindow;
 class LocalFrame;
 class Location;
 class MainThreadTaskRunner;
+class MediaQueryListListener;
 class MediaQueryMatcher;
-class MouseEventWithHitTestResults;
 class NodeFilter;
 class NodeIterator;
 class Page;
@@ -152,6 +155,7 @@ class WebGLRenderingContext;
 struct AnnotatedRegionValue;
 struct IconURL;
 
+typedef EventWithHitTestResults<PlatformMouseEvent> MouseEventWithHitTestResults;
 typedef int ExceptionCode;
 
 enum StyleResolverUpdateMode {
@@ -274,9 +278,6 @@ public:
     const ViewportDescription& viewportDescription() const { return m_viewportDescription; }
     Length viewportDefaultMinWidth() const { return m_viewportDefaultMinWidth; }
 
-#ifndef NDEBUG
-    bool didDispatchViewportPropertiesChanged() const { return m_didDispatchViewportPropertiesChanged; }
-#endif
     bool hasLegacyViewportTag() const { return m_legacyViewportDescription.isLegacyViewportType(); }
 
     void setReferrerPolicy(ReferrerPolicy);
@@ -390,6 +391,13 @@ public:
     bool isTransitionDocument() const { return m_isTransitionDocument; }
     void setIsTransitionDocument() { m_isTransitionDocument = true; }
 
+    struct TransitionElementData {
+        String scope;
+        String selector;
+        String markup;
+    };
+    void getTransitionElementData(Vector<TransitionElementData>&);
+
     StyleResolver* styleResolver() const;
     StyleResolver& ensureStyleResolver() const;
 
@@ -452,6 +460,7 @@ public:
 
     void setupFontBuilder(RenderStyle* documentStyle);
 
+    bool needsRenderTreeUpdate() const;
     void updateRenderTreeIfNeeded() { updateRenderTree(NoChange); }
     void updateRenderTreeForNodeIfNeeded(Node*);
     void updateLayout();
@@ -821,7 +830,7 @@ public:
 
     Vector<IconURL> iconURLs(int iconTypesMask);
 
-    Color brandColor() const;
+    Color themeColor() const;
 
     // Returns the HTMLLinkElement currently in use for the Web Manifest.
     // Returns null if there is no such element.
@@ -842,7 +851,7 @@ public:
 
     // FIXME(crbug.com/305497): This should be removed once LocalDOMWindow is an ExecutionContext.
     virtual void postTask(PassOwnPtr<ExecutionContextTask>) OVERRIDE; // Executes the task on context's thread asynchronously.
-    void postInspectorTask(const Closure&);
+    void postInspectorTask(PassOwnPtr<ExecutionContextTask>);
 
     virtual void tasksWereSuspended() OVERRIDE FINAL;
     virtual void tasksWereResumed() OVERRIDE FINAL;
@@ -907,6 +916,7 @@ public:
     void enqueueResizeEvent();
     void enqueueScrollEventForNode(Node*);
     void enqueueAnimationFrameEvent(PassRefPtrWillBeRawPtr<Event>);
+    void enqueueMediaQueryChangeListeners(WillBeHeapVector<RefPtrWillBeMember<MediaQueryListListener> >&);
 
     bool hasFullscreenElementStack() const { return m_hasFullscreenElementStack; }
     void setHasFullscreenElementStack() { m_hasFullscreenElementStack = true; }
@@ -961,9 +971,10 @@ public:
 
     PassRefPtrWillBeRawPtr<Element> createElement(const AtomicString& localName, const AtomicString& typeExtension, ExceptionState&);
     PassRefPtrWillBeRawPtr<Element> createElementNS(const AtomicString& namespaceURI, const AtomicString& qualifiedName, const AtomicString& typeExtension, ExceptionState&);
-    ScriptValue registerElement(WebCore::ScriptState*, const AtomicString& name, ExceptionState&);
-    ScriptValue registerElement(WebCore::ScriptState*, const AtomicString& name, const Dictionary& options, ExceptionState&, CustomElement::NameSet validNames = CustomElement::StandardNames);
+    ScriptValue registerElement(blink::ScriptState*, const AtomicString& name, ExceptionState&);
+    ScriptValue registerElement(blink::ScriptState*, const AtomicString& name, const Dictionary& options, ExceptionState&, CustomElement::NameSet validNames = CustomElement::StandardNames);
     CustomElementRegistrationContext* registrationContext() { return m_registrationContext.get(); }
+    CustomElementMicrotaskRunQueue* customElementMicrotaskRunQueue();
 
     void setImportsController(HTMLImportsController*);
     HTMLImportsController* importsController() const { return m_importsController; }
@@ -1075,7 +1086,6 @@ private:
     void scheduleRenderTreeUpdate();
 
     bool needsFullRenderTreeUpdate() const;
-    bool needsRenderTreeUpdate() const;
 
     void inheritHtmlAndBodyElementStyles(StyleRecalcChange);
 
@@ -1093,7 +1103,7 @@ private:
 
     virtual bool isDocument() const OVERRIDE FINAL { return true; }
 
-    virtual void childrenChanged(bool changedByParser = false, Node* beforeChange = 0, Node* afterChange = 0, int childCountDelta = 0) OVERRIDE;
+    virtual void childrenChanged(const ChildrenChange&) OVERRIDE;
 
     virtual String nodeName() const OVERRIDE FINAL;
     virtual NodeType nodeType() const OVERRIDE FINAL;
@@ -1350,15 +1360,12 @@ private:
     OwnPtr<FastTextAutosizer> m_fastTextAutosizer;
 
     RefPtrWillBeMember<CustomElementRegistrationContext> m_registrationContext;
+    RefPtrWillBeMember<CustomElementMicrotaskRunQueue> m_customElementMicrotaskRunQueue;
 
     void elementDataCacheClearTimerFired(Timer<Document>*);
     Timer<Document> m_elementDataCacheClearTimer;
 
-    OwnPtr<ElementDataCache> m_elementDataCache;
-
-#ifndef NDEBUG
-    bool m_didDispatchViewportPropertiesChanged;
-#endif
+    OwnPtrWillBeMember<ElementDataCache> m_elementDataCache;
 
     typedef HashMap<AtomicString, OwnPtr<Locale> > LocaleIdentifierToLocaleMap;
     LocaleIdentifierToLocaleMap m_localeCache;
@@ -1413,13 +1420,8 @@ DEFINE_NODE_TYPE_CASTS(Document, isDocumentNode());
 #define DEFINE_DOCUMENT_TYPE_CASTS(thisType) \
     DEFINE_TYPE_CASTS(thisType, Document, document, document->is##thisType(), document.is##thisType())
 
-// All these varations are needed to avoid ambiguous overloads with the Node and TreeScope versions.
-inline bool operator==(const Document& a, const Document& b) { return &a == &b; }
-inline bool operator==(const Document& a, const Document* b) { return &a == b; }
-inline bool operator==(const Document* a, const Document& b) { return a == &b; }
-inline bool operator!=(const Document& a, const Document& b) { return !(a == b); }
-inline bool operator!=(const Document& a, const Document* b) { return !(a == b); }
-inline bool operator!=(const Document* a, const Document& b) { return !(a == b); }
+// This is needed to avoid ambiguous overloads with the Node and TreeScope versions.
+DEFINE_COMPARISON_OPERATORS_WITH_REFERENCES(Document)
 
 // Put these methods here, because they require the Document definition, but we really want to inline them.
 
@@ -1430,6 +1432,11 @@ inline bool Node::isDocumentNode() const
 
 Node* eventTargetNodeForDocument(Document*);
 
-} // namespace WebCore
+} // namespace blink
+
+#ifndef NDEBUG
+// Outside the WebCore namespace for ease of invocation from gdb.
+void showLiveDocumentInstances();
+#endif
 
 #endif // Document_h

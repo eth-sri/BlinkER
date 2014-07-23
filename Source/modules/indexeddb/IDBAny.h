@@ -26,7 +26,7 @@
 #ifndef IDBAny_h
 #define IDBAny_h
 
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "modules/indexeddb/IDBKey.h"
 #include "modules/indexeddb/IDBKeyPath.h"
 #include "platform/SharedBuffer.h"
@@ -39,7 +39,7 @@ class WebBlobInfo;
 
 }
 
-namespace WebCore {
+namespace blink {
 
 class DOMStringList;
 class IDBCursor;
@@ -152,6 +152,6 @@ private:
     const int64_t m_integer;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // IDBAny_h

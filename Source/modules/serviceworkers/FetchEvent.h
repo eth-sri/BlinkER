@@ -9,7 +9,7 @@
 #include "modules/serviceworkers/Request.h"
 #include "modules/serviceworkers/RespondWithObserver.h"
 
-namespace WebCore {
+namespace blink {
 
 class ExecutionContext;
 class Request;
@@ -21,10 +21,10 @@ class RespondWithObserver;
 class FetchEvent FINAL : public Event {
 public:
     static PassRefPtrWillBeRawPtr<FetchEvent> create();
-    static PassRefPtrWillBeRawPtr<FetchEvent> create(PassRefPtr<RespondWithObserver>, PassRefPtr<Request>);
+    static PassRefPtrWillBeRawPtr<FetchEvent> create(PassRefPtr<RespondWithObserver>, PassRefPtrWillBeRawPtr<Request>);
     virtual ~FetchEvent() { }
 
-    Request* request() const;
+    PassRefPtrWillBeRawPtr<Request> request() const;
     bool isReload() const;
 
     void respondWith(ScriptState*, const ScriptValue&);
@@ -37,14 +37,14 @@ public:
 
 protected:
     FetchEvent();
-    FetchEvent(PassRefPtr<RespondWithObserver>, PassRefPtr<Request>);
+    FetchEvent(PassRefPtr<RespondWithObserver>, PassRefPtrWillBeRawPtr<Request>);
 
 private:
     RefPtr<RespondWithObserver> m_observer;
-    RefPtr<Request> m_request;
+    RefPtrWillBeMember<Request> m_request;
     bool m_isReload;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // FetchEvent_h

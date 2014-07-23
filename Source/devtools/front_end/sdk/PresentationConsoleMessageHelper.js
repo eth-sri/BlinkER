@@ -30,7 +30,6 @@
 
 /**
  * @constructor
- * @implements {WebInspector.TargetManager.Observer}
  * @param {!WebInspector.Workspace} workspace
  */
 WebInspector.PresentationConsoleMessageHelper = function(workspace)
@@ -42,42 +41,29 @@ WebInspector.PresentationConsoleMessageHelper = function(workspace)
     this._presentationConsoleMessages = [];
     this._workspace = workspace;
 
-    WebInspector.targetManager.observeTargets(this);
+    WebInspector.multitargetConsoleModel.addEventListener(WebInspector.ConsoleModel.Events.ConsoleCleared, this._consoleCleared, this);
+    WebInspector.multitargetConsoleModel.addEventListener(WebInspector.ConsoleModel.Events.MessageAdded, this._onConsoleMessageAdded, this);
+    WebInspector.multitargetConsoleModel.messages().forEach(this._consoleMessageAdded, this);
+    WebInspector.targetManager.addModelListener(WebInspector.DebuggerModel, WebInspector.DebuggerModel.Events.ParsedScriptSource, this._parsedScriptSource, this);
+    WebInspector.targetManager.addModelListener(WebInspector.DebuggerModel, WebInspector.DebuggerModel.Events.FailedToParseScriptSource, this._parsedScriptSource, this);
+    WebInspector.targetManager.addModelListener(WebInspector.DebuggerModel, WebInspector.DebuggerModel.Events.GlobalObjectCleared, this._debuggerReset, this);
 }
 
 WebInspector.PresentationConsoleMessageHelper.prototype = {
     /**
-     * @param {!WebInspector.Target} target
-     */
-    targetAdded: function(target)
-    {
-        target.consoleModel.addEventListener(WebInspector.ConsoleModel.Events.MessageAdded, this._consoleMessageAdded, this);
-        target.consoleModel.addEventListener(WebInspector.ConsoleModel.Events.ConsoleCleared, this._consoleCleared, this);
-
-        target.debuggerModel.addEventListener(WebInspector.DebuggerModel.Events.ParsedScriptSource, this._parsedScriptSource, this);
-        target.debuggerModel.addEventListener(WebInspector.DebuggerModel.Events.FailedToParseScriptSource, this._parsedScriptSource, this);
-        target.debuggerModel.addEventListener(WebInspector.DebuggerModel.Events.GlobalObjectCleared, this._debuggerReset, this);
-    },
-
-    /**
-     * @param {!WebInspector.Target} target
-     */
-    targetRemoved: function(target)
-    {
-        target.consoleModel.removeEventListener(WebInspector.ConsoleModel.Events.MessageAdded, this._consoleMessageAdded, this);
-        target.consoleModel.removeEventListener(WebInspector.ConsoleModel.Events.ConsoleCleared, this._consoleCleared, this);
-
-        target.debuggerModel.removeEventListener(WebInspector.DebuggerModel.Events.ParsedScriptSource, this._parsedScriptSource, this);
-        target.debuggerModel.removeEventListener(WebInspector.DebuggerModel.Events.FailedToParseScriptSource, this._parsedScriptSource, this);
-        target.debuggerModel.removeEventListener(WebInspector.DebuggerModel.Events.GlobalObjectCleared, this._debuggerReset, this);
-    },
-
-    /**
      * @param {!WebInspector.Event} event
      */
-    _consoleMessageAdded: function(event)
+    _onConsoleMessageAdded: function(event)
     {
         var message = /** @type {!WebInspector.ConsoleMessage} */ (event.data);
+        this._consoleMessageAdded(message)
+    },
+
+    /**
+     * @param {!WebInspector.ConsoleMessage} message
+     */
+    _consoleMessageAdded: function(message)
+    {
         if (!message.url || !message.isErrorOrWarning())
             return;
 
@@ -136,7 +122,7 @@ WebInspector.PresentationConsoleMessageHelper.prototype = {
         for (var i = 0; i < messages.length; i++) {
             var message = messages[i];
             var rawLocation = this._rawLocation(message);
-            if (script.scriptId === rawLocation.scriptId)
+            if (script.target() === message.target() && script.scriptId === rawLocation.scriptId)
                 this._addConsoleMessageToScript(message, rawLocation);
             else
                 pendingMessages.push(message);
@@ -174,7 +160,7 @@ WebInspector.PresentationConsoleMessageHelper.prototype = {
 WebInspector.PresentationConsoleMessage = function(message, rawLocation)
 {
     this.originalMessage = message;
-    this._liveLocation = rawLocation.createLiveLocation(this._updateLocation.bind(this));
+    this._liveLocation = WebInspector.debuggerWorkspaceBinding.createLiveLocation(rawLocation, this._updateLocation.bind(this));
 }
 
 WebInspector.PresentationConsoleMessage.prototype = {

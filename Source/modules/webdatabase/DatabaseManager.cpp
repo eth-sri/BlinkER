@@ -26,8 +26,8 @@
 #include "config.h"
 #include "modules/webdatabase/DatabaseManager.h"
 
-#include "bindings/v8/ExceptionMessages.h"
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionMessages.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/ExecutionContextTask.h"
@@ -45,7 +45,7 @@
 #include "modules/webdatabase/DatabaseTask.h"
 #include "platform/weborigin/SecurityOrigin.h"
 
-namespace WebCore {
+namespace blink {
 
 DatabaseManager& DatabaseManager::manager()
 {
@@ -54,7 +54,7 @@ DatabaseManager& DatabaseManager::manager()
 }
 
 DatabaseManager::DatabaseManager()
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     : m_databaseContextRegisteredCount(0)
     , m_databaseContextInstanceCount(0)
 #endif
@@ -124,7 +124,7 @@ void DatabaseManager::registerDatabaseContext(DatabaseContext* databaseContext)
 #else
     m_contextMap.set(context, databaseContext);
 #endif
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     m_databaseContextRegisteredCount++;
 #endif
 }
@@ -134,13 +134,13 @@ void DatabaseManager::unregisterDatabaseContext(DatabaseContext* databaseContext
     MutexLocker locker(m_contextMapLock);
     ExecutionContext* context = databaseContext->executionContext();
     ASSERT(m_contextMap.get(context));
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     m_databaseContextRegisteredCount--;
 #endif
     m_contextMap.remove(context);
 }
 
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
 void DatabaseManager::didConstructDatabaseContext()
 {
     MutexLocker lock(m_contextMapLock);
@@ -279,4 +279,4 @@ void DatabaseManager::logErrorMessage(ExecutionContext* context, const String& m
     context->addConsoleMessage(StorageMessageSource, ErrorMessageLevel, message);
 }
 
-} // namespace WebCore
+} // namespace blink

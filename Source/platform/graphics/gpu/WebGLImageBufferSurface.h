@@ -39,7 +39,7 @@ namespace blink {
 class WebGraphicsContext3DProvider;
 }
 
-namespace WebCore {
+namespace blink {
 
 // This is a GPU backed surface that has no canvas or render target.
 class PLATFORM_EXPORT WebGLImageBufferSurface : public ImageBufferSurface {
@@ -49,7 +49,7 @@ public:
     virtual ~WebGLImageBufferSurface();
 
     virtual SkCanvas* canvas() const OVERRIDE { return 0; }
-    virtual const SkBitmap& bitmap() const OVERRIDE { return m_bitmap; }
+    virtual const SkBitmap& bitmap() OVERRIDE { return m_bitmap; }
     virtual bool isValid() const OVERRIDE { return m_bitmap.pixelRef(); }
     virtual bool isAccelerated() const OVERRIDE { return true; }
     virtual Platform3DObject getBackingTexture() const OVERRIDE;
@@ -67,6 +67,6 @@ private:
 };
 
 
-} // namespace WebCore
+} // namespace blink
 
 #endif

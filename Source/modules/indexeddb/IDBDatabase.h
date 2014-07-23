@@ -26,8 +26,7 @@
 #ifndef IDBDatabase_h
 #define IDBDatabase_h
 
-#include "bindings/v8/Dictionary.h"
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/Dictionary.h"
 #include "core/dom/ActiveDOMObject.h"
 #include "core/dom/DOMStringList.h"
 #include "modules/EventModules.h"
@@ -44,7 +43,7 @@
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 class DOMError;
 class ExceptionState;
@@ -52,7 +51,6 @@ class ExecutionContext;
 
 class IDBDatabase FINAL
     : public RefCountedGarbageCollectedWillBeGarbageCollectedFinalized<IDBDatabase>
-    , public ScriptWrappable
     , public EventTargetWithInlineData
     , public ActiveDOMObject {
     DEFINE_EVENT_TARGET_REFCOUNTING_WILL_BE_REMOVED(RefCountedGarbageCollected<IDBDatabase>);
@@ -157,6 +155,6 @@ private:
     Member<IDBDatabaseCallbacks> m_databaseCallbacks;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // IDBDatabase_h

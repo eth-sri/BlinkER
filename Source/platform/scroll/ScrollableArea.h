@@ -32,7 +32,7 @@
 #include "wtf/Noncopyable.h"
 #include "wtf/Vector.h"
 
-namespace WebCore {
+namespace blink {
 
 class FloatPoint;
 class GraphicsContext;
@@ -183,7 +183,8 @@ public:
 
     virtual bool usesCompositedScrolling() const { return false; }
 
-    virtual void updateAfterCompositingChange() { }
+    // Returns true if the GraphicsLayer tree needs to be rebuilt.
+    virtual bool updateAfterCompositingChange() { return false; }
 
     virtual bool userInputScrollable(ScrollbarOrientation) const = 0;
     virtual bool shouldPlaceVerticalScrollbarOnLeft() const = 0;
@@ -282,6 +283,6 @@ private:
     IntPoint m_scrollOrigin;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // ScrollableArea_h

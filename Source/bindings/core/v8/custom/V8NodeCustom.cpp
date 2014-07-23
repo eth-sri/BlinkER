@@ -31,95 +31,33 @@
 #include "config.h"
 #include "bindings/core/v8/V8Node.h"
 
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/V8AbstractEventListener.h"
 #include "bindings/core/v8/V8Attr.h"
+#include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8CDATASection.h"
 #include "bindings/core/v8/V8Comment.h"
 #include "bindings/core/v8/V8Document.h"
 #include "bindings/core/v8/V8DocumentFragment.h"
 #include "bindings/core/v8/V8DocumentType.h"
 #include "bindings/core/v8/V8Element.h"
+#include "bindings/core/v8/V8EventListener.h"
 #include "bindings/core/v8/V8HTMLElement.h"
 #include "bindings/core/v8/V8Notation.h"
 #include "bindings/core/v8/V8ProcessingInstruction.h"
 #include "bindings/core/v8/V8SVGElement.h"
 #include "bindings/core/v8/V8ShadowRoot.h"
 #include "bindings/core/v8/V8Text.h"
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/V8AbstractEventListener.h"
-#include "bindings/v8/V8Binding.h"
-#include "bindings/v8/V8EventListener.h"
 #include "core/dom/Document.h"
 #include "core/dom/custom/CustomElementCallbackDispatcher.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/events/EventListener.h"
 #include "wtf/RefPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 // These functions are custom to prevent a wrapper lookup of the return value which is always
 // part of the arguments.
-void V8Node::insertBeforeMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
-    v8::Handle<v8::Object> holder = info.Holder();
-    Node* impl = V8Node::toNative(holder);
-
-    CustomElementCallbackDispatcher::CallbackDeliveryScope deliveryScope;
-
-    ExceptionState exceptionState(ExceptionState::ExecutionContext, "insertBefore", "Node", info.Holder(), info.GetIsolate());
-    Node* newChild = V8Node::toNativeWithTypeCheck(info.GetIsolate(), info[0]);
-    Node* refChild = V8Node::toNativeWithTypeCheck(info.GetIsolate(), info[1]);
-    impl->insertBefore(newChild, refChild, exceptionState);
-    if (exceptionState.throwIfNeeded())
-        return;
-    v8SetReturnValue(info, info[0]);
-}
-
-void V8Node::replaceChildMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
-    v8::Handle<v8::Object> holder = info.Holder();
-    Node* impl = V8Node::toNative(holder);
-
-    CustomElementCallbackDispatcher::CallbackDeliveryScope deliveryScope;
-
-    ExceptionState exceptionState(ExceptionState::ExecutionContext, "replaceChild", "Node", info.Holder(), info.GetIsolate());
-    Node* newChild = V8Node::toNativeWithTypeCheck(info.GetIsolate(), info[0]);
-    Node* oldChild = V8Node::toNativeWithTypeCheck(info.GetIsolate(), info[1]);
-    impl->replaceChild(newChild, oldChild, exceptionState);
-    if (exceptionState.throwIfNeeded())
-        return;
-    v8SetReturnValue(info, info[1]);
-}
-
-void V8Node::removeChildMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
-    v8::Handle<v8::Object> holder = info.Holder();
-    Node* impl = V8Node::toNative(holder);
-
-    CustomElementCallbackDispatcher::CallbackDeliveryScope deliveryScope;
-
-    ExceptionState exceptionState(ExceptionState::ExecutionContext, "removeChild", "Node", info.Holder(), info.GetIsolate());
-    Node* oldChild = V8Node::toNativeWithTypeCheck(info.GetIsolate(), info[0]);
-    impl->removeChild(oldChild, exceptionState);
-    if (exceptionState.throwIfNeeded())
-        return;
-    v8SetReturnValue(info, info[0]);
-}
-
-void V8Node::appendChildMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
-    v8::Handle<v8::Object> holder = info.Holder();
-    Node* impl = V8Node::toNative(holder);
-
-    CustomElementCallbackDispatcher::CallbackDeliveryScope deliveryScope;
-
-    ExceptionState exceptionState(ExceptionState::ExecutionContext, "appendChild", "Node", info.Holder(), info.GetIsolate());
-    Node* newChild = V8Node::toNativeWithTypeCheck(info.GetIsolate(), info[0]);
-    impl->appendChild(newChild, exceptionState);
-    if (exceptionState.throwIfNeeded())
-        return;
-    v8SetReturnValue(info, info[0]);
-}
-
 v8::Handle<v8::Object> wrap(Node* impl, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
 {
     ASSERT(impl);
@@ -153,4 +91,4 @@ v8::Handle<v8::Object> wrap(Node* impl, v8::Handle<v8::Object> creationContext, 
     ASSERT_NOT_REACHED();
     return V8Node::createWrapper(impl, creationContext, isolate);
 }
-} // namespace WebCore
+} // namespace blink

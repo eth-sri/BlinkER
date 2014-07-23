@@ -17,7 +17,7 @@ WebInspector.AdvancedApp.prototype = {
     {
         var rootView = new WebInspector.RootView();
 
-        this._rootSplitView = new WebInspector.SplitView(false, true, WebInspector.dockController.canDock() ? "InspectorView.splitViewState" : "InspectorView.dummySplitViewState", 300, 300, true);
+        this._rootSplitView = new WebInspector.SplitView(false, true, "InspectorView.splitViewState", 300, 300, true);
         this._rootSplitView.show(rootView.element);
 
         WebInspector.inspectorView.show(this._rootSplitView.sidebarElement());
@@ -32,7 +32,9 @@ WebInspector.AdvancedApp.prototype = {
         WebInspector.dockController.addEventListener(WebInspector.DockController.Events.AfterDockSideChanged, this._onAfterDockSideChange, this);
         this._onDockSideChange();
 
+        console.timeStamp("AdvancedApp.attachToBody");
         rootView.attachToBody();
+        this._inspectedPagePlaceholder.update();
     },
 
     /**
@@ -149,7 +151,10 @@ WebInspector.AdvancedApp.prototype = {
     {
         if (this._changingDockSide || (this._isDocked() === toolbox))
             return;
+        if (!window.innerWidth || !window.innerHeight)
+            return;
         var bounds = /** @type {{x: number, y: number, width: number, height: number}} */ (event.data);
+        console.timeStamp("AdvancedApp.setInspectedPageBounds");
         InspectorFrontendHost.setInspectedPageBounds(bounds);
     },
 
@@ -168,8 +173,7 @@ WebInspector.Toolbox = function()
     WebInspector.overridesSupport = window.opener.WebInspector.overridesSupport;
     WebInspector.settings = window.opener.WebInspector.settings;
     WebInspector.experimentsSettings = window.opener.WebInspector.experimentsSettings;
-    WebInspector.cssModel = window.opener.WebInspector.cssModel;
-    WebInspector.domModel = window.opener.WebInspector.domModel;
+    WebInspector.targetManager = window.opener.WebInspector.targetManager;
     WebInspector.workspace = window.opener.WebInspector.workspace;
     WebInspector.Revealer = window.opener.WebInspector.Revealer;
     WebInspector.ContextMenu = window.opener.WebInspector.ContextMenu;

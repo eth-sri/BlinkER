@@ -49,7 +49,7 @@
 #include "wtf/Functional.h"
 // FIXME: #include "wtf/MainThread.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -115,7 +115,7 @@ HTMLDocumentParser::HTMLDocumentParser(HTMLDocument& document, bool reportErrors
     , m_parserScheduler(HTMLParserScheduler::create(this))
     , m_xssAuditorDelegate(&document)
     , m_weakFactory(this)
-    , m_preloader(adoptPtr(new HTMLResourcePreloader(&document)))
+    , m_preloader(HTMLResourcePreloader::create(document))
     , m_isPinnedToMainThread(false)
     , m_endWasDelayed(false)
     , m_haveBackgroundParser(false)
@@ -167,7 +167,9 @@ HTMLDocumentParser::~HTMLDocumentParser()
 void HTMLDocumentParser::trace(Visitor* visitor)
 {
     visitor->trace(m_treeBuilder);
+    visitor->trace(m_xssAuditorDelegate);
     visitor->trace(m_scriptRunner);
+    visitor->trace(m_preloader);
     ScriptableDocumentParser::trace(visitor);
     HTMLScriptRunnerHost::trace(visitor);
 }

@@ -40,7 +40,7 @@
 #include "SkPoint.h"
 #include "SkRect.h"
 
-namespace WebCore {
+namespace blink {
 class GraphicsContext;
 
 // This class is an encapsulation of functionality for GraphicsContext, and its methods are mirrored
@@ -83,6 +83,8 @@ public:
 
         SkRect opaqueRect;
     };
+
+    void reset();
 
 private:
     void didDraw(const GraphicsContext*, const SkRect&, const SkPaint&, const SkBitmap* sourceBitmap, bool fillsBounds, DrawType);

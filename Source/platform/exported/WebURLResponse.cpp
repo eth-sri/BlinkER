@@ -41,7 +41,7 @@
 #include "public/platform/WebURLLoadTiming.h"
 #include "wtf/RefPtr.h"
 
-using namespace WebCore;
+using namespace blink;
 
 namespace blink {
 
@@ -376,6 +376,16 @@ bool WebURLResponse::wasFetchedViaProxy() const
 void WebURLResponse::setWasFetchedViaProxy(bool value)
 {
     m_private->m_resourceResponse->setWasFetchedViaProxy(value);
+}
+
+bool WebURLResponse::wasFetchedViaServiceWorker() const
+{
+    return m_private->m_resourceResponse->wasFetchedViaServiceWorker();
+}
+
+void WebURLResponse::setWasFetchedViaServiceWorker(bool value)
+{
+    m_private->m_resourceResponse->setWasFetchedViaServiceWorker(value);
 }
 
 bool WebURLResponse::isMultipartPayload() const

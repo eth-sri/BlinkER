@@ -50,7 +50,7 @@ namespace blink {
 class WebGraphicsContext3D;
 }
 
-namespace WebCore {
+namespace blink {
 
 class DrawingBuffer;
 class GraphicsContext;
@@ -122,6 +122,7 @@ public:
     void flush();
 
     void notifySurfaceInvalid();
+    void didPresent();
 
 private:
     ImageBuffer(PassOwnPtr<ImageBufferSurface>);
@@ -152,6 +153,6 @@ struct ImageDataBuffer {
 
 String PLATFORM_EXPORT ImageDataToDataURL(const ImageDataBuffer&, const String& mimeType, const double* quality);
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // ImageBuffer_h

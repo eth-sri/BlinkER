@@ -12,7 +12,7 @@
 #include "{{filename}}"
 {% endfor %}
 
-namespace WebCore {
+namespace blink {
 
 {{v8_class}}::{{v8_class}}(v8::Handle<v8::Function> callback, ScriptState* scriptState)
     : ActiveDOMCallback(scriptState->executionContext())
@@ -33,7 +33,6 @@ namespace WebCore {
     if (!canInvokeCallback())
         {{return_default}};
 
-    v8::Isolate* isolate = m_scriptState->isolate();
     if (m_scriptState->contextIsEmpty())
         {{return_default}};
 
@@ -65,13 +64,13 @@ namespace WebCore {
     {% if method.idl_type == 'boolean' %}
     v8::TryCatch exceptionCatcher;
     exceptionCatcher.SetVerbose(true);
-    ScriptController::callFunction(m_scriptState->executionContext(), m_callback.newLocal(isolate), {{this_handle_parameter}}{{method.arguments | length}}, argv, m_scriptState->isolate());
+    ScriptController::callFunction(m_scriptState->executionContext(), m_callback.newLocal(m_scriptState->isolate()), {{this_handle_parameter}}{{method.arguments | length}}, argv, m_scriptState->isolate());
     return !exceptionCatcher.HasCaught();
     {% else %}{# void #}
-    ScriptController::callFunction(m_scriptState->executionContext(), m_callback.newLocal(isolate), {{this_handle_parameter}}{{method.arguments | length}}, argv, m_scriptState->isolate());
+    ScriptController::callFunction(m_scriptState->executionContext(), m_callback.newLocal(m_scriptState->isolate()), {{this_handle_parameter}}{{method.arguments | length}}, argv, m_scriptState->isolate());
     {% endif %}
 }
 
 {% endfor %}
-} // namespace WebCore
+} // namespace blink
 {% endfilter %}

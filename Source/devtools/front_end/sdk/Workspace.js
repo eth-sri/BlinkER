@@ -99,8 +99,9 @@ WebInspector.ProjectDelegate.prototype = {
 
     /**
      * @param {string} path
+     * @param {function()=} callback
      */
-    refresh: function(path) { },
+    refresh: function(path, callback) { },
 
     /**
      * @param {string} path
@@ -133,10 +134,11 @@ WebInspector.ProjectDelegate.prototype = {
 
     /**
      * @param {!WebInspector.ProjectSearchConfig} searchConfig
+     * @param {!Array.<string>} filesMathingFileQuery
      * @param {!WebInspector.Progress} progress
      * @param {function(!Array.<string>)} callback
      */
-    findFilesMatchingSearchRequest: function(searchConfig, progress, callback) { },
+    findFilesMatchingSearchRequest: function(searchConfig, filesMathingFileQuery, progress, callback) { },
 
     /**
      * @param {!WebInspector.Progress} progress
@@ -438,10 +440,11 @@ WebInspector.Project.prototype = {
 
     /**
      * @param {string} path
+     * @param {function()=} callback
      */
-    refresh: function(path)
+    refresh: function(path, callback)
     {
-        this._projectDelegate.refresh(path);
+        this._projectDelegate.refresh(path, callback);
     },
 
     /**
@@ -501,12 +504,13 @@ WebInspector.Project.prototype = {
 
     /**
      * @param {!WebInspector.ProjectSearchConfig} searchConfig
+     * @param {!Array.<string>} filesMathingFileQuery
      * @param {!WebInspector.Progress} progress
      * @param {function(!Array.<string>)} callback
      */
-    findFilesMatchingSearchRequest: function(searchConfig, progress, callback)
+    findFilesMatchingSearchRequest: function(searchConfig, filesMathingFileQuery, progress, callback)
     {
-        this._projectDelegate.findFilesMatchingSearchRequest(searchConfig, progress, callback);
+        this._projectDelegate.findFilesMatchingSearchRequest(searchConfig, filesMathingFileQuery, progress, callback);
     },
 
     /**
@@ -542,6 +546,7 @@ WebInspector.Workspace = function(fileSystemMapping)
     /** @type {!Object.<string, !WebInspector.Project>} */
     this._projects = {};
     this._hasResourceContentTrackingExtensions = false;
+    InspectorFrontendHost.events.addEventListener(InspectorFrontendHostAPI.Events.RevealSourceLine, this._revealSourceLine, this);
 }
 
 WebInspector.Workspace.Events = {
@@ -768,6 +773,37 @@ WebInspector.Workspace.prototype = {
     hasResourceContentTrackingExtensions: function()
     {
         return this._hasResourceContentTrackingExtensions;
+    },
+
+    /**
+     * @param {!WebInspector.Event} event
+     */
+    _revealSourceLine: function(event)
+    {
+        var url = /** @type {string} */ (event.data["url"]);
+        var lineNumber = /** @type {number} */ (event.data["lineNumber"]);
+        var columnNumber = /** @type {number} */ (event.data["columnNumber"]);
+
+        var uiSourceCode = this.uiSourceCodeForURL(url);
+        if (uiSourceCode) {
+            WebInspector.Revealer.reveal(uiSourceCode.uiLocation(lineNumber, columnNumber));
+            return;
+        }
+
+        /**
+         * @param {!WebInspector.Event} event
+         * @this {WebInspector.Workspace}
+         */
+        function listener(event)
+        {
+            var uiSourceCode = /** @type {!WebInspector.UISourceCode} */ (event.data);
+            if (uiSourceCode.url === url) {
+                WebInspector.Revealer.reveal(uiSourceCode.uiLocation(lineNumber, columnNumber));
+                this.removeEventListener(WebInspector.Workspace.Events.UISourceCodeAdded, listener, this);
+            }
+        }
+
+        this.addEventListener(WebInspector.Workspace.Events.UISourceCodeAdded, listener, this);
     },
 
     __proto__: WebInspector.Object.prototype

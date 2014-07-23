@@ -25,7 +25,7 @@
 #include "config.h"
 #include "core/dom/Range.h"
 
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ClientRect.h"
 #include "core/dom/ClientRectList.h"
 #include "core/dom/DocumentFragment.h"
@@ -53,7 +53,7 @@
 #include <stdio.h>
 #endif
 
-namespace WebCore {
+namespace blink {
 
 DEFINE_DEBUG_ONLY_GLOBAL(WTF::RefCountedLeakCounter, rangeCounter, ("Range"));
 
@@ -321,10 +321,10 @@ Range::CompareResults Range::compareNode(Node* refNode, ExceptionState& exceptio
     return NODE_INSIDE; // ends inside the range
 }
 
-short Range::compareBoundaryPoints(CompareHow how, const Range* sourceRange, ExceptionState& exceptionState) const
+short Range::compareBoundaryPoints(CompareHow how, const PassRefPtrWillBeRawPtr<Range> sourceRange, ExceptionState& exceptionState) const
 {
-    if (!sourceRange) {
-        exceptionState.throwDOMException(NotFoundError, "The source range provided was null.");
+    if (!(how == START_TO_START || how == START_TO_END || how == END_TO_END || how == END_TO_START)) {
+        exceptionState.throwDOMException(NotSupportedError, "The comparison method provided must be one of 'START_TO_START', 'START_TO_END', 'END_TO_END', or 'END_TO_START'.");
         return 0;
     }
 
@@ -357,7 +357,7 @@ short Range::compareBoundaryPoints(CompareHow how, const Range* sourceRange, Exc
             return compareBoundaryPoints(m_start, sourceRange->m_end, exceptionState);
     }
 
-    exceptionState.throwDOMException(SyntaxError, "The comparison method provided must be one of 'START_TO_START', 'START_TO_END', 'END_TO_END', or 'END_TO_START'.");
+    ASSERT_NOT_REACHED();
     return 0;
 }
 
@@ -950,11 +950,7 @@ String Range::toHTML() const
 
 String Range::text() const
 {
-    // We need to update layout, since plainText uses line boxes in the render tree.
-    // FIXME: As with innerText, we'd like this to work even if there are no render objects.
-    m_start.container()->document().updateLayout();
-
-    return plainText(this);
+    return plainText(this, TextIteratorEmitsObjectReplacementCharacter);
 }
 
 PassRefPtrWillBeRawPtr<DocumentFragment> Range::createContextualFragment(const String& markup, ExceptionState& exceptionState)
@@ -994,7 +990,7 @@ PassRefPtrWillBeRawPtr<DocumentFragment> Range::createContextualFragment(const S
     }
 
     // Steps 3, 4, 5.
-    RefPtrWillBeRawPtr<DocumentFragment> fragment = WebCore::createContextualFragment(markup, element.get(), AllowScriptingContentAndDoNotMarkAlreadyStarted, exceptionState);
+    RefPtrWillBeRawPtr<DocumentFragment> fragment = blink::createContextualFragment(markup, element.get(), AllowScriptingContentAndDoNotMarkAlreadyStarted, exceptionState);
     if (!fragment)
         return nullptr;
 
@@ -1651,7 +1647,7 @@ void Range::getBorderAndTextQuads(Vector<FloatQuad>& quads) const
     Node* endContainer = m_end.container();
     Node* stopNode = pastLastNode();
 
-    HashSet<Node*> nodeSet;
+    WillBeHeapHashSet<RawPtrWillBeMember<Node> > nodeSet;
     for (Node* node = firstNode(); node != stopNode; node = NodeTraversal::next(*node)) {
         if (node->isElementNode())
             nodeSet.add(node);
@@ -1707,11 +1703,11 @@ void Range::trace(Visitor* visitor)
     visitor->trace(m_end);
 }
 
-} // namespace WebCore
+} // namespace blink
 
 #ifndef NDEBUG
 
-void showTree(const WebCore::Range* range)
+void showTree(const blink::Range* range)
 {
     if (range && range->boundaryPointsValid()) {
         range->startContainer()->showTreeAndMark(range->startContainer(), "S", range->endContainer(), "E");

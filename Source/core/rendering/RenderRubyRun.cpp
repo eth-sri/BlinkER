@@ -36,7 +36,7 @@
 #include "core/rendering/RenderRubyText.h"
 #include "core/rendering/RenderText.h"
 
-namespace WebCore {
+namespace blink {
 
 RenderRubyRun::RenderRubyRun()
     : RenderBlockFlow(0)
@@ -86,15 +86,6 @@ RenderRubyBase* RenderRubyRun::rubyBaseSafe()
         RenderBlockFlow::addChild(base);
     }
     return base;
-}
-
-RenderBlock* RenderRubyRun::firstLineBlock() const
-{
-    return 0;
-}
-
-void RenderRubyRun::updateFirstLetter()
-{
 }
 
 bool RenderRubyRun::isChildAllowed(RenderObject* child, RenderStyle*) const
@@ -307,4 +298,4 @@ void RenderRubyRun::getOverhang(bool firstLine, RenderObject* startRenderer, Ren
         endOverhang = std::min<int>(endOverhang, std::min<int>(toRenderText(endRenderer)->minLogicalWidth(), halfWidthOfFontSize));
 }
 
-} // namespace WebCore
+} // namespace blink

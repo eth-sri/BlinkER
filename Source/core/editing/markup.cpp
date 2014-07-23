@@ -29,7 +29,7 @@
 #include "config.h"
 #include "core/editing/markup.h"
 
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/CSSPropertyNames.h"
 #include "core/CSSValueKeywords.h"
 #include "core/HTMLNames.h"
@@ -60,7 +60,7 @@
 #include "wtf/StdLibExtras.h"
 #include "wtf/text/StringBuilder.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -95,11 +95,11 @@ private:
     String m_value;
 };
 
-} // namespace WebCore
+} // namespace blink
 
-WTF_ALLOW_INIT_WITH_MEM_FUNCTIONS(WebCore::AttributeChange);
+WTF_ALLOW_INIT_WITH_MEM_FUNCTIONS(blink::AttributeChange);
 
-namespace WebCore {
+namespace blink {
 
 static void completeURLs(DocumentFragment& fragment, const String& baseURL)
 {
@@ -146,7 +146,7 @@ private:
     enum NodeTraversalMode { EmitString, DoNotEmitString };
     Node* traverseNodesForSerialization(Node* startNode, Node* pastEnd, NodeTraversalMode);
 
-    bool shouldAnnotate() { return m_shouldAnnotate == AnnotateForInterchange; }
+    bool shouldAnnotate() const { return m_shouldAnnotate == AnnotateForInterchange || m_shouldAnnotate == AnnotateForNavigationTransition; }
     bool shouldApplyWrappingStyle(const Node& node) const
     {
         return m_highestNodeToBeSerialized && m_highestNodeToBeSerialized->parentNode() == node.parentNode()
@@ -317,6 +317,9 @@ void StyledMarkupAccumulator::appendElement(StringBuilder& out, Element& element
             if (shouldAnnotate())
                 newInlineStyle->mergeStyleFromRulesForSerialization(&toHTMLElement(element));
 
+            if (&element == m_highestNodeToBeSerialized && m_shouldAnnotate == AnnotateForNavigationTransition)
+                newInlineStyle->addAbsolutePositioningFromElement(element);
+
             if (addDisplayInline)
                 newInlineStyle->forceInline();
 
@@ -343,8 +346,14 @@ Node* StyledMarkupAccumulator::serializeNodes(Node* startNode, Node* pastEnd)
         m_highestNodeToBeSerialized = lastClosed;
     }
 
-    if (m_highestNodeToBeSerialized && m_highestNodeToBeSerialized->parentNode())
+    if (m_highestNodeToBeSerialized && m_highestNodeToBeSerialized->parentNode()) {
         m_wrappingStyle = EditingStyle::wrappingStyleForSerialization(m_highestNodeToBeSerialized->parentNode(), shouldAnnotate());
+        if (m_shouldAnnotate == AnnotateForNavigationTransition) {
+            m_wrappingStyle->style()->removeProperty(CSSPropertyBackgroundColor);
+            m_wrappingStyle->style()->removeProperty(CSSPropertyBackgroundImage);
+        }
+    }
+
 
     return traverseNodesForSerialization(startNode, pastEnd, EmitString);
 }
@@ -371,7 +380,7 @@ Node* StyledMarkupAccumulator::traverseNodesForSerialization(Node* startNode, No
             // Don't write out empty block containers that aren't fully selected.
             continue;
 
-        if (!n->renderer() && !enclosingNodeWithTag(firstPositionInOrBeforeNode(n), selectTag)) {
+        if (!n->renderer() && !enclosingNodeWithTag(firstPositionInOrBeforeNode(n), selectTag) && m_shouldAnnotate != AnnotateForNavigationTransition) {
             next = NodeTraversal::nextSkippingChildren(*n);
             // Don't skip over pastEnd.
             if (pastEnd && pastEnd->isDescendantOf(n))
@@ -517,7 +526,7 @@ static Node* highestAncestorToWrapMarkup(const Range* range, EAnnotateForInterch
         specialCommonAncestor = ancestorToRetainStructureAndAppearance(commonAncestor);
 
         if (Node* parentListNode = enclosingNodeOfType(firstPositionInOrBeforeNode(range->firstNode()), isListItem)) {
-            if (WebCore::areRangesEqual(VisibleSelection::selectionFromContentsOfNode(parentListNode).toNormalizedRange().get(), range)) {
+            if (blink::areRangesEqual(VisibleSelection::selectionFromContentsOfNode(parentListNode).toNormalizedRange().get(), range)) {
                 specialCommonAncestor = parentListNode->parentNode();
                 while (specialCommonAncestor && !isListElement(specialCommonAncestor))
                     specialCommonAncestor = specialCommonAncestor->parentNode();
@@ -982,11 +991,12 @@ static inline bool isSupportedContainer(Element* element)
     if (!element->isHTMLElement())
         return true;
 
-    if (element->hasLocalName(colTag) || element->hasLocalName(colgroupTag) || element->hasLocalName(framesetTag)
-        || element->hasLocalName(headTag) || element->hasLocalName(styleTag) || element->hasLocalName(titleTag)) {
+    HTMLElement& htmlElement = toHTMLElement(*element);
+    if (htmlElement.hasTagName(colTag) || htmlElement.hasTagName(colgroupTag) || htmlElement.hasTagName(framesetTag)
+        || htmlElement.hasTagName(headTag) || htmlElement.hasTagName(styleTag) || htmlElement.hasTagName(titleTag)) {
         return false;
     }
-    return !toHTMLElement(element)->ieForbidsInsertHTML();
+    return !htmlElement.ieForbidsInsertHTML();
 }
 
 PassRefPtrWillBeRawPtr<DocumentFragment> createContextualFragment(const String& markup, Element* element, ParserContentPolicy parserContentPolicy, ExceptionState& exceptionState)
@@ -1093,6 +1103,17 @@ void mergeWithNextTextNode(PassRefPtrWillBeRawPtr<Node> node, ExceptionState& ex
     textNode->appendData(textNext->data());
     if (textNext->parentNode()) // Might have been removed by mutation event.
         textNext->remove(exceptionState);
+}
+
+String createStyledMarkupForNavigationTransition(Node* node)
+{
+    node->document().updateLayoutIgnorePendingStylesheets();
+
+    StyledMarkupAccumulator accumulator(0, ResolveAllURLs, AnnotateForNavigationTransition, nullptr, 0);
+    accumulator.serializeNodes(node, NodeTraversal::nextSkippingChildren(*node));
+
+    static const char* documentMarkup = "<!DOCTYPE html><meta name=\"viewport\" content=\"width=device-width, user-scalable=0\">";
+    return documentMarkup + accumulator.takeResults();
 }
 
 }

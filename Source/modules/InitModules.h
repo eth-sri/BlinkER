@@ -8,7 +8,7 @@
 #include "core/Init.h"
 #include "platform/heap/Handle.h"
 
-namespace WebCore {
+namespace blink {
 
 class Event;
 class ExceptionState;
@@ -18,10 +18,11 @@ public:
     virtual void registerEventFactory() OVERRIDE;
     virtual void initEventNames() OVERRIDE;
     virtual void initEventTargetNames() OVERRIDE;
+    virtual void initBindings() OVERRIDE;
 };
 
 PassRefPtrWillBeRawPtr<Event> createEventModules(const String& eventType, ExceptionState&);
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // InitModules_h

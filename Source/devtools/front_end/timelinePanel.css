@@ -498,27 +498,40 @@
 
 .timeline .resources-event-divider {
     height: 19px;
-    width: 8px;
-    border-left-width: 2px;
-    border-left-style: solid;
-    bottom: auto;
+    width: 6px;
     pointer-events: auto;
+    margin-left: -2px;
 }
 
-.resources-red-divider {
-    border-color: rgba(255, 0, 0, 0.5);
+.timeline .resources-event-divider::before {
+    height: 19px;
+    width: 2px;
+    margin: 0 2px;
+    background-color: rgb(163, 109, 0);
+    bottom: auto;
+    content: "";
+    display: block;
 }
 
-.resources-blue-divider {
-    border-color: rgba(0, 0, 255, 0.5);
+.timeline .resources-event-divider:hover::before {
+    width: 4px;
+    margin: 0 1px;
 }
 
-.resources-orange-divider {
-    border-color: rgba(255, 178, 23, 0.5);
+.timeline .resources-event-divider.resources-red-divider::before {
+    background-color: rgb(255, 0, 0);
 }
 
-.resources-green-divider {
-    border-color: rgba(0, 130, 0, 0.5);
+.timeline .resources-event-divider.resources-blue-divider::before {
+    background-color: rgb(0, 0, 255);
+}
+
+.timeline .resources-event-divider.resources-orange-divider::before {
+    background-color: rgb(255, 178, 23);
+}
+
+.timeline .resources-event-divider.resources-green-divider::before {
+    background-color: rgb(0, 130, 0);
 }
 
 .resources-divider:last-child {
@@ -758,6 +771,10 @@
 .timeline-range-summary {
     align-items: center;
     margin: 6px;
+}
+
+.timeline-range-summary > div {
+    flex-shrink: 0;
 }
 
 .timeline-aggregated-info-legend > div {

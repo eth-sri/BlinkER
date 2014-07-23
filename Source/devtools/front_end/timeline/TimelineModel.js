@@ -30,12 +30,11 @@
 
 /**
  * @constructor
- * @extends {WebInspector.TargetAwareObject}
- * @param {!WebInspector.Target} target
+ * @extends {WebInspector.Object}
  */
-WebInspector.TimelineModel = function(target)
+WebInspector.TimelineModel = function()
 {
-    WebInspector.TargetAwareObject.call(this, target);
+    WebInspector.Object.call(this);
     this._filters = [];
 }
 
@@ -112,6 +111,8 @@ WebInspector.TimelineModel.Events = {
     RecordFilterChanged: "RecordFilterChanged"
 }
 
+WebInspector.TimelineModel.MainThreadName = "main";
+
 /**
  * @param {!Array.<!WebInspector.TimelineModel.Record>} recordsArray
  * @param {?function(!WebInspector.TimelineModel.Record)|?function(!WebInspector.TimelineModel.Record,number)} preOrderCallback
@@ -153,14 +154,6 @@ WebInspector.TimelineModel.prototype = {
 
     stopRecording: function()
     {
-    },
-
-    /**
-     * @return {boolean}
-     */
-    loadedFromFile: function()
-    {
-        return false;
     },
 
     /**
@@ -262,7 +255,6 @@ WebInspector.TimelineModel.prototype = {
 
     reset: function()
     {
-        this._loadedFromFile = false;
         this._records = [];
         this._minimumRecordTime = 0;
         this._maximumRecordTime = 0;
@@ -329,7 +321,7 @@ WebInspector.TimelineModel.prototype = {
         return this._eventDividerRecords;
     },
 
-    __proto__: WebInspector.TargetAwareObject.prototype
+    __proto__: WebInspector.Object.prototype
 }
 
 /**
@@ -351,7 +343,7 @@ WebInspector.TimelineModel.Record.prototype = {
     initiator: function() { },
 
     /**
-     * @return {!WebInspector.Target}
+     * @return {?WebInspector.Target}
      */
     target: function() { },
 
@@ -371,7 +363,7 @@ WebInspector.TimelineModel.Record.prototype = {
     startTime: function() { },
 
     /**
-     * @return {string|undefined}
+     * @return {string}
      */
     thread: function() { },
 
@@ -451,27 +443,85 @@ WebInspector.TimelineModel.Filter.prototype = {
 /**
  * @constructor
  * @extends {WebInspector.TimelineModel.Filter}
- * @param {!Array.<string>} excludeTypes
+ * @param {!Array.<string>} recordTypes
  */
-WebInspector.TimelineRecordTypeFilter = function(excludeTypes)
+WebInspector.TimelineRecordTypeFilter = function(recordTypes)
 {
     WebInspector.TimelineModel.Filter.call(this);
-    this._excludeTypes = {};
-    for (var i = 0; i < excludeTypes.length; ++i)
-        this._excludeTypes[excludeTypes[i]] = true;
+    this._recordTypes = recordTypes.keySet();
 }
 
 WebInspector.TimelineRecordTypeFilter.prototype = {
+    __proto__: WebInspector.TimelineModel.Filter.prototype
+}
+
+/**
+ * @constructor
+ * @extends {WebInspector.TimelineRecordTypeFilter}
+ * @param {!Array.<string>} recordTypes
+ */
+WebInspector.TimelineRecordHiddenEmptyTypeFilter = function(recordTypes)
+{
+    WebInspector.TimelineRecordTypeFilter.call(this, recordTypes);
+}
+
+WebInspector.TimelineRecordHiddenEmptyTypeFilter.prototype = {
     /**
      * @param {!WebInspector.TimelineModel.Record} record
      * @return {boolean}
      */
     accept: function(record)
     {
-        return !this._excludeTypes[record.type()];
+        return record.children().length !== 0 || !this._recordTypes[record.type()];
     },
 
-    __proto__: WebInspector.TimelineModel.Filter.prototype
+    __proto__: WebInspector.TimelineRecordTypeFilter.prototype
+}
+
+/**
+ * @constructor
+ * @extends {WebInspector.TimelineRecordTypeFilter}
+ * @param {!Array.<string>} recordTypes
+ */
+WebInspector.TimelineRecordHiddenTypeFilter = function(recordTypes)
+{
+    WebInspector.TimelineRecordTypeFilter.call(this, recordTypes);
+}
+
+WebInspector.TimelineRecordHiddenTypeFilter.prototype = {
+    /**
+     * @param {!WebInspector.TimelineModel.Record} record
+     * @return {boolean}
+     */
+    accept: function(record)
+    {
+        return !this._recordTypes[record.type()];
+    },
+
+    __proto__: WebInspector.TimelineRecordTypeFilter.prototype
+}
+
+/**
+ * @constructor
+ * @extends {WebInspector.TimelineRecordTypeFilter}
+ * @param {!Array.<string>} recordTypes
+ */
+WebInspector.TimelineRecordVisibleTypeFilter = function(recordTypes)
+{
+    WebInspector.TimelineRecordTypeFilter.call(this, recordTypes);
+}
+
+WebInspector.TimelineRecordVisibleTypeFilter.prototype = {
+    /**
+     * @param {!WebInspector.TimelineModel.Record} record
+     * @return {boolean}
+     */
+    accept: function(record)
+    {
+        return !!this._recordTypes[record.type()];
+    },
+
+    __proto__: WebInspector.TimelineRecordTypeFilter.prototype
 }
 
 /**
@@ -493,7 +543,7 @@ WebInspector.TimelineMergingRecordBuffer.prototype = {
      */
     process: function(thread, records)
     {
-        if (thread) {
+        if (thread !== WebInspector.TimelineModel.MainThreadName) {
             this._backgroundRecordsBuffer = this._backgroundRecordsBuffer.concat(records);
             return [];
         }

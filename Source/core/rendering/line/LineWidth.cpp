@@ -33,13 +33,14 @@
 #include "core/rendering/RenderBlock.h"
 #include "core/rendering/RenderRubyRun.h"
 
-namespace WebCore {
+namespace blink {
 
 LineWidth::LineWidth(RenderBlockFlow& block, bool isFirstLine, IndentTextOrNot shouldIndentText)
     : m_block(block)
     , m_uncommittedWidth(0)
     , m_committedWidth(0)
     , m_overhangWidth(0)
+    , m_trailingWhitespaceWidth(0)
     , m_left(0)
     , m_right(0)
     , m_availableWidth(0)

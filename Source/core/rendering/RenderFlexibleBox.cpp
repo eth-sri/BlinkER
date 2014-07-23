@@ -31,6 +31,7 @@
 #include "config.h"
 #include "core/rendering/RenderFlexibleBox.h"
 
+#include "core/frame/UseCounter.h"
 #include "core/rendering/FastTextAutosizer.h"
 #include "core/rendering/RenderLayer.h"
 #include "core/rendering/RenderView.h"
@@ -38,7 +39,7 @@
 #include "wtf/MathExtras.h"
 #include <limits>
 
-namespace WebCore {
+namespace blink {
 
 struct RenderFlexibleBox::LineContext {
     LineContext(LayoutUnit crossAxisOffset, LayoutUnit crossAxisExtent, size_t numberOfChildren, LayoutUnit maxAscent)
@@ -72,7 +73,7 @@ RenderFlexibleBox::RenderFlexibleBox(Element* element)
     , m_orderIterator(this)
     , m_numberOfInFlowChildrenOnFirstLine(-1)
 {
-    setChildrenInline(false); // All of our children must be block-level.
+    ASSERT(!childrenInline());
 }
 
 RenderFlexibleBox::~RenderFlexibleBox()
@@ -611,6 +612,9 @@ bool RenderFlexibleBox::childPreferredMainAxisContentExtentRequiresLayout(Render
 LayoutUnit RenderFlexibleBox::preferredMainAxisContentExtentForChild(RenderBox* child, bool hasInfiniteLineLength, bool relayoutChildren)
 {
     child->clearOverrideSize();
+
+    if (child->style()->hasAspectRatio() || child->isImage() || child->isVideo() || child->isCanvas())
+        UseCounter::count(document(), UseCounter::AspectRatioFlexItem);
 
     Length flexBasis = flexBasisForChild(child);
     if (preferredMainAxisExtentDependsOnLayout(flexBasis, hasInfiniteLineLength)) {
@@ -1308,6 +1312,7 @@ void RenderFlexibleBox::alignChildren(const Vector<LineContext>& lineContexts)
                     minMarginAfterBaseline = std::min(minMarginAfterBaseline, availableAlignmentSpaceForChild(lineCrossAxisExtent, child) - startOffset);
                 break;
             }
+            case ItemPositionLastBaseline:
             case ItemPositionSelfStart:
             case ItemPositionSelfEnd:
             case ItemPositionStart:

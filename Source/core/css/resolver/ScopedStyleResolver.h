@@ -30,12 +30,13 @@
 #include "core/css/ElementRuleCollector.h"
 #include "core/css/RuleSet.h"
 #include "core/dom/ContainerNode.h"
+#include "core/dom/TreeScope.h"
 #include "wtf/HashMap.h"
 #include "wtf/HashSet.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 class MediaQueryEvaluator;
 class PageRuleCollector;
@@ -46,12 +47,15 @@ class StyleSheetContents;
 class ScopedStyleResolver {
     WTF_MAKE_NONCOPYABLE(ScopedStyleResolver); WTF_MAKE_FAST_ALLOCATED;
 public:
-    static PassOwnPtr<ScopedStyleResolver> create(ContainerNode& scopingNode) { return adoptPtr(new ScopedStyleResolver(scopingNode)); }
+    static PassOwnPtr<ScopedStyleResolver> create(TreeScope& scope)
+    {
+        return adoptPtr(new ScopedStyleResolver(scope));
+    }
 
     static ContainerNode* scopingNodeFor(Document&, const CSSStyleSheet*);
 
-    const ContainerNode& scopingNode() const { return m_scopingNode; }
-    const TreeScope& treeScope() const { return m_scopingNode.treeScope(); }
+    const ContainerNode& scopingNode() const { return m_scope.rootNode(); }
+    const TreeScope& treeScope() const { return m_scope; }
     void setParent(ScopedStyleResolver* newParent) { m_parent = newParent; }
     ScopedStyleResolver* parent() { return m_parent; }
 
@@ -67,9 +71,13 @@ public:
     void collectViewportRulesTo(StyleResolver*) const;
 
 private:
-    explicit ScopedStyleResolver(ContainerNode& scopingNode) : m_scopingNode(scopingNode), m_parent(0) { }
+    explicit ScopedStyleResolver(TreeScope& scope)
+        : m_scope(scope)
+        , m_parent(0)
+    {
+    }
 
-    ContainerNode& m_scopingNode;
+    TreeScope& m_scope;
     ScopedStyleResolver* m_parent;
 
     WillBePersistentHeapVector<RawPtrWillBeMember<CSSStyleSheet> > m_authorStyleSheets;
@@ -78,6 +86,6 @@ private:
     KeyframesRuleMap m_keyframesRuleMap;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // ScopedStyleResolver_h

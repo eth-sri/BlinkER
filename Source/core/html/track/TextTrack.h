@@ -27,13 +27,12 @@
 #ifndef TextTrack_h
 #define TextTrack_h
 
-#include "bindings/v8/ScriptWrappable.h"
 #include "core/events/EventTarget.h"
 #include "core/html/track/TrackBase.h"
 #include "platform/heap/Handle.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 class ExceptionState;
 class HTMLMediaElement;
@@ -44,7 +43,7 @@ class TextTrackList;
 class VTTRegion;
 class VTTRegionList;
 
-class TextTrack : public TrackBase, public ScriptWrappable, public EventTargetWithInlineData {
+class TextTrack : public TrackBase, public EventTargetWithInlineData {
     REFCOUNTED_EVENT_TARGET(TrackBase);
     WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(TextTrack);
 public:
@@ -141,6 +140,8 @@ private:
     bool m_hasBeenConfigured;
 };
 
-} // namespace WebCore
+DEFINE_TRACK_TYPE_CASTS(TextTrack, TrackBase::TextTrack);
+
+} // namespace blink
 
 #endif

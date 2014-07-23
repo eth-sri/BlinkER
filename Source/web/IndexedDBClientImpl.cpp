@@ -29,7 +29,7 @@
 #include "config.h"
 #include "web/IndexedDBClientImpl.h"
 
-#include "bindings/v8/WorkerScriptController.h"
+#include "bindings/core/v8/WorkerScriptController.h"
 #include "core/dom/Document.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -40,7 +40,7 @@
 #include "web/WorkerPermissionClient.h"
 
 
-using namespace WebCore;
+using namespace blink;
 
 namespace blink {
 

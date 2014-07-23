@@ -37,7 +37,7 @@
 #include "platform/weborigin/SecurityOrigin.h"
 #include "wtf/text/StringBuilder.h"
 
-namespace WebCore {
+namespace blink {
 
 String XSSInfo::buildConsoleError() const
 {
@@ -71,6 +71,11 @@ XSSAuditorDelegate::XSSAuditorDelegate(Document* document)
 {
     ASSERT(isMainThread());
     ASSERT(m_document);
+}
+
+void XSSAuditorDelegate::trace(Visitor* visitor)
+{
+    visitor->trace(m_document);
 }
 
 PassRefPtr<FormData> XSSAuditorDelegate::generateViolationReport(const XSSInfo& xssInfo)
@@ -116,7 +121,7 @@ void XSSAuditorDelegate::didBlockScript(const XSSInfo& xssInfo)
     }
 
     if (xssInfo.m_didBlockEntirePage)
-        m_document->frame()->navigationScheduler().scheduleLocationChange(m_document, SecurityOrigin::urlWithUniqueSecurityOrigin(), Referrer());
+        m_document->frame()->navigationScheduler().schedulePageBlock(m_document, Referrer());
 }
 
-} // namespace WebCore
+} // namespace blink

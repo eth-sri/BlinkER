@@ -5,17 +5,17 @@
 #include "config.h"
 #include "modules/serviceworkers/Client.h"
 
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/SerializedScriptValue.h"
 #include "modules/serviceworkers/ServiceWorkerGlobalScopeClient.h"
 #include "public/platform/WebString.h"
 #include "wtf/RefPtr.h"
 
-namespace WebCore {
+namespace blink {
 
-PassRefPtr<Client> Client::create(unsigned id)
+PassRefPtrWillBeRawPtr<Client> Client::create(unsigned id)
 {
-    return adoptRef(new Client(id));
+    return adoptRefWillBeNoop(new Client(id));
 }
 
 Client::Client(unsigned id)
@@ -24,9 +24,7 @@ Client::Client(unsigned id)
     ScriptWrappable::init(this);
 }
 
-Client::~Client()
-{
-}
+DEFINE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(Client);
 
 void Client::postMessage(ExecutionContext* context, PassRefPtr<SerializedScriptValue> message, const MessagePortArray* ports, ExceptionState& exceptionState)
 {
@@ -40,4 +38,4 @@ void Client::postMessage(ExecutionContext* context, PassRefPtr<SerializedScriptV
     ServiceWorkerGlobalScopeClient::from(context)->postMessageToClient(m_id, messageString, webChannels.release());
 }
 
-} // namespace WebCore
+} // namespace blink

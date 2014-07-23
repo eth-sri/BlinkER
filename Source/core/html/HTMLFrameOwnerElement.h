@@ -26,7 +26,7 @@
 #include "core/html/HTMLElement.h"
 #include "wtf/HashCountedSet.h"
 
-namespace WebCore {
+namespace blink {
 
 class LocalDOMWindow;
 class ExceptionState;
@@ -121,17 +121,13 @@ public:
     }
 
 private:
-    static HashCountedSet<Node*>& disabledSubtreeRoots()
-    {
-        DEFINE_STATIC_LOCAL(HashCountedSet<Node*>, nodes, ());
-        return nodes;
-    }
+    static WillBeHeapHashCountedSet<RawPtrWillBeMember<Node> >& disabledSubtreeRoots();
 
     Node& m_root;
 };
 
 DEFINE_TYPE_CASTS(HTMLFrameOwnerElement, FrameOwner, owner, owner->isLocal(), owner.isLocal());
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // HTMLFrameOwnerElement_h

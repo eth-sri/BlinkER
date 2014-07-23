@@ -28,8 +28,8 @@
 #include "config.h"
 #include "core/editing/Editor.h"
 
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/CSSPropertyNames.h"
 #include "core/CSSValueKeywords.h"
 #include "core/HTMLNames.h"
@@ -65,7 +65,7 @@
 #include "public/platform/Platform.h"
 #include "wtf/text/AtomicString.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -274,7 +274,7 @@ static unsigned verticalScrollDistance(LocalFrame& frame)
     RenderStyle* style = renderer->style();
     if (!style)
         return 0;
-    if (!(style->overflowY() == OSCROLL || style->overflowY() == OAUTO || focusedElement->rendererIsEditable()))
+    if (!(style->overflowY() == OSCROLL || style->overflowY() == OAUTO || focusedElement->hasEditableStyle()))
         return 0;
     int height = std::min<int>(toRenderBox(renderer)->clientHeight(), frame.view()->visibleHeight());
     return static_cast<unsigned>(max(max<int>(height * ScrollableArea::minFractionToStepWhenPaging(), height - ScrollableArea::maxOverlapBetweenPages()), 1));
@@ -546,7 +546,7 @@ static bool executeInsertLineBreak(LocalFrame& frame, Event* event, EditorComman
 
 static bool executeInsertNewline(LocalFrame& frame, Event* event, EditorCommandSource, const String&)
 {
-    LocalFrame* targetFrame = WebCore::targetFrame(frame, event);
+    LocalFrame* targetFrame = blink::targetFrame(frame, event);
     return targetFrame->eventHandler().handleTextInputEvent("\n", event, targetFrame->editor().canEditRichly() ? TextEventInputKeyboard : TextEventInputLineBreak);
 }
 
@@ -1643,14 +1643,14 @@ static const CommandMap& createCommandMap()
     // Unbookmark (not supported)
 
     CommandMap& commandMap = *new CommandMap;
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     HashSet<int> idSet;
 #endif
     for (size_t i = 0; i < WTF_ARRAY_LENGTH(commands); ++i) {
         const CommandEntry& command = commands[i];
         ASSERT(!commandMap.get(command.name));
         commandMap.set(command.name, &command.command);
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
         ASSERT(!idSet.contains(command.command.idForUserMetrics));
         idSet.add(command.command.idForUserMetrics);
 #endif
@@ -1673,6 +1673,48 @@ Editor::Command Editor::command(const String& commandName)
 Editor::Command Editor::command(const String& commandName, EditorCommandSource source)
 {
     return Command(internalCommand(commandName), source, &m_frame);
+}
+
+bool Editor::executeCommand(const String& commandName)
+{
+    // Specially handling commands that Editor::execCommand does not directly
+    // support.
+    if (commandName == "DeleteToEndOfParagraph") {
+        if (!deleteWithDirection(DirectionForward, ParagraphBoundary, true, false))
+            deleteWithDirection(DirectionForward, CharacterGranularity, true, false);
+        return true;
+    }
+    if (commandName == "DeleteBackward")
+        return command(AtomicString("BackwardDelete")).execute();
+    if (commandName == "DeleteForward")
+        return command(AtomicString("ForwardDelete")).execute();
+    if (commandName == "AdvanceToNextMisspelling") {
+        // Wee need to pass false here or else the currently selected word will never be skipped.
+        spellChecker().advanceToNextMisspelling(false);
+        return true;
+    }
+    if (commandName == "ToggleSpellPanel") {
+        spellChecker().showSpellingGuessPanel();
+        return true;
+    }
+    return command(commandName).execute();
+}
+
+bool Editor::executeCommand(const String& commandName, const String& value)
+{
+    // moveToBeginningOfDocument and moveToEndfDocument are only handled by WebKit for editable nodes.
+    if (!canEdit() && commandName == "moveToBeginningOfDocument")
+        return m_frame.eventHandler().bubblingScroll(ScrollUp, ScrollByDocument);
+
+    if (!canEdit() && commandName == "moveToEndOfDocument")
+        return m_frame.eventHandler().bubblingScroll(ScrollDown, ScrollByDocument);
+
+    if (commandName == "showGuessPanel") {
+        spellChecker().showSpellingGuessPanel();
+        return true;
+    }
+
+    return command(commandName).execute(value);
 }
 
 Editor::Command::Command()
@@ -1757,4 +1799,4 @@ int Editor::Command::idForHistogram() const
     return isSupported() ? m_command->idForUserMetrics : 0;
 }
 
-} // namespace WebCore
+} // namespace blink

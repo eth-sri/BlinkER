@@ -31,20 +31,20 @@
 #include "config.h"
 #include "bindings/core/v8/V8Window.h"
 
+#include "bindings/core/v8/BindingSecurity.h"
+#include "bindings/core/v8/ExceptionMessages.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ScheduledAction.h"
+#include "bindings/core/v8/ScriptController.h"
+#include "bindings/core/v8/ScriptSourceCode.h"
+#include "bindings/core/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8EventListener.h"
+#include "bindings/core/v8/V8EventListenerList.h"
+#include "bindings/core/v8/V8GCForContextDispose.h"
 #include "bindings/core/v8/V8HTMLCollection.h"
+#include "bindings/core/v8/V8HiddenValue.h"
 #include "bindings/core/v8/V8Node.h"
-#include "bindings/v8/BindingSecurity.h"
-#include "bindings/v8/ExceptionMessages.h"
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ScheduledAction.h"
-#include "bindings/v8/ScriptController.h"
-#include "bindings/v8/ScriptSourceCode.h"
-#include "bindings/v8/SerializedScriptValue.h"
-#include "bindings/v8/V8Binding.h"
-#include "bindings/v8/V8EventListener.h"
-#include "bindings/v8/V8EventListenerList.h"
-#include "bindings/v8/V8GCForContextDispose.h"
-#include "bindings/v8/V8HiddenValue.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/MessagePort.h"
 #include "core/frame/DOMTimer.h"
@@ -66,7 +66,7 @@
 #include "wtf/Assertions.h"
 #include "wtf/OwnPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 // FIXME: There is a lot of duplication with SetTimeoutOrInterval() in V8WorkerGlobalScopeCustom.cpp.
 // We should refactor this.
@@ -264,7 +264,7 @@ void V8Window::postMessageMethodCustom(const v8::FunctionCallbackInfo<v8::Value>
             return;
         }
     }
-    TOSTRING_VOID(V8StringResource<WithUndefinedOrNullCheck>, targetOrigin, info[targetOriginArgIndex]);
+    TOSTRING_VOID(V8StringResource<TreatNullAndUndefinedAsNullString>, targetOrigin, info[targetOriginArgIndex]);
 
     RefPtr<SerializedScriptValue> message = SerializedScriptValue::create(info[0], &portArray, &arrayBufferArray, exceptionState, info.GetIsolate());
     if (exceptionState.throwIfNeeded())
@@ -347,9 +347,9 @@ void V8Window::showModalDialogMethodCustom(const v8::FunctionCallbackInfo<v8::Va
         return;
     }
 
-    TOSTRING_VOID(V8StringResource<WithUndefinedOrNullCheck>, urlString, info[0]);
+    TOSTRING_VOID(V8StringResource<TreatNullAndUndefinedAsNullString>, urlString, info[0]);
     DialogHandler handler(info[1], ScriptState::current(info.GetIsolate()));
-    TOSTRING_VOID(V8StringResource<WithUndefinedOrNullCheck>, dialogFeaturesString, info[2]);
+    TOSTRING_VOID(V8StringResource<TreatNullAndUndefinedAsNullString>, dialogFeaturesString, info[2]);
 
     impl->showModalDialog(urlString, dialogFeaturesString, callingDOMWindow(info.GetIsolate()), enteredDOMWindow(info.GetIsolate()), setUpDialog, &handler);
 
@@ -365,7 +365,7 @@ void V8Window::openMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
         return;
     }
 
-    TOSTRING_VOID(V8StringResource<WithUndefinedOrNullCheck>, urlString, info[0]);
+    TOSTRING_VOID(V8StringResource<TreatNullAndUndefinedAsNullString>, urlString, info[0]);
     AtomicString frameName;
     if (info[1]->IsUndefined() || info[1]->IsNull()) {
         frameName = "_blank";
@@ -373,7 +373,7 @@ void V8Window::openMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
         TOSTRING_VOID(V8StringResource<>, frameNameResource, info[1]);
         frameName = frameNameResource;
     }
-    TOSTRING_VOID(V8StringResource<WithUndefinedOrNullCheck>, windowFeaturesString, info[2]);
+    TOSTRING_VOID(V8StringResource<TreatNullAndUndefinedAsNullString>, windowFeaturesString, info[2]);
 
     RefPtrWillBeRawPtr<LocalDOMWindow> openedWindow = impl->open(urlString, frameName, windowFeaturesString, callingDOMWindow(info.GetIsolate()), enteredDOMWindow(info.GetIsolate()));
     if (!openedWindow)
@@ -538,4 +538,4 @@ v8::Handle<v8::Value> toV8(LocalDOMWindow* window, v8::Handle<v8::Object> creati
     return global;
 }
 
-} // namespace WebCore
+} // namespace blink

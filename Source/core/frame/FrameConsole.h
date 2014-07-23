@@ -29,13 +29,13 @@
 #ifndef FrameConsole_h
 #define FrameConsole_h
 
-#include "bindings/v8/ScriptState.h"
+#include "bindings/core/v8/ScriptState.h"
 #include "core/frame/ConsoleTypes.h"
 #include "core/inspector/ScriptCallStack.h"
 #include "wtf/Forward.h"
 #include "wtf/PassOwnPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 class FrameHost;
 
@@ -59,6 +59,6 @@ private:
     LocalFrame& m_frame;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // FrameConsole_h

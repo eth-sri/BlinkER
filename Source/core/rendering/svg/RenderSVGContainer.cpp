@@ -35,7 +35,7 @@
 #include "platform/graphics/GraphicsContextCullSaver.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
 
-namespace WebCore {
+namespace blink {
 
 RenderSVGContainer::RenderSVGContainer(SVGElement* node)
     : RenderSVGModelObject(node)
@@ -51,9 +51,6 @@ RenderSVGContainer::~RenderSVGContainer()
 void RenderSVGContainer::layout()
 {
     ASSERT(needsLayout());
-
-    // RenderSVGRoot disables layoutState for the SVG rendering tree.
-    ASSERT(!view()->layoutStateCachedOffsetsEnabled());
 
     // Allow RenderSVGViewportContainer to update its viewport.
     calcViewport();

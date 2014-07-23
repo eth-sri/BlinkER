@@ -3,7 +3,7 @@
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
  *           (C) 2001 Peter Kelly (pmk@post.com)
  *           (C) 2001 Dirk Mueller (mueller@kde.org)
- * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2013 Apple Inc. All rights reserved.
+ * Copyright (C) 2003-2011, 2013, 2014 Apple Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -37,7 +37,7 @@
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollTypes.h"
 
-namespace WebCore {
+namespace blink {
 
 class ActiveAnimations;
 class Attr;
@@ -132,7 +132,7 @@ public:
     // attribute or one of the SVG animatable attributes.
     bool fastHasAttribute(const QualifiedName&) const;
     const AtomicString& fastGetAttribute(const QualifiedName&) const;
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     bool fastAttributeLookupAllowed(const QualifiedName&) const;
 #endif
 
@@ -168,15 +168,10 @@ public:
     // so this function is not suitable for non-style uses.
     const AtomicString& idForStyleResolution() const;
 
-    // Internal methods that assume the existence of attribute storage, one should use hasAttributes()
-    // before calling them. This is not a trivial getter and its return value should be cached for
+    // Internal method that assumes the existence of attribute storage, one should use hasAttributes()
+    // before calling it. This is not a trivial getter and its return value should be cached for
     // performance.
-    AttributeCollection attributes() const { return elementData()->attributes(); }
-    size_t attributeCount() const;
-    const Attribute& attributeAt(unsigned index) const;
-    const Attribute* findAttributeByName(const QualifiedName&) const;
-    size_t findAttributeIndexByName(const QualifiedName& name) const { return elementData()->attributes().findIndex(name); }
-    size_t findAttributeIndexByName(const AtomicString& name, bool shouldIgnoreAttributeCase) const { return elementData()->attributes().findIndex(name, shouldIgnoreAttributeCase); }
+    AttributeCollection attributes() const;
 
     void scrollIntoView(bool alignToTop = true);
     void scrollIntoViewIfNeeded(bool centerIfNeeded = true);
@@ -237,14 +232,16 @@ public:
 
     const QualifiedName& tagQName() const { return m_tagName; }
     String tagName() const { return nodeName(); }
+
     bool hasTagName(const QualifiedName& tagName) const { return m_tagName.matches(tagName); }
+    bool hasTagName(const HTMLQualifiedName& tagName) const { return ContainerNode::hasTagName(tagName); }
+    bool hasTagName(const SVGQualifiedName& tagName) const { return ContainerNode::hasTagName(tagName); }
 
     // Should be called only by Document::createElementNS to fix up m_tagName immediately after construction.
     void setTagNameForCreateElementNS(const QualifiedName&);
 
     // A fast function for checking the local name against another atomic string.
     bool hasLocalName(const AtomicString& other) const { return m_tagName.localName() == other; }
-    bool hasLocalName(const QualifiedName& other) const { return m_tagName.localName() == other.localName(); }
 
     virtual const AtomicString& localName() const OVERRIDE FINAL { return m_tagName.localName(); }
     const AtomicString& prefix() const { return m_tagName.prefix(); }
@@ -292,6 +289,7 @@ public:
     };
 
     // This method is called whenever an attribute is added, changed or removed.
+    virtual void attributeWillChange(const QualifiedName&, const AtomicString& oldValue, const AtomicString& newValue) { }
     virtual void attributeChanged(const QualifiedName&, const AtomicString&, AttributeModificationReason = ModifiedDirectly);
     virtual void parseAttribute(const QualifiedName&, const AtomicString&);
 
@@ -364,6 +362,9 @@ public:
 
     virtual bool isURLAttribute(const Attribute&) const { return false; }
     virtual bool isHTMLContentAttribute(const Attribute&) const { return false; }
+
+    virtual bool isLiveLink() const { return false; }
+    KURL hrefURL() const;
 
     KURL getURLAttribute(const QualifiedName&) const;
     KURL getNonEmptyURLAttribute(const QualifiedName&) const;
@@ -523,7 +524,7 @@ protected:
 
     virtual InsertionNotificationRequest insertedInto(ContainerNode*) OVERRIDE;
     virtual void removedFrom(ContainerNode*) OVERRIDE;
-    virtual void childrenChanged(bool changedByParser = false, Node* beforeChange = 0, Node* afterChange = 0, int childCountDelta = 0) OVERRIDE;
+    virtual void childrenChanged(const ChildrenChange&) OVERRIDE;
 
     virtual void willRecalcStyle(StyleRecalcChange);
     virtual void didRecalcStyle(StyleRecalcChange);
@@ -532,7 +533,7 @@ protected:
     virtual bool shouldRegisterAsNamedItem() const { return false; }
     virtual bool shouldRegisterAsExtraNamedItem() const { return false; }
 
-    virtual bool supportsSpatialNavigationFocus() const;
+    bool supportsSpatialNavigationFocus() const;
 
     void clearTabIndexExplicitlyIfNeeded();
     void setTabIndexExplicitly(short);
@@ -597,7 +598,6 @@ private:
     void updateId(const AtomicString& oldId, const AtomicString& newId);
     void updateId(TreeScope&, const AtomicString& oldId, const AtomicString& newId);
     void updateName(const AtomicString& oldName, const AtomicString& newName);
-    void updateLabel(TreeScope&, const AtomicString& oldForAttributeValue, const AtomicString& newForAttributeValue);
 
     void scrollByUnits(int units, ScrollGranularity);
 
@@ -654,8 +654,9 @@ private:
 };
 
 DEFINE_NODE_TYPE_CASTS(Element, isElementNode());
-template <typename T> bool isElementOfType(const Element&);
-template <typename T> inline bool isElementOfType(const Node& node) { return node.isElementNode() && isElementOfType<const T>(toElement(node)); }
+template <typename T> bool isElementOfType(const Node&);
+template <> inline bool isElementOfType<const Element>(const Node& node) { return node.isElementNode(); }
+template <typename T> inline bool isElementOfType(const Element& element) { return isElementOfType<T>(static_cast<const Node&>(element)); }
 template <> inline bool isElementOfType<const Element>(const Element&) { return true; }
 
 // Type casting.
@@ -700,17 +701,23 @@ inline Element* Node::parentElement() const
 inline bool Element::fastHasAttribute(const QualifiedName& name) const
 {
     ASSERT(fastAttributeLookupAllowed(name));
-    return elementData() && findAttributeByName(name);
+    return elementData() && attributes().findIndex(name) != kNotFound;
 }
 
 inline const AtomicString& Element::fastGetAttribute(const QualifiedName& name) const
 {
     ASSERT(fastAttributeLookupAllowed(name));
     if (elementData()) {
-        if (const Attribute* attribute = findAttributeByName(name))
+        if (const Attribute* attribute = attributes().find(name))
             return attribute->value();
     }
     return nullAtom;
+}
+
+inline AttributeCollection Element::attributes() const
+{
+    ASSERT(elementData());
+    return elementData()->attributes();
 }
 
 inline bool Element::hasAttributesWithoutUpdate() const
@@ -764,24 +771,6 @@ inline const SpaceSplitString& Element::classNames() const
     return elementData()->classNames();
 }
 
-inline size_t Element::attributeCount() const
-{
-    ASSERT(elementData());
-    return elementData()->attributes().size();
-}
-
-inline const Attribute& Element::attributeAt(unsigned index) const
-{
-    ASSERT(elementData());
-    return elementData()->attributes()[index];
-}
-
-inline const Attribute* Element::findAttributeByName(const QualifiedName& name) const
-{
-    ASSERT(elementData());
-    return elementData()->attributes().find(name);
-}
-
 inline bool Element::hasID() const
 {
     return elementData() && elementData()->hasID();
@@ -796,7 +785,7 @@ inline UniqueElementData& Element::ensureUniqueElementData()
 {
     if (!elementData() || !elementData()->isUnique())
         createUniqueElementData();
-    return static_cast<UniqueElementData&>(*m_elementData);
+    return toUniqueElementData(*m_elementData);
 }
 
 // Put here to make them inline.
@@ -871,11 +860,11 @@ inline bool isShadowHost(const Element* element)
 // These macros do the same as their NODE equivalents but additionally provide a template specialization
 // for isElementOfType<>() so that the Traversal<> API works for these Element types.
 #define DEFINE_ELEMENT_TYPE_CASTS(thisType, predicate) \
-    template <> inline bool isElementOfType<const thisType>(const Element& element) { return element.predicate; } \
+    template <> inline bool isElementOfType<const thisType>(const Node& node) { return node.predicate; } \
     DEFINE_NODE_TYPE_CASTS(thisType, predicate)
 
 #define DEFINE_ELEMENT_TYPE_CASTS_WITH_FUNCTION(thisType) \
-    template <> inline bool isElementOfType<const thisType>(const Element& element) { return is##thisType(element); } \
+    template <> inline bool isElementOfType<const thisType>(const Node& node) { return is##thisType(node); } \
     DEFINE_NODE_TYPE_CASTS_WITH_FUNCTION(thisType)
 
 #define DECLARE_ELEMENT_FACTORY_WITH_TAGNAME(T) \

@@ -52,7 +52,7 @@
 #include "wtf/HashSet.h"
 #include "wtf/text/AtomicString.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -239,6 +239,11 @@ bool SharedStyleFinder::canShareStyleWithElement(Element& candidate) const
         return false;
 
     if (isControl && !canShareStyleWithControl(candidate))
+        return false;
+
+    if (isHTMLOptionElement(candidate) && isHTMLOptionElement(element())
+        && (toHTMLOptionElement(candidate).selected() != toHTMLOptionElement(element()).selected()
+        || toHTMLOptionElement(candidate).spatialNavigationFocused() != toHTMLOptionElement(element()).spatialNavigationFocused()))
         return false;
 
     // FIXME: This line is surprisingly hot, we may wish to inline hasDirectionAuto into StyleResolver.

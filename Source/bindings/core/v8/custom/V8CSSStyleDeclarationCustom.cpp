@@ -31,8 +31,8 @@
 #include "config.h"
 #include "bindings/core/v8/V8CSSStyleDeclaration.h"
 
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/V8Binding.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/V8Binding.h"
 #include "core/CSSPropertyNames.h"
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSStyleDeclaration.h"
@@ -50,7 +50,7 @@
 
 using namespace WTF;
 
-namespace WebCore {
+namespace blink {
 
 // Check for a CSS prefix.
 // Passed prefix is all lowercase.
@@ -59,7 +59,7 @@ namespace WebCore {
 // The prefix within the property name must be followed by a capital letter.
 static bool hasCSSPropertyNamePrefix(const String& propertyName, const char* prefix)
 {
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     ASSERT(*prefix);
     for (const char* p = prefix; *p; ++p)
         ASSERT(isASCIILower(*p));
@@ -219,7 +219,7 @@ void V8CSSStyleDeclaration::namedPropertySetterCustom(v8::Local<v8::String> name
     if (!propInfo)
         return;
 
-    TOSTRING_VOID(V8StringResource<WithNullCheck>, propertyValue, value);
+    TOSTRING_VOID(V8StringResource<TreatNullAsNullString>, propertyValue, value);
     ExceptionState exceptionState(ExceptionState::SetterContext, getPropertyName(static_cast<CSSPropertyID>(propInfo->propID)), "CSSStyleDeclaration", info.Holder(), info.GetIsolate());
     impl->setPropertyInternal(static_cast<CSSPropertyID>(propInfo->propID), propertyValue, false, exceptionState);
 
@@ -229,4 +229,4 @@ void V8CSSStyleDeclaration::namedPropertySetterCustom(v8::Local<v8::String> name
     v8SetReturnValue(info, value);
 }
 
-} // namespace WebCore
+} // namespace blink

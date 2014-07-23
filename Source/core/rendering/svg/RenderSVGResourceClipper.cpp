@@ -25,6 +25,7 @@
 #include "core/rendering/svg/RenderSVGResourceClipper.h"
 
 #include "core/SVGNames.h"
+#include "core/dom/ElementTraversal.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/rendering/HitTestResult.h"
@@ -38,7 +39,7 @@
 #include "platform/graphics/GraphicsContextStateSaver.h"
 #include "wtf/TemporaryChange.h"
 
-namespace WebCore {
+namespace blink {
 
 const RenderSVGResourceType RenderSVGResourceClipper::s_resourceType = ClipperResourceType;
 
@@ -85,7 +86,7 @@ bool RenderSVGResourceClipper::applyStatefulResource(RenderObject* object, Graph
 bool RenderSVGResourceClipper::tryPathOnlyClipping(GraphicsContext* context,
     const AffineTransform& animatedLocalTransform, const FloatRect& objectBoundingBox) {
     // If the current clip-path gets clipped itself, we have to fallback to masking.
-    if (!style()->svgStyle()->clipperResource().isEmpty())
+    if (!style()->svgStyle().clipperResource().isEmpty())
         return false;
     WindRule clipRule = RULE_NONZERO;
     Path clipPath = Path();
@@ -103,15 +104,15 @@ bool RenderSVGResourceClipper::tryPathOnlyClipping(GraphicsContext* context,
         RenderStyle* style = renderer->style();
         if (!style || style->display() == NONE || style->visibility() != VISIBLE)
              continue;
-        const SVGRenderStyle* svgStyle = style->svgStyle();
+        const SVGRenderStyle& svgStyle = style->svgStyle();
         // Current shape in clip-path gets clipped too. Fallback to masking.
-        if (!svgStyle->clipperResource().isEmpty())
+        if (!svgStyle.clipperResource().isEmpty())
             return false;
 
         if (clipPath.isEmpty()) {
             // First clip shape.
             styled->toClipPath(clipPath);
-            clipRule = svgStyle->clipRule();
+            clipRule = svgStyle.clipRule();
             clipPath.setWindRule(clipRule);
             continue;
         }
@@ -120,7 +121,7 @@ bool RenderSVGResourceClipper::tryPathOnlyClipping(GraphicsContext* context,
             // Attempt to generate a combined clip path, fall back to masking if not possible.
             Path subPath;
             styled->toClipPath(subPath);
-            subPath.setWindRule(svgStyle->clipRule());
+            subPath.setWindRule(svgStyle.clipRule());
             if (!clipPath.unionPath(subPath))
                 return false;
         } else {
@@ -184,18 +185,16 @@ bool RenderSVGResourceClipper::applyClippingToContext(RenderObject* target, cons
 
         // clipPath can also be clipped by another clipPath.
         SVGResources* resources = SVGResourcesCache::cachedResourcesForRenderObject(this);
-        RenderSVGResourceClipper* clipPathClipper = 0;
+        RenderSVGResourceClipper* clipPathClipper = resources ? resources->clipper() : 0;
         ClipperContext clipPathClipperContext;
-        if (resources && (clipPathClipper = resources->clipper())) {
-            if (!clipPathClipper->applyClippingToContext(this, targetBoundingBox, repaintRect, context, clipPathClipperContext)) {
-                // FIXME: Awkward state micro-management. Ideally, GraphicsContextStateSaver should
-                //   a) pop saveLayers also
-                //   b) pop multiple states if needed (similarly to SkCanvas::restoreToCount())
-                // Then we should be able to replace this mess with a single, top-level GCSS.
-                maskContentSaver.restore();
-                context->restoreLayer();
-                return false;
-            }
+        if (clipPathClipper && !clipPathClipper->applyClippingToContext(this, targetBoundingBox, repaintRect, context, clipPathClipperContext)) {
+            // FIXME: Awkward state micro-management. Ideally, GraphicsContextStateSaver should
+            //   a) pop saveLayers also
+            //   b) pop multiple states if needed (similarly to SkCanvas::restoreToCount())
+            // Then we should be able to replace this mess with a single, top-level GCSS.
+            maskContentSaver.restore();
+            context->restoreLayer();
+            return false;
         }
 
         drawClipMaskContent(context, targetBoundingBox);
@@ -280,7 +279,7 @@ PassRefPtr<DisplayList> RenderSVGResourceClipper::asDisplayList(GraphicsContext*
         if (!style || style->display() == NONE || style->visibility() != VISIBLE)
             continue;
 
-        WindRule newClipRule = style->svgStyle()->clipRule();
+        WindRule newClipRule = style->svgStyle().clipRule();
         bool isUseElement = isSVGUseElement(*childElement);
         if (isUseElement) {
             SVGUseElement& useElement = toSVGUseElement(*childElement);
@@ -288,7 +287,7 @@ PassRefPtr<DisplayList> RenderSVGResourceClipper::asDisplayList(GraphicsContext*
             if (!renderer)
                 continue;
             if (!useElement.hasAttribute(SVGNames::clip_ruleAttr))
-                newClipRule = renderer->style()->svgStyle()->clipRule();
+                newClipRule = renderer->style()->svgStyle().clipRule();
         }
 
         // Only shapes, paths and texts are allowed for clipping.

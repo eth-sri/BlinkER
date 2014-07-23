@@ -35,7 +35,7 @@
 #include "platform/TraceEvent.h"
 #include "wtf/CurrentTime.h"
 
-namespace WebCore {
+namespace blink {
 
 static const int maxIntervalForUserGestureForwarding = 1000; // One second matches Gecko.
 static const int maxTimerNestingLevel = 5;
@@ -234,4 +234,4 @@ double DOMTimer::alignedFireTime(double fireTime) const
     return fireTime;
 }
 
-} // namespace WebCore
+} // namespace blink

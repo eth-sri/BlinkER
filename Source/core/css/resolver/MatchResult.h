@@ -29,7 +29,7 @@
 #include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
 
-namespace WebCore {
+namespace blink {
 
 class StylePropertySet;
 class StyleRule;
@@ -67,7 +67,7 @@ public:
         struct {
             unsigned linkMatchType : 2;
             unsigned whitelistType : 2;
-        };
+        } m_types;
         // Used to make sure all memory is zero-initialized since we compute the hash over the bytes of this object.
         void* possiblyPaddedMember;
     };
@@ -75,9 +75,9 @@ public:
 
 } // WebCore namespace
 
-WTF_ALLOW_MOVE_AND_INIT_WITH_MEM_FUNCTIONS(WebCore::MatchedProperties);
+WTF_ALLOW_MOVE_AND_INIT_WITH_MEM_FUNCTIONS(blink::MatchedProperties);
 
-namespace WebCore {
+namespace blink {
 
 class MatchResult {
     STACK_ALLOCATED();
@@ -108,7 +108,7 @@ inline bool operator!=(const MatchRanges& a, const MatchRanges& b)
 
 inline bool operator==(const MatchedProperties& a, const MatchedProperties& b)
 {
-    return a.properties == b.properties && a.linkMatchType == b.linkMatchType;
+    return a.properties == b.properties && a.m_types.linkMatchType == b.m_types.linkMatchType;
 }
 
 inline bool operator!=(const MatchedProperties& a, const MatchedProperties& b)
@@ -116,6 +116,6 @@ inline bool operator!=(const MatchedProperties& a, const MatchedProperties& b)
     return !(a == b);
 }
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // MatchResult_h

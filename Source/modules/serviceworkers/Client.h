@@ -5,20 +5,23 @@
 #ifndef Client_h
 #define Client_h
 
-#include "bindings/v8/ScriptWrappable.h"
-#include "bindings/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/ScriptWrappable.h"
+#include "bindings/core/v8/SerializedScriptValue.h"
+#include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
 
-namespace WebCore {
+namespace blink {
 
-class Client FINAL : public RefCounted<Client>, public ScriptWrappable {
+class Client FINAL : public RefCountedWillBeGarbageCollected<Client>, public ScriptWrappable {
+    DECLARE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(Client);
 public:
-    static PassRefPtr<Client> create(unsigned id);
-    ~Client();
+    static PassRefPtrWillBeRawPtr<Client> create(unsigned id);
 
     // Client.idl
     unsigned id() const { return m_id; }
     void postMessage(ExecutionContext*, PassRefPtr<SerializedScriptValue> message, const MessagePortArray*, ExceptionState&);
+
+    void trace(Visitor*) { }
 
 private:
     explicit Client(unsigned id);
@@ -26,6 +29,6 @@ private:
     unsigned m_id;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // Client_h

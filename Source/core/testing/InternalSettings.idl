@@ -53,9 +53,9 @@
     // cannot be changed after process start.  These setters should
     // be removed or moved onto internals.runtimeFlags:
     void setAuthorShadowDOMForAnyElementEnabled(boolean enabled);
-    void setCSSExclusionsEnabled(boolean enabled);
     void setLangAttributeAwareFormControlUIEnabled(boolean enabled);
     void setOverlayScrollbarsEnabled(boolean enabled);
     void setExperimentalContentSecurityPolicyFeaturesEnabled(boolean enabled);
+    void setLaxMixedContentCheckingEnabled(boolean enabled);
     void setPseudoClassesInMatchingCriteriaInAuthorShadowTreesEnabled(boolean enabled);
 };

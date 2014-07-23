@@ -27,7 +27,7 @@
 
 #include "core/html/MediaDocument.h"
 
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/HTMLNames.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/RawDataDocumentParser.h"
@@ -44,7 +44,7 @@
 #include "core/loader/FrameLoaderClient.h"
 #include "platform/KeyboardCodes.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 

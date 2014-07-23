@@ -31,11 +31,11 @@
 #include "config.h"
 #include "bindings/modules/v8/V8SQLTransaction.h"
 
+#include "bindings/core/v8/ExceptionMessages.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/V8Binding.h"
 #include "bindings/modules/v8/V8SQLStatementCallback.h"
 #include "bindings/modules/v8/V8SQLStatementErrorCallback.h"
-#include "bindings/v8/ExceptionMessages.h"
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/V8Binding.h"
 #include "core/dom/ExceptionCode.h"
 #include "modules/webdatabase/Database.h"
 #include "modules/webdatabase/sqlite/SQLValue.h"
@@ -43,7 +43,7 @@
 
 using namespace WTF;
 
-namespace WebCore {
+namespace blink {
 
 void V8SQLTransaction::executeSqlMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
@@ -115,4 +115,4 @@ void V8SQLTransaction::executeSqlMethodCustom(const v8::FunctionCallbackInfo<v8:
     exceptionState.throwIfNeeded();
 }
 
-} // namespace WebCore
+} // namespace blink

@@ -26,11 +26,11 @@
 #include "config.h"
 #include "core/editing/WrapContentsInDummySpanCommand.h"
 
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/editing/ApplyStyleCommand.h"
 #include "core/html/HTMLElement.h"
 
-namespace WebCore {
+namespace blink {
 
 WrapContentsInDummySpanCommand::WrapContentsInDummySpanCommand(PassRefPtrWillBeRawPtr<Element> element)
     : SimpleEditCommand(element->document())
@@ -63,7 +63,7 @@ void WrapContentsInDummySpanCommand::doUnapply()
 {
     ASSERT(m_element);
 
-    if (!m_dummySpan || !m_element->rendererIsEditable())
+    if (!m_dummySpan || !m_element->hasEditableStyle())
         return;
 
     WillBeHeapVector<RefPtrWillBeMember<Node> > children;
@@ -81,7 +81,7 @@ void WrapContentsInDummySpanCommand::doReapply()
 {
     ASSERT(m_element);
 
-    if (!m_dummySpan || !m_element->rendererIsEditable())
+    if (!m_dummySpan || !m_element->hasEditableStyle())
         return;
 
     executeApply();
@@ -94,4 +94,4 @@ void WrapContentsInDummySpanCommand::trace(Visitor* visitor)
     SimpleEditCommand::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink

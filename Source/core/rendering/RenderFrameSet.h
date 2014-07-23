@@ -25,7 +25,7 @@
 
 #include "core/rendering/RenderBox.h"
 
-namespace WebCore {
+namespace blink {
 
 class HTMLDimension;
 class HTMLFrameSetElement;
@@ -102,6 +102,7 @@ private:
 
     virtual void layout() OVERRIDE;
     virtual void paint(PaintInfo&, const LayoutPoint&) OVERRIDE;
+    virtual void computePreferredLogicalWidths() OVERRIDE;
     virtual bool isChildAllowed(RenderObject*, RenderStyle*) const OVERRIDE;
     virtual CursorDirective getCursor(const LayoutPoint&, Cursor&) const OVERRIDE;
 
@@ -134,6 +135,6 @@ private:
 
 DEFINE_RENDER_OBJECT_TYPE_CASTS(RenderFrameSet, isFrameSet());
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // RenderFrameSet_h

@@ -27,7 +27,6 @@
 #ifndef MessagePort_h
 #define MessagePort_h
 
-#include "bindings/v8/ScriptWrappable.h"
 #include "core/dom/ActiveDOMObject.h"
 #include "core/events/EventListener.h"
 #include "core/events/EventTarget.h"
@@ -41,7 +40,7 @@
 #include "wtf/Vector.h"
 #include "wtf/WeakPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 class ExceptionState;
 class MessagePort;
@@ -57,7 +56,6 @@ typedef Vector<OwnPtr<blink::WebMessagePortChannel>, 1> MessagePortChannelArray;
 class MessagePort FINAL : public RefCountedWillBeRefCountedGarbageCollected<MessagePort>
     , public ActiveDOMObject
     , public EventTargetWithInlineData
-    , public ScriptWrappable
     , public blink::WebMessagePortChannelClient {
     REFCOUNTED_EVENT_TARGET(MessagePort);
     WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(MessagePort);
@@ -65,7 +63,7 @@ public:
     static PassRefPtrWillBeRawPtr<MessagePort> create(ExecutionContext&);
     virtual ~MessagePort();
 
-    void postMessage(PassRefPtr<SerializedScriptValue> message, const MessagePortArray*, ExceptionState&);
+    void postMessage(ExecutionContext*, PassRefPtr<SerializedScriptValue> message, const MessagePortArray*, ExceptionState&);
 
     void start();
     void close();
@@ -120,6 +118,6 @@ private:
     WeakPtrFactory<MessagePort> m_weakFactory;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // MessagePort_h

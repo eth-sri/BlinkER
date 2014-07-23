@@ -26,8 +26,8 @@
 #include "config.h"
 #include "modules/indexeddb/IDBTransaction.h"
 
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/events/EventQueue.h"
 #include "core/inspector/ScriptCallStack.h"
@@ -41,7 +41,7 @@
 
 using blink::WebIDBDatabase;
 
-namespace WebCore {
+namespace blink {
 
 IDBTransaction* IDBTransaction::create(ExecutionContext* context, int64_t id, const Vector<String>& objectStoreNames, blink::WebIDBTransactionMode mode, IDBDatabase* db)
 {
@@ -404,4 +404,4 @@ blink::WebIDBDatabase* IDBTransaction::backendDB() const
     return m_database->backend();
 }
 
-} // namespace WebCore
+} // namespace blink

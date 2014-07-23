@@ -33,7 +33,7 @@
 #include "core/html/HTMLMediaElement.h"
 #include "platform/text/PlatformLocale.h"
 
-namespace WebCore {
+namespace blink {
 
 using blink::WebLocalizedString;
 using namespace HTMLNames;
@@ -208,12 +208,11 @@ String AXMediaControlsContainer::helpText() const
 
 bool AXMediaControlsContainer::controllingVideoElement() const
 {
-    if (!m_renderer->node())
+    Node* node = m_renderer->node();
+    if (!node)
         return true;
 
-    MediaControlTimeDisplayElement* element = static_cast<MediaControlTimeDisplayElement*>(m_renderer->node());
-
-    return isHTMLVideoElement(toParentMediaElement(element));
+    return isHTMLVideoElement(toParentMediaElement(node));
 }
 
 bool AXMediaControlsContainer::computeAccessibilityIsIgnored() const
@@ -297,4 +296,4 @@ String AccessibilityMediaTimeDisplay::stringValue() const
     return localizedMediaTimeDescription(fabsf(time));
 }
 
-} // namespace WebCore
+} // namespace blink

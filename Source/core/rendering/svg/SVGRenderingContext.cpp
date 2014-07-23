@@ -40,7 +40,7 @@
 
 static int kMaxImageBufferSize = 4096;
 
-namespace WebCore {
+namespace blink {
 
 static inline bool isRenderingMaskImage(RenderObject* object)
 {
@@ -90,7 +90,7 @@ void SVGRenderingContext::prepareToRenderSVGContent(RenderObject* object, PaintI
 {
     ASSERT(object);
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     // This function must not be called twice!
     ASSERT(!(m_renderingFlags & PrepareToRenderSVGContentWasCalled));
     m_renderingFlags |= PrepareToRenderSVGContentWasCalled;
@@ -109,8 +109,7 @@ void SVGRenderingContext::prepareToRenderSVGContent(RenderObject* object, PaintI
     RenderStyle* style = m_object->style();
     ASSERT(style);
 
-    const SVGRenderStyle* svgStyle = style->svgStyle();
-    ASSERT(svgStyle);
+    const SVGRenderStyle& svgStyle = style->svgStyle();
 
     // Setup transparency layers before setting up SVG resources!
     bool isRenderingMask = isRenderingMaskImage(m_object);
@@ -146,7 +145,7 @@ void SVGRenderingContext::prepareToRenderSVGContent(RenderObject* object, PaintI
 
     SVGResources* resources = SVGResourcesCache::cachedResourcesForRenderObject(m_object);
     if (!resources) {
-        if (svgStyle->hasFilter())
+        if (svgStyle.hasFilter())
             return;
 
         m_renderingFlags |= RenderingPrepared;
@@ -295,7 +294,7 @@ bool SVGRenderingContext::bufferForeground(OwnPtr<ImageBuffer>& imageBuffer)
 
     // Create a new buffer and paint the foreground into it.
     if (!imageBuffer) {
-        if ((imageBuffer = m_paintInfo->context->createCompatibleBuffer(expandedIntSize(boundingBox.size())))) {
+        if ((imageBuffer = m_paintInfo->context->createRasterBuffer(expandedIntSize(boundingBox.size())))) {
             GraphicsContext* bufferedRenderingContext = imageBuffer->context();
             bufferedRenderingContext->translate(-boundingBox.x(), -boundingBox.y());
             PaintInfo bufferedInfo(*m_paintInfo);

@@ -131,6 +131,7 @@ height
 imageRendering
 isolation
 justifyContent
+justifyItems
 justifySelf
 left
 length
@@ -399,8 +400,6 @@ webkitTransitionTimingFunction
 webkitUserDrag
 webkitUserModify
 webkitUserSelect
-webkitWrapFlow
-webkitWrapThrough
 webkitWritingMode
 whiteSpace
 widows

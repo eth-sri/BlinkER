@@ -51,7 +51,7 @@
 #include "web/WebSettingsImpl.h"
 #include "web/WebViewImpl.h"
 
-using namespace WebCore;
+using namespace blink;
 
 namespace blink {
 
@@ -127,7 +127,7 @@ private:
         return FloatSize(0, 0);
     }
 
-    virtual void setCursor(const WebCore::Cursor& cursor) OVERRIDE
+    virtual void setCursor(const blink::Cursor& cursor) OVERRIDE
     {
         if (m_popup->m_webView->client())
             m_popup->m_webView->client()->didChangeCursor(WebCursorInfo(cursor));
@@ -189,7 +189,7 @@ bool WebPagePopupImpl::initialize(WebViewImpl* webView, PagePopupClient* popupCl
 
     resize(m_popupClient->contentSize());
 
-    if (!initializePage())
+    if (!m_widgetClient || !initializePage())
         return false;
     m_widgetClient->show(WebNavigationPolicy());
     setFocus(true);
@@ -280,8 +280,10 @@ WebSize WebPagePopupImpl::size()
     return m_popupClient->contentSize();
 }
 
-void WebPagePopupImpl::animate(double)
+void WebPagePopupImpl::beginFrame(const WebBeginFrameArgs& frameTime)
 {
+    // FIXME: This should use frameTime.lastFrameTimeMonotonic but doing so
+    // breaks tests.
     PageWidgetDelegate::animate(m_page.get(), monotonicallyIncreasingTime());
 }
 

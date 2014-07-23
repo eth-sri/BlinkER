@@ -20,20 +20,14 @@ async_test(function(t) {
         return navigator.serviceWorker.register(url, {scope: scope});
     }))
     .then(step(function(serviceWorker) {
-        // FIXME: Replace this with .ready when that supports the in-waiting
-        // Service Worker.
-        return new Promise(step(function(resolve, reject) {
-            serviceWorker.onstatechange = step(function() {
-                if (serviceWorker.state == 'installed') {
-                    resolve();
-                }
-            });
-        }));
+        return wait_for_state(t, serviceWorker, 'installed');
     }), unreached_rejection(t, 'Registration should not fail'))
     .then(step(function() {
         var container = frame.contentWindow.navigator.serviceWorker;
         assert_equals(container.controller, null);
+        assert_equals(container.active, null);
         assert_equals(container.waiting.url, normalizeURL(url));
+        assert_equals(container.installing, null);
 
         // FIXME: Add a test for a frame created after installation.
         // Should the existing frame ("frame") block activation?

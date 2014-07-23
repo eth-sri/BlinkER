@@ -20,17 +20,26 @@
 #include "config.h"
 #include "core/css/MediaQueryListListener.h"
 
+#include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/V8MediaQueryList.h"
-#include "bindings/v8/ScriptController.h"
 #include <v8.h>
 
-namespace WebCore {
+namespace blink {
+
+MediaQueryListListener::MediaQueryListListener()
+{
+    // only for use by subclasses
+}
 
 MediaQueryListListener::MediaQueryListListener(ScriptState* scriptState, const ScriptValue& function)
     : m_scriptState(scriptState)
     , m_function(function)
 {
     ASSERT(m_function.isFunction());
+}
+
+MediaQueryListListener::~MediaQueryListListener()
+{
 }
 
 void MediaQueryListListener::call()

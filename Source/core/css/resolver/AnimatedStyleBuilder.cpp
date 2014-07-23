@@ -31,27 +31,27 @@
 #include "config.h"
 #include "core/css/resolver/AnimatedStyleBuilder.h"
 
-#include "core/animation/AnimatableClipPathOperation.h"
-#include "core/animation/AnimatableColor.h"
-#include "core/animation/AnimatableDouble.h"
-#include "core/animation/AnimatableFilterOperations.h"
-#include "core/animation/AnimatableImage.h"
-#include "core/animation/AnimatableLength.h"
-#include "core/animation/AnimatableLengthBox.h"
-#include "core/animation/AnimatableLengthBoxAndBool.h"
-#include "core/animation/AnimatableLengthPoint.h"
-#include "core/animation/AnimatableLengthPoint3D.h"
-#include "core/animation/AnimatableLengthSize.h"
-#include "core/animation/AnimatableRepeatable.h"
-#include "core/animation/AnimatableSVGLength.h"
-#include "core/animation/AnimatableSVGPaint.h"
-#include "core/animation/AnimatableShadow.h"
-#include "core/animation/AnimatableShapeValue.h"
-#include "core/animation/AnimatableStrokeDasharrayList.h"
-#include "core/animation/AnimatableTransform.h"
-#include "core/animation/AnimatableUnknown.h"
-#include "core/animation/AnimatableValue.h"
-#include "core/animation/AnimatableVisibility.h"
+#include "core/animation/animatable/AnimatableClipPathOperation.h"
+#include "core/animation/animatable/AnimatableColor.h"
+#include "core/animation/animatable/AnimatableDouble.h"
+#include "core/animation/animatable/AnimatableFilterOperations.h"
+#include "core/animation/animatable/AnimatableImage.h"
+#include "core/animation/animatable/AnimatableLength.h"
+#include "core/animation/animatable/AnimatableLengthBox.h"
+#include "core/animation/animatable/AnimatableLengthBoxAndBool.h"
+#include "core/animation/animatable/AnimatableLengthPoint.h"
+#include "core/animation/animatable/AnimatableLengthPoint3D.h"
+#include "core/animation/animatable/AnimatableLengthSize.h"
+#include "core/animation/animatable/AnimatableRepeatable.h"
+#include "core/animation/animatable/AnimatableSVGLength.h"
+#include "core/animation/animatable/AnimatableSVGPaint.h"
+#include "core/animation/animatable/AnimatableShadow.h"
+#include "core/animation/animatable/AnimatableShapeValue.h"
+#include "core/animation/animatable/AnimatableStrokeDasharrayList.h"
+#include "core/animation/animatable/AnimatableTransform.h"
+#include "core/animation/animatable/AnimatableUnknown.h"
+#include "core/animation/animatable/AnimatableValue.h"
+#include "core/animation/animatable/AnimatableVisibility.h"
 #include "core/animation/css/CSSAnimations.h"
 #include "core/css/CSSPrimitiveValueMappings.h"
 #include "core/css/resolver/StyleBuilder.h"
@@ -60,7 +60,7 @@
 #include "wtf/MathExtras.h"
 #include "wtf/TypeTraits.h"
 
-namespace WebCore {
+namespace blink {
 
 namespace {
 
@@ -126,13 +126,12 @@ LengthSize animatableValueToLengthSize(const AnimatableValue* value, const Style
         animatableValueToLength(animatableLengthSize->height(), state, range));
 }
 
-template <CSSPropertyID property>
 void setFillSize(FillLayer* fillLayer, const AnimatableValue* value, const StyleResolverState& state)
 {
     if (value->isLengthSize())
         fillLayer->setSize(FillSize(SizeLength, animatableValueToLengthSize(value, state, ValueRangeNonNegative)));
     else
-        state.styleMap().mapFillSize(property, fillLayer, toAnimatableUnknown(value)->toCSSValue().get());
+        state.styleMap().mapFillSize(fillLayer, toAnimatableUnknown(value)->toCSSValue().get());
 }
 
 PassRefPtr<SVGLength> animatableValueToNonNegativeSVGLength(const AnimatableValue* value)
@@ -144,32 +143,15 @@ PassRefPtr<SVGLength> animatableValueToNonNegativeSVGLength(const AnimatableValu
 }
 
 template <CSSPropertyID property>
-void setOnFillLayers(FillLayer* fillLayer, const AnimatableValue* value, StyleResolverState& state)
+void setOnFillLayers(FillLayer& fillLayers, const AnimatableValue* value, StyleResolverState& state)
 {
     const WillBeHeapVector<RefPtrWillBeMember<AnimatableValue> >& values = toAnimatableRepeatable(value)->values();
     ASSERT(!values.isEmpty());
+    FillLayer* fillLayer = &fillLayers;
     FillLayer* prev = 0;
     for (size_t i = 0; i < values.size(); ++i) {
-        if (!fillLayer) {
-            switch (property) {
-            case CSSPropertyBackgroundImage:
-            case CSSPropertyBackgroundPositionX:
-            case CSSPropertyBackgroundPositionY:
-            case CSSPropertyBackgroundSize:
-            case CSSPropertyWebkitBackgroundSize:
-                fillLayer = new FillLayer(BackgroundFillLayer);
-                break;
-            case CSSPropertyWebkitMaskImage:
-            case CSSPropertyWebkitMaskPositionX:
-            case CSSPropertyWebkitMaskPositionY:
-            case CSSPropertyWebkitMaskSize:
-                fillLayer = new FillLayer(MaskFillLayer);
-                break;
-            default:
-                ASSERT_NOT_REACHED();
-            }
-            prev->setNext(fillLayer);
-        }
+        if (!fillLayer)
+            fillLayer = prev->ensureNext();
         const AnimatableValue* layerValue = values[i].get();
         switch (property) {
         case CSSPropertyBackgroundImage:
@@ -192,7 +174,7 @@ void setOnFillLayers(FillLayer* fillLayer, const AnimatableValue* value, StyleRe
         case CSSPropertyBackgroundSize:
         case CSSPropertyWebkitBackgroundSize:
         case CSSPropertyWebkitMaskSize:
-            setFillSize<property>(fillLayer, layerValue, state);
+            setFillSize(fillLayer, layerValue, state);
             break;
         default:
             ASSERT_NOT_REACHED();
@@ -351,8 +333,8 @@ void AnimatedStyleBuilder::applyProperty(CSSPropertyID property, StyleResolverSt
     case CSSPropertyFill:
         {
             const AnimatableSVGPaint* svgPaint = toAnimatableSVGPaint(value);
-            style->accessSVGStyle()->setFillPaint(svgPaint->paintType(), svgPaint->color(), svgPaint->uri(), true, false);
-            style->accessSVGStyle()->setFillPaint(svgPaint->visitedLinkPaintType(), svgPaint->visitedLinkColor(), svgPaint->visitedLinkURI(), false, true);
+            style->accessSVGStyle().setFillPaint(svgPaint->paintType(), svgPaint->color(), svgPaint->uri(), true, false);
+            style->accessSVGStyle().setFillPaint(svgPaint->visitedLinkPaintType(), svgPaint->visitedLinkColor(), svgPaint->visitedLinkURI(), false, true);
         }
         return;
     case CSSPropertyFlexGrow:
@@ -480,8 +462,8 @@ void AnimatedStyleBuilder::applyProperty(CSSPropertyID property, StyleResolverSt
     case CSSPropertyStroke:
         {
             const AnimatableSVGPaint* svgPaint = toAnimatableSVGPaint(value);
-            style->accessSVGStyle()->setStrokePaint(svgPaint->paintType(), svgPaint->color(), svgPaint->uri(), true, false);
-            style->accessSVGStyle()->setStrokePaint(svgPaint->visitedLinkPaintType(), svgPaint->visitedLinkColor(), svgPaint->visitedLinkURI(), false, true);
+            style->accessSVGStyle().setStrokePaint(svgPaint->paintType(), svgPaint->color(), svgPaint->uri(), true, false);
+            style->accessSVGStyle().setStrokePaint(svgPaint->visitedLinkPaintType(), svgPaint->visitedLinkColor(), svgPaint->visitedLinkURI(), false, true);
         }
         return;
     case CSSPropertyTextDecorationColor:
@@ -636,4 +618,4 @@ void AnimatedStyleBuilder::applyProperty(CSSPropertyID property, StyleResolverSt
     }
 }
 
-} // namespace WebCore
+} // namespace blink

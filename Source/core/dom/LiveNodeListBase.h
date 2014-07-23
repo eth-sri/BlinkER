@@ -27,13 +27,11 @@
 
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
-#include "core/dom/Element.h"
 #include "core/dom/ElementTraversal.h"
-#include "core/dom/NodeTraversal.h"
 #include "core/html/CollectionType.h"
 #include "platform/heap/Handle.h"
 
-namespace WebCore {
+namespace blink {
 
 enum NodeListRootType {
     NodeListIsRootedAtNode,
@@ -94,7 +92,7 @@ protected:
     template <class NodeListType>
     static Element* traverseMatchingElementsBackwardToOffset(const NodeListType&, unsigned offset, Element& currentElement, unsigned& currentOffset);
 
-    void trace(Visitor* visitor) { visitor->trace(m_ownerNode); }
+    virtual void trace(Visitor* visitor) { visitor->trace(m_ownerNode); }
 
 private:
     RefPtrWillBeMember<ContainerNode> m_ownerNode; // Cannot be null.
@@ -173,8 +171,7 @@ template <class NodeListType>
 Element* LiveNodeListBase::traverseMatchingElementsForwardToOffset(const NodeListType& nodeList, unsigned offset, Element& currentElement, unsigned& currentOffset)
 {
     ASSERT(currentOffset < offset);
-    Element* next = &currentElement;
-    while ((next = nextMatchingElement(nodeList, *next))) {
+    for (Element* next = nextMatchingElement(nodeList, currentElement); next; next = nextMatchingElement(nodeList, *next)) {
         if (++currentOffset == offset)
             return next;
     }
@@ -185,14 +182,13 @@ template <class NodeListType>
 Element* LiveNodeListBase::traverseMatchingElementsBackwardToOffset(const NodeListType& nodeList, unsigned offset, Element& currentElement, unsigned& currentOffset)
 {
     ASSERT(currentOffset > offset);
-    Element* previous = &currentElement;
-    while ((previous = previousMatchingElement(nodeList, *previous))) {
+    for (Element* previous = previousMatchingElement(nodeList, currentElement); previous; previous = previousMatchingElement(nodeList, *previous)) {
         if (--currentOffset == offset)
             return previous;
     }
     return 0;
 }
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // LiveNodeListBase_h

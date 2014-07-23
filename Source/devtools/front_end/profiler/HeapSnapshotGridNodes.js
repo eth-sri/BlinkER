@@ -625,7 +625,12 @@ WebInspector.HeapSnapshotGenericObjectNode.prototype = {
     {
     },
 
-    queryObjectContent: function(callback, objectGroupName)
+    /**
+     * @param {!WebInspector.Target} target
+     * @param {!function(!WebInspector.RemoteObject)} callback
+     * @param {string} objectGroupName
+     */
+    queryObjectContent: function(target, callback, objectGroupName)
     {
         /**
          * @param {?Protocol.Error} error
@@ -634,15 +639,15 @@ WebInspector.HeapSnapshotGenericObjectNode.prototype = {
         function formatResult(error, object)
         {
             if (!error && object.type)
-                callback(WebInspector.runtimeModel.createRemoteObject(object), !!error);
+                callback(target.runtimeModel.createRemoteObject(object));
             else
-                callback(WebInspector.runtimeModel.createRemoteObjectFromPrimitiveValue(WebInspector.UIString("Preview is not available")));
+                callback(target.runtimeModel.createRemoteObjectFromPrimitiveValue(WebInspector.UIString("Preview is not available")));
         }
 
         if (this._type === "string")
-            callback(WebInspector.runtimeModel.createRemoteObjectFromPrimitiveValue(this._name));
+            callback(target.runtimeModel.createRemoteObjectFromPrimitiveValue(this._name));
         else
-            HeapProfilerAgent.getObjectByHeapObjectId(String(this.snapshotNodeId), objectGroupName, formatResult);
+            target.heapProfilerAgent().getObjectByHeapObjectId(String(this.snapshotNodeId), objectGroupName, formatResult);
     },
 
     updateHasChildren: function()
@@ -1482,17 +1487,10 @@ WebInspector.AllocationGridNode.prototype = {
 
         var cell = WebInspector.HeapSnapshotGridNode.prototype.createCell.call(this, columnIdentifier);
         var allocationNode = this._allocationNode;
+        var target = this._dataGrid.target();
         if (allocationNode.scriptId) {
-            var urlElement;
             var linkifier = this._dataGrid._linkifier;
-            var script = WebInspector.debuggerModel.scriptForId(String(allocationNode.scriptId));
-            if (script) {
-                var rawLocation = WebInspector.debuggerModel.createRawLocation(script, allocationNode.line - 1, allocationNode.column - 1);
-                urlElement = linkifier.linkifyRawLocation(rawLocation, "profile-node-file");
-            } else {
-                var target = /** @type {!WebInspector.Target} */ (WebInspector.targetManager.activeTarget());
-                urlElement = linkifier.linkifyLocation(target, allocationNode.scriptName, allocationNode.line - 1, allocationNode.column - 1, "profile-node-file");
-            }
+            var urlElement = linkifier.linkifyLocationByScriptId(target, String(allocationNode.scriptId), allocationNode.scriptName, allocationNode.line - 1, allocationNode.column - 1, "profile-node-file");
             urlElement.style.maxWidth = "75%";
             cell.insertBefore(urlElement, cell.firstChild);
         }

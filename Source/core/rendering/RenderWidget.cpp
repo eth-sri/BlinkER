@@ -36,7 +36,7 @@
 #include "core/rendering/compositing/RenderLayerCompositor.h"
 #include "wtf/HashMap.h"
 
-namespace WebCore {
+namespace blink {
 
 RenderWidget::RenderWidget(Element* element)
     : RenderReplaced(element)
@@ -196,8 +196,8 @@ void RenderWidget::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 
     LayoutPoint adjustedPaintOffset = paintOffset + location();
 
-    if (hasBoxDecorations() && (paintInfo.phase == PaintPhaseForeground || paintInfo.phase == PaintPhaseSelection))
-        paintBoxDecorations(paintInfo, adjustedPaintOffset);
+    if (hasBoxDecorationBackground() && (paintInfo.phase == PaintPhaseForeground || paintInfo.phase == PaintPhaseSelection))
+        paintBoxDecorationBackground(paintInfo, adjustedPaintOffset);
 
     if (paintInfo.phase == PaintPhaseMask) {
         paintMask(paintInfo, adjustedPaintOffset);
@@ -321,4 +321,4 @@ CursorDirective RenderWidget::getCursor(const LayoutPoint& point, Cursor& cursor
     return RenderReplaced::getCursor(point, cursor);
 }
 
-} // namespace WebCore
+} // namespace blink

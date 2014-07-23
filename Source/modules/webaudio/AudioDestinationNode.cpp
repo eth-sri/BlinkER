@@ -34,7 +34,7 @@
 #include "modules/webaudio/AudioNodeInput.h"
 #include "modules/webaudio/AudioNodeOutput.h"
 
-namespace WebCore {
+namespace blink {
 
 AudioDestinationNode::AudioDestinationNode(AudioContext* context, float sampleRate)
     : AudioNode(context, sampleRate)
@@ -48,7 +48,13 @@ AudioDestinationNode::AudioDestinationNode(AudioContext* context, float sampleRa
 
 AudioDestinationNode::~AudioDestinationNode()
 {
+    ASSERT(!isInitialized());
+}
+
+void AudioDestinationNode::dispose()
+{
     uninitialize();
+    AudioNode::dispose();
 }
 
 void AudioDestinationNode::render(AudioBus* sourceBus, AudioBus* destinationBus, size_t numberOfFrames)
@@ -93,6 +99,6 @@ void AudioDestinationNode::render(AudioBus* sourceBus, AudioBus* destinationBus,
     m_currentSampleFrame += numberOfFrames;
 }
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // ENABLE(WEB_AUDIO)

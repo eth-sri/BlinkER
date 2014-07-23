@@ -39,7 +39,7 @@
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 class Document;
 class RenderBlock;
@@ -220,7 +220,7 @@ private:
 
         FingerprintMap m_fingerprints;
         ReverseFingerprintMap m_blocksForFingerprint;
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
         void assertMapsAreConsistent();
 #endif
     };
@@ -289,7 +289,7 @@ private:
 
     const Document* m_document;
     const RenderBlock* m_firstBlockToBeginLayout;
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     BlockSet m_blocksThatHaveBegunLayout; // Used to ensure we don't compute properties of a block before beginLayout() is called on it.
 #endif
 
@@ -305,6 +305,6 @@ private:
     bool m_updatePageInfoDeferred;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // FastTextAutosizer_h

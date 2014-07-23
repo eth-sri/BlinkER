@@ -21,7 +21,7 @@
 #ifndef DOMPluginArray_h
 #define DOMPluginArray_h
 
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/frame/DOMWindowProperty.h"
 #include "core/plugins/DOMPlugin.h"
 #include "platform/heap/Handle.h"
@@ -30,7 +30,7 @@
 #include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
 
-namespace WebCore {
+namespace blink {
 
 class LocalFrame;
 class PluginData;
@@ -57,6 +57,6 @@ private:
     PluginData* pluginData() const;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // PluginArray_h

@@ -29,7 +29,7 @@
 #include "platform/TraceEvent.h"
 #include "wtf/Threading.h"
 
-namespace WebCore {
+namespace blink {
 
 namespace {
 
@@ -51,7 +51,7 @@ ImageDecodingStore::ImageDecodingStore()
 
 ImageDecodingStore::~ImageDecodingStore()
 {
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     setCacheLimitInBytes(0);
     ASSERT(!m_imageCacheMap.size());
     ASSERT(!m_decoderCacheMap.size());
@@ -427,4 +427,4 @@ void ImageDecodingStore::removeFromCacheListInternal(const Vector<OwnPtr<CacheEn
         m_orderedCacheList.remove(deletionList[i].get());
 }
 
-} // namespace WebCore
+} // namespace blink

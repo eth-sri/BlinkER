@@ -32,16 +32,20 @@
                       "shouldFlattenTransform": false,
                       "children": [
                         {
-
+                          "shouldFlattenTransform": false
                         }
                       ]
                     }
                   ]
                 },
                 {
-                  "position": [285, 0],
-                  "bounds": [15, 300],
-                  "drawsContent": true
+                  "children": [
+                    {
+                      "position": [285, 0],
+                      "bounds": [15, 300],
+                      "drawsContent": true
+                    }
+                  ]
                 }
               ]
             },

@@ -43,7 +43,7 @@
 #include "platform/weborigin/KURL.h"
 #include "wtf/unicode/CharacterNames.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -125,9 +125,9 @@ String MarkupAccumulator::serializeNodes(Node& targetNode, EChildrenOnly childre
 
 void MarkupAccumulator::serializeNodesWithNamespaces(Node& targetNode, EChildrenOnly childrenOnly, const Namespaces* namespaces, Vector<QualifiedName>* tagNamesToSkip)
 {
-    if (tagNamesToSkip) {
+    if (tagNamesToSkip && targetNode.isElementNode()) {
         for (size_t i = 0; i < tagNamesToSkip->size(); ++i) {
-            if (targetNode.hasTagName(tagNamesToSkip->at(i)))
+            if (toElement(targetNode).hasTagName(tagNamesToSkip->at(i)))
                 return;
         }
     }

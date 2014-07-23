@@ -26,7 +26,7 @@
 #include "config.h"
 #include "core/fileapi/File.h"
 
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "platform/FileMetadata.h"
 #include "platform/MIMETypeRegistry.h"
@@ -35,7 +35,7 @@
 #include "wtf/CurrentTime.h"
 #include "wtf/DateMath.h"
 
-namespace WebCore {
+namespace blink {
 
 static String getContentTypeFromFileName(const String& name, File::ContentTypeLookupPolicy policy)
 {
@@ -270,4 +270,4 @@ void File::appendTo(BlobData& blobData) const
     blobData.appendFile(m_path, 0, size, modificationTime);
 }
 
-} // namespace WebCore
+} // namespace blink

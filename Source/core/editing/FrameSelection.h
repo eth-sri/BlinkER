@@ -37,7 +37,7 @@
 #include "platform/heap/Handle.h"
 #include "wtf/Noncopyable.h"
 
-namespace WebCore {
+namespace blink {
 
 class CharacterData;
 class LocalFrame;
@@ -94,7 +94,7 @@ public:
     Element* rootEditableElementOrDocumentElement() const;
     Node* rootEditableElementOrTreeScopeRootNode() const;
 
-    bool rendererIsEditable() const { return m_selection.rendererIsEditable(); }
+    bool hasEditableStyle() const { return m_selection.hasEditableStyle(); }
     bool isContentEditable() const { return m_selection.isContentEditable(); }
     bool isContentRichlyEditable() const { return m_selection.isContentRichlyEditable(); }
 
@@ -244,6 +244,7 @@ private:
     LayoutUnit lineDirectionPointForBlockDirectionNavigation(EPositionType);
 
     void notifyAccessibilityForSelectionChange();
+    void notifyCompositorForSelectionChange();
 
     void focusedOrActiveStateChanged();
 
@@ -303,12 +304,12 @@ inline void FrameSelection::setTypingStyle(PassRefPtrWillBeRawPtr<EditingStyle> 
 {
     m_typingStyle = style;
 }
-} // namespace WebCore
+} // namespace blink
 
 #ifndef NDEBUG
 // Outside the WebCore namespace for ease of invocation from gdb.
-void showTree(const WebCore::FrameSelection&);
-void showTree(const WebCore::FrameSelection*);
+void showTree(const blink::FrameSelection&);
+void showTree(const blink::FrameSelection*);
 #endif
 
 #endif // FrameSelection_h

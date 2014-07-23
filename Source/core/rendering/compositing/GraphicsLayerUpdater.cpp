@@ -35,7 +35,7 @@
 #include "core/rendering/compositing/RenderLayerCompositor.h"
 #include "platform/TraceEvent.h"
 
-namespace WebCore {
+namespace blink {
 
 class GraphicsLayerUpdater::UpdateContext {
 public:
@@ -90,10 +90,12 @@ void GraphicsLayerUpdater::updateRecursive(RenderLayer& layer, UpdateType update
 
         if (updateType == ForceUpdate || mapping->needsGraphicsLayerUpdate()) {
             const RenderLayer* compositingContainer = context.compositingContainer(layer);
-            ASSERT(compositingContainer == layer.ancestorCompositingLayer());
+            ASSERT(compositingContainer == layer.enclosingLayerWithCompositedLayerMapping(ExcludeSelf));
 
-            if (mapping->updateRequiresOwnBackingStoreForAncestorReasons(compositingContainer))
+            if (mapping->updateRequiresOwnBackingStoreForAncestorReasons(compositingContainer)) {
+                layersNeedingPaintInvalidation.append(&layer);
                 updateType = ForceUpdate;
+            }
 
             // Note carefully: here we assume that the compositing state of all descendants have been updated already,
             // so it is legitimate to compute and cache the composited bounds for this layer.
@@ -122,7 +124,7 @@ void GraphicsLayerUpdater::updateRecursive(RenderLayer& layer, UpdateType update
         updateRecursive(*child, updateType, childContext, layersNeedingPaintInvalidation);
 }
 
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
 
 void GraphicsLayerUpdater::assertNeedsToUpdateGraphicsLayerBitsCleared(RenderLayer& layer)
 {
@@ -135,4 +137,4 @@ void GraphicsLayerUpdater::assertNeedsToUpdateGraphicsLayerBitsCleared(RenderLay
 
 #endif
 
-} // namespace WebCore
+} // namespace blink

@@ -38,7 +38,7 @@
 #include "public/platform/WebString.h"
 #include "public/platform/WebURL.h"
 
-using namespace WebCore;
+using namespace blink;
 
 namespace blink {
 
@@ -48,7 +48,6 @@ WebSettingsImpl::WebSettingsImpl(Settings* settings, InspectorController* inspec
     , m_showFPSCounter(false)
     , m_showPaintRects(false)
     , m_renderVSyncNotificationEnabled(false)
-    , m_gestureTapHighlightEnabled(true)
     , m_autoZoomFocusedNodeToLegibleScale(false)
     , m_deferredImageDecodingEnabled(false)
     , m_doubleTapToZoomEnabled(false)
@@ -59,50 +58,51 @@ WebSettingsImpl::WebSettingsImpl(Settings* settings, InspectorController* inspec
     , m_viewportMetaNonUserScalableQuirk(false)
     , m_clobberUserAgentInitialScaleQuirk(false)
     , m_mainFrameResizesAreOrientationChanges(false)
+    , m_disallowFullscreenForNonMediaElements(false)
 {
     ASSERT(settings);
 }
 
 void WebSettingsImpl::setStandardFontFamily(const WebString& font, UScriptCode script)
 {
-    m_settings->genericFontFamilySettings().setStandard(font, script);
-    m_settings->notifyGenericFontFamilyChange();
+    if (m_settings->genericFontFamilySettings().updateStandard(font, script))
+        m_settings->notifyGenericFontFamilyChange();
 }
 
 void WebSettingsImpl::setFixedFontFamily(const WebString& font, UScriptCode script)
 {
-    m_settings->genericFontFamilySettings().setFixed(font, script);
-    m_settings->notifyGenericFontFamilyChange();
+    if (m_settings->genericFontFamilySettings().updateFixed(font, script))
+        m_settings->notifyGenericFontFamilyChange();
 }
 
 void WebSettingsImpl::setSerifFontFamily(const WebString& font, UScriptCode script)
 {
-    m_settings->genericFontFamilySettings().setSerif(font, script);
-    m_settings->notifyGenericFontFamilyChange();
+    if (m_settings->genericFontFamilySettings().updateSerif(font, script))
+        m_settings->notifyGenericFontFamilyChange();
 }
 
 void WebSettingsImpl::setSansSerifFontFamily(const WebString& font, UScriptCode script)
 {
-    m_settings->genericFontFamilySettings().setSansSerif(font, script);
-    m_settings->notifyGenericFontFamilyChange();
+    if (m_settings->genericFontFamilySettings().updateSansSerif(font, script))
+        m_settings->notifyGenericFontFamilyChange();
 }
 
 void WebSettingsImpl::setCursiveFontFamily(const WebString& font, UScriptCode script)
 {
-    m_settings->genericFontFamilySettings().setCursive(font, script);
-    m_settings->notifyGenericFontFamilyChange();
+    if (m_settings->genericFontFamilySettings().updateCursive(font, script))
+        m_settings->notifyGenericFontFamilyChange();
 }
 
 void WebSettingsImpl::setFantasyFontFamily(const WebString& font, UScriptCode script)
 {
-    m_settings->genericFontFamilySettings().setFantasy(font, script);
-    m_settings->notifyGenericFontFamilyChange();
+    if (m_settings->genericFontFamilySettings().updateFantasy(font, script))
+        m_settings->notifyGenericFontFamilyChange();
 }
 
 void WebSettingsImpl::setPictographFontFamily(const WebString& font, UScriptCode script)
 {
-    m_settings->genericFontFamilySettings().setPictograph(font, script);
-    m_settings->notifyGenericFontFamilyChange();
+    if (m_settings->genericFontFamilySettings().updatePictograph(font, script))
+        m_settings->notifyGenericFontFamilyChange();
 }
 
 void WebSettingsImpl::setDefaultFontSize(int size)
@@ -422,7 +422,7 @@ void WebSettingsImpl::setShowPaintRects(bool show)
 
 void WebSettingsImpl::setEditingBehavior(EditingBehavior behavior)
 {
-    m_settings->setEditingBehaviorType(static_cast<WebCore::EditingBehaviorType>(behavior));
+    m_settings->setEditingBehaviorType(static_cast<blink::EditingBehaviorType>(behavior));
 }
 
 void WebSettingsImpl::setAcceleratedCompositingEnabled(bool enabled)
@@ -656,11 +656,6 @@ void WebSettingsImpl::setNavigateOnDragDrop(bool enabled)
     m_settings->setNavigateOnDragDrop(enabled);
 }
 
-void WebSettingsImpl::setGestureTapHighlightEnabled(bool enableHighlight)
-{
-    m_gestureTapHighlightEnabled = enableHighlight;
-}
-
 void WebSettingsImpl::setAllowCustomScrollbarInMainFrame(bool enabled)
 {
     m_settings->setAllowCustomScrollbarInMainFrame(enabled);
@@ -709,6 +704,11 @@ void WebSettingsImpl::setUseSolidColorScrollbars(bool enabled)
 void WebSettingsImpl::setMainFrameResizesAreOrientationChanges(bool enabled)
 {
     m_mainFrameResizesAreOrientationChanges = enabled;
+}
+
+void WebSettingsImpl::setDisallowFullscreenForNonMediaElements(bool enabled)
+{
+    m_disallowFullscreenForNonMediaElements = enabled;
 }
 
 } // namespace blink

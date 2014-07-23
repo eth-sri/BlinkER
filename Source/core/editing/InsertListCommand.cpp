@@ -26,7 +26,7 @@
 #include "config.h"
 #include "core/editing/InsertListCommand.h"
 
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
@@ -36,7 +36,7 @@
 #include "core/editing/htmlediting.h"
 #include "core/html/HTMLElement.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -80,7 +80,7 @@ PassRefPtrWillBeRawPtr<HTMLElement> InsertListCommand::mergeWithNeighboringLists
     return list.release();
 }
 
-bool InsertListCommand::selectionHasListOfType(const VisibleSelection& selection, const QualifiedName& listTag)
+bool InsertListCommand::selectionHasListOfType(const VisibleSelection& selection, const HTMLQualifiedName& listTag)
 {
     VisiblePosition start = selection.visibleStart();
 
@@ -127,7 +127,7 @@ void InsertListCommand::doApply()
             return;
     }
 
-    const QualifiedName& listTag = (m_type == OrderedList) ? olTag : ulTag;
+    const HTMLQualifiedName& listTag = (m_type == OrderedList) ? olTag : ulTag;
     if (endingSelection().isRange()) {
         bool forceListCreation = false;
         VisibleSelection selection = selectionForParagraphIteration(endingSelection());
@@ -197,7 +197,7 @@ void InsertListCommand::doApply()
     doApplyForSingleParagraph(false, listTag, *endingSelection().firstRange());
 }
 
-void InsertListCommand::doApplyForSingleParagraph(bool forceCreateList, const QualifiedName& listTag, Range& currentSelection)
+void InsertListCommand::doApplyForSingleParagraph(bool forceCreateList, const HTMLQualifiedName& listTag, Range& currentSelection)
 {
     // FIXME: This will produce unexpected results for a selection that starts just before a
     // table and ends inside the first cell, selectionForParagraphIteration should probably
@@ -317,7 +317,7 @@ void InsertListCommand::unlistifyParagraph(const VisiblePosition& originalStart,
     moveParagraphs(start, end, insertionPoint, /* preserveSelection */ true, /* preserveStyle */ true, listChildNode);
 }
 
-static Element* adjacentEnclosingList(const VisiblePosition& pos, const VisiblePosition& adjacentPos, const QualifiedName& listTag)
+static Element* adjacentEnclosingList(const VisiblePosition& pos, const VisiblePosition& adjacentPos, const HTMLQualifiedName& listTag)
 {
     Element* listNode = outermostEnclosingList(adjacentPos.deepEquivalent().deprecatedNode());
 
@@ -336,7 +336,7 @@ static Element* adjacentEnclosingList(const VisiblePosition& pos, const VisibleP
     return listNode;
 }
 
-PassRefPtrWillBeRawPtr<HTMLElement> InsertListCommand::listifyParagraph(const VisiblePosition& originalStart, const QualifiedName& listTag)
+PassRefPtrWillBeRawPtr<HTMLElement> InsertListCommand::listifyParagraph(const VisiblePosition& originalStart, const HTMLQualifiedName& listTag)
 {
     VisiblePosition start = startOfParagraph(originalStart, CanSkipOverEditingBoundary);
     VisiblePosition end = endOfParagraph(start, CanSkipOverEditingBoundary);

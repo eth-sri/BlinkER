@@ -31,15 +31,15 @@
 #include "config.h"
 #include "bindings/core/v8/V8History.h"
 
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8HiddenValue.h"
 #include "bindings/core/v8/V8Window.h"
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/SerializedScriptValue.h"
-#include "bindings/v8/V8Binding.h"
-#include "bindings/v8/V8HiddenValue.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/frame/History.h"
 
-namespace WebCore {
+namespace blink {
 
 void V8History::stateAttributeGetterCustom(const v8::PropertyCallbackInfo<v8::Value>& info)
 {
@@ -66,8 +66,8 @@ void V8History::pushStateMethodCustom(const v8::FunctionCallbackInfo<v8::Value>&
     if (exceptionState.throwIfNeeded())
         return;
 
-    TOSTRING_VOID(V8StringResource<WithUndefinedOrNullCheck>, title, info[1]);
-    TOSTRING_VOID(V8StringResource<WithUndefinedOrNullCheck>, url, info[2]);
+    TOSTRING_VOID(V8StringResource<TreatNullAndUndefinedAsNullString>, title, info[1]);
+    TOSTRING_VOID(V8StringResource<TreatNullAndUndefinedAsNullString>, url, info[2]);
 
     History* history = V8History::toNative(info.Holder());
     history->stateObjectAdded(historyState.release(), title, url, FrameLoadTypeStandard, exceptionState);
@@ -82,8 +82,8 @@ void V8History::replaceStateMethodCustom(const v8::FunctionCallbackInfo<v8::Valu
     if (exceptionState.throwIfNeeded())
         return;
 
-    TOSTRING_VOID(V8StringResource<WithUndefinedOrNullCheck>, title, info[1]);
-    TOSTRING_VOID(V8StringResource<WithUndefinedOrNullCheck>, url, info[2]);
+    TOSTRING_VOID(V8StringResource<TreatNullAndUndefinedAsNullString>, title, info[1]);
+    TOSTRING_VOID(V8StringResource<TreatNullAndUndefinedAsNullString>, url, info[2]);
 
     History* history = V8History::toNative(info.Holder());
     history->stateObjectAdded(historyState.release(), title, url, FrameLoadTypeRedirectWithLockedBackForwardList, exceptionState);
@@ -91,4 +91,4 @@ void V8History::replaceStateMethodCustom(const v8::FunctionCallbackInfo<v8::Valu
     exceptionState.throwIfNeeded();
 }
 
-} // namespace WebCore
+} // namespace blink

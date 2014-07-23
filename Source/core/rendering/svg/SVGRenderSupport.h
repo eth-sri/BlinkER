@@ -24,12 +24,13 @@
 #ifndef SVGRenderSupport_h
 #define SVGRenderSupport_h
 
-namespace WebCore {
+namespace blink {
 
 class AffineTransform;
 class FloatPoint;
 class FloatRect;
 class GraphicsContext;
+class PaintInvalidationState;
 class LayoutRect;
 struct PaintInfo;
 class RenderGeometryMap;
@@ -64,12 +65,10 @@ public:
 
     static bool paintInfoIntersectsRepaintRect(const FloatRect& localRepaintRect, const AffineTransform& localTransform, const PaintInfo&);
 
-    static bool parentTransformDidChange(RenderObject*);
-
     // Important functions used by nearly all SVG renderers centralizing coordinate transformations / repaint rect calculations
-    static LayoutRect clippedOverflowRectForRepaint(const RenderObject*, const RenderLayerModelObject* repaintContainer);
-    static void computeFloatRectForRepaint(const RenderObject*, const RenderLayerModelObject* repaintContainer, FloatRect&, bool fixed);
-    static void mapLocalToContainer(const RenderObject*, const RenderLayerModelObject* repaintContainer, TransformState&, bool* wasFixed = 0);
+    static LayoutRect clippedOverflowRectForRepaint(const RenderObject*, const RenderLayerModelObject* repaintContainer, const PaintInvalidationState*);
+    static void computeFloatRectForRepaint(const RenderObject*, const RenderLayerModelObject* repaintContainer, FloatRect&, bool fixed, const PaintInvalidationState*);
+    static void mapLocalToContainer(const RenderObject*, const RenderLayerModelObject* repaintContainer, TransformState&, bool* wasFixed = 0, const PaintInvalidationState* = 0);
     static const RenderObject* pushMappingToContainer(const RenderObject*, const RenderLayerModelObject* ancestorToStopAt, RenderGeometryMap&);
 
     // Shared between SVG renderers and resources.
@@ -92,6 +91,6 @@ private:
     static bool layoutSizeOfNearestViewportChanged(const RenderObject* start);
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // SVGRenderSupport_h

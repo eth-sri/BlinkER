@@ -31,9 +31,9 @@
 #include "config.h"
 #include "modules/mediastream/RTCPeerConnection.h"
 
-#include "bindings/v8/ArrayValue.h"
-#include "bindings/v8/ExceptionMessages.h"
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ArrayValue.h"
+#include "bindings/core/v8/ExceptionMessages.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
@@ -55,18 +55,20 @@
 #include "modules/mediastream/RTCStatsRequestImpl.h"
 #include "modules/mediastream/RTCVoidRequestImpl.h"
 #include "platform/mediastream/RTCConfiguration.h"
+#include "platform/mediastream/RTCOfferOptions.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebMediaStream.h"
 #include "public/platform/WebRTCConfiguration.h"
 #include "public/platform/WebRTCDataChannelHandler.h"
 #include "public/platform/WebRTCDataChannelInit.h"
 #include "public/platform/WebRTCICECandidate.h"
+#include "public/platform/WebRTCOfferOptions.h"
 #include "public/platform/WebRTCSessionDescription.h"
 #include "public/platform/WebRTCSessionDescriptionRequest.h"
 #include "public/platform/WebRTCStatsRequest.h"
 #include "public/platform/WebRTCVoidRequest.h"
 
-namespace WebCore {
+namespace blink {
 
 namespace {
 
@@ -87,8 +89,21 @@ PassRefPtr<RTCConfiguration> RTCPeerConnection::parseConfiguration(const Diction
     if (configuration.isUndefinedOrNull())
         return nullptr;
 
+    RTCIceTransports iceTransports = RTCIceTransportsAll;
+    String iceTransportsString;
+    if (DictionaryHelper::get(configuration, "iceTransports", iceTransportsString)) {
+        if (iceTransportsString == "none") {
+            iceTransports = RTCIceTransportsNone;
+        } else if (iceTransportsString == "relay") {
+            iceTransports = RTCIceTransportsRelay;
+        } else if (iceTransportsString != "all") {
+            exceptionState.throwTypeError("Malformed RTCIceTransports");
+            return nullptr;
+        }
+    }
+
     ArrayValue iceServers;
-    bool ok = configuration.get("iceServers", iceServers);
+    bool ok = DictionaryHelper::get(configuration, "iceServers", iceServers);
     if (!ok || iceServers.isUndefinedOrNull()) {
         exceptionState.throwTypeError("Malformed RTCConfiguration");
         return nullptr;
@@ -102,6 +117,7 @@ PassRefPtr<RTCConfiguration> RTCPeerConnection::parseConfiguration(const Diction
     }
 
     RefPtr<RTCConfiguration> rtcConfiguration = RTCConfiguration::create();
+    rtcConfiguration->setIceTransports(iceTransports);
 
     for (size_t i = 0; i < numberOfServers; ++i) {
         Dictionary iceServer;
@@ -116,9 +132,9 @@ PassRefPtr<RTCConfiguration> RTCPeerConnection::parseConfiguration(const Diction
 
         Vector<String> urlStrings;
         if (names.contains("urls")) {
-            if (!iceServer.get("urls", urlStrings) || !urlStrings.size()) {
+            if (!DictionaryHelper::get(iceServer, "urls", urlStrings) || !urlStrings.size()) {
                 String urlString;
-                if (iceServer.get("urls", urlString)) {
+                if (DictionaryHelper::get(iceServer, "urls", urlString)) {
                     urlStrings.append(urlString);
                 } else {
                     exceptionState.throwTypeError("Malformed RTCIceServer");
@@ -127,7 +143,7 @@ PassRefPtr<RTCConfiguration> RTCPeerConnection::parseConfiguration(const Diction
             }
         } else if (names.contains("url")) {
             String urlString;
-            if (iceServer.get("url", urlString)) {
+            if (DictionaryHelper::get(iceServer, "url", urlString)) {
                 urlStrings.append(urlString);
             } else {
                 exceptionState.throwTypeError("Malformed RTCIceServer");
@@ -139,8 +155,8 @@ PassRefPtr<RTCConfiguration> RTCPeerConnection::parseConfiguration(const Diction
         }
 
         String username, credential;
-        iceServer.get("username", username);
-        iceServer.get("credential", credential);
+        DictionaryHelper::get(iceServer, "username", username);
+        DictionaryHelper::get(iceServer, "credential", credential);
 
         for (Vector<String>::iterator iter = urlStrings.begin(); iter != urlStrings.end(); ++iter) {
             KURL url(KURL(), *iter);
@@ -154,6 +170,33 @@ PassRefPtr<RTCConfiguration> RTCPeerConnection::parseConfiguration(const Diction
     }
 
     return rtcConfiguration.release();
+}
+
+PassRefPtr<RTCOfferOptions> RTCPeerConnection::parseOfferOptions(const Dictionary& options)
+{
+    if (options.isUndefinedOrNull())
+        return nullptr;
+
+    Vector<String> propertyNames;
+    options.getOwnPropertyNames(propertyNames);
+
+    // Treat |options| as MediaConstraints if it is empty or has "optional" or "mandatory" properties for compatibility.
+    // TODO(jiayl): remove constraints when RTCOfferOptions reaches Stable and client code is ready.
+    if (propertyNames.isEmpty() || propertyNames.contains("optional") || propertyNames.contains("mandatory"))
+        return nullptr;
+
+    int32_t offerToReceiveVideo = 0;
+    int32_t offerToReceiveAudio = 0;
+    bool voiceActivityDetection = true;
+    bool iceRestart = false;
+
+    DictionaryHelper::get(options, "offerToReceiveVideo", offerToReceiveVideo);
+    DictionaryHelper::get(options, "offerToReceiveAudio", offerToReceiveAudio);
+    DictionaryHelper::get(options, "voiceActivityDetection", voiceActivityDetection);
+    DictionaryHelper::get(options, "iceRestart", iceRestart);
+
+    RefPtr<RTCOfferOptions> rtcOfferOptions = RTCOfferOptions::create(offerToReceiveVideo, offerToReceiveAudio, voiceActivityDetection, iceRestart);
+    return rtcOfferOptions.release();
 }
 
 RTCPeerConnection* RTCPeerConnection::create(ExecutionContext* context, const Dictionary& rtcConfiguration, const Dictionary& mediaConstraints, ExceptionState& exceptionState)
@@ -220,19 +263,26 @@ RTCPeerConnection::~RTCPeerConnection()
     ASSERT(m_closed || m_stopped);
 }
 
-void RTCPeerConnection::createOffer(PassOwnPtr<RTCSessionDescriptionCallback> successCallback, PassOwnPtr<RTCErrorCallback> errorCallback, const Dictionary& mediaConstraints, ExceptionState& exceptionState)
+void RTCPeerConnection::createOffer(PassOwnPtr<RTCSessionDescriptionCallback> successCallback, PassOwnPtr<RTCErrorCallback> errorCallback, const Dictionary& rtcOfferOptions, ExceptionState& exceptionState)
 {
     if (throwExceptionIfSignalingStateClosed(m_signalingState, exceptionState))
         return;
 
     ASSERT(successCallback);
 
-    blink::WebMediaConstraints constraints = MediaConstraintsImpl::create(mediaConstraints, exceptionState);
-    if (exceptionState.hadException())
-        return;
+    RefPtr<RTCOfferOptions> offerOptions = parseOfferOptions(rtcOfferOptions);
 
     RefPtr<RTCSessionDescriptionRequest> request = RTCSessionDescriptionRequestImpl::create(executionContext(), this, successCallback, errorCallback);
-    m_peerHandler->createOffer(request.release(), constraints);
+
+    if (offerOptions) {
+        m_peerHandler->createOffer(request.release(), offerOptions.release());
+    } else {
+        blink::WebMediaConstraints constraints = MediaConstraintsImpl::create(rtcOfferOptions, exceptionState);
+        if (exceptionState.hadException())
+            return;
+
+        m_peerHandler->createOffer(request.release(), constraints);
+    }
 }
 
 void RTCPeerConnection::createAnswer(PassOwnPtr<RTCSessionDescriptionCallback> successCallback, PassOwnPtr<RTCErrorCallback> errorCallback, const Dictionary& mediaConstraints, ExceptionState& exceptionState)
@@ -489,19 +539,19 @@ RTCDataChannel* RTCPeerConnection::createDataChannel(String label, const Diction
         return nullptr;
 
     blink::WebRTCDataChannelInit init;
-    options.get("ordered", init.ordered);
-    options.get("negotiated", init.negotiated);
+    DictionaryHelper::get(options, "ordered", init.ordered);
+    DictionaryHelper::get(options, "negotiated", init.negotiated);
 
     unsigned short value = 0;
-    if (options.get("id", value))
+    if (DictionaryHelper::get(options, "id", value))
         init.id = value;
-    if (options.get("maxRetransmits", value))
+    if (DictionaryHelper::get(options, "maxRetransmits", value))
         init.maxRetransmits = value;
-    if (options.get("maxRetransmitTime", value))
+    if (DictionaryHelper::get(options, "maxRetransmitTime", value))
         init.maxRetransmitTime = value;
 
     String protocolString;
-    options.get("protocol", protocolString);
+    DictionaryHelper::get(options, "protocol", protocolString);
     init.protocol = protocolString;
 
     RTCDataChannel* channel = RTCDataChannel::create(executionContext(), this, m_peerHandler.get(), label, init, exceptionState);
@@ -740,4 +790,4 @@ void RTCPeerConnection::trace(Visitor* visitor)
     EventTargetWithInlineData::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink

@@ -7,11 +7,11 @@
 
 #include "core/rendering/ClipRects.h"
 
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
 #include "core/rendering/RenderBox.h" // For OverlayScrollbarSizeRelevancy.
 #endif
 
-namespace WebCore {
+namespace blink {
 
 enum ClipRectsCacheSlot {
     // Relative to the ancestor treated as the root (e.g. transformed layer). Used for hit testing.
@@ -34,7 +34,7 @@ public:
     struct Entry {
         Entry()
             : root(0)
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
             , scrollbarRelevancy(IgnoreOverlayScrollbarSize)
 #endif
         {
@@ -42,7 +42,7 @@ public:
 
         const RenderLayer* root;
         RefPtr<ClipRects> clipRects;
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
         OverlayScrollbarSizeRelevancy scrollbarRelevancy;
 #endif
     };
@@ -63,6 +63,6 @@ private:
     Entry m_entries[NumberOfClipRectsCacheSlots];
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // ClipRectsCache_h

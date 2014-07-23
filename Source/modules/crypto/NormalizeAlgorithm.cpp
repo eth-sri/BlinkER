@@ -31,7 +31,7 @@
 #include "config.h"
 #include "modules/crypto/NormalizeAlgorithm.h"
 
-#include "bindings/v8/Dictionary.h"
+#include "bindings/core/v8/Dictionary.h"
 #include "platform/NotImplemented.h"
 #include "public/platform/WebCryptoAlgorithmParams.h"
 #include "public/platform/WebString.h"
@@ -43,7 +43,7 @@
 #include "wtf/text/StringBuilder.h"
 #include <algorithm>
 
-namespace WebCore {
+namespace blink {
 
 namespace {
 
@@ -54,7 +54,7 @@ struct AlgorithmNameMapping {
     unsigned char algorithmNameLength;
     blink::WebCryptoAlgorithmId algorithmId;
 
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     bool operator<(const AlgorithmNameMapping&) const;
 #endif
 };
@@ -75,7 +75,7 @@ const AlgorithmNameMapping algorithmNameMappings[] = {
     {"RSASSA-PKCS1-V1_5", 17, blink::WebCryptoAlgorithmIdRsaSsaPkcs1v1_5},
 };
 
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
 
 // Essentially std::is_sorted() (however that function is new to C++11).
 template <typename Iterator>
@@ -269,7 +269,7 @@ private:
 // FIXME: Currently only supports ArrayBufferView.
 bool getOptionalCryptoOperationData(const Dictionary& raw, const char* propertyName, bool& hasProperty, RefPtr<ArrayBufferView>& buffer, const ErrorContext& context, AlgorithmError* error)
 {
-    if (!raw.get(propertyName, buffer)) {
+    if (!DictionaryHelper::get(raw, propertyName, buffer)) {
         hasProperty = false;
         return true;
     }
@@ -302,7 +302,7 @@ bool getCryptoOperationData(const Dictionary& raw, const char* propertyName, Ref
 
 bool getUint8Array(const Dictionary& raw, const char* propertyName, RefPtr<Uint8Array>& array, const ErrorContext& context, AlgorithmError* error)
 {
-    if (!raw.get(propertyName, array) || !array) {
+    if (!DictionaryHelper::get(raw, propertyName, array) || !array) {
         setSyntaxError(context.toString(propertyName, "Missing or not a Uint8Array"), error);
         return false;
     }
@@ -322,7 +322,7 @@ bool getBigInteger(const Dictionary& raw, const char* propertyName, RefPtr<Uint8
         return false;
     }
 
-    if (!raw.get(propertyName, array) || !array) {
+    if (!DictionaryHelper::get(raw, propertyName, array) || !array) {
         setSyntaxError(context.toString(propertyName, "Missing or not a Uint8Array"), error);
         return false;
     }
@@ -333,7 +333,7 @@ bool getBigInteger(const Dictionary& raw, const char* propertyName, RefPtr<Uint8
 bool getOptionalInteger(const Dictionary& raw, const char* propertyName, bool& hasProperty, double& value, double minValue, double maxValue, const ErrorContext& context, AlgorithmError* error)
 {
     double number;
-    bool ok = raw.get(propertyName, number, hasProperty);
+    bool ok = DictionaryHelper::get(raw, propertyName, number, hasProperty);
 
     if (!hasProperty)
         return true;
@@ -445,7 +445,7 @@ bool parseAlgorithm(const Dictionary&, blink::WebCryptoOperation, blink::WebCryp
 bool parseHash(const Dictionary& raw, blink::WebCryptoAlgorithm& hash, ErrorContext context, AlgorithmError* error)
 {
     Dictionary rawHash;
-    if (!raw.get("hash", rawHash)) {
+    if (!DictionaryHelper::get(raw, "hash", rawHash)) {
         setSyntaxError(context.toString("hash", "Missing or not a dictionary"), error);
         return false;
     }
@@ -685,7 +685,7 @@ bool parseAlgorithm(const Dictionary& raw, blink::WebCryptoOperation op, blink::
     }
 
     String algorithmName;
-    if (!raw.get("name", algorithmName)) {
+    if (!DictionaryHelper::get(raw, "name", algorithmName)) {
         setSyntaxError(context.toString("name", "Missing or not a string"), error);
         return false;
     }
@@ -726,4 +726,4 @@ bool normalizeAlgorithm(const Dictionary& raw, blink::WebCryptoOperation op, bli
     return parseAlgorithm(raw, op, algorithm, ErrorContext(), error);
 }
 
-} // namespace WebCore
+} // namespace blink

@@ -49,9 +49,10 @@
 #include "platform/network/ResourceRequest.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "public/platform/WebURLRequest.h"
 #include "wtf/Assertions.h"
 
-namespace WebCore {
+namespace blink {
 
 void DocumentThreadableLoader::loadResourceSynchronously(Document& document, const ResourceRequest& request, ThreadableLoaderClient& client, const ThreadableLoaderOptions& options, const ResourceLoaderOptions& resourceLoaderOptions)
 {
@@ -110,13 +111,16 @@ void DocumentThreadableLoader::makeCrossOriginAccessRequest(const ResourceReques
 {
     ASSERT(m_options.crossOriginRequestPolicy == UseAccessControl);
 
-    if ((m_options.preflightPolicy == ConsiderPreflight && isSimpleCrossOriginAccessRequest(request.httpMethod(), request.httpHeaderFields())) || m_options.preflightPolicy == PreventPreflight) {
-        // Cross-origin requests are only allowed for HTTP and registered schemes. We would catch this when checking response headers later, but there is no reason to send a request that's guaranteed to be denied.
-        if (!SchemeRegistry::shouldTreatURLSchemeAsCORSEnabled(request.url().protocol())) {
-            m_client->didFailAccessControlCheck(ResourceError(errorDomainBlinkInternal, 0, request.url().string(), "Cross origin requests are only supported for HTTP."));
-            return;
-        }
+    // Cross-origin requests are only allowed certain registered schemes.
+    // We would catch this when checking response headers later, but there
+    // is no reason to send a request, preflighted or not, that's guaranteed
+    // to be denied.
+    if (!SchemeRegistry::shouldTreatURLSchemeAsCORSEnabled(request.url().protocol())) {
+        m_client->didFailAccessControlCheck(ResourceError(errorDomainBlinkInternal, 0, request.url().string(), "Cross origin requests are only supported for protocol schemes: " + SchemeRegistry::listOfCORSEnabledURLSchemes() + "."));
+        return;
+    }
 
+    if ((m_options.preflightPolicy == ConsiderPreflight && isSimpleCrossOriginAccessRequest(request.httpMethod(), request.httpHeaderFields())) || m_options.preflightPolicy == PreventPreflight) {
         ResourceRequest crossOriginRequest(request);
         ResourceLoaderOptions crossOriginOptions(m_resourceLoaderOptions);
         updateRequestForAccessControl(crossOriginRequest, securityOrigin(), effectiveAllowCredentials());
@@ -318,6 +322,8 @@ void DocumentThreadableLoader::handleResponse(unsigned long identifier, const Re
         return;
     }
 
+    // FIXME: When response.wasFetchedViaServiceWorker() is true, we need to check the URL of the response for CSP and CORS.
+
     if (!m_sameOriginRequest && m_options.crossOriginRequestPolicy == UseAccessControl) {
         String accessControlErrorDescription;
         if (!passesAccessControlCheck(response, effectiveAllowCredentials(), securityOrigin(), accessControlErrorDescription)) {
@@ -423,8 +429,10 @@ void DocumentThreadableLoader::loadRequest(const ResourceRequest& request, Resou
             m_timeoutTimer.startOneShot(m_options.timeoutMilliseconds / 1000.0, FROM_HERE);
 
         FetchRequest newRequest(request, m_options.initiator, resourceLoaderOptions);
+        if (m_options.crossOriginRequestPolicy == AllowCrossOriginRequests)
+            newRequest.setOriginRestriction(FetchRequest::NoOriginRestriction);
         ASSERT(!resource());
-        if (request.targetType() == ResourceRequest::TargetIsMedia)
+        if (request.requestContext() == blink::WebURLRequest::RequestContextVideo || request.requestContext() == blink::WebURLRequest::RequestContextAudio)
             setResource(m_document.fetcher()->fetchMedia(newRequest));
         else
             setResource(m_document.fetcher()->fetchRawResource(newRequest));
@@ -436,6 +444,8 @@ void DocumentThreadableLoader::loadRequest(const ResourceRequest& request, Resou
     }
 
     FetchRequest fetchRequest(request, m_options.initiator, resourceLoaderOptions);
+    if (m_options.crossOriginRequestPolicy == AllowCrossOriginRequests)
+        fetchRequest.setOriginRestriction(FetchRequest::NoOriginRestriction);
     ResourcePtr<Resource> resource = m_document.fetcher()->fetchSynchronously(fetchRequest);
     ResourceResponse response = resource ? resource->response() : ResourceResponse();
     unsigned long identifier = resource ? resource->identifier() : std::numeric_limits<unsigned long>::max();
@@ -499,4 +509,4 @@ SecurityOrigin* DocumentThreadableLoader::securityOrigin() const
     return m_securityOrigin ? m_securityOrigin.get() : m_document.securityOrigin();
 }
 
-} // namespace WebCore
+} // namespace blink

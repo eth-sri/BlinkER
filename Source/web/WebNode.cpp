@@ -31,7 +31,7 @@
 #include "config.h"
 #include "public/web/WebNode.h"
 
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/Node.h"
@@ -58,7 +58,7 @@
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebPluginContainerImpl.h"
 
-using namespace WebCore;
+using namespace blink;
 
 namespace blink {
 
@@ -139,7 +139,7 @@ WebNodeList WebNode::childNodes()
 
 WebString WebNode::createMarkup() const
 {
-    return WebCore::createMarkup(m_private.get());
+    return blink::createMarkup(m_private.get());
 }
 
 bool WebNode::isLink() const
@@ -194,14 +194,10 @@ void WebNode::simulateClick()
     m_private->dispatchSimulatedClick(0);
 }
 
-WebElementCollection WebNode::getElementsByTagName(const WebString& tag) const
+WebElementCollection WebNode::getElementsByHTMLTagName(const WebString& tag) const
 {
-    if (m_private->isContainerNode()) {
-        // FIXME: Calling getElementsByTagNameNS here is inconsistent with the
-        // function name. This is a temporary fix for a serious bug, and should
-        // be reverted soon.
+    if (m_private->isContainerNode())
         return WebElementCollection(toContainerNode(m_private.get())->getElementsByTagNameNS(HTMLNames::xhtmlNamespaceURI, tag));
-    }
     return WebElementCollection();
 }
 
@@ -246,7 +242,7 @@ WebPluginContainer* WebNode::pluginContainer() const
     if (isHTMLObjectElement(coreNode) || isHTMLEmbedElement(coreNode)) {
         RenderObject* object = coreNode.renderer();
         if (object && object->isWidget()) {
-            Widget* widget = WebCore::toRenderWidget(object)->widget();
+            Widget* widget = blink::toRenderWidget(object)->widget();
             if (widget && widget->isPluginContainer())
                 return toWebPluginContainerImpl(widget);
         }

@@ -39,24 +39,17 @@
 #include "wtf/OwnPtr.h"
 #include "wtf/Vector.h"
 
-namespace WebCore {
+namespace blink {
 
-// FIXME: Many of these may not be used.
-class CSSArrayFunctionValue;
 class CSSBorderImageSliceValue;
 class CSSPrimitiveValue;
-class CSSSelectorList;
 class CSSValue;
 class CSSValueList;
 class CSSBasicShape;
 class CSSBasicShapeInset;
 class CSSGridLineNamesValue;
-class Document;
-class Element;
 class ImmutableStylePropertySet;
-class StyleKeyframe;
 class StylePropertyShorthand;
-class StyleKeyframe;
 class UseCounter;
 
 // Inputs: PropertyID, isImportant bool, CSSParserValueList.
@@ -164,9 +157,11 @@ private:
     bool parseGridTemplateAreasRow(NamedGridAreaMap&, const size_t, size_t&);
     PassRefPtrWillBeRawPtr<CSSValue> parseGridTemplateAreas();
     void parseGridLineNames(CSSParserValueList&, CSSValueList&, CSSGridLineNamesValue* = 0);
+    PassRefPtrWillBeRawPtr<CSSValue> parseGridAutoFlow(CSSParserValueList&);
 
     bool parseClipShape(CSSPropertyID, bool important);
 
+    bool parseLegacyPosition(CSSPropertyID, bool important);
     bool parseItemPositionOverflowPosition(CSSPropertyID, bool important);
 
     PassRefPtrWillBeRawPtr<CSSValue> parseShapeProperty(CSSPropertyID propId);
@@ -198,7 +193,6 @@ private:
     bool parseFontFaceUnicodeRange();
 
     bool parseSVGValue(CSSPropertyID propId, bool important);
-    PassRefPtrWillBeRawPtr<CSSValue> parseSVGPaint();
     PassRefPtrWillBeRawPtr<CSSValue> parseSVGStrokeDasharray();
 
     PassRefPtrWillBeRawPtr<CSSValue> parsePaintOrder() const;
@@ -405,6 +399,6 @@ CSSValueID cssValueKeywordID(const CSSParserString&);
 bool isKeywordPropertyID(CSSPropertyID);
 bool isValidKeywordPropertyAndValue(CSSPropertyID, CSSValueID, const CSSParserContext&);
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // CSSPropertyParser_h

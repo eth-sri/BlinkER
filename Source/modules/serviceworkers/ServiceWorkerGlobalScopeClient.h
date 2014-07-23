@@ -44,7 +44,7 @@ namespace blink {
 class WebURL;
 };
 
-namespace WebCore {
+namespace blink {
 
 class ExecutionContext;
 class Response;
@@ -61,7 +61,7 @@ public:
     virtual void didHandleActivateEvent(int eventID, blink::WebServiceWorkerEventResult) = 0;
     virtual void didHandleInstallEvent(int installEventID, blink::WebServiceWorkerEventResult) = 0;
     // A null response means no valid response was provided by the service worker, so fallback to native.
-    virtual void didHandleFetchEvent(int fetchEventID, PassRefPtr<Response> = nullptr) = 0;
+    virtual void didHandleFetchEvent(int fetchEventID, PassRefPtrWillBeRawPtr<Response> = nullptr) = 0;
     virtual void didHandleSyncEvent(int syncEventID) = 0;
     virtual void postMessageToClient(int clientID, const blink::WebString& message, PassOwnPtr<blink::WebMessagePortChannelArray>) = 0;
 
@@ -74,6 +74,6 @@ protected:
 
 void provideServiceWorkerGlobalScopeClientToWorker(WorkerClients*, PassOwnPtrWillBeRawPtr<ServiceWorkerGlobalScopeClient>);
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // ServiceWorkerGlobalScopeClient_h

@@ -23,7 +23,6 @@
 #include "core/rendering/HitTestResult.h"
 
 #include "core/HTMLNames.h"
-#include "core/XLinkNames.h"
 #include "core/dom/DocumentMarkerController.h"
 #include "core/dom/NodeRenderingTraversal.h"
 #include "core/dom/shadow/ShadowRoot.h"
@@ -41,7 +40,7 @@
 #include "core/svg/SVGElement.h"
 #include "platform/scroll/Scrollbar.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -145,19 +144,6 @@ RenderObject* HitTestResult::renderer() const
     if (!m_isFirstLetter || !renderer || !renderer->isText() || !toRenderText(renderer)->isTextFragment())
         return renderer;
     return toRenderTextFragment(renderer)->firstRenderTextInFirstLetter();
-}
-
-void HitTestResult::setToNodesInDocumentTreeScope()
-{
-    if (Node* node = innerNode()) {
-        node = node->document().ancestorInThisScope(node);
-        setInnerNode(node);
-    }
-
-    if (Node* node = innerNonSharedNode()) {
-        node = node->document().ancestorInThisScope(node);
-        setInnerNonSharedNode(node);
-    }
 }
 
 void HitTestResult::setToShadowHostIfInUserAgentShadowRoot()
@@ -344,30 +330,12 @@ KURL HitTestResult::absoluteLinkURL() const
 {
     if (!m_innerURLElement)
         return KURL();
-
-    AtomicString urlString;
-    if (isHTMLAnchorElement(*m_innerURLElement) || isHTMLAreaElement(*m_innerURLElement) || isHTMLLinkElement(*m_innerURLElement))
-        urlString = m_innerURLElement->getAttribute(hrefAttr);
-    else if (isSVGAElement(*m_innerURLElement))
-        urlString = m_innerURLElement->getAttribute(XLinkNames::hrefAttr);
-    else
-        return KURL();
-
-    return m_innerURLElement->document().completeURL(stripLeadingAndTrailingHTMLSpaces(urlString));
+    return m_innerURLElement->hrefURL();
 }
 
 bool HitTestResult::isLiveLink() const
 {
-    if (!m_innerURLElement)
-        return false;
-
-    if (isHTMLAnchorElement(*m_innerURLElement))
-        return toHTMLAnchorElement(m_innerURLElement)->isLiveLink();
-
-    if (isSVGAElement(*m_innerURLElement))
-        return m_innerURLElement->isLink();
-
-    return false;
+    return m_innerURLElement && m_innerURLElement->isLiveLink();
 }
 
 bool HitTestResult::isMisspelled() const
@@ -408,7 +376,7 @@ bool HitTestResult::isContentEditable() const
     if (isHTMLInputElement(*m_innerNonSharedNode))
         return toHTMLInputElement(*m_innerNonSharedNode).isTextField();
 
-    return m_innerNonSharedNode->rendererIsEditable();
+    return m_innerNonSharedNode->hasEditableStyle();
 }
 
 bool HitTestResult::addNodeToRectBasedTestResult(Node* node, const HitTestRequest& request, const HitTestLocation& locationInContainer, const LayoutRect& rect)
@@ -484,19 +452,15 @@ HitTestResult::NodeSet& HitTestResult::mutableRectBasedTestResult()
     return *m_rectBasedTestResult;
 }
 
-Node* HitTestResult::targetNode() const
+void HitTestResult::resolveRectBasedTest(Node* resolvedInnerNode, const LayoutPoint& resolvedPointInMainFrame)
 {
-    Node* node = innerNode();
-    if (!node)
-        return 0;
-    if (node->inDocument())
-        return node;
-
-    Element* element = node->parentElement();
-    if (element && element->inDocument())
-        return element;
-
-    return node;
+    ASSERT(isRectBasedTest());
+    ASSERT(m_hitTestLocation.containsPoint(resolvedPointInMainFrame));
+    m_innerNode = resolvedInnerNode;
+    m_hitTestLocation = HitTestLocation(resolvedPointInMainFrame);
+    m_pointInInnerNodeFrame = resolvedPointInMainFrame;
+    m_rectBasedTestResult = nullptr;
+    ASSERT(!isRectBasedTest());
 }
 
 Element* HitTestResult::innerElement() const
@@ -509,4 +473,4 @@ Element* HitTestResult::innerElement() const
     return 0;
 }
 
-} // namespace WebCore
+} // namespace blink

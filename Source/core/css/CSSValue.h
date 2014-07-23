@@ -29,7 +29,7 @@
 #include "wtf/RefCounted.h"
 #include "wtf/RefPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 class ExceptionState;
 class StyleSheetContents;
@@ -103,7 +103,6 @@ public:
     bool isFilterValue() const { return m_classType == CSSFilterClass; }
     bool isArrayFunctionValue() const { return m_classType == CSSArrayFunctionValueClass; }
     bool isGridTemplateAreasValue() const { return m_classType == GridTemplateAreasClass; }
-    bool isSVGPaint() const { return m_classType == SVGPaintClass; }
     bool isSVGDocumentValue() const { return m_classType == CSSSVGDocumentClass; }
     bool isUnicodeRangeValue() const { return m_classType == UnicodeRangeClass; }
     bool isGridLineNamesValue() const { return m_classType == GridLineNamesClass; }
@@ -111,7 +110,7 @@ public:
     bool isCSSOMSafe() const { return m_isCSSOMSafe; }
     bool isSubtypeExposedToCSSOM() const
     {
-        return isPrimitiveValue() || isSVGPaint() || isValueList();
+        return isPrimitiveValue() || isValueList();
     }
 
     PassRefPtrWillBeRawPtr<CSSValue> cloneForCSSOM() const;
@@ -163,7 +162,6 @@ protected:
         GridTemplateAreasClass,
 
         // SVG classes.
-        SVGPaintClass,
         CSSSVGDocumentClass,
 
         // List class types must appear after ValueListClass.
@@ -259,6 +257,6 @@ inline bool compareCSSValuePtr(const Member<CSSValueType>& first, const Member<C
 #define DEFINE_CSS_VALUE_TYPE_CASTS(thisType, predicate) \
     DEFINE_TYPE_CASTS(thisType, CSSValue, value, value->predicate, value.predicate)
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // CSSValue_h

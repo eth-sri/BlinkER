@@ -398,7 +398,13 @@ class IdlConstant(TypedObject):
         # ConstType is more limited than Type, so subtree is smaller and
         # we don't use the full type_node_to_type function.
         self.idl_type = type_node_inner_to_type(type_node)
-        self.value = value_node.GetName()
+        # FIXME: This code is unnecessarily complicated due to the rather
+        # inconsistent way the upstream IDL parser outputs default values.
+        # http://crbug.com/374178
+        if value_node.GetProperty('TYPE') == 'float':
+            self.value = value_node.GetProperty('VALUE')
+        else:
+            self.value = value_node.GetName()
 
         if num_children == 3:
             ext_attributes_node = children[2]
@@ -763,7 +769,8 @@ def type_node_inner_to_type(node, is_array=False, is_nullable=False):
     elif node_class == 'Sequence':
         if is_array:
             raise ValueError('Arrays of sequences are not supported')
-        return sequence_node_to_type(node, is_nullable=is_nullable)
+        sequence_is_nullable = node.GetProperty('NULLABLE') or False
+        return sequence_node_to_type(node, is_nullable=sequence_is_nullable)
     elif node_class == 'UnionType':
         if is_array:
             raise ValueError('Arrays of unions are not supported')

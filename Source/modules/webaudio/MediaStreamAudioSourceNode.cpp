@@ -33,7 +33,7 @@
 #include "modules/webaudio/AudioNodeOutput.h"
 #include "wtf/Locker.h"
 
-namespace WebCore {
+namespace blink {
 
 PassRefPtrWillBeRawPtr<MediaStreamAudioSourceNode> MediaStreamAudioSourceNode::create(AudioContext* context, MediaStream* mediaStream, MediaStreamTrack* audioTrack, PassOwnPtr<AudioSourceProvider> audioSourceProvider)
 {
@@ -59,7 +59,13 @@ MediaStreamAudioSourceNode::MediaStreamAudioSourceNode(AudioContext* context, Me
 
 MediaStreamAudioSourceNode::~MediaStreamAudioSourceNode()
 {
+    ASSERT(!isInitialized());
+}
+
+void MediaStreamAudioSourceNode::dispose()
+{
     uninitialize();
+    AudioSourceNode::dispose();
 }
 
 void MediaStreamAudioSourceNode::setFormat(size_t numberOfChannels, float sourceSampleRate)
@@ -122,6 +128,6 @@ void MediaStreamAudioSourceNode::trace(Visitor* visitor)
     AudioSourceProviderClient::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // ENABLE(WEB_AUDIO)

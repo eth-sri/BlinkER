@@ -31,15 +31,14 @@
 #ifndef MIDIPort_h
 #define MIDIPort_h
 
-#include "bindings/v8/ScriptWrappable.h"
 #include "modules/EventTargetModules.h"
 #include "platform/heap/Handle.h"
 
-namespace WebCore {
+namespace blink {
 
 class MIDIAccess;
 
-class MIDIPort : public RefCountedGarbageCollectedWillBeGarbageCollectedFinalized<MIDIPort>, public ScriptWrappable, public EventTargetWithInlineData {
+class MIDIPort : public RefCountedGarbageCollectedWillBeGarbageCollectedFinalized<MIDIPort>, public EventTargetWithInlineData {
     DEFINE_EVENT_TARGET_REFCOUNTING_WILL_BE_REMOVED(RefCountedGarbageCollected<MIDIPort>);
     WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(MIDIPort);
 public:
@@ -78,6 +77,6 @@ private:
     Member<MIDIAccess> m_access;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // MIDIPort_h

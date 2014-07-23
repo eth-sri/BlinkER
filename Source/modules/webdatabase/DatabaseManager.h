@@ -36,7 +36,7 @@
 #include "wtf/ThreadingPrimitives.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 class AbstractDatabaseServer;
 class Database;
@@ -61,7 +61,7 @@ public:
     void registerDatabaseContext(DatabaseContext*);
     void unregisterDatabaseContext(DatabaseContext*);
 
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     void didConstructDatabaseContext();
     void didDestructDatabaseContext();
 #else
@@ -107,13 +107,13 @@ private:
     typedef HashMap<ExecutionContext*, RefPtr<DatabaseContext> > ContextMap;
 #endif
     ContextMap m_contextMap;
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     int m_databaseContextRegisteredCount;
     int m_databaseContextInstanceCount;
 #endif
     Mutex m_contextMapLock;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // DatabaseManager_h

@@ -46,7 +46,7 @@ public:
 
     BLINK_EXPORT static void enableDatabase(bool);
 
-    BLINK_EXPORT static void enableDialogElement(bool);
+    BLINK_EXPORT static void enableDisplayList2dCanvas(bool);
 
     BLINK_EXPORT static void enableEncryptedMedia(bool);
     BLINK_EXPORT static bool isEncryptedMediaEnabled();
@@ -82,6 +82,8 @@ public:
 
     BLINK_EXPORT static void enableNavigatorContentUtils(bool);
 
+    BLINK_EXPORT static void enableNavigationTransitions(bool);
+
     BLINK_EXPORT static void enableOrientationEvent(bool);
 
     BLINK_EXPORT static void enablePagePopup(bool);
@@ -112,8 +114,6 @@ public:
 
     BLINK_EXPORT static void enableWebMIDI(bool);
 
-    BLINK_EXPORT static void enableHTMLImports(bool);
-
     BLINK_EXPORT static void enableXSLT(bool);
 
     BLINK_EXPORT static void enableOverlayScrollbars(bool);
@@ -122,8 +122,6 @@ public:
 
     BLINK_EXPORT static void enableSharedWorker(bool);
 
-    BLINK_EXPORT static void enableExperimentalWebSocket(bool);
-
     BLINK_EXPORT static void enableTargetedStyleRecalc(bool);
 
     BLINK_EXPORT static void enablePreciseMemoryInfo(bool);
@@ -131,6 +129,8 @@ public:
     BLINK_EXPORT static void enableLayerSquashing(bool);
 
     BLINK_EXPORT static void enableShowModalDialog(bool);
+
+    BLINK_EXPORT static void enableLaxMixedContentChecking(bool);
 
 private:
     WebRuntimeFeatures();

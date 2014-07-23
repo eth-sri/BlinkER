@@ -32,7 +32,7 @@
 #include "config.h"
 #include "core/loader/NavigationScheduler.h"
 
-#include "bindings/v8/ScriptController.h"
+#include "bindings/core/v8/ScriptController.h"
 #include "core/events/Event.h"
 #include "core/fetch/ResourceLoaderOptions.h"
 #include "core/frame/LocalFrame.h"
@@ -51,7 +51,7 @@
 #include "platform/UserGestureIndicator.h"
 #include "wtf/CurrentTime.h"
 
-namespace WebCore {
+namespace blink {
 
 unsigned NavigationDisablerForBeforeUnload::s_navigationDisableCount = 0;
 
@@ -327,6 +327,12 @@ void NavigationScheduler::scheduleLocationChange(Document* originDocument, const
     schedule(adoptPtr(new ScheduledLocationChange(originDocument, url, referrer, lockBackForwardList)));
 }
 
+void NavigationScheduler::schedulePageBlock(Document* originDocument, const Referrer& referrer)
+{
+    ASSERT(m_frame->page());
+    schedule(adoptPtr(new ScheduledLocationChange(originDocument, SecurityOrigin::urlWithUniqueSecurityOrigin(), referrer, false)));
+}
+
 void NavigationScheduler::scheduleFormSubmission(PassRefPtrWillBeRawPtr<FormSubmission> submission)
 {
     ASSERT(m_frame->page());
@@ -420,4 +426,4 @@ void NavigationScheduler::cancel()
     m_redirect.clear();
 }
 
-} // namespace WebCore
+} // namespace blink

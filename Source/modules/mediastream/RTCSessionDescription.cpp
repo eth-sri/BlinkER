@@ -31,11 +31,11 @@
 #include "config.h"
 #include "modules/mediastream/RTCSessionDescription.h"
 
-#include "bindings/v8/Dictionary.h"
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/Dictionary.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 
-namespace WebCore {
+namespace blink {
 
 static bool verifyType(const String& type)
 {
@@ -50,14 +50,14 @@ static String constructIllegalTypeExceptionMessage(const String& type)
 RTCSessionDescription* RTCSessionDescription::create(const Dictionary& descriptionInitDict, ExceptionState& exceptionState)
 {
     String type;
-    bool ok = descriptionInitDict.get("type", type);
+    bool ok = DictionaryHelper::get(descriptionInitDict, "type", type);
     if (ok && !verifyType(type)) {
         exceptionState.throwDOMException(TypeMismatchError, constructIllegalTypeExceptionMessage(type));
         return nullptr;
     }
 
     String sdp;
-    descriptionInitDict.get("sdp", sdp);
+    DictionaryHelper::get(descriptionInitDict, "sdp", sdp);
 
     return new RTCSessionDescription(blink::WebRTCSessionDescription(type, sdp));
 }
@@ -101,4 +101,4 @@ blink::WebRTCSessionDescription RTCSessionDescription::webSessionDescription()
     return m_webSessionDescription;
 }
 
-} // namespace WebCore
+} // namespace blink

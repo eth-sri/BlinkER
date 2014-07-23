@@ -43,7 +43,7 @@
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 class ContextLifecycleNotifier;
 class LocalDOMWindow;
@@ -56,11 +56,10 @@ class SecurityOrigin;
 class ScriptCallStack;
 
 class ExecutionContext
-    : public WillBeGarbageCollectedMixin
-    , public LifecycleContext<ExecutionContext>
-    , public Supplementable<ExecutionContext> {
+    : public LifecycleContext<ExecutionContext>
+    , public WillBeHeapSupplementable<ExecutionContext> {
 public:
-    virtual void trace(Visitor*);
+    virtual void trace(Visitor*) OVERRIDE;
 
     // Delegating to ExecutionContextClient
     bool isDocument() const { return m_client && m_client->isDocument(); }
@@ -74,7 +73,6 @@ public:
     LocalDOMWindow* executingWindow() const;
     String userAgent(const KURL&) const;
     void postTask(PassOwnPtr<ExecutionContextTask>);
-    void postTask(const Closure&);
     double timerAlignmentInterval() const;
 
     virtual void reportBlockedScriptExecutionToInspector(const String& directiveText) = 0;
@@ -175,6 +173,6 @@ private:
     OwnPtr<ContextLifecycleNotifier> m_lifecycleNotifier;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // ExecutionContext_h

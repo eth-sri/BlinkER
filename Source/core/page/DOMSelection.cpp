@@ -31,9 +31,9 @@
 #include "config.h"
 #include "core/page/DOMSelection.h"
 
-#include "bindings/v8/ExceptionMessages.h"
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionMessages.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/Node.h"
@@ -45,7 +45,7 @@
 #include "core/frame/LocalFrame.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 static Node* selectionShadowAncestor(LocalFrame* frame)
 {
@@ -336,13 +336,10 @@ void DOMSelection::modify(const String& alterString, const String& directionStri
 
 void DOMSelection::extend(Node* node, int offset, ExceptionState& exceptionState)
 {
+    ASSERT(node);
+
     if (!m_frame)
         return;
-
-    if (!node) {
-        exceptionState.throwDOMException(TypeMismatchError, ExceptionMessages::argumentNullOrIncorrectType(1, "Node"));
-        return;
-    }
 
     if (offset < 0) {
         exceptionState.throwDOMException(IndexSizeError, String::number(offset) + " is not a valid offset.");
@@ -358,6 +355,13 @@ void DOMSelection::extend(Node* node, int offset, ExceptionState& exceptionState
 
     // FIXME: Eliminate legacy editing positions
     m_frame->selection().setExtent(VisiblePosition(createLegacyEditingPosition(node, offset), DOWNSTREAM));
+}
+
+void DOMSelection::extend(Node* node, ExceptionState& exceptionState)
+{
+    // This default value implementation differs from the spec, which says |offset| is not optional.
+    // FIXME: Specify this default value in Selection.idl.
+    extend(node, 0, exceptionState);
 }
 
 PassRefPtrWillBeRawPtr<Range> DOMSelection::getRangeAt(int index, ExceptionState& exceptionState)
@@ -561,4 +565,4 @@ void DOMSelection::addConsoleError(const String& message)
         m_treeScope->document().addConsoleMessage(JSMessageSource, ErrorMessageLevel, message);
 }
 
-} // namespace WebCore
+} // namespace blink

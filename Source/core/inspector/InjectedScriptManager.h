@@ -30,13 +30,13 @@
 #ifndef InjectedScriptManager_h
 #define InjectedScriptManager_h
 
-#include "bindings/v8/ScriptState.h"
+#include "bindings/core/v8/ScriptState.h"
 #include "wtf/Forward.h"
 #include "wtf/HashMap.h"
 #include "wtf/text/WTFString.h"
 #include <v8.h>
 
-namespace WebCore {
+namespace blink {
 
 class LocalDOMWindow;
 class InjectedScript;
@@ -85,6 +85,6 @@ private:
     ScriptStateToId m_scriptStateToId;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // !defined(InjectedScriptManager_h)

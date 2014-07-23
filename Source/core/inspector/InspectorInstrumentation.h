@@ -31,7 +31,7 @@
 #ifndef InspectorInstrumentation_h
 #define InspectorInstrumentation_h
 
-#include "bindings/v8/ScriptString.h"
+#include "bindings/core/v8/ScriptString.h"
 #include "core/css/CSSSelector.h"
 #include "core/css/CSSStyleDeclaration.h"
 #include "core/css/CSSStyleSheet.h"
@@ -49,7 +49,7 @@
 #include "platform/network/WebSocketHandshakeResponse.h"
 #include "wtf/RefPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 struct CSSParserString;
 class Document;
@@ -187,7 +187,7 @@ InstrumentingAgents* instrumentationForPage(Page*);
 
 InstrumentingAgents* instrumentationForWorkerGlobalScope(WorkerGlobalScope*);
 
-} // namespace WebCore
+} // namespace blink
 
 #include "core/InspectorInstrumentationInl.h"
 

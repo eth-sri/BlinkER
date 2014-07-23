@@ -18,10 +18,8 @@ function createSampleDOM()
     return div;
 }
 
-test(function ()
+function check_iterator(iterator, root)
 {
-    var root = createSampleDOM();
-    var iterator = document.createNodeIterator(root);
     assert_equals(iterator.toString(), '[object NodeIterator]');
     assert_equals(iterator.root, root);
     assert_equals(iterator.referenceNode, root);
@@ -36,15 +34,29 @@ test(function ()
     assert_idl_attribute(iterator, 'nextNode');
     assert_idl_attribute(iterator, 'previousNode');
     assert_idl_attribute(iterator, 'detach');
-}, 'Construct a NodeIterator by document.createNodeIterator().');
+}
+
+test(function ()
+{
+    var root = createSampleDOM();
+    var iterator = document.createNodeIterator(root);
+    check_iterator(iterator, root);
+}, 'Construct a NodeIterator by document.createNodeIterator(root).');
+
+test(function ()
+{
+    var root = createSampleDOM();
+    var iterator = document.createNodeIterator(root, undefined, undefined);
+    check_iterator(iterator, root);
+}, 'Construct a NodeIterator by document.createNodeIterator(root, undefined, undefined).');
 
 test(function ()
 {
     assert_throws(new TypeError(), function () { document.createNodeIterator(); });
-    assert_throws('NOT_SUPPORTED_ERR', function () { document.createNodeIterator(null); });
-    assert_throws('NOT_SUPPORTED_ERR', function () { document.createNodeIterator(undefined); });
-    assert_throws('NOT_SUPPORTED_ERR', function () { document.createNodeIterator(new Object()); });
-    assert_throws('NOT_SUPPORTED_ERR', function () { document.createNodeIterator(1); });
+    assert_throws(new TypeError(), function () { document.createNodeIterator(null); });
+    assert_throws(new TypeError(), function () { document.createNodeIterator(undefined); });
+    assert_throws(new TypeError(), function () { document.createNodeIterator(new Object()); });
+    assert_throws(new TypeError(), function () { document.createNodeIterator(1); });
 }, 'Give an invalid root node to document.createNodeIterator().');
 
 // |expected| should be an object indicating the expected type of node.
@@ -193,6 +205,14 @@ test(function ()
         testIteratorForwardAndBackward(iterator, expectedAll);
     });
 }, 'Test that the fourth argument (expandEntityReferences) is ignored.');
+
+test(function() {
+    var nodeIterator = document.createNodeIterator(document.body, 42, null);
+    assert_equals(nodeIterator.root, document.body);
+    assert_equals(nodeIterator.referenceNode, document.body);
+    assert_equals(nodeIterator.whatToShow, 42);
+    assert_equals(nodeIterator.filter, null);
+}, "Optional arguments to createNodeIterator should be optional (3 passed, null).");
 </script>
 </body>
 </html>

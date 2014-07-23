@@ -10,7 +10,7 @@
 #include "modules/EventTargetModulesInterfaces.h"
 #include "modules/EventTargetModulesNames.h"
 
-namespace WebCore {
+namespace blink {
 
 class AudioContext;
 class FileWriter;
@@ -24,8 +24,8 @@ class MediaStream;
 class Notification;
 class ExecutionContext;
 class ScriptProcessorNode;
-class WebSocket;
+class DOMWebSocket;
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // EventTargetModules_h

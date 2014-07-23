@@ -31,14 +31,14 @@
 #include "config.h"
 #include "core/inspector/InspectorHeapProfilerAgent.h"
 
-#include "bindings/v8/ScriptProfiler.h"
+#include "bindings/core/v8/ScriptProfiler.h"
 #include "core/inspector/InjectedScript.h"
 #include "core/inspector/InjectedScriptHost.h"
 #include "core/inspector/InspectorState.h"
 #include "platform/Timer.h"
 #include "wtf/CurrentTime.h"
 
-namespace WebCore {
+namespace blink {
 
 typedef uint32_t SnapshotObjectId;
 
@@ -102,7 +102,7 @@ void InspectorHeapProfilerAgent::restore()
         startTrackingHeapObjectsInternal(m_state->getBoolean(HeapProfilerAgentState::allocationTrackingEnabled));
 }
 
-void InspectorHeapProfilerAgent::collectGarbage(WebCore::ErrorString*)
+void InspectorHeapProfilerAgent::collectGarbage(blink::ErrorString*)
 {
     ScriptProfiler::collectGarbage();
 }
@@ -312,5 +312,5 @@ void InspectorHeapProfilerAgent::getHeapObjectId(ErrorString* errorString, const
     *heapSnapshotObjectId = String::number(id);
 }
 
-} // namespace WebCore
+} // namespace blink
 

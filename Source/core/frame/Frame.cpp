@@ -45,12 +45,14 @@
 #include "core/page/EventHandler.h"
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
+#include "core/rendering/RenderLayer.h"
 #include "core/rendering/RenderPart.h"
+#include "platform/graphics/GraphicsLayer.h"
 #include "public/platform/WebLayer.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/RefCountedLeakCounter.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -159,6 +161,19 @@ RenderPart* Frame::ownerRenderer() const
     return toRenderPart(object);
 }
 
+void Frame::setRemotePlatformLayer(blink::WebLayer* layer)
+{
+    if (m_remotePlatformLayer)
+        GraphicsLayer::unregisterContentsLayer(m_remotePlatformLayer);
+    m_remotePlatformLayer = layer;
+    if (m_remotePlatformLayer)
+        GraphicsLayer::registerContentsLayer(layer);
+
+    ASSERT(owner());
+    toHTMLFrameOwnerElement(owner())->setNeedsCompositingUpdate();
+    if (RenderPart* renderer = ownerRenderer())
+        renderer->layer()->updateSelfPaintingLayer();
+}
 
 void Frame::willDetachFrameHost()
 {
@@ -184,6 +199,17 @@ bool Frame::isMainFrame() const
     return page && this == page->mainFrame();
 }
 
+bool Frame::isLocalRoot() const
+{
+    if (isRemoteFrame())
+        return false;
+
+    if (!tree().parent())
+        return true;
+
+    return tree().parent()->isRemoteFrame();
+}
+
 void Frame::disconnectOwnerElement()
 {
     if (m_owner) {
@@ -200,4 +226,4 @@ HTMLFrameOwnerElement* Frame::deprecatedLocalOwner() const
     return m_owner && m_owner->isLocal() ? toHTMLFrameOwnerElement(m_owner) : 0;
 }
 
-} // namespace WebCore
+} // namespace blink

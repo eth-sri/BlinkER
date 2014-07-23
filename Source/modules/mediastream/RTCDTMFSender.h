@@ -26,7 +26,6 @@
 #ifndef RTCDTMFSender_h
 #define RTCDTMFSender_h
 
-#include "bindings/v8/ScriptWrappable.h"
 #include "core/dom/ActiveDOMObject.h"
 #include "modules/EventTargetModules.h"
 #include "platform/Timer.h"
@@ -37,14 +36,13 @@ class WebRTCDTMFSenderHandler;
 class WebRTCPeerConnectionHandler;
 }
 
-namespace WebCore {
+namespace blink {
 
 class ExceptionState;
 class MediaStreamTrack;
 
 class RTCDTMFSender FINAL
     : public RefCountedGarbageCollectedWillBeGarbageCollectedFinalized<RTCDTMFSender>
-    , public ScriptWrappable
     , public EventTargetWithInlineData
     , public blink::WebRTCDTMFSenderHandlerClient
     , public ActiveDOMObject {
@@ -96,6 +94,6 @@ private:
     WillBeHeapVector<RefPtrWillBeMember<Event> > m_scheduledEvents;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // RTCDTMFSender_h

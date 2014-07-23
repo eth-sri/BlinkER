@@ -102,10 +102,9 @@ WebInspector.TimelineUIUtils.prototype = {
     /**
      * @param {!WebInspector.TimelineModel.Record} record
      * @param {!WebInspector.Linkifier} linkifier
-     * @param {boolean} loadedFromFile
      * @return {?Node}
      */
-    buildDetailsNode: function(record, linkifier, loadedFromFile)
+    buildDetailsNode: function(record, linkifier)
     {
         throw new Error("Not implemented.");
     },
@@ -114,9 +113,8 @@ WebInspector.TimelineUIUtils.prototype = {
      * @param {!WebInspector.TimelineModel} model
      * @param {!WebInspector.Linkifier} linkifier
      * @param {function(!DocumentFragment)} callback
-     * @param {boolean} loadedFromFile
      */
-    generateDetailsContent: function(record, model, linkifier, callback, loadedFromFile)
+    generateDetailsContent: function(record, model, linkifier, callback)
     {
         throw new Error("Not implemented.");
     },
@@ -159,6 +157,13 @@ WebInspector.TimelineUIUtils.prototype = {
     hiddenRecordsFilter: function()
     {
         throw new Error("Not implemented.");
+    },
+    /**
+     * @return {?WebInspector.TimelineModel.Filter}
+     */
+    hiddenEmptyRecordsFilter: function()
+    {
+        return null;
     }
 }
 
@@ -182,7 +187,7 @@ WebInspector.TimelineUIUtils.categories = function()
 
 /**
  * @param {!WebInspector.TimelineModel} model
- * @param {!{name: string, tasks: !Array.<!{startTime: number, endTime: number}>, firstTaskIndex: number, lastTaskIndex: number}} info
+ * @param {!{name: string, tasks: !Array.<!WebInspector.TimelineModel.Record>, firstTaskIndex: number, lastTaskIndex: number}} info
  * @return {!Element}
  */
 WebInspector.TimelineUIUtils.generateMainThreadBarPopupContent = function(model, info)
@@ -195,10 +200,10 @@ WebInspector.TimelineUIUtils.generateMainThreadBarPopupContent = function(model,
 
     for (var i = firstTaskIndex; i <= lastTaskIndex; ++i) {
         var task = tasks[i];
-        cpuTime += task.endTime - task.startTime;
+        cpuTime += task.endTime() - task.startTime();
     }
-    var startTime = tasks[firstTaskIndex].startTime;
-    var endTime = tasks[lastTaskIndex].endTime;
+    var startTime = tasks[firstTaskIndex].startTime();
+    var endTime = tasks[lastTaskIndex].endTime();
     var duration = endTime - startTime;
 
     var contentHelper = new WebInspector.TimelinePopupContentHelper(info.name);
@@ -564,7 +569,7 @@ WebInspector.TimelineDetailsContentHelper.prototype = {
             var row = stackTraceElement.createChild("div");
             row.createTextChild(stackFrame.functionName || WebInspector.UIString("(anonymous function)"));
             row.createTextChild(" @ ");
-            var urlElement = this._linkifier.linkifyLocation(this._target, stackFrame.url, stackFrame.lineNumber - 1);
+            var urlElement = this._linkifier.linkifyLocationByScriptId(this._target, stackFrame.scriptId, stackFrame.url, stackFrame.lineNumber - 1, stackFrame.columnNumber - 1);
             row.appendChild(urlElement);
         }
     }

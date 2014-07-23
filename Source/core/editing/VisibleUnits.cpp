@@ -26,8 +26,8 @@
 #include "config.h"
 #include "core/editing/VisibleUnits.h"
 
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
@@ -46,17 +46,17 @@
 #include "platform/heap/Handle.h"
 #include "platform/text/TextBoundaries.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 using namespace WTF::Unicode;
 
 static Node* previousLeafWithSameEditability(Node* node, EditableType editableType)
 {
-    bool editable = node->rendererIsEditable(editableType);
+    bool editable = node->hasEditableStyle(editableType);
     node = node->previousLeafNode();
     while (node) {
-        if (editable == node->rendererIsEditable(editableType))
+        if (editable == node->hasEditableStyle(editableType))
             return node;
         node = node->previousLeafNode();
     }
@@ -68,10 +68,10 @@ static Node* nextLeafWithSameEditability(Node* node, EditableType editableType =
     if (!node)
         return 0;
 
-    bool editable = node->rendererIsEditable(editableType);
+    bool editable = node->hasEditableStyle(editableType);
     node = node->nextLeafNode();
     while (node) {
-        if (editable == node->rendererIsEditable(editableType))
+        if (editable == node->hasEditableStyle(editableType))
             return node;
         node = node->nextLeafNode();
     }
@@ -653,9 +653,7 @@ static unsigned endWordBoundary(const UChar* characters, unsigned length, unsign
         return length;
     }
     needMoreContext = false;
-    int start, end;
-    findWordBoundary(characters, length, offset, &start, &end);
-    return end;
+    return findWordEndBoundary(characters, length, offset);
 }
 
 VisiblePosition endOfWord(const VisiblePosition &c, EWordSide side)
@@ -961,7 +959,7 @@ VisiblePosition previousLinePosition(const VisiblePosition &visiblePosition, int
     // Could not find a previous line. This means we must already be on the first line.
     // Move to the start of the content in this block, which effectively moves us
     // to the start of the line we're on.
-    Element* rootElement = node->rendererIsEditable(editableType) ? node->rootEditableElement(editableType) : node->document().documentElement();
+    Element* rootElement = node->hasEditableStyle(editableType) ? node->rootEditableElement(editableType) : node->document().documentElement();
     if (!rootElement)
         return VisiblePosition();
     return VisiblePosition(firstPositionInNode(rootElement), DOWNSTREAM);
@@ -1019,7 +1017,7 @@ VisiblePosition nextLinePosition(const VisiblePosition &visiblePosition, int lin
     // Could not find a next line. This means we must already be on the last line.
     // Move to the end of the content in this block, which effectively moves us
     // to the end of the line we're on.
-    Element* rootElement = node->rendererIsEditable(editableType) ? node->rootEditableElement(editableType) : node->document().documentElement();
+    Element* rootElement = node->hasEditableStyle(editableType) ? node->rootEditableElement(editableType) : node->document().documentElement();
     if (!rootElement)
         return VisiblePosition();
     return VisiblePosition(lastPositionInNode(rootElement), DOWNSTREAM);
@@ -1098,12 +1096,12 @@ VisiblePosition startOfParagraph(const VisiblePosition& c, EditingBoundaryCrossi
     Position::AnchorType type = p.anchorType();
 
     Node* n = startNode;
-    bool startNodeIsEditable = startNode->rendererIsEditable();
+    bool startNodeIsEditable = startNode->hasEditableStyle();
     while (n) {
-        if (boundaryCrossingRule == CannotCrossEditingBoundary && !Position::nodeIsUserSelectAll(n) && n->rendererIsEditable() != startNodeIsEditable)
+        if (boundaryCrossingRule == CannotCrossEditingBoundary && !Position::nodeIsUserSelectAll(n) && n->hasEditableStyle() != startNodeIsEditable)
             break;
         if (boundaryCrossingRule == CanSkipOverEditingBoundary) {
-            while (n && n->rendererIsEditable() != startNodeIsEditable)
+            while (n && n->hasEditableStyle() != startNodeIsEditable)
                 n = NodeTraversal::previousPostOrder(*n, startBlock);
             if (!n || !n->isDescendantOf(highestRoot))
                 break;
@@ -1176,12 +1174,12 @@ VisiblePosition endOfParagraph(const VisiblePosition &c, EditingBoundaryCrossing
     Position::AnchorType type = p.anchorType();
 
     Node* n = startNode;
-    bool startNodeIsEditable = startNode->rendererIsEditable();
+    bool startNodeIsEditable = startNode->hasEditableStyle();
     while (n) {
-        if (boundaryCrossingRule == CannotCrossEditingBoundary && !Position::nodeIsUserSelectAll(n) && n->rendererIsEditable() != startNodeIsEditable)
+        if (boundaryCrossingRule == CannotCrossEditingBoundary && !Position::nodeIsUserSelectAll(n) && n->hasEditableStyle() != startNodeIsEditable)
             break;
         if (boundaryCrossingRule == CanSkipOverEditingBoundary) {
-            while (n && n->rendererIsEditable() != startNodeIsEditable)
+            while (n && n->hasEditableStyle() != startNodeIsEditable)
                 n = NodeTraversal::next(*n, stayInsideBlock);
             if (!n || !n->isDescendantOf(highestRoot))
                 break;
@@ -1288,19 +1286,15 @@ VisiblePosition nextParagraphPosition(const VisiblePosition& p, int x)
 VisiblePosition startOfBlock(const VisiblePosition& visiblePosition, EditingBoundaryCrossingRule rule)
 {
     Position position = visiblePosition.deepEquivalent();
-    Node* startBlock;
-    if (!position.containerNode() || !(startBlock = enclosingBlock(position.containerNode(), rule)))
-        return VisiblePosition();
-    return VisiblePosition(firstPositionInNode(startBlock));
+    Node* startBlock = position.containerNode() ? enclosingBlock(position.containerNode(), rule) : 0;
+    return startBlock ? VisiblePosition(firstPositionInNode(startBlock)) : VisiblePosition();
 }
 
 VisiblePosition endOfBlock(const VisiblePosition& visiblePosition, EditingBoundaryCrossingRule rule)
 {
     Position position = visiblePosition.deepEquivalent();
-    Node* endBlock;
-    if (!position.containerNode() || !(endBlock = enclosingBlock(position.containerNode(), rule)))
-        return VisiblePosition();
-    return VisiblePosition(lastPositionInNode(endBlock));
+    Node* endBlock = position.containerNode() ? enclosingBlock(position.containerNode(), rule) : 0;
+    return endBlock ? VisiblePosition(lastPositionInNode(endBlock)) : VisiblePosition();
 }
 
 bool inSameBlock(const VisiblePosition &a, const VisiblePosition &b)

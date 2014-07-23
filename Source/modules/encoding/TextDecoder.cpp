@@ -32,12 +32,12 @@
 
 #include "modules/encoding/TextDecoder.h"
 
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "wtf/StringExtras.h"
 #include "wtf/text/TextEncodingRegistry.h"
 
-namespace WebCore {
+namespace blink {
 
 TextDecoder* TextDecoder::create(const String& label, const Dictionary& options, ExceptionState& exceptionState)
 {
@@ -50,10 +50,10 @@ TextDecoder* TextDecoder::create(const String& label, const Dictionary& options,
     }
 
     bool fatal = false;
-    options.get("fatal", fatal);
+    DictionaryHelper::get(options, "fatal", fatal);
 
     bool ignoreBOM = false;
-    options.get("ignoreBOM", ignoreBOM);
+    DictionaryHelper::get(options, "ignoreBOM", ignoreBOM);
 
     return new TextDecoder(encoding, fatal, ignoreBOM);
 }
@@ -85,7 +85,7 @@ String TextDecoder::encoding() const
 String TextDecoder::decode(ArrayBufferView* input, const Dictionary& options, ExceptionState& exceptionState)
 {
     bool stream = false;
-    options.get("stream", stream);
+    DictionaryHelper::get(options, "stream", stream);
 
     const char* start = input ? static_cast<const char*>(input->baseAddress()) : 0;
     size_t length = input ? input->byteLength() : 0;
@@ -113,4 +113,4 @@ String TextDecoder::decode(ArrayBufferView* input, const Dictionary& options, Ex
     return s;
 }
 
-} // namespace WebCore
+} // namespace blink

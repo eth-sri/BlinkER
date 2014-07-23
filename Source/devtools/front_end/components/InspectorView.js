@@ -36,7 +36,7 @@ WebInspector.InspectorView = function()
 {
     WebInspector.VBox.call(this);
     WebInspector.Dialog.setModalHostView(this);
-    WebInspector.GlassPane.DefaultFocusedViewStack.unshift(this);
+    WebInspector.GlassPane.DefaultFocusedViewStack.push(this);
     this.setMinimumSize(180, 72);
 
     // DevTools sidebar is a vertical split of panels tabbed pane and a drawer.
@@ -52,7 +52,7 @@ WebInspector.InspectorView = function()
 
     // Patch tabbed pane header with toolbar actions.
     this._toolbarElement = document.createElement("div");
-    this._toolbarElement.className = "toolbar toolbar-background";
+    this._toolbarElement.className = "toolbar toolbar-background toolbar-colors";
     var headerElement = this._tabbedPane.headerElement();
     headerElement.parentElement.insertBefore(this._toolbarElement, headerElement);
 
@@ -65,7 +65,8 @@ WebInspector.InspectorView = function()
         this._remoteDeviceCountElement = this._rightToolbarElement.createChild("div", "hidden");
         this._remoteDeviceCountElement.addEventListener("click", this.showViewInDrawer.bind(this, "devices", true), false);
         this._remoteDeviceCountElement.id = "remote-device-count";
-        WebInspector.inspectorFrontendEventSink.addEventListener(WebInspector.InspectorView.Events.DeviceCountChanged, this._onDeviceCountChanged, this);
+        InspectorFrontendHost.setDeviceCountUpdatesEnabled(true);
+        InspectorFrontendHost.events.addEventListener(InspectorFrontendHostAPI.Events.DeviceCountUpdated, this._onDeviceCountUpdated, this);
     }
 
     this._errorWarningCountElement = this._rightToolbarElement.createChild("div", "hidden");
@@ -94,6 +95,8 @@ WebInspector.InspectorView = function()
     this._lastActivePanelSetting = WebInspector.settings.createSetting("lastActivePanel", "elements");
 
     this._loadPanelDesciptors();
+
+    InspectorFrontendHost.events.addEventListener(InspectorFrontendHostAPI.Events.ShowConsole, this.showPanel.bind(this, "console"));
 };
 
 WebInspector.InspectorView.Events = {
@@ -486,7 +489,7 @@ WebInspector.InspectorView.prototype = {
     /**
      * @param {!WebInspector.Event} event
      */
-    _onDeviceCountChanged: function(event)
+    _onDeviceCountUpdated: function(event)
     {
         var count = /** @type {number} */ (event.data);
         if (count === this.deviceCount_)

@@ -21,12 +21,12 @@
 #include "config.h"
 #include "core/svg/SVGLengthList.h"
 
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/svg/SVGAnimationElement.h"
 #include "core/svg/SVGParserUtilities.h"
 #include "wtf/text/StringBuilder.h"
 
-namespace WebCore {
+namespace blink {
 
 inline PassRefPtr<SVGLengthList> toSVGLengthList(PassRefPtr<SVGPropertyBase> passBase)
 {

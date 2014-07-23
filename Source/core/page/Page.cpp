@@ -63,7 +63,7 @@
 #include "wtf/StdLibExtras.h"
 #include "wtf/text/Base64.h"
 
-namespace WebCore {
+namespace blink {
 
 DEFINE_DEBUG_ONLY_GLOBAL(WTF::RefCountedLeakCounter, pageCounter, ("Page"));
 
@@ -137,7 +137,7 @@ Page::Page(PageClients& pageClients)
     , m_timerAlignmentInterval(DOMTimer::visiblePageAlignmentInterval())
     , m_visibilityState(PageVisibilityStateVisible)
     , m_isCursorVisible(true)
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     , m_isPainting(false)
 #endif
     , m_frameHost(FrameHost::create(*this))
@@ -202,7 +202,11 @@ PassRefPtrWillBeRawPtr<ClientRectList> Page::nonFastScrollableRects(const LocalF
 
 void Page::setMainFrame(Frame* mainFrame)
 {
-    ASSERT(!m_mainFrame); // Should only be called during initialization
+    // Should only be called during initialization or swaps between local and
+    // remote frames.
+    // FIXME: Unfortunately we can't assert on this at the moment, because this
+    // is called in the base constructor for both LocalFrame and RemoteFrame,
+    // when the vtables for the derived classes have not yet been setup.
     m_mainFrame = mainFrame;
 }
 
@@ -428,7 +432,7 @@ double Page::timerAlignmentInterval() const
     return m_timerAlignmentInterval;
 }
 
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
 void Page::checkSubframeCountConsistency() const
 {
     ASSERT(m_subframeCount >= 0);
@@ -447,7 +451,7 @@ void Page::setVisibilityState(PageVisibilityState visibilityState, bool isInitia
         return;
     m_visibilityState = visibilityState;
 
-    if (visibilityState == WebCore::PageVisibilityStateHidden)
+    if (visibilityState == blink::PageVisibilityStateHidden)
         setTimerAlignmentInterval(DOMTimer::hiddenPageAlignmentInterval());
     else
         setTimerAlignmentInterval(DOMTimer::visiblePageAlignmentInterval());
@@ -594,6 +598,7 @@ PassOwnPtr<LifecycleNotifier<Page> > Page::createLifecycleNotifier()
 
 void Page::trace(Visitor* visitor)
 {
+#if ENABLE(OILPAN)
     visitor->trace(m_dragCaretController);
     visitor->trace(m_dragController);
     visitor->trace(m_contextMenuController);
@@ -602,6 +607,7 @@ void Page::trace(Visitor* visitor)
     visitor->trace(m_validationMessageClient);
     visitor->trace(m_multisamplingChangedObservers);
     visitor->trace(m_frameHost);
+#endif
     WillBeHeapSupplementable<Page>::trace(visitor);
 }
 
@@ -656,4 +662,4 @@ Page::PageClients::~PageClients()
 {
 }
 
-} // namespace WebCore
+} // namespace blink

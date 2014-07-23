@@ -32,26 +32,26 @@
 #include "core/animation/css/CSSAnimatableValueFactory.h"
 
 #include "core/CSSValueKeywords.h"
-#include "core/animation/AnimatableClipPathOperation.h"
-#include "core/animation/AnimatableColor.h"
-#include "core/animation/AnimatableDouble.h"
-#include "core/animation/AnimatableFilterOperations.h"
-#include "core/animation/AnimatableImage.h"
-#include "core/animation/AnimatableLength.h"
-#include "core/animation/AnimatableLengthBox.h"
-#include "core/animation/AnimatableLengthBoxAndBool.h"
-#include "core/animation/AnimatableLengthPoint.h"
-#include "core/animation/AnimatableLengthPoint3D.h"
-#include "core/animation/AnimatableLengthSize.h"
-#include "core/animation/AnimatableRepeatable.h"
-#include "core/animation/AnimatableSVGLength.h"
-#include "core/animation/AnimatableSVGPaint.h"
-#include "core/animation/AnimatableShadow.h"
-#include "core/animation/AnimatableShapeValue.h"
-#include "core/animation/AnimatableStrokeDasharrayList.h"
-#include "core/animation/AnimatableTransform.h"
-#include "core/animation/AnimatableUnknown.h"
-#include "core/animation/AnimatableVisibility.h"
+#include "core/animation/animatable/AnimatableClipPathOperation.h"
+#include "core/animation/animatable/AnimatableColor.h"
+#include "core/animation/animatable/AnimatableDouble.h"
+#include "core/animation/animatable/AnimatableFilterOperations.h"
+#include "core/animation/animatable/AnimatableImage.h"
+#include "core/animation/animatable/AnimatableLength.h"
+#include "core/animation/animatable/AnimatableLengthBox.h"
+#include "core/animation/animatable/AnimatableLengthBoxAndBool.h"
+#include "core/animation/animatable/AnimatableLengthPoint.h"
+#include "core/animation/animatable/AnimatableLengthPoint3D.h"
+#include "core/animation/animatable/AnimatableLengthSize.h"
+#include "core/animation/animatable/AnimatableRepeatable.h"
+#include "core/animation/animatable/AnimatableSVGLength.h"
+#include "core/animation/animatable/AnimatableSVGPaint.h"
+#include "core/animation/animatable/AnimatableShadow.h"
+#include "core/animation/animatable/AnimatableShapeValue.h"
+#include "core/animation/animatable/AnimatableStrokeDasharrayList.h"
+#include "core/animation/animatable/AnimatableTransform.h"
+#include "core/animation/animatable/AnimatableUnknown.h"
+#include "core/animation/animatable/AnimatableVisibility.h"
 #include "core/animation/css/CSSAnimations.h"
 #include "core/css/CSSCalculationValue.h"
 #include "core/css/CSSPrimitiveValue.h"
@@ -60,7 +60,7 @@
 #include "platform/Length.h"
 #include "platform/LengthBox.h"
 
-namespace WebCore {
+namespace blink {
 
 static PassRefPtrWillBeRawPtr<AnimatableValue> createFromLength(const Length& length, const RenderStyle& style)
 {
@@ -184,11 +184,10 @@ inline static PassRefPtrWillBeRawPtr<AnimatableValue> createFromBackgroundPositi
 }
 
 template<CSSPropertyID property>
-inline static PassRefPtrWillBeRawPtr<AnimatableValue> createFromFillLayers(const FillLayer* fillLayer, const RenderStyle& style)
+inline static PassRefPtrWillBeRawPtr<AnimatableValue> createFromFillLayers(const FillLayer& fillLayers, const RenderStyle& style)
 {
-    ASSERT(fillLayer);
     WillBeHeapVector<RefPtrWillBeMember<AnimatableValue> > values;
-    while (fillLayer) {
+    for (const FillLayer* fillLayer = &fillLayers; fillLayer; fillLayer = fillLayer->next()) {
         if (property == CSSPropertyBackgroundImage || property == CSSPropertyWebkitMaskImage) {
             if (!fillLayer->isImageSet())
                 break;
@@ -208,7 +207,6 @@ inline static PassRefPtrWillBeRawPtr<AnimatableValue> createFromFillLayers(const
         } else {
             ASSERT_NOT_REACHED();
         }
-        fillLayer = fillLayer->next();
     }
     return AnimatableRepeatable::create(values);
 }
@@ -324,9 +322,9 @@ PassRefPtrWillBeRawPtr<AnimatableValue> CSSAnimatableValueFactory::create(CSSPro
         return createFromDouble(style.fillOpacity());
     case CSSPropertyFill:
         return AnimatableSVGPaint::create(
-            style.svgStyle()->fillPaintType(), style.svgStyle()->visitedLinkFillPaintType(),
-            style.svgStyle()->fillPaintColor(), style.svgStyle()->visitedLinkFillPaintColor(),
-            style.svgStyle()->fillPaintUri(), style.svgStyle()->visitedLinkFillPaintUri());
+            style.svgStyle().fillPaintType(), style.svgStyle().visitedLinkFillPaintType(),
+            style.svgStyle().fillPaintColor(), style.svgStyle().visitedLinkFillPaintColor(),
+            style.svgStyle().fillPaintUri(), style.svgStyle().visitedLinkFillPaintUri());
     case CSSPropertyFlexGrow:
         return createFromDouble(style.flexGrow(), AnimatableDouble::InterpolationIsNonContinuousWithZero);
     case CSSPropertyFlexShrink:
@@ -411,9 +409,9 @@ PassRefPtrWillBeRawPtr<AnimatableValue> CSSAnimatableValueFactory::create(CSSPro
         return createFromDouble(style.strokeOpacity());
     case CSSPropertyStroke:
         return AnimatableSVGPaint::create(
-            style.svgStyle()->strokePaintType(), style.svgStyle()->visitedLinkStrokePaintType(),
-            style.svgStyle()->strokePaintColor(), style.svgStyle()->visitedLinkStrokePaintColor(),
-            style.svgStyle()->strokePaintUri(), style.svgStyle()->visitedLinkStrokePaintUri());
+            style.svgStyle().strokePaintType(), style.svgStyle().visitedLinkStrokePaintType(),
+            style.svgStyle().strokePaintColor(), style.svgStyle().visitedLinkStrokePaintColor(),
+            style.svgStyle().strokePaintUri(), style.svgStyle().visitedLinkStrokePaintUri());
     case CSSPropertyTextDecorationColor:
         return AnimatableColor::create(style.textDecorationColor().resolve(style.color()), style.visitedLinkTextDecorationColor().resolve(style.visitedLinkColor()));
     case CSSPropertyTextIndent:
@@ -519,4 +517,4 @@ PassRefPtrWillBeRawPtr<AnimatableValue> CSSAnimatableValueFactory::create(CSSPro
     }
 }
 
-} // namespace WebCore
+} // namespace blink

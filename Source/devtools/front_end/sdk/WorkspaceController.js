@@ -35,27 +35,28 @@ WebInspector.WorkspaceController = function(workspace)
 {
     this._workspace = workspace;
     window.addEventListener("focus", this._windowFocused.bind(this), false);
+    this._fileSystemRefreshThrottler = new WebInspector.Throttler(1000);
 }
 
 WebInspector.WorkspaceController.prototype = {
     /**
-     * @param {?Event} event
+     * @param {!Event} event
      */
     _windowFocused: function(event)
     {
-        if (this._fileSystemRefreshTimeout)
-            return;
-        this._fileSystemRefreshTimeout = setTimeout(refreshFileSystems.bind(this), 1000);
+        this._fileSystemRefreshThrottler.schedule(refreshFileSystems.bind(this));
 
         /**
          * @this {WebInspector.WorkspaceController}
+         * @param {!WebInspector.Throttler.FinishCallback} callback
          */
-        function refreshFileSystems()
+        function refreshFileSystems(callback)
         {
-            delete this._fileSystemRefreshTimeout;
+            var barrier = new CallbackBarrier();
             var projects = this._workspace.projects();
             for (var i = 0; i < projects.length; ++i)
-                projects[i].refresh("/");
+                projects[i].refresh("/", barrier.createCallback());
+            barrier.callWhenDone(callback);
         }
     }
 }

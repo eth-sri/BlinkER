@@ -271,8 +271,18 @@ String.prototype.hashCode = function()
 {
     var result = 0;
     for (var i = 0; i < this.length; ++i)
-        result = result * 3 + this.charCodeAt(i);
+        result = (result * 3 + this.charCodeAt(i)) | 0;
     return result;
+}
+
+/**
+ * @param {number} index
+ * @return {boolean}
+ */
+String.prototype.isDigitAt = function(index)
+{
+    var c = this.charCodeAt(index);
+    return 48 <= c && c <= 57;
 }
 
 /**
@@ -903,11 +913,6 @@ String.tokenizeFormatString = function(format, formatters)
         tokens.push({ type: "specifier", specifier: specifier, precision: precision, substitutionIndex: substitutionIndex });
     }
 
-    function isDigit(c)
-    {
-        return !!/[0-9]/.exec(c);
-    }
-
     var index = 0;
     for (var precentIndex = format.indexOf("%", index); precentIndex !== -1; precentIndex = format.indexOf("%", index)) {
         addStringToken(format.substring(index, precentIndex));
@@ -920,10 +925,10 @@ String.tokenizeFormatString = function(format, formatters)
             continue;
         }
 
-        if (isDigit(format[index])) {
+        if (format.isDigitAt(index)) {
             // The first character is a number, it might be a substitution index.
             var number = parseInt(format.substring(index), 10);
-            while (isDigit(format[index]))
+            while (format.isDigitAt(index))
                 ++index;
 
             // If the number is greater than zero and ends with a "$",
@@ -943,7 +948,7 @@ String.tokenizeFormatString = function(format, formatters)
             if (isNaN(precision))
                 precision = 0;
 
-            while (isDigit(format[index]))
+            while (format.isDigitAt(index))
                 ++index;
         }
 
@@ -1674,11 +1679,10 @@ function loadResource(url)
 {
     var xhr = new XMLHttpRequest();
     xhr.open("GET", url, false);
-    var stack = new Error().stack;
     try {
         xhr.send(null);
     } catch (e) {
-        console.error(url + " -> " + stack);
+        console.error(url + " -> " + new Error().stack);
         throw e;
     }
     return xhr.responseText;
@@ -1773,3 +1777,29 @@ CallbackBarrier.prototype = {
 function suppressUnused(value)
 {
 }
+
+/**
+ * @constructor
+ * @param {!T} targetObject
+ * @template T
+ */
+function WeakReference(targetObject)
+{
+    this._targetObject = targetObject;
+}
+
+WeakReference.prototype = {
+    /**
+     * @return {?T}
+     */
+    get: function()
+    {
+        return this._targetObject;
+    },
+
+    clear: function()
+    {
+        this._targetObject = null;
+    }
+};
+

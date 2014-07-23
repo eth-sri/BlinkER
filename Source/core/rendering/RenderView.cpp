@@ -46,7 +46,7 @@
 #include "platform/geometry/TransformState.h"
 #include "platform/graphics/GraphicsContext.h"
 
-namespace WebCore {
+namespace blink {
 
 RenderView::RenderView(Document* document)
     : RenderBlockFlow(document)
@@ -172,12 +172,12 @@ void RenderView::layoutContent()
     if (RuntimeEnabledFeatures::dialogElementEnabled())
         positionDialogs();
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     checkLayoutState();
 #endif
 }
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
 void RenderView::checkLayoutState()
 {
     ASSERT(!m_layoutState->next());
@@ -206,7 +206,7 @@ bool RenderView::shouldDoFullRepaintForNextLayout() const
             // background positioning area resize.
             if (!m_compositor || !m_compositor->needsFixedRootBackgroundLayer(layer())) {
                 if (backgroundRenderer->style()->hasFixedBackgroundImage()
-                    && mustInvalidateFillLayersPaintOnHeightChange(*backgroundRenderer->style()->backgroundLayers()))
+                    && mustInvalidateFillLayersPaintOnHeightChange(backgroundRenderer->style()->backgroundLayers()))
                 return true;
             }
         }
@@ -254,13 +254,13 @@ void RenderView::layout()
 
     layoutContent();
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     checkLayoutState();
 #endif
     clearNeedsLayout();
 }
 
-void RenderView::mapLocalToContainer(const RenderLayerModelObject* repaintContainer, TransformState& transformState, MapCoordinatesFlags mode, bool* wasFixed) const
+void RenderView::mapLocalToContainer(const RenderLayerModelObject* repaintContainer, TransformState& transformState, MapCoordinatesFlags mode, bool* wasFixed, const PaintInvalidationState* paintInvalidationState) const
 {
     ASSERT_UNUSED(wasFixed, !wasFixed || *wasFixed == static_cast<bool>(mode & IsFixed));
 
@@ -281,7 +281,7 @@ void RenderView::mapLocalToContainer(const RenderLayerModelObject* repaintContai
             transformState.move(-frame()->view()->scrollOffset());
             if (parentDocRenderer->isBox())
                 transformState.move(toLayoutSize(toRenderBox(parentDocRenderer)->contentBoxRect().location()));
-            parentDocRenderer->mapLocalToContainer(repaintContainer, transformState, mode, wasFixed);
+            parentDocRenderer->mapLocalToContainer(repaintContainer, transformState, mode, wasFixed, paintInvalidationState);
             return;
         }
     }
@@ -389,7 +389,7 @@ bool RenderView::rootFillsViewportBackground(RenderBox* rootBox) const
     return rootBox->frameRect().contains(frameRect());
 }
 
-void RenderView::paintBoxDecorations(PaintInfo& paintInfo, const LayoutPoint&)
+void RenderView::paintBoxDecorationBackground(PaintInfo& paintInfo, const LayoutPoint&)
 {
     // Check to see if we are enclosed by a layer that requires complex painting rules.  If so, we cannot blit
     // when scrolling, and we need to use slow repaints.  Examples of layers that require this are transparent layers,
@@ -404,7 +404,7 @@ void RenderView::paintBoxDecorations(PaintInfo& paintInfo, const LayoutPoint&)
             break;
         }
 
-        if (layer->enclosingCompositingLayerForPaintInvalidation()) {
+        if (layer->enclosingLayerForPaintInvalidation()) {
             frameView()->setCannotBlitToWindow();
             break;
         }
@@ -444,7 +444,7 @@ void RenderView::paintBoxDecorations(PaintInfo& paintInfo, const LayoutPoint&)
     }
 }
 
-void RenderView::invalidateTreeAfterLayout(const RenderLayerModelObject& paintInvalidationContainer)
+void RenderView::invalidateTreeIfNeeded(const PaintInvalidationState& paintInvalidationState)
 {
     ASSERT(!needsLayout());
 
@@ -453,8 +453,7 @@ void RenderView::invalidateTreeAfterLayout(const RenderLayerModelObject& paintIn
     if (doingFullRepaint() && !viewRect().isEmpty())
         repaintViewRectangle(viewRect());
 
-    LayoutState rootLayoutState(0, false, *this);
-    RenderBlock::invalidateTreeAfterLayout(paintInvalidationContainer);
+    RenderBlock::invalidateTreeIfNeeded(paintInvalidationState);
 }
 
 void RenderView::repaintViewRectangle(const LayoutRect& repaintRect) const
@@ -496,7 +495,7 @@ void RenderView::repaintViewAndCompositedLayers()
         compositor()->repaintCompositedLayers();
 }
 
-void RenderView::mapRectToPaintInvalidationBacking(const RenderLayerModelObject* paintInvalidationContainer, LayoutRect& rect, bool fixed) const
+void RenderView::mapRectToPaintInvalidationBacking(const RenderLayerModelObject* paintInvalidationContainer, LayoutRect& rect, bool fixed, const PaintInvalidationState* paintInvalidationState) const
 {
     // If a container was specified, and was not 0 or the RenderView,
     // then we should have found it by now.
@@ -1000,4 +999,4 @@ double RenderView::layoutViewportHeight() const
     return viewHeight(IncludeScrollbars) / scale;
 }
 
-} // namespace WebCore
+} // namespace blink

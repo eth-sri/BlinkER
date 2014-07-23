@@ -27,11 +27,11 @@
 
 #include "modules/mediastream/MediaDevicesRequest.h"
 
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/Document.h"
 #include "modules/mediastream/UserMediaController.h"
 
-namespace WebCore {
+namespace blink {
 
 MediaDevicesRequest* MediaDevicesRequest::create(ExecutionContext* context, UserMediaController* controller, PassOwnPtr<MediaDeviceInfoCallback> callback, ExceptionState& exceptionState)
 {
@@ -80,4 +80,4 @@ void MediaDevicesRequest::stop()
     m_controller = 0;
 }
 
-} // namespace WebCore
+} // namespace blink

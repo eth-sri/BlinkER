@@ -7,12 +7,13 @@
 
 #include "core/css/MediaValues.h"
 
-namespace WebCore {
+namespace blink {
 
 class Document;
 
 class MediaValuesDynamic FINAL : public MediaValues {
 public:
+    static PassRefPtr<MediaValues> create(Document&);
     static PassRefPtr<MediaValues> create(LocalFrame*);
     virtual PassRefPtr<MediaValues> copy() const OVERRIDE;
     virtual bool isSafeToSendToAnotherThread() const OVERRIDE;

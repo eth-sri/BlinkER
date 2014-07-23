@@ -8,9 +8,9 @@
 #include "wtf/MainThread.h"
 #include "wtf/TemporaryChange.h"
 
-namespace WebCore {
+namespace blink {
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
 
 class NoEventDispatchAssertion {
 public:
@@ -69,8 +69,8 @@ public:
     };
 };
 
-#endif // NDEBUG
+#endif // ENABLE(ASSERT)
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // NoEventDispatchAssertion_h

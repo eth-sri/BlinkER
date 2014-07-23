@@ -49,7 +49,7 @@ class SkPath;
 class SkRRect;
 struct SkRect;
 
-namespace WebCore {
+namespace blink {
 
 class DisplayList;
 class ImageBuffer;
@@ -95,6 +95,9 @@ public:
         ASSERT(!paintingDisabled());
         return m_canvas;
     }
+
+    void resetCanvas(SkCanvas*);
+
     bool paintingDisabled() const { return m_disabledState & PaintingDisabled; }
     bool contextDisabled() const { return m_disabledState; }
 
@@ -112,7 +115,7 @@ public:
     void save();
     void restore();
     unsigned saveCount() { return m_canvasStateStack.size(); }
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     void disableDestructionChecks() { m_disableDestructionChecks = true; }
 #endif
 
@@ -197,9 +200,10 @@ public:
     CompositeOperator compositeOperation() const { return immutableState()->compositeOperator(); }
     blink::WebBlendMode blendModeOperation() const { return immutableState()->blendMode(); }
 
-    // Change the way document markers are rendered.
-    // Any deviceScaleFactor higher than 1.5 is enough to justify setting this flag.
-    void setUseHighResMarkers(bool isHighRes) { m_useHighResMarker = isHighRes; }
+    // Speicy the device scale factor which may change the way document markers
+    // and fonts are rendered.
+    void setDeviceScaleFactor(float factor) { m_deviceScaleFactor = factor; }
+    float deviceScaleFactor() const { return m_deviceScaleFactor; }
 
     // If true we are (most likely) rendering to a web page and the
     // canvas has been prepared with an opaque background. If false,
@@ -291,6 +295,8 @@ public:
 
     void drawImageBuffer(ImageBuffer*, const FloatRect& destRect, const FloatRect* srcRect = 0, CompositeOperator = CompositeSourceOver);
 
+    void drawPicture(PassRefPtr<SkPicture>, const FloatRect& dest, const FloatRect& src, CompositeOperator, blink::WebBlendMode);
+
     // These methods write to the canvas and modify the opaque region, if tracked.
     // Also drawLine(const IntPoint& point1, const IntPoint& point2) and fillRoundedRect
     void writePixels(const SkImageInfo&, const void* pixels, size_t rowBytes, int x, int y);
@@ -371,7 +377,6 @@ public:
     // the discipline is different.
     void canvasClip(const Path&, WindRule = RULE_EVENODD);
     void clipOut(const Path&);
-    bool isClipMode() const;
 
     // ---------- Transformation methods -----------------
     // Note that the getCTM method returns only the current transform from Blink's perspective,
@@ -399,11 +404,11 @@ public:
 
     // Create an image buffer compatible with this context, with suitable resolution
     // for drawing into the buffer and then into this context.
-    PassOwnPtr<ImageBuffer> createCompatibleBuffer(const IntSize&, OpacityMode = NonOpaque) const;
+    PassOwnPtr<ImageBuffer> createRasterBuffer(const IntSize&, OpacityMode = NonOpaque) const;
 
     static void adjustLineToPixelBoundaries(FloatPoint& p1, FloatPoint& p2, float strokeWidth, StrokeStyle);
 
-    void beginAnnotation(const char*, const char*, const String&, const String&, const String&);
+    void beginAnnotation(const AnnotationList&);
     void endAnnotation();
 
 private:
@@ -501,7 +506,7 @@ private:
     struct RecordingState;
     Vector<RecordingState> m_recordingStateStack;
 
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     unsigned m_annotationCount;
     unsigned m_layerCount;
     bool m_disableDestructionChecks;
@@ -514,12 +519,12 @@ private:
 
     unsigned m_disabledState;
 
+    float m_deviceScaleFactor;
+
     // Activation for the above region tracking features
     bool m_trackOpaqueRegion : 1;
     bool m_trackTextRegion : 1;
 
-    // Are we on a high DPI display? If so, spelling and grammar markers are larger.
-    bool m_useHighResMarker : 1;
     // FIXME: Make this go away: crbug.com/236892
     bool m_updatingControlTints : 1;
     bool m_accelerated : 1;
@@ -528,6 +533,6 @@ private:
     bool m_antialiasHairlineImages : 1;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // GraphicsContext_h

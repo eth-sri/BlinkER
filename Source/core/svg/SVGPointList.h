@@ -31,11 +31,11 @@
 #ifndef SVGPointList_h
 #define SVGPointList_h
 
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/svg/SVGPoint.h"
 #include "core/svg/properties/SVGListPropertyHelper.h"
 
-namespace WebCore {
+namespace blink {
 
 class SVGPointListTearOff;
 
@@ -68,6 +68,6 @@ private:
     bool parse(const CharType*& ptr, const CharType* end);
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // SVGPointList_h

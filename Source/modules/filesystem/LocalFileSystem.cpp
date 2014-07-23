@@ -46,7 +46,7 @@
 #include "wtf/Functional.h"
 #include "wtf/RefCounted.h"
 
-namespace WebCore {
+namespace blink {
 
 namespace {
 
@@ -132,7 +132,7 @@ void LocalFileSystem::fileSystemNotAllowedInternal(
     PassRefPtrWillBeRawPtr<ExecutionContext> context,
     PassRefPtr<CallbackWrapper> callbacks)
 {
-    context->postTask(createCallbackTask(&fileSystemNotAllowed, callbacks->release()));
+    context->postTask(createCrossThreadTask(&fileSystemNotAllowed, callbacks->release()));
 }
 
 void LocalFileSystem::fileSystemAllowedInternal(
@@ -189,4 +189,4 @@ void provideLocalFileSystemToWorker(WorkerClients* clients, PassOwnPtr<FileSyste
     clients->provideSupplement(LocalFileSystem::supplementName(), LocalFileSystem::create(client));
 }
 
-} // namespace WebCore
+} // namespace blink

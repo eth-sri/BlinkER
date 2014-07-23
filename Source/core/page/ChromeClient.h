@@ -28,7 +28,6 @@
 #include "core/loader/NavigationPolicy.h"
 #include "core/frame/ConsoleTypes.h"
 #include "core/page/FocusType.h"
-#include "core/rendering/RenderEmbeddedObject.h"
 #include "core/rendering/style/RenderStyleConstants.h"
 #include "platform/Cursor.h"
 #include "platform/HostWindow.h"
@@ -39,7 +38,7 @@
 #include "wtf/PassOwnPtr.h"
 #include "wtf/Vector.h"
 
-namespace WebCore {
+namespace blink {
 
 class AXObject;
 class ColorChooser;
@@ -187,6 +186,8 @@ public:
     virtual void enterFullScreenForElement(Element*) { }
     virtual void exitFullScreenForElement(Element*) { }
 
+    virtual void clearCompositedSelectionBounds() { }
+
     virtual void needTouchEvents(bool) = 0;
 
     virtual void setTouchAction(TouchAction) = 0;
@@ -225,7 +226,7 @@ public:
 
     // FIXME: Remove this method once we have input routing in the browser
     // process. See http://crbug.com/339659.
-    virtual void forwardInputEvent(WebCore::Frame*, WebCore::Event*) { }
+    virtual void forwardInputEvent(blink::Frame*, blink::Event*) { }
 
     // Input mehtod editor related functions.
     virtual void didCancelCompositionOnSelectionChange() { }

@@ -25,7 +25,7 @@
 #include "config.h"
 #include "core/html/HTMLTableRowElement.h"
 
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/HTMLNames.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/ExceptionCode.h"
@@ -34,7 +34,7 @@
 #include "core/html/HTMLTableElement.h"
 #include "core/html/HTMLTableSectionElement.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -80,7 +80,7 @@ int HTMLTableRowElement::rowIndex() const
         }
     }
 
-    for (Element* child = ElementTraversal::firstWithin(*table); child; child = ElementTraversal::nextSibling(*child)) {
+    for (HTMLElement* child = Traversal<HTMLElement>::firstWithin(*table); child; child = Traversal<HTMLElement>::nextSibling(*child)) {
         if (child->hasTagName(tbodyTag)) {
             HTMLTableSectionElement* section = toHTMLTableSectionElement(child);
             for (HTMLTableRowElement* row = Traversal<HTMLTableRowElement>::firstChild(*section); row; row = Traversal<HTMLTableRowElement>::nextSibling(*row)) {

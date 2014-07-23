@@ -7,7 +7,7 @@
 
 #include "core/rendering/RenderGeometryMap.h"
 
-namespace WebCore {
+namespace blink {
 
 class RenderLayer;
 
@@ -18,7 +18,7 @@ public:
 
     void update();
 
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     static void assertNeedsCompositingInputsUpdateBitsCleared(RenderLayer*);
 #endif
 
@@ -30,9 +30,11 @@ private:
 
     struct AncestorInfo {
         AncestorInfo()
-            : enclosingCompositedLayer(0)
+            : ancestorStackingContext(0)
+            , enclosingCompositedLayer(0)
             , lastScrollingAncestor(0)
             , hasAncestorWithClipOrOverflowClip(false)
+            , hasAncestorWithClipPath(false)
         {
         }
 
@@ -45,6 +47,7 @@ private:
         // containing block chain.
         RenderLayer* lastScrollingAncestor;
         bool hasAncestorWithClipOrOverflowClip;
+        bool hasAncestorWithClipPath;
     };
 
     void updateRecursive(RenderLayer*, UpdateType, AncestorInfo);
@@ -53,6 +56,6 @@ private:
     RenderLayer* m_rootRenderLayer;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // CompositingInputsUpdater_h

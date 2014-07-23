@@ -21,6 +21,7 @@
 
 #include "core/rendering/svg/RenderSVGResourceMasker.h"
 
+#include "core/dom/ElementTraversal.h"
 #include "core/rendering/svg/RenderSVGResource.h"
 #include "core/rendering/svg/SVGRenderingContext.h"
 #include "core/svg/SVGElement.h"
@@ -29,7 +30,7 @@
 #include "platform/transforms/AffineTransform.h"
 #include "wtf/Vector.h"
 
-namespace WebCore {
+namespace blink {
 
 const RenderSVGResourceType RenderSVGResourceMasker::s_resourceType = MaskerResourceType;
 
@@ -87,11 +88,10 @@ void RenderSVGResourceMasker::postApplyResource(RenderObject* object, GraphicsCo
 
     FloatRect repaintRect = object->paintInvalidationRectInLocalCoordinates();
 
-    const SVGRenderStyle* svgStyle = style()->svgStyle();
-    ASSERT(svgStyle);
-    ColorFilter maskLayerFilter = svgStyle->maskType() == MT_LUMINANCE
+    const SVGRenderStyle& svgStyle = style()->svgStyle();
+    ColorFilter maskLayerFilter = svgStyle.maskType() == MT_LUMINANCE
         ? ColorFilterLuminanceToAlpha : ColorFilterNone;
-    ColorFilter maskContentFilter = svgStyle->colorInterpolation() == CI_LINEARRGB
+    ColorFilter maskContentFilter = svgStyle.colorInterpolation() == CI_LINEARRGB
         ? ColorFilterSRGBToLinearRGB : ColorFilterNone;
 
     // Mask layer start.

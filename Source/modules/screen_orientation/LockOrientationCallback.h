@@ -11,7 +11,7 @@
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 class ScriptPromiseResolver;
 
@@ -24,13 +24,13 @@ public:
     explicit LockOrientationCallback(PassRefPtr<ScriptPromiseResolver>);
     virtual ~LockOrientationCallback();
 
-    virtual void onSuccess(unsigned angle, blink::WebScreenOrientationType) OVERRIDE;
+    virtual void onSuccess() OVERRIDE;
     virtual void onError(blink::WebLockOrientationError) OVERRIDE;
 
 private:
     RefPtr<ScriptPromiseResolver> m_resolver;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // LockOrientationCallback_h

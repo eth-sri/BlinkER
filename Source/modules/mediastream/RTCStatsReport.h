@@ -25,13 +25,13 @@
 #ifndef RTCStatsReport_h
 #define RTCStatsReport_h
 
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "wtf/HashMap.h"
 #include "wtf/Vector.h"
 #include "wtf/text/StringHash.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 class RTCStatsReport FINAL : public GarbageCollectedFinalized<RTCStatsReport>, public ScriptWrappable {
 public:
@@ -61,6 +61,6 @@ private:
     HashMap<String, String> m_stats;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // RTCStatsReport_h

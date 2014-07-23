@@ -39,7 +39,7 @@
 #include "wtf/PassOwnPtr.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 class Document;
 class Element;
@@ -105,7 +105,7 @@ private:
     InspectorDOMDebuggerAgent(InspectorDOMAgent*, InspectorDebuggerAgent*);
 
     void pauseOnNativeEventIfNeeded(PassRefPtr<JSONObject> eventData, bool synchronous);
-    PassRefPtr<JSONObject> preparePauseOnNativeEventData(const String& eventName, const AtomicString* targetName);
+    PassRefPtr<JSONObject> preparePauseOnNativeEventData(const String& eventName, const String* targetName);
 
     // InspectorDOMAgent::Listener implementation.
     virtual void domAgentWasEnabled() OVERRIDE;
@@ -132,7 +132,7 @@ private:
     bool m_pauseInNextEventListener;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 
 #endif // !defined(InspectorDOMDebuggerAgent_h)

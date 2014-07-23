@@ -48,7 +48,7 @@
 #include "core/rendering/ClipRectsCache.h"
 #include "core/rendering/RenderBox.h"
 
-namespace WebCore {
+namespace blink {
 
 class RenderLayer;
 
@@ -61,8 +61,8 @@ class ClipRectsContext {
 public:
     ClipRectsContext(const RenderLayer* root, ClipRectsCacheSlot slot, OverlayScrollbarSizeRelevancy relevancy = IgnoreOverlayScrollbarSize, const LayoutSize& accumulation = LayoutSize())
         : rootLayer(root)
-        , cacheSlot(slot)
         , scrollbarRelevancy(relevancy)
+        , cacheSlot(slot)
         , subPixelAccumulation(accumulation)
         , respectOverflowClip(RespectOverflowClip)
     {
@@ -81,12 +81,13 @@ public:
         return cacheSlot != UncachedClipRects;
     }
 
+    const RenderLayer* const rootLayer;
+    const OverlayScrollbarSizeRelevancy scrollbarRelevancy;
+
 private:
     friend class RenderLayerClipper;
 
-    const RenderLayer* rootLayer;
     ClipRectsCacheSlot cacheSlot;
-    OverlayScrollbarSizeRelevancy scrollbarRelevancy;
     LayoutSize subPixelAccumulation;
     ShouldRespectOverflowClip respectOverflowClip;
 };
@@ -98,10 +99,11 @@ public:
 
     void clearClipRectsIncludingDescendants();
     void clearClipRectsIncludingDescendants(ClipRectsCacheSlot);
-    void clearClipRects();
 
     LayoutRect childrenClipRect() const; // Returns the foreground clip rect of the layer in the document's coordinate space.
     LayoutRect localClipRect() const; // Returns the background clip rect of the layer in the local coordinate space.
+
+    ClipRects* getClipRects(const ClipRectsContext&) const;
 
     ClipRect backgroundClipRect(const ClipRectsContext&) const;
 
@@ -113,18 +115,23 @@ public:
         ClipRect& backgroundRect, ClipRect& foregroundRect, ClipRect& outlineRect, const LayoutPoint* offsetFromRoot = 0) const;
 
 private:
+    void calculateClipRects(const ClipRectsContext&, ClipRects&) const;
+
+    ClipRects* clipRectsIfCached(const ClipRectsContext&) const;
+    ClipRects* storeClipRectsInCache(const ClipRectsContext&, ClipRects* parentClipRects, const ClipRects&) const;
+
+    // cachedClipRects looks buggy: It doesn't check whether context.rootLayer and entry.root match.
+    // FIXME: Move callers to clipRectsIfCached, which does the proper checks.
     ClipRects* cachedClipRects(const ClipRectsContext& context) const
     {
         return m_cache ? m_cache->get(context.cacheSlot).clipRects.get() : 0;
     }
 
-    ClipRects* updateClipRects(const ClipRectsContext&);
-    void calculateClipRects(const ClipRectsContext&, ClipRects&) const;
-    void parentClipRects(const ClipRectsContext&, ClipRects&) const;
+    void getOrCalculateClipRects(const ClipRectsContext&, ClipRects&) const;
 
     RenderLayer* clippingRootForPainting() const;
 
-    ClipRectsCache& cache()
+    ClipRectsCache& cache() const
     {
         if (!m_cache)
             m_cache = adoptPtr(new ClipRectsCache);
@@ -133,9 +140,9 @@ private:
 
     // FIXME: Could this be a RenderBox?
     RenderLayerModelObject& m_renderer;
-    OwnPtr<ClipRectsCache> m_cache;
+    mutable OwnPtr<ClipRectsCache> m_cache;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // RenderLayerClipper_h

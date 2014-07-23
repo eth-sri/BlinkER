@@ -34,7 +34,7 @@
 
 using namespace std;
 
-namespace WebCore {
+namespace blink {
 
 ScrollView::ScrollView()
     : m_horizontalScrollbarMode(ScrollbarAuto)
@@ -240,6 +240,18 @@ IntPoint ScrollView::adjustScrollPositionWithinRange(const IntPoint& scrollPoint
     return newScrollPosition;
 }
 
+void ScrollView::adjustScrollbarOpacity()
+{
+    if (m_horizontalScrollbar && layerForHorizontalScrollbar()) {
+        bool isOpaqueScrollbar = !m_horizontalScrollbar->isOverlayScrollbar();
+        layerForHorizontalScrollbar()->setContentsOpaque(isOpaqueScrollbar);
+    }
+    if (m_verticalScrollbar && layerForVerticalScrollbar()) {
+        bool isOpaqueScrollbar = !m_verticalScrollbar->isOverlayScrollbar();
+        layerForVerticalScrollbar()->setContentsOpaque(isOpaqueScrollbar);
+    }
+}
+
 int ScrollView::scrollSize(ScrollbarOrientation orientation) const
 {
     Scrollbar* scrollbar = ((orientation == HorizontalScrollbar) ? m_horizontalScrollbar : m_verticalScrollbar).get();
@@ -329,7 +341,7 @@ static bool useOverlayScrollbars()
     return ScrollbarTheme::theme()->usesOverlayScrollbars();
 }
 
-void ScrollView::computeScrollbarExistence(bool& newHasHorizontalScrollbar, bool& newHasVerticalScrollbar, ComputeScrollbarExistenceOption option) const
+void ScrollView::computeScrollbarExistence(bool& newHasHorizontalScrollbar, bool& newHasVerticalScrollbar, const IntSize& docSize, ComputeScrollbarExistenceOption option) const
 {
     bool hasHorizontalScrollbar = m_horizontalScrollbar;
     bool hasVerticalScrollbar = m_verticalScrollbar;
@@ -347,8 +359,6 @@ void ScrollView::computeScrollbarExistence(bool& newHasHorizontalScrollbar, bool
 
     if (m_scrollbarsSuppressed || (hScroll != ScrollbarAuto && vScroll != ScrollbarAuto))
         return;
-
-    IntSize docSize = contentsSize();
 
     if (hScroll == ScrollbarAuto)
         newHasHorizontalScrollbar = docSize.width() > visibleWidth();
@@ -435,7 +445,7 @@ bool ScrollView::adjustScrollbarExistence(ComputeScrollbarExistenceOption option
 
     bool newHasHorizontalScrollbar = false;
     bool newHasVerticalScrollbar = false;
-    computeScrollbarExistence(newHasHorizontalScrollbar, newHasVerticalScrollbar, option);
+    computeScrollbarExistence(newHasHorizontalScrollbar, newHasVerticalScrollbar, contentsSize(), option);
 
     bool scrollbarExistenceChanged = hasHorizontalScrollbar != newHasHorizontalScrollbar || hasVerticalScrollbar != newHasVerticalScrollbar;
     if (!scrollbarExistenceChanged)
@@ -812,6 +822,7 @@ bool ScrollView::isScrollCornerVisible() const
 
 void ScrollView::scrollbarStyleChanged()
 {
+    adjustScrollbarOpacity();
     contentsResized();
     updateScrollbars(scrollOffset());
     positionScrollbarLayers();
@@ -1123,4 +1134,4 @@ void ScrollView::setScrollOrigin(const IntPoint& origin, bool updatePositionAtAl
         updateScrollbars(scrollOffset());
 }
 
-} // namespace WebCore
+} // namespace blink

@@ -26,9 +26,9 @@
 #ifndef IDBObjectStore_h
 #define IDBObjectStore_h
 
-#include "bindings/v8/Dictionary.h"
-#include "bindings/v8/ScriptWrappable.h"
-#include "bindings/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/Dictionary.h"
+#include "bindings/core/v8/ScriptWrappable.h"
+#include "bindings/core/v8/SerializedScriptValue.h"
 #include "modules/indexeddb/IDBCursor.h"
 #include "modules/indexeddb/IDBIndex.h"
 #include "modules/indexeddb/IDBKey.h"
@@ -43,7 +43,7 @@
 #include "wtf/RefPtr.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 class DOMStringList;
 class IDBAny;
@@ -125,6 +125,6 @@ private:
     IDBIndexMap m_indexMap;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // IDBObjectStore_h

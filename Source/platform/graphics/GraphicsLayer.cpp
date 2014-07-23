@@ -64,7 +64,7 @@ using blink::WebFilterOperations;
 using blink::WebLayer;
 using blink::WebPoint;
 
-namespace WebCore {
+namespace blink {
 
 typedef HashMap<const GraphicsLayer*, Vector<FloatRect> > RepaintMap;
 static RepaintMap& repaintRectMap()
@@ -105,7 +105,7 @@ GraphicsLayer::GraphicsLayer(GraphicsLayerClient* client)
     , m_scrollableArea(0)
     , m_3dRenderingContext(0)
 {
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     if (m_client)
         m_client->verifyNotPainting();
 #endif
@@ -123,7 +123,7 @@ GraphicsLayer::~GraphicsLayer()
         m_linkHighlights[i]->clearCurrentGraphicsLayer();
     m_linkHighlights.clear();
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     if (m_client)
         m_client->verifyNotPainting();
 #endif
@@ -147,7 +147,7 @@ void GraphicsLayer::setParent(GraphicsLayer* layer)
     m_parent = layer;
 }
 
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
 
 bool GraphicsLayer::hasAncestor(GraphicsLayer* ancestor) const
 {
@@ -562,39 +562,44 @@ static PassRefPtr<JSONArray> rectAsJSONArray(const T& rect)
     return array;
 }
 
+static double roundCloseToZero(double number)
+{
+    return std::abs(number) < 1e-7 ? 0 : number;
+}
+
 static PassRefPtr<JSONArray> transformAsJSONArray(const TransformationMatrix& t)
 {
     RefPtr<JSONArray> array = adoptRef(new JSONArray);
     {
         RefPtr<JSONArray> row = adoptRef(new JSONArray);
-        row->pushNumber(t.m11());
-        row->pushNumber(t.m12());
-        row->pushNumber(t.m13());
-        row->pushNumber(t.m14());
+        row->pushNumber(roundCloseToZero(t.m11()));
+        row->pushNumber(roundCloseToZero(t.m12()));
+        row->pushNumber(roundCloseToZero(t.m13()));
+        row->pushNumber(roundCloseToZero(t.m14()));
         array->pushArray(row);
     }
     {
         RefPtr<JSONArray> row = adoptRef(new JSONArray);
-        row->pushNumber(t.m21());
-        row->pushNumber(t.m22());
-        row->pushNumber(t.m23());
-        row->pushNumber(t.m24());
+        row->pushNumber(roundCloseToZero(t.m21()));
+        row->pushNumber(roundCloseToZero(t.m22()));
+        row->pushNumber(roundCloseToZero(t.m23()));
+        row->pushNumber(roundCloseToZero(t.m24()));
         array->pushArray(row);
     }
     {
         RefPtr<JSONArray> row = adoptRef(new JSONArray);
-        row->pushNumber(t.m31());
-        row->pushNumber(t.m32());
-        row->pushNumber(t.m33());
-        row->pushNumber(t.m34());
+        row->pushNumber(roundCloseToZero(t.m31()));
+        row->pushNumber(roundCloseToZero(t.m32()));
+        row->pushNumber(roundCloseToZero(t.m33()));
+        row->pushNumber(roundCloseToZero(t.m34()));
         array->pushArray(row);
     }
     {
         RefPtr<JSONArray> row = adoptRef(new JSONArray);
-        row->pushNumber(t.m41());
-        row->pushNumber(t.m42());
-        row->pushNumber(t.m43());
-        row->pushNumber(t.m44());
+        row->pushNumber(roundCloseToZero(t.m41()));
+        row->pushNumber(roundCloseToZero(t.m42()));
+        row->pushNumber(roundCloseToZero(t.m43()));
+        row->pushNumber(roundCloseToZero(t.m44()));
         array->pushArray(row);
     }
     return array;
@@ -716,9 +721,9 @@ PassRefPtr<JSONObject> GraphicsLayer::layerTreeAsJSON(LayerTreeFlags flags, Rend
 
     if (flags & LayerTreeIncludesDebugInfo) {
         RefPtr<JSONArray> compositingReasonsJSON = adoptRef(new JSONArray);
-        for (size_t i = 0; i < WTF_ARRAY_LENGTH(compositingReasonStringMap); ++i) {
-            if (m_debugInfo.compositingReasons() & compositingReasonStringMap[i].reason)
-                compositingReasonsJSON->pushString(compositingReasonStringMap[i].description);
+        for (size_t i = 0; i < kNumberOfCompositingReasons; ++i) {
+            if (m_debugInfo.compositingReasons() & kCompositingReasonStringMap[i].reason)
+                compositingReasonsJSON->pushString(kCompositingReasonStringMap[i].description);
         }
         json->setArray("compositingReasons", compositingReasonsJSON);
     }
@@ -889,6 +894,8 @@ void GraphicsLayer::setContentsOpaque(bool opaque)
     m_contentsOpaque = opaque;
     m_layer->layer()->setOpaque(m_contentsOpaque);
     m_opaqueRectTrackingContentLayerDelegate->setOpaque(m_contentsOpaque);
+    if (m_contentsLayer)
+        m_contentsLayer->setOpaque(opaque);
 }
 
 void GraphicsLayer::setMaskLayer(GraphicsLayer* maskLayer)
@@ -1044,102 +1051,15 @@ WebLayer* GraphicsLayer::platformLayer() const
     return m_layer->layer();
 }
 
-static bool copyWebCoreFilterOperationsToWebFilterOperations(const FilterOperations& filters, WebFilterOperations& webFilters)
-{
-    for (size_t i = 0; i < filters.size(); ++i) {
-        const FilterOperation& op = *filters.at(i);
-        switch (op.type()) {
-        case FilterOperation::REFERENCE:
-            return false; // Not supported.
-        case FilterOperation::GRAYSCALE:
-        case FilterOperation::SEPIA:
-        case FilterOperation::SATURATE:
-        case FilterOperation::HUE_ROTATE: {
-            float amount = toBasicColorMatrixFilterOperation(op).amount();
-            switch (op.type()) {
-            case FilterOperation::GRAYSCALE:
-                webFilters.appendGrayscaleFilter(amount);
-                break;
-            case FilterOperation::SEPIA:
-                webFilters.appendSepiaFilter(amount);
-                break;
-            case FilterOperation::SATURATE:
-                webFilters.appendSaturateFilter(amount);
-                break;
-            case FilterOperation::HUE_ROTATE:
-                webFilters.appendHueRotateFilter(amount);
-                break;
-            default:
-                ASSERT_NOT_REACHED();
-            }
-            break;
-        }
-        case FilterOperation::INVERT:
-        case FilterOperation::OPACITY:
-        case FilterOperation::BRIGHTNESS:
-        case FilterOperation::CONTRAST: {
-            float amount = toBasicComponentTransferFilterOperation(op).amount();
-            switch (op.type()) {
-            case FilterOperation::INVERT:
-                webFilters.appendInvertFilter(amount);
-                break;
-            case FilterOperation::OPACITY:
-                webFilters.appendOpacityFilter(amount);
-                break;
-            case FilterOperation::BRIGHTNESS:
-                webFilters.appendBrightnessFilter(amount);
-                break;
-            case FilterOperation::CONTRAST:
-                webFilters.appendContrastFilter(amount);
-                break;
-            default:
-                ASSERT_NOT_REACHED();
-            }
-            break;
-        }
-        case FilterOperation::BLUR: {
-            float pixelRadius = toBlurFilterOperation(op).stdDeviation().getFloatValue();
-            webFilters.appendBlurFilter(pixelRadius);
-            break;
-        }
-        case FilterOperation::DROP_SHADOW: {
-            const DropShadowFilterOperation& dropShadowOp = toDropShadowFilterOperation(op);
-            webFilters.appendDropShadowFilter(WebPoint(dropShadowOp.x(), dropShadowOp.y()), dropShadowOp.stdDeviation(), dropShadowOp.color().rgb());
-            break;
-        }
-        case FilterOperation::NONE:
-            break;
-        }
-    }
-    return true;
-}
-
-bool GraphicsLayer::setFilters(const FilterOperations& filters)
+void GraphicsLayer::setFilters(const FilterOperations& filters)
 {
     SkiaImageFilterBuilder builder;
     OwnPtr<WebFilterOperations> webFilters = adoptPtr(Platform::current()->compositorSupport()->createFilterOperations());
     FilterOutsets outsets = filters.outsets();
     builder.setCropOffset(FloatSize(outsets.left(), outsets.top()));
-    if (!builder.buildFilterOperations(filters, webFilters.get())) {
-        // Make sure the filters are removed from the platform layer, as they are
-        // going to fallback to software mode.
-        webFilters->clear();
-        m_layer->layer()->setFilters(*webFilters);
-        m_filters = FilterOperations();
-        return false;
-    }
-
+    builder.buildFilterOperations(filters, webFilters.get());
     m_layer->layer()->setFilters(*webFilters);
     m_filters = filters;
-    return true;
-}
-
-void GraphicsLayer::setBackgroundFilters(const FilterOperations& filters)
-{
-    OwnPtr<WebFilterOperations> webFilters = adoptPtr(Platform::current()->compositorSupport()->createFilterOperations());
-    if (!copyWebCoreFilterOperationsToWebFilterOperations(filters, *webFilters))
-        return;
-    m_layer->layer()->setBackgroundFilters(*webFilters);
 }
 
 void GraphicsLayer::setPaintingPhase(GraphicsLayerPaintingPhase phase)
@@ -1204,15 +1124,15 @@ void GraphicsLayer::didScroll()
         m_scrollableArea->scrollToOffsetWithoutAnimation(m_scrollableArea->minimumScrollPosition() + toIntSize(m_layer->layer()->scrollPosition()));
 }
 
-} // namespace WebCore
+} // namespace blink
 
 #ifndef NDEBUG
-void showGraphicsLayerTree(const WebCore::GraphicsLayer* layer)
+void showGraphicsLayerTree(const blink::GraphicsLayer* layer)
 {
     if (!layer)
         return;
 
-    String output = layer->layerTreeAsText(WebCore::LayerTreeIncludesDebugInfo);
+    String output = layer->layerTreeAsText(blink::LayerTreeIncludesDebugInfo);
     fprintf(stderr, "%s\n", output.utf8().data());
 }
 #endif

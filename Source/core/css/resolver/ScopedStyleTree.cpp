@@ -32,7 +32,7 @@
 #include "core/dom/shadow/ElementShadow.h"
 #include "core/dom/shadow/ShadowRoot.h"
 
-namespace WebCore {
+namespace blink {
 
 class StyleSheetContents;
 
@@ -58,8 +58,10 @@ ScopedStyleResolver* ScopedStyleTree::addScopedStyleResolver(ContainerNode& scop
 {
     HashMap<const ContainerNode*, OwnPtr<ScopedStyleResolver> >::AddResult addResult = m_authorStyles.add(&scopingNode, nullptr);
 
+    ASSERT(scopingNode.isShadowRoot() || scopingNode.isDocumentNode());
+
     if (addResult.isNewEntry) {
-        addResult.storedValue->value = ScopedStyleResolver::create(scopingNode);
+        addResult.storedValue->value = ScopedStyleResolver::create(scopingNode.treeScope());
         if (scopingNode.isDocumentNode())
             m_scopedResolverForDocument = addResult.storedValue->value.get();
     }
@@ -220,4 +222,4 @@ void ScopedStyleTree::remove(const ContainerNode* scopingNode)
     m_authorStyles.remove(scopingNode);
 }
 
-} // namespace WebCore
+} // namespace blink

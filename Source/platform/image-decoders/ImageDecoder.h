@@ -47,7 +47,7 @@
 #endif
 #endif
 
-namespace WebCore {
+namespace blink {
 
 // ImageDecoder is a base for all format-specific decoders
 // (e.g. JPEGImageDecoder). This base manages the ImageFrame cache.
@@ -186,6 +186,7 @@ public:
                 size_t length = CFDataGetLength(iccProfile);
                 const unsigned char* systemProfile = CFDataGetBytePtr(iccProfile);
                 m_outputDeviceProfile = qcms_profile_from_memory(systemProfile, length);
+                CFRelease(iccProfile);
             }
 #else
             // FIXME: add support for multiple monitors.
@@ -302,6 +303,6 @@ private:
     bool m_failed;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif

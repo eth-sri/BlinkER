@@ -25,7 +25,7 @@
 
 #include "core/rendering/RenderPart.h"
 
-namespace WebCore {
+namespace blink {
 
 class TextRun;
 
@@ -43,20 +43,16 @@ public:
     void setPluginUnavailabilityReason(PluginUnavailabilityReason);
     bool showsUnavailablePluginIndicator() const;
 
-protected:
+private:
+    virtual void paintContents(PaintInfo&, const LayoutPoint&) OVERRIDE FINAL;
     virtual void paintReplaced(PaintInfo&, const LayoutPoint&) OVERRIDE FINAL;
     virtual void paint(PaintInfo&, const LayoutPoint&) OVERRIDE FINAL;
 
-protected:
     virtual void layout() OVERRIDE FINAL;
 
-private:
     virtual const char* renderName() const OVERRIDE { return "RenderEmbeddedObject"; }
     virtual bool isEmbeddedObject() const OVERRIDE FINAL { return true; }
     virtual RenderBox* embeddedContentBox() const OVERRIDE FINAL;
-
-    void paintSnapshotImage(PaintInfo&, const LayoutPoint&, Image*);
-    virtual void paintContents(PaintInfo&, const LayoutPoint&) OVERRIDE FINAL;
 
     virtual LayerType layerTypeRequired() const OVERRIDE FINAL;
 
@@ -73,6 +69,6 @@ private:
 
 DEFINE_RENDER_OBJECT_TYPE_CASTS(RenderEmbeddedObject, isEmbeddedObject());
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // RenderEmbeddedObject_h

@@ -5,8 +5,8 @@
 #ifndef MIDIAccessInitializer_h
 #define MIDIAccessInitializer_h
 
-#include "bindings/v8/ScriptPromise.h"
-#include "bindings/v8/ScriptPromiseResolver.h"
+#include "bindings/core/v8/ScriptPromise.h"
+#include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "modules/webmidi/MIDIAccessor.h"
 #include "modules/webmidi/MIDIAccessorClient.h"
 #include "modules/webmidi/MIDIOptions.h"
@@ -14,7 +14,7 @@
 #include "wtf/OwnPtr.h"
 #include "wtf/Vector.h"
 
-namespace WebCore {
+namespace blink {
 
 class MIDIAccess;
 class Navigator;
@@ -69,7 +69,7 @@ private:
     Vector<PortDescriptor> m_portDescriptors;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 
 #endif // MIDIAccessInitializer_h

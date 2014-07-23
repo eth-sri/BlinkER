@@ -26,7 +26,7 @@
 #include "core/svg/SVGGraphicsElement.h"
 #include "core/svg/SVGURIReference.h"
 
-namespace WebCore {
+namespace blink {
 
 class SVGAElement FINAL : public SVGGraphicsElement,
                           public SVGURIReference {
@@ -47,6 +47,8 @@ private:
 
     virtual void defaultEventHandler(Event*) OVERRIDE;
 
+    virtual bool isLiveLink() const OVERRIDE { return isLink(); }
+
     virtual bool supportsFocus() const OVERRIDE;
     virtual bool isMouseFocusable() const OVERRIDE;
     virtual bool isKeyboardFocusable() const OVERRIDE;
@@ -59,6 +61,6 @@ private:
     RefPtr<SVGAnimatedString> m_svgTarget;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // SVGAElement_h

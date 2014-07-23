@@ -31,7 +31,7 @@
 #include "config.h"
 #include "modules/websockets/MainThreadWebSocketChannel.h"
 
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/fileapi/Blob.h"
@@ -55,9 +55,7 @@
 #include "wtf/text/StringHash.h"
 #include "wtf/text/WTFString.h"
 
-using namespace std;
-
-namespace WebCore {
+namespace blink {
 
 const double TCPMaximumSegmentLifetime = 2 * 60.0;
 
@@ -96,9 +94,6 @@ bool MainThreadWebSocketChannel::connect(const KURL& url, const String& protocol
     ASSERT(!m_suspended);
 
     if (m_document->frame() && !m_document->frame()->loader().mixedContentChecker()->canConnectInsecureWebSocket(m_document->securityOrigin(), url))
-        return false;
-    Frame* top = m_document->frame()->tree().top();
-    if (top != m_document->frame() && !toLocalFrame(top)->loader().mixedContentChecker()->canConnectInsecureWebSocket(toLocalFrame(top)->document()->securityOrigin(), url))
         return false;
     if (MixedContentChecker::isMixedContent(m_document->securityOrigin(), url)) {
         String message = "Connecting to a non-secure WebSocket server from a secure origin is deprecated.";
@@ -880,4 +875,4 @@ void MainThreadWebSocketChannel::trace(Visitor* visitor)
     SocketStreamHandleClient::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink

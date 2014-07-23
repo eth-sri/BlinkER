@@ -150,7 +150,9 @@ body.platform-mac .help-key-cell {
 }
 
 .help-cell {
-    display: inline;
+    display: inline-block;
+    width: 200px;
+    vertical-align: middle;
 }
 
 .help-section-title {
@@ -587,11 +589,15 @@ body.platform-mac .help-key {
     background-color: pink;
 }
 
-.list-column-editor {
+input.list-column-editor,
+select.list-column-editor {
     border: 1px solid rgb(213, 213, 213);
     border-radius: 2px;
     color: #444444;
     padding: 3px;
+}
+select.list-column-editor {
+    padding: 2px;
 }
 
 .settings-tab .settings-list .settings-list-item .file-system-path {
@@ -608,11 +614,23 @@ body.platform-mac .help-key {
     font-weight: bold;
 }
 
+.file-systems-list .settings-list-item .list-column.settings-list-column-path {
+    width: 100%;
+}
+
 .file-mappings-list .settings-list-item .list-column.settings-list-column-url {
     width: 50%;
 }
 
 .file-mappings-list .settings-list-item .list-column.settings-list-column-path {
+    width: 50%;
+}
+
+.blackbox-patterns-list .settings-list-item .list-column.settings-list-column-pattern {
+    width: 50%;
+}
+
+.blackbox-patterns-list .settings-list-item .list-column.settings-list-column-value {
     width: 50%;
 }
 
@@ -653,6 +671,23 @@ body.platform-mac .help-key {
     margin-bottom: 0.8em;
 }
 
+.blackbox-dialog .columns-header {
+    color: black;
+    font-weight: bold;
+    margin-bottom: 0.4em;
+    display: -webkit-box;
+    padding: 0;
+}
+
+.blackbox-dialog .columns-header span {
+    width: 50%;
+    display: -webkit-box;
+}
+
+.blackbox-dialog .columns-header span + span {
+    margin-left: -7px
+}
+
 .settings-dialog .done-button {
     float: right;
 }
@@ -676,7 +711,7 @@ body.platform-mac .help-key {
     padding-left: 19px;
 }
 
-.edit-file-system-dialog .section {
+.dialog-contents .section {
     min-width: 400px;
 }
 

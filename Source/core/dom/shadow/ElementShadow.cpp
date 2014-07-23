@@ -28,7 +28,6 @@
 #include "core/dom/shadow/ElementShadow.h"
 
 #include "core/css/StyleSheetList.h"
-#include "core/dom/ContainerNodeAlgorithms.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/NodeTraversal.h"
 #include "core/dom/shadow/ContentDistribution.h"
@@ -36,7 +35,7 @@
 #include "core/html/HTMLShadowElement.h"
 #include "core/inspector/InspectorInstrumentation.h"
 
-namespace WebCore {
+namespace blink {
 
 class DistributionPool FINAL {
     STACK_ALLOCATED();
@@ -254,7 +253,7 @@ const DestinationInsertionPoints* ElementShadow::destinationInsertionPointsFor(c
 void ElementShadow::distribute()
 {
     host()->setNeedsStyleRecalc(SubtreeStyleChange);
-    Vector<HTMLShadowElement*, 32> shadowInsertionPoints;
+    WillBeHeapVector<RawPtrWillBeMember<HTMLShadowElement>, 32> shadowInsertionPoints;
     DistributionPool pool(*host());
 
     for (ShadowRoot* root = youngestShadowRoot(); root; root = root->olderShadowRoot()) {
@@ -356,12 +355,14 @@ void ElementShadow::clearDistribution()
 
 void ElementShadow::trace(Visitor* visitor)
 {
+#if ENABLE(OILPAN)
     visitor->trace(m_nodeToInsertionPoints);
     visitor->trace(m_selectFeatures);
     // Shadow roots are linked with previous and next pointers which are traced.
     // It is therefore enough to trace one of the shadow roots here and the
     // rest will be traced from there.
     visitor->trace(m_shadowRoots.head());
+#endif
 }
 
 } // namespace

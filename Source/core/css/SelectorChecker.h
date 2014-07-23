@@ -32,7 +32,7 @@
 #include "core/dom/Element.h"
 #include "platform/scroll/ScrollTypes.h"
 
-namespace WebCore {
+namespace blink {
 
 class CSSSelector;
 class ContainerNode;
@@ -47,16 +47,11 @@ public:
     enum VisitedMatchType { VisitedMatchDisabled, VisitedMatchEnabled };
     enum Mode { ResolvingStyle = 0, CollectingStyleRules, CollectingCSSRules, QueryingRules, SharingRules };
     explicit SelectorChecker(Document&, Mode);
-    enum BehaviorAtBoundary {
-        DoesNotCrossBoundary = 0,
-        // FIXME: refactor to remove BoundaryBehavior (i.e. DoesNotCrossBoundary and StaysWithinTreeScope).
-        StaysWithinTreeScope = 2,
-        BoundaryBehaviorMask = 3, // 2bit for boundary behavior
-        ScopeContainsLastMatchedElement = 4,
-        ScopeIsShadowRoot = 8,
-        TreatShadowHostAsNormalScope = 16,
-
-        ScopeIsShadowHostInPseudoHostParameter = ScopeIsShadowRoot | TreatShadowHostAsNormalScope
+    enum ContextFlags {
+        // FIXME: Revmoe DefaultBehavior.
+        DefaultBehavior = 0,
+        ScopeContainsLastMatchedElement = 1,
+        TreatShadowHostAsNormalScope = 2,
     };
 
     struct SelectorCheckingContext {
@@ -74,7 +69,8 @@ public:
             , isSubSelector(false)
             , hasScrollbarPseudo(false)
             , hasSelectionPseudo(false)
-            , behaviorAtBoundary(DoesNotCrossBoundary)
+            , isUARule(false)
+            , contextFlags(DefaultBehavior)
         { }
 
         const CSSSelector* selector;
@@ -89,7 +85,8 @@ public:
         bool isSubSelector;
         bool hasScrollbarPseudo;
         bool hasSelectionPseudo;
-        BehaviorAtBoundary behaviorAtBoundary;
+        bool isUARule;
+        ContextFlags contextFlags;
     };
 
     struct MatchResult {
@@ -114,12 +111,13 @@ public:
     static bool tagMatches(const Element&, const QualifiedName&);
     static bool isCommonPseudoClassSelector(const CSSSelector&);
     static bool matchesFocusPseudoClass(const Element&);
+    static bool matchesSpatialNavigationFocusPseudoClass(const Element&);
     static bool checkExactAttribute(const Element&, const QualifiedName& selectorAttributeName, const StringImpl* value);
 
     enum LinkMatchMask { MatchLink = 1, MatchVisited = 2, MatchAll = MatchLink | MatchVisited };
     static unsigned determineLinkMatchType(const CSSSelector&);
 
-    static bool isHostInItsShadowTree(const Element&, BehaviorAtBoundary, const ContainerNode* scope);
+    static bool isHostInItsShadowTree(const Element&, const ContainerNode* scope);
 
 private:
     template<typename SiblingTraversalStrategy>
@@ -132,8 +130,6 @@ private:
     Match matchForPseudoShadow(const ContainerNode*, const SelectorCheckingContext&, const SiblingTraversalStrategy&, MatchResult*) const;
 
     bool checkScrollbarPseudoClass(const SelectorCheckingContext&, Document*, const CSSSelector&) const;
-    Element* parentElement(const SelectorCheckingContext&, bool allowToCrossBoundary = false) const;
-    bool scopeContainsLastMatchedElement(const SelectorCheckingContext&) const;
 
     static bool isFrameFocused(const Element&);
 
@@ -177,7 +173,7 @@ inline bool SelectorChecker::checkExactAttribute(const Element& element, const Q
     return false;
 }
 
-inline bool SelectorChecker::isHostInItsShadowTree(const Element& element, BehaviorAtBoundary behaviorAtBoundary, const ContainerNode* scope)
+inline bool SelectorChecker::isHostInItsShadowTree(const Element& element, const ContainerNode* scope)
 {
     return scope && scope->isInShadowTree() && scope->shadowHost() == element;
 }

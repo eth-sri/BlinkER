@@ -29,7 +29,7 @@
 #include "wtf/Forward.h"
 #include "wtf/PassRefPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 class AbstractInlineTextBox;
 class InlineTextBox;
@@ -40,7 +40,7 @@ public:
     // not the content of the Text node, updating text-transform property
     // doesn't re-transform the string.
     RenderText(Node*, PassRefPtr<StringImpl>);
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     virtual ~RenderText();
 #endif
 
@@ -118,7 +118,7 @@ public:
     LayoutUnit marginLeft() const { return minimumValueForLength(style()->marginLeft(), 0); }
     LayoutUnit marginRight() const { return minimumValueForLength(style()->marginRight(), 0); }
 
-    virtual LayoutRect clippedOverflowRectForPaintInvalidation(const RenderLayerModelObject* paintInvalidationContainer) const OVERRIDE FINAL;
+    virtual LayoutRect clippedOverflowRectForPaintInvalidation(const RenderLayerModelObject* paintInvalidationContainer, const PaintInvalidationState* = 0) const OVERRIDE FINAL;
 
     InlineTextBox* firstTextBox() const { return m_firstTextBox; }
     InlineTextBox* lastTextBox() const { return m_lastTextBox; }
@@ -225,7 +225,7 @@ inline UChar RenderText::characterAt(unsigned i) const
 
 DEFINE_RENDER_OBJECT_TYPE_CASTS(RenderText, isText());
 
-#ifdef NDEBUG
+#if !ENABLE(ASSERT)
 inline void RenderText::checkConsistency() const
 {
 }
@@ -233,6 +233,6 @@ inline void RenderText::checkConsistency() const
 
 void applyTextTransform(const RenderStyle*, String&, UChar);
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // RenderText_h

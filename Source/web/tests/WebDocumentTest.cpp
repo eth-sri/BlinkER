@@ -8,6 +8,7 @@
 
 #include "core/CSSPropertyNames.h"
 #include "core/dom/NodeRenderStyle.h"
+#include "core/dom/StyleEngine.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLElement.h"
 #include "core/page/Page.h"
@@ -17,10 +18,10 @@
 
 #include <gtest/gtest.h>
 
-using WebCore::Color;
-using WebCore::Document;
-using WebCore::HTMLElement;
-using WebCore::RenderStyle;
+using blink::Color;
+using blink::Document;
+using blink::HTMLElement;
+using blink::RenderStyle;
 using blink::FrameTestHelpers::WebViewHelper;
 using blink::WebDocument;
 
@@ -47,7 +48,7 @@ TEST(WebDocumentTest, InsertStyleSheet)
     ASSERT(style);
 
     // Inserted stylesheet not yet applied.
-    ASSERT_EQ(Color(0, 0, 0), style->visitedDependentColor(WebCore::CSSPropertyColor));
+    ASSERT_EQ(Color(0, 0, 0), style->visitedDependentColor(blink::CSSPropertyColor));
 
     // Apply inserted stylesheet.
     coreDoc->updateRenderTreeIfNeeded();
@@ -56,7 +57,7 @@ TEST(WebDocumentTest, InsertStyleSheet)
     ASSERT(style);
 
     // Inserted stylesheet applied.
-    ASSERT_EQ(Color(0, 128, 0), style->visitedDependentColor(WebCore::CSSPropertyColor));
+    ASSERT_EQ(Color(0, 128, 0), style->visitedDependentColor(blink::CSSPropertyColor));
 }
 
 }

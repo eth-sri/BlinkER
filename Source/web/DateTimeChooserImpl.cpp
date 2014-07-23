@@ -39,28 +39,27 @@
 #include "platform/DateTimeChooserClient.h"
 #include "platform/Language.h"
 #include "platform/text/PlatformLocale.h"
-#include "web/CalendarPicker.h"
+#include "public/platform/Platform.h"
 #include "web/ChromeClientImpl.h"
-#include "web/PickerCommon.h"
 #include "web/WebViewImpl.h"
 
-using namespace WebCore;
+using namespace blink;
 
 namespace blink {
 
-DateTimeChooserImpl::DateTimeChooserImpl(ChromeClientImpl* chromeClient, WebCore::DateTimeChooserClient* client, const WebCore::DateTimeChooserParameters& parameters)
+DateTimeChooserImpl::DateTimeChooserImpl(ChromeClientImpl* chromeClient, blink::DateTimeChooserClient* client, const blink::DateTimeChooserParameters& parameters)
     : m_chromeClient(chromeClient)
     , m_client(client)
     , m_popup(0)
     , m_parameters(parameters)
-    , m_locale(WebCore::Locale::create(parameters.locale))
+    , m_locale(blink::Locale::create(parameters.locale))
 {
     ASSERT(m_chromeClient);
     ASSERT(m_client);
     m_popup = m_chromeClient->openPagePopup(this, m_parameters.anchorRectInRootView);
 }
 
-PassRefPtrWillBeRawPtr<DateTimeChooserImpl> DateTimeChooserImpl::create(ChromeClientImpl* chromeClient, WebCore::DateTimeChooserClient* client, const WebCore::DateTimeChooserParameters& parameters)
+PassRefPtrWillBeRawPtr<DateTimeChooserImpl> DateTimeChooserImpl::create(ChromeClientImpl* chromeClient, blink::DateTimeChooserClient* client, const blink::DateTimeChooserParameters& parameters)
 {
     return adoptRefWillBeNoop(new DateTimeChooserImpl(chromeClient, client, parameters));
 }
@@ -76,40 +75,40 @@ void DateTimeChooserImpl::endChooser()
     m_chromeClient->closePagePopup(m_popup);
 }
 
-WebCore::IntSize DateTimeChooserImpl::contentSize()
+blink::IntSize DateTimeChooserImpl::contentSize()
 {
-    return WebCore::IntSize(0, 0);
+    return blink::IntSize(0, 0);
 }
 
 static String valueToDateTimeString(double value, AtomicString type)
 {
-    WebCore::DateComponents components;
-    if (type == WebCore::InputTypeNames::date)
+    blink::DateComponents components;
+    if (type == blink::InputTypeNames::date)
         components.setMillisecondsSinceEpochForDate(value);
-    else if (type == WebCore::InputTypeNames::datetime_local)
+    else if (type == blink::InputTypeNames::datetime_local)
         components.setMillisecondsSinceEpochForDateTimeLocal(value);
-    else if (type == WebCore::InputTypeNames::month)
+    else if (type == blink::InputTypeNames::month)
         components.setMonthsSinceEpoch(value);
-    else if (type == WebCore::InputTypeNames::time)
+    else if (type == blink::InputTypeNames::time)
         components.setMillisecondsSinceMidnight(value);
-    else if (type == WebCore::InputTypeNames::week)
+    else if (type == blink::InputTypeNames::week)
         components.setMillisecondsSinceEpochForWeek(value);
     else
         ASSERT_NOT_REACHED();
-    return components.type() == WebCore::DateComponents::Invalid ? String() : components.toString();
+    return components.type() == blink::DateComponents::Invalid ? String() : components.toString();
 }
 
-void DateTimeChooserImpl::writeDocument(WebCore::SharedBuffer* data)
+void DateTimeChooserImpl::writeDocument(blink::SharedBuffer* data)
 {
     String stepString = String::number(m_parameters.step);
     String stepBaseString = String::number(m_parameters.stepBase, 11, WTF::TruncateTrailingZeros);
     IntRect anchorRectInScreen = m_chromeClient->rootViewToScreen(m_parameters.anchorRectInRootView);
     String todayLabelString;
     String otherDateLabelString;
-    if (m_parameters.type == WebCore::InputTypeNames::month) {
+    if (m_parameters.type == blink::InputTypeNames::month) {
         todayLabelString = locale().queryString(WebLocalizedString::ThisMonthButtonLabel);
         otherDateLabelString = locale().queryString(WebLocalizedString::OtherMonthLabel);
-    } else if (m_parameters.type == WebCore::InputTypeNames::week) {
+    } else if (m_parameters.type == blink::InputTypeNames::week) {
         todayLabelString = locale().queryString(WebLocalizedString::ThisWeekButtonLabel);
         otherDateLabelString = locale().queryString(WebLocalizedString::OtherWeekLabel);
     } else {
@@ -118,10 +117,10 @@ void DateTimeChooserImpl::writeDocument(WebCore::SharedBuffer* data)
     }
 
     addString("<!DOCTYPE html><head><meta charset='UTF-8'><style>\n", data);
-    data->append(pickerCommonCss, sizeof(pickerCommonCss));
-    data->append(pickerButtonCss, sizeof(pickerButtonCss));
-    data->append(suggestionPickerCss, sizeof(suggestionPickerCss));
-    data->append(calendarPickerCss, sizeof(calendarPickerCss));
+    data->append(blink::Platform::current()->loadResource("pickerCommon.css"));
+    data->append(blink::Platform::current()->loadResource("pickerButton.css"));
+    data->append(blink::Platform::current()->loadResource("suggestionPicker.css"));
+    data->append(blink::Platform::current()->loadResource("calendarPicker.css"));
     addString("</style></head><body><div id=main>Loading...</div><script>\n"
         "window.dialogArguments = {\n", data);
     addProperty("anchorRectInScreen", anchorRectInScreen, data);
@@ -154,20 +153,20 @@ void DateTimeChooserImpl::writeDocument(WebCore::SharedBuffer* data)
         addProperty("localizedSuggestionValues", localizedSuggestionValues, data);
         addProperty("suggestionLabels", suggestionLabels, data);
         addProperty("inputWidth", static_cast<unsigned>(m_parameters.anchorRectInRootView.width()), data);
-        addProperty("showOtherDateEntry", WebCore::RenderTheme::theme().supportsCalendarPicker(m_parameters.type), data);
+        addProperty("showOtherDateEntry", blink::RenderTheme::theme().supportsCalendarPicker(m_parameters.type), data);
         addProperty("otherDateLabel", otherDateLabelString, data);
-        addProperty("suggestionHighlightColor", WebCore::RenderTheme::theme().activeListBoxSelectionBackgroundColor().serialized(), data);
-        addProperty("suggestionHighlightTextColor", WebCore::RenderTheme::theme().activeListBoxSelectionForegroundColor().serialized(), data);
+        addProperty("suggestionHighlightColor", blink::RenderTheme::theme().activeListBoxSelectionBackgroundColor().serialized(), data);
+        addProperty("suggestionHighlightTextColor", blink::RenderTheme::theme().activeListBoxSelectionForegroundColor().serialized(), data);
     }
     addString("}\n", data);
 
-    data->append(pickerCommonJs, sizeof(pickerCommonJs));
-    data->append(suggestionPickerJs, sizeof(suggestionPickerJs));
-    data->append(calendarPickerJs, sizeof(calendarPickerJs));
+    data->append(blink::Platform::current()->loadResource("pickerCommon.js"));
+    data->append(blink::Platform::current()->loadResource("suggestionPicker.js"));
+    data->append(blink::Platform::current()->loadResource("calendarPicker.js"));
     addString("</script></body>\n", data);
 }
 
-WebCore::Locale& DateTimeChooserImpl::locale()
+blink::Locale& DateTimeChooserImpl::locale()
 {
     return *m_locale;
 }

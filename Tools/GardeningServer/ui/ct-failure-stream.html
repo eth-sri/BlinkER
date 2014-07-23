@@ -1,0 +1,26 @@
+<!--
+Copyright 2014 The Chromium Authors. All rights reserved.
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
+
+<link rel="import" href="ct-failure-card.html">
+
+<polymer-element name="ct-failure-stream" attributes="groups commits" noscript>
+  <template>
+    <style>
+      :host {
+        display: block;
+      }
+
+      ct-failure-card {
+        margin: 5px;
+        padding: 5px;
+        border-top: 1px solid lightgrey;
+      }
+    </style>
+    <template repeat="{{failures in groups}}">
+      <ct-failure-card failures="{{failures}}" commits="{{commits}}"></ct-failure-card>
+    </template>
+  </template>
+</polymer-element>

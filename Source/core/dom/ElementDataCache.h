@@ -35,22 +35,24 @@
 #include "wtf/Vector.h"
 #include "wtf/text/StringHash.h"
 
-namespace WebCore {
+namespace blink {
 
 class Attribute;
 class ShareableElementData;
 
-class ElementDataCache {
+class ElementDataCache FINAL : public NoBaseWillBeGarbageCollected<ElementDataCache>  {
+    DECLARE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(ElementDataCache)
 public:
-    static PassOwnPtr<ElementDataCache> create() { return adoptPtr(new ElementDataCache); }
-    ~ElementDataCache();
+    static PassOwnPtrWillBeRawPtr<ElementDataCache> create() { return adoptPtrWillBeNoop(new ElementDataCache); }
 
     PassRefPtrWillBeRawPtr<ShareableElementData> cachedShareableElementDataWithAttributes(const Vector<Attribute>&);
+
+    void trace(Visitor*);
 
 private:
     ElementDataCache();
 
-    typedef WillBePersistentHeapHashMap<unsigned, RefPtrWillBeMember<ShareableElementData>, AlreadyHashed> ShareableElementDataCache;
+    typedef WillBeHeapHashMap<unsigned, RefPtrWillBeMember<ShareableElementData>, AlreadyHashed> ShareableElementDataCache;
     ShareableElementDataCache m_shareableElementDataCache;
 };
 

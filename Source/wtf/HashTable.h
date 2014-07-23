@@ -89,34 +89,6 @@ namespace WTF {
 
 #endif
 
-    template<bool needsEphemeronHandling>
-    class HashTableQueueFlag;
-
-    template<>
-    class HashTableQueueFlag<true> {
-    public:
-        HashTableQueueFlag()
-            : m_enqueued(false)
-        {
-        }
-
-        bool enqueued() const { return m_enqueued; }
-        void setEnqueued() { m_enqueued = true; }
-        void clearEnqueued() { m_enqueued = false; }
-
-    private:
-        bool m_enqueued;
-    };
-
-    template<>
-    class HashTableQueueFlag<false> {
-    public:
-        HashTableQueueFlag() { }
-        bool enqueued() { return false; }
-        void setEnqueued() { }
-        void clearEnqueued() { }
-    };
-
     template<typename Key, typename Value, typename Extractor, typename HashFunctions, typename Traits, typename KeyTraits, typename Allocator>
     class HashTable;
     template<typename Key, typename Value, typename Extractor, typename HashFunctions, typename Traits, typename KeyTraits, typename Allocator>
@@ -152,7 +124,7 @@ namespace WTF {
         HashTableConstIterator(PointerType position, PointerType endPosition, const HashTableType* container)
             : m_position(position)
             , m_endPosition(endPosition)
-#ifdef ASSERT_ENABLED
+#if ENABLE(ASSERT)
             , m_container(container)
             , m_containerModifications(container->modifications())
 #endif
@@ -163,7 +135,7 @@ namespace WTF {
         HashTableConstIterator(PointerType position, PointerType endPosition, const HashTableType* container, HashItemKnownGoodTag)
             : m_position(position)
             , m_endPosition(endPosition)
-#ifdef ASSERT_ENABLED
+#if ENABLE(ASSERT)
             , m_container(container)
             , m_containerModifications(container->modifications())
 #endif
@@ -225,7 +197,7 @@ namespace WTF {
     private:
         PointerType m_position;
         PointerType m_endPosition;
-#ifdef ASSERT_ENABLED
+#if ENABLE(ASSERT)
         const HashTableType* m_container;
         int64_t m_containerModifications;
 #endif
@@ -300,7 +272,7 @@ namespace WTF {
         HashTableAddResult(const HashTableType* container, ValueType* storedValue, bool isNewEntry)
             : storedValue(storedValue)
             , isNewEntry(isNewEntry)
-#if SECURITY_ASSERT_ENABLED
+#if ENABLE(SECURITY_ASSERT)
             , m_container(container)
             , m_containerModifications(container->modifications())
 #endif
@@ -322,7 +294,7 @@ namespace WTF {
         ValueType* storedValue;
         bool isNewEntry;
 
-#if SECURITY_ASSERT_ENABLED
+#if ENABLE(SECURITY_ASSERT)
     private:
         const HashTableType* m_container;
         const int64_t m_containerModifications;
@@ -490,7 +462,7 @@ namespace WTF {
 
         void trace(typename Allocator::Visitor*);
 
-#ifdef ASSERT_ENABLED
+#if ENABLE(ASSERT)
         int64_t modifications() const { return m_modifications; }
         void registerModification() { m_modifications++; }
         // HashTable and collections that build on it do not support
@@ -547,15 +519,18 @@ namespace WTF {
             return mask;
         }
 
+        void setEnqueued() { m_queueFlag = true; }
+        void clearEnqueued() { m_queueFlag = false; }
+        bool enqueued() { return m_queueFlag; }
+
         ValueType* m_table;
         unsigned m_tableSize;
         unsigned m_keyCount;
-        unsigned m_deletedCount;
-#ifdef ASSERT_ENABLED
+        unsigned m_deletedCount:31;
+        bool m_queueFlag:1;
+#if ENABLE(ASSERT)
         unsigned m_modifications;
 #endif
-        static const bool needsEphemeronHandling = (ShouldBeTraced<Traits>::value && Traits::weakHandlingFlag == WeakHandlingInCollections);
-        HashTableQueueFlag<needsEphemeronHandling> m_queueFlag; // Zero size except in tables with both weak and strong pointers.
 
 #if DUMP_HASHTABLE_STATS_PER_TABLE
     public:
@@ -610,7 +585,8 @@ namespace WTF {
         , m_tableSize(0)
         , m_keyCount(0)
         , m_deletedCount(0)
-#ifdef ASSERT_ENABLED
+        , m_queueFlag(false)
+#if ENABLE(ASSERT)
         , m_modifications(0)
 #endif
 #if DUMP_HASHTABLE_STATS_PER_TABLE
@@ -1088,7 +1064,8 @@ namespace WTF {
         , m_tableSize(0)
         , m_keyCount(0)
         , m_deletedCount(0)
-#ifdef ASSERT_ENABLED
+        , m_queueFlag(false)
+#if ENABLE(ASSERT)
         , m_modifications(0)
 #endif
 #if DUMP_HASHTABLE_STATS_PER_TABLE
@@ -1108,9 +1085,14 @@ namespace WTF {
         std::swap(m_table, other.m_table);
         std::swap(m_tableSize, other.m_tableSize);
         std::swap(m_keyCount, other.m_keyCount);
-        std::swap(m_deletedCount, other.m_deletedCount);
+        // std::swap does not work for bit fields.
+        unsigned deleted = m_deletedCount;
+        m_deletedCount = other.m_deletedCount;
+        other.m_deletedCount = deleted;
+        ASSERT(!m_queueFlag);
+        ASSERT(!other.m_queueFlag);
 
-#ifdef ASSERT_ENABLED
+#if ENABLE(ASSERT)
         std::swap(m_modifications, other.m_modifications);
 #endif
 
@@ -1195,7 +1177,7 @@ namespace WTF {
             typedef HashTable<Key, Value, Extractor, HashFunctions, Traits, KeyTraits, Allocator> HashTableType;
             HashTableType* table = reinterpret_cast<HashTableType*>(closure);
             ASSERT(Allocator::weakTableRegistered(visitor, table));
-            table->m_queueFlag.clearEnqueued();
+            table->clearEnqueued();
         }
     };
 
@@ -1231,12 +1213,12 @@ namespace WTF {
                 // la Ephemerons:
                 // http://dl.acm.org/citation.cfm?doid=263698.263733 - see also
                 // http://www.jucs.org/jucs_14_21/eliminating_cycles_in_weak
-                ASSERT(!m_queueFlag.enqueued() || Allocator::weakTableRegistered(visitor, this));
-                if (!m_queueFlag.enqueued()) {
+                ASSERT(!enqueued() || Allocator::weakTableRegistered(visitor, this));
+                if (!enqueued()) {
                     Allocator::registerWeakTable(visitor, this,
                         WeakProcessingHashTableHelper<Traits::weakHandlingFlag, Key, Value, Extractor, HashFunctions, Traits, KeyTraits, Allocator>::ephemeronIteration,
                         WeakProcessingHashTableHelper<Traits::weakHandlingFlag, Key, Value, Extractor, HashFunctions, Traits, KeyTraits, Allocator>::ephemeronIterationDone);
-                    m_queueFlag.setEnqueued();
+                    setEnqueued();
                 }
                 // We don't need to trace the elements here, since registering
                 // as a weak table above will cause them to be traced (perhaps

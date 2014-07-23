@@ -9,7 +9,7 @@
 #include "wtf/RefCounted.h"
 #include "wtf/RefPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 class Document;
 class CSSPrimitiveValue;
@@ -76,6 +76,7 @@ protected:
     const String calculateMediaType(LocalFrame*) const;
     bool calculateThreeDEnabled(LocalFrame*) const;
     MediaValues::PointerDeviceType calculateLeastCapablePrimaryPointerDeviceType(LocalFrame*) const;
+    static LocalFrame* frameFrom(Document&);
 
 };
 

@@ -39,7 +39,7 @@
 #include "public/web/WebNotificationPresenter.h"
 #include "public/web/WebSecurityOrigin.h"
 
-using namespace WebCore;
+using namespace blink;
 
 namespace blink {
 
@@ -52,7 +52,16 @@ public:
     {
     }
 
-    virtual void permissionRequestComplete()
+    virtual ~NotificationPermissionCallbackClient() { }
+
+    virtual void permissionRequestComplete(WebNotificationPermission permission) OVERRIDE
+    {
+        if (m_callback)
+            m_callback->handleEvent(Notification::permissionString(static_cast<NotificationClient::Permission>(permission)));
+        delete this;
+    }
+
+    virtual void permissionRequestComplete() OVERRIDE
     {
         if (m_callback)
             m_callback->handleEvent(Notification::permissionString(static_cast<NotificationClient::Permission>(m_presenter->checkPermission(WebSecurityOrigin(m_securityOrigin)))));
@@ -60,8 +69,6 @@ public:
     }
 
 private:
-    virtual ~NotificationPermissionCallbackClient() { }
-
     WebNotificationPresenter* m_presenter;
     RefPtr<SecurityOrigin> m_securityOrigin;
     OwnPtr<NotificationPermissionCallback> m_callback;

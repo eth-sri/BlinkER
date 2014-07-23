@@ -31,16 +31,16 @@
 #include "config.h"
 #include "bindings/core/v8/V8MessageEvent.h"
 
+#include "bindings/core/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8Blob.h"
+#include "bindings/core/v8/V8HiddenValue.h"
 #include "bindings/core/v8/V8MessagePort.h"
 #include "bindings/core/v8/V8Window.h"
 #include "bindings/core/v8/custom/V8ArrayBufferCustom.h"
-#include "bindings/v8/SerializedScriptValue.h"
-#include "bindings/v8/V8Binding.h"
-#include "bindings/v8/V8HiddenValue.h"
 #include "core/events/MessageEvent.h"
 
-namespace WebCore {
+namespace blink {
 
 // Ensures a wrapper is created for the data to return now so that V8 knows how
 // much memory is used via the wrapper. To keep the wrapper alive, it's set to
@@ -161,4 +161,4 @@ void V8MessageEvent::initMessageEventMethodCustom(const v8::FunctionCallbackInfo
     }
 }
 
-} // namespace WebCore
+} // namespace blink

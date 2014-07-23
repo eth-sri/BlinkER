@@ -55,7 +55,7 @@ class WebAnimation;
 class WebLayer;
 }
 
-namespace WebCore {
+namespace blink {
 
 class FloatRect;
 class GraphicsContext;
@@ -187,9 +187,7 @@ public:
     void setBlendMode(blink::WebBlendMode);
     void setIsRootForIsolatedGroup(bool);
 
-    // Returns true if filter can be rendered by the compositor
-    bool setFilters(const FilterOperations&);
-    void setBackgroundFilters(const FilterOperations&);
+    void setFilters(const FilterOperations&);
 
     // Some GraphicsLayers paint only the foreground or the background content
     void setPaintingPhase(GraphicsLayerPaintingPhase);
@@ -274,7 +272,7 @@ private:
     // can be batched before updating.
     void addChildInternal(GraphicsLayer*);
 
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     bool hasAncestor(GraphicsLayer*) const;
 #endif
 
@@ -365,11 +363,11 @@ private:
     int m_3dRenderingContext;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #ifndef NDEBUG
 // Outside the WebCore namespace for ease of invocation from gdb.
-void PLATFORM_EXPORT showGraphicsLayerTree(const WebCore::GraphicsLayer*);
+void PLATFORM_EXPORT showGraphicsLayerTree(const blink::GraphicsLayer*);
 #endif
 
 #endif // GraphicsLayer_h

@@ -37,7 +37,7 @@
 #include "platform/heap/Handle.h"
 #include "wtf/RefPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 class DragData;
 class FileList;
@@ -66,7 +66,6 @@ private:
     virtual void setValue(const String&, bool valueChanged, TextFieldEventBehavior) OVERRIDE;
     virtual bool receiveDroppedFiles(const DragData*) OVERRIDE;
     virtual String droppedFileSystemId() OVERRIDE;
-    virtual void copyNonAttributeProperties(const HTMLInputElement&) OVERRIDE;
     virtual bool isFileUpload() const OVERRIDE;
     virtual void createShadowSubtree() OVERRIDE;
     virtual void disabledAttributeChanged() OVERRIDE;
@@ -84,6 +83,6 @@ private:
     String m_droppedFileSystemId;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // FileInputType_h

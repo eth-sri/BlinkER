@@ -31,16 +31,16 @@
 #include "config.h"
 #include "bindings/core/v8/V8XSLTProcessor.h"
 
+#include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8Document.h"
 #include "bindings/core/v8/V8DocumentFragment.h"
 #include "bindings/core/v8/V8Node.h"
-#include "bindings/v8/V8Binding.h"
 #include "core/dom/DocumentFragment.h"
 #include "core/dom/Node.h"
 #include "core/xml/XSLTProcessor.h"
 #include "wtf/RefPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 void V8XSLTProcessor::setParameterMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
@@ -83,4 +83,4 @@ void V8XSLTProcessor::removeParameterMethodCustom(const v8::FunctionCallbackInfo
     impl->removeParameter(namespaceURI, localName);
 }
 
-} // namespace WebCore
+} // namespace blink

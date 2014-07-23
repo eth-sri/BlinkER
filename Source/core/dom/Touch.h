@@ -26,7 +26,7 @@
 #ifndef Touch_h
 #define Touch_h
 
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/events/EventTarget.h"
 #include "platform/geometry/FloatPoint.h"
 #include "platform/geometry/FloatSize.h"
@@ -36,11 +36,11 @@
 #include "wtf/RefCounted.h"
 #include "wtf/RefPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 class LocalFrame;
 
-class Touch FINAL : public RefCountedWillBeGarbageCollectedFinalized<Touch>, public ScriptWrappable {
+class Touch FINAL : public RefCountedWillBeGarbageCollected<Touch>, public ScriptWrappable {
 public:
     static PassRefPtrWillBeRawPtr<Touch> create(LocalFrame* frame, EventTarget* target,
         unsigned identifier, const FloatPoint& screenPos, const FloatPoint& pagePos,
@@ -101,6 +101,6 @@ private:
     LayoutPoint m_absoluteLocation;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif /* Touch_h */

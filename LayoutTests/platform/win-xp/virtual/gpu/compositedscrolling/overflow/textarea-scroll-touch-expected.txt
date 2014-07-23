@@ -24,21 +24,25 @@
                   "drawsContent": true,
                   "children": [
                     {
-
+                      "shouldFlattenTransform": false
                     }
                   ]
                 }
               ]
             },
             {
-              "position": [190, 1],
-              "bounds": [15, 109],
-              "drawsContent": true
-            },
-            {
-              "position": [190, 110],
-              "bounds": [15, 15],
-              "drawsContent": true
+              "children": [
+                {
+                  "position": [190, 1],
+                  "bounds": [15, 109],
+                  "drawsContent": true
+                },
+                {
+                  "position": [190, 110],
+                  "bounds": [15, 15],
+                  "drawsContent": true
+                }
+              ]
             }
           ]
         },
@@ -59,21 +63,25 @@
                   "drawsContent": true,
                   "children": [
                     {
-
+                      "shouldFlattenTransform": false
                     }
                   ]
                 }
               ]
             },
             {
-              "position": [190, 1],
-              "bounds": [15, 109],
-              "drawsContent": true
-            },
-            {
-              "position": [190, 110],
-              "bounds": [15, 15],
-              "drawsContent": true
+              "children": [
+                {
+                  "position": [190, 1],
+                  "bounds": [15, 109],
+                  "drawsContent": true
+                },
+                {
+                  "position": [190, 110],
+                  "bounds": [15, 15],
+                  "drawsContent": true
+                }
+              ]
             }
           ]
         }

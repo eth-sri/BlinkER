@@ -35,7 +35,7 @@
 #include "core/dom/StyleSheetCandidate.h"
 #include "platform/RuntimeEnabledFeatures.h"
 
-namespace WebCore {
+namespace blink {
 
 DocumentStyleSheetCollection::DocumentStyleSheetCollection(TreeScope& treeScope)
     : TreeScopeStyleSheetCollection(treeScope)
@@ -110,7 +110,7 @@ void DocumentStyleSheetCollection::updateActiveStyleSheets(StyleEngine* engine, 
         styleResolver->setBuildScopedStyleTreeInDocumentOrder(false);
         if (change.styleResolverUpdateType != Additive) {
             ASSERT(change.styleResolverUpdateType == Reset);
-            resetAllRuleSetsInTreeScope(styleResolver);
+            styleResolver->resetAuthorStyle(&m_treeScope.rootNode());
             engine->removeFontFaceRules(change.fontFaceRulesToRemove);
             styleResolver->removePendingAuthorStyleSheets(m_activeAuthorStyleSheets);
             styleResolver->lazyAppendAuthorStyleSheets(0, collection.activeAuthorStyleSheets());
@@ -120,8 +120,6 @@ void DocumentStyleSheetCollection::updateActiveStyleSheets(StyleEngine* engine, 
     }
     if (change.requiresFullStyleRecalc)
         document().setNeedsStyleRecalc(SubtreeStyleChange);
-
-    m_scopingNodesForStyleScoped.didRemoveScopingNodes();
 
     collection.swap(*this);
 

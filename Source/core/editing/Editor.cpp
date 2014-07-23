@@ -27,7 +27,7 @@
 #include "config.h"
 #include "core/editing/Editor.h"
 
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/CSSPropertyNames.h"
 #include "core/EventNames.h"
 #include "core/HTMLNames.h"
@@ -68,6 +68,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
+#include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLTextAreaElement.h"
@@ -84,7 +85,7 @@
 #include "platform/weborigin/KURL.h"
 #include "wtf/unicode/CharacterNames.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 using namespace WTF;
@@ -254,7 +255,7 @@ bool Editor::canDeleteRange(Range* range) const
     if (!startContainer || !endContainer)
         return false;
 
-    if (!startContainer->rendererIsEditable() || !endContainer->rendererIsEditable())
+    if (!startContainer->hasEditableStyle() || !endContainer->hasEditableStyle())
         return false;
 
     if (range->collapsed()) {
@@ -420,20 +421,38 @@ void Editor::writeSelectionToPasteboard(Pasteboard* pasteboard, Range* selectedR
     pasteboard->writeHTML(html, url, plainText, canSmartCopyOrDelete());
 }
 
+static Image* imageFromNode(const Node& node)
+{
+    node.document().updateLayoutIgnorePendingStylesheets();
+    RenderObject* renderer = node.renderer();
+    if (!renderer)
+        return nullptr;
+
+    if (renderer->isCanvas())
+        return toHTMLCanvasElement(node).copiedImage();
+
+    if (renderer->isImage()) {
+        RenderImage* renderImage = toRenderImage(renderer);
+        if (!renderImage)
+            return nullptr;
+
+        ImageResource* cachedImage = renderImage->cachedImage();
+        if (!cachedImage || cachedImage->errorOccurred())
+            return nullptr;
+        return cachedImage->imageForRenderer(renderImage);
+    }
+
+    return nullptr;
+}
+
 static void writeImageNodeToPasteboard(Pasteboard* pasteboard, Node* node, const String& title)
 {
     ASSERT(pasteboard);
     ASSERT(node);
 
-    if (!(node->renderer() && node->renderer()->isImage()))
+    RefPtr<Image> image = imageFromNode(*node);
+    if (!image.get())
         return;
-
-    RenderImage* renderer = toRenderImage(node->renderer());
-    ImageResource* cachedImage = renderer->cachedImage();
-    if (!cachedImage || cachedImage->errorOccurred())
-        return;
-    Image* image = cachedImage->imageForRenderer(renderer);
-    ASSERT(image);
 
     // FIXME: This should probably be reconciled with HitTestResult::absoluteImageURL.
     AtomicString urlString;
@@ -441,11 +460,11 @@ static void writeImageNodeToPasteboard(Pasteboard* pasteboard, Node* node, const
         urlString = toElement(node)->getAttribute(srcAttr);
     else if (isSVGImageElement(*node))
         urlString = toElement(node)->getAttribute(XLinkNames::hrefAttr);
-    else if (isHTMLEmbedElement(*node) || isHTMLObjectElement(*node))
+    else if (isHTMLEmbedElement(*node) || isHTMLObjectElement(*node) || isHTMLCanvasElement(*node))
         urlString = toElement(node)->imageSourceURL();
     KURL url = urlString.isEmpty() ? KURL() : node->document().completeURL(stripLeadingAndTrailingHTMLSpaces(urlString));
 
-    pasteboard->writeImage(image, url, title);
+    pasteboard->writeImage(image.get(), url, title);
 }
 
 // Returns whether caller should continue with "the default processing", which is the same as
@@ -1265,4 +1284,4 @@ void Editor::trace(Visitor* visitor)
     visitor->trace(m_mark);
 }
 
-} // namespace WebCore
+} // namespace blink

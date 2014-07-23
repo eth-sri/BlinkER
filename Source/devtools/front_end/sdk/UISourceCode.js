@@ -59,7 +59,7 @@ WebInspector.UISourceCode = function(project, parentPath, name, originURL, url, 
     this._sourceMappingForTarget = new Map();
 
     /**
-     * @type {!Map.<!WebInspector.Target, !WebInspector.ScriptFile>}
+     * @type {!Map.<!WebInspector.Target, !WebInspector.ResourceScriptFile>}
      */
     this._scriptFileForTarget = new Map();
 
@@ -224,7 +224,7 @@ WebInspector.UISourceCode.prototype = {
 
     /**
      * @param {!WebInspector.Target} target
-     * @return {?WebInspector.ScriptFile}
+     * @return {?WebInspector.ResourceScriptFile}
      */
     scriptFileForTarget: function(target)
     {
@@ -233,7 +233,7 @@ WebInspector.UISourceCode.prototype = {
 
     /**
      * @param {!WebInspector.Target} target
-     * @param {?WebInspector.ScriptFile} scriptFile
+     * @param {?WebInspector.ResourceScriptFile} scriptFile
      */
     setScriptFileForTarget: function(target, scriptFile)
     {
@@ -455,11 +455,6 @@ WebInspector.UISourceCode.prototype = {
         }
 
         this.requestOriginalContent(callback.bind(this));
-
-        WebInspector.notifications.dispatchEventToListeners(WebInspector.UserMetrics.UserAction, {
-            action: WebInspector.UserMetrics.UserActionNames.ApplyOriginalContent,
-            url: this.url
-        });
     },
 
     /**
@@ -482,11 +477,6 @@ WebInspector.UISourceCode.prototype = {
         }
 
         this.requestOriginalContent(revert.bind(this));
-
-        WebInspector.notifications.dispatchEventToListeners(WebInspector.UserMetrics.UserAction, {
-            action: WebInspector.UserMetrics.UserActionNames.RevertRevision,
-            url: this.url
-        });
     },
 
     /**
@@ -551,11 +541,6 @@ WebInspector.UISourceCode.prototype = {
 
         this._commitContent(this.workingCopy(), true);
         callback(null);
-
-        WebInspector.notifications.dispatchEventToListeners(WebInspector.UserMetrics.UserAction, {
-            action: WebInspector.UserMetrics.UserActionNames.FileSaved,
-            url: this.url
-        });
     },
 
     /**
@@ -657,6 +642,21 @@ WebInspector.UISourceCode.prototype = {
                 result.push(rawLocation);
         }
         return result;
+    },
+
+    /**
+     * @param {number} lineNumber
+     * @return {boolean}
+     */
+    uiLineHasMapping: function(lineNumber)
+    {
+        var sourceMappings = this._sourceMappingForTarget.values();
+        for (var i = 0; i < sourceMappings.length; ++i) {
+            var sourceMapping = sourceMappings[i];
+            if (!sourceMappings[i].uiLineHasMapping(this, lineNumber))
+                return false;
+        }
+        return true;
     },
 
     /**
@@ -787,13 +787,6 @@ WebInspector.UILocation.prototype = {
  */
 WebInspector.RawLocation = function()
 {
-}
-
-WebInspector.RawLocation.prototype = {
-    /**
-     * @return {?WebInspector.UILocation}
-     */
-    toUILocation: function() { }
 }
 
 /**

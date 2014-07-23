@@ -60,6 +60,7 @@ GarbageCollected
 Global=|*
 Immutable
 ImplementedAs=*
+ImplementedInPrivateScript
 InitializedByEventConstructor
 LegacyTreatAsPartialInterface
 LogActivity=|GetterOnly|SetterOnly
@@ -76,7 +77,6 @@ PartialInterfaceImplementedAs=*
 PerContextEnabled=*
 PerWorldBindings
 PrimaryGlobal=|*
-PrivateScriptInterface
 PutForwards=*
 RaisesException=|Getter|Setter|Constructor
 Reflect=|*
@@ -92,10 +92,10 @@ SetWrapperReferenceFrom=*
 SetWrapperReferenceTo=*
 SetterCallWith=ExecutionContext|ScriptArguments|ActiveWindow|FirstWindow
 SpecialWrapFor=*
-TreatNullAs=NullString
+TreatNullAs=NullString|EmptyString
 TreatReturnedNullStringAs=Null|Undefined
 TreatUndefinedAs=NullString
-TypeChecking=Interface|Nullable|Unrestricted
+TypeChecking=Interface|Unrestricted
 URL
 Unforgeable
 WillBeGarbageCollected

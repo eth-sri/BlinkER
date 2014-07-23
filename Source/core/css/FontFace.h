@@ -31,7 +31,7 @@
 #ifndef FontFace_h
 #define FontFace_h
 
-#include "bindings/v8/ScriptPromise.h"
+#include "bindings/core/v8/ScriptPromise.h"
 #include "core/CSSPropertyNames.h"
 #include "core/css/CSSValue.h"
 #include "core/dom/DOMError.h"
@@ -40,7 +40,7 @@
 #include "wtf/RefCounted.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 class CSSFontFace;
 class CSSValueList;
@@ -134,6 +134,6 @@ private:
 
 typedef WillBeHeapVector<RefPtrWillBeMember<FontFace> > FontFaceArray;
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // FontFace_h

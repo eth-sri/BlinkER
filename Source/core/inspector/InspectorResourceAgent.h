@@ -31,18 +31,19 @@
 #ifndef InspectorResourceAgent_h
 #define InspectorResourceAgent_h
 
-#include "bindings/v8/ScriptString.h"
+#include "bindings/core/v8/ScriptString.h"
 #include "core/InspectorFrontend.h"
 #include "core/inspector/InspectorBaseAgent.h"
+#include "platform/Timer.h"
+#include "platform/heap/Handle.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/text/WTFString.h"
-
 
 namespace WTF {
 class String;
 }
 
-namespace WebCore {
+namespace blink {
 
 class Resource;
 struct FetchInitiatorInfo;
@@ -144,12 +145,14 @@ public:
 
     // Called from other agents.
     void setHostId(const String&);
-    bool fetchResourceContent(LocalFrame*, const KURL&, String* content, bool* base64Encoded);
+    bool fetchResourceContent(Document*, const KURL&, String* content, bool* base64Encoded);
 
 private:
     InspectorResourceAgent(InspectorPageAgent*);
 
     void enable();
+    void delayedRemoveReplayXHR(XMLHttpRequest*);
+    void removeFinishedReplayXHRFired(Timer<InspectorResourceAgent>*);
 
     InspectorPageAgent* m_pageAgent;
     InspectorFrontend::Network* m_frontend;
@@ -166,9 +169,13 @@ private:
     // FIXME: InspectorResourceAgent should now be aware of style recalculation.
     RefPtr<TypeBuilder::Network::Initiator> m_styleRecalculationInitiator;
     bool m_isRecalculatingStyle;
+
+    WillBePersistentHeapHashSet<RefPtrWillBeMember<XMLHttpRequest> > m_replayXHRs;
+    WillBePersistentHeapHashSet<RefPtrWillBeMember<XMLHttpRequest> > m_replayXHRsToBeDeleted;
+    Timer<InspectorResourceAgent> m_removeFinishedReplayXHRTimer;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 
 #endif // !defined(InspectorResourceAgent_h)

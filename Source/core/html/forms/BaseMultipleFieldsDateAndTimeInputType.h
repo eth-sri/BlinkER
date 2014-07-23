@@ -39,7 +39,7 @@
 #include "core/html/shadow/PickerIndicatorElement.h"
 #include "core/html/shadow/SpinButtonElement.h"
 
-namespace WebCore {
+namespace blink {
 
 struct DateTimeChooserParameters;
 
@@ -53,6 +53,8 @@ class BaseMultipleFieldsDateAndTimeInputType
 
 public:
     virtual bool isValidFormat(bool hasYear, bool hasMonth, bool hasWeek, bool hasDay, bool hasAMPM, bool hasHour, bool hasMinute, bool hasSecond) const = 0;
+
+    virtual void trace(Visitor* visitor) OVERRIDE { BaseDateAndTimeInputType::trace(visitor); }
 
 protected:
     BaseMultipleFieldsDateAndTimeInputType(HTMLInputElement&);
@@ -108,7 +110,6 @@ private:
     virtual void restoreFormControlState(const FormControlState&) OVERRIDE FINAL;
     virtual FormControlState saveFormControlState() const OVERRIDE FINAL;
     virtual void setValue(const String&, bool valueChanged, TextFieldEventBehavior) OVERRIDE FINAL;
-    virtual bool shouldUseInputMethod() const OVERRIDE FINAL;
     virtual void stepAttributeChanged() OVERRIDE FINAL;
     virtual void updateView() OVERRIDE FINAL;
     virtual void valueAttributeChanged() OVERRIDE;
@@ -129,7 +130,7 @@ private:
     bool m_pickerIndicatorIsAlwaysVisible;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif
 #endif // BaseMultipleFieldsDateAndTimeInputType_h

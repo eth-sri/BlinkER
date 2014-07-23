@@ -31,15 +31,15 @@
 #ifndef SVGListPropertyHelper_h
 #define SVGListPropertyHelper_h
 
-#include "bindings/v8/ExceptionMessages.h"
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionMessages.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/svg/SVGAnimationElement.h"
 #include "core/svg/properties/SVGPropertyHelper.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/Vector.h"
 
-namespace WebCore {
+namespace blink {
 
 // This is an implementation of the SVG*List property spec:
 // http://www.w3.org/TR/SVG/single-page.html#types-InterfaceSVGLengthList

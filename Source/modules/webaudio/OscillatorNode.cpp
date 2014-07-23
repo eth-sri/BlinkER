@@ -37,9 +37,7 @@
 #include "wtf/StdLibExtras.h"
 #include <algorithm>
 
-using namespace std;
-
-namespace WebCore {
+namespace blink {
 
 using namespace VectorMath;
 
@@ -75,7 +73,13 @@ OscillatorNode::OscillatorNode(AudioContext* context, float sampleRate)
 
 OscillatorNode::~OscillatorNode()
 {
+    ASSERT(!isInitialized());
+}
+
+void OscillatorNode::dispose()
+{
     uninitialize();
+    AudioScheduledSourceNode::dispose();
 }
 
 String OscillatorNode::type() const
@@ -267,7 +271,7 @@ void OscillatorNode::process(size_t framesToProcess)
     float frequency = 0;
     float* higherWaveData = 0;
     float* lowerWaveData = 0;
-    float tableInterpolationFactor;
+    float tableInterpolationFactor = 0;
 
     if (!hasSampleAccurateValues) {
         frequency = m_frequency->smoothedValue();
@@ -349,6 +353,6 @@ void OscillatorNode::trace(Visitor* visitor)
     AudioScheduledSourceNode::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // ENABLE(WEB_AUDIO)

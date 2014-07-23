@@ -61,7 +61,7 @@
 #include <algorithm>
 #include <math.h>
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -142,12 +142,7 @@ void RenderBox::styleWillChange(StyleDifference diff, const RenderStyle& newStyl
 {
     RenderStyle* oldStyle = style();
     if (oldStyle) {
-        // The background of the root element or the body element could propagate up to
-        // the canvas.  Just dirty the entire canvas when our style changes substantially.
-        if ((diff.needsRepaint() || diff.needsLayout()) && node()
-            && (isHTMLHtmlElement(*node()) || isHTMLBodyElement(*node()))) {
-            view()->paintInvalidationForWholeRenderer();
-
+        if ((diff.needsRepaint() || diff.needsLayout()) && backgroundCanBleedToCanvas()) {
             if (oldStyle->hasEntirelyFixedBackground() != newStyle.hasEntirelyFixedBackground())
                 view()->compositor()->setNeedsUpdateFixedBackground();
         }
@@ -163,10 +158,6 @@ void RenderBox::styleWillChange(StyleDifference diff, const RenderStyle& newStyl
             if (isFloating() && !isOutOfFlowPositioned() && newStyle.hasOutOfFlowPosition())
                 removeFloatingOrPositionedChildFromBlockLists();
         }
-    // FIXME: This branch runs when !oldStyle, which means that layout was never called
-    // so what's the point in invalidating the whole view that we never painted?
-    } else if (isBody()) {
-        view()->paintInvalidationForWholeRenderer();
     }
 
     RenderBoxModelObject::styleWillChange(diff, newStyle);
@@ -278,7 +269,7 @@ void RenderBox::updateFromStyle()
 
     // The root and the RenderView always paint their backgrounds/borders.
     if (isRootObject || isViewObject)
-        setHasBoxDecorations(true);
+        setHasBoxDecorationBackground(true);
 
     setFloating(!isOutOfFlowPositioned() && styleToUse->isFloating());
 
@@ -702,7 +693,7 @@ bool RenderBox::canBeProgramaticallyScrolled() const
     if (scrollsOverflow() && hasScrollableOverflow)
         return true;
 
-    return node && node->rendererIsEditable();
+    return node && node->hasEditableStyle();
 }
 
 bool RenderBox::usesCompositedScrolling() const
@@ -906,7 +897,7 @@ void RenderBox::computeIntrinsicLogicalWidths(LayoutUnit& minLogicalWidth, Layou
 LayoutUnit RenderBox::minPreferredLogicalWidth() const
 {
     if (preferredLogicalWidthsDirty()) {
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
         SetLayoutNeededForbiddenScope layoutForbiddenScope(const_cast<RenderBox&>(*this));
 #endif
         const_cast<RenderBox*>(this)->computePreferredLogicalWidths();
@@ -918,7 +909,7 @@ LayoutUnit RenderBox::minPreferredLogicalWidth() const
 LayoutUnit RenderBox::maxPreferredLogicalWidth() const
 {
     if (preferredLogicalWidthsDirty()) {
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
         SetLayoutNeededForbiddenScope layoutForbiddenScope(const_cast<RenderBox&>(*this));
 #endif
         const_cast<RenderBox*>(this)->computePreferredLogicalWidths();
@@ -1103,7 +1094,7 @@ void RenderBox::paintRootBoxFillLayers(const PaintInfo& paintInfo)
 
     RenderObject* rootBackgroundRenderer = rendererForRootBackground();
 
-    const FillLayer* bgLayer = rootBackgroundRenderer->style()->backgroundLayers();
+    const FillLayer& bgLayer = rootBackgroundRenderer->style()->backgroundLayers();
     Color bgColor = rootBackgroundRenderer->resolveColor(CSSPropertyBackgroundColor);
 
     paintFillLayers(paintInfo, bgColor, bgLayer, view()->backgroundRect(this), BackgroundBleedNone, CompositeSourceOver, rootBackgroundRenderer);
@@ -1146,17 +1137,17 @@ BackgroundBleedAvoidance RenderBox::determineBackgroundBleedAvoidance(GraphicsCo
     return BackgroundBleedClipBackground;
 }
 
-void RenderBox::paintBoxDecorations(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
+void RenderBox::paintBoxDecorationBackground(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
     if (!paintInfo.shouldPaintWithinRoot(this))
         return;
 
     LayoutRect paintRect = borderBoxRect();
     paintRect.moveBy(paintOffset);
-    paintBoxDecorationsWithRect(paintInfo, paintOffset, paintRect);
+    paintBoxDecorationBackgroundWithRect(paintInfo, paintOffset, paintRect);
 }
 
-void RenderBox::paintBoxDecorationsWithRect(PaintInfo& paintInfo, const LayoutPoint& paintOffset, const LayoutRect& paintRect)
+void RenderBox::paintBoxDecorationBackgroundWithRect(PaintInfo& paintInfo, const LayoutPoint& paintOffset, const LayoutRect& paintRect)
 {
     BackgroundBleedAvoidance bleedAvoidance = determineBackgroundBleedAvoidance(paintInfo.context);
 
@@ -1172,11 +1163,6 @@ void RenderBox::paintBoxDecorationsWithRect(PaintInfo& paintInfo, const LayoutPo
         paintInfo.context->clipRoundedRect(border);
     }
 
-    paintBackgroundWithBorderAndBoxShadow(paintInfo, paintRect, bleedAvoidance);
-}
-
-void RenderBox::paintBackgroundWithBorderAndBoxShadow(PaintInfo& paintInfo, const LayoutRect& paintRect, BackgroundBleedAvoidance bleedAvoidance)
-{
     // If we have a native theme appearance, paint that before painting our background.
     // The theme will tell us whether or not we should also paint the CSS background.
     IntRect snappedPaintRect(pixelSnappedIntRect(paintRect));
@@ -1205,7 +1191,7 @@ void RenderBox::paintBackground(const PaintInfo& paintInfo, const LayoutRect& pa
     }
     if (isBody() && skipBodyBackground(this))
         return;
-    if (backgroundIsKnownToBeObscured())
+    if (boxDecorationBackgroundIsKnownToBeObscured())
         return;
     paintFillLayers(paintInfo, resolveColor(CSSPropertyBackgroundColor), style()->backgroundLayers(), paintRect, bleedAvoidance);
 }
@@ -1221,7 +1207,7 @@ bool RenderBox::getBackgroundPaintedExtent(LayoutRect& paintedExtent) const
         return true;
     }
 
-    if (!style()->backgroundLayers()->image() || style()->backgroundLayers()->next()) {
+    if (!style()->backgroundLayers().image() || style()->backgroundLayers().next()) {
         paintedExtent =  backgroundRect;
         return true;
     }
@@ -1255,7 +1241,7 @@ bool RenderBox::backgroundIsKnownToBeOpaqueInRect(const LayoutRect& localRect) c
     if (style()->hasBorderRadius())
         return false;
     // FIXME: The background color clip is defined by the last layer.
-    if (style()->backgroundLayers()->next())
+    if (style()->backgroundLayers().next())
         return false;
     LayoutRect backgroundRect;
     switch (style()->backgroundClip()) {
@@ -1349,19 +1335,19 @@ bool RenderBox::computeBackgroundIsKnownToBeObscured()
 
 bool RenderBox::backgroundHasOpaqueTopLayer() const
 {
-    const FillLayer* fillLayer = style()->backgroundLayers();
-    if (!fillLayer || fillLayer->clip() != BorderFillBox)
+    const FillLayer& fillLayer = style()->backgroundLayers();
+    if (fillLayer.clip() != BorderFillBox)
         return false;
 
     // Clipped with local scrolling
-    if (hasOverflowClip() && fillLayer->attachment() == LocalBackgroundAttachment)
+    if (hasOverflowClip() && fillLayer.attachment() == LocalBackgroundAttachment)
         return false;
 
-    if (fillLayer->hasOpaqueImage(this) && fillLayer->hasRepeatXY() && fillLayer->image()->canRender(*this, style()->effectiveZoom()))
+    if (fillLayer.hasOpaqueImage(this) && fillLayer.hasRepeatXY() && fillLayer.image()->canRender(*this, style()->effectiveZoom()))
         return true;
 
     // If there is only one layer and no image, check whether the background color is opaque
-    if (!fillLayer->next() && !fillLayer->hasImage()) {
+    if (!fillLayer.next() && !fillLayer.hasImage()) {
         Color bgColor = resolveColor(CSSPropertyBackgroundColor);
         if (bgColor.alpha() == 255)
             return true;
@@ -1408,14 +1394,13 @@ void RenderBox::paintMaskImages(const PaintInfo& paintInfo, const LayoutRect& pa
     if (!compositedMask || flattenCompositingLayers) {
         pushTransparencyLayer = true;
         StyleImage* maskBoxImage = style()->maskBoxImage().image();
-        const FillLayer* maskLayers = style()->maskLayers();
+        const FillLayer& maskLayers = style()->maskLayers();
 
         // Don't render a masked element until all the mask images have loaded, to prevent a flash of unmasked content.
         if (maskBoxImage)
             allMaskImagesLoaded &= maskBoxImage->isLoaded();
 
-        if (maskLayers)
-            allMaskImagesLoaded &= maskLayers->imagesAreLoaded();
+        allMaskImagesLoaded &= maskLayers.imagesAreLoaded();
 
         paintInfo.context->setCompositeOperation(CompositeDestinationIn);
         paintInfo.context->beginTransparencyLayer(1);
@@ -1431,11 +1416,11 @@ void RenderBox::paintMaskImages(const PaintInfo& paintInfo, const LayoutRect& pa
         paintInfo.context->endLayer();
 }
 
-void RenderBox::paintFillLayers(const PaintInfo& paintInfo, const Color& c, const FillLayer* fillLayer, const LayoutRect& rect,
+void RenderBox::paintFillLayers(const PaintInfo& paintInfo, const Color& c, const FillLayer& fillLayer, const LayoutRect& rect,
     BackgroundBleedAvoidance bleedAvoidance, CompositeOperator op, RenderObject* backgroundObject)
 {
     Vector<const FillLayer*, 8> layers;
-    const FillLayer* curLayer = fillLayer;
+    const FillLayer* curLayer = &fillLayer;
     bool shouldDrawBackgroundInSeparateBuffer = false;
     while (curLayer) {
         layers.append(curLayer);
@@ -1451,7 +1436,7 @@ void RenderBox::paintFillLayers(const PaintInfo& paintInfo, const Color& c, cons
             shouldDrawBackgroundInSeparateBuffer = true;
 
         // The clipOccludesNextLayers condition must be evaluated first to avoid short-circuiting.
-        if (curLayer->clipOccludesNextLayers(curLayer == fillLayer) && curLayer->hasOpaqueImage(this) && curLayer->image()->canRender(*this, style()->effectiveZoom()) && curLayer->hasRepeatXY() && curLayer->blendMode() == blink::WebBlendModeNormal && !boxShadowShouldBeAppliedToBackground(bleedAvoidance))
+        if (curLayer->clipOccludesNextLayers(curLayer == &fillLayer) && curLayer->hasOpaqueImage(this) && curLayer->image()->canRender(*this, style()->effectiveZoom()) && curLayer->hasRepeatXY() && curLayer->blendMode() == blink::WebBlendModeNormal && !boxShadowShouldBeAppliedToBackground(bleedAvoidance))
             break;
         curLayer = curLayer->next();
     }
@@ -1464,13 +1449,13 @@ void RenderBox::paintFillLayers(const PaintInfo& paintInfo, const Color& c, cons
 
     Vector<const FillLayer*>::const_reverse_iterator topLayer = layers.rend();
     for (Vector<const FillLayer*>::const_reverse_iterator it = layers.rbegin(); it != topLayer; ++it)
-        paintFillLayer(paintInfo, c, *it, rect, bleedAvoidance, op, backgroundObject);
+        paintFillLayer(paintInfo, c, **it, rect, bleedAvoidance, op, backgroundObject);
 
     if (shouldDrawBackgroundInSeparateBuffer)
         context->endLayer();
 }
 
-void RenderBox::paintFillLayer(const PaintInfo& paintInfo, const Color& c, const FillLayer* fillLayer, const LayoutRect& rect,
+void RenderBox::paintFillLayer(const PaintInfo& paintInfo, const Color& c, const FillLayer& fillLayer, const LayoutRect& rect,
     BackgroundBleedAvoidance bleedAvoidance, CompositeOperator op, RenderObject* backgroundObject)
 {
     paintFillLayerExtended(paintInfo, c, fillLayer, rect, bleedAvoidance, 0, LayoutSize(), op, backgroundObject);
@@ -1500,12 +1485,12 @@ void RenderBox::imageChanged(WrappedImagePtr image, const IntRect*)
         repaintLayerRectsForImage(image, style()->maskLayers(), false);
 }
 
-bool RenderBox::repaintLayerRectsForImage(WrappedImagePtr image, const FillLayer* layers, bool drawingBackground)
+bool RenderBox::repaintLayerRectsForImage(WrappedImagePtr image, const FillLayer& layers, bool drawingBackground)
 {
     LayoutRect rendererRect;
     RenderBox* layerRenderer = 0;
 
-    for (const FillLayer* curLayer = layers; curLayer; curLayer = curLayer->next()) {
+    for (const FillLayer* curLayer = &layers; curLayer; curLayer = curLayer->next()) {
         if (curLayer->image() && image == curLayer->image()->data() && curLayer->image()->canRender(*this, style()->effectiveZoom())) {
             // Now that we know this image is being used, compute the renderer and the rect if we haven't already.
             if (!layerRenderer) {
@@ -1534,7 +1519,7 @@ bool RenderBox::repaintLayerRectsForImage(WrappedImagePtr image, const FillLayer
             }
 
             BackgroundImageGeometry geometry;
-            layerRenderer->calculateBackgroundImageGeometry(0, curLayer, rendererRect, geometry);
+            layerRenderer->calculateBackgroundImageGeometry(0, *curLayer, rendererRect, geometry);
             if (geometry.hasNonLocalGeometry()) {
                 // Rather than incur the costs of computing the paintContainer for renderers with fixed backgrounds
                 // in order to get the right destRect, just repaint the entire renderer.
@@ -1550,7 +1535,7 @@ bool RenderBox::repaintLayerRectsForImage(WrappedImagePtr image, const FillLayer
     return false;
 }
 
-void RenderBox::invalidateTreeAfterLayout(const RenderLayerModelObject& paintInvalidationContainer)
+void RenderBox::invalidateTreeIfNeeded(const PaintInvalidationState& paintInvalidationState)
 {
     // FIXME: Currently only using this logic for RenderBox and its ilk. Ideally, RenderBlockFlows with
     // inline children should track a dirty rect in local coordinates for dirty lines instead of invalidating
@@ -1560,36 +1545,44 @@ void RenderBox::invalidateTreeAfterLayout(const RenderLayerModelObject& paintInv
     // FIXME: SVG should probably also go through this unified paint invalidation system.
     ASSERT(!needsLayout());
 
-    if (!shouldCheckForPaintInvalidationAfterLayout())
+    if (!shouldCheckForPaintInvalidation())
         return;
 
     bool establishesNewPaintInvalidationContainer = isPaintInvalidationContainer();
-    const RenderLayerModelObject& newPaintInvalidationContainer = *adjustCompositedContainerForSpecialAncestors(establishesNewPaintInvalidationContainer ? this : &paintInvalidationContainer);
+    const RenderLayerModelObject& newPaintInvalidationContainer = *adjustCompositedContainerForSpecialAncestors(establishesNewPaintInvalidationContainer ? this : &paintInvalidationState.paintInvalidationContainer());
     // FIXME: This assert should be re-enabled when we move paint invalidation to after compositing update. crbug.com/360286
     // ASSERT(&newPaintInvalidationContainer == containerForPaintInvalidation());
 
+    invalidatePaintIfNeeded(paintInvalidationState, newPaintInvalidationContainer);
+
+    // This is for the next invalidatePaintIfNeeded so must be after invalidatePaintIfNeeded.
+    savePreviousBorderBoxSizeIfNeeded();
+
+    PaintInvalidationState childTreeWalkState(paintInvalidationState, *this, newPaintInvalidationContainer);
+    RenderObject::invalidateTreeIfNeeded(childTreeWalkState);
+}
+
+void RenderBox::invalidatePaintIfNeeded(const PaintInvalidationState& paintInvalidationState, const RenderLayerModelObject& newPaintInvalidationContainer)
+{
     const LayoutRect oldPaintInvalidationRect = previousPaintInvalidationRect();
     const LayoutPoint oldPositionFromPaintInvalidationContainer = previousPositionFromPaintInvalidationContainer();
-    setPreviousPaintInvalidationRect(boundsRectForPaintInvalidation(&newPaintInvalidationContainer));
-    setPreviousPositionFromPaintInvalidationContainer(RenderLayer::positionFromPaintInvalidationContainer(this, &newPaintInvalidationContainer));
+    setPreviousPaintInvalidationRect(boundsRectForPaintInvalidation(&newPaintInvalidationContainer, &paintInvalidationState));
+    setPreviousPositionFromPaintInvalidationContainer(RenderLayer::positionFromPaintInvalidationContainer(this, &newPaintInvalidationContainer, &paintInvalidationState));
 
     // If we are set to do a full paint invalidation that means the RenderView will be
     // issue paint invalidations. We can then skip issuing of paint invalidations for the child
     // renderers as they'll be covered by the RenderView.
-    if (view()->doingFullRepaint()) {
-        LayoutState state(*this, isTableRow() ? LayoutSize() : locationOffset());
-        RenderObject::invalidateTreeAfterLayout(newPaintInvalidationContainer);
+    if (view()->doingFullRepaint())
         return;
-    }
 
     if ((onlyNeededPositionedMovementLayout() && compositingState() != PaintsIntoOwnBacking)
         || (shouldDoFullPaintInvalidationIfSelfPaintingLayer()
             && hasLayer()
             && layer()->isSelfPaintingLayer())) {
-        setShouldDoFullPaintInvalidationAfterLayout(true);
+        setShouldDoFullPaintInvalidation(true);
     }
 
-    if (!invalidatePaintIfNeeded(&newPaintInvalidationContainer, oldPaintInvalidationRect, oldPositionFromPaintInvalidationContainer))
+    if (!RenderObject::invalidatePaintIfNeeded(newPaintInvalidationContainer, oldPaintInvalidationRect, oldPositionFromPaintInvalidationContainer, paintInvalidationState))
         invalidatePaintForOverflowIfNeeded();
 
     // Issue paint invalidations for any scrollbars if there is a scrollable area for this renderer.
@@ -1601,18 +1594,6 @@ void RenderBox::invalidateTreeAfterLayout(const RenderLayerModelObject& paintInv
                 invalidatePaintRectangle(area->horizontalBarDamage());
             area->resetScrollbarDamage();
         }
-    }
-
-    // FIXME: LayoutState should be enabled for other paint invalidation containers than the RenderView. crbug.com/363834
-    if (establishesNewPaintInvalidationContainer && !isRenderView()) {
-        ForceHorriblySlowRectMapping slowRectMapping(*this);
-        RenderObject::invalidateTreeAfterLayout(newPaintInvalidationContainer);
-    } else {
-        // FIXME: This concept of a tree walking state for fast lookups should be generalized away from
-        // just layout.
-        // FIXME: Table rows shouldn't be special-cased.
-        LayoutState state(*this, isTableRow() ? LayoutSize() : locationOffset());
-        RenderObject::invalidateTreeAfterLayout(newPaintInvalidationContainer);
     }
 }
 
@@ -1794,20 +1775,17 @@ LayoutUnit RenderBox::perpendicularContainingBlockLogicalHeight() const
     return cb->adjustContentBoxLogicalHeightForBoxSizing(logicalHeightLength.value());
 }
 
-void RenderBox::mapLocalToContainer(const RenderLayerModelObject* repaintContainer, TransformState& transformState, MapCoordinatesFlags mode, bool* wasFixed) const
+void RenderBox::mapLocalToContainer(const RenderLayerModelObject* repaintContainer, TransformState& transformState, MapCoordinatesFlags mode, bool* wasFixed, const PaintInvalidationState* paintInvalidationState) const
 {
     if (repaintContainer == this)
         return;
 
-    if (RenderView* v = view()) {
-        if (v->canMapUsingLayoutStateForContainer(repaintContainer)) {
-            LayoutState* layoutState = v->layoutState();
-            LayoutSize offset = layoutState->paintOffset() + locationOffset();
-            if (style()->hasInFlowPosition() && layer())
-                offset += layer()->offsetForInFlowPosition();
-            transformState.move(offset);
-            return;
-        }
+    if (paintInvalidationState && paintInvalidationState->canMapToContainer(repaintContainer)) {
+        LayoutSize offset = paintInvalidationState->paintOffset() + locationOffset();
+        if (style()->hasInFlowPosition() && layer())
+            offset += layer()->offsetForInFlowPosition();
+        transformState.move(offset);
+        return;
     }
 
     bool containerSkipped;
@@ -1852,9 +1830,6 @@ void RenderBox::mapLocalToContainer(const RenderLayerModelObject* repaintContain
 
 void RenderBox::mapAbsoluteToLocalPoint(MapCoordinatesFlags mode, TransformState& transformState) const
 {
-    // We don't expect to be called during layout.
-    ASSERT(!view() || !view()->layoutStateCachedOffsetsEnabled());
-
     bool isFixedPos = style()->position() == FixedPosition;
     bool hasTransform = hasLayer() && layer()->transform();
     if (hasTransform && !isFixedPos) {
@@ -1872,7 +1847,7 @@ LayoutSize RenderBox::offsetFromContainer(const RenderObject* o, const LayoutPoi
     ASSERT(o == container());
 
     LayoutSize offset;
-    if (isInFlowPositioned())
+    if (isRelPositioned())
         offset += offsetForInFlowPosition();
 
     if (!isInline() || isReplaced()) {
@@ -1905,7 +1880,7 @@ LayoutSize RenderBox::offsetFromContainer(const RenderObject* o, const LayoutPoi
     if (o->hasOverflowClip())
         offset -= toRenderBox(o)->scrolledContentOffset();
 
-    if (style()->position() == AbsolutePosition && o->isInFlowPositioned() && o->isRenderInline())
+    if (style()->position() == AbsolutePosition && o->isRelPositioned() && o->isRenderInline())
         offset += toRenderInline(o)->offsetForInFlowPositionedInline(*this);
 
     return offset;
@@ -1939,7 +1914,7 @@ void RenderBox::positionLineBox(InlineBox* box)
             // our object was inline originally, since otherwise it would have ended up underneath
             // the inlines.
             RootInlineBox& root = box->root();
-            root.block().setStaticInlinePositionForChild(this, root.lineTopWithLeading(), LayoutUnit::fromFloatRound(box->logicalLeft()));
+            root.block().setStaticInlinePositionForChild(this, LayoutUnit::fromFloatRound(box->logicalLeft()));
             if (style()->hasStaticInlinePosition(box->isHorizontal()))
                 setChildNeedsLayout(MarkOnlyThis); // Just go ahead and mark the positioned object as needing layout, so it will update its position properly.
         } else {
@@ -1972,17 +1947,24 @@ void RenderBox::deleteLineBoxWrapper()
     }
 }
 
-LayoutRect RenderBox::clippedOverflowRectForPaintInvalidation(const RenderLayerModelObject* paintInvalidationContainer) const
+LayoutRect RenderBox::clippedOverflowRectForPaintInvalidation(const RenderLayerModelObject* paintInvalidationContainer, const PaintInvalidationState* paintInvalidationState) const
 {
     if (style()->visibility() != VISIBLE && enclosingLayer()->subtreeIsInvisible())
         return LayoutRect();
 
+    // If we have a background that could bleed into the canvas, just return
+    // the viewport's rectangle. This works as only body and the document
+    // element's renderer can bleed into the viewport so we are guaranteed
+    // to be in the RenderView's coordinate space.
+    if (style()->hasBackground() && backgroundCanBleedToCanvas())
+        return view()->viewRect();
+
     LayoutRect r = visualOverflowRect();
-    mapRectToPaintInvalidationBacking(paintInvalidationContainer, r);
+    mapRectToPaintInvalidationBacking(paintInvalidationContainer, r, false /*fixed*/, paintInvalidationState);
     return r;
 }
 
-void RenderBox::mapRectToPaintInvalidationBacking(const RenderLayerModelObject* paintInvalidationContainer, LayoutRect& rect, bool fixed) const
+void RenderBox::mapRectToPaintInvalidationBacking(const RenderLayerModelObject* paintInvalidationContainer, LayoutRect& rect, bool fixed, const PaintInvalidationState* paintInvalidationState) const
 {
     // The rect we compute at each step is shifted by our x/y offset in the parent container's coordinate space.
     // Only when we cross a writing mode boundary will we have to possibly flipForWritingMode (to convert into a more appropriate
@@ -1993,24 +1975,20 @@ void RenderBox::mapRectToPaintInvalidationBacking(const RenderLayerModelObject* 
     // physical when we hit a paintInvalidationContainer boundary. Therefore the final rect returned is always in the
     // physical coordinate space of the paintInvalidationContainer.
     RenderStyle* styleToUse = style();
-    if (RenderView* v = view()) {
-        // LayoutState is only valid for root-relative, non-fixed position repainting
-        if (v->canMapUsingLayoutStateForContainer(paintInvalidationContainer) && styleToUse->position() != FixedPosition) {
-            LayoutState* layoutState = v->layoutState();
 
-            if (layer() && layer()->transform())
-                rect = layer()->transform()->mapRect(pixelSnappedIntRect(rect));
+    if (paintInvalidationState && paintInvalidationState->canMapToContainer(paintInvalidationContainer) && styleToUse->position() != FixedPosition) {
+        if (layer() && layer()->transform())
+            rect = layer()->transform()->mapRect(pixelSnappedIntRect(rect));
 
-            // We can't trust the bits on RenderObject, because this might be called while re-resolving style.
-            if (styleToUse->hasInFlowPosition() && layer())
-                rect.move(layer()->offsetForInFlowPosition());
+        // We can't trust the bits on RenderObject, because this might be called while re-resolving style.
+        if (styleToUse->hasInFlowPosition() && layer())
+            rect.move(layer()->offsetForInFlowPosition());
 
-            rect.moveBy(location());
-            rect.move(layoutState->paintOffset());
-            if (layoutState->isClipped())
-                rect.intersect(layoutState->clipRect());
-            return;
-        }
+        rect.moveBy(location());
+        rect.move(paintInvalidationState->paintOffset());
+        if (paintInvalidationState->isClipped())
+            rect.intersect(paintInvalidationState->clipRect());
+        return;
     }
 
     if (hasReflection())
@@ -2027,7 +2005,7 @@ void RenderBox::mapRectToPaintInvalidationBacking(const RenderLayerModelObject* 
     if (!o)
         return;
 
-    if (isWritingModeRoot() && !isOutOfFlowPositioned())
+    if (isWritingModeRoot())
         flipForWritingMode(rect);
 
     LayoutPoint topLeft = rect.location();
@@ -2045,7 +2023,7 @@ void RenderBox::mapRectToPaintInvalidationBacking(const RenderLayerModelObject* 
     } else if (position == FixedPosition)
         fixed = true;
 
-    if (position == AbsolutePosition && o->isInFlowPositioned() && o->isRenderInline()) {
+    if (position == AbsolutePosition && o->isRelPositioned() && o->isRenderInline()) {
         topLeft += toRenderInline(o)->offsetForInFlowPositionedInline(*this);
     } else if (styleToUse->hasInFlowPosition() && layer()) {
         // Apply the relative position offset when invalidating a rectangle.  The layer
@@ -2079,7 +2057,7 @@ void RenderBox::mapRectToPaintInvalidationBacking(const RenderLayerModelObject* 
         return;
     }
 
-    o->mapRectToPaintInvalidationBacking(paintInvalidationContainer, rect, fixed);
+    o->mapRectToPaintInvalidationBacking(paintInvalidationContainer, rect, fixed, paintInvalidationState);
 }
 
 void RenderBox::invalidatePaintForOverhangingFloats(bool)
@@ -2099,7 +2077,7 @@ void RenderBox::updateLogicalWidth()
 
 static float getMaxWidthListMarker(const RenderBox* renderer)
 {
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     ASSERT(renderer);
     Node* parentNode = renderer->generatingNode();
     ASSERT(parentNode);
@@ -2684,6 +2662,9 @@ LayoutUnit RenderBox::computePercentageLogicalHeight(const Length& height) const
 
     availableHeight -= rootMarginBorderPaddingHeight;
 
+    if (isTable() && isOutOfFlowPositioned())
+        availableHeight += cb->paddingLogicalHeight();
+
     LayoutUnit result = valueForLength(height, availableHeight);
     if (includeBorderPadding) {
         // FIXME: Table cells should default to box-sizing: border-box so we can avoid this hack.
@@ -2756,10 +2737,37 @@ LayoutUnit RenderBox::computeReplacedLogicalHeight() const
     return computeReplacedLogicalHeightRespectingMinMaxHeight(computeReplacedLogicalHeightUsing(style()->logicalHeight()));
 }
 
+bool RenderBox::logicalHeightComputesAsNone(SizeType sizeType) const
+{
+    ASSERT(sizeType == MinSize || sizeType == MaxSize);
+    Length logicalHeight = sizeType == MinSize ? style()->logicalMinHeight() : style()->logicalMaxHeight();
+    Length initialLogicalHeight = sizeType == MinSize ? RenderStyle::initialMinSize() : RenderStyle::initialMaxSize();
+
+    if (logicalHeight == initialLogicalHeight)
+        return true;
+
+    if (!logicalHeight.isPercent() || isOutOfFlowPositioned())
+        return false;
+
+    // Anonymous block boxes are ignored when resolving percentage values that would refer to it:
+    // the closest non-anonymous ancestor box is used instead.
+    RenderBlock* containingBlock = this->containingBlock();
+    while (containingBlock->isAnonymous())
+        containingBlock = containingBlock->containingBlock();
+
+    return containingBlock->hasAutoHeightOrContainingBlockWithAutoHeight();
+}
+
 LayoutUnit RenderBox::computeReplacedLogicalHeightRespectingMinMaxHeight(LayoutUnit logicalHeight) const
 {
-    LayoutUnit minLogicalHeight = computeReplacedLogicalHeightUsing(style()->logicalMinHeight());
-    LayoutUnit maxLogicalHeight = style()->logicalMaxHeight().isUndefined() ? logicalHeight : computeReplacedLogicalHeightUsing(style()->logicalMaxHeight());
+    // If the height of the containing block is not specified explicitly (i.e., it depends on content height), and this element is not absolutely positioned,
+    // the percentage value is treated as '0' (for 'min-height') or 'none' (for 'max-height').
+    LayoutUnit minLogicalHeight;
+    if (!logicalHeightComputesAsNone(MinSize))
+        minLogicalHeight = computeReplacedLogicalHeightUsing(style()->logicalMinHeight());
+    LayoutUnit maxLogicalHeight = logicalHeight;
+    if (!logicalHeightComputesAsNone(MaxSize))
+        maxLogicalHeight =  computeReplacedLogicalHeightUsing(style()->logicalMaxHeight());
     return std::max(minLogicalHeight, std::min(logicalHeight, maxLogicalHeight));
 }
 
@@ -2827,7 +2835,8 @@ LayoutUnit RenderBox::computeReplacedLogicalHeightUsing(const Length& logicalHei
 
 LayoutUnit RenderBox::availableLogicalHeight(AvailableLogicalHeightType heightType) const
 {
-    return constrainLogicalHeightByMinMax(availableLogicalHeightUsing(style()->logicalHeight(), heightType), -1);
+    // http://www.w3.org/TR/CSS2/visudet.html#propdef-height - We are interested in the content height.
+    return constrainContentBoxLogicalHeightByMinMax(availableLogicalHeightUsing(style()->logicalHeight(), heightType), -1);
 }
 
 LayoutUnit RenderBox::availableLogicalHeightUsing(const Length& h, AvailableLogicalHeightType heightType) const
@@ -2903,7 +2912,7 @@ LayoutUnit RenderBox::containingBlockLogicalWidthForPositioned(const RenderBoxMo
     if (containingBlock->isBox())
         return toRenderBox(containingBlock)->clientLogicalWidth();
 
-    ASSERT(containingBlock->isRenderInline() && containingBlock->isInFlowPositioned());
+    ASSERT(containingBlock->isRenderInline() && containingBlock->isRelPositioned());
 
     const RenderInline* flow = toRenderInline(containingBlock);
     InlineFlowBox* first = flow->firstLineBox();
@@ -2946,7 +2955,7 @@ LayoutUnit RenderBox::containingBlockLogicalHeightForPositioned(const RenderBoxM
         return cb->clientLogicalHeight();
     }
 
-    ASSERT(containingBlock->isRenderInline() && containingBlock->isInFlowPositioned());
+    ASSERT(containingBlock->isRenderInline() && containingBlock->isRelPositioned());
 
     const RenderInline* flow = toRenderInline(containingBlock);
     InlineFlowBox* first = flow->firstLineBox();
@@ -4036,88 +4045,53 @@ bool RenderBox::shrinkToAvoidFloats() const
     return style()->width().isAuto();
 }
 
-bool RenderBox::avoidsFloats() const
+static bool isReplacedElement(Node* node)
 {
-    return isReplaced() || hasOverflowClip() || isHR() || isLegend() || isWritingModeRoot() || isFlexItemIncludingDeprecated();
+    // Checkboxes and radioboxes are not isReplaced() nor do they have their own renderer in which to override avoidFloats().
+    return node && node->isElementNode() && toElement(node)->isFormControlElement();
 }
 
-InvalidationReason RenderBox::getPaintInvalidationReason(const RenderLayerModelObject* paintInvalidationContainer,
+bool RenderBox::avoidsFloats() const
+{
+    return isReplaced() || isReplacedElement(node()) || hasOverflowClip() || isHR() || isLegend() || isWritingModeRoot() || isFlexItemIncludingDeprecated();
+}
+
+InvalidationReason RenderBox::getPaintInvalidationReason(const RenderLayerModelObject& paintInvalidationContainer,
     const LayoutRect& oldBounds, const LayoutPoint& oldLocation, const LayoutRect& newBounds, const LayoutPoint& newLocation)
 {
     InvalidationReason invalidationReason = RenderBoxModelObject::getPaintInvalidationReason(paintInvalidationContainer, oldBounds, oldLocation, newBounds, newLocation);
     if (invalidationReason != InvalidationNone && invalidationReason != InvalidationIncremental)
         return invalidationReason;
 
-    // FIXME: The following checks should use old and new border box rects instead of old and new bounds.
+    if (!style()->hasBackground() && !style()->hasBoxDecorations())
+        return invalidationReason;
 
-    if (style()->hasBorderRadius()) {
-        // If a border-radius exists and width/height is smaller than
-        // radius width/height, we cannot use delta-paint-invalidation.
-        RoundedRect oldRoundedRect = style()->getRoundedBorderFor(oldBounds);
-        RoundedRect newRoundedRect = style()->getRoundedBorderFor(newBounds);
-        if (oldRoundedRect.radii() != newRoundedRect.radii())
-            return InvalidationBorderRadius;
+    LayoutSize oldBorderBoxSize;
+    if (m_rareData && m_rareData->m_previousBorderBoxSize.width() != -1) {
+        oldBorderBoxSize = m_rareData->m_previousBorderBoxSize;
+    } else {
+        // We didn't save the old border box size because it was the same as the size of oldBounds.
+        oldBorderBoxSize = oldBounds.size();
     }
 
-    if (oldBounds.width() != newBounds.width() && mustInvalidateBackgroundOrBorderPaintOnWidthChange())
-        return InvalidationBoundsChangeWithBackground;
-    if (oldBounds.height() != newBounds.height() && mustInvalidateBackgroundOrBorderPaintOnHeightChange())
-        return InvalidationBoundsChangeWithBackground;
+    LayoutSize newBorderBoxSize = size();
 
-    return invalidationReason;
-}
+    if (oldBorderBoxSize == newBorderBoxSize)
+        return invalidationReason;
 
-void RenderBox::incrementallyInvalidatePaint(const RenderLayerModelObject* paintInvalidationContainer, const LayoutRect& oldBounds, const LayoutRect& newBounds)
-{
-    RenderBoxModelObject::incrementallyInvalidatePaint(paintInvalidationContainer, oldBounds, newBounds);
+    if (oldBorderBoxSize.width() != newBorderBoxSize.width() && mustInvalidateBackgroundOrBorderPaintOnWidthChange())
+        return InvalidationBorderBoxChange;
+    if (oldBorderBoxSize.height() != newBorderBoxSize.height() && mustInvalidateBackgroundOrBorderPaintOnHeightChange())
+        return InvalidationBorderBoxChange;
 
-    if (!style()->hasBorder() && !style()->boxShadow() && !style()->hasBorderImageOutsets() && !style()->hasOutline())
-        return;
+    // If size of repaint rect equals to size of border box, RenderObject::incrementallyInvalidatePaint()
+    // is good for boxes having background without box decorations.
+    if (oldBorderBoxSize == oldBounds.size() && newBorderBoxSize == newBounds.size() && !style()->hasBoxDecorations())
+        return invalidationReason;
 
-    RenderStyle* outlineStyle = outlineStyleForPaintInvalidation();
-    LayoutUnit outlineWidth = outlineStyle->outlineSize();
-    LayoutBoxExtent insetShadowExtent = style()->getBoxShadowInsetExtent();
-    LayoutUnit deltaWidth = absoluteValue(newBounds.width() - oldBounds.width());
-    if (deltaWidth) {
-        LayoutUnit shadowLeft;
-        LayoutUnit shadowRight;
-        style()->getBoxShadowHorizontalExtent(shadowLeft, shadowRight);
-        LayoutUnit boxWidth = width();
-        LayoutUnit minInsetRightShadowExtent = std::min<LayoutUnit>(-insetShadowExtent.right(), std::min<LayoutUnit>(newBounds.width(), oldBounds.width()));
-        LayoutUnit borderWidth = std::max<LayoutUnit>(borderRight(), std::max<LayoutUnit>(valueForLength(style()->borderTopRightRadius().width(), boxWidth), valueForLength(style()->borderBottomRightRadius().width(), boxWidth)));
-        LayoutUnit decorationsLeftWidth = std::max<LayoutUnit>(-outlineStyle->outlineOffset(), borderWidth + minInsetRightShadowExtent) + std::max<LayoutUnit>(outlineWidth, -shadowLeft);
-        LayoutUnit decorationsRightWidth = std::max<LayoutUnit>(-outlineStyle->outlineOffset(), borderWidth + minInsetRightShadowExtent) + std::max<LayoutUnit>(outlineWidth, shadowRight);
-        LayoutRect rightRect(newBounds.x() + std::min(newBounds.width(), oldBounds.width()) - decorationsLeftWidth,
-            newBounds.y(),
-            deltaWidth + decorationsLeftWidth + decorationsRightWidth,
-            std::max(newBounds.height(), oldBounds.height()));
-        LayoutUnit right = std::min<LayoutUnit>(newBounds.maxX(), oldBounds.maxX());
-        if (rightRect.x() < right) {
-            rightRect.setWidth(std::min(rightRect.width(), right - rightRect.x()));
-            invalidatePaintUsingContainer(paintInvalidationContainer, pixelSnappedIntRect(rightRect), InvalidationIncremental);
-        }
-    }
-
-    LayoutUnit deltaHeight = absoluteValue(newBounds.height() - oldBounds.height());
-    if (deltaHeight) {
-        LayoutUnit shadowTop;
-        LayoutUnit shadowBottom;
-        style()->getBoxShadowVerticalExtent(shadowTop, shadowBottom);
-        LayoutUnit boxHeight = height();
-        LayoutUnit minInsetBottomShadowExtent = std::min<LayoutUnit>(-insetShadowExtent.bottom(), std::min<LayoutUnit>(newBounds.height(), oldBounds.height()));
-        LayoutUnit borderHeight = std::max<LayoutUnit>(borderBottom(), std::max<LayoutUnit>(valueForLength(style()->borderBottomLeftRadius().height(), boxHeight), valueForLength(style()->borderBottomRightRadius().height(), boxHeight)));
-        LayoutUnit decorationsTopHeight = std::max<LayoutUnit>(-outlineStyle->outlineOffset(), borderHeight + minInsetBottomShadowExtent) + std::max<LayoutUnit>(outlineWidth, -shadowTop);
-        LayoutUnit decorationsBottomHeight = std::max<LayoutUnit>(-outlineStyle->outlineOffset(), borderHeight + minInsetBottomShadowExtent) + std::max<LayoutUnit>(outlineWidth, shadowBottom);
-        LayoutRect bottomRect(newBounds.x(),
-            std::min(newBounds.maxY(), oldBounds.maxY()) - decorationsTopHeight,
-            std::max(newBounds.width(), oldBounds.width()),
-            deltaHeight + decorationsTopHeight + decorationsBottomHeight);
-        LayoutUnit bottom = std::min(newBounds.maxY(), oldBounds.maxY());
-        if (bottomRect.y() < bottom) {
-            bottomRect.setHeight(std::min(bottomRect.height(), bottom - bottomRect.y()));
-            invalidatePaintUsingContainer(paintInvalidationContainer, pixelSnappedIntRect(bottomRect), InvalidationIncremental);
-        }
-    }
+    // FIXME: Since we have accurate old border box size, we could do more accurate
+    // incremental invalidation instead of full invalidation.
+    return InvalidationBorderBoxChange;
 }
 
 void RenderBox::markForPaginationRelayoutIfNeeded(SubtreeLayoutScope& layoutScope)
@@ -4131,57 +4105,51 @@ void RenderBox::markForPaginationRelayoutIfNeeded(SubtreeLayoutScope& layoutScop
 
 void RenderBox::addVisualEffectOverflow()
 {
-    if (!style()->boxShadow() && !style()->hasBorderImageOutsets() && !style()->hasOutline())
+    if (!style()->hasVisualOverflowingEffect())
         return;
 
-    bool isFlipped = style()->isFlippedBlocksWritingMode();
-    bool isHorizontal = isHorizontalWritingMode();
+    // Add in the final overflow with shadows, outsets and outline combined.
+    LayoutRect visualEffectOverflow = borderBoxRect();
+    visualEffectOverflow.expand(computeVisualEffectOverflowExtent());
+    addVisualOverflow(visualEffectOverflow);
+}
 
-    LayoutRect borderBox = borderBoxRect();
-    LayoutUnit overflowMinX = borderBox.x();
-    LayoutUnit overflowMaxX = borderBox.maxX();
-    LayoutUnit overflowMinY = borderBox.y();
-    LayoutUnit overflowMaxY = borderBox.maxY();
+LayoutBoxExtent RenderBox::computeVisualEffectOverflowExtent() const
+{
+    ASSERT(style()->hasVisualOverflowingEffect());
 
-    // Compute box-shadow overflow first.
+    LayoutUnit top;
+    LayoutUnit right;
+    LayoutUnit bottom;
+    LayoutUnit left;
+
     if (style()->boxShadow()) {
-        LayoutUnit shadowLeft;
-        LayoutUnit shadowRight;
-        LayoutUnit shadowTop;
-        LayoutUnit shadowBottom;
-        style()->getBoxShadowExtent(shadowTop, shadowRight, shadowBottom, shadowLeft);
+        style()->getBoxShadowExtent(top, right, bottom, left);
 
-        // In flipped blocks writing modes such as vertical-rl, the physical right shadow value is actually at the lower x-coordinate.
-        overflowMinX = borderBox.x() + ((!isFlipped || isHorizontal) ? shadowLeft : -shadowRight);
-        overflowMaxX = borderBox.maxX() + ((!isFlipped || isHorizontal) ? shadowRight : -shadowLeft);
-        overflowMinY = borderBox.y() + ((!isFlipped || !isHorizontal) ? shadowTop : -shadowBottom);
-        overflowMaxY = borderBox.maxY() + ((!isFlipped || !isHorizontal) ? shadowBottom : -shadowTop);
+        // Box shadow extent's top and left are negative when extend to left and top direction, respectively.
+        // Negate to make them positive.
+        top = -top;
+        left = -left;
     }
 
-    // Now compute border-image-outset overflow.
     if (style()->hasBorderImageOutsets()) {
         LayoutBoxExtent borderOutsets = style()->borderImageOutsets();
-
-        // In flipped blocks writing modes, the physical sides are inverted. For example in vertical-rl, the right
-        // border is at the lower x coordinate value.
-        overflowMinX = std::min(overflowMinX, borderBox.x() - ((!isFlipped || isHorizontal) ? borderOutsets.left() : borderOutsets.right()));
-        overflowMaxX = std::max(overflowMaxX, borderBox.maxX() + ((!isFlipped || isHorizontal) ? borderOutsets.right() : borderOutsets.left()));
-        overflowMinY = std::min(overflowMinY, borderBox.y() - ((!isFlipped || !isHorizontal) ? borderOutsets.top() : borderOutsets.bottom()));
-        overflowMaxY = std::max(overflowMaxY, borderBox.maxY() + ((!isFlipped || !isHorizontal) ? borderOutsets.bottom() : borderOutsets.top()));
+        top = std::max(top, borderOutsets.top());
+        right = std::max(right, borderOutsets.right());
+        bottom = std::max(bottom, borderOutsets.bottom());
+        left = std::max(left, borderOutsets.left());
     }
 
-    if (style()->hasOutline()) {
-        LayoutUnit outlineSize = style()->outlineSize();
-
-        overflowMinX = std::min(overflowMinX, borderBox.x() - outlineSize);
-        overflowMaxX = std::max(overflowMaxX, borderBox.maxX() + outlineSize);
-        overflowMinY = std::min(overflowMinY, borderBox.y() - outlineSize);
-        overflowMaxY = std::max(overflowMaxY, borderBox.maxY() + outlineSize);
+    RenderStyle* outlineStyle = this->outlineStyle();
+    if (outlineStyle->hasOutline()) {
+        LayoutUnit outlineSize = outlineStyle->outlineSize();
+        top = std::max(top, outlineSize);
+        right = std::max(right, outlineSize);
+        bottom = std::max(bottom, outlineSize);
+        left = std::max(left, outlineSize);
     }
 
-    // Add in the final overflow with shadows, outsets and outline combined.
-    LayoutRect visualEffectOverflow(overflowMinX, overflowMinY, overflowMaxX - overflowMinX, overflowMaxY - overflowMinY);
-    addVisualOverflow(visualEffectOverflow);
+    return LayoutBoxExtent(top, right, bottom, left);
 }
 
 void RenderBox::addOverflowFromChild(RenderBox* child, const LayoutSize& delta)
@@ -4280,7 +4248,7 @@ void RenderBox::clearLayoutOverflow()
         return;
 
     if (!hasVisualOverflow() && contentsVisualOverflowRect().isEmpty()) {
-        m_overflow.clear();
+        clearAllOverflows();
         return;
     }
 
@@ -4437,7 +4405,7 @@ LayoutRect RenderBox::layoutOverflowRectForPropagation(RenderStyle* parentStyle)
         rect.unite(layoutOverflowRect());
 
     bool hasTransform = hasLayer() && layer()->transform();
-    if (isInFlowPositioned() || hasTransform) {
+    if (isRelPositioned() || hasTransform) {
         // If we are relatively positioned or if we have a transform, then we have to convert
         // this rectangle into physical coordinates, apply relative positioning and transforms
         // to it, and then convert it back.
@@ -4446,7 +4414,7 @@ LayoutRect RenderBox::layoutOverflowRectForPropagation(RenderStyle* parentStyle)
         if (hasTransform)
             rect = layer()->currentTransform().mapRect(rect);
 
-        if (isInFlowPositioned())
+        if (isRelPositioned())
             rect.move(offsetForInFlowPosition());
 
         // Now we need to flip back.
@@ -4680,4 +4648,28 @@ LayoutUnit RenderBox::offsetFromLogicalTopOfFirstPage() const
     return containerBlock->offsetFromLogicalTopOfFirstPage() + logicalTop();
 }
 
-} // namespace WebCore
+void RenderBox::savePreviousBorderBoxSizeIfNeeded()
+{
+    // If m_rareData is already created, always save.
+    if (!m_rareData) {
+        LayoutSize paintInvalidationSize = previousPaintInvalidationRect().size();
+
+        // Don't save old border box size if the paint rect is empty because we'll
+        // full invalidate once the paint rect becomes non-empty.
+        if (paintInvalidationSize.isEmpty())
+            return;
+
+        // Don't save old border box size if we can use size of the old paint rect
+        // as the old border box size in the next invalidation.
+        if (paintInvalidationSize == size())
+            return;
+
+        // We need the old border box size only when the box has background or box decorations.
+        if (!style()->hasBackground() && !style()->hasBoxDecorations())
+            return;
+    }
+
+    ensureRareData().m_previousBorderBoxSize = size();
+}
+
+} // namespace blink

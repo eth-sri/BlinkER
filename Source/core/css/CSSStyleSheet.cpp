@@ -21,9 +21,9 @@
 #include "config.h"
 #include "core/css/CSSStyleSheet.h"
 
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/V8Binding.h"
-#include "bindings/v8/V8PerIsolateData.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8PerIsolateData.h"
 #include "core/HTMLNames.h"
 #include "core/SVGNames.h"
 #include "core/css/CSSCharsetRule.h"
@@ -43,7 +43,7 @@
 #include "platform/weborigin/SecurityOrigin.h"
 #include "wtf/text/StringBuilder.h"
 
-namespace WebCore {
+namespace blink {
 
 class StyleSheetCSSRuleList FINAL : public CSSRuleList {
 public:
@@ -74,7 +74,7 @@ private:
     RawPtrWillBeMember<CSSStyleSheet> m_styleSheet;
 };
 
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
 static bool isAcceptableCSSStyleSheetParent(Node* parentNode)
 {
     // Only these nodes can be parents of StyleSheets, and they need to call

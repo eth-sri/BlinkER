@@ -141,7 +141,7 @@ WebInspector.SASSSourceMapping.prototype = {
 
         var etagMessage = this._headerValue("etag", headers) ? ", \"ETag\" response header found instead" : "";
         var message = String.sprintf("The \"Last-Modified\" response header is missing or invalid for %s%s. The CSS auto-reload functionality will not work correctly.", url, etagMessage);
-        this._cssModel.target().consoleModel.log(message);
+        WebInspector.console.log(message);
         return null;
     },
 
@@ -242,7 +242,7 @@ WebInspector.SASSSourceMapping.prototype = {
     {
         var cssUISourceCode = this._workspace.uiSourceCodeForURL(cssURL);
         if (!cssUISourceCode) {
-            WebInspector.messageSink.addMessage(WebInspector.UIString("%s resource missing. Please reload the page.", cssURL));
+            WebInspector.console.warn(WebInspector.UIString("%s resource missing. Please reload the page.", cssURL));
             callback(cssURL, sassURL, true);
             return;
         }
@@ -561,7 +561,7 @@ WebInspector.SASSSourceMapping.prototype = {
     uiLocationToRawLocation: function(uiSourceCode, lineNumber, columnNumber)
     {
         // FIXME: Implement this when ui -> raw mapping has clients.
-        return new WebInspector.CSSLocation(this._cssModel.target(), uiSourceCode.url || "", lineNumber, columnNumber);
+        return new WebInspector.CSSLocation(this._cssModel.target(), null, uiSourceCode.url || "", lineNumber, columnNumber);
     },
 
     /**
@@ -570,6 +570,16 @@ WebInspector.SASSSourceMapping.prototype = {
     isIdentity: function()
     {
         return false;
+    },
+
+    /**
+     * @param {!WebInspector.UISourceCode} uiSourceCode
+     * @param {number} lineNumber
+     * @return {boolean}
+     */
+    uiLineHasMapping: function(uiSourceCode, lineNumber)
+    {
+        return true;
     },
 
     /**

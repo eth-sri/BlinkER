@@ -31,10 +31,10 @@
 #include "config.h"
 #include "public/web/WebScriptBindings.h"
 
-#include "bindings/v8/V8Binding.h"
+#include "bindings/core/v8/V8Binding.h"
 #include "public/platform/WebString.h"
 
-using namespace WebCore;
+using namespace blink;
 
 namespace blink {
 

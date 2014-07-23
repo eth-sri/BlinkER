@@ -142,9 +142,12 @@ WebInspector.ContentProviderBasedProjectDelegate.prototype = {
 
     /**
      * @param {string} path
+     * @param {function()=} callback
      */
-    refresh: function(path)
+    refresh: function(path, callback)
     {
+        if (callback)
+            callback();
     },
 
     /**
@@ -214,13 +217,14 @@ WebInspector.ContentProviderBasedProjectDelegate.prototype = {
 
     /**
      * @param {!WebInspector.ProjectSearchConfig} searchConfig
+     * @param {!Array.<string>} filesMathingFileQuery
      * @param {!WebInspector.Progress} progress
      * @param {function(!Array.<string>)} callback
      */
-    findFilesMatchingSearchRequest: function(searchConfig, progress, callback)
+    findFilesMatchingSearchRequest: function(searchConfig, filesMathingFileQuery, progress, callback)
     {
         var result = [];
-        var paths = Object.keys(this._contentProviders);
+        var paths = filesMathingFileQuery;
         var totalCount = paths.length;
         if (totalCount === 0) {
             // searchInContent should call back later.
@@ -228,7 +232,6 @@ WebInspector.ContentProviderBasedProjectDelegate.prototype = {
             return;
         }
 
-        paths = paths.filter(searchConfig.filePathMatchesFileQuery.bind(searchConfig));
         var barrier = new CallbackBarrier();
         progress.setTotalWork(paths.length);
         for (var i = 0; i < paths.length; ++i)

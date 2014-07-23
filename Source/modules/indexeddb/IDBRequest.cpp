@@ -29,9 +29,9 @@
 #include "config.h"
 #include "modules/indexeddb/IDBRequest.h"
 
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ExceptionStatePlaceholder.h"
-#include "bindings/v8/IDBBindingUtilities.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/modules/v8/IDBBindingUtilities.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/events/EventQueue.h"
 #include "modules/indexeddb/IDBCursorWithValue.h"
@@ -43,7 +43,7 @@
 
 using blink::WebIDBCursor;
 
-namespace WebCore {
+namespace blink {
 
 IDBRequest* IDBRequest::create(ScriptState* scriptState, IDBAny* source, IDBTransaction* transaction)
 {
@@ -303,7 +303,7 @@ void IDBRequest::onSuccess(PassRefPtr<SharedBuffer> valueBuffer, PassOwnPtr<Vect
     onSuccessInternal(IDBAny::create(valueBuffer, m_blobInfo.get()));
 }
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
 static IDBObjectStore* effectiveObjectStore(IDBAny* source)
 {
     if (source->type() == IDBAny::IDBObjectStoreType)
@@ -322,16 +322,14 @@ void IDBRequest::onSuccess(PassRefPtr<SharedBuffer> prpValueBuffer, PassOwnPtr<V
     if (!shouldEnqueueEvent())
         return;
 
-#ifndef NDEBUG
     ASSERT(keyPath == effectiveObjectStore(m_source)->metadata().keyPath);
-#endif
 
     RefPtr<SharedBuffer> valueBuffer = prpValueBuffer;
     IDBKey* primaryKey = prpPrimaryKey;
     ASSERT(!m_blobInfo.get());
     m_blobInfo = blobInfo;
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     assertPrimaryKeyValidOrInjectable(m_scriptState.get(), valueBuffer, m_blobInfo.get(), primaryKey, keyPath);
 #endif
 
@@ -546,4 +544,4 @@ void IDBRequest::dequeueEvent(Event* event)
     }
 }
 
-} // namespace WebCore
+} // namespace blink

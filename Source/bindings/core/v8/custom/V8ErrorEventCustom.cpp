@@ -31,17 +31,17 @@
 #include "config.h"
 #include "bindings/core/v8/V8ErrorEvent.h"
 
+#include "bindings/core/v8/DOMWrapperWorld.h"
+#include "bindings/core/v8/Dictionary.h"
+#include "bindings/core/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8DOMWrapper.h"
 #include "bindings/core/v8/V8Event.h"
-#include "bindings/v8/DOMWrapperWorld.h"
-#include "bindings/v8/Dictionary.h"
-#include "bindings/v8/SerializedScriptValue.h"
-#include "bindings/v8/V8Binding.h"
-#include "bindings/v8/V8DOMWrapper.h"
-#include "bindings/v8/V8HiddenValue.h"
+#include "bindings/core/v8/V8HiddenValue.h"
 #include "core/dom/ContextFeatures.h"
 #include "platform/RuntimeEnabledFeatures.h"
 
-namespace WebCore {
+namespace blink {
 
 void V8ErrorEvent::errorAttributeGetterCustom(const v8::PropertyCallbackInfo<v8::Value>& info)
 {
@@ -54,4 +54,4 @@ void V8ErrorEvent::errorAttributeGetterCustom(const v8::PropertyCallbackInfo<v8:
     v8SetReturnValueNull(info);
 }
 
-} // namespace WebCore
+} // namespace blink

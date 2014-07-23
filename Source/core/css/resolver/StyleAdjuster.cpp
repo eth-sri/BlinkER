@@ -51,7 +51,7 @@
 #include "platform/transforms/TransformOperations.h"
 #include "wtf/Assertions.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -126,19 +126,9 @@ static bool isInTopLayer(const Element* element, const RenderStyle* style)
     return (element && element->isInTopLayer()) || (style && style->styleType() == BACKDROP);
 }
 
-static bool isDisplayFlexibleBox(EDisplay display)
-{
-    return display == FLEX || display == INLINE_FLEX;
-}
-
-static bool isDisplayGridBox(EDisplay display)
-{
-    return display == GRID || display == INLINE_GRID;
-}
-
 static bool parentStyleForcesZIndexToCreateStackingContext(const RenderStyle* parentStyle)
 {
-    return isDisplayFlexibleBox(parentStyle->display()) || isDisplayGridBox(parentStyle->display());
+    return parentStyle->isDisplayFlexibleOrGridBox();
 }
 
 static bool hasWillChangeThatCreatesStackingContext(const RenderStyle* style)
@@ -202,7 +192,7 @@ void StyleAdjuster::adjustRenderStyle(RenderStyle* style, RenderStyle* parentSty
     // cases where objects that should be blended as a single unit end up with a non-transparent
     // object wedged in between them. Auto z-index also becomes 0 for objects that specify transforms/masks/reflections.
     if (style->hasAutoZIndex() && ((e && e->document().documentElement() == e)
-        || style->opacity() < 1.0f
+        || style->hasOpacity()
         || style->hasTransformRelatedProperty()
         || style->hasMask()
         || style->clipPath()
@@ -210,7 +200,6 @@ void StyleAdjuster::adjustRenderStyle(RenderStyle* style, RenderStyle* parentSty
         || style->hasFilter()
         || style->hasBlendMode()
         || style->hasIsolation()
-        || style->position() == StickyPosition
         || style->position() == FixedPosition
         || isInTopLayer(e, style)
         || hasWillChangeThatCreatesStackingContext(style)))
@@ -396,12 +385,6 @@ void StyleAdjuster::adjustStyleForDisplay(RenderStyle* style, RenderStyle* paren
         && style->position() == RelativePosition)
         style->setPosition(StaticPosition);
 
-    // Cannot support position: sticky for table columns and column groups because current code is only doing
-    // background painting through columns / column groups
-    if ((style->display() == TABLE_COLUMN_GROUP || style->display() == TABLE_COLUMN)
-        && style->position() == StickyPosition)
-        style->setPosition(StaticPosition);
-
     // writing-mode does not apply to table row groups, table column groups, table rows, and table columns.
     // FIXME: Table cells should be allowed to be perpendicular or flipped with respect to the table, though.
     if (style->display() == TABLE_COLUMN || style->display() == TABLE_COLUMN_GROUP || style->display() == TABLE_FOOTER_GROUP
@@ -415,7 +398,7 @@ void StyleAdjuster::adjustStyleForDisplay(RenderStyle* style, RenderStyle* paren
     if (style->writingMode() != TopToBottomWritingMode && (style->display() == BOX || style->display() == INLINE_BOX))
         style->setWritingMode(TopToBottomWritingMode);
 
-    if (isDisplayFlexibleBox(parentStyle->display()) || isDisplayGridBox(parentStyle->display())) {
+    if (parentStyle->isDisplayFlexibleOrGridBox()) {
         style->setFloating(NoFloat);
         style->setDisplay(equivalentBlockDisplay(style->display(), style->isFloating(), !m_useQuirksModeStyles));
     }

@@ -26,7 +26,7 @@
 #ifndef FontFaceSet_h
 #define FontFaceSet_h
 
-#include "bindings/v8/ScriptPromise.h"
+#include "bindings/core/v8/ScriptPromise.h"
 #include "core/css/FontFace.h"
 #include "core/css/FontFaceSetForEachCallback.h"
 #include "core/dom/ActiveDOMObject.h"
@@ -43,7 +43,7 @@
 #undef check
 #endif
 
-namespace WebCore {
+namespace blink {
 
 class CSSFontFace;
 class CSSFontFaceSource;
@@ -159,6 +159,6 @@ private:
     FontLoadHistogram m_histogram;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // FontFaceSet_h

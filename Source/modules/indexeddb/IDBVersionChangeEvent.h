@@ -26,8 +26,8 @@
 #ifndef IDBVersionChangeEvent_h
 #define IDBVersionChangeEvent_h
 
-#include "bindings/v8/Nullable.h"
-#include "bindings/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/Nullable.h"
+#include "bindings/core/v8/SerializedScriptValue.h"
 #include "modules/EventModules.h"
 #include "modules/indexeddb/IDBAny.h"
 #include "modules/indexeddb/IDBRequest.h"
@@ -36,13 +36,14 @@
 #include "wtf/RefPtr.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 struct IDBVersionChangeEventInit : public EventInit {
     IDBVersionChangeEventInit();
 
     unsigned long long oldVersion;
     Nullable<unsigned long long> newVersion;
+    String dataLoss;
 };
 
 class IDBVersionChangeEvent FINAL : public Event {
@@ -77,10 +78,10 @@ private:
 
     unsigned long long m_oldVersion;
     Nullable<unsigned long long> m_newVersion;
-    bool m_dataLoss;
+    blink::WebIDBDataLoss m_dataLoss;
     String m_dataLossMessage;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // IDBVersionChangeEvent_h

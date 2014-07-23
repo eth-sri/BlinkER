@@ -45,7 +45,7 @@
 #include "core/rendering/style/StyleInheritedData.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -66,9 +66,8 @@ RenderTable::RenderTable(Element* element)
     , m_borderStart(0)
     , m_borderEnd(0)
 {
-    setChildrenInline(false);
+    ASSERT(!childrenInline());
     m_columnPos.fill(0, 1);
-
 }
 
 RenderTable::~RenderTable()
@@ -258,7 +257,7 @@ void RenderTable::updateLogicalWidth()
 
     RenderBlock* cb = containingBlock();
 
-    LayoutUnit availableLogicalWidth = containingBlockLogicalWidthForContent();
+    LayoutUnit availableLogicalWidth = containingBlockLogicalWidthForContent() + (isOutOfFlowPositioned() ? cb->paddingLogicalWidth() : LayoutUnit(0));
     bool hasPerpendicularContainingBlock = cb->style()->isHorizontalWritingMode() != style()->isHorizontalWritingMode();
     LayoutUnit containerWidthInInlineDirection = hasPerpendicularContainingBlock ? perpendicularContainingBlockLogicalHeight() : availableLogicalWidth;
 
@@ -365,6 +364,9 @@ void RenderTable::layoutCaption(RenderTableCaption* caption)
         caption->setPaginationStrut(0);
     }
     caption->setLogicalLocation(LayoutPoint(caption->marginStart(), captionLogicalTop));
+
+    if (!selfNeedsLayout())
+        caption->setMayNeedPaintInvalidation(true);
 
     setLogicalHeight(logicalHeight() + caption->logicalHeight() + collapsedMarginBeforeForChild(caption) + collapsedMarginAfterForChild(caption));
 }
@@ -521,7 +523,12 @@ void RenderTable::layout()
             }
             section->setLogicalLocation(LayoutPoint(sectionLogicalLeft, logicalHeight()));
 
+            // As we may skip invalidation on the table, we need to ensure that sections are invalidated when they moved.
+            if (sectionMoved && !section->selfNeedsLayout())
+                section->setMayNeedPaintInvalidation(true);
+
             setLogicalHeight(logicalHeight() + section->logicalHeight());
+
             section = sectionBelow(section);
         }
 
@@ -630,8 +637,8 @@ void RenderTable::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 void RenderTable::paintObject(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
     PaintPhase paintPhase = paintInfo.phase;
-    if ((paintPhase == PaintPhaseBlockBackground || paintPhase == PaintPhaseChildBlockBackground) && hasBoxDecorations() && style()->visibility() == VISIBLE)
-        paintBoxDecorations(paintInfo, paintOffset);
+    if ((paintPhase == PaintPhaseBlockBackground || paintPhase == PaintPhaseChildBlockBackground) && hasBoxDecorationBackground() && style()->visibility() == VISIBLE)
+        paintBoxDecorationBackground(paintInfo, paintOffset);
 
     if (paintPhase == PaintPhaseMask) {
         paintMask(paintInfo, paintOffset);
@@ -695,14 +702,14 @@ void RenderTable::subtractCaptionRect(LayoutRect& rect) const
     }
 }
 
-void RenderTable::paintBoxDecorations(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
+void RenderTable::paintBoxDecorationBackground(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
     if (!paintInfo.shouldPaintWithinRoot(this))
         return;
 
     LayoutRect rect(paintOffset, size());
     subtractCaptionRect(rect);
-    paintBoxDecorationsWithRect(paintInfo, paintOffset, rect);
+    paintBoxDecorationBackgroundWithRect(paintInfo, paintOffset, rect);
 }
 
 void RenderTable::paintMask(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
@@ -1294,15 +1301,6 @@ RenderTableCell* RenderTable::cellAfter(const RenderTableCell* cell) const
     if (effCol >= numEffCols())
         return 0;
     return cell->section()->primaryCellAt(cell->rowIndex(), effCol);
-}
-
-RenderBlock* RenderTable::firstLineBlock() const
-{
-    return 0;
-}
-
-void RenderTable::updateFirstLetter()
-{
 }
 
 int RenderTable::baselinePosition(FontBaseline baselineType, bool firstLine, LineDirectionMode direction, LinePositionMode linePositionMode) const

@@ -31,12 +31,12 @@
 #ifndef StorageQuota_h
 #define StorageQuota_h
 
-#include "bindings/v8/ScriptPromise.h"
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ScriptPromise.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
 
-namespace WebCore {
+namespace blink {
 
 class ExecutionContext;
 
@@ -60,6 +60,6 @@ private:
     StorageQuota();
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // StorageQuota_h

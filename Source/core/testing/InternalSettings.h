@@ -35,7 +35,7 @@
 #include "wtf/RefCounted.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 class Document;
 class ExceptionState;
@@ -55,9 +55,9 @@ public:
         explicit Backup(Settings*);
         void restoreTo(Settings*);
 
-        bool m_originalCSSExclusionsEnabled;
         bool m_originalAuthorShadowDOMForAnyElementEnabled;
         bool m_originalCSP;
+        bool m_originalLaxMixedContentCheckingEnabled;
         bool m_originalOverlayScrollbarsEnabled;
         EditingBehaviorType m_originalEditingBehavior;
         bool m_originalTextAutosizingEnabled;
@@ -111,11 +111,11 @@ public:
     // cannot be changed after process start. These setters should
     // be removed or moved onto internals.runtimeFlags:
     void setAuthorShadowDOMForAnyElementEnabled(bool);
-    void setCSSExclusionsEnabled(bool);
     void setLangAttributeAwareFormControlUIEnabled(bool);
     void setOverlayScrollbarsEnabled(bool);
     void setExperimentalContentSecurityPolicyFeaturesEnabled(bool);
     void setPseudoClassesInMatchingCriteriaInAuthorShadowTreesEnabled(bool);
+    void setLaxMixedContentCheckingEnabled(bool);
 
     virtual void trace(Visitor*) OVERRIDE;
 
@@ -130,6 +130,6 @@ private:
     Backup m_backup;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif

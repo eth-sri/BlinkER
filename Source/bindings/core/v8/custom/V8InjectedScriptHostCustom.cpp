@@ -31,11 +31,18 @@
 #include "config.h"
 #include "bindings/core/v8/V8InjectedScriptHost.h"
 
+#include "bindings/core/v8/BindingSecurity.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ScriptDebugServer.h"
+#include "bindings/core/v8/ScriptValue.h"
+#include "bindings/core/v8/V8AbstractEventListener.h"
+#include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8EventTarget.h"
 #include "bindings/core/v8/V8HTMLAllCollection.h"
 #include "bindings/core/v8/V8HTMLCollection.h"
 #include "bindings/core/v8/V8Node.h"
 #include "bindings/core/v8/V8NodeList.h"
+#include "bindings/core/v8/V8ScriptRunner.h"
 #include "bindings/core/v8/V8Storage.h"
 #include "bindings/core/v8/custom/V8Float32ArrayCustom.h"
 #include "bindings/core/v8/custom/V8Float64ArrayCustom.h"
@@ -46,23 +53,15 @@
 #include "bindings/core/v8/custom/V8Uint32ArrayCustom.h"
 #include "bindings/core/v8/custom/V8Uint8ArrayCustom.h"
 #include "bindings/core/v8/custom/V8Uint8ClampedArrayCustom.h"
-#include "bindings/modules/v8/V8Database.h"
-#include "bindings/v8/BindingSecurity.h"
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ScriptDebugServer.h"
-#include "bindings/v8/ScriptValue.h"
-#include "bindings/v8/V8AbstractEventListener.h"
-#include "bindings/v8/V8Binding.h"
-#include "bindings/v8/V8ScriptRunner.h"
 #include "core/events/EventTarget.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/inspector/InjectedScript.h"
 #include "core/inspector/InjectedScriptHost.h"
 #include "core/inspector/InspectorDOMAgent.h"
-#include "modules/webdatabase/Database.h"
+#include "core/inspector/JavaScriptCallFrame.h"
 #include "platform/JSONValues.h"
 
-namespace WebCore {
+namespace blink {
 
 Node* InjectedScriptHost::scriptValueAsNode(ScriptState* scriptState, ScriptValue value)
 {
@@ -97,6 +96,23 @@ void V8InjectedScriptHost::inspectedObjectMethodCustom(const v8::FunctionCallbac
     v8SetReturnValue(info, object->get(ScriptState::current(info.GetIsolate())).v8Value());
 }
 
+static v8::Handle<v8::String> functionDisplayName(v8::Handle<v8::Function> function)
+{
+    v8::Handle<v8::Value> value = function->GetDisplayName();
+    if (value->IsString() && v8::Handle<v8::String>::Cast(value)->Length())
+        return v8::Handle<v8::String>::Cast(value);
+
+    value = function->GetName();
+    if (value->IsString() && v8::Handle<v8::String>::Cast(value)->Length())
+        return v8::Handle<v8::String>::Cast(value);
+
+    value = function->GetInferredName();
+    if (value->IsString() && v8::Handle<v8::String>::Cast(value)->Length())
+        return v8::Handle<v8::String>::Cast(value);
+
+    return v8::Handle<v8::String>();
+}
+
 void V8InjectedScriptHost::internalConstructorNameMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     if (info.Length() < 1)
@@ -105,7 +121,23 @@ void V8InjectedScriptHost::internalConstructorNameMethodCustom(const v8::Functio
     if (!info[0]->IsObject())
         return;
 
-    v8SetReturnValue(info, info[0]->ToObject()->GetConstructorName());
+    v8::Local<v8::Object> object = info[0]->ToObject();
+    v8::Local<v8::String> result = object->GetConstructorName();
+
+    if (!result.IsEmpty() && toCoreStringWithUndefinedOrNullCheck(result) == "Object") {
+        v8::Local<v8::String> constructorSymbol = v8AtomicString(info.GetIsolate(), "constructor");
+        if (object->HasRealNamedProperty(constructorSymbol) && !object->HasRealNamedCallbackProperty(constructorSymbol)) {
+            v8::TryCatch tryCatch;
+            v8::Local<v8::Value> constructor = object->GetRealNamedProperty(constructorSymbol);
+            if (!constructor.IsEmpty() && constructor->IsFunction()) {
+                v8::Local<v8::String> constructorName = functionDisplayName(v8::Handle<v8::Function>::Cast(constructor));
+                if (!constructorName.IsEmpty() && !tryCatch.HasCaught())
+                    result = constructorName;
+            }
+        }
+    }
+
+    v8SetReturnValue(info, result);
 }
 
 void V8InjectedScriptHost::isHTMLAllCollectionMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -182,15 +214,6 @@ void V8InjectedScriptHost::typeMethodCustom(const v8::FunctionCallbackInfo<v8::V
     }
 }
 
-static bool setFunctionName(v8::Handle<v8::Object>& result, const v8::Handle<v8::Value>& value, v8::Isolate* isolate)
-{
-    if (value->IsString() && v8::Handle<v8::String>::Cast(value)->Length()) {
-        result->Set(v8AtomicString(isolate, "functionName"), value);
-        return true;
-    }
-    return false;
-}
-
 void V8InjectedScriptHost::functionDetailsMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     if (info.Length() < 1)
@@ -213,10 +236,8 @@ void V8InjectedScriptHost::functionDetailsMethodCustom(const v8::FunctionCallbac
     v8::Local<v8::Object> result = v8::Object::New(isolate);
     result->Set(v8AtomicString(isolate, "location"), location);
 
-    if (!setFunctionName(result, function->GetDisplayName(), isolate)
-        && !setFunctionName(result, function->GetName(), isolate)
-        && !setFunctionName(result, function->GetInferredName(), isolate))
-        result->Set(v8AtomicString(isolate, "functionName"), v8AtomicString(isolate, ""));
+    v8::Handle<v8::String> name = functionDisplayName(function);
+    result->Set(v8AtomicString(isolate, "functionName"), name.IsEmpty() ? v8AtomicString(isolate, "") : name);
 
     InjectedScriptHost* host = V8InjectedScriptHost::toNative(info.Holder());
     ScriptDebugServer& debugServer = host->scriptDebugServer();
@@ -315,7 +336,7 @@ void V8InjectedScriptHost::inspectMethodCustom(const v8::FunctionCallbackInfo<v8
     host->inspectImpl(object.toJSONValue(scriptState), hints.toJSONValue(scriptState));
 }
 
-void V8InjectedScriptHost::evaluateMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
+void V8InjectedScriptHost::evalMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     v8::Isolate* isolate = info.GetIsolate();
     if (info.Length() < 1) {
@@ -337,6 +358,35 @@ void V8InjectedScriptHost::evaluateMethodCustom(const v8::FunctionCallbackInfo<v
         return;
     }
     v8SetReturnValue(info, result);
+}
+
+void V8InjectedScriptHost::evaluateWithExceptionDetailsMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    v8::Isolate* isolate = info.GetIsolate();
+    if (info.Length() < 1) {
+        isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(isolate, "One argument expected.")));
+        return;
+    }
+
+    v8::Handle<v8::String> expression = info[0]->ToString();
+    if (expression.IsEmpty()) {
+        isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(isolate, "The argument must be a string.")));
+        return;
+    }
+
+    ASSERT(isolate->InContext());
+    v8::TryCatch tryCatch;
+    v8::Handle<v8::Value> result = V8ScriptRunner::compileAndRunInternalScript(expression, info.GetIsolate());
+
+    v8::Local<v8::Object> wrappedResult = v8::Object::New(isolate);
+    if (tryCatch.HasCaught()) {
+        wrappedResult->Set(v8::String::NewFromUtf8(isolate, "result"), tryCatch.Exception());
+        wrappedResult->Set(v8::String::NewFromUtf8(isolate, "exceptionDetails"), JavaScriptCallFrame::createExceptionDetails(tryCatch.Message(), isolate));
+    } else {
+        wrappedResult->Set(v8::String::NewFromUtf8(isolate, "result"), result);
+        wrappedResult->Set(v8::String::NewFromUtf8(isolate, "exceptionDetails"), v8::Undefined(isolate));
+    }
+    v8SetReturnValue(info, wrappedResult);
 }
 
 void V8InjectedScriptHost::setFunctionVariableValueMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -444,4 +494,4 @@ void V8InjectedScriptHost::suppressWarningsAndCallMethodCustom(const v8::Functio
     v8SetReturnValue(info, result);
 }
 
-} // namespace WebCore
+} // namespace blink

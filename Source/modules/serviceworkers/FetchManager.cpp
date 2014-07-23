@@ -5,19 +5,21 @@
 #include "config.h"
 #include "FetchManager.h"
 
-#include "bindings/v8/ScriptPromiseResolver.h"
-#include "bindings/v8/ScriptState.h"
-#include "bindings/v8/V8ThrowException.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ScriptPromiseResolver.h"
+#include "bindings/core/v8/ScriptState.h"
+#include "bindings/core/v8/V8ThrowException.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/fileapi/Blob.h"
 #include "core/loader/ThreadableLoader.h"
 #include "core/loader/ThreadableLoaderClient.h"
+#include "core/xml/XMLHttpRequest.h"
 #include "modules/serviceworkers/Response.h"
 #include "modules/serviceworkers/ResponseInit.h"
 #include "platform/network/ResourceRequest.h"
 #include "wtf/HashSet.h"
 
-namespace WebCore {
+namespace blink {
 
 class FetchManager::Loader : public ThreadableLoaderClient {
 public:
@@ -74,7 +76,7 @@ void FetchManager::Loader::didFinishLoading(unsigned long, double)
     String filePath = m_response.downloadedFilePath();
     if (!filePath.isEmpty() && m_downloadedBlobLength) {
         blobData->appendFile(filePath);
-        // FIXME: Set the ContentType correctly.
+        blobData->setContentType(m_response.mimeType());
     }
     ResponseInit responseInit;
     // FIXME: We may have to filter the status when we support CORS.
@@ -84,7 +86,8 @@ void FetchManager::Loader::didFinishLoading(unsigned long, double)
     // FIXME: fill options.
     RefPtrWillBeRawPtr<Blob> blob = Blob::create(BlobDataHandle::create(blobData.release(), m_downloadedBlobLength));
     // FIXME: Handle response status correctly.
-    m_resolver->resolve(Response::create(blob.get(), responseInit));
+    NonThrowableExceptionState exceptionState;
+    m_resolver->resolve(Response::create(blob.get(), responseInit, exceptionState));
     notifyFinished();
 }
 
@@ -174,4 +177,23 @@ void FetchManager::onLoaderFinished(Loader* loader)
     m_loaders.remove(loader);
 }
 
-} // namespace WebCore
+bool FetchManager::isSimpleMethod(const String& method)
+{
+    // "A simple method is a method that is `GET`, `HEAD`, or `POST`."
+    return isOnAccessControlSimpleRequestMethodWhitelist(method);
+}
+
+bool FetchManager::isForbiddenMethod(const String& method)
+{
+    // "A forbidden method is a method that is a byte case-insensitive match for one of `CONNECT`, `TRACE`, and `TRACK`."
+    return !XMLHttpRequest::isAllowedHTTPMethod(method);
+}
+
+bool FetchManager::isUsefulMethod(const String& method)
+{
+    // "A useful method is a method that is not a forbidden method."
+    // "A forbidden method is a method that is a byte case-insensitive match for one of `CONNECT`, `TRACE`, and `TRACK`."
+    return XMLHttpRequest::isAllowedHTTPMethod(method);
+}
+
+} // namespace blink

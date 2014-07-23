@@ -26,7 +26,6 @@
 #ifndef IDBTransaction_h
 #define IDBTransaction_h
 
-#include "bindings/v8/ScriptWrappable.h"
 #include "core/dom/ActiveDOMObject.h"
 #include "core/dom/DOMError.h"
 #include "core/events/EventListener.h"
@@ -39,7 +38,7 @@
 #include "public/platform/WebIDBTypes.h"
 #include "wtf/HashSet.h"
 
-namespace WebCore {
+namespace blink {
 
 class DOMError;
 class ExceptionState;
@@ -51,7 +50,6 @@ struct IDBObjectStoreMetadata;
 
 class IDBTransaction FINAL
     : public RefCountedGarbageCollectedWillBeGarbageCollectedFinalized<IDBTransaction>
-    , public ScriptWrappable
     , public EventTargetWithInlineData
     , public ActiveDOMObject {
     DEFINE_EVENT_TARGET_REFCOUNTING_WILL_BE_REMOVED(RefCountedGarbageCollected<IDBTransaction>);
@@ -146,6 +144,6 @@ private:
     IDBDatabaseMetadata m_previousMetadata;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // IDBTransaction_h

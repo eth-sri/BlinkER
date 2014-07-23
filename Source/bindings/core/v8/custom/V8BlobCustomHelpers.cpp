@@ -31,24 +31,24 @@
 #include "config.h"
 #include "bindings/core/v8/custom/V8BlobCustomHelpers.h"
 
+#include "bindings/core/v8/Dictionary.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8Blob.h"
 #include "bindings/core/v8/custom/V8ArrayBufferCustom.h"
 #include "bindings/core/v8/custom/V8ArrayBufferViewCustom.h"
-#include "bindings/v8/Dictionary.h"
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/V8Binding.h"
 #include "wtf/DateMath.h"
 
-namespace WebCore {
+namespace blink {
 
 namespace V8BlobCustomHelpers {
 
 ParsedProperties::ParsedProperties(bool hasFileProperties)
     : m_normalizeLineEndingsToNative(false)
     , m_hasFileProperties(hasFileProperties)
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     , m_hasLastModified(false)
-#endif // NDEBUG
+#endif // ENABLE(ASSERT)
 {
 }
 
@@ -57,9 +57,9 @@ void ParsedProperties::setLastModified(double lastModified)
     ASSERT(m_hasFileProperties);
     ASSERT(!m_hasLastModified);
     m_lastModified = lastModified;
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     m_hasLastModified = true;
-#endif // NDEBUG
+#endif // ENABLE(ASSERT)
 }
 
 void ParsedProperties::setDefaultLastModified()
@@ -72,7 +72,7 @@ bool ParsedProperties::parseBlobPropertyBag(v8::Local<v8::Value> propertyBag, co
     TONATIVE_DEFAULT(Dictionary, dictionary, Dictionary(propertyBag, isolate), false);
 
     String endings;
-    TONATIVE_DEFAULT(bool, containsEndings, dictionary.get("endings", endings), false);
+    TONATIVE_DEFAULT(bool, containsEndings, DictionaryHelper::get(dictionary, "endings", endings), false);
     if (containsEndings) {
         if (endings != "transparent" && endings != "native") {
             exceptionState.throwTypeError("The 'endings' property must be either 'transparent' or 'native'.");
@@ -82,7 +82,7 @@ bool ParsedProperties::parseBlobPropertyBag(v8::Local<v8::Value> propertyBag, co
             m_normalizeLineEndingsToNative = true;
     }
 
-    TONATIVE_DEFAULT(bool, containsType, dictionary.get("type", m_contentType), false);
+    TONATIVE_DEFAULT(bool, containsType, DictionaryHelper::get(dictionary, "type", m_contentType), false);
     if (containsType) {
         if (!m_contentType.containsOnlyASCII()) {
             exceptionState.throwDOMException(SyntaxError, "The 'type' property must consist of ASCII characters.");
@@ -95,7 +95,7 @@ bool ParsedProperties::parseBlobPropertyBag(v8::Local<v8::Value> propertyBag, co
         return true;
 
     v8::Local<v8::Value> lastModified;
-    TONATIVE_DEFAULT(bool, containsLastModified, dictionary.get("lastModified", lastModified), false);
+    TONATIVE_DEFAULT(bool, containsLastModified, DictionaryHelper::get(dictionary, "lastModified", lastModified), false);
     if (containsLastModified) {
         TONATIVE_DEFAULT(long long, lastModifiedInt, toInt64(lastModified), false);
         setLastModified(static_cast<double>(lastModifiedInt) / msPerSecond);
@@ -106,10 +106,13 @@ bool ParsedProperties::parseBlobPropertyBag(v8::Local<v8::Value> propertyBag, co
     return true;
 }
 
-bool processBlobParts(v8::Local<v8::Object> blobParts, uint32_t blobPartsLength, bool normalizeLineEndingsToNative, BlobData& blobData, v8::Isolate* isolate)
+bool processBlobParts(v8::Local<v8::Object> blobParts, bool normalizeLineEndingsToNative, BlobData& blobData, v8::Isolate* isolate)
 {
-    for (uint32_t i = 0; i < blobPartsLength; ++i) {
-        v8::Local<v8::Value> item = blobParts->Get(v8::Uint32::New(isolate, i));
+    // FIXME: handle sequences based on ES6 @@iterator, see http://crbug.com/393866
+    v8::Local<v8::Array> array = v8::Local<v8::Array>::Cast(blobParts);
+    uint32_t length = v8::Local<v8::Array>::Cast(blobParts)->Length();
+    for (uint32_t i = 0; i < length; ++i) {
+        v8::Local<v8::Value> item = array->Get(i);
         if (item.IsEmpty())
             return false;
 
@@ -135,4 +138,4 @@ bool processBlobParts(v8::Local<v8::Object> blobParts, uint32_t blobPartsLength,
 
 } // namespace V8BlobCustomHelpers
 
-} // namespace WebCore
+} // namespace blink

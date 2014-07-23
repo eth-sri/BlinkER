@@ -35,10 +35,8 @@ function createSampleDOM()
     return div;
 }
 
-test(function ()
+function check_walker(walker, root)
 {
-    var root = createSampleDOM();
-    var walker = document.createTreeWalker(root);
     assert_equals(walker.toString(), '[object TreeWalker]');
     assert_equals(walker.root, root);
     assert_equals(walker.whatToShow, 0xFFFFFFFF);
@@ -54,15 +52,29 @@ test(function ()
     assert_idl_attribute(walker, 'nextSibling');
     assert_idl_attribute(walker, 'previousNode');
     assert_idl_attribute(walker, 'nextNode');
-}, 'Construct a TreeWalker by document.createTreeWalker().');
+}
+
+test(function ()
+{
+    var root = createSampleDOM();
+    var walker = document.createTreeWalker(root);
+    check_walker(walker, root);
+}, 'Construct a TreeWalker by document.createTreeWalker(root).');
+
+test(function ()
+{
+    var root = createSampleDOM();
+    var walker = document.createTreeWalker(root, undefined, undefined);
+    check_walker(walker, root);
+}, 'Construct a TreeWalker by document.createTreeWalker(root, undefined, undefined).');
 
 test(function ()
 {
     assert_throws(new TypeError(), function () { document.createTreeWalker(); });
-    assert_throws('NOT_SUPPORTED_ERR', function () { document.createTreeWalker(null); });
-    assert_throws('NOT_SUPPORTED_ERR', function () { document.createTreeWalker(undefined); });
-    assert_throws('NOT_SUPPORTED_ERR', function () { document.createTreeWalker(new Object()); });
-    assert_throws('NOT_SUPPORTED_ERR', function () { document.createTreeWalker(1); });
+    assert_throws(new TypeError(), function () { document.createTreeWalker(null); });
+    assert_throws(new TypeError(), function () { document.createTreeWalker(undefined); });
+    assert_throws(new TypeError(), function () { document.createTreeWalker(new Object()); });
+    assert_throws(new TypeError(), function () { document.createTreeWalker(1); });
 }, 'Give an invalid root node to document.createTreeWalker().');
 
 // |expected| should be an object indicating the expected type of node.
@@ -119,6 +131,14 @@ test(function ()
         assert_false(walker.expandEntityReferences);
     });
 }, 'Test that the fourth argument (expandEntityReferences) is ignored.');
+
+test(function() {
+    var treeWalker = document.createTreeWalker(document.body, 42, null);
+    assert_equals(treeWalker.root, document.body);
+    assert_equals(treeWalker.currentNode, document.body);
+    assert_equals(treeWalker.whatToShow, 42);
+    assert_equals(treeWalker.filter, null);
+}, "Optional arguments to createTreeWalker should be optional (3 passed, null).");
 </script>
 </body>
 </html>

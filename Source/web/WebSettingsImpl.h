@@ -33,7 +33,7 @@
 
 #include "public/web/WebSettings.h"
 
-namespace WebCore {
+namespace blink {
 class InspectorController;
 class Settings;
 }
@@ -42,7 +42,7 @@ namespace blink {
 
 class WebSettingsImpl FINAL : public WebSettings {
 public:
-    explicit WebSettingsImpl(WebCore::Settings*, WebCore::InspectorController*);
+    explicit WebSettingsImpl(blink::Settings*, blink::InspectorController*);
     virtual ~WebSettingsImpl() { }
 
     virtual bool mainFrameResizesAreOrientationChanges() const OVERRIDE;
@@ -90,6 +90,7 @@ public:
     virtual void setDeviceScaleAdjustment(float) OVERRIDE;
     virtual void setDeviceSupportsMouse(bool) OVERRIDE;
     virtual void setDeviceSupportsTouch(bool) OVERRIDE;
+    virtual void setDisallowFullscreenForNonMediaElements(bool) OVERRIDE;
     virtual void setDoubleTapToZoomEnabled(bool) OVERRIDE;
     virtual void setDownloadableBinaryFontsEnabled(bool) OVERRIDE;
     virtual void setEditingBehavior(EditingBehavior) OVERRIDE;
@@ -99,7 +100,6 @@ public:
     virtual void setExperimentalWebGLEnabled(bool) OVERRIDE;
     virtual void setFantasyFontFamily(const WebString&, UScriptCode = USCRIPT_COMMON) OVERRIDE;
     virtual void setFixedFontFamily(const WebString&, UScriptCode = USCRIPT_COMMON) OVERRIDE;
-    virtual void setGestureTapHighlightEnabled(bool) OVERRIDE;
     virtual void setHyperlinkAuditingEnabled(bool) OVERRIDE;
     virtual void setIgnoreMainFrameOverflowHiddenQuirk(bool) OVERRIDE;
     virtual void setImagesEnabled(bool) OVERRIDE;
@@ -178,7 +178,7 @@ public:
     bool showPaintRects() const { return m_showPaintRects; }
     bool renderVSyncNotificationEnabled() const { return m_renderVSyncNotificationEnabled; }
     bool autoZoomFocusedNodeToLegibleScale() const { return m_autoZoomFocusedNodeToLegibleScale; }
-    bool gestureTapHighlightEnabled() const { return m_gestureTapHighlightEnabled; }
+    bool disallowFullscreenForNonMediaElements() const { return m_disallowFullscreenForNonMediaElements; }
     bool doubleTapToZoomEnabled() const { return m_doubleTapToZoomEnabled; }
     bool perTilePaintingEnabled() const { return m_perTilePaintingEnabled; }
     bool supportDeprecatedTargetDensityDPI() const { return m_supportDeprecatedTargetDensityDPI; }
@@ -188,12 +188,11 @@ public:
     bool clobberUserAgentInitialScaleQuirk() const { return m_clobberUserAgentInitialScaleQuirk; }
 
 private:
-    WebCore::Settings* m_settings;
-    WebCore::InspectorController* m_inspectorController;
+    blink::Settings* m_settings;
+    blink::InspectorController* m_inspectorController;
     bool m_showFPSCounter;
     bool m_showPaintRects;
     bool m_renderVSyncNotificationEnabled;
-    bool m_gestureTapHighlightEnabled;
     bool m_autoZoomFocusedNodeToLegibleScale;
     bool m_deferredImageDecodingEnabled;
     bool m_doubleTapToZoomEnabled;
@@ -214,6 +213,7 @@ private:
     // can be removed any time after 2015. See http://crbug.com/313754.
     bool m_clobberUserAgentInitialScaleQuirk;
     bool m_mainFrameResizesAreOrientationChanges;
+    bool m_disallowFullscreenForNonMediaElements;
 };
 
 } // namespace blink

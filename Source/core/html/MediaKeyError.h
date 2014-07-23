@@ -26,12 +26,12 @@
 #ifndef MediaKeyError_h
 #define MediaKeyError_h
 
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
 
-namespace WebCore {
+namespace blink {
 
 class MediaKeyError FINAL : public RefCountedWillBeGarbageCollectedFinalized<MediaKeyError>, public ScriptWrappable {
 public:
@@ -65,6 +65,6 @@ private:
     unsigned long m_systemCode;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif

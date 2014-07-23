@@ -34,7 +34,7 @@
 #include "wtf/OwnPtr.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 class AXObjectCache;
 class DocumentLifecycle;
@@ -173,7 +173,7 @@ public:
     void removeSlowRepaintObject();
     bool hasSlowRepaintObjects() const { return m_slowRepaintObjectCount; }
 
-    // Includes fixed- and sticky-position objects.
+    // Fixed-position objects.
     typedef HashSet<RenderObject*> ViewportConstrainedObjectSet;
     void addViewportConstrainedObject(RenderObject*);
     void removeViewportConstrainedObject(RenderObject*);
@@ -218,6 +218,8 @@ public:
 
     void updateLayoutAndStyleForPainting();
     void updateLayoutAndStyleIfNeededRecursive();
+
+    void invalidateTreeIfNeededRecursive();
 
     void incrementVisuallyNonEmptyCharacterCount(unsigned);
     void incrementVisuallyNonEmptyPixelCount(const IntSize&);
@@ -280,6 +282,7 @@ public:
     void removeResizerArea(RenderBox&);
     const ResizerAreaSet* resizerAreas() const { return m_resizerAreas.get(); }
 
+    virtual void setParent(Widget*) OVERRIDE;
     virtual void removeChild(Widget*) OVERRIDE;
 
     // This function exists for ports that need to handle wheel events manually.
@@ -297,8 +300,6 @@ public:
 
     // DEPRECATED: Use viewportConstrainedVisibleContentRect() instead.
     IntSize scrollOffsetForFixedPosition() const;
-
-    virtual bool shouldPlaceVerticalScrollbarOnLeft() const OVERRIDE;
 
     // Override scrollbar notifications to update the AXObject cache.
     virtual void didAddScrollbar(Scrollbar*, ScrollbarOrientation) OVERRIDE;
@@ -361,7 +362,7 @@ private:
     void scheduleOrPerformPostLayoutTasks();
     void performPostLayoutTasks();
 
-    void invalidateTree(RenderObject* root);
+    void invalidateTreeIfNeeded();
 
     void gatherDebugLayoutRects(RenderObject* layoutRoot);
 
@@ -394,6 +395,7 @@ private:
 
     void updateLayersAndCompositingAfterScrollIfNeeded();
     void updateFixedElementPaintInvalidationRectsAfterScroll();
+    void updateCompositedSelectionBoundsIfNeeded();
 
     bool hasCustomScrollbars() const;
     bool shouldUseCustomScrollbars(Element*& customScrollbarElement, LocalFrame*& customScrollbarFrame);
@@ -560,6 +562,6 @@ private:
     bool m_originalValue;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // FrameView_h

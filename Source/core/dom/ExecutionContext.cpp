@@ -40,7 +40,7 @@
 #include "core/workers/WorkerThread.h"
 #include "wtf/MainThread.h"
 
-namespace WebCore {
+namespace blink {
 
 class ExecutionContext::PendingException : public NoBaseWillBeGarbageCollectedFinalized<ExecutionContext::PendingException> {
     WTF_MAKE_NONCOPYABLE(PendingException);
@@ -303,13 +303,6 @@ void ExecutionContext::postTask(PassOwnPtr<ExecutionContextTask> task)
     m_client->postTask(task);
 }
 
-void ExecutionContext::postTask(const Closure& closure)
-{
-    if (!m_client)
-        return;
-    m_client->postTask(CallClosureTask::create(closure));
-}
-
 PassOwnPtr<LifecycleNotifier<ExecutionContext> > ExecutionContext::createLifecycleNotifier()
 {
     return ContextLifecycleNotifier::create(this);
@@ -342,7 +335,7 @@ void ExecutionContext::trace(Visitor* visitor)
 #if ENABLE(OILPAN)
     visitor->trace(m_pendingExceptions);
 #endif
-    Supplementable<WebCore::ExecutionContext>::trace(visitor);
+    WillBeHeapSupplementable<blink::ExecutionContext>::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink

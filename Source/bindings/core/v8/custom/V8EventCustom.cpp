@@ -31,15 +31,16 @@
 #include "config.h"
 #include "bindings/core/v8/V8Event.h"
 
+#include "bindings/core/v8/ModuleProxy.h"
+#include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8DataTransfer.h"
-#include "bindings/v8/V8Binding.h"
+#include "core/EventHeaders.h"
+#include "core/EventInterfaces.h"
 #include "core/clipboard/DataTransfer.h"
 #include "core/events/ClipboardEvent.h"
 #include "core/events/Event.h"
-#include "modules/EventModulesHeaders.h"
-#include "modules/EventModulesInterfaces.h"
 
-namespace WebCore {
+namespace blink {
 
 void V8Event::clipboardDataAttributeGetterCustom(const v8::PropertyCallbackInfo<v8::Value>& info)
 {
@@ -66,9 +67,11 @@ v8::Handle<v8::Object> wrap(Event* event, v8::Handle<v8::Object> creationContext
         return V8Event::createWrapper(event, creationContext, isolate);
 
     EVENT_INTERFACES_FOR_EACH(TRY_TO_WRAP_WITH_INTERFACE)
-    EVENT_MODULES_INTERFACES_FOR_EACH(TRY_TO_WRAP_WITH_INTERFACE)
 
+    v8::Handle<v8::Object> wrapper = ModuleProxy::moduleProxy().wrapForEvent(event, creationContext, isolate);
+    if (!wrapper.IsEmpty())
+        return wrapper;
     return V8Event::createWrapper(event, creationContext, isolate);
 }
 
-} // namespace WebCore
+} // namespace blink

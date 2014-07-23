@@ -9,22 +9,8 @@
         },
         {
             "type": "@WebInspector.ContextMenu.Provider",
-            "contextTypes": ["WebInspector.RemoteObject", "WebInspector.DOMNode"],
+            "contextTypes": ["WebInspector.RemoteObject", "WebInspector.DOMNode", "WebInspector.DeferredDOMNode"],
             "className": "WebInspector.ElementsPanel.ContextMenuProvider"
-        },
-        {
-            "type": "drawer-view",
-            "name": "emulation",
-            "title": "Emulation",
-            "order": "10",
-            "className": "WebInspector.OverridesView"
-        },
-        {
-            "type": "drawer-view",
-            "name": "rendering",
-            "title": "Rendering",
-            "order": "11",
-            "className": "WebInspector.RenderingOptionsView"
         },
         {
             "type": "@WebInspector.Renderer",
@@ -33,18 +19,13 @@
         },
         {
             "type": "@WebInspector.Revealer",
-            "contextTypes": ["WebInspector.DOMNode"],
+            "contextTypes": ["WebInspector.DOMNode", "WebInspector.DeferredDOMNode" ],
             "className": "WebInspector.ElementsPanel.DOMNodeRevealer"
         },
         {
             "type": "@WebInspector.Revealer",
             "contextTypes": ["WebInspector.RemoteObject"],
             "className": "WebInspector.ElementsPanel.NodeRemoteObjectRevealer"
-        },
-        {
-            "type": "@WebInspector.Revealer",
-            "contextTypes": ["WebInspector.OverridesSupport"],
-            "className": "WebInspector.OverridesView.Revealer"
         },
         {
             "type": "ui-setting",

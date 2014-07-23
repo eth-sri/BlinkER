@@ -70,14 +70,14 @@ using blink::WebVector;
 
 namespace {
 
-WebLayer* toWebLayer(WebCore::GraphicsLayer* layer)
+WebLayer* toWebLayer(blink::GraphicsLayer* layer)
 {
     return layer ? layer->platformLayer() : 0;
 }
 
 } // namespace
 
-namespace WebCore {
+namespace blink {
 
 PassOwnPtr<ScrollingCoordinator> ScrollingCoordinator::create(Page* page)
 {
@@ -346,9 +346,7 @@ void ScrollingCoordinator::scrollableAreaScrollbarLayerDidChange(ScrollableArea*
         // Root layer non-overlay scrollbars should be marked opaque to disable
         // blending.
         bool isOpaqueScrollbar = !scrollbar->isOverlayScrollbar();
-        if (!scrollbarGraphicsLayer->contentsOpaque())
-            scrollbarGraphicsLayer->setContentsOpaque(isMainFrame && isOpaqueScrollbar);
-        scrollbarLayer->layer()->setOpaque(scrollbarGraphicsLayer->contentsOpaque());
+        scrollbarGraphicsLayer->setContentsOpaque(isMainFrame && isOpaqueScrollbar);
 
         WebLayer* scrollLayer = toWebLayer(scrollableArea->layerForScrolling());
         WebLayer* containerLayer = toWebLayer(scrollableArea->layerForContainer());
@@ -419,26 +417,6 @@ static void makeLayerChildFrameMap(const LocalFrame* currentFrame, LayerFrameMap
     }
 }
 
-// Return the enclosingCompositedLayerForRepaint for the given RenderLayer
-// including crossing frame boundaries.
-static const RenderLayer* enclosingCompositedLayer(const RenderLayer* layer)
-{
-    RenderLayer* compositedLayer = 0;
-    while (!compositedLayer) {
-        compositedLayer = layer->enclosingCompositingLayerForPaintInvalidation();
-        if (!compositedLayer) {
-            RenderObject* owner = layer->renderer()->frame()->ownerRenderer();
-            if (!owner)
-                break;
-            layer = owner->enclosingLayer();
-        }
-    }
-    // Since this machinery is used only when accelerated compositing is enabled, we expect
-    // that every layer should have an enclosing composited layer.
-    ASSERT(compositedLayer);
-    return compositedLayer;
-}
-
 static void projectRectsToGraphicsLayerSpaceRecursive(
     const RenderLayer* curLayer,
     const LayerHitTestRects& layerRects,
@@ -451,31 +429,11 @@ static void projectRectsToGraphicsLayerSpaceRecursive(
     LayerHitTestRects::const_iterator layerIter = layerRects.find(curLayer);
     if (layerIter != layerRects.end()) {
         // Find the enclosing composited layer when it's in another document (for non-composited iframes).
-        const RenderLayer* compositedLayer = enclosingCompositedLayer(layerIter->key);
-        if (!compositedLayer)
-            return;
+        const RenderLayer* compositedLayer = layerIter->key->enclosingLayerForPaintInvalidationCrossingFrameBoundaries();
+        ASSERT(compositedLayer);
 
         // Find the appropriate GraphicsLayer for the composited RenderLayer.
-        GraphicsLayer* graphicsLayer;
-        LayoutSize extraOffset;
-        if (compositedLayer->compositingState() == PaintsIntoGroupedBacking) {
-            graphicsLayer = compositedLayer->groupedMapping()->squashingLayer();
-            extraOffset = -compositedLayer->offsetFromSquashingLayerOrigin();
-        } else {
-            ASSERT(compositedLayer->hasCompositedLayerMapping());
-            CompositedLayerMappingPtr compositedLayerMapping = compositedLayer->compositedLayerMapping();
-            // The origin for the graphics layer does not have to be the same
-            // as the composited layer (e.g. when a child layer has negative
-            // offset and paints into this layer), so when projecting rects to
-            // graphics layer space they have to be offset by the origin for
-            // the composited layer.
-            extraOffset = compositedLayerMapping->contentOffsetInCompositingLayer();
-            // If the layer is using composited scrolling, then it's the contents that these
-            // rects apply to.
-            graphicsLayer = compositedLayerMapping->scrollingContentsLayer();
-            if (!graphicsLayer)
-                graphicsLayer = compositedLayerMapping->mainGraphicsLayer();
-        }
+        GraphicsLayer* graphicsLayer = compositedLayer->graphicsLayerBackingForScrolling();
 
         GraphicsLayerHitTestRects::iterator glIter = graphicsRects.find(graphicsLayer);
         Vector<LayoutRect>* glRects;
@@ -483,6 +441,7 @@ static void projectRectsToGraphicsLayerSpaceRecursive(
             glRects = &graphicsRects.add(graphicsLayer, Vector<LayoutRect>()).storedValue->value;
         else
             glRects = &glIter->value;
+
         // Transform each rect to the co-ordinate space of the graphicsLayer.
         for (size_t i = 0; i < layerIter->value.size(); ++i) {
             LayoutRect rect = layerIter->value[i];
@@ -495,7 +454,7 @@ static void projectRectsToGraphicsLayerSpaceRecursive(
                 if (compositedLayer->renderer()->hasOverflowClip())
                     rect.move(compositedLayer->renderBox()->scrolledContentOffset());
             }
-            rect.move(extraOffset);
+            RenderLayer::mapRectToPaintBackingCoordinates(compositedLayer->renderer(), rect);
             glRects->append(rect);
         }
     }
@@ -603,9 +562,9 @@ void ScrollingCoordinator::setTouchEventTargetRects(LayerHitTestRects& layerRect
     m_layersWithTouchRects.swap(oldLayersWithTouchRects);
     for (LayerHitTestRects::iterator it = layerRects.begin(); it != layerRects.end(); ++it) {
         if (!it->value.isEmpty()) {
-            const RenderLayer* compositedLayer = enclosingCompositedLayer(it->key);
-            if (compositedLayer)
-                m_layersWithTouchRects.add(compositedLayer);
+            const RenderLayer* compositedLayer = it->key->enclosingLayerForPaintInvalidationCrossingFrameBoundaries();
+            ASSERT(compositedLayer);
+            m_layersWithTouchRects.add(compositedLayer);
         }
     }
 
@@ -1006,4 +965,4 @@ bool ScrollingCoordinator::frameViewIsDirty() const
     return false;
 }
 
-} // namespace WebCore
+} // namespace blink

@@ -33,7 +33,7 @@
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/GraphicsLayerClient.h"
 
-namespace WebCore {
+namespace blink {
 
 class RenderLayerCompositor;
 
@@ -150,7 +150,7 @@ public:
     void setSquashingContentsNeedDisplay();
     void setContentsNeedDisplay();
     // r is in the coordinate space of the layer's render object
-    void setContentsNeedDisplayInRect(const IntRect&);
+    void setContentsNeedDisplayInRect(const LayoutRect&);
 
     // Notification from the renderer that its content changed.
     void contentChanged(ContentChangeType);
@@ -175,7 +175,7 @@ public:
     virtual void paintContents(const GraphicsLayer*, GraphicsContext&, GraphicsLayerPaintingPhase, const IntRect& clip) OVERRIDE;
     virtual bool isTrackingRepaints() const OVERRIDE;
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     virtual void verifyNotPainting() OVERRIDE;
 #endif
 
@@ -185,8 +185,12 @@ public:
     GraphicsLayer* layerForVerticalScrollbar() const { return m_layerForVerticalScrollbar.get(); }
     GraphicsLayer* layerForScrollCorner() const { return m_layerForScrollCorner.get(); }
 
+    // Removes the overflow controls host layer from its parent and positions it
+    // so that it can be inserted as a sibling to this CLM without changing
+    // position.
+    GraphicsLayer* detachLayerForOverflowControls(const RenderLayer& enclosingLayer);
+
     void updateFilters(const RenderStyle*);
-    bool canCompositeFilters() const { return m_canCompositeFilters; }
 
     void setBlendMode(blink::WebBlendMode);
 
@@ -196,7 +200,7 @@ public:
 
     GraphicsLayerUpdater::UpdateType updateTypeForChildren(GraphicsLayerUpdater::UpdateType) const;
 
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     void assertNeedsToUpdateGraphicsLayerBitsCleared() {  ASSERT(m_pendingUpdateScope == GraphicsLayerUpdateNone); }
 #endif
 
@@ -296,8 +300,6 @@ private:
 
     static bool hasVisibleNonCompositingDescendant(RenderLayer* parent);
 
-    void paintsIntoCompositedAncestorChanged();
-
     void doPaintTask(GraphicsLayerPaintInfo&, GraphicsContext*, const IntRect& clip);
 
     // Computes the background clip rect for the given squashed layer, up to any containing layer that is squashed into the
@@ -383,6 +385,7 @@ private:
     OwnPtr<GraphicsLayer> m_layerForHorizontalScrollbar;
     OwnPtr<GraphicsLayer> m_layerForVerticalScrollbar;
     OwnPtr<GraphicsLayer> m_layerForScrollCorner;
+    OwnPtr<GraphicsLayer> m_overflowControlsHostLayer;
 
     // A squashing CLM has two possible squashing-related structures.
     //
@@ -397,6 +400,9 @@ private:
     // m_squashingContainmentLayer
     //   + m_graphicsLayer
     //   + m_squashingLayer
+    //
+    // Stacking children of a squashed layer receive graphics layers that are parented to the compositd ancestor of the
+    // squashed layer (i.e. nearest enclosing composited layer that is not squashed).
     OwnPtr<GraphicsLayer> m_squashingContainmentLayer; // Only used if any squashed layers exist and m_squashingContainmentLayer is not present, to contain the squashed layers as siblings to the rest of the GraphicsLayer tree chunk.
     OwnPtr<GraphicsLayer> m_squashingLayer; // Only used if any squashed layers exist, this is the backing that squashed layers paint into.
     Vector<GraphicsLayerPaintInfo> m_squashedLayers;
@@ -408,11 +414,10 @@ private:
     unsigned m_isMainFrameRenderViewLayer : 1;
     unsigned m_requiresOwnBackingStoreForIntrinsicReasons : 1;
     unsigned m_requiresOwnBackingStoreForAncestorReasons : 1;
-    unsigned m_canCompositeFilters : 1;
     unsigned m_backgroundLayerPaintsFixedRootBackground : 1;
     unsigned m_scrollingContentsAreEmpty : 1;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // CompositedLayerMapping_h

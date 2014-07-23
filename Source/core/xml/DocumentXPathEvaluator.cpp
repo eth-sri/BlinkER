@@ -26,11 +26,11 @@
 #include "config.h"
 #include "core/xml/DocumentXPathEvaluator.h"
 
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/xml/XPathExpression.h"
 #include "core/xml/XPathResult.h"
 
-namespace WebCore {
+namespace blink {
 
 DocumentXPathEvaluator::DocumentXPathEvaluator()
 {
@@ -79,4 +79,4 @@ void DocumentXPathEvaluator::trace(Visitor* visitor)
     DocumentSupplement::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink

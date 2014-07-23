@@ -10,15 +10,15 @@
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "wtf/Assertions.h"
 
-namespace WebCore {
+namespace blink {
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
 static unsigned checkConnectedSubframeCountIsConsistent(Node&);
 #endif
 
 void ChildFrameDisconnector::disconnect(DisconnectPolicy policy)
 {
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     checkConnectedSubframeCountIsConsistent(m_root);
 #endif
 
@@ -72,7 +72,7 @@ void ChildFrameDisconnector::collectFrameOwners(ElementShadow& shadow)
         collectFrameOwners(*root);
 }
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
 static unsigned checkConnectedSubframeCountIsConsistent(Node& node)
 {
     unsigned count = 0;

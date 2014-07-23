@@ -30,12 +30,12 @@
 
 /**
  * @constructor
- * @extends {WebInspector.TargetAwareObject}
+ * @extends {WebInspector.SDKModel}
  * @param {!WebInspector.Target} target
  */
 WebInspector.NetworkManager = function(target)
 {
-    WebInspector.TargetAwareObject.call(this, target);
+    WebInspector.SDKModel.call(this, WebInspector.NetworkManager, target);
     this._dispatcher = new WebInspector.NetworkDispatcher(this);
     this._target = target;
     this._networkAgent = target.networkAgent();
@@ -81,6 +81,7 @@ WebInspector.NetworkManager._MIMETypes = {
     "font/opentype":               {"font": true},
     "application/octet-stream":    {"font": true, "image": true},
     "application/font-woff":       {"font": true},
+    "application/font-woff2":      {"font": true},
     "application/x-font-woff":     {"font": true},
     "application/x-font-type1":    {"font": true},
     "application/x-font-ttf":      {"font": true},
@@ -135,7 +136,7 @@ WebInspector.NetworkManager.prototype = {
         WebInspector.settings.cacheDisabled.removeChangeListener(this._cacheDisabledSettingChanged, this)
     },
 
-    __proto__: WebInspector.TargetAwareObject.prototype
+    __proto__: WebInspector.SDKModel.prototype
 }
 
 /**
@@ -570,8 +571,3 @@ WebInspector.NetworkDispatcher.prototype = {
         return networkRequest;
     }
 }
-
-/**
- * @type {!WebInspector.NetworkManager}
- */
-WebInspector.networkManager;

@@ -149,7 +149,8 @@
            # You can use Blink-in-JS in your local experiment, but don't ship it.
            # crbug.com/341031
            'private_script_files': [
-              '../bindings/v8/PrivateScriptRunner.js',
+              '../bindings/core/v8/PrivateScriptRunner.js',
+              '../core/html/HTMLMarqueeElement.js',
            ],
            'inputs': [
               '../build/scripts/make_private_script_source.py',
@@ -166,36 +167,23 @@
             ],
         },
         {
-          'action_name': 'generateXMLViewerCSS',
-          'inputs': [
-            'xml/XMLViewer.css',
-          ],
-          'outputs': [
-            '<(blink_core_output_dir)/XMLViewerCSS.h',
-          ],
-          'action': [
-            'python',
-            '../build/scripts/xxd.py',
-            'XMLViewer_css',
-            '<@(_inputs)',
-            '<@(_outputs)'
-          ],
-        },
-        {
-          'action_name': 'generateXMLViewerJS',
-          'inputs': [
-            'xml/XMLViewer.js',
-          ],
-          'outputs': [
-            '<(blink_core_output_dir)/XMLViewerJS.h',
-          ],
-          'action': [
-            'python',
-            '../build/scripts/xxd.py',
-            'XMLViewer_js',
-            '<@(_inputs)',
-            '<@(_outputs)'
-          ],
+          'action_name': 'generatePrivateScriptForTesting',
+           'private_script_files': [
+              'testing/PrivateScriptTest.js',
+           ],
+           'inputs': [
+              '../build/scripts/make_private_script_source.py',
+              '<@(_private_script_files)',
+            ],
+            'outputs': [
+              '<(blink_core_output_dir)/PrivateScriptSourcesForTesting.h',
+            ],
+            'action': [
+              'python',
+              '../build/scripts/make_private_script_source.py',
+              '<@(_outputs)',
+              '<@(_private_script_files)'
+            ],
         },
         {
           'action_name': 'HTMLEntityTable',
@@ -238,7 +226,6 @@
             '--output_dir',
             '<(blink_core_output_dir)',
             '--gperf', '<(gperf_exe)',
-            '--defines', '<(feature_defines)',
           ],
         },
         {
@@ -263,7 +250,6 @@
             '<@(in_files)',
             '--output_dir',
             '<(blink_core_output_dir)',
-            '--defines', '<(feature_defines)',
           ],
         },
         {
@@ -288,7 +274,6 @@
             '<@(in_files)',
             '--output_dir',
             '<(blink_core_output_dir)',
-            '--defines', '<(feature_defines)',
           ],
         },
         {
@@ -312,7 +297,6 @@
             '<@(in_files)',
             '--output_dir',
             '<(blink_core_output_dir)',
-            '--defines', '<(feature_defines)',
           ],
         },
         {
@@ -328,7 +312,6 @@
             '../build/scripts/make_mediaquery_tokenizer_codepoints.py',
             '--output_dir',
             '<(blink_core_output_dir)',
-            '--defines', '<(feature_defines)',
           ],
         },
         {
@@ -399,7 +382,6 @@
              '--output_dir',
              '<(blink_core_output_dir)',
             '--gperf', '<(gperf_exe)',
-            '--defines', '<(feature_defines)',
           ],
         },
         {
@@ -577,15 +559,13 @@
             'html/parser/MathMLAttributeNames.in',
             '--output_dir',
             '<(blink_core_output_dir)',
-            '--defines', '<(feature_defines)'
           ],
         },
         {
           'action_name': 'UserAgentStyleSheets',
           'variables': {
             'scripts': [
-              'css/make-css-file-arrays.pl',
-              '../build/scripts/preprocessor.pm',
+              '../build/scripts/make-file-arrays.py',
             ],
             'stylesheets': [
               'css/html.css',
@@ -595,6 +575,7 @@
               'css/themeChromiumAndroid.css',
               'css/themeChromiumLinux.css',
               'css/themeChromiumSkia.css',
+              'css/themeInputMultipleFields.css',
               'css/themeMac.css',
               'css/themeWin.css',
               'css/themeWinQuirks.css',
@@ -618,15 +599,12 @@
           ],
           'action': [
             'python',
-            '../build/scripts/action_useragentstylesheets.py',
-            '<@(_outputs)',
-            '<@(stylesheets)',
-            '--',
             '<@(scripts)',
-            '--',
-            '--defines', '<(feature_defines)',
-            '<@(preprocessor)',
-            '--perl', '<(perl_exe)',
+            '--namespace',
+            'WebCore',
+            '--out-h=<(blink_core_output_dir)/UserAgentStyleSheets.h',
+            '--out-cpp=<(blink_core_output_dir)/UserAgentStyleSheetsData.cpp',
+            '<@(stylesheets)',
           ],
         },
         {

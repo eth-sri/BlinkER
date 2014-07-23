@@ -20,7 +20,7 @@
 #include "config.h"
 #include "core/css/MediaList.h"
 
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/MediaFeatureNames.h"
 #include "core/css/parser/BisonCSSParser.h"
 #include "core/css/CSSStyleSheet.h"
@@ -31,7 +31,7 @@
 #include "core/frame/LocalDOMWindow.h"
 #include "wtf/text/StringBuilder.h"
 
-namespace WebCore {
+namespace blink {
 
 /* MediaList is used to store 3 types of media related entities which mean the same:
  *

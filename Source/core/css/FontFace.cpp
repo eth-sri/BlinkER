@@ -31,10 +31,10 @@
 #include "config.h"
 #include "core/css/FontFace.h"
 
-#include "bindings/v8/Dictionary.h"
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ScriptPromiseResolver.h"
-#include "bindings/v8/ScriptState.h"
+#include "bindings/core/v8/Dictionary.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ScriptPromiseResolver.h"
+#include "bindings/core/v8/ScriptState.h"
 #include "core/CSSValueKeywords.h"
 #include "core/css/BinaryDataFontFaceSource.h"
 #include "core/css/CSSFontFace.h"
@@ -60,7 +60,7 @@
 #include "platform/FontFamilyNames.h"
 #include "platform/SharedBuffer.h"
 
-namespace WebCore {
+namespace blink {
 
 class FontFaceReadyPromiseResolver {
 public:
@@ -110,32 +110,32 @@ static bool initFontFace(FontFace* fontFace, ExecutionContext* context, const At
         return false;
 
     String value;
-    if (descriptors.get("style", value)) {
+    if (DictionaryHelper::get(descriptors, "style", value)) {
         fontFace->setStyle(context, value, exceptionState);
         if (exceptionState.hadException())
             return false;
     }
-    if (descriptors.get("weight", value)) {
+    if (DictionaryHelper::get(descriptors, "weight", value)) {
         fontFace->setWeight(context, value, exceptionState);
         if (exceptionState.hadException())
             return false;
     }
-    if (descriptors.get("stretch", value)) {
+    if (DictionaryHelper::get(descriptors, "stretch", value)) {
         fontFace->setStretch(context, value, exceptionState);
         if (exceptionState.hadException())
             return false;
     }
-    if (descriptors.get("unicodeRange", value)) {
+    if (DictionaryHelper::get(descriptors, "unicodeRange", value)) {
         fontFace->setUnicodeRange(context, value, exceptionState);
         if (exceptionState.hadException())
             return false;
     }
-    if (descriptors.get("variant", value)) {
+    if (DictionaryHelper::get(descriptors, "variant", value)) {
         fontFace->setVariant(context, value, exceptionState);
         if (exceptionState.hadException())
             return false;
     }
-    if (descriptors.get("featureSettings", value)) {
+    if (DictionaryHelper::get(descriptors, "featureSettings", value)) {
         fontFace->setFeatureSettings(context, value, exceptionState);
         if (exceptionState.hadException())
             return false;
@@ -195,7 +195,7 @@ PassRefPtrWillBeRawPtr<FontFace> FontFace::create(Document* document, const Styl
         && fontFace->setPropertyFromStyle(properties, CSSPropertyFontVariant)
         && fontFace->setPropertyFromStyle(properties, CSSPropertyWebkitFontFeatureSettings)
         && !fontFace->family().isEmpty()
-        && fontFace->traits().mask()) {
+        && fontFace->traits().bitfield()) {
         fontFace->initCSSFontFace(document, src);
         return fontFace.release();
     }
@@ -636,4 +636,4 @@ bool FontFace::hadBlankText() const
     return m_cssFontFace->hadBlankText();
 }
 
-} // namespace WebCore
+} // namespace blink

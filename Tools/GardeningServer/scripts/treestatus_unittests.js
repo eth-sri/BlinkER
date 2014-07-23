@@ -44,12 +44,12 @@ var closedTreeJson = {
 };
 
 test('urlByName', 3, function() {
-    equal(treestatus.urlByName('blink'), 'http://blink-status.appspot.com/current?format=json');
-    equal(treestatus.urlByName('chromium'), 'http://chromium-status.appspot.com/current?format=json');
+    equal(treestatus.urlByName('blink'), 'http://blink-status.appspot.com/');
+    equal(treestatus.urlByName('chromium'), 'http://chromium-status.appspot.com/');
     equal(treestatus.urlByName('foo'), null);
 });
 
-asyncTest('fetchTreeStatus', 4, function() {
+asyncTest('fetchTreeStatus', 3, function() {
     var simulator = new NetworkSimulator();
 
     simulator.json = function(url)
@@ -67,13 +67,11 @@ asyncTest('fetchTreeStatus', 4, function() {
                 equal(span.textContent, 'OPEN');
 
                 span = document.createElement('span');
-                simulator.runTest(function() {
-                    treestatus.fetchTreeStatus('http://closedtree', span)
-                        .then(function() {
-                            equal(span.textContent, 'Tree is closed by ojan@chromium.org');
-                            start();
-                        });
-                });
+                treestatus.fetchTreeStatus('http://closedtree', span)
+                    .then(function() {
+                        equal(span.textContent, 'Tree is closed by ojan@chromium.org');
+                        start();
+                    });
             });
     });
 });

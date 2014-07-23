@@ -30,9 +30,20 @@ function test()
 
     function checkReverseMapping(compiledLineNumber, compiledColumnNumber, sourceURL, sourceLineNumber, mapping)
     {
-        var entry = mapping.findEntryReversed(sourceURL, sourceLineNumber);
+        var entry = mapping.findEntryReversed(sourceURL, sourceLineNumber, 5);
         InspectorTest.addResult(compiledLineNumber + " === " + entry[0]);
         InspectorTest.addResult(compiledColumnNumber + " === " + entry[1]);
+    }
+
+    function uiLocation(script, line, column)
+    {
+        var location = script.target().debuggerModel.createRawLocation(script, line, column);
+        return WebInspector.debuggerWorkspaceBinding.rawLocationToUILocation(location);
+    }
+
+    function resetModels()
+    {
+        WebInspector.debuggerModel._reset();
     }
 
     InspectorTest.runTestSuite([
@@ -53,9 +64,10 @@ function test()
                 0         1         2         3
                 012345678901234567890123456789012345
                 function add(a,b){return a+b}var global="foo";
+                foo
             */
             var mappingPayload = {
-                "mappings":"AAASA,QAAAA,IAAG,CAACC,CAAD,CAAaC,CAAb,CACZ,CACI,MAAOD,EAAP,CAAoBC,CADxB,CAIA,IAAIC,OAAS;",
+                "mappings":"AAASA,QAAAA,IAAG,CAACC,CAAD,CAAaC,CAAb,CACZ,CACI,MAAOD,EAAP,CAAoBC,CADxB,CAIA,IAAIC,OAAS;A",
                 "sources":["example.js"]
             };
             var mapping = new WebInspector.SourceMap("source-map.json", mappingPayload);
@@ -66,6 +78,7 @@ function test()
             checkMapping(0, 18, "example.js", 2, 4, mapping);
             checkMapping(0, 25, "example.js", 2, 11, mapping);
             checkMapping(0, 27, "example.js", 2, 24, mapping);
+            checkMapping(1, 0, undefined, undefined, undefined, mapping);
 
             checkReverseMapping(0, 0, "example.js", 0, mapping);
             checkReverseMapping(0, 17, "example.js", 1, mapping);
@@ -191,7 +204,7 @@ function test()
         function testCompilerScriptMapping(next)
         {
             var script;
-            WebInspector.debuggerModel._reset();
+            resetModels();
             var mapping = createCompilerScriptMapping();
             var originalUISourceCode;
             step1();
@@ -233,10 +246,10 @@ function test()
                 var uiSourceCode1 = InspectorTest.testWorkspace.uiSourceCodeForOriginURL("http://localhost:8000/inspector/resources/source1.js");
                 var uiSourceCode2 = InspectorTest.testWorkspace.uiSourceCodeForOriginURL("http://localhost:8000/inspector/resources/source2.js");
 
-                InspectorTest.checkUILocation(uiSourceCode1, 4, 4, script.rawLocationToUILocation(0, 81));
-                InspectorTest.checkUILocation(uiSourceCode1, 5, 4, script.rawLocationToUILocation(0, 93));
-                InspectorTest.checkUILocation(uiSourceCode2, 7, 4, script.rawLocationToUILocation(1, 151));
-                InspectorTest.checkUILocation(originalUISourceCode, 1, 200, script.rawLocationToUILocation(1, 200));
+                InspectorTest.checkUILocation(uiSourceCode1, 4, 4, uiLocation(script, 0, 81));
+                InspectorTest.checkUILocation(uiSourceCode1, 5, 4, uiLocation(script, 0, 93));
+                InspectorTest.checkUILocation(uiSourceCode2, 7, 4, uiLocation(script, 1, 151));
+                InspectorTest.checkUILocation(originalUISourceCode, 1, 200, uiLocation(script, 1, 200));
 
                 InspectorTest.checkRawLocation(script, 0, 42, uiSourceCode1.uiLocationToRawLocation(target, 3, 10));
                 InspectorTest.checkRawLocation(script, 1, 85, uiSourceCode2.uiLocationToRawLocation(target, 0, 0));
@@ -261,7 +274,7 @@ function test()
         function testCompilerScriptMappingWhenResourceWasLoadedAfterSource(next)
         {
             var script;
-            WebInspector.debuggerModel._reset();
+            resetModels();
             var mapping = createCompilerScriptMapping();
             var originalUISourceCode;
             step1();
@@ -299,10 +312,10 @@ function test()
                 var uiSourceCode1 = InspectorTest.testWorkspace.uiSourceCodeForOriginURL("http://localhost:8000/inspector/resources/source1.js");
                 var uiSourceCode2 = InspectorTest.testWorkspace.uiSourceCodeForOriginURL("http://localhost:8000/inspector/resources/source2.js");
 
-                InspectorTest.checkUILocation(uiSourceCode1, 4, 4, script.rawLocationToUILocation(0, 81));
-                InspectorTest.checkUILocation(uiSourceCode1, 5, 4, script.rawLocationToUILocation(0, 93));
-                InspectorTest.checkUILocation(uiSourceCode2, 7, 4, script.rawLocationToUILocation(1, 151));
-                InspectorTest.checkUILocation(originalUISourceCode, 1, 200, script.rawLocationToUILocation(1, 200));
+                InspectorTest.checkUILocation(uiSourceCode1, 4, 4, uiLocation(script, 0, 81));
+                InspectorTest.checkUILocation(uiSourceCode1, 5, 4, uiLocation(script, 0, 93));
+                InspectorTest.checkUILocation(uiSourceCode2, 7, 4, uiLocation(script, 1, 151));
+                InspectorTest.checkUILocation(originalUISourceCode, 1, 200, uiLocation(script, 1, 200));
 
                 InspectorTest.checkRawLocation(script, 0, 42, uiSourceCode1.uiLocationToRawLocation(target, 3, 10));
                 InspectorTest.checkRawLocation(script, 1, 85, uiSourceCode2.uiLocationToRawLocation(target, 0, 0));
@@ -326,7 +339,7 @@ function test()
 
         function testInlinedSourceMap(next)
         {
-            WebInspector.debuggerModel._reset();
+            resetModels();
             var mapping = createCompilerScriptMapping();
             var script = InspectorTest.createScriptMock("http://example.com/compiled.js", 0, 0, true, "");
             var sourceMap = {
@@ -366,7 +379,7 @@ function test()
         function testSourceMapCouldNotBeLoaded(next)
         {
             WebInspector.settings.jsSourceMapsEnabled.get = function() { return true; }
-            WebInspector.debuggerModel._reset();
+            resetModels();
             InspectorTest.createWorkspace();
             var debuggerScriptMapping = new WebInspector.DebuggerScriptMapping(WebInspector.debuggerModel, InspectorTest.testWorkspace, InspectorTest.testNetworkWorkspaceBinding);
 
@@ -383,8 +396,8 @@ function test()
             script.sourceMapURL = "http://localhost:8000/inspector/resources/source-map.json_";
             console.error = function() {}; // Error message is platform dependent.
             debuggerScriptMapping._parsedScriptSource({data:script});
-            var uiLocation = script.rawLocationToUILocation(0, 0);
-            InspectorTest.addResult(uiLocation.uiSourceCode.originURL());
+            var location = uiLocation(script, 0, 0);
+            InspectorTest.addResult(location.uiSourceCode.originURL());
             next();
         },
 

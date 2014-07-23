@@ -32,7 +32,7 @@
 #include "core/rendering/RenderObject.h"
 #include "core/rendering/style/RenderStyle.h"
 
-namespace WebCore {
+namespace blink {
 
 SimplifyMarkupCommand::SimplifyMarkupCommand(Document& document, Node* firstNode, Node* nodeAfterLast)
     : CompositeEditCommand(document), m_firstNode(firstNode), m_nodeAfterLast(nodeAfterLast)
@@ -76,8 +76,7 @@ void SimplifyMarkupCommand::doApply()
                 break;
             }
 
-            unsigned context;
-            if (currentNode->renderStyle()->visualInvalidationDiff(*startingStyle, context).hasNoChange() && !context)
+            if (!currentNode->renderStyle()->visualInvalidationDiff(*startingStyle).hasDifference())
                 topNodeWithStartingStyle = currentNode;
 
         }
@@ -129,4 +128,4 @@ void SimplifyMarkupCommand::trace(Visitor* visitor)
     CompositeEditCommand::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink

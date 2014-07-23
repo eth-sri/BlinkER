@@ -28,8 +28,8 @@
 
 #include "modules/webaudio/AudioContext.h"
 
-#include "bindings/v8/ExceptionMessages.h"
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionMessages.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/html/HTMLMediaElement.h"
@@ -74,9 +74,9 @@
 #include "wtf/text/WTFString.h"
 
 // FIXME: check the proper way to reference an undefined thread ID
-const int UndefinedThreadIdentifier = 0xffffffff;
+const WTF::ThreadIdentifier UndefinedThreadIdentifier = 0xffffffff;
 
-namespace WebCore {
+namespace blink {
 
 bool AudioContext::isSampleRateRangeGood(float sampleRate)
 {
@@ -132,6 +132,7 @@ AudioContext::AudioContext(Document* document, unsigned numberOfChannels, size_t
     , m_isCleared(false)
     , m_isInitialized(false)
     , m_destinationNode(nullptr)
+    , m_isDeletionScheduled(false)
     , m_automaticPullNodesNeedUpdating(false)
     , m_connectionCount(0)
     , m_audioThread(0)
@@ -190,6 +191,11 @@ void AudioContext::initialize()
 
 void AudioContext::clear()
 {
+#if ENABLE(OILPAN)
+    // We need to run disposers before destructing m_contextGraphMutex.
+    m_liveAudioSummingJunctions.clear();
+#endif
+
     // We have to release our reference to the destination node before the context will ever be deleted since the destination node holds a reference to the context.
     if (m_destinationNode)
         m_destinationNode.clear();
@@ -586,18 +592,17 @@ void AudioContext::refNode(AudioNode* node)
     ASSERT(isMainThread());
     AutoLocker locker(this);
 
-    node->ref(AudioNode::RefTypeConnection);
     m_referencedNodes.append(node);
+    node->makeConnection();
 }
 
 void AudioContext::derefNode(AudioNode* node)
 {
     ASSERT(isGraphOwner());
 
-    node->deref(AudioNode::RefTypeConnection);
-
     for (unsigned i = 0; i < m_referencedNodes.size(); ++i) {
-        if (node == m_referencedNodes[i]) {
+        if (node == m_referencedNodes[i].get()) {
+            node->breakConnection();
             m_referencedNodes.remove(i);
             break;
         }
@@ -608,7 +613,7 @@ void AudioContext::derefUnfinishedSourceNodes()
 {
     ASSERT(isMainThread());
     for (unsigned i = 0; i < m_referencedNodes.size(); ++i)
-        m_referencedNodes[i]->deref(AudioNode::RefTypeConnection);
+        m_referencedNodes[i]->breakConnection();
 
     m_referencedNodes.clear();
 }
@@ -682,6 +687,12 @@ bool AudioContext::isGraphOwner() const
     return currentThread() == m_graphOwnerThread;
 }
 
+void AudioContext::addDeferredBreakConnection(AudioNode& node)
+{
+    ASSERT(isAudioThread());
+    m_deferredBreakConnectionList.append(&node);
+}
+
 void AudioContext::addDeferredFinishDeref(AudioNode* node)
 {
     ASSERT(isAudioThread());
@@ -716,8 +727,8 @@ void AudioContext::handlePostRenderTasks()
     // from the render graph (in which case they'll render silence).
     bool mustReleaseLock;
     if (tryLock(mustReleaseLock)) {
-        // Take care of finishing any derefs where the tryLock() failed previously.
-        handleDeferredFinishDerefs();
+        // Take care of AudioNode tasks where the tryLock() failed previously.
+        handleDeferredAudioNodeTasks();
 
         // Dynamically clean up nodes which are no longer needed.
         derefFinishedSourceNodes();
@@ -737,16 +748,32 @@ void AudioContext::handlePostRenderTasks()
     }
 }
 
-void AudioContext::handleDeferredFinishDerefs()
+void AudioContext::handleDeferredAudioNodeTasks()
 {
     ASSERT(isAudioThread() && isGraphOwner());
-    for (unsigned i = 0; i < m_deferredFinishDerefList.size(); ++i) {
-        AudioNode* node = m_deferredFinishDerefList[i];
-        node->finishDeref(AudioNode::RefTypeConnection);
-    }
 
+    for (unsigned i = 0; i < m_deferredBreakConnectionList.size(); ++i)
+        m_deferredBreakConnectionList[i]->breakConnectionWithLock();
+    m_deferredBreakConnectionList.clear();
+
+    for (unsigned i = 0; i < m_deferredFinishDerefList.size(); ++i)
+        m_deferredFinishDerefList[i]->finishDeref();
     m_deferredFinishDerefList.clear();
 }
+
+#if ENABLE(OILPAN)
+void AudioContext::registerLiveAudioSummingJunction(AudioSummingJunction& junction)
+{
+    ASSERT(isMainThread());
+    m_liveAudioSummingJunctions.add(&junction, adoptPtr(new AudioSummingJunctionDisposer(junction)));
+}
+
+AudioContext::AudioSummingJunctionDisposer::~AudioSummingJunctionDisposer()
+{
+    ASSERT(isMainThread());
+    m_junction.context()->removeMarkedSummingJunction(&m_junction);
+}
+#endif
 
 void AudioContext::markForDeletion(AudioNode* node)
 {
@@ -809,15 +836,8 @@ void AudioContext::deleteMarkedNodes()
             AudioNode* node = m_nodesToDelete[n - 1];
             m_nodesToDelete.removeLast();
 
-            // Before deleting the node, clear out any AudioNodeInputs from m_dirtySummingJunctions.
-            unsigned numberOfInputs = node->numberOfInputs();
-            for (unsigned i = 0; i < numberOfInputs; ++i)
-                m_dirtySummingJunctions.remove(node->input(i));
+            node->dispose();
 
-            // Before deleting the node, clear out any AudioNodeOutputs from m_dirtyAudioNodeOutputs.
-            unsigned numberOfOutputs = node->numberOfOutputs();
-            for (unsigned i = 0; i < numberOfOutputs; ++i)
-                m_dirtyAudioNodeOutputs.remove(node->output(i));
 #if ENABLE(OILPAN)
             // Finally, clear the keep alive handle that keeps this
             // object from being collected.
@@ -829,6 +849,21 @@ void AudioContext::deleteMarkedNodes()
         }
         m_isDeletionScheduled = false;
     }
+}
+
+void AudioContext::unmarkDirtyNode(AudioNode& node)
+{
+    // Before deleting the node, clear out any AudioNodeInputs from
+    // m_dirtySummingJunctions.
+    unsigned numberOfInputs = node.numberOfInputs();
+    for (unsigned i = 0; i < numberOfInputs; ++i)
+        m_dirtySummingJunctions.remove(node.input(i));
+
+    // Before deleting the node, clear out any AudioNodeOutputs from
+    // m_dirtyAudioNodeOutputs.
+    unsigned numberOfOutputs = node.numberOfOutputs();
+    for (unsigned i = 0; i < numberOfOutputs; ++i)
+        m_dirtyAudioNodeOutputs.remove(node.output(i));
 }
 
 void AudioContext::markSummingJunctionDirty(AudioSummingJunction* summingJunction)
@@ -847,6 +882,7 @@ void AudioContext::removeMarkedSummingJunction(AudioSummingJunction* summingJunc
 void AudioContext::markAudioNodeOutputDirty(AudioNodeOutput* output)
 {
     ASSERT(isGraphOwner());
+    ASSERT(isMainThread());
     m_dirtyAudioNodeOutputs.add(output);
 }
 
@@ -955,10 +991,12 @@ void AudioContext::trace(Visitor* visitor)
     visitor->trace(m_renderTarget);
     visitor->trace(m_destinationNode);
     visitor->trace(m_listener);
-    visitor->trace(m_dirtySummingJunctions);
+#if ENABLE(OILPAN)
+    visitor->trace(m_liveAudioSummingJunctions);
+#endif
     EventTargetWithInlineData::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // ENABLE(WEB_AUDIO)

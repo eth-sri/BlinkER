@@ -31,12 +31,12 @@
 #include "config.h"
 #include "core/inspector/WorkerDebuggerAgent.h"
 
-#include "bindings/v8/ScriptDebugServer.h"
+#include "bindings/core/v8/ScriptDebugServer.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkerThread.h"
 #include "wtf/MessageQueue.h"
 
-namespace WebCore {
+namespace blink {
 
 namespace {
 
@@ -64,7 +64,7 @@ public:
     {
         // Process all queued debugger commands. WorkerThread is certainly
         // alive if this task is being executed.
-        while (MessageQueueMessageReceived == m_thread->runLoop().runDebuggerTask(WorkerRunLoop::DontWaitForMessage)) { }
+        while (MessageQueueMessageReceived == m_thread->runDebuggerTask(WorkerRunLoop::DontWaitForMessage)) { }
     }
 
 private:
@@ -136,4 +136,4 @@ void WorkerDebuggerAgent::unmuteConsole()
     // We don't need to mute console for workers.
 }
 
-} // namespace WebCore
+} // namespace blink

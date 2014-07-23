@@ -7,13 +7,19 @@
 #ifndef V8TestInterfaceConstructor_h
 #define V8TestInterfaceConstructor_h
 
+#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8DOMWrapper.h"
+#include "bindings/core/v8/WrapperTypeInfo.h"
 #include "bindings/tests/idls/TestInterfaceConstructor.h"
-#include "bindings/v8/V8Binding.h"
-#include "bindings/v8/V8DOMWrapper.h"
-#include "bindings/v8/WrapperTypeInfo.h"
 #include "platform/heap/Handle.h"
 
-namespace WebCore {
+namespace blink {
+
+class V8TestInterfaceConstructorConstructor {
+public:
+    static v8::Handle<v8::FunctionTemplate> domTemplate(v8::Isolate*);
+    static const WrapperTypeInfo wrapperTypeInfo;
+};
 
 class V8TestInterfaceConstructor {
 public:

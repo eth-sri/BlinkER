@@ -21,8 +21,8 @@ function test()
         InspectorTest.override(HeapProfilerAgent, "takeHeapSnapshot", takeHeapSnapshotMock);
         function takeHeapSnapshotMock(reportProgress, callback) {
             if (reportProgress) {
-                profileType.reportHeapSnapshotProgress(50, 100, false);
-                profileType.reportHeapSnapshotProgress(100, 100, true);
+                profileType._reportHeapSnapshotProgress({data: {done: 50, total: 100, finished: false}});
+                profileType._reportHeapSnapshotProgress({data: {done: 100, total: 100, finished: true}});
             }
             for (var i = 0, l = sourceStringified.length; i < l; i += partSize)
                 dispatcher.addHeapSnapshotChunk(sourceStringified.slice(i, i + partSize));
@@ -38,7 +38,7 @@ function test()
     }
 
     WebInspector.console.log = function(message) {
-        InspectorTest.addResult("WebInspector.console.log: " + message);
+        InspectorTest.addResult("WebInspector.consoleModel.log: " + message);
     }
 
     InspectorTest.runTestSuite([
@@ -50,7 +50,7 @@ function test()
                 function saveMock(url, data)
                 {
                     savedSnapshotData = data;
-                    WebInspector.fileManager.savedURL(url);
+                    WebInspector.fileManager._savedURL({data: url});
                 }
                 InspectorTest.override(InspectorFrontendHost, "save", saveMock);
 
@@ -58,7 +58,7 @@ function test()
                 InspectorFrontendHost.append = function appendMock(url, data)
                 {
                     savedSnapshotData += data;
-                    WebInspector.fileManager.appendedToURL(url);
+                    WebInspector.fileManager._appendedToURL({data: url});
                 }
                 function closeMock(url)
                 {

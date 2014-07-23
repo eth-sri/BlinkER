@@ -40,6 +40,10 @@ WebInspector.IsolatedFileSystemManager = function()
     this._pendingFileSystemRequests = {};
     this._fileSystemMapping = new WebInspector.FileSystemMapping();
     this._requestFileSystems();
+
+    InspectorFrontendHost.events.addEventListener(InspectorFrontendHostAPI.Events.FileSystemsLoaded, this._onFileSystemsLoaded, this);
+    InspectorFrontendHost.events.addEventListener(InspectorFrontendHostAPI.Events.FileSystemRemoved, this._onFileSystemRemoved, this);
+    InspectorFrontendHost.events.addEventListener(InspectorFrontendHostAPI.Events.FileSystemAdded, this._onFileSystemAdded, this);
 }
 
 /** @typedef {!{fileSystemName: string, rootURL: string, fileSystemPath: string}} */
@@ -79,10 +83,11 @@ WebInspector.IsolatedFileSystemManager.prototype = {
     },
 
     /**
-     * @param {!Array.<!WebInspector.IsolatedFileSystemManager.FileSystem>} fileSystems
+     * @param {!WebInspector.Event} event
      */
-    _fileSystemsLoaded: function(fileSystems)
+    _onFileSystemsLoaded: function(event)
     {
+        var fileSystems = /** @type {!Array.<!WebInspector.IsolatedFileSystemManager.FileSystem>} */ (event.data);
         var addedFileSystemPaths = {};
         for (var i = 0; i < fileSystems.length; ++i) {
             this._innerAddFileSystem(fileSystems[i]);
@@ -122,18 +127,27 @@ WebInspector.IsolatedFileSystemManager.prototype = {
     },
 
     /**
-     * @param {string} errorMessage
-     * @param {!WebInspector.IsolatedFileSystemManager.FileSystem} fileSystem
+     * @param {!WebInspector.Event} event
      */
-    _fileSystemAdded: function(errorMessage, fileSystem)
+    _onFileSystemAdded: function(event)
     {
+        var errorMessage = /** @type {string} */ (event.data["errorMessage"]);
+        var fileSystem = /** @type {!WebInspector.IsolatedFileSystemManager.FileSystem} */ (event.data["fileSystem"]);
         var fileSystemPath;
         if (errorMessage) {
-            WebInspector.messageSink.addErrorMessage(errorMessage, true);
+            WebInspector.console.error(errorMessage, true);
         } else {
             this._innerAddFileSystem(fileSystem);
             fileSystemPath = fileSystem.fileSystemPath;
         }
+    },
+
+    /**
+     * @param {!WebInspector.Event} event
+     */
+    _onFileSystemRemoved: function(event)
+    {
+        this._fileSystemRemoved(/** @type {string} */ (event.data));
     },
 
     /**
@@ -184,44 +198,3 @@ WebInspector.IsolatedFileSystemManager.prototype = {
  * @type {!WebInspector.IsolatedFileSystemManager}
  */
 WebInspector.isolatedFileSystemManager;
-
-/**
- * @constructor
- * @param {!WebInspector.IsolatedFileSystemManager} IsolatedFileSystemManager
- */
-WebInspector.IsolatedFileSystemDispatcher = function(IsolatedFileSystemManager)
-{
-    this._IsolatedFileSystemManager = IsolatedFileSystemManager;
-}
-
-WebInspector.IsolatedFileSystemDispatcher.prototype = {
-    /**
-     * @param {!Array.<!WebInspector.IsolatedFileSystemManager.FileSystem>} fileSystems
-     */
-    fileSystemsLoaded: function(fileSystems)
-    {
-        this._IsolatedFileSystemManager._fileSystemsLoaded(fileSystems);
-    },
-
-    /**
-     * @param {string} fileSystemPath
-     */
-    fileSystemRemoved: function(fileSystemPath)
-    {
-        this._IsolatedFileSystemManager._fileSystemRemoved(fileSystemPath);
-    },
-
-    /**
-     * @param {string} errorMessage
-     * @param {!WebInspector.IsolatedFileSystemManager.FileSystem} fileSystem
-     */
-    fileSystemAdded: function(errorMessage, fileSystem)
-    {
-        this._IsolatedFileSystemManager._fileSystemAdded(errorMessage, fileSystem);
-    }
-}
-
-/**
- * @type {!WebInspector.IsolatedFileSystemDispatcher}
- */
-WebInspector.isolatedFileSystemDispatcher;

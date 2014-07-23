@@ -26,11 +26,11 @@
 #include "config.h"
 #include "modules/indexeddb/IDBDatabase.h"
 
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ExceptionStatePlaceholder.h"
-#include "bindings/v8/IDBBindingUtilities.h"
-#include "bindings/v8/Nullable.h"
-#include "bindings/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/Nullable.h"
+#include "bindings/core/v8/SerializedScriptValue.h"
+#include "bindings/modules/v8/IDBBindingUtilities.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/events/EventQueue.h"
 #include "core/inspector/ScriptCallStack.h"
@@ -50,7 +50,7 @@
 
 using blink::WebIDBDatabase;
 
-namespace WebCore {
+namespace blink {
 
 const char IDBDatabase::indexDeletedErrorMessage[] = "The index or its object store has been deleted.";
 const char IDBDatabase::isKeyCursorErrorMessage[] = "The cursor is a key cursor.";
@@ -203,12 +203,12 @@ IDBObjectStore* IDBDatabase::createObjectStore(const String& name, const Diction
     if (!options.isUndefinedOrNull()) {
         String keyPathString;
         Vector<String> keyPathArray;
-        if (options.get("keyPath", keyPathArray))
+        if (DictionaryHelper::get(options, "keyPath", keyPathArray))
             keyPath = IDBKeyPath(keyPathArray);
         else if (options.getWithUndefinedOrNullCheck("keyPath", keyPathString))
             keyPath = IDBKeyPath(keyPathString);
 
-        options.get("autoIncrement", autoIncrement);
+        DictionaryHelper::get(options, "autoIncrement", autoIncrement);
     }
 
     return createObjectStore(name, keyPath, autoIncrement, exceptionState);
@@ -397,8 +397,13 @@ void IDBDatabase::onVersionChange(int64_t oldVersion, int64_t newVersion)
     if (m_contextStopped || !executionContext())
         return;
 
-    if (m_closePending)
+    if (m_closePending) {
+        // If we're pending, that means there's a busy transaction. We won't
+        // fire 'versionchange' but since we're not closing immediately the
+        // back-end should still send out 'blocked'.
+        m_backend->versionChangeIgnored();
         return;
+    }
 
     Nullable<unsigned long long> newVersionNullable = (newVersion == IDBDatabaseMetadata::NoIntVersion) ? Nullable<unsigned long long>() : Nullable<unsigned long long>(newVersion);
     enqueueEvent(IDBVersionChangeEvent::create(EventTypeNames::versionchange, oldVersion, newVersionNullable));
@@ -424,7 +429,11 @@ bool IDBDatabase::dispatchEvent(PassRefPtrWillBeRawPtr<Event> event)
         if (m_enqueuedEvents[i].get() == event.get())
             m_enqueuedEvents.remove(i);
     }
-    return EventTarget::dispatchEvent(event.get());
+
+    bool result = EventTarget::dispatchEvent(event.get());
+    if (event->type() == EventTypeNames::versionchange && !m_closePending && m_backend)
+        m_backend->versionChangeIgnored();
+    return result;
 }
 
 int64_t IDBDatabase::findObjectStoreId(const String& name) const
@@ -468,4 +477,4 @@ ExecutionContext* IDBDatabase::executionContext() const
     return ActiveDOMObject::executionContext();
 }
 
-} // namespace WebCore
+} // namespace blink

@@ -5,13 +5,14 @@
 #include "config.h"
 #include "InitModules.h"
 
+#include "bindings/modules/v8/ModuleBindingsInitializer.h"
 #include "core/EventTypeNames.h"
 #include "core/dom/Document.h"
 #include "modules/EventModulesFactory.h"
 #include "modules/EventModulesNames.h"
 #include "modules/EventTargetModulesNames.h"
 
-namespace WebCore {
+namespace blink {
 
 void ModulesInitializer::initEventNames()
 {
@@ -31,4 +32,9 @@ void ModulesInitializer::registerEventFactory()
     Document::registerEventFactory(EventModulesFactory::create());
 }
 
-} // namespace WebCore
+void ModulesInitializer::initBindings()
+{
+    ModuleBindingsInitializer::init();
+}
+
+} // namespace blink

@@ -19,26 +19,30 @@
                   "drawsContent": true,
                   "children": [
                     {
-
+                      "shouldFlattenTransform": false
                     }
                   ]
                 }
               ]
             },
             {
-              "position": [0, 285],
-              "bounds": [285, 15],
-              "drawsContent": true
-            },
-            {
-              "position": [285, 0],
-              "bounds": [15, 285],
-              "drawsContent": true
-            },
-            {
-              "position": [285, 285],
-              "bounds": [15, 15],
-              "drawsContent": true
+              "children": [
+                {
+                  "position": [0, 285],
+                  "bounds": [285, 15],
+                  "drawsContent": true
+                },
+                {
+                  "position": [285, 0],
+                  "bounds": [15, 285],
+                  "drawsContent": true
+                },
+                {
+                  "position": [285, 285],
+                  "bounds": [15, 15],
+                  "drawsContent": true
+                }
+              ]
             }
           ]
         }

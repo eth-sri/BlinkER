@@ -27,14 +27,14 @@
 #ifndef HistoryItem_h
 #define HistoryItem_h
 
-#include "bindings/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/SerializedScriptValue.h"
 #include "platform/geometry/FloatPoint.h"
 #include "platform/geometry/IntPoint.h"
 #include "platform/weborigin/Referrer.h"
 #include "wtf/RefCounted.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 class Document;
 class DocumentState;
@@ -133,6 +133,6 @@ private:
 
 }; // class HistoryItem
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // HISTORYITEM_H

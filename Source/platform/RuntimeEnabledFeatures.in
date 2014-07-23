@@ -30,18 +30,15 @@ PrefixedVideoFullscreen status=stable
 // The changes enabled behind this flag are very likely to break lots of content.
 // ** DO NOT use this flag unless you know what you are doing. **
 BleedingEdgeFastPaths
-BrandColor status=experimental
+ThemeColor status=stable
 
 ClientHintsDpr status=experimental
 Crypto status=stable
 CSSAnimationUnprefixed status=experimental
 CSSCompositing status=experimental
-CSSExclusions status=experimental
 CSSGridLayout status=experimental
 CSSMaskSourceType status=experimental
 CSSOMSmoothScroll status=experimental
-CSSShapes status=stable
-CSSStickyPosition status=test
 CSSTouchAction status=stable
 CSSTouchActionDelay status=test
 CSSTransformsUnprefixed status=stable
@@ -49,10 +46,13 @@ CSSViewport status=experimental
 CSSWillChange status=stable
 CSS3Text status=experimental
 CSS3TextDecorations status=experimental
+CompositedSelectionUpdates
 CustomSchemeHandler depends_on=NavigatorContentUtils, status=experimental
 Database status=stable
 DeviceLight status=test
 DialogElement status=stable
+DisplayList2dCanvas
+SVGFontsOnNonGDIPlatforms
 EncodingAPI status=experimental
 EncryptedMedia status=test
 EncryptedMediaAnyVersion status=stable
@@ -61,16 +61,17 @@ ExperimentalContentSecurityPolicyFeatures status=experimental
 ExperimentalWebSocket status=stable
 FastMobileScrolling
 FileAPIBlobClose status=experimental
-FileConstructor status=experimental
+FileConstructor status=stable
 FileSystem status=stable
 FontLoadEvents status=stable
 FastTextAutosizing status=stable
 Gamepad status=stable
+Geofencing status=test
 HTMLImports status=stable
 HighResolutionTimeInWorkers status=stable
 IMEAPI status=experimental
 ImageDataConstructor status=experimental
-ImageRenderingPixelated status=experimental
+ImageRenderingPixelated status=stable
 IndexedDBExperimental status=experimental
 InputModeAttribute status=experimental
 LangAttributeAwareFormControlUI
@@ -96,11 +97,10 @@ OrientationEvent
 OverlayFullscreenVideo
 PagePopup status=stable
 Path2D status=stable
-PathOpsSVGClipping
+PathOpsSVGClipping status=experimental
 PeerConnection depends_on=MediaStream, status=stable
 PreciseMemoryInfo
 PushMessaging status=experimental
-Quota status=stable
 QuotaPromise status=experimental
 OverlayScrollbars
 RegionBasedColumns status=experimental
@@ -121,6 +121,9 @@ Picture status=experimental
 
 // window.showModalDialog is deprecated and slated for removal. crbug.com/345831
 ShowModalDialog status=deprecated
+
+// Lax Mixed Content checking for WebSockets, XHR, etc. is deprecated and slated for removal. crbug.com/389089
+LaxMixedContentChecking status=deprecated
 
 SpeechSynthesis status=stable
 Stream status=experimental

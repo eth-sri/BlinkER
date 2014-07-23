@@ -30,7 +30,7 @@
 #include "core/loader/FrameLoaderClient.h"
 #include "platform/RuntimeEnabledFeatures.h"
 
-namespace WebCore {
+namespace blink {
 
 #define DEFINE_ARRAY_FOR_MATCHING(name, source, maxMatchLength) \
 const UChar* name; \
@@ -474,8 +474,8 @@ void HTMLMetaElement::process()
             processViewportContentAttribute("width=device-width", ViewportDescription::HandheldFriendlyMeta);
         else if (equalIgnoringCase(nameValue, "mobileoptimized"))
             processViewportContentAttribute("width=device-width, initial-scale=1", ViewportDescription::MobileOptimizedMeta);
-        else if (RuntimeEnabledFeatures::brandColorEnabled() && equalIgnoringCase(nameValue, "brand-color") && document().frame())
-            document().frame()->loader().client()->dispatchDidChangeBrandColor();
+        else if (RuntimeEnabledFeatures::themeColorEnabled() && equalIgnoringCase(nameValue, "theme-color") && document().frame())
+            document().frame()->loader().client()->dispatchDidChangeThemeColor();
     }
 
     // Get the document to process the tag, but only if we're actually part of DOM

@@ -26,7 +26,7 @@
 #include "config.h"
 #include "core/html/HTMLVideoElement.h"
 
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/CSSPropertyNames.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Attribute.h"
@@ -41,7 +41,7 @@
 #include "core/rendering/RenderVideo.h"
 #include "platform/UserGestureIndicator.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -117,14 +117,14 @@ void HTMLVideoElement::parseAttribute(const QualifiedName& name, const AtomicStr
         if (shouldDisplayPosterImage()) {
             if (!m_imageLoader)
                 m_imageLoader = HTMLImageLoader::create(this);
-            m_imageLoader->updateFromElementIgnoringPreviousError();
+            m_imageLoader->updateFromElement(ImageLoader::UpdateIgnorePreviousError);
         } else {
             if (renderer())
                 toRenderImage(renderer())->imageResource()->setImageResource(0);
         }
         // Notify the player when the poster image URL changes.
-        if (player())
-            player()->setPoster(posterImageURL());
+        if (webMediaPlayer())
+            webMediaPlayer()->setPoster(posterImageURL());
     } else
         HTMLMediaElement::parseAttribute(name, value);
 }

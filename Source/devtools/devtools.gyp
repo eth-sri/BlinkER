@@ -53,7 +53,6 @@
                 'build_network_module',
                 'build_profiler_module',
                 'build_resources_module',
-                'build_search_module',
                 'build_settings_module',
                 'build_source_frame_module',
                 'build_sources_module',
@@ -128,7 +127,6 @@
                         'input_pages': [
                             '<(PRODUCT_DIR)/resources/inspector/devtools.html',
                             '<(PRODUCT_DIR)/resources/inspector/main/Main.js',
-                            '<(PRODUCT_DIR)/resources/inspector/search/AdvancedSearchView.js',
                             '<(PRODUCT_DIR)/resources/inspector/console/ConsolePanel.js',
                             '<(PRODUCT_DIR)/resources/inspector/elements/ElementsPanel.js',
                             '<(PRODUCT_DIR)/resources/inspector/extensions/ExtensionServer.js',
@@ -141,7 +139,7 @@
                             '<(PRODUCT_DIR)/resources/inspector/profiler/ProfilesPanel.js',
                             '<(PRODUCT_DIR)/resources/inspector/audits/AuditsPanel.js',
                             '<(PRODUCT_DIR)/resources/inspector/layers/LayersPanel.js',
-                            '<(PRODUCT_DIR)/resources/inspector/profiler/heap_snapshot_worker/HeapSnapshotWorker.js',
+                            '<(PRODUCT_DIR)/resources/inspector/heap_snapshot_worker/HeapSnapshotWorker.js',
                             '<(PRODUCT_DIR)/resources/inspector/script_formatter_worker/ScriptFormatterWorker.js',
                             '<(PRODUCT_DIR)/resources/inspector/temp_storage_shared_worker/TempStorageSharedWorker.js',
                             '<(PRODUCT_DIR)/resources/inspector/devices/DevicesView.js',
@@ -290,7 +288,7 @@
                         {
                             'destination': '<(PRODUCT_DIR)/resources/inspector',
                             'files': [
-                                '<@(devtools_core_base_js_files)',
+                                '<@(devtools_core_base_files)',
                                 '<(blink_devtools_output_dir)/InspectorBackendCommands.js',
                                 '<(blink_devtools_output_dir)/SupportedCSSProperties.js',
                             ],
@@ -317,6 +315,18 @@
                             'destination': '<(PRODUCT_DIR)/resources/inspector/ui',
                             'files': [
                                 '<@(devtools_ui_js_files)',
+                            ],
+                        },
+                        {
+                            'destination': '<(PRODUCT_DIR)/resources/inspector/host',
+                            'files': [
+                                '<@(devtools_host_js_files)',
+                            ],
+                        },
+                        {
+                            'destination': '<(PRODUCT_DIR)/resources/inspector/toolbox',
+                            'files': [
+                                '<@(devtools_toolbox_js_files)',
                             ],
                         },
                         {
@@ -354,36 +364,6 @@
                             'files': [
                                 '<@(devtools_console_js_files)',
                                 'front_end/console/module.json',
-                            ],
-                        }
-                    ]
-                }]
-            ]
-        },
-        {
-            'target_name': 'build_search_module',
-            'type': 'none',
-            'conditions': [
-                ['debug_devtools==0', { # Release
-                    'actions': [{
-                        'action_name': 'build_search_module',
-                        'script_name': 'scripts/inline_js_imports.py',
-                        'input_file': 'front_end/search/AdvancedSearchView.js',
-                        'inputs': [
-                            '<@(_script_name)',
-                            '<@(devtools_search_js_files)',
-                        ],
-                        'outputs': ['<(PRODUCT_DIR)/resources/inspector/search/AdvancedSearchView.js'],
-                        'action': ['python', '<@(_script_name)', '<@(_input_file)', '<@(_outputs)'],
-                    }],
-                },
-                { # Debug
-                    'copies': [
-                        {
-                            'destination': '<(PRODUCT_DIR)/resources/inspector/search',
-                            'files': [
-                                '<@(devtools_search_js_files)',
-                                'front_end/search/module.json',
                             ],
                         }
                     ]
@@ -744,20 +724,20 @@
                     'actions': [{
                         'action_name': 'build_heap_snapshot_worker_module',
                         'script_name': 'scripts/inline_js_imports.py',
-                        'input_file': 'front_end/profiler/heap_snapshot_worker/HeapSnapshotWorker.js',
+                        'input_file': 'front_end/heap_snapshot_worker/HeapSnapshotWorker.js',
                         'inputs': [
                             '<@(_script_name)',
                             '<@(_input_file)',
                             '<@(devtools_heap_snapshot_worker_js_files)',
                         ],
-                        'outputs': ['<(PRODUCT_DIR)/resources/inspector/profiler/heap_snapshot_worker/HeapSnapshotWorker.js'],
+                        'outputs': ['<(PRODUCT_DIR)/resources/inspector/heap_snapshot_worker/HeapSnapshotWorker.js'],
                         'action': ['python', '<@(_script_name)', '<@(_input_file)', '<@(_outputs)'],
                     }],
                 },
                 { # Debug
                     'copies': [
                         {
-                            'destination': '<(PRODUCT_DIR)/resources/inspector/profiler/heap_snapshot_worker',
+                            'destination': '<(PRODUCT_DIR)/resources/inspector/heap_snapshot_worker',
                             'files': [
                                 '<@(devtools_heap_snapshot_worker_js_files)',
                             ],
@@ -874,15 +854,15 @@
                     'actions': [{
                         'action_name': 'concatenate_devtools_css',
                         'script_name': 'scripts/concatenate_css_files.py',
-                        'input_page': 'front_end/inspector.html',
+                        'input_stylesheet': 'front_end/inspector.css',
                         'inputs': [
                             '<@(_script_name)',
-                            '<@(_input_page)',
-                            '<@(all_devtools_files)',
+                            '<@(_input_stylesheet)',
+                            '<@(devtools_core_base_files)',
                         ],
                         'search_path': [ 'front_end' ],
                         'outputs': ['<(PRODUCT_DIR)/resources/inspector/inspector.css'],
-                        'action': ['python', '<@(_script_name)', '<@(_input_page)', '<@(_search_path)', '<@(_outputs)'],
+                        'action': ['python', '<@(_script_name)', '<@(_input_stylesheet)', '<@(_outputs)'],
                     }],
                     'copies': [{
                         'destination': '<(PRODUCT_DIR)/resources/inspector',

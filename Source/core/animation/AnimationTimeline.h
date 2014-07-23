@@ -40,7 +40,7 @@
 #include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
 
-namespace WebCore {
+namespace blink {
 
 class Document;
 class AnimationNode;
@@ -67,6 +67,7 @@ public:
     // Creates a player attached to this timeline, but without a start time.
     AnimationPlayer* createAnimationPlayer(AnimationNode*);
     AnimationPlayer* play(AnimationNode*);
+    WillBeHeapVector<RefPtrWillBeMember<AnimationPlayer> > getAnimationPlayers();
 
 #if !ENABLE(OILPAN)
     void playerDestroyed(AnimationPlayer* player)
@@ -84,7 +85,6 @@ public:
     double currentTimeInternal();
     double effectiveTime();
     void pauseAnimationsForTesting(double);
-    size_t numberOfActiveAnimationsForTesting() const;
 
     void setOutdatedAnimationPlayer(AnimationPlayer*);
     bool hasOutdatedAnimationPlayer() const;

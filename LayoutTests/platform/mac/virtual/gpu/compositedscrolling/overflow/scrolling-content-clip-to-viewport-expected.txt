@@ -17,24 +17,28 @@
                   "shouldFlattenTransform": false,
                   "children": [
                     {
-
+                      "shouldFlattenTransform": false
                     }
                   ]
                 }
               ]
             },
             {
-              "position": [0, 325],
-              "bounds": [305, 15]
-            },
-            {
-              "position": [305, 0],
-              "bounds": [15, 325]
-            },
-            {
-              "position": [305, 325],
-              "bounds": [15, 15],
-              "drawsContent": true
+              "children": [
+                {
+                  "position": [0, 325],
+                  "bounds": [305, 15]
+                },
+                {
+                  "position": [305, 0],
+                  "bounds": [15, 325]
+                },
+                {
+                  "position": [305, 325],
+                  "bounds": [15, 15],
+                  "drawsContent": true
+                }
+              ]
             }
           ]
         },

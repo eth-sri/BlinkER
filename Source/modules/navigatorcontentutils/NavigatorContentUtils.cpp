@@ -27,7 +27,7 @@
 #include "config.h"
 #include "modules/navigatorcontentutils/NavigatorContentUtils.h"
 
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/frame/LocalFrame.h"
@@ -36,7 +36,7 @@
 #include "wtf/HashSet.h"
 #include "wtf/text/StringBuilder.h"
 
-namespace WebCore {
+namespace blink {
 
 static HashSet<String>* protocolWhitelist;
 
@@ -107,7 +107,7 @@ static bool isProtocolWhitelisted(const String& scheme)
     return protocolWhitelist->contains(builder.toString());
 }
 
-static bool verifyProtocolHandlerScheme(const String& scheme, const String& method, ExceptionState& exceptionState)
+static bool verifyCustomHandlerScheme(const String& scheme, ExceptionState& exceptionState)
 {
     if (!isValidProtocol(scheme)) {
         exceptionState.throwSecurityError("The scheme '" + scheme + "' is not valid protocol");
@@ -155,7 +155,7 @@ void NavigatorContentUtils::registerProtocolHandler(Navigator& navigator, const 
     if (!verifyCustomHandlerURL(baseURL, url, exceptionState))
         return;
 
-    if (!verifyProtocolHandlerScheme(scheme, "registerProtocolHandler", exceptionState))
+    if (!verifyCustomHandlerScheme(scheme, exceptionState))
         return;
 
     ASSERT(navigator.frame()->page());
@@ -198,7 +198,7 @@ String NavigatorContentUtils::isProtocolHandlerRegistered(Navigator& navigator, 
     if (!verifyCustomHandlerURL(baseURL, url, exceptionState))
         return declined;
 
-    if (!verifyProtocolHandlerScheme(scheme, "isProtocolHandlerRegistered", exceptionState))
+    if (!verifyCustomHandlerScheme(scheme, exceptionState))
         return declined;
 
     ASSERT(navigator.frame()->page());
@@ -216,7 +216,7 @@ void NavigatorContentUtils::unregisterProtocolHandler(Navigator& navigator, cons
     if (!verifyCustomHandlerURL(baseURL, url, exceptionState))
         return;
 
-    if (!verifyProtocolHandlerScheme(scheme, "unregisterProtocolHandler", exceptionState))
+    if (!verifyCustomHandlerScheme(scheme, exceptionState))
         return;
 
     ASSERT(navigator.frame()->page());
@@ -233,4 +233,4 @@ void provideNavigatorContentUtilsTo(Page& page, PassOwnPtr<NavigatorContentUtils
     NavigatorContentUtils::provideTo(page, NavigatorContentUtils::supplementName(), NavigatorContentUtils::create(client));
 }
 
-} // namespace WebCore
+} // namespace blink

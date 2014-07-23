@@ -26,13 +26,13 @@
 #include "config.h"
 #include "core/inspector/InspectorConsoleAgent.h"
 
-#include "bindings/v8/ScriptCallStackFactory.h"
-#include "bindings/v8/ScriptController.h"
-#include "bindings/v8/ScriptProfiler.h"
+#include "bindings/core/v8/ScriptCallStackFactory.h"
+#include "bindings/core/v8/ScriptController.h"
+#include "bindings/core/v8/ScriptProfiler.h"
 #include "core/frame/LocalFrame.h"
-#include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InjectedScriptHost.h"
 #include "core/inspector/InjectedScriptManager.h"
+#include "core/inspector/InspectorConsoleMessage.h"
 #include "core/inspector/InspectorState.h"
 #include "core/inspector/InspectorTimelineAgent.h"
 #include "core/inspector/InstrumentingAgents.h"
@@ -49,7 +49,7 @@
 #include "wtf/text/StringBuilder.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 static const unsigned maximumConsoleMessages = 1000;
 static const int expireConsoleMessagesStep = 100;
@@ -96,7 +96,7 @@ void InspectorConsoleAgent::enable(ErrorString*)
     m_state->setBoolean(ConsoleAgentState::consoleMessagesEnabled, true);
 
     if (m_expiredConsoleMessageCount) {
-        ConsoleMessage expiredMessage(!isWorkerAgent(), OtherMessageSource, LogMessageType, WarningMessageLevel, String::format("%d console messages are not shown.", m_expiredConsoleMessageCount));
+        InspectorConsoleMessage expiredMessage(!isWorkerAgent(), OtherMessageSource, LogMessageType, WarningMessageLevel, String::format("%d console messages are not shown.", m_expiredConsoleMessageCount));
         expiredMessage.setTimestamp(0);
         expiredMessage.addToFrontend(m_frontend, m_injectedScriptManager, false);
     }
@@ -161,17 +161,17 @@ void InspectorConsoleAgent::addMessageToConsole(MessageSource source, MessageTyp
         clearMessages(&error);
     }
 
-    addConsoleMessage(adoptPtr(new ConsoleMessage(!isWorkerAgent(), source, type, level, message, callStack, requestIdentifier)));
+    addConsoleMessage(adoptPtr(new InspectorConsoleMessage(!isWorkerAgent(), source, type, level, message, callStack, requestIdentifier)));
 }
 
-void InspectorConsoleAgent::addMessageToConsole(MessageSource source, MessageType type, MessageLevel level, const String& message, ScriptState* scriptState, PassRefPtrWillBeRawPtr<ScriptArguments> arguments, unsigned long requestIdentifier)
+void InspectorConsoleAgent::addConsoleAPIMessageToConsole(MessageType type, MessageLevel level, const String& message, ScriptState* scriptState, PassRefPtrWillBeRawPtr<ScriptArguments> arguments, unsigned long requestIdentifier)
 {
     if (type == ClearMessageType) {
         ErrorString error;
         clearMessages(&error);
     }
 
-    addConsoleMessage(adoptPtr(new ConsoleMessage(!isWorkerAgent(), source, type, level, message, arguments, scriptState, requestIdentifier)));
+    addConsoleMessage(adoptPtr(new InspectorConsoleMessage(!isWorkerAgent(), ConsoleAPIMessageSource, type, level, message, arguments, scriptState, requestIdentifier)));
 }
 
 void InspectorConsoleAgent::addMessageToConsole(MessageSource source, MessageType type, MessageLevel level, const String& message, const String& scriptId, unsigned lineNumber, unsigned columnNumber, ScriptState* scriptState, unsigned long requestIdentifier)
@@ -182,7 +182,7 @@ void InspectorConsoleAgent::addMessageToConsole(MessageSource source, MessageTyp
     }
 
     bool canGenerateCallStack = !isWorkerAgent() && m_frontend;
-    addConsoleMessage(adoptPtr(new ConsoleMessage(canGenerateCallStack, source, type, level, message, scriptId, lineNumber, columnNumber, scriptState, requestIdentifier)));
+    addConsoleMessage(adoptPtr(new InspectorConsoleMessage(canGenerateCallStack, source, type, level, message, scriptId, lineNumber, columnNumber, scriptState, requestIdentifier)));
 }
 
 Vector<unsigned> InspectorConsoleAgent::consoleMessageArgumentCounts()
@@ -219,7 +219,7 @@ void InspectorConsoleAgent::consoleTimeEnd(ExecutionContext*, const String& titl
 
     double elapsed = monotonicallyIncreasingTime() - startTime;
     String message = title + String::format(": %.3fms", elapsed * 1000);
-    addMessageToConsole(ConsoleAPIMessageSource, LogMessageType, DebugMessageLevel, message, String(), 0, 0, scriptState);
+    addConsoleAPIMessageToConsole(LogMessageType, DebugMessageLevel, message, scriptState, nullptr);
 }
 
 void InspectorConsoleAgent::consoleTimeline(ExecutionContext* context, const String& title, ScriptState* scriptState)
@@ -245,7 +245,7 @@ void InspectorConsoleAgent::consoleCount(ScriptState* scriptState, PassRefPtrWil
 
     HashCountedSet<String>::AddResult result = m_counts.add(identifier);
     String message = title + ": " + String::number(result.storedValue->value);
-    addMessageToConsole(ConsoleAPIMessageSource, LogMessageType, DebugMessageLevel, message, callStack.get());
+    addConsoleAPIMessageToConsole(LogMessageType, DebugMessageLevel, message, scriptState, nullptr);
 }
 
 void InspectorConsoleAgent::frameWindowDiscarded(LocalDOMWindow* window)
@@ -299,7 +299,7 @@ void InspectorConsoleAgent::setMonitoringXHREnabled(ErrorString*, bool enabled)
     m_state->setBoolean(ConsoleAgentState::monitoringXHR, enabled);
 }
 
-void InspectorConsoleAgent::addConsoleMessage(PassOwnPtr<ConsoleMessage> consoleMessage)
+void InspectorConsoleAgent::addConsoleMessage(PassOwnPtr<InspectorConsoleMessage> consoleMessage)
 {
     ASSERT_ARG(consoleMessage, consoleMessage);
 
@@ -330,5 +330,5 @@ void InspectorConsoleAgent::addInspectedHeapObject(ErrorString*, int inspectedHe
     m_injectedScriptManager->injectedScriptHost()->addInspectedObject(adoptPtr(new InspectableHeapObject(inspectedHeapObjectId)));
 }
 
-} // namespace WebCore
+} // namespace blink
 

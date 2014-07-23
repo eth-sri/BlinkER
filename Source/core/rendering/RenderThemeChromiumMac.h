@@ -30,7 +30,7 @@
 
 OBJC_CLASS WebCoreRenderThemeNotificationObserver;
 
-namespace WebCore {
+namespace blink {
 
 class RenderThemeChromiumMac FINAL : public RenderTheme {
 public:
@@ -55,7 +55,7 @@ public:
     virtual Color platformInactiveListBoxSelectionForegroundColor() const OVERRIDE;
     virtual Color platformFocusRingColor() const OVERRIDE;
 
-    virtual ScrollbarControlSize scrollbarControlSizeForPart(ControlPart) OVERRIDE { return SmallScrollbar; }
+    virtual ScrollbarControlSize scrollbarControlSizeForPart(ControlPart part) OVERRIDE { return part == ListboxPart ? SmallScrollbar : RegularScrollbar; }
 
     virtual void platformColorsDidChange() OVERRIDE;
 
@@ -77,6 +77,7 @@ public:
     virtual bool paintCapsLockIndicator(RenderObject*, const PaintInfo&, const IntRect&) OVERRIDE;
 
     virtual bool popsMenuByArrowKeys() const OVERRIDE { return true; }
+    virtual bool popsMenuBySpaceKey() const OVERRIDE FINAL { return true; }
 
     virtual IntSize meterSizeForBounds(const RenderMeter*, const IntRect&) const OVERRIDE;
     virtual bool paintMeter(RenderObject*, const PaintInfo&, const IntRect&) OVERRIDE;
@@ -210,6 +211,6 @@ private:
     RetainPtr<WebCoreRenderThemeNotificationObserver> m_notificationObserver;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // RenderThemeChromiumMac_h

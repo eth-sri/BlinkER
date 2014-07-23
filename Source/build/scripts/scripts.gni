@@ -56,21 +56,11 @@ make_element_type_helpers_files = make_qualified_names_files + [
 # The executables are relative to the build directory. Don't rebase it because
 # on Posix we want to run the system one on the path.
 if (is_win) {
-  perl_exe = rebase_path("//third_party/perl/perl/bin/perl.exe", root_build_dir)
   gperf_exe = rebase_path("//third_party/gperf/bin/gperf.exe", root_build_dir)
   bison_exe = rebase_path("//third_party/bison/bin/bison.exe", root_build_dir)
-  # Using cl instead of cygwin gcc cuts the processing time from
-  # 1m58s to 0m52s.
-  preprocessor = "--preprocessor \"cl.exe -nologo -EP -TP\""
 } else {
-  perl_exe = "perl"
   gperf_exe = "gperf"
   bison_exe = "bison"
-  # We specify a preprocess so it happens locally and won't get
-  # distributed to goma.
-  # FIXME: /usr/bin/gcc won't exist on OSX forever. We want to
-  # use /usr/bin/clang once we require Xcode 4.x.
-  preprocessor = "--preprocessor \"/usr/bin/gcc -E -P -x c++\""
 }
 
 # Templates --------------------------------------------------------------------
@@ -102,11 +92,11 @@ template("process_in_files") {
   action(target_name) {
     script = invoker.script
 
-    source_prereqs = invoker.in_files
+    inputs = invoker.in_files
     if (defined(invoker.other_inputs)) {
-      source_prereqs += invoker.other_inputs
+      inputs += invoker.other_inputs
     } else {
-      source_prereqs += scripts_for_in_files
+      inputs += scripts_for_in_files
     }
     outputs = invoker.outputs
 
@@ -134,7 +124,6 @@ template("make_names") {
     in_files = invoker.in_files
     other_inputs = make_names_files
     outputs = invoker.outputs
-    other_args = [ "--defines", feature_defines_string ]
   }
 }
 
@@ -148,7 +137,6 @@ template("make_qualified_names") {
     in_files = invoker.in_files
     other_inputs = make_qualified_names_files
     outputs = invoker.outputs
-    other_args = [ "--defines", feature_defines_string ]
   }
 }
 
@@ -172,7 +160,7 @@ template("make_token_matcher") {
   action(target_name) {
     script = "//third_party/WebKit/Source/build/scripts/make_token_matcher.py"
 
-    source_prereqs = scripts_for_in_files + [ invoker.input_file ]
+    inputs = scripts_for_in_files + [ invoker.input_file ]
     outputs = [ invoker.output_file ]
 
     args = [

@@ -55,6 +55,14 @@ WebInspector.ProfileType.Events = {
 
 WebInspector.ProfileType.prototype = {
     /**
+     * @return {number}
+     */
+    nextProfileUid: function()
+    {
+        return this._nextProfileUid;
+    },
+
+    /**
      * @return {boolean}
      */
     hasTemporaryView: function()
@@ -229,9 +237,9 @@ WebInspector.ProfileType.prototype = {
      */
     setProfileBeingRecorded: function(profile)
     {
-        if (this._profileBeingRecorded)
+        if (this._profileBeingRecorded && this._profileBeingRecorded.target())
             this._profileBeingRecorded.target().profilingLock.release();
-        if (profile)
+        if (profile && profile.target())
             profile.target().profilingLock.acquire();
         this._profileBeingRecorded = profile;
     },
@@ -289,14 +297,14 @@ WebInspector.ProfileType.DataDisplayDelegate.prototype = {
 
 /**
  * @constructor
- * @extends {WebInspector.TargetAwareObject}
- * @param {!WebInspector.Target} target
+ * @extends {WebInspector.Object}
+ * @param {?WebInspector.Target} target
  * @param {!WebInspector.ProfileType} profileType
  * @param {string} title
  */
 WebInspector.ProfileHeader = function(target, profileType, title)
 {
-    WebInspector.TargetAwareObject.call(this, target);
+    this._weakTarget = target ? target.weakReference() : new WeakReference(null);
     this._profileType = profileType;
     this.title = title;
     this.uid = profileType._nextProfileUid++;
@@ -322,6 +330,22 @@ WebInspector.ProfileHeader.Events = {
 }
 
 WebInspector.ProfileHeader.prototype = {
+    /**
+     * @return {?WebInspector.Target}
+     */
+    target: function()
+    {
+        return this._weakTarget.get();
+    },
+
+    /**
+     * @return {!WeakReference.<!WebInspector.Target>}
+     */
+    weakTarget: function()
+    {
+        return this._weakTarget;
+    },
+
     /**
      * @return {!WebInspector.ProfileType}
      */
@@ -409,13 +433,14 @@ WebInspector.ProfileHeader.prototype = {
         this._fromFile = true;
     },
 
-    __proto__: WebInspector.TargetAwareObject.prototype
+    __proto__: WebInspector.Object.prototype
 }
 
 /**
  * @constructor
  * @implements {WebInspector.Searchable}
  * @implements {WebInspector.ProfileType.DataDisplayDelegate}
+ * @implements {WebInspector.TargetManager.Observer}
  * @extends {WebInspector.PanelWithSidebarTree}
  */
 WebInspector.ProfilesPanel = function()
@@ -424,9 +449,6 @@ WebInspector.ProfilesPanel = function()
     this.registerRequiredCSS("panelEnablerView.css");
     this.registerRequiredCSS("heapProfiler.css");
     this.registerRequiredCSS("profilesPanel.css");
-
-    this._target = /** @type {!WebInspector.Target} */ (WebInspector.targetManager.activeTarget());
-    this._target.profilingLock.addEventListener(WebInspector.Lock.Events.StateChanged, this._onProfilingStateChanged, this);
 
     this._searchableView = new WebInspector.SearchableView(this);
 
@@ -479,10 +501,8 @@ WebInspector.ProfilesPanel = function()
     this.element.addEventListener("contextmenu", this._handleContextMenuEvent.bind(this), true);
     this._registerShortcuts();
 
-    this._configureCpuProfilerSamplingInterval();
-    WebInspector.settings.highResolutionCpuProfiling.addChangeListener(this._configureCpuProfilerSamplingInterval, this);
+    WebInspector.targetManager.observeTargets(this);
 }
-
 
 /**
  * @constructor
@@ -496,9 +516,8 @@ WebInspector.ProfileTypeRegistry = function() {
     this._addProfileType(this.heapSnapshotProfileType);
     this.trackingHeapSnapshotProfileType = new WebInspector.TrackingHeapSnapshotProfileType();
     this._addProfileType(this.trackingHeapSnapshotProfileType);
-    HeapProfilerAgent.enable();
 
-    if (Capabilities.isMainFrontend && WebInspector.experimentsSettings.canvasInspection.isEnabled()) {
+    if (!WebInspector.isWorkerFrontend() && WebInspector.experimentsSettings.canvasInspection.isEnabled()) {
         this.canvasProfileType = new WebInspector.CanvasProfileType();
         this._addProfileType(this.canvasProfileType);
     }
@@ -525,6 +544,22 @@ WebInspector.ProfileTypeRegistry.prototype = {
 
 
 WebInspector.ProfilesPanel.prototype = {
+    /**
+     * @param {!WebInspector.Target} target
+     */
+    targetAdded: function(target)
+    {
+        target.profilingLock.addEventListener(WebInspector.Lock.Events.StateChanged, this._onProfilingStateChanged, this);
+    },
+
+    /**
+     * @param {!WebInspector.Target} target
+     */
+    targetRemoved: function(target)
+    {
+        target.profilingLock.removeEventListener(WebInspector.Lock.Events.StateChanged, this._onProfilingStateChanged, this);
+    },
+
     /**
      * @return {!WebInspector.SearchableView}
      */
@@ -560,17 +595,6 @@ WebInspector.ProfilesPanel.prototype = {
         this.registerShortcuts(WebInspector.ShortcutsScreen.ProfilesPanelShortcuts.StartStopRecording, this.toggleRecordButton.bind(this));
     },
 
-    _configureCpuProfilerSamplingInterval: function()
-    {
-        var intervalUs = WebInspector.settings.highResolutionCpuProfiling.get() ? 100 : 1000;
-        ProfilerAgent.setSamplingInterval(intervalUs, didChangeInterval);
-        function didChangeInterval(error)
-        {
-            if (error)
-                WebInspector.messageSink.addErrorMessage(error, true);
-        }
-    },
-
     /**
      * @param {!File} file
      */
@@ -588,12 +612,12 @@ WebInspector.ProfilesPanel.prototype = {
                     continue;
                 extensions.push(extension);
             }
-            WebInspector.messageSink.addMessage(WebInspector.UIString("Can't load file. Only files with extensions '%s' can be loaded.", extensions.join("', '")));
+            WebInspector.console.error(WebInspector.UIString("Can't load file. Only files with extensions '%s' can be loaded.", extensions.join("', '")));
             return;
         }
 
         if (!!profileType.profileBeingRecorded()) {
-            WebInspector.messageSink.addMessage(WebInspector.UIString("Can't load profile while another profile is recording."));
+            WebInspector.console.error(WebInspector.UIString("Can't load profile while another profile is recording."));
             return;
         }
 
@@ -632,7 +656,8 @@ WebInspector.ProfilesPanel.prototype = {
     {
         if (WebInspector.experimentsSettings.disableAgentsWhenProfile.isEnabled())
             WebInspector.inspectorView.setCurrentPanelLocked(toggled);
-        var enable = toggled || !this._target.profilingLock.isAcquired();
+        var isAcquiredInSomeTarget = WebInspector.targetManager.targets().some(function(target) { return target.profilingLock.isAcquired(); });
+        var enable = toggled || !isAcquiredInSomeTarget;
         this.recordButton.setEnabled(enable);
         this.recordButton.toggled = toggled;
         if (enable)
@@ -708,11 +733,6 @@ WebInspector.ProfilesPanel.prototype = {
         this.visibleView = this._launcherView;
     },
 
-    _garbageCollectButtonClicked: function()
-    {
-        HeapProfilerAgent.collectGarbage();
-    },
-
     /**
      * @param {!WebInspector.ProfileType} profileType
      */
@@ -762,7 +782,7 @@ WebInspector.ProfilesPanel.prototype = {
     },
 
     /**
-     * @param {?Event} event
+     * @param {!Event} event
      */
     _handleContextMenuEvent: function(event)
     {
@@ -1007,7 +1027,7 @@ WebInspector.ProfilesPanel.prototype = {
          */
         function revealInView(viewName)
         {
-            HeapProfilerAgent.getHeapObjectId(objectId, didReceiveHeapObjectId.bind(this, viewName));
+            object.target().heapProfilerAgent().getHeapObjectId(objectId, didReceiveHeapObjectId.bind(this, viewName));
         }
 
         /**
@@ -1332,7 +1352,6 @@ WebInspector.ProfilesSidebarTreeElement.prototype = {
 }
 
 
-importScript("../sdk/CPUProfileModel.js");
 importScript("CPUProfileDataGrid.js");
 importScript("CPUProfileBottomUpDataGrid.js");
 importScript("CPUProfileTopDownDataGrid.js");

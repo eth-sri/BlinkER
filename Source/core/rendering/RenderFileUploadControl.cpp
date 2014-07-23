@@ -30,13 +30,14 @@
 #include "core/rendering/PaintInfo.h"
 #include "core/rendering/RenderButton.h"
 #include "core/rendering/RenderTheme.h"
+#include "core/rendering/TextRunConstructor.h"
 #include "platform/fonts/Font.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
 #include "platform/text/PlatformLocale.h"
 #include "platform/text/TextRun.h"
 #include <math.h>
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -105,7 +106,6 @@ void RenderFileUploadControl::paintObject(PaintInfo& paintInfo, const LayoutPoin
         const String& displayedFilename = fileTextValue();
         const Font& font = style()->font();
         TextRun textRun = constructTextRun(this, font, displayedFilename, style(), TextRun::AllowTrailingExpansion, RespectDirection | RespectDirectionOverride);
-        textRun.disableRoundingHacks();
 
         // Determine where the filename should be placed
         LayoutUnit contentLeft = paintOffset.x() + borderLeft() + paddingLeft();
@@ -224,4 +224,4 @@ String RenderFileUploadControl::fileTextValue() const
     return RenderTheme::theme().fileListNameForWidth(input->locale(), input->files(), style()->font(), maxFilenameWidth());
 }
 
-} // namespace WebCore
+} // namespace blink

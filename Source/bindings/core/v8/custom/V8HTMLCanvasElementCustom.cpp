@@ -32,11 +32,11 @@
 #include "config.h"
 #include "bindings/core/v8/V8HTMLCanvasElement.h"
 
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8CanvasRenderingContext2D.h"
 #include "bindings/core/v8/V8Node.h"
 #include "bindings/core/v8/V8WebGLRenderingContext.h"
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/V8Binding.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/canvas/Canvas2DContextAttributes.h"
 #include "core/html/canvas/CanvasRenderingContext.h"
@@ -45,7 +45,7 @@
 #include "wtf/MathExtras.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 void V8HTMLCanvasElement::getContextMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
@@ -54,9 +54,9 @@ void V8HTMLCanvasElement::getContextMethodCustom(const v8::FunctionCallbackInfo<
     HTMLCanvasElement* impl = V8HTMLCanvasElement::toNative(holder);
     TOSTRING_VOID(V8StringResource<>, contextIdResource, info[0]);
     String contextId = contextIdResource;
-    RefPtr<CanvasContextAttributes> attributes;
+    RefPtrWillBeRawPtr<CanvasContextAttributes> attributes = nullptr;
     if (contextId == "webgl" || contextId == "experimental-webgl") {
-        RefPtr<WebGLContextAttributes> webGLAttributes = WebGLContextAttributes::create();
+        RefPtrWillBeRawPtr<WebGLContextAttributes> webGLAttributes = WebGLContextAttributes::create();
         if (info.Length() > 1 && info[1]->IsObject()) {
             v8::Handle<v8::Object> jsAttributes = info[1]->ToObject();
             v8::Handle<v8::String> alpha = v8AtomicString(isolate, "alpha");
@@ -83,7 +83,7 @@ void V8HTMLCanvasElement::getContextMethodCustom(const v8::FunctionCallbackInfo<
         }
         attributes = webGLAttributes;
     } else {
-        RefPtr<Canvas2DContextAttributes> canvas2DAttributes = Canvas2DContextAttributes::create();
+        RefPtrWillBeRawPtr<Canvas2DContextAttributes> canvas2DAttributes = Canvas2DContextAttributes::create();
         if (info.Length() > 1 && info[1]->IsObject()) {
             v8::Handle<v8::Object> jsAttributes = info[1]->ToObject();
             v8::Handle<v8::String> alpha = v8AtomicString(isolate, "alpha");
@@ -148,4 +148,4 @@ void V8HTMLCanvasElement::toDataURLMethodCustom(const v8::FunctionCallbackInfo<v
     v8SetReturnValueStringOrUndefined(info, result, info.GetIsolate());
 }
 
-} // namespace WebCore
+} // namespace blink

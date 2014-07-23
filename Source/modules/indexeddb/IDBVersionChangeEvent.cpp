@@ -26,9 +26,7 @@
 #include "config.h"
 #include "modules/indexeddb/IDBVersionChangeEvent.h"
 
-#include "bindings/v8/IDBBindingUtilities.h"
-
-namespace WebCore {
+namespace blink {
 
 
 IDBVersionChangeEventInit::IDBVersionChangeEventInit()
@@ -58,6 +56,10 @@ IDBVersionChangeEvent::IDBVersionChangeEvent(const AtomicString& eventType, cons
     , m_newVersion(initializer.newVersion)
     , m_dataLoss(blink::WebIDBDataLossNone)
 {
+    if (initializer.dataLoss.isEmpty() || initializer.dataLoss == "none")
+        m_dataLoss = blink::WebIDBDataLossNone;
+    else if (initializer.dataLoss == "total")
+        m_dataLoss = blink::WebIDBDataLossTotal;
     ScriptWrappable::init(this);
 }
 
@@ -86,4 +88,4 @@ void IDBVersionChangeEvent::trace(Visitor* visitor)
     Event::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink

@@ -31,13 +31,13 @@
 #include "config.h"
 #include "bindings/core/v8/V8PopStateEvent.h"
 
+#include "bindings/core/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/V8HiddenValue.h"
 #include "bindings/core/v8/V8History.h"
-#include "bindings/v8/SerializedScriptValue.h"
-#include "bindings/v8/V8HiddenValue.h"
 #include "core/events/PopStateEvent.h"
 #include "core/frame/History.h"
 
-namespace WebCore {
+namespace blink {
 
 // Save the state value to a hidden attribute in the V8PopStateEvent, and return it, for convenience.
 static v8::Handle<v8::Value> cacheState(v8::Handle<v8::Object> popStateEvent, v8::Handle<v8::Value> state, v8::Isolate* isolate)
@@ -99,4 +99,4 @@ void V8PopStateEvent::stateAttributeGetterCustom(const v8::PropertyCallbackInfo<
     v8SetReturnValue(info, cacheState(info.Holder(), result, info.GetIsolate()));
 }
 
-} // namespace WebCore
+} // namespace blink

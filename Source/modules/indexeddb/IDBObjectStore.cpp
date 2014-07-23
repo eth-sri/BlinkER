@@ -26,10 +26,10 @@
 #include "config.h"
 #include "modules/indexeddb/IDBObjectStore.h"
 
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ExceptionStatePlaceholder.h"
-#include "bindings/v8/IDBBindingUtilities.h"
-#include "bindings/v8/ScriptState.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ScriptState.h"
+#include "bindings/modules/v8/IDBBindingUtilities.h"
 #include "core/dom/DOMStringList.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
@@ -53,7 +53,7 @@ using blink::WebIDBCursor;
 using blink::WebIDBDatabase;
 using blink::WebVector;
 
-namespace WebCore {
+namespace blink {
 
 IDBObjectStore::IDBObjectStore(const IDBObjectStoreMetadata& metadata, IDBTransaction* transaction)
     : m_metadata(metadata)
@@ -182,6 +182,12 @@ IDBRequest* IDBObjectStore::put(ScriptState* scriptState, blink::WebIDBPutMode p
     if (exceptionState.hadException())
         return 0;
 
+    // Keys that need to be extracted must be taken from a clone so that
+    // side effects (i.e. getters) are not triggered. Construct the
+    // clone lazily since the operation may be expensive.
+    ScriptValue clone;
+    value.clear();
+
     const IDBKeyPath& keyPath = m_metadata.keyPath;
     const bool usesInLineKeys = !keyPath.isNull();
     const bool hasKeyGenerator = autoIncrement();
@@ -190,12 +196,27 @@ IDBRequest* IDBObjectStore::put(ScriptState* scriptState, blink::WebIDBPutMode p
         exceptionState.throwDOMException(DataError, "The object store uses in-line keys and the key parameter was provided.");
         return 0;
     }
+
+    // This test logically belongs in IDBCursor, but must operate on the cloned value.
+    if (putMode == blink::WebIDBPutModeCursorUpdate && usesInLineKeys) {
+        ASSERT(key);
+        if (clone.isEmpty())
+            clone = deserializeScriptValue(scriptState, serializedValue.get(), &blobInfo);
+        IDBKey* keyPathKey = createIDBKeyFromScriptValueAndKeyPath(scriptState->isolate(), clone, keyPath);
+        if (!keyPathKey || !keyPathKey->isEqual(key)) {
+            exceptionState.throwDOMException(DataError, "The effective object store of this cursor uses in-line keys and evaluating the key path of the value parameter results in a different value than the cursor's effective key.");
+            return nullptr;
+        }
+    }
+
     if (!usesInLineKeys && !hasKeyGenerator && !key) {
         exceptionState.throwDOMException(DataError, "The object store uses out-of-line keys and has no key generator and the key parameter was not provided.");
         return 0;
     }
     if (usesInLineKeys) {
-        IDBKey* keyPathKey = createIDBKeyFromScriptValueAndKeyPath(scriptState->isolate(), value, keyPath);
+        if (clone.isEmpty())
+            clone = deserializeScriptValue(scriptState, serializedValue.get(), &blobInfo);
+        IDBKey* keyPathKey = createIDBKeyFromScriptValueAndKeyPath(scriptState->isolate(), clone, keyPath);
         if (keyPathKey && !keyPathKey->isValid()) {
             exceptionState.throwDOMException(DataError, "Evaluating the object store's key path yielded a value that is not a valid key.");
             return 0;
@@ -205,7 +226,7 @@ IDBRequest* IDBObjectStore::put(ScriptState* scriptState, blink::WebIDBPutMode p
             return 0;
         }
         if (hasKeyGenerator && !keyPathKey) {
-            if (!canInjectIDBKeyIntoScriptValue(scriptState->isolate(), value, keyPath)) {
+            if (!canInjectIDBKeyIntoScriptValue(scriptState->isolate(), clone, keyPath)) {
                 exceptionState.throwDOMException(DataError, "A generated key could not be inserted into the value.");
                 return 0;
             }
@@ -226,8 +247,10 @@ IDBRequest* IDBObjectStore::put(ScriptState* scriptState, blink::WebIDBPutMode p
     Vector<int64_t> indexIds;
     HeapVector<IndexKeys> indexKeys;
     for (IDBObjectStoreMetadata::IndexMap::const_iterator it = m_metadata.indexes.begin(); it != m_metadata.indexes.end(); ++it) {
+        if (clone.isEmpty())
+            clone = deserializeScriptValue(scriptState, serializedValue.get(), &blobInfo);
         IndexKeys keys;
-        generateIndexKeysForValue(scriptState->isolate(), it->value, value, &keys);
+        generateIndexKeysForValue(scriptState->isolate(), it->value, clone, &keys);
         indexIds.append(it->key);
         indexKeys.append(keys);
     }
@@ -386,10 +409,10 @@ private:
 IDBIndex* IDBObjectStore::createIndex(ScriptState* scriptState, const String& name, const IDBKeyPath& keyPath, const Dictionary& options, ExceptionState& exceptionState)
 {
     bool unique = false;
-    options.get("unique", unique);
+    DictionaryHelper::get(options, "unique", unique);
 
     bool multiEntry = false;
-    options.get("multiEntry", multiEntry);
+    DictionaryHelper::get(options, "multiEntry", multiEntry);
 
     return createIndex(scriptState, name, keyPath, unique, multiEntry, exceptionState);
 }
@@ -667,4 +690,4 @@ WebIDBDatabase* IDBObjectStore::backendDB() const
     return m_transaction->backendDB();
 }
 
-} // namespace WebCore
+} // namespace blink

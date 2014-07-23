@@ -34,7 +34,7 @@
 #include "platform/RuntimeEnabledFeatures.h"
 #include "web/WebMediaPlayerClientImpl.h"
 
-using namespace WebCore;
+using namespace blink;
 
 namespace blink {
 
@@ -67,9 +67,9 @@ void WebRuntimeFeatures::enableDatabase(bool enable)
     RuntimeEnabledFeatures::setDatabaseEnabled(enable);
 }
 
-void WebRuntimeFeatures::enableDialogElement(bool enable)
+void WebRuntimeFeatures::enableDisplayList2dCanvas(bool enable)
 {
-    RuntimeEnabledFeatures::setDialogElementEnabled(enable);
+    RuntimeEnabledFeatures::setDisplayList2dCanvasEnabled(enable);
 }
 
 void WebRuntimeFeatures::enableEncryptedMedia(bool enable)
@@ -165,6 +165,11 @@ void WebRuntimeFeatures::enableNavigatorContentUtils(bool enable)
     RuntimeEnabledFeatures::setNavigatorContentUtilsEnabled(enable);
 }
 
+void WebRuntimeFeatures::enableNavigationTransitions(bool enable)
+{
+    RuntimeEnabledFeatures::setNavigationTransitionsEnabled(enable);
+}
+
 void WebRuntimeFeatures::enableOrientationEvent(bool enable)
 {
     RuntimeEnabledFeatures::setOrientationEventEnabled(enable);
@@ -240,11 +245,6 @@ void WebRuntimeFeatures::enableWebMIDI(bool enable)
     return RuntimeEnabledFeatures::setWebMIDIEnabled(enable);
 }
 
-void WebRuntimeFeatures::enableHTMLImports(bool enable)
-{
-    RuntimeEnabledFeatures::setHTMLImportsEnabled(enable);
-}
-
 void WebRuntimeFeatures::enableXSLT(bool enable)
 {
     RuntimeEnabledFeatures::setXSLTEnabled(enable);
@@ -265,11 +265,6 @@ void WebRuntimeFeatures::enableSharedWorker(bool enable)
     RuntimeEnabledFeatures::setSharedWorkerEnabled(enable);
 }
 
-void WebRuntimeFeatures::enableExperimentalWebSocket(bool enable)
-{
-    RuntimeEnabledFeatures::setExperimentalWebSocketEnabled(enable);
-}
-
 void WebRuntimeFeatures::enableTargetedStyleRecalc(bool enable)
 {
     RuntimeEnabledFeatures::setTargetedStyleRecalcEnabled(enable);
@@ -288,6 +283,11 @@ void WebRuntimeFeatures::enableLayerSquashing(bool enable)
 void WebRuntimeFeatures::enableShowModalDialog(bool enable)
 {
     RuntimeEnabledFeatures::setShowModalDialogEnabled(enable);
+}
+
+void WebRuntimeFeatures::enableLaxMixedContentChecking(bool enable)
+{
+    RuntimeEnabledFeatures::setLaxMixedContentCheckingEnabled(enable);
 }
 
 } // namespace blink

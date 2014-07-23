@@ -29,7 +29,7 @@
 #ifndef AudioParam_h
 #define AudioParam_h
 
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "modules/webaudio/AudioContext.h"
 #include "modules/webaudio/AudioParamTimeline.h"
 #include "modules/webaudio/AudioSummingJunction.h"
@@ -39,11 +39,16 @@
 #include "wtf/RefCounted.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
 class AudioNodeOutput;
 
-class AudioParam FINAL : public RefCountedWillBeGarbageCollectedFinalized<AudioParam>, public ScriptWrappable, public AudioSummingJunction {
+#if ENABLE(OILPAN)
+#define AUDIO_PARAM_BASE_CLASSES public AudioSummingJunction, public ScriptWrappable
+#else
+#define AUDIO_PARAM_BASE_CLASSES public RefCounted<AudioParam>, public ScriptWrappable, public AudioSummingJunction
+#endif
+class AudioParam FINAL : AUDIO_PARAM_BASE_CLASSES {
 public:
     static const double DefaultSmoothingConstant;
     static const double SnapThreshold;
@@ -99,12 +104,10 @@ public:
     void calculateSampleAccurateValues(float* values, unsigned numberOfValues);
 
     // Connect an audio-rate signal to control this parameter.
-    void connect(AudioNodeOutput*);
-    void disconnect(AudioNodeOutput*);
+    void connect(AudioNodeOutput&);
+    void disconnect(AudioNodeOutput&);
 
-    void trace(Visitor*) { }
-
-protected:
+private:
     AudioParam(AudioContext* context, const String& name, double defaultValue, double minValue, double maxValue, unsigned units = 0)
         : AudioSummingJunction(context)
         , m_name(name)
@@ -118,7 +121,6 @@ protected:
         ScriptWrappable::init(this);
     }
 
-private:
     // sampleAccurate corresponds to a-rate (audio rate) vs. k-rate in the Web Audio specification.
     void calculateFinalValues(float* values, unsigned numberOfValues, bool sampleAccurate);
     void calculateTimelineValues(float* values, unsigned numberOfValues);
@@ -136,6 +138,6 @@ private:
     AudioParamTimeline m_timeline;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // AudioParam_h

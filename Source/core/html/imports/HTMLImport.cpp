@@ -34,7 +34,7 @@
 #include "core/dom/Document.h"
 #include "core/html/imports/HTMLImportStateResolver.h"
 
-namespace WebCore {
+namespace blink {
 
 HTMLImport* HTMLImport::root()
 {
@@ -87,8 +87,8 @@ void HTMLImport::stateDidChange()
 
 void HTMLImport::recalcTreeState(HTMLImport* root)
 {
-    HashMap<HTMLImport*, HTMLImportState> snapshot;
-    Vector<HTMLImport*> updated;
+    WillBeHeapHashMap<RawPtrWillBeMember<HTMLImport>, HTMLImportState> snapshot;
+    WillBeHeapVector<RawPtrWillBeMember<HTMLImport> > updated;
 
     for (HTMLImport* i = root; i; i = traverseNext(i)) {
         snapshot.add(i, i->state());
@@ -140,4 +140,4 @@ void HTMLImport::showThis()
 }
 #endif
 
-} // namespace WebCore
+} // namespace blink

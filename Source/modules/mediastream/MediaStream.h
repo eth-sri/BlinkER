@@ -26,7 +26,6 @@
 #ifndef MediaStream_h
 #define MediaStream_h
 
-#include "bindings/v8/ScriptWrappable.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/html/URLRegistry.h"
 #include "modules/EventTargetModules.h"
@@ -34,13 +33,12 @@
 #include "platform/Timer.h"
 #include "platform/mediastream/MediaStreamDescriptor.h"
 
-namespace WebCore {
+namespace blink {
 
 class ExceptionState;
 
 class MediaStream FINAL
     : public RefCountedGarbageCollectedWillBeGarbageCollectedFinalized<MediaStream>
-    , public ScriptWrappable
     , public URLRegistrable
     , public MediaStreamDescriptorClient
     , public EventTargetWithInlineData
@@ -66,6 +64,7 @@ public:
 
     MediaStreamTrackVector getAudioTracks() const { return m_audioTracks; }
     MediaStreamTrackVector getVideoTracks() const { return m_videoTracks; }
+    MediaStreamTrackVector getTracks();
 
     bool ended() const;
     void stop();
@@ -116,6 +115,6 @@ private:
 
 typedef HeapVector<Member<MediaStream> > MediaStreamVector;
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // MediaStream_h

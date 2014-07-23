@@ -29,6 +29,10 @@ THE POSSIBILITY OF SUCH DAMAGE.
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.6.2/jquery.min.js"></script>
 <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.8.15/jquery-ui.min.js"></script>
 <script src="../qunit/qunit/qunit.js"></script>
+<script>
+  QUnit.config.autostart = false;
+  window.addEventListener('polymer-ready', QUnit.start);
+</script>
 </head>
 
 <body>
@@ -38,44 +42,36 @@ THE POSSIBILITY OF SUCH DAMAGE.
 <h2 id="qunit-userAgent"></h2>
 <ol id="qunit-tests"></ol>
 
-<link rel="stylesheet" href="styles/results.css">
-
-<script src="scripts/base.js"></script>
-<script src="scripts/config.js"></script>
-<script src="scripts/base_unittests.js"></script>
+<script src="bower_components/sugar/release/sugar-full.development.js"></script>
 <script src="scripts/net.js"></script>
 <script src="scripts/net_unittests.js"></script>
-<script src="scripts/rollbot.js"></script>
-<script src="scripts/rollbot_unittests.js"></script>
-<script src="scripts/svn-log.js"></script>
-<script src="scripts/svn-log_unittests.js"></script>
 <script src="scripts/treestatus.js"></script>
 <script src="scripts/treestatus_unittests.js"></script>
-<script src="scripts/builders.js"></script>
-<script src="scripts/builders_unittests.js"></script>
-<script src="scripts/checkout.js"></script>
-<script src="scripts/checkout_unittests.js"></script>
 <script src="scripts/results.js"></script>
 <script src="scripts/results_unittests.js"></script>
 <script src="scripts/ui.js"></script>
-<script src="scripts/ui/actions.js"></script>
-<script src="scripts/ui/actions_unittests.js"></script>
-<script src="scripts/ui/failures.js"></script>
-<script src="scripts/ui/failures_unittests.js"></script>
-<script src="scripts/ui/results.js"></script>
-<script src="scripts/controllers.js"></script> <!-- This script is slightly of order. -->
-<script src="scripts/ui/results_unittests.js"></script>
-<script src="scripts/ui_unittests.js"></script>
-<script src="scripts/model.js"></script>
-<script src="scripts/model_unittests.js"></script>
-<script src="scripts/ui/notifications.js"></script>
-<script src="scripts/ui/notifications_unittests.js"></script>
-<script src="scripts/controllers_unittests.js"></script>
 
 <script src="bower_components/platform/platform.js"></script>
 <link rel="import" href="bower_components/polymer/polymer.html">
 <link rel="import" href="polymer-load-warning.html">
-<link rel="import" href="ui/ct-test-output-tests.html">
+<link rel="import" href="model/ct-commit-log-tests.html">
+<link rel="import" href="model/ct-commit-tests.html">
+<link rel="import" href="ui/ct-builder-grid-tests.html">
+<link rel="import" href="ui/ct-builder-tests.html">
+<link rel="import" href="ui/ct-commit-tests.html">
+<link rel="import" href="ui/ct-commit-list-tests.html">
+<link rel="import" href="ui/ct-embedded-flakiness-dashboard-tests.html">
+<link rel="import" href="ui/ct-failing-builders-tests.html">
+<link rel="import" href="ui/ct-failure-card-tests.html">
+<link rel="import" href="ui/ct-failure-grouper-tests.html">
+<link rel="import" href="ui/ct-failure-stream-tests.html">
+<link rel="import" href="ui/ct-results-by-builder-tests.html">
 <link rel="import" href="ui/ct-results-comparison-tests.html">
+<link rel="import" href="ui/ct-results-comparison-zoomer-tests.html">
+<link rel="import" href="ui/ct-results-detail-tests.html">
+<link rel="import" href="ui/ct-results-panel-tests.html">
+<link rel="import" href="ui/ct-test-list-tests.html">
+<link rel="import" href="ui/ct-test-output-tests.html">
+<link rel="import" href="ui/ct-tree-status-tests.html">
 
 </body>

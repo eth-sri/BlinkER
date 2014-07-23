@@ -62,7 +62,7 @@
 
 // The methods in this file are shared by all themes on every platform.
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -321,7 +321,6 @@ bool RenderTheme::paint(RenderObject* o, const PaintInfo& paintInfo, const IntRe
     case MenulistButtonPart:
     case TextFieldPart:
     case TextAreaPart:
-    case ListboxPart:
         return true;
     case SearchFieldPart:
         return paintSearchField(o, paintInfo, r);
@@ -344,11 +343,11 @@ bool RenderTheme::paintBorderOnly(RenderObject* o, const PaintInfo& paintInfo, c
     switch (o->style()->appearance()) {
     case TextFieldPart:
         return paintTextField(o, paintInfo, r);
-    case ListboxPart:
     case TextAreaPart:
         return paintTextArea(o, paintInfo, r);
     case MenulistButtonPart:
     case SearchFieldPart:
+    case ListboxPart:
         return true;
     case CheckboxPart:
     case RadioPart:
@@ -384,7 +383,6 @@ bool RenderTheme::paintDecorations(RenderObject* o, const PaintInfo& paintInfo, 
         return paintMenuListButton(o, paintInfo, r);
     case TextFieldPart:
     case TextAreaPart:
-    case ListboxPart:
     case CheckboxPart:
     case RadioPart:
     case PushButtonPart:
@@ -557,7 +555,7 @@ static bool isBackgroundOrBorderStyled(const RenderStyle& style, const CachedUAS
 {
     // Code below excludes the background-repeat from comparison by resetting it
     FillLayer backgroundCopy = uaStyle.backgroundLayers;
-    FillLayer backgroundLayersCopy = *style.backgroundLayers();
+    FillLayer backgroundLayersCopy = style.backgroundLayers();
     backgroundCopy.setRepeatX(NoRepeatFill);
     backgroundCopy.setRepeatY(NoRepeatFill);
     backgroundLayersCopy.setRepeatX(NoRepeatFill);
@@ -584,7 +582,6 @@ bool RenderTheme::isControlStyled(const RenderStyle* style, const CachedUAStyle*
     case RatingLevelIndicatorPart:
         return isBackgroundOrBorderStyled(*style, *uaStyle);
 
-    case ListboxPart:
     case MenulistPart:
     case SearchFieldPart:
     case TextAreaPart:
@@ -1073,10 +1070,10 @@ String RenderTheme::fileListNameForWidth(Locale& locale, const FileList* fileLis
         string = fileList->item(0)->name();
     } else {
         // FIXME: Localization of fileList->length().
-        return StringTruncator::rightTruncate(locale.queryString(blink::WebLocalizedString::MultipleFileUploadText, String::number(fileList->length())), width, font, StringTruncator::EnableRoundingHacks);
+        return StringTruncator::rightTruncate(locale.queryString(blink::WebLocalizedString::MultipleFileUploadText, String::number(fileList->length())), width, font);
     }
 
-    return StringTruncator::centerTruncate(string, width, font, StringTruncator::EnableRoundingHacks);
+    return StringTruncator::centerTruncate(string, width, font);
 }
 
 bool RenderTheme::shouldOpenPickerWithF4Key() const
@@ -1224,4 +1221,4 @@ void RenderTheme::adjustRadioStyleUsingFallbackTheme(RenderStyle* style, Element
     style->resetBorder();
 }
 
-} // namespace WebCore
+} // namespace blink

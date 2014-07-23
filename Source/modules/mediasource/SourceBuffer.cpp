@@ -31,15 +31,15 @@
 #include "config.h"
 #include "modules/mediasource/SourceBuffer.h"
 
-#include "bindings/v8/ExceptionMessages.h"
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionMessages.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/events/Event.h"
 #include "core/events/GenericEventQueue.h"
 #include "core/fileapi/FileReaderLoader.h"
-#include "core/fileapi/Stream.h"
 #include "core/html/TimeRanges.h"
+#include "core/streams/Stream.h"
 #include "modules/mediasource/MediaSource.h"
 #include "platform/Logging.h"
 #include "platform/TraceEvent.h"
@@ -52,7 +52,7 @@
 
 using blink::WebSourceBuffer;
 
-namespace WebCore {
+namespace blink {
 
 namespace {
 
@@ -72,11 +72,11 @@ static bool throwExceptionIfRemovedOrUpdating(bool isRemoved, bool isUpdating, E
 
 } // namespace
 
-PassRefPtrWillBeRawPtr<SourceBuffer> SourceBuffer::create(PassOwnPtr<WebSourceBuffer> webSourceBuffer, MediaSource* source, GenericEventQueue* asyncEventQueue)
+SourceBuffer* SourceBuffer::create(PassOwnPtr<WebSourceBuffer> webSourceBuffer, MediaSource* source, GenericEventQueue* asyncEventQueue)
 {
-    RefPtrWillBeRawPtr<SourceBuffer> sourceBuffer(adoptRefWillBeRefCountedGarbageCollected(new SourceBuffer(webSourceBuffer, source, asyncEventQueue)));
+    SourceBuffer* sourceBuffer(adoptRefCountedGarbageCollectedWillBeNoop(new SourceBuffer(webSourceBuffer, source, asyncEventQueue)));
     sourceBuffer->suspendIfNeeded();
-    return sourceBuffer.release();
+    return sourceBuffer;
 }
 
 SourceBuffer::SourceBuffer(PassOwnPtr<WebSourceBuffer> webSourceBuffer, MediaSource* source, GenericEventQueue* asyncEventQueue)
@@ -105,9 +105,14 @@ SourceBuffer::SourceBuffer(PassOwnPtr<WebSourceBuffer> webSourceBuffer, MediaSou
 
 SourceBuffer::~SourceBuffer()
 {
+    // Oilpan: a SourceBuffer might be finalized without having been
+    // explicitly removed first, hence the asserts below will not
+    // hold.
+#if !ENABLE(OILPAN)
     ASSERT(isRemoved());
     ASSERT(!m_loader);
     ASSERT(!m_stream);
+#endif
 }
 
 const AtomicString& SourceBuffer::segmentsKeyword()
@@ -151,7 +156,7 @@ void SourceBuffer::setMode(const AtomicString& newMode, ExceptionState& exceptio
     m_mode = newMode;
 }
 
-PassRefPtr<TimeRanges> SourceBuffer::buffered(ExceptionState& exceptionState) const
+PassRefPtrWillBeRawPtr<TimeRanges> SourceBuffer::buffered(ExceptionState& exceptionState) const
 {
     // Section 3.1 buffered attribute steps.
     // 1. If this object has been removed from the sourceBuffers attribute of the parent media source then throw an
@@ -716,4 +721,4 @@ void SourceBuffer::trace(Visitor* visitor)
     EventTargetWithInlineData::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink

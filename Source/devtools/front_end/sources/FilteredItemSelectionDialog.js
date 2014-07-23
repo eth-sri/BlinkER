@@ -91,6 +91,7 @@ WebInspector.FilteredItemSelectionDialog.prototype = {
         this._dialogHeight = height;
 
         this._updateShowMatchingItems();
+        this._viewportControl.refresh();
     },
 
     focus: function()
@@ -325,6 +326,8 @@ WebInspector.FilteredItemSelectionDialog.prototype = {
      */
     _updateSelection: function(index, makeLast)
     {
+        if (!this._filteredItems.length)
+            return;
         var element = this._viewportControl.renderedElementAt(this._selectedIndexInFiltered);
         if (element)
             element.classList.remove("selected");
@@ -377,6 +380,14 @@ WebInspector.FilteredItemSelectionDialog.prototype = {
         if (index === this._selectedIndexInFiltered)
             element.classList.add("selected");
         return new WebInspector.StaticViewportElement(element);
+    },
+
+    /**
+     * @return {number}
+     */
+    minimumRowHeight: function()
+    {
+        return this.fastHeight(0);
     },
 
     __proto__: WebInspector.DialogDelegate.prototype
@@ -869,9 +880,9 @@ WebInspector.OpenResourceDialog.show = function(sourcesView, relativeToElement, 
 
     var filteredItemSelectionDialog = new WebInspector.FilteredItemSelectionDialog(new WebInspector.OpenResourceDialog(sourcesView, defaultScores));
     filteredItemSelectionDialog.renderAsTwoRows();
+    WebInspector.Dialog.show(relativeToElement, filteredItemSelectionDialog);
     if (query)
         filteredItemSelectionDialog.setQuery(query);
-    WebInspector.Dialog.show(relativeToElement, filteredItemSelectionDialog);
 }
 
 /**

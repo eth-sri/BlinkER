@@ -33,9 +33,9 @@
 
 #include "modules/mediastream/UserMediaRequest.h"
 
-#include "bindings/v8/Dictionary.h"
-#include "bindings/v8/ExceptionMessages.h"
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/Dictionary.h"
+#include "bindings/core/v8/ExceptionMessages.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/SpaceSplitString.h"
@@ -45,7 +45,7 @@
 #include "platform/mediastream/MediaStreamCenter.h"
 #include "platform/mediastream/MediaStreamDescriptor.h"
 
-namespace WebCore {
+namespace blink {
 
 static blink::WebMediaConstraints parseOptions(const Dictionary& options, const String& mediaType, ExceptionState& exceptionState)
 {
@@ -57,7 +57,7 @@ static blink::WebMediaConstraints parseOptions(const Dictionary& options, const 
         constraints = MediaConstraintsImpl::create(constraintsDictionary, exceptionState);
     else {
         bool mediaRequested = false;
-        options.get(mediaType, mediaRequested);
+        DictionaryHelper::get(options, mediaType, mediaRequested);
         if (mediaRequested)
             constraints = MediaConstraintsImpl::create();
     }
@@ -185,4 +185,4 @@ void UserMediaRequest::contextDestroyed()
     ContextLifecycleObserver::contextDestroyed();
 }
 
-} // namespace WebCore
+} // namespace blink

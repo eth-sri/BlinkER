@@ -39,10 +39,9 @@ namespace blink {
 class WebWaitableEvent;
 }
 
-namespace WebCore {
+namespace blink {
 
     class KURL;
-    class NotificationClient;
     class WorkerGlobalScope;
     class WorkerLoaderProxy;
     class WorkerReportingProxy;
@@ -66,11 +65,14 @@ namespace WebCore {
         WorkerLoaderProxy& workerLoaderProxy() const { return m_workerLoaderProxy; }
         WorkerReportingProxy& workerReportingProxy() const { return m_workerReportingProxy; }
 
+        void postTask(PassOwnPtr<ExecutionContextTask>);
+        void postDebuggerTask(PassOwnPtr<ExecutionContextTask>);
+
+        MessageQueueWaitResult runDebuggerTask(WorkerRunLoop::WaitMode = WorkerRunLoop::WaitForMessage);
+        bool terminated() { return m_runLoop.terminated(); }
+
         // Number of active worker threads.
         static unsigned workerThreadCount();
-
-        NotificationClient* getNotificationClient() { return m_notificationClient; }
-        void setNotificationClient(NotificationClient* client) { m_notificationClient = client; }
 
     protected:
         WorkerThread(WorkerLoaderProxy&, WorkerReportingProxy&, PassOwnPtrWillBeRawPtr<WorkerThreadStartupData>);
@@ -99,12 +101,10 @@ namespace WebCore {
 
         OwnPtrWillBePersistent<WorkerThreadStartupData> m_startupData;
 
-        NotificationClient* m_notificationClient;
-
         // Used to signal thread shutdown.
         OwnPtr<blink::WebWaitableEvent> m_shutdownEvent;
     };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // WorkerThread_h

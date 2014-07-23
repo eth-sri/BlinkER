@@ -57,7 +57,7 @@
 
 using blink::WebSocketHandle;
 
-namespace WebCore {
+namespace blink {
 
 class NewWebSocketChannelImpl::BlobLoader FINAL : public NoBaseWillBeGarbageCollectedFinalized<NewWebSocketChannelImpl::BlobLoader>, public FileReaderLoaderClient {
 public:
@@ -136,9 +136,6 @@ bool NewWebSocketChannelImpl::connect(const KURL& url, const String& protocol)
 
     if (executionContext()->isDocument() && document()->frame()) {
         if (!document()->frame()->loader().mixedContentChecker()->canConnectInsecureWebSocket(document()->securityOrigin(), url))
-            return false;
-        Frame* top = document()->frame()->tree().top();
-        if (top != document()->frame() && !toLocalFrame(top)->loader().mixedContentChecker()->canConnectInsecureWebSocket(toLocalFrame(top)->document()->securityOrigin(), url))
             return false;
     }
     if (MixedContentChecker::isMixedContent(document()->securityOrigin(), url)) {
@@ -310,9 +307,11 @@ void NewWebSocketChannelImpl::sendInternal()
 {
     ASSERT(m_handle);
     unsigned long consumedBufferedAmount = 0;
-    while (!m_messages.isEmpty() && m_sendingQuota > 0 && !m_blobLoader) {
+    while (!m_messages.isEmpty() && !m_blobLoader) {
         bool final = false;
         Message* message = m_messages.first().get();
+        if (m_sendingQuota <= 0 && message->type != MessageTypeClose)
+            break;
         switch (message->type) {
         case MessageTypeText: {
             WebSocketHandle::MessageType type =
@@ -568,4 +567,4 @@ void NewWebSocketChannelImpl::trace(Visitor* visitor)
     WebSocketChannel::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink

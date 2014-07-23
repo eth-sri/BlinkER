@@ -31,10 +31,11 @@
 #include "config.h"
 #include "core/html/track/vtt/VTTRegion.h"
 
-#include "bindings/v8/ExceptionMessages.h"
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionMessages.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ClientRect.h"
 #include "core/dom/DOMTokenList.h"
+#include "core/dom/ElementTraversal.h"
 #include "core/html/HTMLDivElement.h"
 #include "core/html/track/vtt/VTTParser.h"
 #include "core/html/track/vtt/VTTScanner.h"
@@ -44,7 +45,7 @@
 #include "wtf/MathExtras.h"
 #include "wtf/text/StringBuilder.h"
 
-namespace WebCore {
+namespace blink {
 
 // The following values default values are defined within the WebVTT Regions Spec.
 // https://dvcs.w3.org/hg/text-tracks/raw-file/default/608toVTT/region.html
@@ -474,4 +475,4 @@ void VTTRegion::trace(Visitor* visitor)
     visitor->trace(m_track);
 }
 
-} // namespace WebCore
+} // namespace blink

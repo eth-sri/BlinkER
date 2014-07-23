@@ -31,6 +31,9 @@
 #include "config.h"
 #include "bindings/core/v8/V8XMLHttpRequest.h"
 
+#include "bindings/core/v8/ExceptionMessages.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8Blob.h"
 #include "bindings/core/v8/V8Document.h"
 #include "bindings/core/v8/V8FormData.h"
@@ -38,18 +41,15 @@
 #include "bindings/core/v8/V8Stream.h"
 #include "bindings/core/v8/custom/V8ArrayBufferCustom.h"
 #include "bindings/core/v8/custom/V8ArrayBufferViewCustom.h"
-#include "bindings/v8/ExceptionMessages.h"
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/V8Binding.h"
 #include "core/dom/Document.h"
-#include "core/fileapi/Stream.h"
 #include "core/inspector/InspectorInstrumentation.h"
+#include "core/streams/Stream.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/xml/XMLHttpRequest.h"
 #include "wtf/ArrayBuffer.h"
 #include <v8.h>
 
-namespace WebCore {
+namespace blink {
 
 void V8XMLHttpRequest::constructorCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
@@ -177,10 +177,10 @@ void V8XMLHttpRequest::openMethodCustom(const v8::FunctionCallbackInfo<v8::Value
         bool async = info[2]->BooleanValue();
 
         if (info.Length() >= 4 && !info[3]->IsUndefined()) {
-            TOSTRING_VOID(V8StringResource<WithNullCheck>, user, info[3]);
+            TOSTRING_VOID(V8StringResource<TreatNullAsNullString>, user, info[3]);
 
             if (info.Length() >= 5 && !info[4]->IsUndefined()) {
-                TOSTRING_VOID(V8StringResource<WithNullCheck>, password, info[4]);
+                TOSTRING_VOID(V8StringResource<TreatNullAsNullString>, password, info[4]);
                 xmlHttpRequest->open(method, url, async, user, password, exceptionState);
             } else {
                 xmlHttpRequest->open(method, url, async, user, exceptionState);
@@ -240,7 +240,7 @@ void V8XMLHttpRequest::sendMethodCustom(const v8::FunctionCallbackInfo<v8::Value
             ASSERT(arrayBufferView);
             xmlHttpRequest->send(arrayBufferView, exceptionState);
         } else {
-            TOSTRING_VOID(V8StringResource<WithNullCheck>, argString, arg);
+            TOSTRING_VOID(V8StringResource<TreatNullAsNullString>, argString, arg);
             xmlHttpRequest->send(argString, exceptionState);
         }
     }
@@ -248,4 +248,4 @@ void V8XMLHttpRequest::sendMethodCustom(const v8::FunctionCallbackInfo<v8::Value
     exceptionState.throwIfNeeded();
 }
 
-} // namespace WebCore
+} // namespace blink

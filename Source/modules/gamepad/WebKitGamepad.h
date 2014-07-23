@@ -5,12 +5,12 @@
 #ifndef WebKitGamepad_h
 #define WebKitGamepad_h
 
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "modules/gamepad/GamepadCommon.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Vector.h"
 
-namespace WebCore {
+namespace blink {
 
 class WebKitGamepad FINAL : public GarbageCollectedFinalized<WebKitGamepad>, public GamepadCommon, public ScriptWrappable {
 public:
@@ -32,6 +32,6 @@ private:
     FloatVector m_buttons;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // WebKitGamepad_h

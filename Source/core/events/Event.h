@@ -24,14 +24,14 @@
 #ifndef Event_h
 #define Event_h
 
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/dom/DOMTimeStamp.h"
 #include "core/events/EventPath.h"
 #include "platform/heap/Handle.h"
 #include "wtf/RefCounted.h"
 #include "wtf/text/AtomicString.h"
 
-namespace WebCore {
+namespace blink {
 
 class EventTarget;
 class EventDispatcher;
@@ -213,6 +213,6 @@ private:
 #define DEFINE_EVENT_TYPE_CASTS(typeName) \
     DEFINE_TYPE_CASTS(typeName, Event, event, event->is##typeName(), event.is##typeName())
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // Event_h

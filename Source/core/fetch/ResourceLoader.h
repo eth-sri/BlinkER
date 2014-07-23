@@ -40,7 +40,7 @@ namespace blink {
 class WebThreadedDataReceiver;
 }
 
-namespace WebCore {
+namespace blink {
 
 class EventAction;
 class EventRacerLog;

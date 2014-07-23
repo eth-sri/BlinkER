@@ -34,7 +34,7 @@
 #include "wtf/PassRefPtr.h"
 #include "wtf/ThreadingPrimitives.h"
 
-namespace WebCore {
+namespace blink {
 
 class AudioContext;
 class HTMLMediaElement;
@@ -49,6 +49,7 @@ public:
     HTMLMediaElement* mediaElement() { return m_mediaElement.get(); }
 
     // AudioNode
+    virtual void dispose() OVERRIDE;
     virtual void process(size_t framesToProcess) OVERRIDE;
 
     // AudioSourceProviderClient
@@ -72,9 +73,12 @@ private:
     double m_sourceSampleRate;
 
     OwnPtr<MultiChannelResampler> m_multiChannelResampler;
+    // Oilpan: This object must be alive between lock() and unlock().
+    GC_PLUGIN_IGNORE("http://crbug.com/395940")
+    RefPtrWillBePersistent<MediaElementAudioSourceNode> m_keepAliveWhileLocking;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // ENABLE(WEB_AUDIO)
 

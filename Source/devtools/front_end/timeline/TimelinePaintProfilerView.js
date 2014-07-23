@@ -29,50 +29,61 @@ WebInspector.TimelinePaintProfilerView = function()
 WebInspector.TimelinePaintProfilerView.prototype = {
     wasShown: function()
     {
-        this._innerSetPicture(this._picture);
-    },
-
-    /**
-     * @param {string} encodedPicture
-     */
-    setPicture: function(encodedPicture)
-    {
-        if (this._lastLoadedSnapshot) {
-            this._lastLoadedSnapshot.dispose();
-            this._lastLoadedSnapshot = null;
+        if (this._updateWhenVisible) {
+            this._updateWhenVisible = false;
+            this._update();
         }
-        this._picture = encodedPicture;
-        if (!this.isShowing())
-            return;
-        this._innerSetPicture(this._picture);
     },
 
     /**
+     * @param {?WebInspector.Target} target
      * @param {string} encodedPicture
      */
-    _innerSetPicture: function(encodedPicture)
+    setPicture: function(target, encodedPicture)
     {
-        WebInspector.PaintProfilerSnapshot.load(encodedPicture, onSnapshotLoaded.bind(this));
+        this._disposeSnapshot();
+        this._picture = encodedPicture;
+        this._target = target;
+        if (this.isShowing())
+            this._update();
+        else
+            this._updateWhenVisible = true;
+    },
+
+    _update: function()
+    {
+        if (!this._target)
+            return;
+        WebInspector.PaintProfilerSnapshot.load(this._target, this._picture, onSnapshotLoaded.bind(this));
         /**
          * @param {?WebInspector.PaintProfilerSnapshot} snapshot
          * @this WebInspector.TimelinePaintProfilerView
          */
         function onSnapshotLoaded(snapshot)
         {
+            this._disposeSnapshot();
             this._lastLoadedSnapshot = snapshot;
             snapshot.commandLog(onCommandLogDone.bind(this, snapshot));
         }
 
         /**
          * @param {!WebInspector.PaintProfilerSnapshot=} snapshot
-         * @param {!Array.<!Object>=} log
+         * @param {!Array.<!WebInspector.PaintProfilerLogItem>=} log
          * @this {WebInspector.TimelinePaintProfilerView}
          */
         function onCommandLogDone(snapshot, log)
         {
-            this._logTreeView.setCommandLog(log);
+            this._logTreeView.setCommandLog(snapshot.target(), log);
             this._paintProfilerView.setSnapshotAndLog(snapshot || null, log || []);
         }
+    },
+
+    _disposeSnapshot: function()
+    {
+        if (!this._lastLoadedSnapshot)
+            return;
+        this._lastLoadedSnapshot.dispose();
+        this._lastLoadedSnapshot = null;
     },
 
     _onWindowChanged: function()

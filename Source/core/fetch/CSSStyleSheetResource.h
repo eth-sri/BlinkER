@@ -30,7 +30,7 @@
 #include "core/fetch/StyleSheetResource.h"
 #include "platform/heap/Handle.h"
 
-namespace WebCore {
+namespace blink {
 
 class CSSParserContext;
 class ResourceClient;
@@ -55,6 +55,7 @@ protected:
 
 private:
     bool canUseSheet(bool enforceMIMEType, bool* hasValidMIMEType) const;
+    virtual void dispose() OVERRIDE;
     virtual void checkNotify() OVERRIDE;
 
     String m_decodedSheetText;

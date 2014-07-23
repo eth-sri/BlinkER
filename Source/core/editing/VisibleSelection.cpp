@@ -26,7 +26,7 @@
 #include "config.h"
 #include "core/editing/VisibleSelection.h"
 
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/Range.h"
@@ -44,7 +44,7 @@
 #include <stdio.h>
 #endif
 
-namespace WebCore {
+namespace blink {
 
 VisibleSelection::VisibleSelection()
     : m_affinity(DOWNSTREAM)
@@ -716,7 +716,7 @@ bool VisibleSelection::isContentEditable() const
     return isEditablePosition(start());
 }
 
-bool VisibleSelection::rendererIsEditable() const
+bool VisibleSelection::hasEditableStyle() const
 {
     return isEditablePosition(start(), ContentIsEditable, DoNotUpdateStyle);
 }
@@ -848,16 +848,16 @@ void VisibleSelection::showTreeForThis() const
 
 #endif
 
-} // namespace WebCore
+} // namespace blink
 
 #ifndef NDEBUG
 
-void showTree(const WebCore::VisibleSelection& sel)
+void showTree(const blink::VisibleSelection& sel)
 {
     sel.showTreeForThis();
 }
 
-void showTree(const WebCore::VisibleSelection* sel)
+void showTree(const blink::VisibleSelection* sel)
 {
     if (sel)
         sel->showTreeForThis();

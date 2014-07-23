@@ -41,7 +41,7 @@
 #include "platform/fonts/SimpleFontData.h"
 #include "wtf/text/AtomicString.h"
 
-namespace WebCore {
+namespace blink {
 
 CSSFontSelector::CSSFontSelector(Document* document)
     : m_document(document)
@@ -174,10 +174,12 @@ void CSSFontSelector::updateGenericFontFamilySettings(Document& document)
 
 void CSSFontSelector::trace(Visitor* visitor)
 {
+#if ENABLE(OILPAN)
     visitor->trace(m_document);
     visitor->trace(m_fontFaceCache);
     visitor->trace(m_clients);
     visitor->trace(m_fontLoader);
+#endif
     FontSelector::trace(visitor);
 }
 

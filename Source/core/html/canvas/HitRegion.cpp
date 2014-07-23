@@ -8,12 +8,13 @@
 #include "core/accessibility/AXObjectCache.h"
 #include "core/rendering/RenderBoxModelObject.h"
 
-namespace WebCore {
+namespace blink {
 
 HitRegion::HitRegion(const HitRegionOptions& options)
     : m_id(options.id)
     , m_control(options.control)
     , m_path(options.path)
+    , m_fillRule(options.fillRule)
 {
 }
 
@@ -41,7 +42,7 @@ void HitRegion::updateAccessibility(Element* canvas)
 
 bool HitRegion::contains(const LayoutPoint& point) const
 {
-    return m_path.contains(point, RULE_NONZERO);
+    return m_path.contains(point, m_fillRule);
 }
 
 void HitRegion::removePixels(const Path& clearArea)
@@ -153,11 +154,13 @@ unsigned HitRegionManager::getHitRegionsCount() const
 
 void HitRegionManager::trace(Visitor* visitor)
 {
+#if ENABLE(OILPAN)
     visitor->trace(m_hitRegionList);
     visitor->trace(m_hitRegionIdMap);
     visitor->trace(m_hitRegionControlMap);
+#endif
 }
 
 DEFINE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(HitRegionManager)
 
-} // namespace WebCore
+} // namespace blink

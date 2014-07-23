@@ -47,7 +47,7 @@
 #include "core/frame/Settings.h"
 #include "platform/URLPatternMatcher.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -464,10 +464,8 @@ void StyleEngine::appendActiveAuthorStyleSheets()
     TreeScopeSet::iterator begin = m_activeTreeScopes.begin();
     TreeScopeSet::iterator end = m_activeTreeScopes.end();
     for (TreeScopeSet::iterator it = begin; it != end; ++it) {
-        if (TreeScopeStyleSheetCollection* collection = m_styleSheetCollectionMap.get(*it)) {
-            m_resolver->setBuildScopedStyleTreeInDocumentOrder(!collection->scopingNodesForStyleScoped());
+        if (TreeScopeStyleSheetCollection* collection = m_styleSheetCollectionMap.get(*it))
             m_resolver->appendAuthorStyleSheets(collection->activeAuthorStyleSheets());
-        }
     }
     m_resolver->finishAppendAuthorStyleSheets();
     m_resolver->setBuildScopedStyleTreeInDocumentOrder(false);
@@ -681,6 +679,7 @@ void StyleEngine::fontsNeedUpdate(CSSFontSelector*)
 
 void StyleEngine::trace(Visitor* visitor)
 {
+#if ENABLE(OILPAN)
     visitor->trace(m_document);
     visitor->trace(m_injectedAuthorStyleSheets);
     visitor->trace(m_authorStyleSheets);
@@ -691,6 +690,7 @@ void StyleEngine::trace(Visitor* visitor)
     visitor->trace(m_textToSheetCache);
     visitor->trace(m_sheetToTextCache);
     visitor->trace(m_xslStyleSheet);
+#endif
     CSSFontSelectorClient::trace(visitor);
 }
 

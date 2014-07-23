@@ -33,7 +33,7 @@
 #include "public/platform/WebRTCPeerConnectionHandler.h"
 #include "wtf/Locker.h"
 
-namespace WebCore {
+namespace blink {
 
 PassRefPtrWillBeRawPtr<MediaStreamAudioDestinationNode> MediaStreamAudioDestinationNode::create(AudioContext* context, size_t numberOfChannels)
 {
@@ -61,7 +61,13 @@ MediaStreamAudioDestinationNode::MediaStreamAudioDestinationNode(AudioContext* c
 
 MediaStreamAudioDestinationNode::~MediaStreamAudioDestinationNode()
 {
+    ASSERT(!isInitialized());
+}
+
+void MediaStreamAudioDestinationNode::dispose()
+{
     uninitialize();
+    AudioBasicInspectorNode::dispose();
 }
 
 void MediaStreamAudioDestinationNode::trace(Visitor* visitor)
@@ -76,6 +82,6 @@ void MediaStreamAudioDestinationNode::process(size_t numberOfFrames)
     m_source->consumeAudio(m_mixBus.get(), numberOfFrames);
 }
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // ENABLE(WEB_AUDIO)

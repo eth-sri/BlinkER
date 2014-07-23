@@ -32,7 +32,7 @@
 #include "core/frame/SuspendableTimer.h"
 #include "core/inspector/InspectorInstrumentation.h"
 
-namespace WebCore {
+namespace blink {
 
 class DOMWindowEventQueueTimer : public NoBaseWillBeGarbageCollectedFinalized<DOMWindowEventQueueTimer>, public SuspendableTimer {
     WTF_MAKE_NONCOPYABLE(DOMWindowEventQueueTimer);
@@ -65,8 +65,10 @@ DOMWindowEventQueue::~DOMWindowEventQueue()
 
 void DOMWindowEventQueue::trace(Visitor* visitor)
 {
+#if ENABLE(OILPAN)
     visitor->trace(m_pendingEventTimer);
     visitor->trace(m_queuedEvents);
+#endif
     EventQueue::trace(visitor);
 }
 

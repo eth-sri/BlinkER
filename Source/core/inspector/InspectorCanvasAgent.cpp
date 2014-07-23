@@ -31,8 +31,8 @@
 #include "config.h"
 #include "core/inspector/InspectorCanvasAgent.h"
 
-#include "bindings/v8/ScriptProfiler.h"
-#include "bindings/v8/ScriptValue.h"
+#include "bindings/core/v8/ScriptProfiler.h"
+#include "bindings/core/v8/ScriptValue.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/inspector/BindingVisitors.h"
 #include "core/inspector/InjectedScript.h"
@@ -45,15 +45,15 @@
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 
-using WebCore::TypeBuilder::Array;
-using WebCore::TypeBuilder::Canvas::ResourceId;
-using WebCore::TypeBuilder::Canvas::ResourceState;
-using WebCore::TypeBuilder::Canvas::TraceLog;
-using WebCore::TypeBuilder::Canvas::TraceLogId;
-using WebCore::TypeBuilder::Page::FrameId;
-using WebCore::TypeBuilder::Runtime::RemoteObject;
+using blink::TypeBuilder::Array;
+using blink::TypeBuilder::Canvas::ResourceId;
+using blink::TypeBuilder::Canvas::ResourceState;
+using blink::TypeBuilder::Canvas::TraceLog;
+using blink::TypeBuilder::Canvas::TraceLogId;
+using blink::TypeBuilder::Page::FrameId;
+using blink::TypeBuilder::Runtime::RemoteObject;
 
-namespace WebCore {
+namespace blink {
 
 namespace CanvasAgentState {
 static const char canvasAgentEnabled[] = "canvasAgentEnabled";
@@ -349,5 +349,5 @@ void InspectorCanvasAgent::didBeginFrame()
     }
 }
 
-} // namespace WebCore
+} // namespace blink
 

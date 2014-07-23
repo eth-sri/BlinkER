@@ -30,7 +30,7 @@
 
 /**
  * @constructor
- * @extends {WebInspector.TargetAwareObject}
+ * @extends {WebInspector.SDKObject}
  * @implements {WebInspector.ContentProvider}
  * @param {!NetworkAgent.RequestId} requestId
  * @param {!WebInspector.Target} target
@@ -41,7 +41,7 @@
  */
 WebInspector.NetworkRequest = function(target, requestId, url, documentURL, frameId, loaderId)
 {
-    WebInspector.TargetAwareObject.call(this, target);
+    WebInspector.SDKObject.call(this, target);
 
     this._requestId = requestId;
     this.url = url;
@@ -719,8 +719,11 @@ WebInspector.NetworkRequest.prototype = {
     {
         function parseNameValue(pair)
         {
-            var splitPair = pair.split("=", 2);
-            return {name: splitPair[0], value: splitPair[1] || ""};
+            var position = pair.indexOf("=");
+            if (position === -1)
+                return {name: pair, value: ""};
+            else
+                return {name: pair.substring(0, position), value: pair.substring(position + 1)};
         }
         return queryString.split("&").map(parseNameValue);
     },
@@ -990,5 +993,5 @@ WebInspector.NetworkRequest.prototype = {
         this._frames.push(frameOrError);
     },
 
-    __proto__: WebInspector.TargetAwareObject.prototype
+    __proto__: WebInspector.SDKObject.prototype
 }

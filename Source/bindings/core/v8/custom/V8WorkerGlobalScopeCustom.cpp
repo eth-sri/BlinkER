@@ -31,20 +31,19 @@
 #include "config.h"
 #include "bindings/core/v8/V8WorkerGlobalScope.h"
 
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ScheduledAction.h"
-#include "bindings/v8/V8Binding.h"
-#include "bindings/v8/V8WorkerGlobalScopeEventListener.h"
-#include "bindings/v8/WorkerScriptController.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ScheduledAction.h"
+#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8WorkerGlobalScopeEventListener.h"
+#include "bindings/core/v8/WorkerScriptController.h"
 #include "core/frame/DOMTimer.h"
 #include "core/frame/DOMWindowTimers.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/inspector/ScriptCallStack.h"
 #include "core/workers/WorkerGlobalScope.h"
-#include "modules/websockets/WebSocket.h"
 #include "wtf/OwnPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 static void setTimeoutOrInterval(const v8::FunctionCallbackInfo<v8::Value>& info, bool singleShot)
 {
@@ -121,4 +120,4 @@ v8::Handle<v8::Value> toV8(WorkerGlobalScope* impl, v8::Handle<v8::Object> creat
     return global;
 }
 
-} // namespace WebCore
+} // namespace blink

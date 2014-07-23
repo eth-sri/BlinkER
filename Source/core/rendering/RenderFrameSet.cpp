@@ -37,7 +37,7 @@
 #include "platform/Cursor.h"
 #include "platform/graphics/GraphicsContext.h"
 
-namespace WebCore {
+namespace blink {
 
 RenderFrameSet::RenderFrameSet(HTMLFrameSetElement* frameSet)
     : RenderBox(frameSet)
@@ -151,6 +151,13 @@ void RenderFrameSet::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
             yPos += borderThickness;
         }
     }
+}
+
+void RenderFrameSet::computePreferredLogicalWidths()
+{
+    m_minPreferredLogicalWidth = 0;
+    m_maxPreferredLogicalWidth = 0;
+    clearPreferredLogicalWidthsDirty();
 }
 
 void RenderFrameSet::GridAxis::resize(int size)
@@ -652,4 +659,4 @@ CursorDirective RenderFrameSet::getCursor(const LayoutPoint& point, Cursor& curs
     return RenderBox::getCursor(point, cursor);
 }
 
-} // namespace WebCore
+} // namespace blink

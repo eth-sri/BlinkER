@@ -29,7 +29,12 @@
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 
-namespace WebCore {
+namespace blink {
+
+PassRefPtrWillBeRawPtr<MediaQueryMatcher> MediaQueryMatcher::create(Document& document)
+{
+    return adoptRefWillBeNoop(new MediaQueryMatcher(document));
+}
 
 MediaQueryMatcher::MediaQueryMatcher(Document& document)
     : m_document(&document)
@@ -42,14 +47,7 @@ DEFINE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(MediaQueryMatcher)
 void MediaQueryMatcher::documentDetached()
 {
     m_document = nullptr;
-
-    // Take a ref to each MediaQueryList as removing the listeners in documentDetached
-    // could release the last ref and mutate the m_mediaLists.
-    WillBeHeapVector<RefPtrWillBeMember<MediaQueryList> > lists;
-    copyToVector(m_mediaLists, lists);
-
-    for (size_t i = 0; i < lists.size(); ++i)
-        lists[i]->documentDetached();
+    m_evaluator = nullptr;
 }
 
 PassOwnPtr<MediaQueryEvaluator> MediaQueryMatcher::createEvaluator() const
@@ -62,14 +60,17 @@ PassOwnPtr<MediaQueryEvaluator> MediaQueryMatcher::createEvaluator() const
 
 bool MediaQueryMatcher::evaluate(const MediaQuerySet* media)
 {
+    ASSERT(!m_document || m_document->frame() || !m_evaluator);
+
     if (!media)
         return false;
 
+    // Cache the evaluator to avoid allocating one per evaluation.
+    if (!m_evaluator)
+        m_evaluator = createEvaluator();
+
     if (m_evaluator)
         return m_evaluator->eval(media);
-
-    if (OwnPtr<MediaQueryEvaluator> evaluator = createEvaluator())
-        return evaluator->eval(media);
 
     return false;
 }
@@ -82,7 +83,7 @@ PassRefPtrWillBeRawPtr<MediaQueryList> MediaQueryMatcher::matchMedia(const Strin
     RefPtrWillBeRawPtr<MediaQuerySet> media = MediaQuerySet::create(query);
     // Add warning message to inspector whenever dpi/dpcm values are used for "screen" media.
     reportMediaQueryWarningIfNeeded(m_document, media.get());
-    return MediaQueryList::create(this, media);
+    return MediaQueryList::create(m_document, this, media);
 }
 
 void MediaQueryMatcher::addMediaQueryList(MediaQueryList* query)
@@ -104,25 +105,19 @@ void MediaQueryMatcher::mediaFeaturesChanged()
     if (!m_document)
         return;
 
-    // Cache an evaluator so we don't allocate one for each list below.
-    m_evaluator = createEvaluator();
-    if (!m_evaluator)
-        return;
-
     WillBeHeapVector<RefPtrWillBeMember<MediaQueryListListener> > listenersToNotify;
     for (MediaQueryListSet::iterator it = m_mediaLists.begin(); it != m_mediaLists.end(); ++it)
         (*it)->mediaFeaturesChanged(&listenersToNotify);
 
-    m_evaluator = nullptr;
-    // FIXME: This should be async! We're running script inside ::layout() or ::updateRenderTree().
-    for (size_t i = 0; i < listenersToNotify.size(); ++i)
-        listenersToNotify[i]->call();
+    m_document->enqueueMediaQueryChangeListeners(listenersToNotify);
 }
 
 void MediaQueryMatcher::trace(Visitor* visitor)
 {
+#if ENABLE(OILPAN)
     visitor->trace(m_document);
     visitor->trace(m_mediaLists);
+#endif
 }
 
 }

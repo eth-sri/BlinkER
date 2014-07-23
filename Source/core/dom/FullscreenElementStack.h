@@ -38,7 +38,7 @@
 #include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
 
-namespace WebCore {
+namespace blink {
 
 class RenderFullScreen;
 class RenderStyle;
@@ -66,12 +66,16 @@ public:
     };
 
     void requestFullScreenForElement(Element&, RequestType);
-    void webkitCancelFullScreen();
+    void fullyExitFullscreen();
+    void exitFullscreen();
 
-    void webkitWillEnterFullScreenForElement(Element*);
-    void webkitDidEnterFullScreenForElement(Element*);
-    void webkitWillExitFullScreenForElement(Element*);
-    void webkitDidExitFullScreenForElement(Element*);
+    static bool fullscreenEnabled(Document&);
+    Element* fullscreenElement() const { return !m_fullScreenElementStack.isEmpty() ? m_fullScreenElementStack.last().get() : 0; }
+
+    void willEnterFullScreenForElement(Element*);
+    void didEnterFullScreenForElement(Element*);
+    void willExitFullScreenForElement(Element*);
+    void didExitFullScreenForElement(Element*);
 
     void setFullScreenRenderer(RenderFullScreen*);
     RenderFullScreen* fullScreenRenderer() const { return m_fullScreenRenderer; }
@@ -79,11 +83,7 @@ public:
 
     void removeFullScreenElementOfSubtree(Node*, bool amongChildrenOnly = false);
 
-    // W3C API
-    static bool webkitFullscreenEnabled(Document&);
-    Element* webkitFullscreenElement() const { return !m_fullScreenElementStack.isEmpty() ? m_fullScreenElementStack.last().get() : 0; }
-    void webkitExitFullscreen();
-
+    // Mozilla API
     bool webkitIsFullScreen() const { return m_fullScreenElement.get(); }
     bool webkitFullScreenKeyboardInputAllowed() const { return m_fullScreenElement.get() && m_areKeysEnabledInFullScreen; }
     Element* webkitCurrentFullScreenElement() const { return m_fullScreenElement.get(); }
@@ -105,8 +105,10 @@ private:
     void clearFullscreenElementStack();
     void popFullscreenElementStack();
     void pushFullscreenElementStack(Element&);
-    void addDocumentToFullScreenChangeEventQueue(Document&);
-    void fullScreenChangeDelayTimerFired(Timer<FullscreenElementStack>*);
+
+    void enqueueChangeEvent(Document&);
+    void enqueueErrorEvent(Element&);
+    void eventQueueTimerFired(Timer<FullscreenElementStack>*);
 
     void fullScreenElementRemoved();
 
@@ -114,9 +116,8 @@ private:
     RefPtrWillBeMember<Element> m_fullScreenElement;
     WillBeHeapVector<RefPtrWillBeMember<Element> > m_fullScreenElementStack;
     RenderFullScreen* m_fullScreenRenderer;
-    Timer<FullscreenElementStack> m_fullScreenChangeDelayTimer;
-    WillBeHeapDeque<RefPtrWillBeMember<Node> > m_fullScreenChangeEventTargetQueue;
-    WillBeHeapDeque<RefPtrWillBeMember<Node> > m_fullScreenErrorEventTargetQueue;
+    Timer<FullscreenElementStack> m_eventQueueTimer;
+    WillBeHeapDeque<RefPtrWillBeMember<Event> > m_eventQueue;
     LayoutRect m_savedPlaceholderFrameRect;
     RefPtr<RenderStyle> m_savedPlaceholderRenderStyle;
 };
@@ -136,6 +137,6 @@ inline FullscreenElementStack* FullscreenElementStack::fromIfExists(Document& do
     return fromIfExistsSlow(document);
 }
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // FullscreenElementStack_h

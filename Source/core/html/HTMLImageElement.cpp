@@ -23,12 +23,12 @@
 #include "config.h"
 #include "core/html/HTMLImageElement.h"
 
-#include "bindings/v8/ScriptEventListener.h"
+#include "bindings/core/v8/ScriptEventListener.h"
 #include "core/CSSPropertyNames.h"
 #include "core/HTMLNames.h"
 #include "core/MediaTypeNames.h"
 #include "core/css/MediaQueryMatcher.h"
-#include "core/css/MediaValuesCached.h"
+#include "core/css/MediaValuesDynamic.h"
 #include "core/css/parser/SizesAttributeParser.h"
 #include "core/dom/Attribute.h"
 #include "core/fetch/ImageResource.h"
@@ -43,7 +43,7 @@
 #include "platform/MIMETypeRegistry.h"
 #include "platform/RuntimeEnabledFeatures.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -191,7 +191,7 @@ void HTMLImageElement::parseAttribute(const QualifiedName& name, const AtomicStr
         if (renderer() && renderer()->isImage())
             toRenderImage(renderer())->updateAltText();
     } else if (name == srcAttr || name == srcsetAttr || name == sizesAttr) {
-        selectSourceURL(UpdateIgnorePreviousError);
+        selectSourceURL(ImageLoader::UpdateIgnorePreviousError);
     } else if (name == usemapAttr) {
         setIsLink(!value.isNull());
     } else if (name == compositeAttr) {
@@ -243,14 +243,10 @@ ImageCandidate HTMLImageElement::findBestFitImageFromPictureParent()
         if (!type.isEmpty() && !supportedImageType(type))
             continue;
 
-        String media = source->fastGetAttribute(mediaAttr);
-        if (!media.isEmpty()) {
-            RefPtrWillBeRawPtr<MediaQuerySet> mediaQueries = MediaQuerySet::create(media);
-            if (!document().mediaQueryMatcher().evaluate(mediaQueries.get()))
-                continue;
-        }
+        if (!source->mediaQueryMatches())
+            continue;
 
-        unsigned effectiveSize = SizesAttributeParser::findEffectiveSize(source->fastGetAttribute(sizesAttr), MediaValuesCached::create(document()));
+        unsigned effectiveSize = SizesAttributeParser::findEffectiveSize(source->fastGetAttribute(sizesAttr), MediaValuesDynamic::create(document()));
         ImageCandidate candidate = bestFitSourceForSrcsetAttribute(document().devicePixelRatio(), effectiveSize, source->fastGetAttribute(srcsetAttr));
         if (candidate.isEmpty())
             continue;
@@ -315,7 +311,7 @@ Node::InsertionNotificationRequest HTMLImageElement::insertedInto(ContainerNode*
     // If we have been inserted from a renderer-less document,
     // our loader may have not fetched the image, so do it now.
     if ((insertionPoint->inDocument() && !imageLoader().image()) || imageWasModified)
-        imageLoader().updateFromElement(m_elementCreatedByParser ? ImageLoader::ForceLoadImmediately : ImageLoader::LoadNormally);
+        imageLoader().updateFromElement(ImageLoader::UpdateNormal, m_elementCreatedByParser ? ImageLoader::ForceLoadImmediately : ImageLoader::LoadNormally);
 
     return HTMLElement::insertedInto(insertionPoint);
 }
@@ -420,11 +416,6 @@ const QualifiedName& HTMLImageElement::subResourceAttributeName() const
     return srcAttr;
 }
 
-const AtomicString& HTMLImageElement::alt() const
-{
-    return fastGetAttribute(altAttr);
-}
-
 bool HTMLImageElement::draggable() const
 {
     // Image elements are draggable by default.
@@ -453,6 +444,7 @@ void HTMLImageElement::setWidth(int value)
 
 int HTMLImageElement::x() const
 {
+    document().updateLayoutIgnorePendingStylesheets();
     RenderObject* r = renderer();
     if (!r)
         return 0;
@@ -464,6 +456,7 @@ int HTMLImageElement::x() const
 
 int HTMLImageElement::y() const
 {
+    document().updateLayoutIgnorePendingStylesheets();
     RenderObject* r = renderer();
     if (!r)
         return 0;
@@ -564,7 +557,7 @@ FloatSize HTMLImageElement::defaultDestinationSize() const
     return size;
 }
 
-void HTMLImageElement::selectSourceURL(UpdateFromElementBehavior behavior)
+void HTMLImageElement::selectSourceURL(ImageLoader::UpdateFromElementBehavior behavior)
 {
     bool foundURL = false;
     if (RuntimeEnabledFeatures::pictureEnabled()) {
@@ -578,14 +571,11 @@ void HTMLImageElement::selectSourceURL(UpdateFromElementBehavior behavior)
     if (!foundURL) {
         unsigned effectiveSize = 0;
         if (RuntimeEnabledFeatures::pictureSizesEnabled())
-            effectiveSize = SizesAttributeParser::findEffectiveSize(fastGetAttribute(sizesAttr), MediaValuesCached::create(document()));
+            effectiveSize = SizesAttributeParser::findEffectiveSize(fastGetAttribute(sizesAttr), MediaValuesDynamic::create(document()));
         ImageCandidate candidate = bestFitSourceForImageAttributes(document().devicePixelRatio(), effectiveSize, fastGetAttribute(srcAttr), fastGetAttribute(srcsetAttr));
         setBestFitURLAndDPRFromImageCandidate(candidate);
     }
-    if (behavior == UpdateIgnorePreviousError)
-        imageLoader().updateFromElementIgnoringPreviousError();
-    else
-        imageLoader().updateFromElement();
+    imageLoader().updateFromElement(behavior);
 }
 
 const KURL& HTMLImageElement::sourceURL() const

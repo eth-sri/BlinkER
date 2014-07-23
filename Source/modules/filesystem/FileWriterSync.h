@@ -31,13 +31,13 @@
 #ifndef FileWriterSync_h
 #define FileWriterSync_h
 
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/fileapi/FileError.h"
 #include "modules/filesystem/FileWriterBase.h"
 #include "platform/heap/Handle.h"
 #include "public/platform/WebFileWriterClient.h"
 
-namespace WebCore {
+namespace blink {
 
 class Blob;
 class ExceptionState;
@@ -46,7 +46,7 @@ class FileWriterSync FINAL : public FileWriterBase, public ScriptWrappable, publ
 public:
     static FileWriterSync* create()
     {
-        return adoptRefCountedGarbageCollected(new FileWriterSync());
+        return adoptRefCountedGarbageCollectedWillBeNoop(new FileWriterSync());
     }
     virtual ~FileWriterSync();
 
@@ -65,11 +65,11 @@ private:
     void prepareForWrite();
 
     FileError::ErrorCode m_error;
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     bool m_complete;
 #endif
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // FileWriter_h

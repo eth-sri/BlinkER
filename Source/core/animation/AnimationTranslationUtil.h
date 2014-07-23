@@ -36,14 +36,14 @@ class WebTransformOperations;
 class WebFilterOperations;
 }
 
-namespace WebCore {
+namespace blink {
 
 class FilterOperations;
 class TransformOperations;
 
 void toWebTransformOperations(const TransformOperations& inOperations, blink::WebTransformOperations* outOperations);
-bool toWebFilterOperations(const FilterOperations& inOperations, blink::WebFilterOperations* outOperations);
+void toWebFilterOperations(const FilterOperations& inOperations, blink::WebFilterOperations* outOperations);
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // AnimationTranslationUtil_h

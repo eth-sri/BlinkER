@@ -55,7 +55,7 @@ const int domBreakpointDerivedTypeShift = 16;
 
 }
 
-namespace WebCore {
+namespace blink {
 
 static const char requestAnimationFrameEventName[] = "requestAnimationFrame";
 static const char cancelAnimationFrameEventName[] = "cancelAnimationFrame";
@@ -242,7 +242,7 @@ void InspectorDOMDebuggerAgent::didRemoveDOMNode(Node* node)
     if (m_domBreakpoints.size()) {
         // Remove subtree breakpoints.
         m_domBreakpoints.remove(node);
-        Vector<Node*> stack(1, InspectorDOMAgent::innerFirstChild(node));
+        WillBeHeapVector<RawPtrWillBeMember<Node> > stack(1, InspectorDOMAgent::innerFirstChild(node));
         do {
             Node* node = stack.last();
             stack.removeLast();
@@ -418,7 +418,7 @@ void InspectorDOMDebuggerAgent::pauseOnNativeEventIfNeeded(PassRefPtr<JSONObject
         m_debuggerAgent->schedulePauseOnNextStatement(InspectorFrontend::Debugger::Reason::EventListener, eventData);
 }
 
-PassRefPtr<JSONObject> InspectorDOMDebuggerAgent::preparePauseOnNativeEventData(const String& eventName, const AtomicString* targetName)
+PassRefPtr<JSONObject> InspectorDOMDebuggerAgent::preparePauseOnNativeEventData(const String& eventName, const String* targetName)
 {
     String fullEventName = (targetName ? listenerEventCategoryType : instrumentationEventCategoryType) + eventName;
     if (m_pauseInNextEventListener) {
@@ -476,7 +476,9 @@ void InspectorDOMDebuggerAgent::willFireAnimationFrame(Document*, int)
 
 void InspectorDOMDebuggerAgent::willHandleEvent(EventTarget* target, Event* event, EventListener*, bool)
 {
-    pauseOnNativeEventIfNeeded(preparePauseOnNativeEventData(event->type(), &target->interfaceName()), false);
+    Node* node = target->toNode();
+    String targetName = node ? node->nodeName() : target->interfaceName();
+    pauseOnNativeEventIfNeeded(preparePauseOnNativeEventData(event->type(), &targetName), false);
 }
 
 void InspectorDOMDebuggerAgent::willExecuteCustomElementCallback(Element*)
@@ -561,5 +563,5 @@ void InspectorDOMDebuggerAgent::clear()
     m_pauseInNextEventListener = false;
 }
 
-} // namespace WebCore
+} // namespace blink
 

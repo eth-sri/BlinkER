@@ -30,14 +30,17 @@
 
 /**
  * @constructor
+ * @extends {WebInspector.SDKObject}
+ * @param {!WebInspector.Target} target
  * @param {!WebInspector.Workspace} workspace
  */
-WebInspector.LiveEditSupport = function(workspace)
+WebInspector.LiveEditSupport = function(target, workspace)
 {
+    WebInspector.SDKObject.call(this, target);
     this._workspace = workspace;
-    this._projectId = "liveedit:";
+    this._projectId = "liveedit:" + target.id();
     this._projectDelegate = new WebInspector.DebuggerProjectDelegate(workspace, this._projectId, WebInspector.projectTypes.LiveEdit);
-    WebInspector.debuggerModel.addEventListener(WebInspector.DebuggerModel.Events.GlobalObjectCleared, this._debuggerReset, this);
+    target.debuggerModel.addEventListener(WebInspector.DebuggerModel.Events.GlobalObjectCleared, this._debuggerReset, this);
     this._debuggerReset();
 }
 
@@ -48,14 +51,14 @@ WebInspector.LiveEditSupport.prototype = {
      */
     uiSourceCodeForLiveEdit: function(uiSourceCode)
     {
-        var rawLocation = uiSourceCode.uiLocationToRawLocation(WebInspector.targetManager.targets()[0], 0, 0);
-        var debuggerModelLocation = /** @type {!WebInspector.DebuggerModel.Location} */ (rawLocation);
-        var script = debuggerModelLocation.script();
-        var uiLocation = script.rawLocationToUILocation(0, 0);
+        var debuggerModelLocation = WebInspector.debuggerWorkspaceBinding.uiLocationToRawLocation(this.target(), uiSourceCode, 0, 0);
+        var uiLocation = WebInspector.debuggerWorkspaceBinding.rawLocationToUILocation(debuggerModelLocation);
 
         // FIXME: Support live editing of scripts mapped to some file.
         if (uiLocation.uiSourceCode !== uiSourceCode)
             return uiLocation.uiSourceCode;
+
+        var script = debuggerModelLocation.script();
         if (this._uiSourceCodeForScriptId[script.scriptId])
             return this._uiSourceCodeForScriptId[script.scriptId];
 
@@ -85,22 +88,44 @@ WebInspector.LiveEditSupport.prototype = {
     {
         var uiSourceCode = /** @type {!WebInspector.UISourceCode} */ (event.target);
         var scriptId = /** @type {string} */ (this._scriptIdForUISourceCode.get(uiSourceCode));
-        WebInspector.debuggerModel.setScriptSource(scriptId, uiSourceCode.workingCopy(), innerCallback);
+        this.target().debuggerModel.setScriptSource(scriptId, uiSourceCode.workingCopy(), innerCallback.bind(this));
 
         /**
+         * @this {WebInspector.LiveEditSupport}
          * @param {?string} error
          * @param {!DebuggerAgent.SetScriptSourceError=} errorData
          */
         function innerCallback(error, errorData)
         {
             if (error) {
-                var script = WebInspector.debuggerModel.scriptForId(scriptId);
+                var script = this.target().debuggerModel.scriptForId(scriptId);
                 WebInspector.LiveEditSupport.logDetailedError(error, errorData, script);
                 return;
             }
             WebInspector.LiveEditSupport.logSuccess();
         }
+    },
+
+    __proto__: WebInspector.SDKObject.prototype
+}
+
+/**
+ * @param {!WebInspector.UISourceCode} uiSourceCode
+ * @return {?WebInspector.LiveEditSupport}
+ */
+WebInspector.LiveEditSupport.liveEditSupportForUISourceCode = function(uiSourceCode)
+{
+    var projectId = uiSourceCode.project().id();
+    var target = null;
+    var targets = WebInspector.targetManager.targets();
+    for (var i = 0; i < targets.length; ++i) {
+        if (projectId === WebInspector.DefaultScriptMapping.projectIdForTarget(targets[i])) {
+            target = targets[i];
+            break;
+        }
     }
+    var mapping = WebInspector.DebuggerScriptMapping.registry.instance(target);
+    return mapping ? mapping.liveEditSupport() : null;
 }
 
 /**
@@ -110,26 +135,23 @@ WebInspector.LiveEditSupport.prototype = {
  */
 WebInspector.LiveEditSupport.logDetailedError = function(error, errorData, contextScript)
 {
-    var warningLevel = WebInspector.ConsoleMessage.MessageLevel.Warning;
+    var warningLevel = WebInspector.Console.MessageLevel.Warning;
     if (!errorData) {
         if (error)
-            WebInspector.messageSink.addMessage(WebInspector.UIString("LiveEdit failed: %s", error), warningLevel);
+            WebInspector.console.addMessage(WebInspector.UIString("LiveEdit failed: %s", error), warningLevel);
         return;
     }
     var compileError = errorData.compileError;
     if (compileError) {
         var location = contextScript ? WebInspector.UIString(" at %s:%d:%d", contextScript.sourceURL, compileError.lineNumber, compileError.columnNumber) : "";
         var message = WebInspector.UIString("LiveEdit compile failed: %s%s", compileError.message, location);
-        WebInspector.messageSink.addErrorMessage(message);
+        WebInspector.console.error(message);
     } else {
-        WebInspector.messageSink.addMessage(WebInspector.UIString("Unknown LiveEdit error: %s; %s", JSON.stringify(errorData), error), warningLevel);
+        WebInspector.console.addMessage(WebInspector.UIString("Unknown LiveEdit error: %s; %s", JSON.stringify(errorData), error), warningLevel);
     }
 }
 
 WebInspector.LiveEditSupport.logSuccess = function()
 {
-    WebInspector.messageSink.addMessage(WebInspector.UIString("Recompilation and update succeeded."));
+    WebInspector.console.log(WebInspector.UIString("Recompilation and update succeeded."));
 }
-
-/** @type {!WebInspector.LiveEditSupport} */
-WebInspector.liveEditSupport;

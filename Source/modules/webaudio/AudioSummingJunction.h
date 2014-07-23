@@ -30,17 +30,17 @@
 #include "wtf/HashSet.h"
 #include "wtf/Vector.h"
 
-namespace WebCore {
+namespace blink {
 
 class AudioContext;
 class AudioNodeOutput;
 
 // An AudioSummingJunction represents a point where zero, one, or more AudioNodeOutputs connect.
 
-class AudioSummingJunction {
+class AudioSummingJunction : public NoBaseWillBeGarbageCollectedFinalized<AudioSummingJunction> {
 public:
-    explicit AudioSummingJunction(AudioContext*);
     virtual ~AudioSummingJunction();
+    virtual void trace(Visitor*);
 
     // Can be called from any thread.
     AudioContext* context() { return m_context.get(); }
@@ -61,7 +61,9 @@ public:
     virtual void didUpdate() = 0;
 
 protected:
-    RefPtrWillBePersistent<AudioContext> m_context;
+    explicit AudioSummingJunction(AudioContext*);
+
+    RefPtrWillBeMember<AudioContext> m_context;
 
     // m_outputs contains the AudioNodeOutputs representing current connections which are not disabled.
     // The rendering code should never use this directly, but instead uses m_renderingOutputs.
@@ -77,6 +79,6 @@ protected:
     bool m_renderingStateNeedUpdating;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // AudioSummingJunction_h

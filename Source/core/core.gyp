@@ -42,10 +42,6 @@
 
     'webcore_include_dirs': [
       '..',  # WebKit/Source
-      # FIXME: Remove the following two lines once core scripts generate qualified
-      # includes correctly: http://crbug.com/380054
-      '<(bindings_core_v8_output_dir)',
-      '<(bindings_modules_v8_output_dir)',
       '<(SHARED_INTERMEDIATE_DIR)/blink',  # gen/blink
     ],
 
@@ -204,7 +200,7 @@
       'target_name': 'debugger_script_source',
       'type': 'none',
       'variables': {
-        'input_file_path': '<(bindings_v8_dir)/DebuggerScript.js',
+        'input_file_path': '<(bindings_core_v8_dir)/DebuggerScript.js',
         'output_file_path': '<(blink_core_output_dir)/DebuggerScriptSource.h',
         'character_array_name': 'DebuggerScriptSource_js',
       },
@@ -248,7 +244,7 @@
       ],
       'sources': [
         # FIXME: should be bindings_core_v8_files http://crbug.com/358074
-        '<@(bindings_v8_files)',
+        '<@(bindings_core_v8_files)',
         # These files include all the .cpp files generated from the .idl files
         # in webcore_files.
         '<@(bindings_core_v8_generated_aggregate_files)',
@@ -340,9 +336,9 @@
         ['OS=="win"', {
           # In generated bindings code: 'switch contains default but no case'.
           # Disable c4267 warnings until we fix size_t to int truncations.
-          # 4702 is disabled because of issues in Bison-generated
+          # 4701 and 4702 are disabled because of issues in Bison-generated
           # XPathGrammar.cpp and CSSGrammar.cpp.
-          'msvs_disabled_warnings': [ 4065, 4267, 4702 ],
+          'msvs_disabled_warnings': [ 4065, 4267, 4701, 4702 ],
         }],
         ['OS in ("linux", "android") and "WTF_USE_WEBAUDIO_IPP=1" in feature_defines', {
           'cflags': [
@@ -419,8 +415,7 @@
         'xcode_settings': {
           # Some Mac-specific parts of WebKit won't compile without having this
           # prefix header injected.
-          # FIXME: make this a first-class setting.
-          'GCC_PREFIX_HEADER': 'WebCorePrefixMac.h',
+          'GCC_PREFIX_HEADER': '<(DEPTH)/third_party/WebKit/Source/build/mac/Prefix.h',
         },
       },
       'conditions': [
@@ -492,7 +487,7 @@
                   'class_whitelist_regex':
                       'ChromiumWebCoreObjC|TCMVisibleView|RTCMFlippedView|ScrollerStyleObserver',
                   'category_whitelist_regex':
-                      'TCMInterposing|ScrollAnimatorChromiumMacExt|WebCoreTheme',
+                      'WebCoreFocusRingDrawing|WebCoreTheme',
                 },
                 'action': [
                   '../build/scripts/check_objc_rename.sh',
@@ -598,8 +593,6 @@
         ['exclude', '.*'],
         ['include', 'rendering/'],
 
-        # FIXME: Figure out how to store these patterns in a variable.
-        ['exclude', '(cf|cg|mac|opentype|svg|win)/'],
         ['exclude', '(?<!Chromium)(CF|CG|Mac|Win)\\.(cpp|mm?)$'],
         # Previous rule excludes things like ChromiumFooWin, include those.
         ['include', 'rendering/.*Chromium.*\\.(cpp|mm?)$'],
@@ -675,8 +668,6 @@
       'sources/': [
         ['exclude', 'rendering/'],
 
-        # FIXME: Figure out how to store these patterns in a variable.
-        ['exclude', '(cf|cg|mac|opentype|svg|win)/'],
         ['exclude', '(?<!Chromium)(CF|CG|Mac|Win)\\.(cpp|mm?)$'],
       ],
       'conditions': [
@@ -815,16 +806,20 @@
         'INSIDE_BLINK',
       ],
       'include_dirs': [
-        '<(bindings_v8_dir)',  # FIXME: Remove once http://crbug.com/236119 is fixed.
+        '<(bindings_core_v8_dir)',  # FIXME: Remove once http://crbug.com/236119 is fixed.
         'testing',
         'testing/v8',
       ],
       'sources': [
         '<@(webcore_testing_files)',
+        '<(bindings_core_v8_output_dir)/V8GarbageCollectedScriptWrappable.cpp',
+        '<(bindings_core_v8_output_dir)/V8GarbageCollectedScriptWrappable.h',
         '<(bindings_core_v8_output_dir)/V8GCObservation.cpp',
         '<(bindings_core_v8_output_dir)/V8GCObservation.h',
         '<(bindings_core_v8_output_dir)/V8MallocStatistics.cpp',
         '<(bindings_core_v8_output_dir)/V8MallocStatistics.h',
+        '<(bindings_core_v8_output_dir)/V8PrivateScriptTest.cpp',
+        '<(bindings_core_v8_output_dir)/V8PrivateScriptTest.h',
         '<(bindings_core_v8_output_dir)/V8TypeConversions.cpp',
         '<(bindings_core_v8_output_dir)/V8TypeConversions.h',
         '<(bindings_core_v8_output_dir)/V8Internals.cpp',
@@ -841,6 +836,8 @@
         '<(bindings_core_v8_output_dir)/V8LayerRect.h',
         '<(bindings_core_v8_output_dir)/V8LayerRectList.cpp',
         '<(bindings_core_v8_output_dir)/V8LayerRectList.h',
+        '<(bindings_core_v8_output_dir)/V8RefCountedScriptWrappable.cpp',
+        '<(bindings_core_v8_output_dir)/V8RefCountedScriptWrappable.h',
       ],
       'sources/': [
         ['exclude', 'testing/js'],

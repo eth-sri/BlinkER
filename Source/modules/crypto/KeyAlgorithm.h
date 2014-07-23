@@ -31,12 +31,12 @@
 #ifndef KeyAlgorithm_h
 #define KeyAlgorithm_h
 
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "public/platform/WebCryptoKeyAlgorithm.h"
 #include "wtf/Forward.h"
 
-namespace WebCore {
+namespace blink {
 
 class KeyAlgorithm : public GarbageCollectedFinalized<KeyAlgorithm>, public ScriptWrappable {
 public:
@@ -63,6 +63,6 @@ protected:
 #define DEFINE_KEY_ALGORITHM_TYPE_CASTS(thisType) \
     DEFINE_TYPE_CASTS(thisType, KeyAlgorithm, value, value->is##thisType(), value.is##thisType())
 
-} // namespace WebCore
+} // namespace blink
 
 #endif

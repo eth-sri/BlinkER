@@ -25,15 +25,15 @@
 #include "config.h"
 #include "bindings/modules/v8/V8Crypto.h"
 
+#include "bindings/core/v8/ExceptionMessages.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/custom/V8ArrayBufferViewCustom.h"
-#include "bindings/v8/ExceptionMessages.h"
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/V8Binding.h"
 #include "core/dom/ExceptionCode.h"
 #include "modules/crypto/Crypto.h"
 #include "wtf/ArrayBufferView.h"
 
-namespace WebCore {
+namespace blink {
 
 void V8Crypto::getRandomValuesMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
@@ -61,4 +61,4 @@ void V8Crypto::getRandomValuesMethodCustom(const v8::FunctionCallbackInfo<v8::Va
     v8SetReturnValue(info, buffer);
 }
 
-} // namespace WebCore
+} // namespace blink

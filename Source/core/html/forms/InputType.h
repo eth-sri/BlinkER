@@ -38,7 +38,7 @@
 #include "core/html/forms/StepRange.h"
 #include "core/frame/UseCounter.h"
 
-namespace WebCore {
+namespace blink {
 
 class Chrome;
 class DateComponents;
@@ -155,7 +155,6 @@ public:
 
     virtual bool isKeyboardFocusable() const;
     virtual bool shouldShowFocusRingOnMouseFocus() const;
-    virtual bool shouldUseInputMethod() const;
     virtual void enableSecureTextInput();
     virtual void disableSecureTextInput();
     virtual void accessKeyAction(bool sendMouseEvents);
@@ -172,7 +171,6 @@ public:
     // Should return true if the given DragData has more than one dropped files.
     virtual bool receiveDroppedFiles(const DragData*);
     virtual String droppedFileSystemId();
-    virtual void copyNonAttributeProperties(const HTMLInputElement&);
     // Should return true if the corresponding renderer for a type can display a suggested value.
     virtual bool canSetSuggestedValue();
     virtual bool shouldSendChangeEventAfterCheckedChanged();
@@ -240,5 +238,5 @@ private:
     void applyStep(const Decimal&, int count, AnyStepHandling, TextFieldEventBehavior, ExceptionState&);
 };
 
-} // namespace WebCore
+} // namespace blink
 #endif

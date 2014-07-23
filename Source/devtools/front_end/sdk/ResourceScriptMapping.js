@@ -100,6 +100,16 @@ WebInspector.ResourceScriptMapping.prototype = {
         return true;
     },
 
+    /**
+     * @param {!WebInspector.UISourceCode} uiSourceCode
+     * @param {number} lineNumber
+     * @return {boolean}
+     */
+    uiLineHasMapping: function(uiSourceCode, lineNumber)
+    {
+        return true;
+    },
+
     _uiSourceCodeAddedToWorkspace: function(event)
     {
         var uiSourceCode = /** @type {!WebInspector.UISourceCode} */ (event.data);
@@ -211,45 +221,7 @@ WebInspector.ResourceScriptMapping.prototype = {
 }
 
 /**
- * @interface
- * @extends {WebInspector.EventTarget}
- */
-WebInspector.ScriptFile = function()
-{
-}
-
-WebInspector.ScriptFile.Events = {
-    DidMergeToVM: "DidMergeToVM",
-    DidDivergeFromVM: "DidDivergeFromVM",
-}
-
-WebInspector.ScriptFile.prototype = {
-    /**
-     * @return {boolean}
-     */
-    hasDivergedFromVM: function() { return false; },
-
-    /**
-     * @return {boolean}
-     */
-    isDivergingFromVM: function() { return false; },
-
-    /**
-     * @return {boolean}
-     */
-    isMergingToVM: function() { return false; },
-
-    checkMapping: function() { },
-
-    /**
-     * @return {?WebInspector.Target}
-     */
-    target: function() { return null; },
-}
-
-/**
  * @constructor
- * @implements {WebInspector.ScriptFile}
  * @extends {WebInspector.Object}
  * @param {!WebInspector.ResourceScriptMapping} resourceScriptMapping
  * @param {!WebInspector.UISourceCode} uiSourceCode
@@ -259,7 +231,6 @@ WebInspector.ResourceScriptFile = function(resourceScriptMapping, uiSourceCode, 
 {
     console.assert(scripts.length);
 
-    WebInspector.ScriptFile.call(this);
     this._resourceScriptMapping = resourceScriptMapping;
     this._uiSourceCode = uiSourceCode;
 
@@ -270,12 +241,18 @@ WebInspector.ResourceScriptFile = function(resourceScriptMapping, uiSourceCode, 
     this._update();
 }
 
+WebInspector.ResourceScriptFile.Events = {
+    DidMergeToVM: "DidMergeToVM",
+    DidDivergeFromVM: "DidDivergeFromVM",
+}
+
 WebInspector.ResourceScriptFile.prototype = {
     /**
-     * @param {function(boolean)=} callback
+     * @param {function(?string,!DebuggerAgent.SetScriptSourceError=,!WebInspector.Script=)=} callback
      */
     commitLiveEdit: function(callback)
     {
+        var target = this._resourceScriptMapping._target;
         /**
          * @param {?string} error
          * @param {!DebuggerAgent.SetScriptSourceError=} errorData
@@ -283,24 +260,16 @@ WebInspector.ResourceScriptFile.prototype = {
          */
         function innerCallback(error, errorData)
         {
-            if (error) {
-                this._update();
-                WebInspector.LiveEditSupport.logDetailedError(error, errorData, this._script);
-                if (callback)
-                    callback(false);
-                return;
-            }
-
-            this._scriptSource = source;
+            if (!error)
+                this._scriptSource = source;
             this._update();
-            WebInspector.LiveEditSupport.logSuccess();
             if (callback)
-                callback(true);
+                callback(error, errorData, this._script);
         }
         if (!this._script)
             return;
         var source = this._uiSourceCode.workingCopy();
-        this._resourceScriptMapping._debuggerModel.setScriptSource(this._script.scriptId, source, innerCallback.bind(this));
+        target.debuggerModel.setScriptSource(this._script.scriptId, source, innerCallback.bind(this));
     },
 
     /**
@@ -342,7 +311,7 @@ WebInspector.ResourceScriptFile.prototype = {
         this._resourceScriptMapping._hasDivergedFromVM(this._uiSourceCode);
         delete this._isDivergingFromVM;
         this._hasDivergedFromVM = true;
-        this.dispatchEventToListeners(WebInspector.ScriptFile.Events.DidDivergeFromVM, this._uiSourceCode);
+        this.dispatchEventToListeners(WebInspector.ResourceScriptFile.Events.DidDivergeFromVM, this._uiSourceCode);
     },
 
     _mergeToVM: function()
@@ -351,7 +320,7 @@ WebInspector.ResourceScriptFile.prototype = {
         this._isMergingToVM = true;
         this._resourceScriptMapping._hasMergedToVM(this._uiSourceCode);
         delete this._isMergingToVM;
-        this.dispatchEventToListeners(WebInspector.ScriptFile.Events.DidMergeToVM, this._uiSourceCode);
+        this.dispatchEventToListeners(WebInspector.ResourceScriptFile.Events.DidMergeToVM, this._uiSourceCode);
     },
 
     /**
@@ -410,6 +379,16 @@ WebInspector.ResourceScriptFile.prototype = {
     dispose: function()
     {
         this._uiSourceCode.removeEventListener(WebInspector.UISourceCode.Events.WorkingCopyChanged, this._workingCopyChanged, this);
+    },
+
+    /**
+     * @param {string} sourceMapURL
+     */
+    addSourceMapURL: function(sourceMapURL)
+    {
+        if (!this._script)
+            return;
+        this._script.addSourceMapURL(sourceMapURL);
     },
 
     __proto__: WebInspector.Object.prototype

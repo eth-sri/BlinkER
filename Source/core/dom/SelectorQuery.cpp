@@ -27,7 +27,7 @@
 #include "config.h"
 #include "core/dom/SelectorQuery.h"
 
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/css/parser/BisonCSSParser.h"
 #include "core/css/SelectorChecker.h"
 #include "core/css/SiblingTraversalStrategies.h"
@@ -38,7 +38,7 @@
 #include "core/dom/shadow/ElementShadow.h"
 #include "core/dom/shadow/ShadowRoot.h"
 
-namespace WebCore {
+namespace blink {
 
 struct SingleElementSelectorQueryTrait {
     typedef Element* OutputType;
@@ -119,8 +119,9 @@ inline bool SelectorDataList::selectorMatches(const CSSSelector& selector, Eleme
 {
     SelectorChecker selectorChecker(element.document(), SelectorChecker::QueryingRules);
     SelectorChecker::SelectorCheckingContext selectorCheckingContext(selector, &element, SelectorChecker::VisitedMatchDisabled);
-    selectorCheckingContext.behaviorAtBoundary = SelectorChecker::StaysWithinTreeScope;
     selectorCheckingContext.scope = !rootNode.isDocumentNode() ? &rootNode : 0;
+    if (selectorCheckingContext.scope)
+        selectorCheckingContext.contextFlags = SelectorChecker::ScopeContainsLastMatchedElement;
     return selectorChecker.match(selectorCheckingContext, DOMSiblingTraversalStrategy()) == SelectorChecker::SelectorMatches;
 }
 
@@ -426,7 +427,7 @@ void SelectorDataList::execute(ContainerNode& rootNode, typename SelectorQueryTr
     if (const CSSSelector* idSelector = selectorForIdLookup(firstSelector)) {
         const AtomicString& idToMatch = idSelector->value();
         if (rootNode.treeScope().containsMultipleElementsWithId(idToMatch)) {
-            const Vector<Element*>& elements = rootNode.treeScope().getAllElementsById(idToMatch);
+            const WillBeHeapVector<RawPtrWillBeMember<Element> >& elements = rootNode.treeScope().getAllElementsById(idToMatch);
             size_t count = elements.size();
             for (size_t i = 0; i < count; ++i) {
                 Element& element = *elements[i];

@@ -39,13 +39,13 @@ import v8_types
 import v8_utilities
 
 CALLBACK_INTERFACE_H_INCLUDES = frozenset([
-    'bindings/v8/ActiveDOMCallback.h',
-    'bindings/v8/DOMWrapperWorld.h',
-    'bindings/v8/ScopedPersistent.h',
+    'bindings/core/v8/ActiveDOMCallback.h',
+    'bindings/core/v8/DOMWrapperWorld.h',
+    'bindings/core/v8/ScopedPersistent.h',
 ])
 CALLBACK_INTERFACE_CPP_INCLUDES = frozenset([
-    'bindings/v8/ScriptController.h',
-    'bindings/v8/V8Binding.h',
+    'bindings/core/v8/ScriptController.h',
+    'bindings/core/v8/V8Binding.h',
     'core/dom/ExecutionContext.h',
     'wtf/Assertions.h',
     'wtf/GetPtr.h',
@@ -117,7 +117,7 @@ def arguments_context(arguments, call_with_this_handle):
         return {
             'handle': '%sHandle' % argument.name,
             'cpp_value_to_v8_value': argument.idl_type.cpp_value_to_v8_value(
-                argument.name, isolate='isolate',
+                argument.name, isolate='m_scriptState->isolate()',
                 creation_context='m_scriptState->context()->Global()'),
         }
 

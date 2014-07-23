@@ -32,8 +32,8 @@
 
 #include "public/web/WebLeakDetector.h"
 
-#include "bindings/v8/V8Binding.h"
-#include "bindings/v8/V8GCController.h"
+#include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8GCController.h"
 #include "core/dom/Document.h"
 #include "core/fetch/MemoryCache.h"
 #include "core/fetch/ResourceFetcher.h"
@@ -44,7 +44,7 @@
 
 #include <v8.h>
 
-using namespace WebCore;
+using namespace blink;
 
 namespace blink {
 
@@ -130,6 +130,10 @@ void WebLeakDetectorImpl::delayedReport(Timer<WebLeakDetectorImpl>*)
     result.numberOfLiveNodes = InspectorCounters::counterValue(InspectorCounters::NodeCounter);
 
     m_client->onLeakDetectionComplete(result);
+
+#ifndef NDEBUG
+    showLiveDocumentInstances();
+#endif
 }
 
 } // namespace

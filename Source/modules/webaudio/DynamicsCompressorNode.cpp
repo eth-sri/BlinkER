@@ -36,7 +36,7 @@
 // Set output to stereo by default.
 static const unsigned defaultNumberOfOutputChannels = 2;
 
-namespace WebCore {
+namespace blink {
 
 DynamicsCompressorNode::DynamicsCompressorNode(AudioContext* context, float sampleRate)
     : AudioNode(context, sampleRate)
@@ -59,7 +59,13 @@ DynamicsCompressorNode::DynamicsCompressorNode(AudioContext* context, float samp
 
 DynamicsCompressorNode::~DynamicsCompressorNode()
 {
+    ASSERT(!isInitialized());
+}
+
+void DynamicsCompressorNode::dispose()
+{
     uninitialize();
+    AudioNode::dispose();
 }
 
 void DynamicsCompressorNode::process(size_t framesToProcess)
@@ -124,6 +130,6 @@ void DynamicsCompressorNode::trace(Visitor* visitor)
     AudioNode::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // ENABLE(WEB_AUDIO)

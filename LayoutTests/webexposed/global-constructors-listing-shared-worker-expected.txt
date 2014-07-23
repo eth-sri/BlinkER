@@ -8,6 +8,7 @@ Starting worker: resources/global-context-constructors-listing.js
 [Worker] ArrayBuffer
 [Worker] Blob
 [Worker] Boolean
+[Worker] CircularRegion
 [Worker] DataView
 [Worker] Date
 [Worker] Error
@@ -15,6 +16,7 @@ Starting worker: resources/global-context-constructors-listing.js
 [Worker] EventSource
 [Worker] File
 [Worker] FileError
+[Worker] FileList
 [Worker] FileReader
 [Worker] FileReaderSync
 [Worker] Float32Array

@@ -18,6 +18,7 @@
                   "shouldFlattenTransform": false,
                   "children": [
                     {
+                      "shouldFlattenTransform": false,
                       "children": [
                         {
                           "bounds": [10, 200]
@@ -29,8 +30,12 @@
               ]
             },
             {
-              "position": [85, 0],
-              "bounds": [15, 100]
+              "children": [
+                {
+                  "position": [85, 0],
+                  "bounds": [15, 100]
+                }
+              ]
             }
           ]
         },
@@ -46,6 +51,7 @@
                   "shouldFlattenTransform": false,
                   "children": [
                     {
+                      "shouldFlattenTransform": false,
                       "children": [
                         {
                           "bounds": [200, 10]
@@ -57,8 +63,12 @@
               ]
             },
             {
-              "position": [0, 85],
-              "bounds": [100, 15]
+              "children": [
+                {
+                  "position": [0, 85],
+                  "bounds": [100, 15]
+                }
+              ]
             }
           ]
         },
@@ -74,6 +84,7 @@
                   "shouldFlattenTransform": false,
                   "children": [
                     {
+                      "shouldFlattenTransform": false,
                       "children": [
                         {
                           "bounds": [200, 200]
@@ -85,17 +96,21 @@
               ]
             },
             {
-              "position": [0, 85],
-              "bounds": [85, 15]
-            },
-            {
-              "position": [85, 0],
-              "bounds": [15, 85]
-            },
-            {
-              "position": [85, 85],
-              "bounds": [15, 15],
-              "drawsContent": true
+              "children": [
+                {
+                  "position": [0, 85],
+                  "bounds": [85, 15]
+                },
+                {
+                  "position": [85, 0],
+                  "bounds": [15, 85]
+                },
+                {
+                  "position": [85, 85],
+                  "bounds": [15, 15],
+                  "drawsContent": true
+                }
+              ]
             }
           ]
         },
@@ -119,9 +134,13 @@
               ]
             },
             {
-              "position": [85, 85],
-              "bounds": [15, 15],
-              "drawsContent": true
+              "children": [
+                {
+                  "position": [85, 85],
+                  "bounds": [15, 15],
+                  "drawsContent": true
+                }
+              ]
             }
           ]
         }

@@ -31,12 +31,13 @@
 #ifndef ImageBufferClient_h
 #define ImageBufferClient_h
 
-namespace WebCore {
+namespace blink {
 
 class ImageBufferClient {
 public:
     virtual ~ImageBufferClient() { }
     virtual void notifySurfaceInvalid() = 0;
+    virtual void didPresent() = 0;
 };
 
 }

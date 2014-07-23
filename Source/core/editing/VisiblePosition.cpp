@@ -27,7 +27,7 @@
 #include "config.h"
 #include "core/editing/VisiblePosition.h"
 
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/Range.h"
@@ -44,7 +44,7 @@
 #include <stdio.h>
 #endif
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -96,7 +96,7 @@ VisiblePosition VisiblePosition::previous(EditingBoundaryCrossingRule rule) cons
     VisiblePosition prev = VisiblePosition(pos, DOWNSTREAM);
     ASSERT(prev != *this);
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     // we should always be able to make the affinity DOWNSTREAM, because going previous from an
     // UPSTREAM position can never yield another UPSTREAM position (unless line wrap length is 0!).
     if (prev.isNotNull() && m_affinity == UPSTREAM) {
@@ -591,7 +591,7 @@ Position VisiblePosition::canonicalPosition(const Position& passedPosition)
 
     // The new position must be in the same editable element. Enforce that first.
     // Unless the descent is from a non-editable html element to an editable body.
-    if (isHTMLHtmlElement(node) && !node->rendererIsEditable() && node->document().body() && node->document().body()->rendererIsEditable())
+    if (isHTMLHtmlElement(node) && !node->hasEditableStyle() && node->document().body() && node->document().body()->hasEditableStyle())
         return next.isNotNull() ? next : prev;
 
     Node* editingRoot = editableRootForPosition(position);
@@ -795,17 +795,17 @@ void VisiblePosition::trace(Visitor* visitor)
     visitor->trace(m_deepPosition);
 }
 
-}  // namespace WebCore
+}  // namespace blink
 
 #ifndef NDEBUG
 
-void showTree(const WebCore::VisiblePosition* vpos)
+void showTree(const blink::VisiblePosition* vpos)
 {
     if (vpos)
         vpos->showTreeForThis();
 }
 
-void showTree(const WebCore::VisiblePosition& vpos)
+void showTree(const blink::VisiblePosition& vpos)
 {
     vpos.showTreeForThis();
 }

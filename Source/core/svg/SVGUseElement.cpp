@@ -26,7 +26,7 @@
 
 #include "core/svg/SVGUseElement.h"
 
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/XLinkNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
@@ -42,7 +42,7 @@
 #include "core/svg/SVGSVGElement.h"
 #include "core/xml/parser/XMLDocumentParser.h"
 
-namespace WebCore {
+namespace blink {
 
 inline SVGUseElement::SVGUseElement(Document& document)
     : SVGGraphicsElement(SVGNames::useTag, document)
@@ -115,7 +115,7 @@ void SVGUseElement::parseAttribute(const QualifiedName& name, const AtomicString
     reportAttributeParsingError(parseError, name, value);
 }
 
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
 static inline bool isWellFormedDocument(Document* document)
 {
     if (document->isXMLDocument())

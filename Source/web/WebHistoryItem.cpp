@@ -31,7 +31,7 @@
 #include "config.h"
 #include "public/web/WebHistoryItem.h"
 
-#include "bindings/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/SerializedScriptValue.h"
 #include "core/loader/HistoryItem.h"
 #include "platform/network/FormData.h"
 #include "platform/weborigin/KURL.h"
@@ -43,7 +43,7 @@
 #include "public/web/WebSerializedScriptValue.h"
 #include "wtf/text/StringHash.h"
 
-using namespace WebCore;
+using namespace blink;
 
 namespace blink {
 

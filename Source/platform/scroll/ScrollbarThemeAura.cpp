@@ -41,11 +41,11 @@
 #include "public/platform/WebRect.h"
 #include "public/platform/WebThemeEngine.h"
 
-namespace WebCore {
+namespace blink {
 
 static bool useMockTheme()
 {
-    return isRunningLayoutTest();
+    return LayoutTestSupport::isRunningLayoutTest();
 }
 
 ScrollbarTheme* ScrollbarTheme::nativeTheme()
@@ -172,4 +172,4 @@ int ScrollbarThemeAura::minimumThumbLength(ScrollbarThemeClient* scrollbar)
     return size.width();
 }
 
-} // namespace WebCore
+} // namespace blink

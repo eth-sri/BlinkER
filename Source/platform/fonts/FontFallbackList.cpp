@@ -35,7 +35,7 @@
 #include "platform/fonts/FontFamily.h"
 #include "platform/fonts/SegmentedFontData.h"
 
-namespace WebCore {
+namespace blink {
 
 FontFallbackList::FontFallbackList()
     : m_pageZero(0)
@@ -71,7 +71,7 @@ void FontFallbackList::releaseFontData()
     for (unsigned i = 0; i < numFonts; ++i) {
         if (!m_fontList[i]->isCustomFont()) {
             ASSERT(!m_fontList[i]->isSegmented());
-            FontCache::fontCache()->releaseFontData(static_cast<const SimpleFontData*>(m_fontList[i].get()));
+            FontCache::fontCache()->releaseFontData(toSimpleFontData(m_fontList[i]));
         }
     }
 }
@@ -95,7 +95,7 @@ void FontFallbackList::determinePitch(const FontDescription& fontDescription) co
             }
             simpleFontData = segmentedFontData->rangeAt(0).fontData().get();
         } else {
-            simpleFontData = static_cast<const SimpleFontData*>(fontData);
+            simpleFontData = toSimpleFontData(fontData);
         }
         if (!fontData->isLoadingFallback()) {
             m_pitch = simpleFontData->pitch();
@@ -139,10 +139,12 @@ const SimpleFontData* FontFallbackList::determinePrimarySimpleFontData(const Fon
         if (!fontData) {
             // All fonts are custom fonts and are loading. Return the first FontData.
             fontData = fontDataAt(fontDescription, 0);
-            if (!fontData)
-                fontData = FontCache::fontCache()->getLastResortFallbackFont(fontDescription).get();
-            ASSERT(fontData);
-            return fontData->fontDataForCharacter(' ');
+            if (fontData)
+                return fontData->fontDataForCharacter(' ');
+
+            SimpleFontData* lastResortFallback = FontCache::fontCache()->getLastResortFallbackFont(fontDescription).get();
+            ASSERT(lastResortFallback);
+            return lastResortFallback;
         }
 
         if (fontData->isSegmented() && !toSegmentedFontData(fontData)->containsCharacter(' '))

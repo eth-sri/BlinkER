@@ -30,7 +30,7 @@
 
 #include "core/dom/Node.h"
 
-namespace WebCore {
+namespace blink {
 
 void DocumentOrderedList::add(Node* node)
 {
@@ -67,6 +67,13 @@ void DocumentOrderedList::parserAdd(Node* node)
 void DocumentOrderedList::remove(const Node* node)
 {
     m_nodes.remove(const_cast<Node*>(node));
+}
+
+void DocumentOrderedList::trace(Visitor* visitor)
+{
+#if ENABLE(OILPAN)
+    visitor->trace(m_nodes);
+#endif
 }
 
 }

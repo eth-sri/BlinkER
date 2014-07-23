@@ -24,7 +24,7 @@
 #include "core/rendering/InlineFlowBox.h"
 #include "platform/text/BidiContext.h"
 
-namespace WebCore {
+namespace blink {
 
 class EllipsisBox;
 class HitTestResult;
@@ -108,8 +108,6 @@ public:
     void paintEllipsisBox(PaintInfo&, const LayoutPoint&, LayoutUnit lineTop, LayoutUnit lineBottom) const;
 
     virtual void clearTruncation() OVERRIDE FINAL;
-
-    bool isHyphenated() const;
 
     virtual int baselinePosition(FontBaseline baselineType) const OVERRIDE FINAL;
     virtual LayoutUnit lineHeight() const OVERRIDE FINAL;
@@ -237,6 +235,6 @@ private:
     LayoutUnit m_selectionBottom;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // RootInlineBox_h

@@ -65,18 +65,20 @@ WebInspector.PaintProfilerView.prototype = {
 
     /**
      * @param {?WebInspector.PaintProfilerSnapshot} snapshot
-     * @param {!Array.<!Object>} log
+     * @param {!Array.<!WebInspector.PaintProfilerLogItem>} log
      */
     setSnapshotAndLog: function(snapshot, log)
     {
         this._reset();
         this._snapshot = snapshot;
-        this._logCategories = log.map(WebInspector.PaintProfilerView._categoryForLogItem);
+        this._log = log;
+        this._logCategories = this._log.map(WebInspector.PaintProfilerView._categoryForLogItem);
+
         if (!this._snapshot) {
             this._update();
             return;
         }
-        snapshot.requestImage(null, null, this._showImageCallback);
+        snapshot.requestImage(null, null, 1, this._showImageCallback);
         snapshot.profile(onProfileDone.bind(this));
         /**
          * @param {!Array.<!LayerTreeAgent.PaintProfile>=} profiles
@@ -98,7 +100,7 @@ WebInspector.PaintProfilerView.prototype = {
             return;
 
         var maxBars = Math.floor((this._canvas.width - 2 * this._barPaddingWidth) / this._outerBarWidth);
-        var sampleCount = this._profiles[0].length;
+        var sampleCount = this._log.length;
         this._samplesPerBar = Math.ceil(sampleCount / maxBars);
         var barCount = Math.floor(sampleCount / this._samplesPerBar);
 
@@ -108,11 +110,11 @@ WebInspector.PaintProfilerView.prototype = {
         var heightByCategory = {};
         for (var i = 0, lastBarIndex = 0, lastBarTime = 0; i < sampleCount;) {
             var categoryName = (this._logCategories[i] && this._logCategories[i].name) || "misc";
+            var sampleIndex = this._log[i].commandIndex;
             for (var row = 0; row < this._profiles.length; row++) {
-                lastBarTime += this._profiles[row][i];
-                if (!heightByCategory[categoryName])
-                    heightByCategory[categoryName] = 0;
-                heightByCategory[categoryName] += this._profiles[row][i];
+                var sample = this._profiles[row][sampleIndex];
+                lastBarTime += sample;
+                heightByCategory[categoryName] = (heightByCategory[categoryName] || 0) + sample;
             }
             ++i;
             if (i - lastBarIndex == this._samplesPerBar || i == sampleCount) {
@@ -179,7 +181,7 @@ WebInspector.PaintProfilerView.prototype = {
         var barLeft = Math.floor((screenLeft - this._barPaddingWidth) / this._outerBarWidth);
         var barRight = Math.floor((screenRight - this._barPaddingWidth + this._innerBarWidth)/ this._outerBarWidth);
         var stepLeft = Math.max(0, barLeft * this._samplesPerBar);
-        var stepRight = Math.min(barRight * this._samplesPerBar, this._profiles[0].length);
+        var stepRight = Math.min(barRight * this._samplesPerBar, this._log.length - 1);
 
         return {left: stepLeft, right: stepRight};
     },
@@ -191,7 +193,7 @@ WebInspector.PaintProfilerView.prototype = {
             return;
 
         var window = this.windowBoundaries();
-        this._snapshot.requestImage(window.left, window.right, this._showImageCallback);
+        this._snapshot.requestImage(this._log[window.left].commandIndex, this._log[window.right].commandIndex, 1, this._showImageCallback);
     },
 
     _reset: function()
@@ -214,17 +216,23 @@ WebInspector.PaintProfilerCommandLogView = function()
     this.setMinimumSize(100, 25);
     this.element.classList.add("outline-disclosure");
     var sidebarTreeElement = this.element.createChild("ol", "sidebar-tree");
+    sidebarTreeElement.addEventListener("mousemove", this._onMouseMove.bind(this), false);
+    sidebarTreeElement.addEventListener("mouseout", this._onMouseMove.bind(this), false);
+    sidebarTreeElement.addEventListener("contextmenu", this._onContextMenu.bind(this), true);
     this.sidebarTree = new TreeOutline(sidebarTreeElement);
     this._popoverHelper = new WebInspector.ObjectPopoverHelper(this.element, this._getHoverAnchor.bind(this), this._resolveObjectForPopover.bind(this), undefined, true);
+
     this._reset();
 }
 
 WebInspector.PaintProfilerCommandLogView.prototype = {
     /**
-     * @param {!Array.<!Object>=} log
+     * @param {?WebInspector.Target} target
+     * @param {!Array.<!WebInspector.PaintProfilerLogItem>=} log
      */
-    setCommandLog: function(log)
+    setCommandLog: function(target, log)
     {
+        this._target = target;
         this._log = log;
         this.updateWindow();
     },
@@ -235,12 +243,11 @@ WebInspector.PaintProfilerCommandLogView.prototype = {
      */
     updateWindow: function(stepLeft, stepRight)
     {
-        var log = this._log;
         stepLeft = stepLeft || 0;
-        stepRight = stepRight || log.length - 1;
+        stepRight = stepRight || this._log.length - 1;
         this.sidebarTree.removeChildren();
         for (var i = stepLeft; i <= stepRight; ++i) {
-            var node = new WebInspector.LogTreeElement(log[i]);
+            var node = new WebInspector.LogTreeElement(this, this._log[i]);
             this.sidebarTree.appendChild(node);
         }
     },
@@ -273,17 +280,53 @@ WebInspector.PaintProfilerCommandLogView.prototype = {
         showCallback(WebInspector.RemoteObject.fromLocalObject(obj), false);
     },
 
+    /**
+     * @param {?Event} event
+     */
+    _onMouseMove: function(event)
+    {
+        var node = this.sidebarTree.treeElementFromPoint(event.pageX, event.pageY);
+        if (node === this._lastHoveredNode)
+            return;
+        if (this._lastHoveredNode)
+            this._lastHoveredNode.setHovered(false);
+        this._lastHoveredNode = node;
+        if (this._lastHoveredNode)
+            this._lastHoveredNode.setHovered(true);
+    },
+
+    /**
+     * @param {?Event} event
+     */
+    _onContextMenu: function(event)
+    {
+        if (!this._target)
+            return;
+        var node = this.sidebarTree.treeElementFromPoint(event.pageX, event.pageY);
+        if (!node || !node.representedObject)
+            return;
+        var logItem = /** @type {!WebInspector.PaintProfilerLogItem} */ (node.representedObject);
+        if (!logItem.nodeId())
+            return;
+        var contextMenu = new WebInspector.ContextMenu(event);
+        var domNode = new WebInspector.DeferredDOMNode(this._target, logItem.nodeId());
+        contextMenu.appendApplicableItems(domNode);
+        contextMenu.show();
+    },
+
     __proto__: WebInspector.VBox.prototype
 };
 
 /**
   * @constructor
-  * @param {!Object} logItem
+  * @param {!WebInspector.PaintProfilerCommandLogView} ownerView
+  * @param {!WebInspector.PaintProfilerLogItem} logItem
   * @extends {TreeElement}
   */
-WebInspector.LogTreeElement = function(logItem)
+WebInspector.LogTreeElement = function(ownerView, logItem)
 {
     TreeElement.call(this, "", logItem);
+    this._ownerView = ownerView;
     this._update();
 }
 
@@ -343,6 +386,28 @@ WebInspector.LogTreeElement.prototype = {
     setHovered: function(hovered)
     {
         this.listItemElement.classList.toggle("hovered", hovered);
+        var target = this._ownerView._target;
+        if (!target)
+            return;
+        if (!hovered) {
+            target.domModel.hideDOMNodeHighlight();
+            return;
+        }
+        var logItem = /** @type {!WebInspector.PaintProfilerLogItem} */ (this.representedObject);
+        if (!logItem)
+            return;
+        var backendNodeId = logItem.nodeId();
+        if (!backendNodeId)
+            return;
+        new WebInspector.DeferredDOMNode(target, backendNodeId).resolve(highlightNode);
+        /**
+         * @param {?WebInspector.DOMNode} node
+         */
+        function highlightNode(node)
+        {
+            if (node)
+                node.highlight();
+        }
     },
 
     __proto__: TreeElement.prototype

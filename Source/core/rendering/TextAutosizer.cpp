@@ -39,7 +39,7 @@
 #include "platform/geometry/IntSize.h"
 #include "wtf/StdLibExtras.h"
 
-namespace WebCore {
+namespace blink {
 
 #define AUTOSIZING_CLUSTER_HASH
 
@@ -453,7 +453,7 @@ void TextAutosizer::setMultiplier(RenderObject* renderer, float multiplier)
 
 void TextAutosizer::setMultiplierForList(RenderObject* renderer, float multiplier)
 {
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     Node* parentNode = renderer->generatingNode();
     ASSERT(parentNode);
     ASSERT(isHTMLOListElement(parentNode) || isHTMLUListElement(parentNode));
@@ -825,4 +825,4 @@ void TextAutosizer::getNarrowDescendantsGroupedByWidth(const TextAutosizingClust
     }
 }
 
-} // namespace WebCore
+} // namespace blink

@@ -28,10 +28,10 @@
 #include "config.h"
 #include "core/events/MessageEvent.h"
 
-#include "bindings/v8/ExceptionMessages.h"
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionMessages.h"
+#include "bindings/core/v8/ExceptionState.h"
 
-namespace WebCore {
+namespace blink {
 
 static inline bool isValidSource(EventTarget* source)
 {
@@ -194,4 +194,4 @@ void MessageEvent::trace(Visitor* visitor)
     Event::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink

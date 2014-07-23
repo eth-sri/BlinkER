@@ -190,6 +190,18 @@ interface InspectorInstrumentation {
     [Debugger, Inline=FastReturn]
     void didDeliverMutationRecords(ExecutionContext*);
 
+    [Debugger, Inline=FastReturn]
+    void didPostExecutionContextTask([Keep] ExecutionContext*, ExecutionContextTask*);
+
+    [Debugger, Inline=FastReturn]
+    void didKillAllExecutionContextTasks([Keep] ExecutionContext*);
+
+    [Debugger, Inline=FastReturn]
+    void willPerformExecutionContextTask([Keep] ExecutionContext*, ExecutionContextTask*);
+
+    [Debugger, Inline=FastReturn]
+    void didPerformExecutionContextTask(ExecutionContext*);
+
     [Timeline, Inline=FastReturn]
     InspectorInstrumentationCookie willEvaluateScript([Keep] LocalFrame*, const String& url, int lineNumber);
 
@@ -225,6 +237,9 @@ interface InspectorInstrumentation {
 
     [Timeline, Inline=FastReturn]
     void didDispatchXHRLoadEvent(const InspectorInstrumentationCookie&);
+
+    [Debugger, Inline=FastReturn]
+    void didDispatchXHRLoadendEvent(ExecutionContext*, XMLHttpRequest*);
 
     [Timeline, Inline=FastReturn]
     void willScrollLayer([Keep] RenderObject*);
@@ -439,6 +454,21 @@ interface InspectorInstrumentation {
 
     [DOMDebugger, Inline=FastReturn]
     void willExecuteCustomElementCallback([Keep] Element*);
+
+    [Debugger, Inline=FastReturn]
+    int traceAsyncOperationStarting([Keep] ExecutionContext*, const String& operationName);
+
+    [Debugger, Inline=FastReturn]
+    void traceAsyncOperationCompleted([Keep] ExecutionContext*, int operationId);
+
+    [Debugger, Inline=FastReturn]
+    InspectorInstrumentationCookie traceAsyncOperationCompletedCallbackStarting([Keep] ExecutionContext*, int operationId);
+
+    [Debugger, Inline=FastReturn]
+    InspectorInstrumentationCookie traceAsyncCallbackStarting([Keep] ExecutionContext*, int operationId);
+
+    [Debugger, Inline=FastReturn]
+    void traceAsyncCallbackCompleted(const InspectorInstrumentationCookie&);
 }
 
 interface InspectorConsoleInstrumentation {
@@ -456,7 +486,7 @@ interface InspectorConsoleInstrumentation {
     void addMessageToConsole(ExecutionContext* context, MessageSource source, MessageType type, MessageLevel level, const String& message, const String& scriptId, unsigned lineNumber, unsigned columnNumber, ScriptState* state, unsigned long requestIdentifier = 0);
 
     [Console, Debugger]
-    void addMessageToConsole(ExecutionContext* context, MessageSource source, MessageType type, MessageLevel level, const String& message, ScriptState* state, PassRefPtrWillBeRawPtr<ScriptArguments> arguments, unsigned long requestIdentifier = 0);
+    void addConsoleAPIMessageToConsole(ExecutionContext* context, MessageType type, MessageLevel level, const String& message, ScriptState* state, PassRefPtrWillBeRawPtr<ScriptArguments> arguments, unsigned long requestIdentifier = 0);
 
     [Console]
     void consoleCount(ExecutionContext* context, ScriptState* state, PassRefPtrWillBeRawPtr<ScriptArguments> arguments);
@@ -494,7 +524,7 @@ interface InspectorOverrides {
 
 interface InspectorCanvasInstrumentation {
 
-#include "bindings/v8/ScriptValue.h"
+#include "bindings/core/v8/ScriptValue.h"
 
     [Canvas]
     ScriptValue wrapCanvas2DRenderingContextForInstrumentation(Document*, const ScriptValue&);

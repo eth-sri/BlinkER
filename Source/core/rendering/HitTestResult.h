@@ -34,7 +34,7 @@
 #include "wtf/OwnPtr.h"
 #include "wtf/RefPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 class Element;
 class LocalFrame;
@@ -88,7 +88,6 @@ public:
     PositionWithAffinity position() const;
     RenderObject* renderer() const;
 
-    void setToNodesInDocumentTreeScope();
     void setToShadowHostIfInUserAgentShadowRoot();
 
     const HitTestLocation& hitTestLocation() const { return m_hitTestLocation; }
@@ -126,7 +125,11 @@ public:
     // the same thing as mutableRectBasedTestResult(), but here the return value is const.
     const NodeSet& rectBasedTestResult() const;
 
-    Node* targetNode() const;
+    // Collapse the rect-based test result into a single target at the specified location.
+    void resolveRectBasedTest(Node* resolvedInnerNode, const LayoutPoint& resolvedPointInMainFrame);
+
+    // FIXME: Remove this.
+    Node* targetNode() const { return innerNode(); }
 
 private:
     NodeSet& mutableRectBasedTestResult(); // See above.
@@ -137,6 +140,7 @@ private:
     RefPtrWillBeMember<Node> m_innerNode;
     RefPtrWillBeMember<Node> m_innerPossiblyPseudoNode;
     RefPtrWillBeMember<Node> m_innerNonSharedNode;
+    // FIXME: Nothing changes this to a value different from m_hitTestLocation!
     LayoutPoint m_pointInInnerNodeFrame; // The hit-tested point in innerNode frame coordinates.
     LayoutPoint m_localPoint; // A point in the local coordinate space of m_innerNonSharedNode's renderer. Allows us to efficiently
                               // determine where inside the renderer we hit on subsequent operations.
@@ -148,6 +152,6 @@ private:
     mutable OwnPtrWillBeMember<NodeSet> m_rectBasedTestResult;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // HitTestResult_h

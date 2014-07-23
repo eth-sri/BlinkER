@@ -26,11 +26,11 @@
 #include "config.h"
 #include "core/editing/MergeIdenticalElementsCommand.h"
 
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/Element.h"
 
-namespace WebCore {
+namespace blink {
 
 MergeIdenticalElementsCommand::MergeIdenticalElementsCommand(PassRefPtrWillBeRawPtr<Element> first, PassRefPtrWillBeRawPtr<Element> second)
     : SimpleEditCommand(first->document())
@@ -44,7 +44,7 @@ MergeIdenticalElementsCommand::MergeIdenticalElementsCommand(PassRefPtrWillBeRaw
 
 void MergeIdenticalElementsCommand::doApply()
 {
-    if (m_element1->nextSibling() != m_element2 || !m_element1->rendererIsEditable() || !m_element2->rendererIsEditable())
+    if (m_element1->nextSibling() != m_element2 || !m_element1->hasEditableStyle() || !m_element2->hasEditableStyle())
         return;
 
     m_atChild = m_element2->firstChild();
@@ -68,7 +68,7 @@ void MergeIdenticalElementsCommand::doUnapply()
     RefPtrWillBeRawPtr<Node> atChild = m_atChild.release();
 
     ContainerNode* parent = m_element2->parentNode();
-    if (!parent || !parent->rendererIsEditable())
+    if (!parent || !parent->hasEditableStyle())
         return;
 
     TrackExceptionState exceptionState;
@@ -94,4 +94,4 @@ void MergeIdenticalElementsCommand::trace(Visitor* visitor)
     SimpleEditCommand::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink

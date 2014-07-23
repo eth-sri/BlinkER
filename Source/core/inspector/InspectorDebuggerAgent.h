@@ -30,7 +30,7 @@
 #ifndef InspectorDebuggerAgent_h
 #define InspectorDebuggerAgent_h
 
-#include "bindings/v8/ScriptState.h"
+#include "bindings/core/v8/ScriptState.h"
 #include "core/InspectorFrontend.h"
 #include "core/frame/ConsoleTypes.h"
 #include "core/inspector/AsyncCallStackTracker.h"
@@ -45,12 +45,13 @@
 #include "wtf/Vector.h"
 #include "wtf/text/StringHash.h"
 
-namespace WebCore {
+namespace blink {
 
 class Document;
 class Event;
 class EventListener;
 class EventTarget;
+class ExecutionContextTask;
 class FormData;
 class HTTPHeaderMap;
 class InjectedScriptManager;
@@ -61,6 +62,7 @@ class JSONObject;
 class KURL;
 class MutationObserver;
 class ScriptArguments;
+class ScriptAsyncCallStack;
 class ScriptCallStack;
 class ScriptDebugServer;
 class ScriptRegexp;
@@ -93,8 +95,7 @@ public:
 
     bool isPaused();
     bool runningNestedMessageLoop();
-    void addMessageToConsole(MessageSource, MessageType, MessageLevel, const String&, PassRefPtrWillBeRawPtr<ScriptCallStack>, unsigned long);
-    void addMessageToConsole(MessageSource, MessageType, MessageLevel, const String&, ScriptState*, PassRefPtrWillBeRawPtr<ScriptArguments>, unsigned long);
+    void addConsoleAPIMessageToConsole(MessageType, MessageLevel, const String&, ScriptState*, PassRefPtrWillBeRawPtr<ScriptArguments>, unsigned long);
 
     String preprocessEventListener(LocalFrame*, const String& source, const String& url, const String& functionName);
     PassOwnPtr<ScriptSourceCode> preprocess(LocalFrame*, const ScriptSourceCode&);
@@ -132,7 +133,8 @@ public:
         const bool* returnByValue,
         const bool* generatePreview,
         RefPtr<TypeBuilder::Runtime::RemoteObject>& result,
-        TypeBuilder::OptOutput<bool>* wasThrown) OVERRIDE FINAL;
+        TypeBuilder::OptOutput<bool>* wasThrown,
+        RefPtr<TypeBuilder::Debugger::ExceptionDetails>&) OVERRIDE FINAL;
     virtual void compileScript(ErrorString*, const String& expression, const String& sourceURL, const int* executionContextId, TypeBuilder::OptOutput<TypeBuilder::Debugger::ScriptId>*, RefPtr<TypeBuilder::Debugger::ExceptionDetails>&) OVERRIDE;
     virtual void runScript(ErrorString*, const TypeBuilder::Debugger::ScriptId&, const int* executionContextId, const String* objectGroup, const bool* doNotPauseOnExceptionsAndMuteConsole, RefPtr<TypeBuilder::Runtime::RemoteObject>& result, RefPtr<TypeBuilder::Debugger::ExceptionDetails>&) OVERRIDE;
     virtual void setOverlayMessage(ErrorString*, const String*) OVERRIDE;
@@ -154,10 +156,20 @@ public:
     void willHandleEvent(EventTarget*, Event*, EventListener*, bool useCapture);
     void didHandleEvent();
     void willLoadXHR(XMLHttpRequest*, ThreadableLoaderClient*, const AtomicString& method, const KURL&, bool async, FormData* body, const HTTPHeaderMap& headers, bool includeCrendentials);
+    void didDispatchXHRLoadendEvent(XMLHttpRequest*);
     void didEnqueueMutationRecord(ExecutionContext*, MutationObserver*);
     void didClearAllMutationRecords(ExecutionContext*, MutationObserver*);
     void willDeliverMutationRecords(ExecutionContext*, MutationObserver*);
     void didDeliverMutationRecords();
+    void didPostExecutionContextTask(ExecutionContext*, ExecutionContextTask*);
+    void didKillAllExecutionContextTasks(ExecutionContext*);
+    void willPerformExecutionContextTask(ExecutionContext*, ExecutionContextTask*);
+    void didPerformExecutionContextTask();
+    int traceAsyncOperationStarting(ExecutionContext*, const String& operationName);
+    void traceAsyncOperationCompleted(ExecutionContext*, int operationId);
+    void traceAsyncOperationCompletedCallbackStarting(ExecutionContext*, int operationId);
+    void traceAsyncCallbackStarting(ExecutionContext*, int operationId);
+    void traceAsyncCallbackCompleted();
     bool canBreakProgram();
     void breakProgram(InspectorFrontend::Debugger::Reason::Enum breakReason, PassRefPtr<JSONObject> data);
     void scriptExecutionBlockedByCSP(const String& directiveText);
@@ -179,6 +191,8 @@ public:
     void setBreakpoint(const String& scriptId, int lineNumber, int columnNumber, BreakpointSource, const String& condition = String());
     void removeBreakpoint(const String& scriptId, int lineNumber, int columnNumber, BreakpointSource);
 
+    PassRefPtrWillBeRawPtr<ScriptAsyncCallStack> currentAsyncStackTraceForConsole();
+
 protected:
     explicit InspectorDebuggerAgent(InjectedScriptManager*);
 
@@ -199,6 +213,7 @@ protected:
 private:
     SkipPauseRequest shouldSkipExceptionPause();
     SkipPauseRequest shouldSkipStepPause();
+    bool isTopCallFrameInFramework();
 
     void cancelPauseOnNextStatement();
     void addMessageToConsole(MessageSource, MessageType);
@@ -206,8 +221,8 @@ private:
     PassRefPtr<TypeBuilder::Array<TypeBuilder::Debugger::CallFrame> > currentCallFrames();
     PassRefPtr<TypeBuilder::Debugger::StackTrace> currentAsyncStackTrace();
 
-    virtual void didParseSource(const String& scriptId, const Script&) OVERRIDE FINAL;
-    virtual void failedToParseSource(const String& url, const String& data, int firstLine, int errorLine, const String& errorMessage) OVERRIDE FINAL;
+    virtual void didParseSource(const String& scriptId, const Script&, CompileResult) OVERRIDE FINAL;
+    virtual void didReceiveV8AsyncTaskEvent(ExecutionContext*, const String& eventType, const String& eventName, int id) OVERRIDE FINAL;
 
     void setPauseOnExceptionsImpl(ErrorString*, int);
 
@@ -217,7 +232,7 @@ private:
     bool assertPaused(ErrorString*);
     void clearBreakDetails();
 
-    String sourceMapURLForScript(const Script&);
+    String sourceMapURLForScript(const Script&, CompileResult);
 
     String scriptURL(JavaScriptCallFrame*);
 
@@ -237,6 +252,7 @@ private:
     RefPtr<JSONObject> m_breakAuxData;
     bool m_javaScriptPauseScheduled;
     bool m_debuggerStepScheduled;
+    bool m_steppingFromFramework;
     bool m_pausingOnNativeEvent;
     Listener* m_listener;
 
@@ -247,7 +263,7 @@ private:
     AsyncCallStackTracker m_asyncCallStackTracker;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 
 #endif // !defined(InspectorDebuggerAgent_h)

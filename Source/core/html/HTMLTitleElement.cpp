@@ -23,7 +23,7 @@
 #include "config.h"
 #include "core/html/HTMLTitleElement.h"
 
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/HTMLNames.h"
 #include "core/dom/ChildListMutationScope.h"
 #include "core/dom/Document.h"
@@ -32,7 +32,7 @@
 #include "core/rendering/style/StyleInheritedData.h"
 #include "wtf/text/StringBuilder.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -61,9 +61,9 @@ void HTMLTitleElement::removedFrom(ContainerNode* insertionPoint)
         document().removeTitle(this);
 }
 
-void HTMLTitleElement::childrenChanged(bool changedByParser, Node* beforeChange, Node* afterChange, int childCountDelta)
+void HTMLTitleElement::childrenChanged(const ChildrenChange& change)
 {
-    HTMLElement::childrenChanged(changedByParser, beforeChange, afterChange, childCountDelta);
+    HTMLElement::childrenChanged(change);
     if (inDocument() && !isInShadowTree() && !m_ignoreTitleUpdatesWhenChildrenChange)
         document().setTitleElement(text(), this);
 }

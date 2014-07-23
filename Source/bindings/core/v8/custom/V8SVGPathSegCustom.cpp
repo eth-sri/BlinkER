@@ -31,6 +31,7 @@
 #include "config.h"
 #include "bindings/core/v8/V8SVGPathSeg.h"
 
+#include "bindings/core/v8/V8DOMWrapper.h"
 #include "bindings/core/v8/V8SVGPathSegArcAbs.h"
 #include "bindings/core/v8/V8SVGPathSegArcRel.h"
 #include "bindings/core/v8/V8SVGPathSegClosePath.h"
@@ -51,9 +52,8 @@
 #include "bindings/core/v8/V8SVGPathSegMovetoAbs.h"
 #include "bindings/core/v8/V8SVGPathSegMovetoRel.h"
 #include "bindings/core/v8/V8Window.h"
-#include "bindings/v8/V8DOMWrapper.h"
 
-namespace WebCore {
+namespace blink {
 
 v8::Handle<v8::Object> wrap(SVGPathSeg* impl, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
 {
@@ -102,4 +102,4 @@ v8::Handle<v8::Object> wrap(SVGPathSeg* impl, v8::Handle<v8::Object> creationCon
     return V8SVGPathSeg::createWrapper(impl, creationContext, isolate);
 }
 
-} // namespace WebCore
+} // namespace blink

@@ -26,12 +26,12 @@
 #ifndef DeviceAcceleration_h
 #define DeviceAcceleration_h
 
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "modules/device_orientation/DeviceMotionData.h"
 #include "platform/heap/Handle.h"
 #include "wtf/RefCounted.h"
 
-namespace WebCore {
+namespace blink {
 
 class DeviceAcceleration : public RefCountedWillBeGarbageCollectedFinalized<DeviceAcceleration>, public ScriptWrappable {
 public:
@@ -51,6 +51,6 @@ private:
     RefPtrWillBeMember<DeviceMotionData::Acceleration> m_acceleration;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // DeviceAcceleration_h

@@ -38,7 +38,16 @@
 #include "core/page/Page.h"
 #include "platform/TraceEvent.h"
 
-namespace WebCore {
+namespace blink {
+
+namespace {
+
+bool compareAnimationPlayers(const RefPtrWillBeMember<blink::AnimationPlayer>& left, const RefPtrWillBeMember<blink::AnimationPlayer>& right)
+{
+    return AnimationPlayer::hasLowerPriority(left.get(), right.get());
+}
+
+}
 
 // This value represents 1 frame at 30Hz plus a little bit of wiggle room.
 // TODO: Plumb a nominal framerate through and derive this value from that.
@@ -85,6 +94,18 @@ AnimationPlayer* AnimationTimeline::play(AnimationNode* child)
     AnimationPlayer* player = createAnimationPlayer(child);
     m_document->compositorPendingAnimations().add(player);
     return player;
+}
+
+WillBeHeapVector<RefPtrWillBeMember<AnimationPlayer> > AnimationTimeline::getAnimationPlayers()
+{
+    WillBeHeapVector<RefPtrWillBeMember<AnimationPlayer> > animationPlayers;
+    for (WillBeHeapHashSet<RawPtrWillBeWeakMember<AnimationPlayer> >::iterator it = m_players.begin(); it != m_players.end(); ++it) {
+        if ((*it)->source() && (*it)->source()->isCurrent()) {
+            animationPlayers.append(*it);
+        }
+    }
+    std::sort(animationPlayers.begin(), animationPlayers.end(), compareAnimationPlayers);
+    return animationPlayers;
 }
 
 void AnimationTimeline::wake()
@@ -202,19 +223,6 @@ void AnimationTimeline::setOutdatedAnimationPlayer(AnimationPlayer* player)
         m_timing->serviceOnNextFrame();
 }
 
-size_t AnimationTimeline::numberOfActiveAnimationsForTesting() const
-{
-    // Includes all players whose directly associated timed items
-    // are current or in effect.
-    size_t count = 0;
-    for (WillBeHeapHashSet<RefPtrWillBeMember<AnimationPlayer> >::iterator it = m_playersNeedingUpdate.begin(); it != m_playersNeedingUpdate.end(); ++it) {
-        const AnimationNode* animationNode = (*it)->source();
-        if ((*it)->hasStartTime())
-            count += (animationNode && (animationNode->isCurrent() || animationNode->isInEffect()));
-    }
-    return count;
-}
-
 #if !ENABLE(OILPAN)
 void AnimationTimeline::detachFromDocument()
 {
@@ -225,10 +233,12 @@ void AnimationTimeline::detachFromDocument()
 
 void AnimationTimeline::trace(Visitor* visitor)
 {
+#if ENABLE(OILPAN)
     visitor->trace(m_document);
     visitor->trace(m_timing);
     visitor->trace(m_playersNeedingUpdate);
     visitor->trace(m_players);
+#endif
 }
 
 } // namespace

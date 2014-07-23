@@ -5,8 +5,8 @@
 #include "config.h"
 #include "modules/serviceworkers/Headers.h"
 
-#include "bindings/v8/Dictionary.h"
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/Dictionary.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/fetch/CrossOriginAccessControl.h"
 #include "core/xml/XMLHttpRequest.h"
 #include "modules/serviceworkers/HeadersForEachCallback.h"
@@ -15,49 +15,54 @@
 #include "wtf/RefPtr.h"
 #include "wtf/text/WTFString.h"
 
-namespace WebCore {
+namespace blink {
 
-PassRefPtr<Headers> Headers::create()
+PassRefPtrWillBeRawPtr<Headers> Headers::create()
 {
-    return adoptRef(new Headers);
+    return adoptRefWillBeNoop(new Headers);
 }
 
-PassRefPtr<Headers> Headers::create(ExceptionState&)
+PassRefPtrWillBeRawPtr<Headers> Headers::create(ExceptionState&)
 {
     return create();
 }
 
-PassRefPtr<Headers> Headers::create(const Headers* init, ExceptionState& exceptionState)
+PassRefPtrWillBeRawPtr<Headers> Headers::create(const Headers* init, ExceptionState& exceptionState)
 {
     // "The Headers(|init|) constructor, when invoked, must run these steps:"
     // "1. Let |headers| be a new Headers object."
-    RefPtr<Headers> headers = create();
+    RefPtrWillBeRawPtr<Headers> headers = create();
     // "2. If |init| is given, fill headers with |init|. Rethrow any exception."
     headers->fillWith(init, exceptionState);
     // "3. Return |headers|."
     return headers.release();
 }
 
-PassRefPtr<Headers> Headers::create(const Dictionary& init, ExceptionState& exceptionState)
+PassRefPtrWillBeRawPtr<Headers> Headers::create(const Dictionary& init, ExceptionState& exceptionState)
 {
     // "The Headers(|init|) constructor, when invoked, must run these steps:"
     // "1. Let |headers| be a new Headers object."
-    RefPtr<Headers> headers = create();
+    RefPtrWillBeRawPtr<Headers> headers = create();
     // "2. If |init| is given, fill headers with |init|. Rethrow any exception."
     headers->fillWith(init, exceptionState);
     // "3. Return |headers|."
     return headers.release();
 }
 
-// Called when creating Request.
-PassRefPtr<Headers> Headers::create(FetchHeaderList* headerList)
+PassRefPtrWillBeRawPtr<Headers> Headers::create(FetchHeaderList* headerList)
 {
-    return adoptRef(new Headers(headerList));
+    return adoptRefWillBeNoop(new Headers(headerList));
 }
 
-Headers::~Headers()
+PassRefPtrWillBeRawPtr<Headers> Headers::createCopy() const
 {
+    RefPtrWillBeRawPtr<FetchHeaderList> headerList = m_headerList->createCopy();
+    RefPtrWillBeRawPtr<Headers> headers = create(headerList.get());
+    headers->m_guard = m_guard;
+    return headers.release();
 }
+
+DEFINE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(Headers);
 
 unsigned long Headers::size() const
 {
@@ -245,21 +250,22 @@ void Headers::fillWith(const Dictionary& object, ExceptionState& exceptionState)
     // http://fetch.spec.whatwg.org/#headers-class
     // FIXME: Support sequence<sequence<ByteString>>.
     Vector<String> keyValuePair;
-    if (object.get(keys[0], keyValuePair)) {
+    if (DictionaryHelper::get(object, keys[0], keyValuePair)) {
         // "2. Otherwise, if |object| is a sequence, then for each |header| in
         //     |object|, run these substeps:
-        //    1. If |header| does not contain two items, throw a TypeError.
+        //    1. If |header| does not contain exactly two items, throw a
+        //       TypeError.
         //    2. Append |header|'s first item/|header|'s second item to
         //       |headers|. Rethrow any exception."
         for (size_t i = 0; i < keys.size(); ++i) {
             // We've already got the keyValuePair for key[0].
             if (i > 0) {
-                if (!object.get(keys[i], keyValuePair)) {
+                if (!DictionaryHelper::get(object, keys[i], keyValuePair)) {
                     exceptionState.throwTypeError("Invalid value");
                     return;
                 }
             }
-            if (keyValuePair.size() < 2) {
+            if (keyValuePair.size() != 2) {
                 exceptionState.throwTypeError("Invalid value");
                 return;
             }
@@ -279,7 +285,7 @@ void Headers::fillWith(const Dictionary& object, ExceptionState& exceptionState)
     // FIXME: Support OpenEndedDictionary<ByteString>.
     for (size_t i = 0; i < keys.size(); ++i) {
         String value;
-        if (!object.get(keys[i], value)) {
+        if (!DictionaryHelper::get(object, keys[i], value)) {
             exceptionState.throwTypeError("Invalid value");
             return;
         }
@@ -296,7 +302,6 @@ Headers::Headers()
     ScriptWrappable::init(this);
 }
 
-// Called when creating Request or Responce.
 Headers::Headers(FetchHeaderList* headerList)
     : m_headerList(headerList)
     , m_guard(NoneGuard)
@@ -317,4 +322,9 @@ void Headers::forEachInternal(PassOwnPtr<HeadersForEachCallback> callback, Scrip
     }
 }
 
-} // namespace WebCore
+void Headers::trace(Visitor* visitor)
+{
+    visitor->trace(m_headerList);
+}
+
+} // namespace blink

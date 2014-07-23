@@ -31,13 +31,13 @@
 #ifndef DataTransferItem_h
 #define DataTransferItem_h
 
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
 #include "wtf/RefCounted.h"
 #include "wtf/RefPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 class Blob;
 class DataObjectItem;
@@ -46,10 +46,10 @@ class File;
 class StringCallback;
 class ExecutionContext;
 
-class DataTransferItem : public RefCountedWillBeGarbageCollectedFinalized<DataTransferItem>, public ScriptWrappable {
+class DataTransferItem FINAL : public RefCountedWillBeGarbageCollected<DataTransferItem>, public ScriptWrappable {
+    DECLARE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(DataTransferItem);
 public:
     static PassRefPtrWillBeRawPtr<DataTransferItem> create(PassRefPtrWillBeRawPtr<DataTransfer>, PassRefPtrWillBeRawPtr<DataObjectItem>);
-    ~DataTransferItem();
 
     String kind() const;
     String type() const;
@@ -69,6 +69,6 @@ private:
     RefPtrWillBeMember<DataObjectItem> m_item;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // DataTransferItem_h

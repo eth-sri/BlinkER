@@ -30,9 +30,9 @@
 #include "config.h"
 #include "ServiceWorkerGlobalScope.h"
 
-#include "bindings/v8/ScriptPromise.h"
-#include "bindings/v8/ScriptState.h"
-#include "bindings/v8/V8ThrowException.h"
+#include "bindings/core/v8/ScriptPromise.h"
+#include "bindings/core/v8/ScriptState.h"
+#include "bindings/core/v8/V8ThrowException.h"
 #include "core/inspector/ScriptCallStack.h"
 #include "core/workers/WorkerClients.h"
 #include "core/workers/WorkerThreadStartupData.h"
@@ -48,9 +48,10 @@
 #include "platform/network/ResourceRequest.h"
 #include "platform/weborigin/KURL.h"
 #include "public/platform/WebURL.h"
+#include "public/platform/WebURLRequest.h"
 #include "wtf/CurrentTime.h"
 
-namespace WebCore {
+namespace blink {
 
 PassRefPtrWillBeRawPtr<ServiceWorkerGlobalScope> ServiceWorkerGlobalScope::create(ServiceWorkerThread* thread, PassOwnPtrWillBeRawPtr<WorkerThreadStartupData> startupData)
 {
@@ -89,6 +90,7 @@ String ServiceWorkerGlobalScope::scope(ExecutionContext* context)
 ScriptPromise ServiceWorkerGlobalScope::fetch(ScriptState* scriptState, Request* request)
 {
     OwnPtr<ResourceRequest> resourceRequest(request->createResourceRequest());
+    resourceRequest->setRequestContext(blink::WebURLRequest::RequestContextFetch);
     return m_fetchManager->fetch(scriptState, resourceRequest.release());
 }
 
@@ -98,11 +100,12 @@ ScriptPromise ServiceWorkerGlobalScope::fetch(ScriptState* scriptState, const St
     if (!url.isValid())
         return ScriptPromise::reject(scriptState, V8ThrowException::createTypeError("Invalid URL", scriptState->isolate()));
     OwnPtr<ResourceRequest> resourceRequest = adoptPtr(new ResourceRequest(url));
+    resourceRequest->setRequestContext(blink::WebURLRequest::RequestContextFetch);
     resourceRequest->setHTTPMethod("GET");
     return m_fetchManager->fetch(scriptState, resourceRequest.release());
 }
 
-PassRefPtr<ServiceWorkerClients> ServiceWorkerGlobalScope::clients()
+PassRefPtrWillBeRawPtr<ServiceWorkerClients> ServiceWorkerGlobalScope::clients()
 {
     if (!m_clients)
         m_clients = ServiceWorkerClients::create();
@@ -116,6 +119,7 @@ const AtomicString& ServiceWorkerGlobalScope::interfaceName() const
 
 void ServiceWorkerGlobalScope::trace(Visitor* visitor)
 {
+    visitor->trace(m_clients);
     WorkerGlobalScope::trace(visitor);
 }
 
@@ -125,4 +129,4 @@ void ServiceWorkerGlobalScope::logExceptionToConsole(const String& errorMessage,
     addMessageToWorkerConsole(JSMessageSource, ErrorMessageLevel, errorMessage, sourceURL, lineNumber, callStack, 0);
 }
 
-} // namespace WebCore
+} // namespace blink

@@ -31,9 +31,8 @@
 #ifndef ServiceWorker_h
 #define ServiceWorker_h
 
-#include "bindings/v8/ScriptPromise.h"
-#include "bindings/v8/ScriptWrappable.h"
-#include "bindings/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/ScriptPromise.h"
+#include "bindings/core/v8/SerializedScriptValue.h"
 #include "core/workers/AbstractWorker.h"
 #include "public/platform/WebServiceWorker.h"
 #include "public/platform/WebServiceWorkerProxy.h"
@@ -42,25 +41,24 @@
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
 
-namespace WebCore {
+namespace blink {
 
 class ScriptState;
 class ScriptPromiseResolver;
 
 class ServiceWorker
     : public AbstractWorker
-    , public ScriptWrappable
     , public blink::WebServiceWorkerProxy {
 public:
     virtual ~ServiceWorker() { }
 
     // For CallbackPromiseAdapter
     typedef blink::WebServiceWorker WebType;
-    static PassRefPtr<ServiceWorker> from(ScriptPromiseResolver*, WebType* worker);
+    static PassRefPtrWillBeRawPtr<ServiceWorker> from(ScriptPromiseResolver*, WebType* worker);
 
-    static PassRefPtr<ServiceWorker> from(ExecutionContext*, WebType*);
+    static PassRefPtrWillBeRawPtr<ServiceWorker> from(ExecutionContext*, WebType*);
 
-    void postMessage(PassRefPtr<SerializedScriptValue> message, const MessagePortArray*, ExceptionState&);
+    void postMessage(ExecutionContext*, PassRefPtr<SerializedScriptValue> message, const MessagePortArray*, ExceptionState&);
 
     String scope() const;
     String url() const;
@@ -84,7 +82,7 @@ private:
         ContextStopped
     };
 
-    static PassRefPtr<ServiceWorker> create(ExecutionContext*, PassOwnPtr<blink::WebServiceWorker>);
+    static PassRefPtrWillBeRawPtr<ServiceWorker> create(ExecutionContext*, PassOwnPtr<blink::WebServiceWorker>);
     ServiceWorker(ExecutionContext*, PassOwnPtr<blink::WebServiceWorker>);
     void setProxyState(ProxyState);
     void onPromiseResolved();
@@ -98,6 +96,6 @@ private:
     ProxyState m_proxyState;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // ServiceWorker_h

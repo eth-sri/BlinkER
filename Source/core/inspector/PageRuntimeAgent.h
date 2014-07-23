@@ -31,11 +31,11 @@
 #ifndef PageRuntimeAgent_h
 #define PageRuntimeAgent_h
 
-#include "bindings/v8/ScriptState.h"
+#include "bindings/core/v8/ScriptState.h"
 #include "core/inspector/InspectorRuntimeAgent.h"
 #include "wtf/PassOwnPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 class InspectorPageAgent;
 class Page;
@@ -68,7 +68,7 @@ private:
     bool m_mainWorldContextCreated;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 
 #endif // !defined(InspectorPagerAgent_h)

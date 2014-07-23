@@ -24,16 +24,17 @@
  */
 
 #include "config.h"
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "core/editing/FormatBlockCommand.h"
+
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Element.h"
 #include "core/dom/Range.h"
-#include "core/editing/FormatBlockCommand.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/editing/htmlediting.h"
 #include "core/html/HTMLElement.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -153,14 +154,14 @@ Node* enclosingBlockToSplitTreeTo(Node* startNode)
 {
     Node* lastBlock = startNode;
     for (Node* n = startNode; n; n = n->parentNode()) {
-        if (!n->rendererIsEditable())
+        if (!n->hasEditableStyle())
             return lastBlock;
-        if (isTableCell(n) || isHTMLBodyElement(*n) || !n->parentNode() || !n->parentNode()->rendererIsEditable() || isElementForFormatBlock(n))
+        if (isTableCell(n) || isHTMLBodyElement(*n) || !n->parentNode() || !n->parentNode()->hasEditableStyle() || isElementForFormatBlock(n))
             return n;
         if (isBlock(n))
             lastBlock = n;
         if (isListElement(n))
-            return n->parentNode()->rendererIsEditable() ? n->parentNode() : n;
+            return n->parentNode()->hasEditableStyle() ? n->parentNode() : n;
     }
     return lastBlock;
 }

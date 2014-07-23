@@ -31,8 +31,8 @@
 #include "config.h"
 #include "modules/notifications/Notification.h"
 
-#include "bindings/v8/Dictionary.h"
-#include "bindings/v8/ScriptWrappable.h"
+#include "bindings/core/v8/Dictionary.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/dom/Document.h"
 #include "core/events/Event.h"
 #include "core/frame/UseCounter.h"
@@ -40,23 +40,23 @@
 #include "modules/notifications/NotificationClient.h"
 #include "modules/notifications/NotificationController.h"
 
-namespace WebCore {
+namespace blink {
 
 Notification* Notification::create(ExecutionContext* context, const String& title, const Dictionary& options)
 {
-    NotificationClient& client = NotificationController::clientFrom(toDocument(context)->frame());
+    NotificationClient& client = NotificationController::clientFrom(context);
     Notification* notification = adoptRefCountedGarbageCollectedWillBeNoop(new Notification(title, context, &client));
 
     String argument;
-    if (options.get("body", argument))
+    if (DictionaryHelper::get(options, "body", argument))
         notification->setBody(argument);
-    if (options.get("tag", argument))
+    if (DictionaryHelper::get(options, "tag", argument))
         notification->setTag(argument);
-    if (options.get("lang", argument))
+    if (DictionaryHelper::get(options, "lang", argument))
         notification->setLang(argument);
-    if (options.get("dir", argument))
+    if (DictionaryHelper::get(options, "dir", argument))
         notification->setDir(argument);
-    if (options.get("icon", argument)) {
+    if (DictionaryHelper::get(options, "icon", argument)) {
         KURL iconUrl = argument.isEmpty() ? KURL() : context->completeURL(argument);
         if (!iconUrl.isEmpty() && iconUrl.isValid())
             notification->setIconUrl(iconUrl);
@@ -70,14 +70,14 @@ Notification::Notification(const String& title, ExecutionContext* context, Notif
     : ActiveDOMObject(context)
     , m_title(title)
     , m_dir("auto")
-    , m_state(Idle)
+    , m_state(NotificationStateIdle)
     , m_client(client)
-    , m_asyncRunner(adoptPtr(new AsyncMethodRunner<Notification>(this, &Notification::show)))
+    , m_asyncRunner(this, &Notification::show)
 {
     ASSERT(m_client);
     ScriptWrappable::init(this);
 
-    m_asyncRunner->runAsync();
+    m_asyncRunner.runAsync();
 }
 
 Notification::~Notification()
@@ -86,7 +86,7 @@ Notification::~Notification()
 
 void Notification::show()
 {
-    ASSERT(m_state == Idle);
+    ASSERT(m_state == NotificationStateIdle);
     if (!toDocument(executionContext())->page())
         return;
 
@@ -96,18 +96,18 @@ void Notification::show()
     }
 
     if (m_client->show(this))
-        m_state = Showing;
+        m_state = NotificationStateShowing;
 }
 
 void Notification::close()
 {
     switch (m_state) {
-    case Idle:
+    case NotificationStateIdle:
         break;
-    case Showing:
+    case NotificationStateShowing:
         m_client->close(this);
         break;
-    case Closed:
+    case NotificationStateClosed:
         break;
     }
 }
@@ -132,7 +132,7 @@ void Notification::dispatchErrorEvent()
 void Notification::dispatchCloseEvent()
 {
     dispatchEvent(Event::create(EventTypeNames::close));
-    m_state = Closed;
+    m_state = NotificationStateClosed;
 }
 
 TextDirection Notification::direction() const
@@ -162,21 +162,19 @@ const String& Notification::permissionString(NotificationClient::Permission perm
 
 const String& Notification::permission(ExecutionContext* context)
 {
-    ASSERT(toDocument(context)->page());
-
     UseCounter::count(context, UseCounter::NotificationPermission);
-    return permissionString(NotificationController::clientFrom(toDocument(context)->frame()).checkPermission(context));
+    return permissionString(NotificationController::clientFrom(context).checkPermission(context));
 }
 
 void Notification::requestPermission(ExecutionContext* context, PassOwnPtr<NotificationPermissionCallback> callback)
 {
     ASSERT(toDocument(context)->page());
-    NotificationController::clientFrom(toDocument(context)->frame()).requestPermission(context, callback);
+    NotificationController::clientFrom(context).requestPermission(context, callback);
 }
 
 bool Notification::dispatchEvent(PassRefPtrWillBeRawPtr<Event> event)
 {
-    ASSERT(m_state != Closed);
+    ASSERT(m_state != NotificationStateClosed);
 
     return EventTarget::dispatchEvent(event);
 }
@@ -188,19 +186,19 @@ const AtomicString& Notification::interfaceName() const
 
 void Notification::stop()
 {
-    if (m_client)
+    m_state = NotificationStateClosed;
+
+    if (m_client) {
         m_client->notificationObjectDestroyed(this);
+        m_client = 0;
+    }
 
-    if (m_asyncRunner)
-        m_asyncRunner->stop();
-
-    m_client = 0;
-    m_state = Closed;
+    m_asyncRunner.stop();
 }
 
 bool Notification::hasPendingActivity() const
 {
-    return m_state == Showing || (m_asyncRunner && m_asyncRunner->isActive());
+    return m_state == NotificationStateShowing || m_asyncRunner.isActive();
 }
 
-} // namespace WebCore
+} // namespace blink

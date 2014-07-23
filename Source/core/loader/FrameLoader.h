@@ -47,7 +47,7 @@
 #include "wtf/HashSet.h"
 #include "wtf/OwnPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 class Resource;
 class Chrome;
@@ -78,6 +78,8 @@ bool isBackForwardLoadType(FrameLoadType);
 class FrameLoader {
     WTF_MAKE_NONCOPYABLE(FrameLoader);
 public:
+    static ResourceRequest requestFromHistoryItem(HistoryItem*, ResourceRequestCachePolicy);
+
     FrameLoader(LocalFrame*);
     ~FrameLoader();
 
@@ -215,6 +217,8 @@ private:
     void loadWithNavigationAction(const NavigationAction&, FrameLoadType, PassRefPtrWillBeRawPtr<FormState>,
         const SubstituteData&, ContentSecurityPolicyCheck shouldCheckMainWorldContentSecurityPolicy, ClientRedirectPolicy = NotClientRedirect, const AtomicString& overrideEncoding = nullAtom);
 
+    bool validateTransitionNavigationMode();
+    bool dispatchNavigationTransitionData();
     void detachFromParent();
     void detachChildren();
     void detachClient();
@@ -288,6 +292,6 @@ private:
     EventRacerJoinActions m_completeTriggers;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // FrameLoader_h

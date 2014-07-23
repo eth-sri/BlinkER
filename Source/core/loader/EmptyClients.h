@@ -63,7 +63,7 @@
  Brittle, yes.  Unfortunate, yes.  Hopefully temporary.
 */
 
-namespace WebCore {
+namespace blink {
 
 class EmptyChromeClient : public ChromeClient {
     WTF_MAKE_FAST_ALLOCATED;
@@ -191,7 +191,7 @@ public:
     virtual void dispatchDidHandleOnloadEvents() OVERRIDE { }
     virtual void dispatchDidReceiveServerRedirectForProvisionalLoad() OVERRIDE { }
     virtual void dispatchWillClose() OVERRIDE { }
-    virtual void dispatchDidStartProvisionalLoad() OVERRIDE { }
+    virtual void dispatchDidStartProvisionalLoad(bool isTransitionNavigation) OVERRIDE { }
     virtual void dispatchDidReceiveTitle(const String&) OVERRIDE { }
     virtual void dispatchDidChangeIcons(IconType) OVERRIDE { }
     virtual void dispatchDidCommitLoad(LocalFrame*, HistoryItem*, HistoryCommitType) OVERRIDE { }
@@ -200,9 +200,9 @@ public:
     virtual void dispatchDidFinishDocumentLoad() OVERRIDE { }
     virtual void dispatchDidFinishLoad() OVERRIDE { }
     virtual void dispatchDidFirstVisuallyNonEmptyLayout() OVERRIDE { }
-    virtual void dispatchDidChangeBrandColor() OVERRIDE { };
+    virtual void dispatchDidChangeThemeColor() OVERRIDE { };
 
-    virtual NavigationPolicy decidePolicyForNavigation(const ResourceRequest&, DocumentLoader*, NavigationPolicy) OVERRIDE;
+    virtual NavigationPolicy decidePolicyForNavigation(const ResourceRequest&, DocumentLoader*, NavigationPolicy, bool isTransitionNavigation) OVERRIDE;
 
     virtual void dispatchWillSendSubmitEvent(HTMLFormElement*) OVERRIDE;
     virtual void dispatchWillSubmitForm(HTMLFormElement*) OVERRIDE;
@@ -251,8 +251,10 @@ public:
     virtual PassOwnPtr<EventRacerLogClient> createEventRacerLogClient() OVERRIDE { return PassOwnPtr<EventRacerLogClient>(); }
 };
 
-class EmptyTextCheckerClient FINAL : public TextCheckerClient {
+class EmptyTextCheckerClient : public TextCheckerClient {
 public:
+    ~EmptyTextCheckerClient() { }
+
     virtual bool shouldEraseMarkersAfterChangeSelection(TextCheckingType) const OVERRIDE { return true; }
     virtual void checkSpellingOfString(const String&, int*, int*) OVERRIDE { }
     virtual String getAutoCorrectSuggestionForMisspelledWord(const String&) OVERRIDE { return String(); }
@@ -260,7 +262,7 @@ public:
     virtual void requestCheckingOfString(PassRefPtr<TextCheckingRequest>) OVERRIDE;
 };
 
-class EmptySpellCheckerClient FINAL : public SpellCheckerClient {
+class EmptySpellCheckerClient : public SpellCheckerClient {
     WTF_MAKE_NONCOPYABLE(EmptySpellCheckerClient); WTF_MAKE_FAST_ALLOCATED;
 public:
     EmptySpellCheckerClient() { }

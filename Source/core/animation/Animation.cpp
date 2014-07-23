@@ -31,20 +31,20 @@
 #include "config.h"
 #include "core/animation/Animation.h"
 
-#include "bindings/v8/Dictionary.h"
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/Dictionary.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/animation/ActiveAnimations.h"
 #include "core/animation/AnimationHelpers.h"
 #include "core/animation/AnimationPlayer.h"
 #include "core/animation/AnimationTimeline.h"
 #include "core/animation/CompositorAnimations.h"
+#include "core/animation/Interpolation.h"
 #include "core/animation/KeyframeEffectModel.h"
-#include "core/animation/interpolation/Interpolation.h"
 #include "core/dom/Element.h"
 #include "core/frame/UseCounter.h"
 #include "core/rendering/RenderLayer.h"
 
-namespace WebCore {
+namespace blink {
 
 PassRefPtrWillBeRawPtr<Animation> Animation::create(Element* target, PassRefPtrWillBeRawPtr<AnimationEffect> effect, const Timing& timing, Priority priority, PassOwnPtr<EventDelegate> eventDelegate)
 {
@@ -313,4 +313,4 @@ void Animation::trace(Visitor* visitor)
     AnimationNode::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink

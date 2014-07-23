@@ -50,16 +50,16 @@ from v8_utilities import capitalize, conditional_string, cpp_name, gc_type, has_
 
 
 INTERFACE_H_INCLUDES = frozenset([
-    'bindings/v8/V8Binding.h',
-    'bindings/v8/V8DOMWrapper.h',
-    'bindings/v8/WrapperTypeInfo.h',
+    'bindings/core/v8/V8Binding.h',
+    'bindings/core/v8/V8DOMWrapper.h',
+    'bindings/core/v8/WrapperTypeInfo.h',
     'platform/heap/Handle.h',
 ])
 INTERFACE_CPP_INCLUDES = frozenset([
-    'bindings/v8/ExceptionState.h',
-    'bindings/v8/V8DOMConfiguration.h',
-    'bindings/v8/V8HiddenValue.h',
-    'bindings/v8/V8ObjectConstructor.h',
+    'bindings/core/v8/ExceptionState.h',
+    'bindings/core/v8/V8DOMConfiguration.h',
+    'bindings/core/v8/V8HiddenValue.h',
+    'bindings/core/v8/V8ObjectConstructor.h',
     'core/dom/ContextFeatures.h',
     'core/dom/Document.h',
     'platform/RuntimeEnabledFeatures.h',
@@ -85,8 +85,8 @@ def interface_context(interface):
 
     is_document = inherits_interface(interface.name, 'Document')
     if is_document:
-        includes.update(['bindings/v8/ScriptController.h',
-                         'bindings/v8/V8WindowShell.h',
+        includes.update(['bindings/core/v8/ScriptController.h',
+                         'bindings/core/v8/V8WindowShell.h',
                          'core/frame/LocalFrame.h'])
 
     # [ActiveDOMObject]
@@ -95,7 +95,7 @@ def interface_context(interface):
     # [CheckSecurity]
     is_check_security = 'CheckSecurity' in extended_attributes
     if is_check_security:
-        includes.add('bindings/v8/BindingSecurity.h')
+        includes.add('bindings/core/v8/BindingSecurity.h')
 
     # [DependentLifetime]
     is_dependent_lifetime = 'DependentLifetime' in extended_attributes
@@ -108,7 +108,7 @@ def interface_context(interface):
     # [SetWrapperReferenceFrom]
     reachable_node_function = extended_attributes.get('SetWrapperReferenceFrom')
     if reachable_node_function:
-        includes.update(['bindings/v8/V8GCController.h',
+        includes.update(['bindings/core/v8/V8GCController.h',
                          'core/dom/Element.h'])
 
     # [SetWrapperReferenceTo]
@@ -197,16 +197,16 @@ def interface_context(interface):
     any_type_attributes = [attribute for attribute in interface.attributes
                            if attribute.idl_type.name == 'Any']
     if has_event_constructor:
-        includes.add('bindings/v8/Dictionary.h')
+        includes.add('bindings/core/v8/Dictionary.h')
         if any_type_attributes:
-            includes.add('bindings/v8/SerializedScriptValue.h')
+            includes.add('bindings/core/v8/SerializedScriptValue.h')
 
     # [NamedConstructor]
     named_constructor = named_constructor_context(interface)
 
     if (constructors or custom_constructors or has_event_constructor or
         named_constructor):
-        includes.add('bindings/v8/V8ObjectConstructor.h')
+        includes.add('bindings/core/v8/V8ObjectConstructor.h')
         includes.add('core/frame/LocalDOMWindow.h')
 
     context.update({
@@ -216,10 +216,6 @@ def interface_context(interface):
         'has_event_constructor': has_event_constructor,
         'interface_length':
             interface_length(interface, constructors + custom_constructors),
-        'is_constructor_call_with_document': has_extended_attribute_value(
-            interface, 'ConstructorCallWith', 'Document'),  # [ConstructorCallWith=Document]
-        'is_constructor_call_with_execution_context': has_extended_attribute_value(
-            interface, 'ConstructorCallWith', 'ExecutionContext'),  # [ConstructorCallWith=ExecutionContext]
         'is_constructor_raises_exception': extended_attributes.get('RaisesException') == 'Constructor',  # [RaisesException=Constructor]
         'named_constructor': named_constructor,
     })
@@ -344,6 +340,7 @@ def constant_context(constant):
     extended_attributes = constant.extended_attributes
     return {
         'cpp_class': extended_attributes.get('PartialInterfaceImplementedAs'),
+        'idl_type': constant.idl_type.name,
         'name': constant.name,
         # FIXME: use 'reflected_name' as correct 'name'
         'reflected_name': extended_attributes.get('Reflect', constant.name),
@@ -719,7 +716,7 @@ def resolution_tests_methods(effective_overloads):
     for idl_type, method in ((idl_type, method)
                              for idl_type, method in idl_types_methods
                              if idl_type.is_wrapper_type):
-        test = 'V8{idl_type}::hasInstance({cpp_value}, isolate)'.format(idl_type=idl_type.base_type, cpp_value=cpp_value)
+        test = 'V8{idl_type}::hasInstance({cpp_value}, info.GetIsolate())'.format(idl_type=idl_type.base_type, cpp_value=cpp_value)
         yield test, method
 
     # 8. Otherwise: if V is any kind of object except for a native Date object,
@@ -734,9 +731,9 @@ def resolution_tests_methods(effective_overloads):
         # http://crbug.com/321462
         idl_type, method = next((idl_type, method)
                                 for idl_type, method in idl_types_methods
-                                if (idl_type.array_or_sequence_type or
+                                if (idl_type.native_array_element_type or
                                     idl_type.name == 'Dictionary'))
-        if idl_type.array_or_sequence_type:
+        if idl_type.native_array_element_type:
             # (We test for Array instead of generic Object to type-check.)
             # FIXME: test for Object during resolution, then have type check for
             # Array in overloaded method: http://crbug.com/262383
@@ -854,6 +851,10 @@ def constructor_context(interface, constructor):
     arguments_need_try_catch = any(v8_methods.argument_needs_try_catch(argument)
                                    for argument in constructor.arguments)
 
+    # [RaisesException=Constructor]
+    is_constructor_raises_exception = \
+        interface.extended_attributes.get('RaisesException') == 'Constructor'
+
     return {
         'arguments': [v8_methods.argument_context(interface, constructor, argument, index)
                       for index, argument in enumerate(constructor.arguments)],
@@ -864,13 +865,21 @@ def constructor_context(interface, constructor):
         'cpp_value': v8_methods.cpp_value(
             interface, constructor, len(constructor.arguments)),
         'has_exception_state':
-            # [RaisesException=Constructor]
-            interface.extended_attributes.get('RaisesException') == 'Constructor' or
+            is_constructor_raises_exception or
             any(argument for argument in constructor.arguments
                 if argument.idl_type.name == 'SerializedScriptValue' or
                    argument.idl_type.may_raise_exception_on_conversion),
+        'is_call_with_document':
+            # [ConstructorCallWith=Document]
+            has_extended_attribute_value(interface,
+                'ConstructorCallWith', 'Document'),
+        'is_call_with_execution_context':
+            # [ConstructorCallWith=ExecutionContext]
+            has_extended_attribute_value(interface,
+                'ConstructorCallWith', 'ExecutionContext'),
         'is_constructor': True,
         'is_named_constructor': False,
+        'is_raises_exception': is_constructor_raises_exception,
         'number_of_required_arguments':
             number_of_required_arguments(constructor),
     }

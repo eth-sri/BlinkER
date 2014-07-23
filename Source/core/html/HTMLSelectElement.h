@@ -26,15 +26,18 @@
 #ifndef HTMLSelectElement_h
 #define HTMLSelectElement_h
 
+#include "core/html/HTMLContentElement.h"
 #include "core/html/HTMLFormControlElementWithState.h"
 #include "core/html/HTMLOptionsCollection.h"
 #include "core/html/forms/TypeAhead.h"
 #include "wtf/Vector.h"
 
-namespace WebCore {
+namespace blink {
 
+class AutoscrollController;
 class ExceptionState;
 class HTMLOptionElement;
+class MouseEvent;
 
 class HTMLSelectElement FINAL : public HTMLFormControlElementWithState, public TypeAheadDataSource {
 public:
@@ -97,6 +100,7 @@ public:
     Element* item(unsigned index);
 
     void scrollToSelection();
+    void scrollTo(int listIndex);
 
     void listBoxSelectItem(int listIndex, bool allowMultiplySelections, bool shift, bool fireOnChangeNow = true);
 
@@ -113,9 +117,13 @@ public:
 
     // For use in the implementation of HTMLOptionElement.
     void optionSelectionStateChanged(HTMLOptionElement*, bool optionIsSelected);
+    void optionRemoved(const HTMLOptionElement&);
     bool anonymousIndexedSetter(unsigned, PassRefPtrWillBeRawPtr<HTMLOptionElement>, ExceptionState&);
 
     void updateListOnRenderer();
+
+    HTMLOptionElement* spatialNavigationFocusedOption();
+    void handleMouseRelease();
 
     virtual void trace(Visitor*) OVERRIDE;
 
@@ -145,6 +153,7 @@ private:
 
     virtual RenderObject* createRenderer(RenderStyle*) OVERRIDE;
     virtual bool appendFormData(FormDataList&, bool) OVERRIDE;
+    virtual void didAddUserAgentShadowRoot(ShadowRoot&) OVERRIDE;
 
     virtual void defaultEventHandler(Event*) OVERRIDE;
 
@@ -174,7 +183,9 @@ private:
     int lastSelectedListIndex() const;
     void updateSelectedState(int listIndex, bool multi, bool shift);
     void menuListDefaultEventHandler(Event*);
-    bool platformHandleKeydownEvent(KeyboardEvent*);
+    void handlePopupOpenKeyboardEvent(Event*);
+    bool shouldOpenPopupForKeyDownEvent(KeyboardEvent*);
+    bool shouldOpenPopupForKeyPressEvent(KeyboardEvent*);
     void listBoxDefaultEventHandler(Event*);
     void setOptionsChangedOnRenderer();
     size_t searchOptionsForValue(const String&, size_t listIndexStart, size_t listIndexEnd) const;
@@ -189,8 +200,11 @@ private:
     int firstSelectableListIndex() const;
     int lastSelectableListIndex() const;
     int nextSelectableListIndexPageAway(int startIndex, SkipDirection) const;
+    int listIndexForEventTargetOption(const Event&);
+    int listIndexForOption(const HTMLOptionElement&);
+    AutoscrollController* autoscrollController() const;
 
-    virtual void childrenChanged(bool changedByParser = false, Node* beforeChange = 0, Node* afterChange = 0, int childCountDelta = 0) OVERRIDE;
+    virtual void childrenChanged(const ChildrenChange&) OVERRIDE;
     virtual bool areAuthorShadowsAllowed() const OVERRIDE { return false; }
     virtual void finishParsingChildren() OVERRIDE;
 

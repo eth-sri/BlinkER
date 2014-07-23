@@ -21,20 +21,24 @@
                   "drawsContent": true,
                   "children": [
                     {
-
+                      "shouldFlattenTransform": false
                     }
                   ]
                 }
               ]
             },
             {
-              "position": [289, 4],
-              "bounds": [15, 185]
-            },
-            {
-              "position": [289, 189],
-              "bounds": [15, 15],
-              "drawsContent": true
+              "children": [
+                {
+                  "position": [289, 4],
+                  "bounds": [15, 185]
+                },
+                {
+                  "position": [289, 189],
+                  "bounds": [15, 15],
+                  "drawsContent": true
+                }
+              ]
             }
           ]
         },
@@ -44,7 +48,6 @@
           "contentsOpaque": true,
           "drawsContent": true,
           "backgroundColor": "#008000",
-          "hasClipParent": true,
           "children": [
             {
 

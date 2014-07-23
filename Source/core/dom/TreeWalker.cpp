@@ -25,13 +25,13 @@
 #include "config.h"
 #include "core/dom/TreeWalker.h"
 
-#include "bindings/v8/ExceptionMessages.h"
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionMessages.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ContainerNode.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/NodeTraversal.h"
 
-namespace WebCore {
+namespace blink {
 
 TreeWalker::TreeWalker(PassRefPtrWillBeRawPtr<Node> rootNode, unsigned whatToShow, PassRefPtrWillBeRawPtr<NodeFilter> filter)
     : NodeIteratorBase(rootNode, whatToShow, filter)
@@ -283,4 +283,4 @@ void TreeWalker::trace(Visitor* visitor)
     NodeIteratorBase::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink

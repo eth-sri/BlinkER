@@ -74,17 +74,17 @@ const double progressAnimationNumFrames = 256;
 
 @interface WebCoreRenderThemeNotificationObserver : NSObject
 {
-    WebCore::RenderTheme *_theme;
+    blink::RenderTheme *_theme;
 }
 
-- (id)initWithTheme:(WebCore::RenderTheme *)theme;
+- (id)initWithTheme:(blink::RenderTheme *)theme;
 - (void)systemColorsDidChange:(NSNotification *)notification;
 
 @end
 
 @implementation WebCoreRenderThemeNotificationObserver
 
-- (id)initWithTheme:(WebCore::RenderTheme *)theme
+- (id)initWithTheme:(blink::RenderTheme *)theme
 {
     if (!(self = [super init]))
         return nil;
@@ -147,7 +147,7 @@ void _NSDrawCarbonThemeBezel(NSRect frame, BOOL enabled, BOOL flipped);
 void _NSDrawCarbonThemeListBox(NSRect frame, BOOL enabled, BOOL flipped, BOOL always_yes);
 }
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -511,7 +511,7 @@ Color RenderThemeChromiumMac::systemColor(CSSValueID cssValueId) const
 bool RenderThemeChromiumMac::isControlStyled(const RenderStyle* style, const CachedUAStyle* uaStyle) const
 {
     ASSERT(uaStyle);
-    if (style->appearance() == TextFieldPart || style->appearance() == TextAreaPart || style->appearance() == ListboxPart)
+    if (style->appearance() == TextFieldPart || style->appearance() == TextAreaPart)
         return style->border() != uaStyle->border || style->boxShadow();
 
     // FIXME: This is horrible, but there is not much else that can be done.  Menu lists cannot draw properly when
@@ -1766,10 +1766,10 @@ String RenderThemeChromiumMac::fileListNameForWidth(Locale& locale, const FileLi
         strToTruncate = [[NSFileManager defaultManager] displayNameAtPath:(fileList->item(0)->path())];
     } else {
         // FIXME: Localization of fileList->length().
-        return StringTruncator::rightTruncate(locale.queryString(blink::WebLocalizedString::MultipleFileUploadText, String::number(fileList->length())), width, font, StringTruncator::EnableRoundingHacks);
+        return StringTruncator::rightTruncate(locale.queryString(blink::WebLocalizedString::MultipleFileUploadText, String::number(fileList->length())), width, font);
     }
 
-    return StringTruncator::centerTruncate(strToTruncate, width, font, StringTruncator::EnableRoundingHacks);
+    return StringTruncator::centerTruncate(strToTruncate, width, font);
 }
 
 NSView* FlippedView()
@@ -1791,7 +1791,7 @@ PassRefPtr<RenderTheme> RenderThemeChromiumMac::create()
 
 bool RenderThemeChromiumMac::usesTestModeFocusRingColor() const
 {
-    return isRunningLayoutTest();
+    return LayoutTestSupport::isRunningLayoutTest();
 }
 
 NSView* RenderThemeChromiumMac::documentViewFor(RenderObject*) const
@@ -1857,8 +1857,9 @@ String RenderThemeChromiumMac::extraFullScreenStyleSheet()
 String RenderThemeChromiumMac::extraDefaultStyleSheet()
 {
     return RenderTheme::extraDefaultStyleSheet() +
-           String(themeChromiumUserAgentStyleSheet, sizeof(themeChromiumUserAgentStyleSheet)) +
-           String(themeMacUserAgentStyleSheet, sizeof(themeMacUserAgentStyleSheet));
+        String(themeChromiumCss, sizeof(themeChromiumCss)) +
+        String(themeInputMultipleFieldsCss, sizeof(themeInputMultipleFieldsCss)) +
+        String(themeMacCss, sizeof(themeMacCss));
 }
 
 bool RenderThemeChromiumMac::paintMediaVolumeSliderContainer(RenderObject* object, const PaintInfo& paintInfo, const IntRect& rect)
@@ -1909,4 +1910,4 @@ bool RenderThemeChromiumMac::shouldUseFallbackTheme(RenderStyle* style) const
     return false;
 }
 
-} // namespace WebCore
+} // namespace blink

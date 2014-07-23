@@ -41,6 +41,7 @@
 #include "platform/network/ResourceRequest.h"
 #include "platform/network/ResourceResponse.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "public/platform/WebURLRequest.h"
 #include "wtf/Assertions.h"
 #include "wtf/Vector.h"
 #include "wtf/text/CString.h"
@@ -51,7 +52,7 @@
 #include <libxslt/variables.h>
 #include <libxslt/xsltutils.h>
 
-namespace WebCore {
+namespace blink {
 
 void XSLTProcessor::genericErrorFunc(void*, const char*, ...)
 {
@@ -101,6 +102,7 @@ static xmlDocPtr docLoaderFunc(
 
         ResourceLoaderOptions fetchOptions(ResourceFetcher::defaultResourceOptions());
         FetchRequest request(ResourceRequest(url), FetchInitiatorTypeNames::xml, fetchOptions);
+        request.mutableResourceRequest().setRequestContext(blink::WebURLRequest::RequestContextXSLT);
         request.setOriginRestriction(FetchRequest::RestrictToSameOrigin);
         ResourcePtr<Resource> resource = globalResourceFetcher->fetchSynchronously(request);
         if (!resource || !globalProcessor)
@@ -333,7 +335,8 @@ bool XSLTProcessor::transformToString(Node* sourceNode, String& mimeType, String
         if (shouldFreeSourceDoc)
             xmlFreeDoc(sourceDoc);
 
-        if ((success = saveResultToString(resultDoc, sheet, resultString))) {
+        success = saveResultToString(resultDoc, sheet, resultString);
+        if (success) {
             mimeType = resultMIMEType(resultDoc, sheet);
             resultEncoding = (char*)resultDoc->encoding;
         }
@@ -348,4 +351,4 @@ bool XSLTProcessor::transformToString(Node* sourceNode, String& mimeType, String
     return success;
 }
 
-} // namespace WebCore
+} // namespace blink

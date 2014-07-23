@@ -25,8 +25,8 @@
 #ifndef InspectorConsoleAgent_h
 #define InspectorConsoleAgent_h
 
-#include "bindings/v8/ScriptState.h"
-#include "bindings/v8/ScriptString.h"
+#include "bindings/core/v8/ScriptState.h"
+#include "bindings/core/v8/ScriptString.h"
 #include "core/InspectorFrontend.h"
 #include "core/inspector/ConsoleAPITypes.h"
 #include "core/inspector/InspectorBaseAgent.h"
@@ -38,9 +38,9 @@
 #include "wtf/Vector.h"
 #include "wtf/text/StringHash.h"
 
-namespace WebCore {
+namespace blink {
 
-class ConsoleMessage;
+class InspectorConsoleMessage;
 class DocumentLoader;
 class LocalDOMWindow;
 class LocalFrame;
@@ -76,7 +76,7 @@ public:
     virtual void clearFrontend() OVERRIDE FINAL;
     virtual void restore() OVERRIDE FINAL;
 
-    void addMessageToConsole(MessageSource, MessageType, MessageLevel, const String& message, ScriptState*, PassRefPtrWillBeRawPtr<ScriptArguments>, unsigned long requestIdentifier = 0);
+    void addConsoleAPIMessageToConsole(MessageType, MessageLevel, const String& message, ScriptState*, PassRefPtrWillBeRawPtr<ScriptArguments>, unsigned long requestIdentifier = 0);
     void addMessageToConsole(MessageSource, MessageType, MessageLevel, const String& message, const String& scriptId, unsigned lineNumber, unsigned columnNumber = 0, ScriptState* = 0, unsigned long requestIdentifier = 0);
 
     // FIXME: Remove once we no longer generate stacks outside of Inspector.
@@ -106,12 +106,12 @@ public:
     virtual bool isWorkerAgent() = 0;
 
 protected:
-    void addConsoleMessage(PassOwnPtr<ConsoleMessage>);
+    void addConsoleMessage(PassOwnPtr<InspectorConsoleMessage>);
 
     InspectorTimelineAgent* m_timelineAgent;
     InjectedScriptManager* m_injectedScriptManager;
     InspectorFrontend::Console* m_frontend;
-    Vector<OwnPtr<ConsoleMessage> > m_consoleMessages;
+    Vector<OwnPtr<InspectorConsoleMessage> > m_consoleMessages;
     int m_expiredConsoleMessageCount;
     HashCountedSet<String> m_counts;
     HashMap<String, double> m_times;
@@ -120,7 +120,7 @@ private:
     static int s_enabledAgentCount;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 
 #endif // !defined(InspectorConsoleAgent_h)

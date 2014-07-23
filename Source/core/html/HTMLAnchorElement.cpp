@@ -24,6 +24,7 @@
 #include "config.h"
 #include "core/html/HTMLAnchorElement.h"
 
+#include "bindings/core/v8/V8DOMActivityLogger.h"
 #include "core/dom/Attribute.h"
 #include "core/editing/FrameSelection.h"
 #include "core/events/KeyboardEvent.h"
@@ -51,9 +52,10 @@
 #include "platform/weborigin/SecurityPolicy.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebURL.h"
+#include "public/platform/WebURLRequest.h"
 #include "wtf/text/StringBuilder.h"
 
-namespace WebCore {
+namespace blink {
 
 using namespace HTMLNames;
 
@@ -76,7 +78,7 @@ HTMLAnchorElement::~HTMLAnchorElement()
 
 bool HTMLAnchorElement::supportsFocus() const
 {
-    if (rendererIsEditable())
+    if (hasEditableStyle())
         return HTMLElement::supportsFocus();
     // If not a link we should still be able to focus the element if it has tabIndex.
     return isLink() || HTMLElement::supportsFocus();
@@ -153,10 +155,26 @@ void HTMLAnchorElement::defaultEventHandler(Event* event)
 
 void HTMLAnchorElement::setActive(bool down)
 {
-    if (rendererIsEditable())
+    if (hasEditableStyle())
         return;
 
     ContainerNode::setActive(down);
+}
+
+void HTMLAnchorElement::attributeWillChange(const QualifiedName& name, const AtomicString& oldValue, const AtomicString& newValue)
+{
+    if (name == hrefAttr && inDocument()) {
+        V8DOMActivityLogger* activityLogger = V8DOMActivityLogger::currentActivityLoggerIfIsolatedWorld();
+        if (activityLogger) {
+            Vector<String> argv;
+            argv.append("a");
+            argv.append(hrefAttr.toString());
+            argv.append(oldValue);
+            argv.append(newValue);
+            activityLogger->logEvent("blinkSetAttribute", argv.size(), argv.data());
+        }
+    }
+    HTMLElement::attributeWillChange(name, oldValue, newValue);
 }
 
 void HTMLAnchorElement::parseAttribute(const QualifiedName& name, const AtomicString& value)
@@ -207,7 +225,7 @@ bool HTMLAnchorElement::canStartSelection() const
 {
     if (!isLink())
         return HTMLElement::canStartSelection();
-    return rendererIsEditable();
+    return hasEditableStyle();
 }
 
 bool HTMLAnchorElement::draggable() const
@@ -276,17 +294,12 @@ short HTMLAnchorElement::tabIndex() const
     return Element::tabIndex();
 }
 
-AtomicString HTMLAnchorElement::target() const
-{
-    return getAttribute(targetAttr);
-}
-
 bool HTMLAnchorElement::isLiveLink() const
 {
-    return isLink() && !rendererIsEditable();
+    return isLink() && !hasEditableStyle();
 }
 
-void HTMLAnchorElement::sendPings(const KURL& destinationURL)
+void HTMLAnchorElement::sendPings(const KURL& destinationURL) const
 {
     const AtomicString& pingValue = getAttribute(pingAttr);
     if (pingValue.isNull() || !document().settings() || !document().settings()->hyperlinkAuditingEnabled())
@@ -318,6 +331,7 @@ void HTMLAnchorElement::handleClick(Event* event)
 
     ResourceRequest request(completedURL);
     if (hasAttribute(downloadAttr)) {
+        request.setRequestContext(blink::WebURLRequest::RequestContextDownload);
         if (!hasRel(RelationNoReferrer)) {
             String referrer = SecurityPolicy::generateReferrerHeader(document().referrerPolicy(), completedURL, document().outgoingReferrer());
             if (!referrer.isEmpty())
@@ -329,7 +343,8 @@ void HTMLAnchorElement::handleClick(Event* event)
 
         frame->loader().client()->loadURLExternally(request, NavigationPolicyDownload, suggestedName);
     } else {
-        FrameLoadRequest frameRequest(&document(), request, target());
+        request.setRequestContext(blink::WebURLRequest::RequestContextHyperlink);
+        FrameLoadRequest frameRequest(&document(), request, getAttribute(targetAttr));
         frameRequest.setTriggeringEvent(event);
         if (hasRel(RelationNoReferrer))
             frameRequest.setShouldSendReferrer(NeverSendReferrer);
@@ -355,6 +370,20 @@ bool HTMLAnchorElement::willRespondToMouseClickEvents()
 bool HTMLAnchorElement::isInteractiveContent() const
 {
     return isLink();
+}
+
+Node::InsertionNotificationRequest HTMLAnchorElement::insertedInto(ContainerNode* insertionPoint)
+{
+    if (insertionPoint->inDocument()) {
+        V8DOMActivityLogger* activityLogger = V8DOMActivityLogger::currentActivityLoggerIfIsolatedWorld();
+        if (activityLogger) {
+            Vector<String> argv;
+            argv.append("a");
+            argv.append(fastGetAttribute(hrefAttr));
+            activityLogger->logEvent("blinkAddElement", argv.size(), argv.data());
+        }
+    }
+    return HTMLElement::insertedInto(insertionPoint);
 }
 
 }

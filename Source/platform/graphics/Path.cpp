@@ -39,7 +39,7 @@
 #include "third_party/skia/include/pathops/SkPathOps.h"
 #include "wtf/MathExtras.h"
 
-namespace WebCore {
+namespace blink {
 
 Path::Path()
     : m_path()
@@ -497,7 +497,7 @@ bool Path::unionPath(const Path& other)
     return Op(m_path, other.m_path, kUnion_PathOp, &m_path);
 }
 
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
 bool ellipseIsRenderable(float startAngle, float endAngle)
 {
     return (std::abs(endAngle - startAngle) < twoPiFloat)

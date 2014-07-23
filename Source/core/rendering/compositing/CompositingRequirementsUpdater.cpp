@@ -33,7 +33,7 @@
 #include "core/rendering/compositing/RenderLayerCompositor.h"
 #include "platform/TraceEvent.h"
 
-namespace WebCore {
+namespace blink {
 
 class OverlapMapContainer {
 public:
@@ -123,25 +123,11 @@ private:
 
 class CompositingRequirementsUpdater::RecursionData {
 public:
-    RecursionData(RenderLayer* compAncestor, bool testOverlap)
-        : m_compositingAncestor(compAncestor)
+    explicit RecursionData(RenderLayer* compositingAncestor)
+        : m_compositingAncestor(compositingAncestor)
         , m_subtreeIsCompositing(false)
         , m_hasUnisolatedCompositedBlendingDescendant(false)
-        , m_testingOverlap(testOverlap)
-#ifndef NDEBUG
-        , m_depth(0)
-#endif
-    {
-    }
-
-    RecursionData(const RecursionData& other)
-        : m_compositingAncestor(other.m_compositingAncestor)
-        , m_subtreeIsCompositing(other.m_subtreeIsCompositing)
-        , m_hasUnisolatedCompositedBlendingDescendant(other.m_hasUnisolatedCompositedBlendingDescendant)
-        , m_testingOverlap(other.m_testingOverlap)
-#ifndef NDEBUG
-        , m_depth(other.m_depth + 1)
-#endif
+        , m_testingOverlap(true)
     {
     }
 
@@ -149,14 +135,11 @@ public:
     bool m_subtreeIsCompositing;
     bool m_hasUnisolatedCompositedBlendingDescendant;
     bool m_testingOverlap;
-#ifndef NDEBUG
-    int m_depth;
-#endif
 };
 
 static bool requiresCompositingOrSquashing(CompositingReasons reasons)
 {
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
     bool fastAnswer = reasons != CompositingReasonNone;
     bool slowAnswer = requiresCompositing(reasons) || requiresSquashing(reasons);
     ASSERT(fastAnswer == slowAnswer);
@@ -208,7 +191,7 @@ void CompositingRequirementsUpdater::update(RenderLayer* root)
 
     // Go through the layers in presentation order, so that we can compute which RenderLayers need compositing layers.
     // FIXME: we could maybe do this and the hierarchy udpate in one pass, but the parenting logic would be more complex.
-    RecursionData recursionData(root, true);
+    RecursionData recursionData(root);
     OverlapMap overlapTestRequestMap;
     bool saw3DTransform = false;
 
@@ -270,7 +253,7 @@ void CompositingRequirementsUpdater::updateRecursive(RenderLayer* ancestorLayer,
             unclippedDescendants.append(layer);
     }
 
-    const IntRect& absBounds = layer->compositingInputs().clippedAbsoluteBoundingBox;
+    const IntRect& absBounds = layer->clippedAbsoluteBoundingBox();
     absoluteDecendantBoundingBox = absBounds;
 
     if (currentRecursionData.m_testingOverlap && !requiresCompositingOrSquashing(directReasons))
@@ -281,7 +264,7 @@ void CompositingRequirementsUpdater::updateRecursive(RenderLayer* ancestorLayer,
     // The children of this layer don't need to composite, unless there is
     // a compositing layer among them, so start by inheriting the compositing
     // ancestor with m_subtreeIsCompositing set to false.
-    RecursionData childRecursionData(currentRecursionData);
+    RecursionData childRecursionData = currentRecursionData;
     childRecursionData.m_subtreeIsCompositing = false;
 
     bool willBeCompositedOrSquashed = compositor->canBeComposited(layer) && requiresCompositingOrSquashing(reasonsToComposite);
@@ -300,7 +283,7 @@ void CompositingRequirementsUpdater::updateRecursive(RenderLayer* ancestorLayer,
         childRecursionData.m_testingOverlap = true;
     }
 
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     LayerListMutationDetector mutationChecker(layer->stackingNode());
 #endif
 
@@ -330,7 +313,7 @@ void CompositingRequirementsUpdater::updateRecursive(RenderLayer* ancestorLayer,
                     //        re-compute the absBounds for the child so that we can add the
                     //        negative z-index child's bounds to the new overlap context.
                     overlapMap.beginNewOverlapTestingContext();
-                    overlapMap.add(curNode->layer(), curNode->layer()->compositingInputs().clippedAbsoluteBoundingBox);
+                    overlapMap.add(curNode->layer(), curNode->layer()->clippedAbsoluteBoundingBox());
                     overlapMap.finishCurrentOverlapTestingContext();
                 }
             }
@@ -402,6 +385,9 @@ void CompositingRequirementsUpdater::updateRecursive(RenderLayer* ancestorLayer,
             willBeCompositedOrSquashed = true;
         }
 
+        if (willBeCompositedOrSquashed)
+            reasonsToComposite |= layer->potentialCompositingReasonsFromStyle() & CompositingReasonInlineTransform;
+
         // If the original layer is composited, the reflection needs to be, too.
         if (layer->reflectionInfo()) {
             // FIXME: Shouldn't we call computeCompositingRequirements to handle a reflection overlapping with another renderer?
@@ -417,7 +403,8 @@ void CompositingRequirementsUpdater::updateRecursive(RenderLayer* ancestorLayer,
         // Note that if the layer clips its descendants, there's no reason to propagate the child animation to the parent layers. That's because
         // we know for sure the animation is contained inside the clipping rectangle, which is already added to the overlap map.
         bool isCompositedClippingLayer = compositor->canBeComposited(layer) && (reasonsToComposite & CompositingReasonClipsCompositingDescendants);
-        if ((!childRecursionData.m_testingOverlap && !isCompositedClippingLayer) || layer->renderer()->style()->hasCurrentTransformAnimation())
+        bool isCompositedWithInlineTransform = reasonsToComposite & CompositingReasonInlineTransform;
+        if ((!childRecursionData.m_testingOverlap && !isCompositedClippingLayer) || layer->renderer()->style()->hasCurrentTransformAnimation() || isCompositedWithInlineTransform)
             currentRecursionData.m_testingOverlap = false;
 
         if (childRecursionData.m_compositingAncestor == layer)
@@ -431,4 +418,4 @@ void CompositingRequirementsUpdater::updateRecursive(RenderLayer* ancestorLayer,
 
 }
 
-} // namespace WebCore
+} // namespace blink

@@ -27,12 +27,14 @@
 #include "config.h"
 #include "core/frame/LocalDOMWindow.h"
 
-#include "bindings/v8/ExceptionMessages.h"
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ExceptionStatePlaceholder.h"
-#include "bindings/v8/ScriptCallStackFactory.h"
-#include "bindings/v8/ScriptController.h"
-#include "bindings/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/Dictionary.h"
+#include "bindings/core/v8/ExceptionMessages.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ScriptCallStackFactory.h"
+#include "bindings/core/v8/ScriptController.h"
+#include "bindings/core/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/V8DOMActivityLogger.h"
 #include "core/css/CSSComputedStyleDeclaration.h"
 #include "core/css/CSSRuleList.h"
 #include "core/css/DOMWindowCSS.h"
@@ -57,7 +59,6 @@
 #include "core/events/PopStateEvent.h"
 #include "core/frame/BarProp.h"
 #include "core/frame/Console.h"
-#include "core/frame/DOMPoint.h"
 #include "core/frame/DOMWindowLifecycleNotifier.h"
 #include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/FrameConsole.h"
@@ -69,6 +70,7 @@
 #include "core/frame/Navigator.h"
 #include "core/frame/Screen.h"
 #include "core/frame/Settings.h"
+#include "core/frame/WebKitPoint.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InspectorTraceEvents.h"
@@ -111,13 +113,13 @@
 using std::min;
 using std::max;
 
-namespace WebCore {
+namespace blink {
 
 class PostMessageTimer FINAL : public SuspendableTimer {
 public:
     PostMessageTimer(LocalDOMWindow& window, PassRefPtr<SerializedScriptValue> message, const String& sourceOrigin, PassRefPtrWillBeRawPtr<LocalDOMWindow> source, PassOwnPtr<MessagePortChannelArray> channels, SecurityOrigin* targetOrigin, PassRefPtrWillBeRawPtr<ScriptCallStack> stackTrace, UserGestureToken* userGestureToken)
         : SuspendableTimer(window.document())
-        , m_window(window)
+        , m_window(&window)
         , m_message(message)
         , m_origin(sourceOrigin)
         , m_source(source)
@@ -126,6 +128,7 @@ public:
         , m_stackTrace(stackTrace)
         , m_userGestureToken(userGestureToken)
     {
+        m_asyncOperationId = InspectorInstrumentation::traceAsyncOperationStarting(executionContext(), "postMessage");
     }
 
     PassRefPtrWillBeRawPtr<MessageEvent> event()
@@ -140,11 +143,16 @@ public:
 private:
     virtual void didFire() OVERRIDE
     {
-        m_window->postMessageTimerFired(adoptPtr(this));
+        InspectorInstrumentationCookie cookie = InspectorInstrumentation::traceAsyncOperationCompletedCallbackStarting(executionContext(), m_asyncOperationId);
+        m_window->postMessageTimerFired(this);
         // This object is deleted now.
+        InspectorInstrumentation::traceAsyncCallbackCompleted(cookie);
     }
 
-    RefPtrWillBePersistent<LocalDOMWindow> m_window;
+    // FIXME: Oilpan: This raw pointer is safe because the PostMessageTimer is
+    // owned by the LocalDOMWindow. Ideally PostMessageTimer should be moved to
+    // the heap and use Member<LocalDOMWindow>.
+    LocalDOMWindow* m_window;
     RefPtr<SerializedScriptValue> m_message;
     String m_origin;
     RefPtrWillBePersistent<LocalDOMWindow> m_source;
@@ -152,6 +160,7 @@ private:
     RefPtr<SecurityOrigin> m_targetOrigin;
     RefPtrWillBePersistent<ScriptCallStack> m_stackTrace;
     RefPtr<UserGestureToken> m_userGestureToken;
+    int m_asyncOperationId;
 };
 
 static void disableSuddenTermination()
@@ -327,7 +336,7 @@ bool LocalDOMWindow::canShowModalDialogNow(const LocalFrame* frame)
 LocalDOMWindow::LocalDOMWindow(LocalFrame& frame)
     : FrameDestructionObserver(&frame)
     , m_shouldPrintWhenFinishedLoading(false)
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     , m_hasBeenReset(false)
 #endif
 {
@@ -604,7 +613,7 @@ void LocalDOMWindow::resetDOMWindowProperties()
     m_sessionStorage = nullptr;
     m_localStorage = nullptr;
     m_applicationCache = nullptr;
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     m_hasBeenReset = true;
 #endif
 }
@@ -860,30 +869,34 @@ void LocalDOMWindow::postMessage(PassRefPtr<SerializedScriptValue> message, cons
         stackTrace = createScriptCallStack(ScriptCallStack::maxCallStackSizeToCapture, true);
 
     // Schedule the message.
-    PostMessageTimer* timer = new PostMessageTimer(*this, message, sourceOrigin, source, channels.release(), target.get(), stackTrace.release(), UserGestureIndicator::currentToken());
+    OwnPtr<PostMessageTimer> timer = adoptPtr(new PostMessageTimer(*this, message, sourceOrigin, source, channels.release(), target.get(), stackTrace.release(), UserGestureIndicator::currentToken()));
     timer->startOneShot(0, FROM_HERE);
     timer->suspendIfNeeded();
+    m_postMessageTimers.add(timer.release());
 }
 
-void LocalDOMWindow::postMessageTimerFired(PassOwnPtr<PostMessageTimer> t)
+void LocalDOMWindow::postMessageTimerFired(PostMessageTimer* timer)
 {
-    OwnPtr<PostMessageTimer> timer(t);
-
-    if (!isCurrentlyDisplayedInFrame())
+    if (!isCurrentlyDisplayedInFrame()) {
+        m_postMessageTimers.remove(timer);
         return;
+    }
 
     RefPtrWillBeRawPtr<MessageEvent> event = timer->event();
 
     // Give the embedder a chance to intercept this postMessage because this
     // LocalDOMWindow might be a proxy for another in browsers that support
     // postMessage calls across WebKit instances.
-    if (m_frame->loader().client()->willCheckAndDispatchMessageEvent(timer->targetOrigin(), event.get()))
+    if (m_frame->loader().client()->willCheckAndDispatchMessageEvent(timer->targetOrigin(), event.get())) {
+        m_postMessageTimers.remove(timer);
         return;
+    }
 
     UserGestureIndicator gestureIndicator(timer->userGestureToken());
 
     event->entangleMessagePorts(document());
     dispatchMessageEventWithOriginCheck(timer->targetOrigin(), event, timer->stackTrace());
+    m_postMessageTimers.remove(timer);
 }
 
 void LocalDOMWindow::dispatchMessageEventWithOriginCheck(SecurityOrigin* intendedTargetOrigin, PassRefPtrWillBeRawPtr<Event> event, PassRefPtrWillBeRawPtr<ScriptCallStack> stackTrace)
@@ -1329,7 +1342,7 @@ PassRefPtrWillBeRawPtr<CSSRuleList> LocalDOMWindow::getMatchedCSSRules(Element* 
     return m_frame->document()->ensureStyleResolver().pseudoCSSRulesForElement(element, pseudoId, rulesToInclude);
 }
 
-PassRefPtrWillBeRawPtr<DOMPoint> LocalDOMWindow::webkitConvertPointFromNodeToPage(Node* node, const DOMPoint* p) const
+PassRefPtrWillBeRawPtr<WebKitPoint> LocalDOMWindow::webkitConvertPointFromNodeToPage(Node* node, const WebKitPoint* p) const
 {
     if (!node || !p)
         return nullptr;
@@ -1341,10 +1354,10 @@ PassRefPtrWillBeRawPtr<DOMPoint> LocalDOMWindow::webkitConvertPointFromNodeToPag
 
     FloatPoint pagePoint(p->x(), p->y());
     pagePoint = node->convertToPage(pagePoint);
-    return DOMPoint::create(pagePoint.x(), pagePoint.y());
+    return WebKitPoint::create(pagePoint.x(), pagePoint.y());
 }
 
-PassRefPtrWillBeRawPtr<DOMPoint> LocalDOMWindow::webkitConvertPointFromPageToNode(Node* node, const DOMPoint* p) const
+PassRefPtrWillBeRawPtr<WebKitPoint> LocalDOMWindow::webkitConvertPointFromPageToNode(Node* node, const WebKitPoint* p) const
 {
     if (!node || !p)
         return nullptr;
@@ -1356,7 +1369,7 @@ PassRefPtrWillBeRawPtr<DOMPoint> LocalDOMWindow::webkitConvertPointFromPageToNod
 
     FloatPoint nodePoint(p->x(), p->y());
     nodePoint = node->convertFromPage(nodePoint);
-    return DOMPoint::create(nodePoint.x(), nodePoint.y());
+    return WebKitPoint::create(nodePoint.x(), nodePoint.y());
 }
 
 double LocalDOMWindow::devicePixelRatio() const
@@ -1370,7 +1383,7 @@ double LocalDOMWindow::devicePixelRatio() const
 static bool scrollBehaviorFromScrollOptions(const Dictionary& scrollOptions, ScrollBehavior& scrollBehavior, ExceptionState& exceptionState)
 {
     String scrollBehaviorString;
-    if (!scrollOptions.get("behavior", scrollBehaviorString)) {
+    if (!DictionaryHelper::get(scrollOptions, "behavior", scrollBehaviorString)) {
         scrollBehavior = ScrollBehaviorAuto;
         return true;
     }
@@ -1521,7 +1534,7 @@ DOMWindowCSS& LocalDOMWindow::css() const
 
 static void didAddStorageEventListener(LocalDOMWindow* window)
 {
-    // Creating these WebCore::Storage objects informs the system that we'd like to receive
+    // Creating these blink::Storage objects informs the system that we'd like to receive
     // notifications about storage events that might be triggered in other processes. Rather
     // than subscribe to these notifications explicitly, we subscribe to them implicitly to
     // simplify the work done by the system.
@@ -1566,7 +1579,7 @@ bool LocalDOMWindow::addEventListener(const AtomicString& eventType, PassRefPtr<
     return true;
 }
 
-bool LocalDOMWindow::removeEventListener(const AtomicString& eventType, EventListener* listener, bool useCapture)
+bool LocalDOMWindow::removeEventListener(const AtomicString& eventType, PassRefPtr<EventListener> listener, bool useCapture)
 {
     if (!EventTarget::removeEventListener(eventType, listener, useCapture))
         return false;
@@ -1627,7 +1640,7 @@ bool LocalDOMWindow::dispatchEvent(PassRefPtrWillBeRawPtr<Event> prpEvent, PassR
     event->setCurrentTarget(this);
     event->setEventPhase(Event::AT_TARGET);
 
-    TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "EventDispatch", "type", event->type().ascii());
+    TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "EventDispatch", "data", InspectorEventDispatchEvent::data(*event));
     // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentationCookie cookie = InspectorInstrumentation::willDispatchEventOnWindow(frame(), *event, this);
 
@@ -1692,6 +1705,16 @@ void LocalDOMWindow::setLocation(const String& urlString, LocalDOMWindow* callin
 
     if (isInsecureScriptAccess(*callingWindow, completedURL))
         return;
+
+    V8DOMActivityLogger* activityLogger = V8DOMActivityLogger::currentActivityLoggerIfIsolatedWorld();
+    if (activityLogger) {
+        Vector<String> argv;
+        argv.append("LocalDOMWindow");
+        argv.append("url");
+        argv.append(firstFrame->document()->url());
+        argv.append(completedURL);
+        activityLogger->logEvent("blinkSetAttribute", argv.size(), argv.data());
+    }
 
     // We want a new history item if we are processing a user gesture.
     m_frame->navigationScheduler().scheduleLocationChange(activeDocument,
@@ -1811,6 +1834,10 @@ PassRefPtrWillBeRawPtr<LocalDOMWindow> LocalDOMWindow::open(const String& urlStr
     LocalFrame* firstFrame = enteredWindow->frame();
     if (!firstFrame)
         return nullptr;
+
+    UseCounter::count(*activeDocument, UseCounter::DOMWindowOpen);
+    if (!windowFeaturesString.isEmpty())
+        UseCounter::count(*activeDocument, UseCounter::DOMWindowOpenFeatures);
 
     if (!enteredWindow->allowPopUp()) {
         // Because FrameTree::find() returns true for empty strings, we must check for empty frame names.
@@ -1932,4 +1959,4 @@ void LocalDOMWindow::trace(Visitor* visitor)
     EventTargetWithInlineData::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink

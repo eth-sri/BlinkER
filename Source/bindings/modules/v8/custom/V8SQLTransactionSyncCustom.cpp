@@ -31,9 +31,9 @@
 #include "config.h"
 #include "bindings/modules/v8/V8SQLTransactionSync.h"
 
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/V8Binding.h"
 #include "bindings/modules/v8/V8SQLResultSet.h"
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/V8Binding.h"
 #include "core/dom/ExceptionCode.h"
 #include "modules/webdatabase/DatabaseSync.h"
 #include "modules/webdatabase/SQLResultSet.h"
@@ -42,7 +42,7 @@
 
 using namespace WTF;
 
-namespace WebCore {
+namespace blink {
 
 void V8SQLTransactionSync::executeSqlMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
@@ -98,4 +98,4 @@ void V8SQLTransactionSync::executeSqlMethodCustom(const v8::FunctionCallbackInfo
     v8SetReturnValue(info, result);
 }
 
-} // namespace WebCore
+} // namespace blink

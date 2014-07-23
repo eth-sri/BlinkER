@@ -41,7 +41,7 @@
 #include "core/page/EventHandler.h"
 #include "core/rendering/RenderObject.h"
 
-namespace WebCore {
+namespace blink {
 
 InputMethodController::SelectionOffsetsScope::SelectionOffsetsScope(InputMethodController* inputMethodController)
     : m_inputMethodController(inputMethodController)
@@ -317,7 +317,7 @@ void InputMethodController::setComposition(const String& text, const Vector<Comp
 
 void InputMethodController::setCompositionFromExistingText(const Vector<CompositionUnderline>& underlines, unsigned compositionStart, unsigned compositionEnd)
 {
-    Node* editable = m_frame.selection().rootEditableElement();
+    Element* editable = m_frame.selection().rootEditableElement();
     Position base = m_frame.selection().base().downstream();
     Node* baseNode = base.anchorNode();
     if (editable->firstChild() == baseNode && editable->lastChild() == baseNode && baseNode->isTextNode()) {
@@ -330,13 +330,14 @@ void InputMethodController::setCompositionFromExistingText(const Vector<Composit
             return;
 
         m_compositionNode = toText(baseNode);
-        m_compositionStart = compositionStart;
-        m_compositionEnd = compositionEnd;
+        RefPtrWillBeRawPtr<Range> range = PlainTextRange(compositionStart, compositionEnd).createRange(*editable);
+        m_compositionStart = range->startOffset();
+        m_compositionEnd = range->endOffset();
         m_customCompositionUnderlines = underlines;
         size_t numUnderlines = m_customCompositionUnderlines.size();
         for (size_t i = 0; i < numUnderlines; ++i) {
-            m_customCompositionUnderlines[i].startOffset += compositionStart;
-            m_customCompositionUnderlines[i].endOffset += compositionStart;
+            m_customCompositionUnderlines[i].startOffset += m_compositionStart;
+            m_customCompositionUnderlines[i].endOffset += m_compositionStart;
         }
         if (baseNode->renderer())
             baseNode->renderer()->paintInvalidationForWholeRenderer();
@@ -379,7 +380,7 @@ bool InputMethodController::setSelectionOffsets(const PlainTextRange& selectionO
     if (!rootEditableElement)
         return false;
 
-    RefPtrWillBeRawPtr<Range> range = selectionOffsets.createRangeForInputMethod(*rootEditableElement);
+    RefPtrWillBeRawPtr<Range> range = selectionOffsets.createRange(*rootEditableElement);
     if (!range)
         return false;
 
@@ -416,9 +417,11 @@ void InputMethodController::extendSelectionAndDelete(int before, int after)
     do {
         if (!setSelectionOffsets(PlainTextRange(std::max(static_cast<int>(selectionOffsets.start()) - before, 0), selectionOffsets.end() + after)))
             return;
+        if (before == 0)
+            break;
         ++before;
     } while (m_frame.selection().start() == m_frame.selection().end() && before <= static_cast<int>(selectionOffsets.start()));
     TypingCommand::deleteSelection(*m_frame.document());
 }
 
-} // namespace WebCore
+} // namespace blink

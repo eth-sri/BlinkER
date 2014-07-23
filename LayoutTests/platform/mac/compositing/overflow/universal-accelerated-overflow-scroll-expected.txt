@@ -7,47 +7,53 @@
       "drawsContent": true,
       "children": [
         {
-          "position": [10, 10],
-          "bounds": [104, 104],
-          "drawsContent": true,
           "children": [
             {
-              "position": [2, 2],
-              "bounds": [85, 85],
+              "position": [10, 10],
+              "bounds": [104, 104],
+              "drawsContent": true,
               "children": [
                 {
-                  "bounds": [85, 144],
-                  "shouldFlattenTransform": false,
-                  "drawsContent": true,
+                  "position": [2, 2],
+                  "bounds": [85, 85],
                   "children": [
                     {
-
+                      "bounds": [85, 144],
+                      "shouldFlattenTransform": false,
+                      "drawsContent": true,
+                      "children": [
+                        {
+                          "shouldFlattenTransform": false
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "children": [
+                    {
+                      "position": [2, 87],
+                      "bounds": [85, 15]
+                    },
+                    {
+                      "position": [87, 2],
+                      "bounds": [15, 85]
+                    },
+                    {
+                      "position": [87, 87],
+                      "bounds": [15, 15],
+                      "drawsContent": true
                     }
                   ]
                 }
               ]
             },
             {
-              "position": [2, 87],
-              "bounds": [85, 15]
-            },
-            {
-              "position": [87, 2],
-              "bounds": [15, 85]
-            },
-            {
-              "position": [87, 87],
-              "bounds": [15, 15],
+              "position": [35, 75],
+              "bounds": [80, 40],
               "drawsContent": true
             }
           ]
-        },
-        {
-          "position": [35, 75],
-          "bounds": [80, 40],
-          "contentsOpaque": true,
-          "drawsContent": true,
-          "backgroundColor": "#808080"
         },
         {
           "children": [
@@ -80,24 +86,28 @@
                   "drawsContent": true,
                   "children": [
                     {
-
+                      "shouldFlattenTransform": false
                     }
                   ]
                 }
               ]
             },
             {
-              "position": [2, 87],
-              "bounds": [85, 15]
-            },
-            {
-              "position": [87, 2],
-              "bounds": [15, 85]
-            },
-            {
-              "position": [87, 87],
-              "bounds": [15, 15],
-              "drawsContent": true
+              "children": [
+                {
+                  "position": [2, 87],
+                  "bounds": [85, 15]
+                },
+                {
+                  "position": [87, 2],
+                  "bounds": [15, 85]
+                },
+                {
+                  "position": [87, 87],
+                  "bounds": [15, 15],
+                  "drawsContent": true
+                }
+              ]
             }
           ]
         },
@@ -108,7 +118,7 @@
               "bounds": [80, 40],
               "contentsOpaque": true,
               "drawsContent": true,
-              "backgroundColor": "#808080"
+              "backgroundColor": "#800080"
             },
             {
               "position": [136, -15],
@@ -118,46 +128,52 @@
           ]
         },
         {
-          "position": [250, 10],
-          "bounds": [104, 104],
-          "drawsContent": true,
           "children": [
             {
-              "position": [2, 2],
-              "bounds": [85, 85],
+              "position": [250, 10],
+              "bounds": [104, 104],
+              "drawsContent": true,
               "children": [
                 {
-                  "bounds": [85, 144],
-                  "shouldFlattenTransform": false,
+                  "position": [2, 2],
+                  "bounds": [85, 85],
                   "children": [
                     {
-
+                      "bounds": [85, 144],
+                      "shouldFlattenTransform": false,
+                      "children": [
+                        {
+                          "shouldFlattenTransform": false
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "children": [
+                    {
+                      "position": [2, 87],
+                      "bounds": [85, 15]
+                    },
+                    {
+                      "position": [87, 2],
+                      "bounds": [15, 85]
+                    },
+                    {
+                      "position": [87, 87],
+                      "bounds": [15, 15],
+                      "drawsContent": true
                     }
                   ]
                 }
               ]
             },
             {
-              "position": [2, 87],
-              "bounds": [85, 15]
-            },
-            {
-              "position": [87, 2],
-              "bounds": [15, 85]
-            },
-            {
-              "position": [87, 87],
-              "bounds": [15, 15],
+              "position": [275, 75],
+              "bounds": [80, 40],
               "drawsContent": true
             }
           ]
-        },
-        {
-          "position": [275, 75],
-          "bounds": [80, 40],
-          "contentsOpaque": true,
-          "drawsContent": true,
-          "backgroundColor": "#808080"
         },
         {
           "children": [
@@ -176,47 +192,53 @@
           ]
         },
         {
-          "position": [370, 10],
-          "bounds": [104, 104],
-          "drawsContent": true,
           "children": [
             {
-              "position": [2, 2],
-              "bounds": [85, 85],
+              "position": [370, 10],
+              "bounds": [104, 104],
+              "drawsContent": true,
               "children": [
                 {
-                  "bounds": [85, 144],
-                  "shouldFlattenTransform": false,
-                  "drawsContent": true,
+                  "position": [2, 2],
+                  "bounds": [85, 85],
                   "children": [
                     {
-
+                      "bounds": [85, 144],
+                      "shouldFlattenTransform": false,
+                      "drawsContent": true,
+                      "children": [
+                        {
+                          "shouldFlattenTransform": false
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "children": [
+                    {
+                      "position": [2, 87],
+                      "bounds": [85, 15]
+                    },
+                    {
+                      "position": [87, 2],
+                      "bounds": [15, 85]
+                    },
+                    {
+                      "position": [87, 87],
+                      "bounds": [15, 15],
+                      "drawsContent": true
                     }
                   ]
                 }
               ]
             },
             {
-              "position": [2, 87],
-              "bounds": [85, 15]
-            },
-            {
-              "position": [87, 2],
-              "bounds": [15, 85]
-            },
-            {
-              "position": [87, 87],
-              "bounds": [15, 15],
+              "position": [395, 75],
+              "bounds": [80, 40],
               "drawsContent": true
             }
           ]
-        },
-        {
-          "position": [395, 75],
-          "bounds": [80, 40],
-          "contentsOpaque": true,
-          "drawsContent": true,
-          "backgroundColor": "#808080"
         },
         {
           "children": [
@@ -249,24 +271,28 @@
                   "drawsContent": true,
                   "children": [
                     {
-
+                      "shouldFlattenTransform": false
                     }
                   ]
                 }
               ]
             },
             {
-              "position": [2, 87],
-              "bounds": [85, 15]
-            },
-            {
-              "position": [87, 2],
-              "bounds": [15, 85]
-            },
-            {
-              "position": [87, 87],
-              "bounds": [15, 15],
-              "drawsContent": true
+              "children": [
+                {
+                  "position": [2, 87],
+                  "bounds": [85, 15]
+                },
+                {
+                  "position": [87, 2],
+                  "bounds": [15, 85]
+                },
+                {
+                  "position": [87, 87],
+                  "bounds": [15, 15],
+                  "drawsContent": true
+                }
+              ]
             }
           ]
         },
@@ -277,7 +303,7 @@
               "bounds": [80, 40],
               "contentsOpaque": true,
               "drawsContent": true,
-              "backgroundColor": "#808080"
+              "backgroundColor": "#800080"
             },
             {
               "position": [16, 105],
@@ -287,46 +313,52 @@
           ]
         },
         {
-          "position": [130, 130],
-          "bounds": [104, 104],
-          "drawsContent": true,
           "children": [
             {
-              "position": [2, 2],
-              "bounds": [85, 85],
+              "position": [130, 130],
+              "bounds": [104, 104],
+              "drawsContent": true,
               "children": [
                 {
-                  "bounds": [85, 144],
-                  "shouldFlattenTransform": false,
+                  "position": [2, 2],
+                  "bounds": [85, 85],
                   "children": [
                     {
-
+                      "bounds": [85, 144],
+                      "shouldFlattenTransform": false,
+                      "children": [
+                        {
+                          "shouldFlattenTransform": false
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "children": [
+                    {
+                      "position": [2, 87],
+                      "bounds": [85, 15]
+                    },
+                    {
+                      "position": [87, 2],
+                      "bounds": [15, 85]
+                    },
+                    {
+                      "position": [87, 87],
+                      "bounds": [15, 15],
+                      "drawsContent": true
                     }
                   ]
                 }
               ]
             },
             {
-              "position": [2, 87],
-              "bounds": [85, 15]
-            },
-            {
-              "position": [87, 2],
-              "bounds": [15, 85]
-            },
-            {
-              "position": [87, 87],
-              "bounds": [15, 15],
+              "position": [155, 195],
+              "bounds": [80, 40],
               "drawsContent": true
             }
           ]
-        },
-        {
-          "position": [155, 195],
-          "bounds": [80, 40],
-          "contentsOpaque": true,
-          "drawsContent": true,
-          "backgroundColor": "#808080"
         },
         {
           "children": [
@@ -358,24 +390,28 @@
                   "shouldFlattenTransform": false,
                   "children": [
                     {
-
+                      "shouldFlattenTransform": false
                     }
                   ]
                 }
               ]
             },
             {
-              "position": [2, 87],
-              "bounds": [85, 15]
-            },
-            {
-              "position": [87, 2],
-              "bounds": [15, 85]
-            },
-            {
-              "position": [87, 87],
-              "bounds": [15, 15],
-              "drawsContent": true
+              "children": [
+                {
+                  "position": [2, 87],
+                  "bounds": [85, 15]
+                },
+                {
+                  "position": [87, 2],
+                  "bounds": [15, 85]
+                },
+                {
+                  "position": [87, 87],
+                  "bounds": [15, 15],
+                  "drawsContent": true
+                }
+              ]
             }
           ]
         },
@@ -386,7 +422,7 @@
               "bounds": [80, 40],
               "contentsOpaque": true,
               "drawsContent": true,
-              "backgroundColor": "#808080"
+              "backgroundColor": "#800080"
             },
             {
               "position": [256, 105],
@@ -409,24 +445,28 @@
                   "shouldFlattenTransform": false,
                   "children": [
                     {
-
+                      "shouldFlattenTransform": false
                     }
                   ]
                 }
               ]
             },
             {
-              "position": [2, 87],
-              "bounds": [85, 15]
-            },
-            {
-              "position": [87, 2],
-              "bounds": [15, 85]
-            },
-            {
-              "position": [87, 87],
-              "bounds": [15, 15],
-              "drawsContent": true
+              "children": [
+                {
+                  "position": [2, 87],
+                  "bounds": [85, 15]
+                },
+                {
+                  "position": [87, 2],
+                  "bounds": [15, 85]
+                },
+                {
+                  "position": [87, 87],
+                  "bounds": [15, 15],
+                  "drawsContent": true
+                }
+              ]
             }
           ]
         },
@@ -437,7 +477,7 @@
               "bounds": [80, 40],
               "contentsOpaque": true,
               "drawsContent": true,
-              "backgroundColor": "#808080"
+              "backgroundColor": "#800080"
             },
             {
               "position": [376, 105],
@@ -461,24 +501,28 @@
                   "drawsContent": true,
                   "children": [
                     {
-
+                      "shouldFlattenTransform": false
                     }
                   ]
                 }
               ]
             },
             {
-              "position": [2, 87],
-              "bounds": [85, 15]
-            },
-            {
-              "position": [87, 2],
-              "bounds": [15, 85]
-            },
-            {
-              "position": [87, 87],
-              "bounds": [15, 15],
-              "drawsContent": true
+              "children": [
+                {
+                  "position": [2, 87],
+                  "bounds": [85, 15]
+                },
+                {
+                  "position": [87, 2],
+                  "bounds": [15, 85]
+                },
+                {
+                  "position": [87, 87],
+                  "bounds": [15, 15],
+                  "drawsContent": true
+                }
+              ]
             }
           ]
         },
@@ -487,7 +531,7 @@
           "bounds": [80, 40],
           "contentsOpaque": true,
           "drawsContent": true,
-          "backgroundColor": "#808080"
+          "backgroundColor": "#800080"
         },
         {
           "children": [
@@ -506,9 +550,6 @@
           ]
         },
         {
-          "position": [130, 250]
-        },
-        {
           "position": [130, 250],
           "bounds": [104, 104],
           "drawsContent": true,
@@ -522,24 +563,28 @@
                   "shouldFlattenTransform": false,
                   "children": [
                     {
-
+                      "shouldFlattenTransform": false
                     }
                   ]
                 }
               ]
             },
             {
-              "position": [2, 87],
-              "bounds": [85, 15]
-            },
-            {
-              "position": [87, 2],
-              "bounds": [15, 85]
-            },
-            {
-              "position": [87, 87],
-              "bounds": [15, 15],
-              "drawsContent": true
+              "children": [
+                {
+                  "position": [2, 87],
+                  "bounds": [85, 15]
+                },
+                {
+                  "position": [87, 2],
+                  "bounds": [15, 85]
+                },
+                {
+                  "position": [87, 87],
+                  "bounds": [15, 15],
+                  "drawsContent": true
+                }
+              ]
             }
           ]
         },
@@ -548,7 +593,7 @@
           "bounds": [80, 40],
           "contentsOpaque": true,
           "drawsContent": true,
-          "backgroundColor": "#808080"
+          "backgroundColor": "#800080"
         },
         {
           "children": [
@@ -567,9 +612,6 @@
           ]
         },
         {
-          "position": [250, 250]
-        },
-        {
           "position": [250, 250],
           "bounds": [104, 104],
           "drawsContent": true,
@@ -584,24 +626,28 @@
                   "drawsContent": true,
                   "children": [
                     {
-
+                      "shouldFlattenTransform": false
                     }
                   ]
                 }
               ]
             },
             {
-              "position": [2, 87],
-              "bounds": [85, 15]
-            },
-            {
-              "position": [87, 2],
-              "bounds": [15, 85]
-            },
-            {
-              "position": [87, 87],
-              "bounds": [15, 15],
-              "drawsContent": true
+              "children": [
+                {
+                  "position": [2, 87],
+                  "bounds": [85, 15]
+                },
+                {
+                  "position": [87, 2],
+                  "bounds": [15, 85]
+                },
+                {
+                  "position": [87, 87],
+                  "bounds": [15, 15],
+                  "drawsContent": true
+                }
+              ]
             }
           ]
         },
@@ -610,7 +656,7 @@
           "bounds": [80, 40],
           "contentsOpaque": true,
           "drawsContent": true,
-          "backgroundColor": "#808080"
+          "backgroundColor": "#800080"
         },
         {
           "children": [
@@ -629,9 +675,6 @@
           ]
         },
         {
-          "position": [370, 250]
-        },
-        {
           "position": [370, 250],
           "bounds": [104, 104],
           "drawsContent": true,
@@ -645,24 +688,28 @@
                   "shouldFlattenTransform": false,
                   "children": [
                     {
-
+                      "shouldFlattenTransform": false
                     }
                   ]
                 }
               ]
             },
             {
-              "position": [2, 87],
-              "bounds": [85, 15]
-            },
-            {
-              "position": [87, 2],
-              "bounds": [15, 85]
-            },
-            {
-              "position": [87, 87],
-              "bounds": [15, 15],
-              "drawsContent": true
+              "children": [
+                {
+                  "position": [2, 87],
+                  "bounds": [85, 15]
+                },
+                {
+                  "position": [87, 2],
+                  "bounds": [15, 85]
+                },
+                {
+                  "position": [87, 87],
+                  "bounds": [15, 15],
+                  "drawsContent": true
+                }
+              ]
             }
           ]
         },
@@ -671,7 +718,7 @@
           "bounds": [80, 40],
           "contentsOpaque": true,
           "drawsContent": true,
-          "backgroundColor": "#808080"
+          "backgroundColor": "#800080"
         },
         {
           "children": [

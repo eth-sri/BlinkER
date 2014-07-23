@@ -26,7 +26,7 @@
 #include "config.h"
 #include "modules/mediastream/MediaStreamTrack.h"
 
-#include "bindings/v8/ExceptionMessages.h"
+#include "bindings/core/v8/ExceptionMessages.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/events/Event.h"
@@ -37,7 +37,7 @@
 #include "platform/mediastream/MediaStreamComponent.h"
 #include "public/platform/WebSourceInfo.h"
 
-namespace WebCore {
+namespace blink {
 
 MediaStreamTrack* MediaStreamTrack::create(ExecutionContext* context, MediaStreamComponent* component)
 {
@@ -102,6 +102,11 @@ void MediaStreamTrack::setEnabled(bool enabled)
 
     if (!ended())
         MediaStreamCenter::instance().didSetMediaStreamTrackEnabled(m_component.get());
+}
+
+bool MediaStreamTrack::muted() const
+{
+    return m_component->muted();
 }
 
 String MediaStreamTrack::readyState() const
@@ -228,4 +233,4 @@ void MediaStreamTrack::trace(Visitor* visitor)
     EventTargetWithInlineData::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink

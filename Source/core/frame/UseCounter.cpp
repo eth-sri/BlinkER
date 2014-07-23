@@ -38,7 +38,7 @@
 #include "core/workers/WorkerGlobalScope.h"
 #include "public/platform/Platform.h"
 
-namespace WebCore {
+namespace blink {
 
 static int totalPagesMeasuredCSSSampleId() { return 1; }
 
@@ -398,8 +398,8 @@ int UseCounter::mapCSSPropertyIdToCSSSampleIdForHistogram(int id)
     case CSSPropertyShapeOutside: return 347;
     case CSSPropertyShapeMargin: return 348;
     // case CSSPropertyShapePadding: return 349;
-    case CSSPropertyWebkitWrapFlow: return 350;
-    case CSSPropertyWebkitWrapThrough: return 351;
+    // case CSSPropertyWebkitWrapFlow: return 350;
+    // case CSSPropertyWebkitWrapThrough: return 351;
     // CSSPropertyWebkitWrap was 352.
 #if defined(ENABLE_TOUCH_EVENTS) && ENABLE_TOUCH_EVENTS
     case CSSPropertyWebkitTapHighlightColor: return 353;
@@ -511,6 +511,7 @@ int UseCounter::mapCSSPropertyIdToCSSSampleIdForHistogram(int id)
     case CSSPropertyGridTemplate: return 452;
     case CSSPropertyGrid: return 453;
     case CSSPropertyAll: return 454;
+    case CSSPropertyJustifyItems: return 455;
 
     // 1. Add new features above this line (don't change the assigned numbers of the existing
     // items).
@@ -533,7 +534,7 @@ int UseCounter::mapCSSPropertyIdToCSSSampleIdForHistogram(int id)
     return 0;
 }
 
-static int maximumCSSSampleId() { return 454; }
+static int maximumCSSSampleId() { return 455; }
 
 void UseCounter::muteForInspector()
 {
@@ -795,4 +796,4 @@ UseCounter* UseCounter::getFrom(const StyleSheetContents* sheetContents)
     return 0;
 }
 
-} // namespace WebCore
+} // namespace blink

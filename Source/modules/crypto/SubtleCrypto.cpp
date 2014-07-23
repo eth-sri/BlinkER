@@ -31,7 +31,7 @@
 #include "config.h"
 #include "modules/crypto/SubtleCrypto.h"
 
-#include "bindings/v8/Dictionary.h"
+#include "bindings/core/v8/Dictionary.h"
 #include "core/dom/ExecutionContext.h"
 #include "modules/crypto/CryptoKey.h"
 #include "modules/crypto/CryptoResultImpl.h"
@@ -42,7 +42,7 @@
 #include "public/platform/WebCryptoAlgorithm.h"
 #include "wtf/ArrayBufferView.h"
 
-namespace WebCore {
+namespace blink {
 
 // Seems like the generated bindings should take care of these however it
 // currently doesn't. See also http://crbug.com/264520
@@ -140,7 +140,7 @@ static ScriptPromise startCryptoOperation(ScriptState* scriptState, const Dictio
 static bool copyStringProperty(const char* property, const Dictionary& source, JSONObject* destination)
 {
     String value;
-    if (!source.get(property, value))
+    if (!DictionaryHelper::get(source, property, value))
         return false;
     destination->setString(property, value);
     return true;
@@ -149,7 +149,7 @@ static bool copyStringProperty(const char* property, const Dictionary& source, J
 static bool copySequenceOfStringProperty(const char* property, const Dictionary& source, JSONObject* destination)
 {
     Vector<String> value;
-    if (!source.get(property, value))
+    if (!DictionaryHelper::get(source, property, value))
         return false;
     RefPtr<JSONArray> jsonArray = JSONArray::create();
     for (unsigned i = 0; i < value.size(); ++i)
@@ -176,7 +176,7 @@ static bool copyJwkDictionaryToJson(const Dictionary& dict, CString& jsonUtf8, C
     copyStringProperty("alg", dict, jsonObject.get());
 
     bool ext;
-    if (dict.get("ext", ext))
+    if (DictionaryHelper::get(dict, "ext", ext))
         jsonObject->setBoolean("ext", ext);
 
     const char* const propertyNames[] = { "d", "n", "e", "p", "q", "dp", "dq", "qi", "k" };
@@ -397,4 +397,4 @@ ScriptPromise SubtleCrypto::unwrapKey(ScriptState* scriptState, const String& ra
     return promise;
 }
 
-} // namespace WebCore
+} // namespace blink

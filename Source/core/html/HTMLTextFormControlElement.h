@@ -27,7 +27,7 @@
 
 #include "core/html/HTMLFormControlElementWithState.h"
 
-namespace WebCore {
+namespace blink {
 
 class ExceptionState;
 class Position;
@@ -86,6 +86,14 @@ public:
     String directionForFormData() const;
 
     void setTextAsOfLastFormControlChangeEvent(const String& text) { m_textAsOfLastFormControlChangeEvent = text; }
+
+    // These functions don't cause synchronous layout and SpellChecker uses
+    // them to improve performance.
+    // Passed |Position| must point inside of a text form control.
+    static Position startOfWord(const Position&);
+    static Position endOfWord(const Position&);
+    static Position startOfSentence(const Position&);
+    static Position endOfSentence(const Position&);
 
 protected:
     HTMLTextFormControlElement(const QualifiedName&, Document&, HTMLFormElement*);

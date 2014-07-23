@@ -28,7 +28,7 @@
 #ifndef MessageEvent_h
 #define MessageEvent_h
 
-#include "bindings/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/SerializedScriptValue.h"
 #include "core/events/Event.h"
 #include "core/events/EventTarget.h"
 #include "core/dom/MessagePort.h"
@@ -36,7 +36,7 @@
 #include "core/frame/LocalDOMWindow.h"
 #include "wtf/ArrayBuffer.h"
 
-namespace WebCore {
+namespace blink {
 
 struct MessageEventInit : public EventInit {
     MessageEventInit();
@@ -86,7 +86,6 @@ public:
     const String& origin() const { return m_origin; }
     const String& lastEventId() const { return m_lastEventId; }
     EventTarget* source() const { return m_source.get(); }
-    EventTarget* source(bool& isNull) const { isNull = !m_source; return m_source.get(); }
     MessagePortArray ports() const { return m_ports ? *m_ports : MessagePortArray(); }
     MessagePortChannelArray* channels() const { return m_channels ? m_channels.get() : 0; }
 
@@ -141,6 +140,6 @@ private:
     OwnPtr<MessagePortChannelArray> m_channels;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // MessageEvent_h

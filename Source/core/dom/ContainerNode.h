@@ -2,7 +2,7 @@
  * Copyright (C) 1999 Lars Knoll (knoll@kde.org)
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
  *           (C) 2001 Dirk Mueller (mueller@kde.org)
- * Copyright (C) 2004, 2005, 2006, 2007, 2009, 2010, 2011 Apple Inc. All rights reserved.
+ * Copyright (C) 2004, 2005, 2006, 2007, 2009, 2010, 2011, 2013 Apple Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -24,12 +24,12 @@
 #ifndef ContainerNode_h
 #define ContainerNode_h
 
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/Node.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/Vector.h"
 
-namespace WebCore {
+namespace blink {
 
 class ClassCollection;
 class ExceptionState;
@@ -37,11 +37,6 @@ class FloatPoint;
 class HTMLCollection;
 class StaticNodeList;
 class TagCollection;
-
-namespace Private {
-    template<class GenericNode, class GenericNodeContainer>
-    void addChildNodesToDeletionQueue(GenericNode*& head, GenericNode*& tail, GenericNodeContainer&);
-}
 
 enum DynamicRestyleFlags {
     ChildrenOrSiblingsAffectedByFocus = 1 << 0,
@@ -84,10 +79,10 @@ public:
     PassRefPtrWillBeRawPtr<Element> querySelector(const AtomicString& selectors, ExceptionState&);
     PassRefPtrWillBeRawPtr<StaticNodeList> querySelectorAll(const AtomicString& selectors, ExceptionState&);
 
-    void insertBefore(PassRefPtrWillBeRawPtr<Node> newChild, Node* refChild, ExceptionState& = ASSERT_NO_EXCEPTION);
-    void replaceChild(PassRefPtrWillBeRawPtr<Node> newChild, Node* oldChild, ExceptionState& = ASSERT_NO_EXCEPTION);
-    void removeChild(Node* child, ExceptionState& = ASSERT_NO_EXCEPTION);
-    void appendChild(PassRefPtrWillBeRawPtr<Node> newChild, ExceptionState& = ASSERT_NO_EXCEPTION);
+    PassRefPtrWillBeRawPtr<Node> insertBefore(PassRefPtrWillBeRawPtr<Node> newChild, Node* refChild, ExceptionState& = ASSERT_NO_EXCEPTION);
+    PassRefPtrWillBeRawPtr<Node> replaceChild(PassRefPtrWillBeRawPtr<Node> newChild, PassRefPtrWillBeRawPtr<Node> oldChild, ExceptionState& = ASSERT_NO_EXCEPTION);
+    PassRefPtrWillBeRawPtr<Node> removeChild(PassRefPtrWillBeRawPtr<Node> child, ExceptionState& = ASSERT_NO_EXCEPTION);
+    PassRefPtrWillBeRawPtr<Node> appendChild(PassRefPtrWillBeRawPtr<Node> newChild, ExceptionState& = ASSERT_NO_EXCEPTION);
 
     Element* getElementById(const AtomicString& id) const;
     PassRefPtrWillBeRawPtr<TagCollection> getElementsByTagName(const AtomicString&);
@@ -150,16 +145,28 @@ public:
     // FIXME: These methods should all be renamed to something better than "check",
     // since it's not clear that they alter the style bits of siblings and children.
     void checkForChildrenAdjacentRuleChanges();
-    void checkForSiblingStyleChanges(bool finishedParsingCallback, Node* beforeChange, Node* afterChange, int childCountDelta);
+    enum SiblingCheckType { FinishedParsingChildren, SiblingRemoved, Other };
+    void checkForSiblingStyleChanges(SiblingCheckType, Node* nodeBeforeChange, Node* nodeAfterChange);
 
     bool childrenSupportStyleSharing() const { return !hasRestyleFlags(); }
 
     // -----------------------------------------------------------------------------
     // Notification of document structure changes (see core/dom/Node.h for more notification methods)
 
+    enum ChildrenChangeType { ChildInserted, ChildRemoved, AllChildrenRemoved, TextChanged };
+    enum ChildrenChangeSource { ChildrenChangeSourceAPI, ChildrenChangeSourceParser };
+    struct ChildrenChange {
+        STACK_ALLOCATED();
+    public:
+        ChildrenChangeType type;
+        RawPtrWillBeMember<Node> siblingBeforeChange;
+        RawPtrWillBeMember<Node> siblingAfterChange;
+        ChildrenChangeSource byParser;
+    };
+
     // Notifies the node that it's list of children have changed (either by adding or removing child nodes), or a child
     // node that is of the type CDATA_SECTION_NODE, TEXT_NODE or COMMENT_NODE has changed its value.
-    virtual void childrenChanged(bool createdByParser = false, Node* beforeChange = 0, Node* afterChange = 0, int childCountDelta = 0);
+    virtual void childrenChanged(const ChildrenChange&);
 
     void disconnectDescendantFrames();
 
@@ -170,9 +177,6 @@ public:
 
 protected:
     ContainerNode(TreeScope*, ConstructionType = CreateContainer);
-
-    template<class GenericNode, class GenericNodeContainer>
-    friend void Private::addChildNodesToDeletionQueue(GenericNode*& head, GenericNode*& tail, GenericNodeContainer&);
 
 #if !ENABLE(OILPAN)
     void removeDetachedChildren();
@@ -188,6 +192,8 @@ private:
     void updateTreeAfterInsertion(Node& child);
     void willRemoveChildren();
     void willRemoveChild(Node& child);
+    void removeDetachedChildrenInContainer(ContainerNode&);
+    void addChildNodesToDeletionQueue(Node*&, Node*&, ContainerNode&);
 
     void notifyNodeInsertedInternal(Node&, NodeVector& postInsertionNotificationTargets);
 
@@ -212,7 +218,7 @@ private:
     RawPtrWillBeMember<Node> m_lastChild;
 };
 
-#ifndef NDEBUG
+#if ENABLE(ASSERT)
 bool childAttachedAllowedWhenAttachingChildren(ContainerNode*);
 #endif
 
@@ -305,6 +311,11 @@ inline ContainerNode* Node::parentElementOrDocumentFragment() const
     return parent && (parent->isElementNode() || parent->isDocumentFragment()) ? parent : 0;
 }
 
+inline bool Node::isTreeScope() const
+{
+    return &treeScope().rootNode() == this;
+}
+
 inline void getChildNodes(Node& node, NodeVector& nodes)
 {
     ASSERT(!nodes.size());
@@ -312,6 +323,6 @@ inline void getChildNodes(Node& node, NodeVector& nodes)
         nodes.append(child);
 }
 
-} // namespace WebCore
+} // namespace blink
 
 #endif // ContainerNode_h

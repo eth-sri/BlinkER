@@ -48,7 +48,7 @@
 #include "wtf/Assertions.h"
 #include "wtf/text/CString.h"
 
-using namespace WebCore;
+using namespace blink;
 
 namespace blink {
 
@@ -225,102 +225,6 @@ void WebMediaPlayerClientImpl::load(WebMediaPlayer::LoadType loadType, const WTF
     m_webMediaPlayer->load(loadType, kurl, corsMode);
 }
 
-void WebMediaPlayerClientImpl::play()
-{
-    if (m_webMediaPlayer)
-        m_webMediaPlayer->play();
-}
-
-void WebMediaPlayerClientImpl::pause()
-{
-    if (m_webMediaPlayer)
-        m_webMediaPlayer->pause();
-}
-
-double WebMediaPlayerClientImpl::duration() const
-{
-    if (m_webMediaPlayer)
-        return m_webMediaPlayer->duration();
-    return 0.0;
-}
-
-double WebMediaPlayerClientImpl::currentTime() const
-{
-    if (m_webMediaPlayer)
-        return m_webMediaPlayer->currentTime();
-    return 0.0;
-}
-
-void WebMediaPlayerClientImpl::seek(double time)
-{
-    if (m_webMediaPlayer)
-        m_webMediaPlayer->seek(time);
-}
-
-bool WebMediaPlayerClientImpl::seeking() const
-{
-    if (m_webMediaPlayer)
-        return m_webMediaPlayer->seeking();
-    return false;
-}
-
-double WebMediaPlayerClientImpl::rate() const
-{
-    return m_rate;
-}
-
-void WebMediaPlayerClientImpl::setRate(double rate)
-{
-    m_rate = rate;
-    if (m_webMediaPlayer)
-        m_webMediaPlayer->setRate(rate);
-}
-
-bool WebMediaPlayerClientImpl::paused() const
-{
-    if (m_webMediaPlayer)
-        return m_webMediaPlayer->paused();
-    return false;
-}
-
-bool WebMediaPlayerClientImpl::supportsSave() const
-{
-    if (m_webMediaPlayer)
-        return m_webMediaPlayer->supportsSave();
-    return false;
-}
-
-void WebMediaPlayerClientImpl::setPoster(const KURL& poster)
-{
-    if (m_webMediaPlayer)
-        m_webMediaPlayer->setPoster(WebURL(poster));
-}
-
-MediaPlayer::NetworkState WebMediaPlayerClientImpl::networkState() const
-{
-    if (m_webMediaPlayer)
-        return static_cast<MediaPlayer::NetworkState>(m_webMediaPlayer->networkState());
-    return MediaPlayer::Empty;
-}
-
-double WebMediaPlayerClientImpl::maxTimeSeekable() const
-{
-    if (m_webMediaPlayer)
-        return m_webMediaPlayer->maxTimeSeekable();
-    return 0.0;
-}
-
-PassRefPtr<TimeRanges> WebMediaPlayerClientImpl::buffered() const
-{
-    if (m_webMediaPlayer)
-        return TimeRanges::create(m_webMediaPlayer->buffered());
-    return TimeRanges::create();
-}
-
-bool WebMediaPlayerClientImpl::didLoadingProgress() const
-{
-    return m_webMediaPlayer && m_webMediaPlayer->didLoadingProgress();
-}
 
 void WebMediaPlayerClientImpl::paint(GraphicsContext* context, const IntRect& rect)
 {
@@ -359,20 +263,6 @@ void WebMediaPlayerClientImpl::setPreload(MediaPlayer::Preload preload)
         m_webMediaPlayer->setPreload(static_cast<WebMediaPlayer::Preload>(preload));
 }
 
-bool WebMediaPlayerClientImpl::hasSingleSecurityOrigin() const
-{
-    if (m_webMediaPlayer)
-        return m_webMediaPlayer->hasSingleSecurityOrigin();
-    return false;
-}
-
-double WebMediaPlayerClientImpl::mediaTimeForTimeValue(double timeValue) const
-{
-    if (m_webMediaPlayer)
-        return m_webMediaPlayer->mediaTimeForTimeValue(timeValue);
-    return timeValue;
-}
-
 #if ENABLE(WEB_AUDIO)
 AudioSourceProvider* WebMediaPlayerClientImpl::audioSourceProvider()
 {
@@ -386,7 +276,7 @@ PassOwnPtr<MediaPlayer> WebMediaPlayerClientImpl::create(MediaPlayerClient* clie
 }
 
 #if OS(ANDROID)
-void WebMediaPlayerClientImpl::paintOnAndroid(WebCore::GraphicsContext* context, const IntRect& rect, uint8_t alpha)
+void WebMediaPlayerClientImpl::paintOnAndroid(blink::GraphicsContext* context, const IntRect& rect, uint8_t alpha)
 {
     OwnPtr<blink::WebGraphicsContext3DProvider> provider = adoptPtr(blink::Platform::current()->createSharedOffscreenGraphicsContext3DProvider());
     if (!provider)
@@ -425,7 +315,6 @@ void WebMediaPlayerClientImpl::paintOnAndroid(WebCore::GraphicsContext* context,
 WebMediaPlayerClientImpl::WebMediaPlayerClientImpl(MediaPlayerClient* client)
     : m_client(client)
     , m_preload(MediaPlayer::Auto)
-    , m_rate(1.0)
 #if OS(ANDROID)
     , m_usePaintOnAndroid(false)
 #endif
@@ -433,7 +322,7 @@ WebMediaPlayerClientImpl::WebMediaPlayerClientImpl(MediaPlayerClient* client)
     ASSERT(m_client);
 }
 
-WebCore::HTMLMediaElement& WebMediaPlayerClientImpl::mediaElement() const
+blink::HTMLMediaElement& WebMediaPlayerClientImpl::mediaElement() const
 {
     return *static_cast<HTMLMediaElement*>(m_client);
 }

@@ -31,8 +31,8 @@
 #include "config.h"
 #include "core/inspector/DOMPatchSupport.h"
 
-#include "bindings/v8/ExceptionState.h"
-#include "bindings/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/ContextFeatures.h"
 #include "core/dom/Document.h"
@@ -54,7 +54,7 @@
 #include "wtf/text/Base64.h"
 #include "wtf/text/CString.h"
 
-namespace WebCore {
+namespace blink {
 
 struct DOMPatchSupport::Digest {
     explicit Digest(Node* node) : m_node(node) { }
@@ -188,8 +188,8 @@ bool DOMPatchSupport::innerPatchNode(Digest* oldDigest, Digest* newDigest, Excep
     if (oldDigest->m_attrsSHA1 != newDigest->m_attrsSHA1) {
         // FIXME: Create a function in Element for removing all properties. Take in account whether did/willModifyAttribute are important.
         if (oldElement->hasAttributesWithoutUpdate()) {
-            while (oldElement->attributeCount()) {
-                const Attribute& attribute = oldElement->attributeAt(0);
+            while (oldElement->attributes().size()) {
+                const Attribute& attribute = oldElement->attributes().at(0);
                 if (!m_domEditor->removeAttribute(oldElement, attribute.localName(), exceptionState))
                     return false;
             }
@@ -514,5 +514,5 @@ void DOMPatchSupport::dumpMap(const ResultMap& map, const String& name)
 }
 #endif
 
-} // namespace WebCore
+} // namespace blink
 

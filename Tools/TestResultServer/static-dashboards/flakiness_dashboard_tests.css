@@ -50,6 +50,9 @@
 .test-table tr > td:nth-child(2) {
     white-space: normal;
 }
+.test-table .file-new-bug {
+    white-space: nowrap;
+}
 .test-table {
     width: 100%;
 }
@@ -82,6 +85,10 @@
     padding: 0 1px;
     font-size: 10px;
     text-align: center;
+    min-width: .75em;
+}
+.interpolatedResult {
+    opacity: 0.2;
 }
 #legend {
     position: fixed;
@@ -108,6 +115,7 @@
 }
 .NODATA, .NOTRUN {
     background-color: #fff;
+    color: #bbb;
 }
 .SKIP {
     background-color: lightgray;
@@ -121,7 +129,7 @@
 .IMAGE {
     background-color: #69f;
 }
-.TEXT {
+.FAIL, .TEXT {
     background-color: #e98080;
 }
 .MISSING {
@@ -177,6 +185,7 @@
     -moz-box-shadow: 5px 5px 5px rgba(0, 0, 0, 0.5);
     -webkit-border-radius: 5px;
     -moz-border-radius: 5px;
+    white-space: nowrap;
 }
 #popup > ul {
     margin: 0;

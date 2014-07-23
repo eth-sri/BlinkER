@@ -126,7 +126,8 @@ WebInspector.JavaScriptBreakpointsSidebarPane.prototype = {
             if (lineNumber < contentString.lineCount()) {
                 var lineText = contentString.lineAt(lineNumber);
                 var maxSnippetLength = 200;
-                snippetElement.textContent = lineText.substr(columnNumber).trimEnd(maxSnippetLength);
+                var snippetStartIndex = columnNumber > 100 ? columnNumber : 0;
+                snippetElement.textContent = lineText.substr(snippetStartIndex).trimEnd(maxSnippetLength);
             }
         }
 
@@ -190,7 +191,7 @@ WebInspector.JavaScriptBreakpointsSidebarPane.prototype = {
 
     /**
      * @param {!WebInspector.BreakpointManager.Breakpoint} breakpoint
-     * @param {?Event} event
+     * @param {!Event} event
      */
     _breakpointCheckboxClicked: function(breakpoint, event)
     {
@@ -201,7 +202,7 @@ WebInspector.JavaScriptBreakpointsSidebarPane.prototype = {
 
     /**
      * @param {!WebInspector.BreakpointManager.Breakpoint} breakpoint
-     * @param {?Event} event
+     * @param {!Event} event
      */
     _breakpointContextMenu: function(breakpoint, event)
     {
@@ -535,6 +536,7 @@ WebInspector.EventListenerBreakpointsSidebarPane = function()
     this._createCategory(WebInspector.UIString("Drag / drop"), ["dragenter", "dragover", "dragleave", "drop"]);
     this._createCategory(WebInspector.UIString("Keyboard"), ["keydown", "keyup", "keypress", "input"]);
     this._createCategory(WebInspector.UIString("Load"), ["load", "beforeunload", "unload", "abort", "error", "hashchange", "popstate"]);
+    this._createCategory(WebInspector.UIString("Media"), ["play", "pause", "playing", "canplay", "canplaythrough", "seeking", "seeked", "timeupdate", "ended", "ratechange", "durationchange", "volumechange", "loadstart", "progress", "suspend", "abort", "error", "emptied", "stalled", "loadedmetadata", "loadeddata", "waiting"], false, ["audio", "video"]);
     this._createCategory(WebInspector.UIString("Mouse"), ["click", "dblclick", "mousedown", "mouseup", "mouseover", "mousemove", "mouseout", "mousewheel", "wheel"]);
     this._createCategory(WebInspector.UIString("Timer"), ["setTimer", "clearTimer", "timerFired"], true);
     this._createCategory(WebInspector.UIString("Touch"), ["touchstart", "touchmove", "touchend", "touchcancel"]);
@@ -670,7 +672,7 @@ WebInspector.EventListenerBreakpointsSidebarPane.prototype = {
     /**
      * @param {string} eventName
      * @param {!Array.<string>} targetNames
-     * @param {?Event} event
+     * @param {!Event} event
      */
     _breakpointCheckboxClicked: function(eventName, targetNames, event)
     {

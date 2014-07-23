@@ -394,7 +394,7 @@ WebInspector.ExtensionServer.prototype = {
 
     _onGetConsoleMessages: function()
     {
-        return WebInspector.console.messages.map(this._makeConsoleMessage);
+        return WebInspector.multitargetConsoleModel.messages().map(this._makeConsoleMessage);
     },
 
     _onAddConsoleMessage: function(message)
@@ -416,15 +416,16 @@ WebInspector.ExtensionServer.prototype = {
         if (!level)
             return this._status.E_BADARG("message.severity", message.severity);
 
+        var mainTarget = WebInspector.targetManager.mainTarget();
         var consoleMessage = new WebInspector.ConsoleMessage(
-            WebInspector.console.target(),
+            mainTarget,
             WebInspector.ConsoleMessage.MessageSource.JS,
             level,
             message.text,
             WebInspector.ConsoleMessage.MessageType.Log,
             message.url,
             message.line);
-        WebInspector.console.addMessage(consoleMessage);
+        mainTarget.consoleModel.addMessage(consoleMessage);
     },
 
     _makeConsoleMessage: function(message)
@@ -665,14 +666,12 @@ WebInspector.ExtensionServer.prototype = {
 
     _initExtensions: function()
     {
-        this._registerAutosubscriptionHandler(WebInspector.extensionAPI.Events.ConsoleMessageAdded,
-            WebInspector.console, WebInspector.ConsoleModel.Events.MessageAdded, this._notifyConsoleMessageAdded);
-        this._registerAutosubscriptionHandler(WebInspector.extensionAPI.Events.NetworkRequestFinished,
-            WebInspector.networkManager, WebInspector.NetworkManager.EventTypes.RequestFinished, this._notifyRequestFinished);
+        this._registerAutosubscriptionTargetManagerHandler(WebInspector.extensionAPI.Events.ConsoleMessageAdded,
+            WebInspector.ConsoleModel, WebInspector.ConsoleModel.Events.MessageAdded, this._notifyConsoleMessageAdded);
         this._registerAutosubscriptionHandler(WebInspector.extensionAPI.Events.ResourceAdded,
-            WebInspector.workspace,
-            WebInspector.Workspace.Events.UISourceCodeAdded,
-            this._notifyResourceAdded);
+            WebInspector.workspace, WebInspector.Workspace.Events.UISourceCodeAdded, this._notifyResourceAdded);
+        this._registerAutosubscriptionTargetManagerHandler(WebInspector.extensionAPI.Events.NetworkRequestFinished,
+            WebInspector.NetworkManager, WebInspector.NetworkManager.EventTypes.RequestFinished, this._notifyRequestFinished);
 
         /**
          * @this {WebInspector.ExtensionServer}
@@ -704,9 +703,10 @@ WebInspector.ExtensionServer.prototype = {
          */
         function onTimelineSubscriptionStarted()
         {
-            WebInspector.timelineManager.addEventListener(WebInspector.TimelineManager.EventTypes.TimelineEventRecorded,
+            var mainTarget = WebInspector.targetManager.mainTarget();
+            mainTarget.timelineManager.addEventListener(WebInspector.TimelineManager.EventTypes.TimelineEventRecorded,
                 this._notifyTimelineEventRecorded, this);
-            WebInspector.timelineManager.start();
+            mainTarget.timelineManager.start();
         }
 
         /**
@@ -714,8 +714,9 @@ WebInspector.ExtensionServer.prototype = {
          */
         function onTimelineSubscriptionStopped()
         {
-            WebInspector.timelineManager.stop(function() {});
-            WebInspector.timelineManager.removeEventListener(WebInspector.TimelineManager.EventTypes.TimelineEventRecorded,
+            var mainTarget = WebInspector.targetManager.mainTarget();
+            mainTarget.timelineManager.stop(function() {});
+            mainTarget.timelineManager.removeEventListener(WebInspector.TimelineManager.EventTypes.TimelineEventRecorded,
                 this._notifyTimelineEventRecorded, this);
         }
 
@@ -870,11 +871,30 @@ WebInspector.ExtensionServer.prototype = {
         this._subscriptionStopHandlers[eventTopic] = onUnsubscribeLast;
     },
 
+    /**
+     * @param {string} eventTopic
+     * @param {!Object} eventTarget
+     * @param {string} frontendEventType
+     * @param {function(!WebInspector.Event)} handler
+     */
     _registerAutosubscriptionHandler: function(eventTopic, eventTarget, frontendEventType, handler)
     {
         this._registerSubscriptionHandler(eventTopic,
             eventTarget.addEventListener.bind(eventTarget, frontendEventType, handler, this),
             eventTarget.removeEventListener.bind(eventTarget, frontendEventType, handler, this));
+    },
+
+    /**
+     * @param {string} eventTopic
+     * @param {!Function} modelClass
+     * @param {string} frontendEventType
+     * @param {function(!WebInspector.Event)} handler
+     */
+    _registerAutosubscriptionTargetManagerHandler: function(eventTopic, modelClass, frontendEventType, handler)
+    {
+        this._registerSubscriptionHandler(eventTopic,
+            WebInspector.targetManager.addModelListener.bind(WebInspector.targetManager, modelClass, frontendEventType, handler, this),
+            WebInspector.targetManager.removeModelListener.bind(WebInspector.targetManager, modelClass, frontendEventType, handler, this));
     },
 
     _registerResourceContentCommittedHandler: function(handler)

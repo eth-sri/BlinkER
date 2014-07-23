@@ -26,7 +26,7 @@
 #include "config.h"
 #include "modules/indexeddb/IDBOpenDBRequest.h"
 
-#include "bindings/v8/Nullable.h"
+#include "bindings/core/v8/Nullable.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "modules/indexeddb/IDBDatabase.h"
@@ -37,7 +37,7 @@
 
 using blink::WebIDBDatabase;
 
-namespace WebCore {
+namespace blink {
 
 IDBOpenDBRequest* IDBOpenDBRequest::create(ScriptState* scriptState, IDBDatabaseCallbacks* callbacks, int64_t transactionId, int64_t version)
 {
@@ -178,4 +178,4 @@ bool IDBOpenDBRequest::dispatchEvent(PassRefPtrWillBeRawPtr<Event> event)
     return IDBRequest::dispatchEvent(event);
 }
 
-} // namespace WebCore
+} // namespace blink

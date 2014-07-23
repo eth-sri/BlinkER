@@ -48,7 +48,7 @@
 + (NSFont*)findFontLike:(NSFont*)font forCharacter:(UniChar)uc inLanguage:(id)useNil;
 @end
 
-namespace WebCore {
+namespace blink {
 
 // The "void*" parameter makes the function match the prototype for callbacks from callOnMainThread.
 static void invalidateFontCache(void*)
@@ -72,7 +72,7 @@ static bool useHinting()
     // Enable hinting when subpixel font scaling is disabled or
     // when running the set of standard non-subpixel layout tests,
     // otherwise use subpixel glyph positioning.
-    return (isRunningLayoutTest() && !isFontAntialiasingEnabledForTest()) || !RuntimeEnabledFeatures::subpixelFontScalingEnabled();
+    return (LayoutTestSupport::isRunningLayoutTest() && !LayoutTestSupport::isFontAntialiasingEnabledForTest()) || !RuntimeEnabledFeatures::subpixelFontScalingEnabled();
 }
 
 void FontCache::platformInit()
@@ -230,4 +230,4 @@ FontPlatformData* FontCache::createFontPlatformData(const FontDescription& fontD
     return platformData.leakPtr();
 }
 
-} // namespace WebCore
+} // namespace blink

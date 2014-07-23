@@ -57,7 +57,7 @@
 using namespace std;
 using blink::WebBlendMode;
 
-namespace WebCore {
+namespace blink {
 
 namespace {
 
@@ -117,15 +117,15 @@ GraphicsContext::GraphicsContext(SkCanvas* canvas, DisabledMode disableContextOr
     , m_paintStateIndex(0)
     , m_pendingCanvasSave(false)
     , m_annotationMode(0)
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     , m_annotationCount(0)
     , m_layerCount(0)
     , m_disableDestructionChecks(false)
 #endif
     , m_disabledState(disableContextOrPainting)
+    , m_deviceScaleFactor(1.0f)
     , m_trackOpaqueRegion(false)
     , m_trackTextRegion(false)
-    , m_useHighResMarker(false)
     , m_updatingControlTints(false)
     , m_accelerated(false)
     , m_isCertainlyOpaque(true)
@@ -143,7 +143,7 @@ GraphicsContext::GraphicsContext(SkCanvas* canvas, DisabledMode disableContextOr
 
 GraphicsContext::~GraphicsContext()
 {
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     if (!m_disableDestructionChecks) {
         ASSERT(!m_paintStateIndex);
         ASSERT(!m_paintState->saveCount());
@@ -153,6 +153,13 @@ GraphicsContext::~GraphicsContext()
         ASSERT(m_canvasStateStack.isEmpty());
     }
 #endif
+}
+
+void GraphicsContext::resetCanvas(SkCanvas* canvas)
+{
+    ASSERT(canvas);
+    m_canvas = canvas;
+    m_opaqueRegion.reset();
 }
 
 void GraphicsContext::save()
@@ -211,23 +218,18 @@ void GraphicsContext::restoreLayer()
         m_opaqueRegion.popCanvasLayer(this);
 }
 
-void GraphicsContext::beginAnnotation(const char* rendererName, const char* paintPhase,
-    const String& elementId, const String& elementClass, const String& elementTag)
+void GraphicsContext::beginAnnotation(const AnnotationList& annotations)
 {
     if (contextDisabled())
         return;
 
     canvas()->beginCommentGroup("GraphicsContextAnnotation");
 
-    GraphicsContextAnnotation annotation(rendererName, paintPhase, elementId, elementClass, elementTag);
-    AnnotationList annotations;
-    annotation.asAnnotationList(annotations);
-
     AnnotationList::const_iterator end = annotations.end();
     for (AnnotationList::const_iterator it = annotations.begin(); it != end; ++it)
         canvas()->addComment(it->first, it->second.ascii().data());
 
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     ++m_annotationCount;
 #endif
 }
@@ -237,10 +239,10 @@ void GraphicsContext::endAnnotation()
     if (contextDisabled())
         return;
 
+    ASSERT(m_annotationCount > 0);
     canvas()->endCommentGroup();
 
-    ASSERT(m_annotationCount > 0);
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     --m_annotationCount;
 #endif
 }
@@ -464,7 +466,7 @@ void GraphicsContext::beginLayer(float opacity, CompositeOperator op, const Floa
         saveLayer(0, &layerPaint);
     }
 
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     ++m_layerCount;
 #endif
 }
@@ -477,7 +479,7 @@ void GraphicsContext::endLayer()
     restoreLayer();
 
     ASSERT(m_layerCount > 0);
-#if ASSERT_ENABLED
+#if ENABLE(ASSERT)
     --m_layerCount;
 #endif
 }
@@ -730,7 +732,8 @@ void GraphicsContext::drawLineForDocumentMarker(const FloatPoint& pt, float widt
     if (contextDisabled())
         return;
 
-    int deviceScaleFactor = m_useHighResMarker ? 2 : 1;
+    // Use 2x resources for a device scale factor of 1.5 or above.
+    int deviceScaleFactor = m_deviceScaleFactor > 1.5f ? 2 : 1;
 
     // Create the pattern we'll use to draw the underline.
     int index = style == DocumentMarkerGrammarLineStyle ? 1 : 0;
@@ -1047,6 +1050,22 @@ void GraphicsContext::drawImageBuffer(ImageBuffer* image, const FloatRect& dest,
         return;
 
     image->draw(this, dest, src, op);
+}
+
+void GraphicsContext::drawPicture(PassRefPtr<SkPicture> picture, const FloatRect& dest, const FloatRect& src, CompositeOperator op, WebBlendMode blendMode)
+{
+    if (contextDisabled() || !picture)
+        return;
+
+    SkPaint picturePaint;
+    picturePaint.setXfermode(WebCoreCompositeToSkiaComposite(op, blendMode).get());
+    SkRect skBounds = WebCoreFloatRectToSKRect(dest);
+    saveLayer(&skBounds, &picturePaint);
+    SkMatrix pictureTransform;
+    pictureTransform.setRectToRect(WebCoreFloatRectToSKRect(src), skBounds, SkMatrix::kFill_ScaleToFit);
+    m_canvas->concat(pictureTransform);
+    picture->draw(m_canvas);
+    restoreLayer();
 }
 
 void GraphicsContext::writePixels(const SkImageInfo& info, const void* pixels, size_t rowBytes, int x, int y)
@@ -1388,14 +1407,6 @@ void GraphicsContext::clipPath(const Path& pathToClip, WindRule clipRule)
     path.setFillType(previousFillType);
 }
 
-bool GraphicsContext::isClipMode() const
-{
-    if (contextDisabled())
-        return false;
-
-    return m_canvas->getClipStack()->getSaveCount() != 0;
-}
-
 void GraphicsContext::clipConvexPolygon(size_t numPoints, const FloatPoint* points, bool antialiased)
 {
     if (contextDisabled())
@@ -1646,7 +1657,7 @@ void GraphicsContext::adjustLineToPixelBoundaries(FloatPoint& p1, FloatPoint& p2
     }
 }
 
-PassOwnPtr<ImageBuffer> GraphicsContext::createCompatibleBuffer(const IntSize& size, OpacityMode opacityMode) const
+PassOwnPtr<ImageBuffer> GraphicsContext::createRasterBuffer(const IntSize& size, OpacityMode opacityMode) const
 {
     // Make the buffer larger if the context's transform is scaling it so we need a higher
     // resolution than one pixel per unit. Also set up a corresponding scale factor on the
@@ -1657,7 +1668,7 @@ PassOwnPtr<ImageBuffer> GraphicsContext::createCompatibleBuffer(const IntSize& s
 
     SkAlphaType alphaType = (opacityMode == Opaque) ? kOpaque_SkAlphaType : kPremul_SkAlphaType;
     SkImageInfo info = SkImageInfo::MakeN32(size.width(), size.height(), alphaType);
-    RefPtr<SkSurface> skSurface = adoptRef(m_canvas->newSurface(info));
+    RefPtr<SkSurface> skSurface = adoptRef(SkSurface::NewRaster(info));
     if (!skSurface)
         return nullptr;
     OwnPtr<ImageBufferSurface> surface = adoptPtr(new CompatibleImageBufferSurface(skSurface.release(), scaledSize, opacityMode));

@@ -34,7 +34,7 @@
 #include "platform/fonts/WidthIterator.h"
 #include "platform/graphics/GraphicsContext.h"
 
-namespace WebCore {
+namespace blink {
 
 static inline const SVGFontData* svgFontAndFontFaceElementForFontData(const SimpleFontData* fontData, SVGFontFaceElement*& fontFace, SVGFontElement*& font)
 {
@@ -112,7 +112,7 @@ void SVGTextRunRenderingContext::drawSVGGlyphs(GraphicsContext* context, const T
     if (parentRenderObject) {
         parentRenderObjectStyle = parentRenderObject->style();
         ASSERT(parentRenderObjectStyle);
-        isVerticalText = parentRenderObjectStyle->svgStyle()->isVerticalWritingMode();
+        isVerticalText = parentRenderObjectStyle->svgStyle().isVerticalWritingMode();
     }
 
     float scale = scaleEmToUnits(fontData->platformData().size(), fontFaceElement->unitsPerEm());

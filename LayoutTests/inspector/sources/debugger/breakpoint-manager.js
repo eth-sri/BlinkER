@@ -35,6 +35,8 @@ InspectorTest.createMockTarget = function(targetManager, id)
             return id;
         },
 
+        addEventListener: function() { },
+        removeEventListener: function() { },
         dispose: function() { }
     };
     InspectorTest.initializeDefaultMappingOnTarget(target);
@@ -46,7 +48,7 @@ InspectorTest.dumpTarget = function(targetAware)
     return InspectorTest.dumpTargetIds ?  "target " + targetAware.target().id() + " " : "";
 }
 
-InspectorTest.DebuggerModelMock = function (target, sourceMapping)
+InspectorTest.DebuggerModelMock = function(target, sourceMapping)
 {
     target.debuggerModel = this;
     this._target = target;
@@ -96,6 +98,11 @@ InspectorTest.DebuggerModelMock.prototype = {
                 savedCallback();
             }
         }
+    },
+
+    rawLocationToUILocation: function(rawLocation)
+    {
+        return this._scripts[rawLocation.scriptId].rawLocationToUILocation(rawLocation.lineNumber, rawLocation.columnNumber);
     },
 
     setBreakpointByURL: function(url, lineNumber, columnNumber, condition, callback)
@@ -195,13 +202,14 @@ InspectorTest.DebuggerModelMock.prototype = {
     _breakpointResolved: function(breakpointId, location)
     {
         this._breakpointResolvedEventTarget.dispatchEventToListeners(breakpointId, location);
-    }
+    },
+
+    __proto__: WebInspector.Object.prototype
 }
-InspectorTest.DebuggerModelMock.prototype.__proto__ = WebInspector.Object.prototype;
 
 InspectorTest.setupLiveLocationSniffers = function()
 {
-    InspectorTest.addSniffer(WebInspector.Script.prototype, "createLiveLocation", function(rawLocation)
+    InspectorTest.addSniffer(WebInspector.DebuggerWorkspaceBinding.prototype, "createLiveLocation", function(rawLocation)
     {
         InspectorTest.addResult("    Location created: " + InspectorTest.dumpTarget(rawLocation) + rawLocation.scriptId + ":" + rawLocation.lineNumber);
     }, true);
@@ -211,10 +219,22 @@ InspectorTest.setupLiveLocationSniffers = function()
     }, true);
 }
 
+InspectorTest.addScript = function(target, breakpointManager, url)
+{
+    target.debuggerModel._addScript(url, url);
+    InspectorTest.addResult("  Adding script: " + url);
+    var contentProvider = new WebInspector.StaticContentProvider(WebInspector.resourceTypes.Script, "");
+    var path = breakpointManager._debuggerProjectDelegate.addContentProvider("", url, url, contentProvider);
+    var uiSourceCode = breakpointManager._workspace.uiSourceCode("debugger:", path);
+    uiSourceCode.setSourceMappingForTarget(target, target.defaultMapping);
+    InspectorTest.uiSourceCodes[url] = uiSourceCode;
+    return uiSourceCode;
+}
+
 InspectorTest.addUISourceCode = function(target, breakpointManager, url, doNotSetSourceMapping, doNotAddScript)
 {
     if (!doNotAddScript)
-        target.debuggerModel._addScript(url, url);
+        InspectorTest.addScript(target, breakpointManager, url);
     InspectorTest.addResult("  Adding UISourceCode: " + url);
     var contentProvider = new WebInspector.StaticContentProvider(WebInspector.resourceTypes.Script, "");
     var uiSourceCode = breakpointManager._networkWorkspaceBinding.addFileForURL(url, contentProvider);
@@ -226,6 +246,21 @@ InspectorTest.addUISourceCode = function(target, breakpointManager, url, doNotSe
 
 InspectorTest.createBreakpointManager = function(targetManager, persistentBreakpoints)
 {
+    InspectorTest._pendingBreakpointUpdates = 0;
+    InspectorTest.addSniffer(WebInspector.BreakpointManager.TargetBreakpoint.prototype, "_updateInDebugger", updateInDebugger, true);
+    InspectorTest.addSniffer(WebInspector.BreakpointManager.TargetBreakpoint.prototype, "_didUpdateInDebugger", didUpdateInDebugger, true);
+
+    function updateInDebugger()
+    {
+        InspectorTest._pendingBreakpointUpdates++;
+    }
+
+    function didUpdateInDebugger()
+    {
+        InspectorTest._pendingBreakpointUpdates--;
+        InspectorTest._notifyAfterBreakpointUpdate();
+    }
+
     persistentBreakpoints = persistentBreakpoints || [];
     var setting = {
         get: function() { return persistentBreakpoints; },
@@ -311,7 +346,6 @@ InspectorTest.dumpBreakpointLocations = function(breakpointManager)
 
 InspectorTest.resetBreakpointManager = function(breakpointManager, next)
 {
-    InspectorTest.dumpBreakpointStorage(breakpointManager);
     InspectorTest.addResult("  Resetting breakpoint manager");
     breakpointManager.removeAllBreakpoints();
     breakpointManager.removeProvisionalBreakpointsForTest();
@@ -319,16 +353,47 @@ InspectorTest.resetBreakpointManager = function(breakpointManager, next)
     next();
 }
 
+InspectorTest.runAfterPendingBreakpointUpdates = function(breakpointManager, callback)
+{
+    InspectorTest._pendingBreakpointUpdatesCallback = callback;
+    InspectorTest._notifyAfterBreakpointUpdate();
+}
+
+InspectorTest._notifyAfterBreakpointUpdate = function()
+{
+    if (!InspectorTest._pendingBreakpointUpdates && InspectorTest._pendingBreakpointUpdatesCallback) {
+        var callback = InspectorTest._pendingBreakpointUpdatesCallback;
+        delete InspectorTest._pendingBreakpointUpdatesCallback;
+        callback();
+    }
+}
+
 InspectorTest.finishBreakpointTest = function(breakpointManager, next)
 {
+    InspectorTest.runAfterPendingBreakpointUpdates(breakpointManager, dump);
+
+    function dump()
+    {
+        InspectorTest.dumpBreakpointLocations(breakpointManager);
+        InspectorTest.dumpBreakpointStorage(breakpointManager);
+        InspectorTest.runAfterPendingBreakpointUpdates(breakpointManager, reset);
+    }
+
+    function reset()
+    {
+        InspectorTest.resetBreakpointManager(breakpointManager, didReset);
+    }
+
+    function didReset()
+    {
+        InspectorTest.runAfterPendingBreakpointUpdates(breakpointManager, finish);
+    }
+
     function finish()
     {
         InspectorTest.dumpBreakpointLocations(breakpointManager);
         next();
     }
-
-    InspectorTest.dumpBreakpointLocations(breakpointManager);
-    InspectorTest.resetBreakpointManager(breakpointManager, finish);
 }
 
 }

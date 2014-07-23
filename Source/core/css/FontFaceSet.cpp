@@ -26,9 +26,9 @@
 #include "config.h"
 #include "core/css/FontFaceSet.h"
 
-#include "bindings/v8/Dictionary.h"
-#include "bindings/v8/ScriptPromiseResolver.h"
-#include "bindings/v8/ScriptState.h"
+#include "bindings/core/v8/Dictionary.h"
+#include "bindings/core/v8/ScriptPromiseResolver.h"
+#include "bindings/core/v8/ScriptState.h"
 #include "core/css/CSSFontFaceLoadEvent.h"
 #include "core/css/CSSFontSelector.h"
 #include "core/css/CSSSegmentedFontFace.h"
@@ -44,7 +44,7 @@
 #include "platform/RuntimeEnabledFeatures.h"
 #include "public/platform/Platform.h"
 
-namespace WebCore {
+namespace blink {
 
 static const int defaultFontSize = 10;
 static const char defaultFontFamily[] = "sans-serif";
@@ -142,6 +142,7 @@ FontFaceSet::FontFaceSet(Document& document)
     , m_shouldFireLoadingEvent(false)
     , m_asyncRunner(this, &FontFaceSet::handlePendingEventsAndPromises)
 {
+    ScriptWrappable::init(this);
     suspendIfNeeded();
 }
 
@@ -185,8 +186,7 @@ AtomicString FontFaceSet::status() const
 
 void FontFaceSet::handlePendingEventsAndPromisesSoon()
 {
-    // setPendingActivity() is unnecessary because m_asyncRunner will be
-    // automatically stopped on destruction.
+    // m_asyncRunner will be automatically stopped on destruction.
     m_asyncRunner.runAsync();
 }
 
@@ -603,4 +603,4 @@ void FontFaceSet::trace(Visitor* visitor)
 }
 #endif
 
-} // namespace WebCore
+} // namespace blink

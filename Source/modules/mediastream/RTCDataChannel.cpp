@@ -25,7 +25,7 @@
 #include "config.h"
 #include "modules/mediastream/RTCDataChannel.h"
 
-#include "bindings/v8/ExceptionState.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/events/MessageEvent.h"
@@ -35,7 +35,7 @@
 #include "wtf/ArrayBuffer.h"
 #include "wtf/ArrayBufferView.h"
 
-namespace WebCore {
+namespace blink {
 
 static void throwNotOpenException(ExceptionState& exceptionState)
 {
@@ -335,4 +335,4 @@ void RTCDataChannel::trace(Visitor* visitor)
     EventTargetWithInlineData::trace(visitor);
 }
 
-} // namespace WebCore
+} // namespace blink

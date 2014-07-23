@@ -50,7 +50,7 @@
 #include "wtf/WeakPtr.h"
 #include "wtf/text/TextPosition.h"
 
-namespace WebCore {
+namespace blink {
 
 class BackgroundHTMLParser;
 class CompactHTMLToken;
@@ -202,7 +202,7 @@ private:
     Deque<OwnPtr<ParsedChunk> > m_speculations;
     WeakPtrFactory<HTMLDocumentParser> m_weakFactory;
     WeakPtr<BackgroundHTMLParser> m_backgroundParser;
-    OwnPtr<HTMLResourcePreloader> m_preloader;
+    OwnPtrWillBeMember<HTMLResourcePreloader> m_preloader;
 
     bool m_isPinnedToMainThread;
     bool m_endWasDelayed;
