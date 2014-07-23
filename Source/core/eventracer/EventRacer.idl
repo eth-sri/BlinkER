@@ -1,0 +1,12 @@
+[
+    ImplementedAs=EventRacerLog,
+    LegacyTreatAsPartialInterface,
+    NoInterfaceObject,
+] interface EventRacer {
+    any ER_read(DOMString name, any value);
+    any ER_write(DOMString name, any value);
+    any ER_readProp(any obj, DOMString name, any value);
+    any ER_writeProp(any obj, DOMString name, any value);
+    any ER_readArray(any obj);
+    any ER_writeArray(any obj);
+};

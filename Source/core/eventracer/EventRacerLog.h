@@ -1,6 +1,8 @@
 #ifndef EventRacerLog_h
 #define EventRacerLog_h
 
+#include "bindings/v8/ScriptValue.h"
+#include "bindings/v8/V8StringResource.h"
 #include "EventAction.h"
 #include "StringSet.h"
 #include "wtf/HashMap.h"
@@ -77,6 +79,16 @@ public:
 
     // Returns the current event-action.
     EventAction *getCurrentAction() const { return m_currentAction; }
+
+    // JS instrumentation calls
+    static ScriptValue ER_read(LocalDOMWindow &, const V8StringResource<> &, const ScriptValue &);
+    static ScriptValue ER_write(LocalDOMWindow &, const V8StringResource<> &, const ScriptValue &);
+    static ScriptValue ER_readProp(LocalDOMWindow &, const ScriptValue &, const V8StringResource<> &,
+                                   const ScriptValue &);
+    static ScriptValue ER_writeProp(LocalDOMWindow &, const ScriptValue &, const V8StringResource<> &,
+                                    const ScriptValue &);
+    static ScriptValue ER_readArray(LocalDOMWindow &, const ScriptValue &);
+    static ScriptValue ER_writeArray(LocalDOMWindow &, const ScriptValue &);
 
 private:
     EventRacerLog();

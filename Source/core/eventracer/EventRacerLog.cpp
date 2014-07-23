@@ -198,4 +198,31 @@ size_t EventRacerLog::internf(const char *fmt, ...) {
     return intern(str);
 }
 
+// JS instrumentation calls
+ScriptValue EventRacerLog::ER_read(LocalDOMWindow &, const V8StringResource<> &, const ScriptValue &val) {
+    return val;
+}
+
+ScriptValue EventRacerLog::ER_write(LocalDOMWindow &, const V8StringResource<> &, const ScriptValue &val) {
+    return val;
+}
+
+ScriptValue EventRacerLog::ER_readProp(LocalDOMWindow &, const ScriptValue &, const V8StringResource<> &,
+                                        const ScriptValue &val) {
+    return val;
+}
+
+ScriptValue EventRacerLog::ER_writeProp(LocalDOMWindow &, const ScriptValue &, const V8StringResource<> &,
+                                         const ScriptValue &val) {
+    return val;
+}
+
+ScriptValue EventRacerLog::ER_readArray(LocalDOMWindow &, const ScriptValue &arr) {
+    return arr;
+}
+
+ScriptValue EventRacerLog::ER_writeArray(LocalDOMWindow &, const ScriptValue &arr) {
+    return arr;
+}
+
 } // end namespace WebCore

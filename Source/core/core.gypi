@@ -462,6 +462,7 @@
             'dom/ParentNode.idl',
             'dom/URLUtils.idl',
             'dom/URLUtilsReadOnly.idl',
+            'eventracer/EventRacer.idl',
             'events/EventListener.idl',
             'events/NavigatorEvents.idl',
             'frame/NavigatorCPU.idl',
