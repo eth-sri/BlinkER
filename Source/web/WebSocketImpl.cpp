@@ -41,6 +41,7 @@
 #include "public/platform/WebString.h"
 #include "public/platform/WebURL.h"
 #include "public/web/WebDocument.h"
+#include "web/WebSocketChannelClientProxy.h"
 #include "wtf/ArrayBuffer.h"
 #include "wtf/text/CString.h"
 #include "wtf/text/WTFString.h"
@@ -51,6 +52,7 @@ namespace blink {
 
 WebSocketImpl::WebSocketImpl(const WebDocument& document, WebSocketClient* client)
     : m_client(client)
+    , m_channelProxy(WebSocketChannelClientProxy::create(this))
     , m_binaryType(BinaryTypeBlob)
     , m_isClosingOrClosed(false)
     , m_bufferedAmount(0)
@@ -58,17 +60,15 @@ WebSocketImpl::WebSocketImpl(const WebDocument& document, WebSocketClient* clien
 {
     RefPtrWillBeRawPtr<Document> coreDocument = PassRefPtrWillBeRawPtr<Document>(document);
     if (RuntimeEnabledFeatures::experimentalWebSocketEnabled()) {
-        m_private = NewWebSocketChannelImpl::create(coreDocument.get(), this);
+        m_private = NewWebSocketChannelImpl::create(coreDocument.get(), m_channelProxy.get());
     } else {
-        m_private = MainThreadWebSocketChannel::create(coreDocument.get(), this);
+        m_private = MainThreadWebSocketChannel::create(coreDocument.get(), m_channelProxy.get());
     }
 }
 
 WebSocketImpl::~WebSocketImpl()
 {
-#if !ENABLE(OILPAN)
     m_private->disconnect();
-#endif
 }
 
 WebSocket::BinaryType WebSocketImpl::binaryType() const
@@ -112,7 +112,8 @@ bool WebSocketImpl::sendText(const WebString& message)
     if (m_isClosingOrClosed)
         return true;
 
-    return m_private->send(message) == WebSocketChannel::SendSuccess;
+    m_private->send(message);
+    return true;
 }
 
 bool WebSocketImpl::sendArrayBuffer(const WebArrayBuffer& webArrayBuffer)
@@ -128,7 +129,8 @@ bool WebSocketImpl::sendArrayBuffer(const WebArrayBuffer& webArrayBuffer)
     if (m_isClosingOrClosed)
         return true;
 
-    return m_private->send(*PassRefPtr<ArrayBuffer>(webArrayBuffer), 0, webArrayBuffer.byteLength()) == WebSocketChannel::SendSuccess;
+    m_private->send(*PassRefPtr<ArrayBuffer>(webArrayBuffer), 0, webArrayBuffer.byteLength());
+    return true;
 }
 
 unsigned long WebSocketImpl::bufferedAmount() const
@@ -199,19 +201,13 @@ void WebSocketImpl::didStartClosingHandshake()
     m_client->didStartClosingHandshake();
 }
 
-void WebSocketImpl::didClose(ClosingHandshakeCompletionStatus status, unsigned short code, const String& reason)
+void WebSocketImpl::didClose(WebSocketChannelClient::ClosingHandshakeCompletionStatus status, unsigned short code, const String& reason)
 {
     m_isClosingOrClosed = true;
     m_client->didClose(static_cast<WebSocketClient::ClosingHandshakeCompletionStatus>(status), code, WebString(reason));
 
     // FIXME: Deprecate this call.
     m_client->didClose(m_bufferedAmount - m_bufferedAmountAfterClose, static_cast<WebSocketClient::ClosingHandshakeCompletionStatus>(status), code, WebString(reason));
-}
-
-void WebSocketImpl::trace(blink::Visitor* visitor)
-{
-    visitor->trace(m_private);
-    blink::WebSocketChannelClient::trace(visitor);
 }
 
 } // namespace blink

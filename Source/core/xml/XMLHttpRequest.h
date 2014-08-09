@@ -124,9 +124,7 @@ public:
     void sendForInspectorXHRReplay(PassRefPtr<FormData>, ExceptionState&);
 
     // Expose HTTP validation methods for other untrusted requests.
-    static bool isAllowedHTTPMethod(const String&);
     static AtomicString uppercaseKnownHTTPMethod(const AtomicString&);
-    static bool isAllowedHTTPHeader(const String&);
 
     void setResponseType(const String&, ExceptionState&);
     String responseType();
@@ -247,6 +245,8 @@ private:
     // An enum corresponding to the allowed string values for the responseType attribute.
     ResponseTypeCode m_responseTypeCode;
     RefPtr<SecurityOrigin> m_securityOrigin;
+
+    double m_previousReadyStateChangeFireTime;
 
     bool m_async;
     bool m_includeCredentials;

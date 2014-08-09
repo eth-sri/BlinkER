@@ -70,9 +70,9 @@ ResourceLoader::RequestCountTracker::RequestCountTracker(const RequestCountTrack
     m_host->incrementRequestCount(m_resource);
 }
 
-PassRefPtr<ResourceLoader> ResourceLoader::create(ResourceLoaderHost* host, Resource* resource, const ResourceRequest& request, const ResourceLoaderOptions& options)
+PassRefPtrWillBeRawPtr<ResourceLoader> ResourceLoader::create(ResourceLoaderHost* host, Resource* resource, const ResourceRequest& request, const ResourceLoaderOptions& options)
 {
-    RefPtr<ResourceLoader> loader(adoptRef(new ResourceLoader(host, resource, options)));
+    RefPtrWillBeRawPtr<ResourceLoader> loader(adoptRefWillBeNoop(new ResourceLoader(host, resource, options)));
     loader->init(request);
     return loader.release();
 }
@@ -95,6 +95,12 @@ ResourceLoader::~ResourceLoader()
     ASSERT(m_state == Terminated);
 }
 
+void ResourceLoader::trace(Visitor* visitor)
+{
+    visitor->trace(m_host);
+    visitor->trace(m_resource);
+}
+
 void ResourceLoader::releaseResources()
 {
     ASSERT(m_state != Terminated);
@@ -112,7 +118,7 @@ void ResourceLoader::releaseResources()
     // deallocated and release the last reference to this object.
     // We need to retain to avoid accessing the object after it
     // has been deallocated and also to avoid reentering this method.
-    RefPtr<ResourceLoader> protector(this);
+    RefPtrWillBeRawPtr<ResourceLoader> protector(this);
 
     m_host.clear();
     m_state = Terminated;
@@ -212,7 +218,7 @@ void ResourceLoader::attachThreadedDataReceiver(PassOwnPtr<blink::WebThreadedDat
 
 void ResourceLoader::didDownloadData(blink::WebURLLoader*, int length, int encodedDataLength)
 {
-    RefPtr<ResourceLoader> protect(this);
+    RefPtrWillBeRawPtr<ResourceLoader> protect(this);
     RELEASE_ASSERT(m_connectionState == ConnectionStateReceivedResponse);
     m_host->didDownloadData(m_resource, length, encodedDataLength);
     m_resource->didDownloadData(length);
@@ -259,7 +265,7 @@ void ResourceLoader::cancel(const ResourceError& error)
 
     // This function calls out to clients at several points that might do
     // something that causes the last reference to this object to go away.
-    RefPtr<ResourceLoader> protector(this);
+    RefPtrWillBeRawPtr<ResourceLoader> protector(this);
 
     // Resource loading can be canceled in a variety of ways, including by
     // javascript, by user actions or by an error response to the resource
@@ -325,7 +331,7 @@ void ResourceLoader::doCancel(const ResourceError& error)
 
 void ResourceLoader::willSendRequest(blink::WebURLLoader*, blink::WebURLRequest& passedRequest, const blink::WebURLResponse& passedRedirectResponse)
 {
-    RefPtr<ResourceLoader> protect(this);
+    RefPtrWillBeRawPtr<ResourceLoader> protect(this);
 
     ResourceRequest& request(applyOptions(passedRequest.toMutableResourceRequest()));
 
@@ -362,7 +368,7 @@ void ResourceLoader::didReceiveCachedMetadata(blink::WebURLLoader*, const char* 
 void ResourceLoader::didSendData(blink::WebURLLoader*, unsigned long long bytesSent, unsigned long long totalBytesToBeSent)
 {
     ASSERT(m_state == Initialized);
-    RefPtr<ResourceLoader> protect(this);
+    RefPtrWillBeRawPtr<ResourceLoader> protect(this);
     m_resource->didSendData(bytesSent, totalBytesToBeSent);
 }
 
@@ -402,7 +408,7 @@ void ResourceLoader::didReceiveResponse(blink::WebURLLoader*, const blink::WebUR
     }
     // Reference the object in this method since the additional processing can do
     // anything including removing the last reference to this object.
-    RefPtr<ResourceLoader> protect(this);
+    RefPtrWillBeRawPtr<ResourceLoader> protect(this);
 
     if (m_eventAction) {
         ASSERT(!EventRacerContext::getLog());
@@ -463,7 +469,7 @@ void ResourceLoader::didReceiveData(blink::WebURLLoader*, const char* data, int 
 
     // Reference the object in this method since the additional processing can do
     // anything including removing the last reference to this object.
-    RefPtr<ResourceLoader> protect(this);
+    RefPtrWillBeRawPtr<ResourceLoader> protect(this);
 
     // FIXME: If we get a resource with more than 2B bytes, this code won't do the right thing.
     // However, with today's computers and networking speeds, this won't happen in practice.
@@ -508,7 +514,7 @@ void ResourceLoader::didFinishLoading(blink::WebURLLoader*, double finishTime, i
         m_eventAction->willDeferJoin();
     }
 
-    RefPtr<ResourceLoader> protect(this);
+    RefPtrWillBeRawPtr<ResourceLoader> protect(this);
     ResourcePtr<Resource> protectResource(m_resource);
     m_state = Finishing;
     didFinishLoadingOnePart(finishTime, encodedDataLength);
@@ -540,7 +546,7 @@ void ResourceLoader::didFail(blink::WebURLLoader*, const blink::WebURLError& err
         m_eventAction->willDeferJoin();
     }
 
-    RefPtr<ResourceLoader> protect(this);
+    RefPtrWillBeRawPtr<ResourceLoader> protect(this);
     RefPtrWillBeRawPtr<ResourceLoaderHost> protectHost(m_host.get());
     ResourcePtr<Resource> protectResource(m_resource);
     m_state = Finishing;
@@ -572,7 +578,7 @@ void ResourceLoader::requestSynchronously()
     // downloadToFile is not supported for synchronous requests.
     ASSERT(!m_request.downloadToFile());
 
-    RefPtr<ResourceLoader> protect(this);
+    RefPtrWillBeRawPtr<ResourceLoader> protect(this);
     RefPtrWillBeRawPtr<ResourceLoaderHost> protectHost(m_host.get());
     ResourcePtr<Resource> protectResource(m_resource);
 

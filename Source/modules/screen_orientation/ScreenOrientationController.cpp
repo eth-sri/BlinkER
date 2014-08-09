@@ -10,6 +10,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/page/Page.h"
 #include "modules/screen_orientation/ScreenOrientation.h"
+#include "modules/screen_orientation/ScreenOrientationDispatcher.h"
 #include "platform/LayoutTestSupport.h"
 #include "platform/PlatformScreen.h"
 #include "public/platform/WebScreenOrientationClient.h"
@@ -40,9 +41,10 @@ ScreenOrientationController* ScreenOrientationController::from(LocalFrame& frame
 }
 
 ScreenOrientationController::ScreenOrientationController(LocalFrame& frame, blink::WebScreenOrientationClient* client)
-    : PageLifecycleObserver(frame.page())
+    : PlatformEventController(frame.page())
     , m_client(client)
     , m_frame(frame)
+    , m_dispatchEventTimer(this, &ScreenOrientationController::dispatchEventTimerFired)
 {
 }
 
@@ -95,6 +97,8 @@ void ScreenOrientationController::updateOrientation()
 
 void ScreenOrientationController::pageVisibilityChanged()
 {
+    notifyDispatcher();
+
     if (!m_orientation || !page() || page()->visibilityState() != PageVisibilityStateVisible)
         return;
 
@@ -130,7 +134,8 @@ void ScreenOrientationController::notifyOrientationChanged()
     }
 
     // Notify current orientation object.
-    m_orientation->dispatchEvent(Event::create(EventTypeNames::change));
+    if (!m_dispatchEventTimer.isActive())
+        m_dispatchEventTimer.startOneShot(0, FROM_HERE);
 
     // ... and child frames, if they have a ScreenOrientationController.
     for (size_t i = 0; i < childFrames.size(); ++i) {
@@ -145,29 +150,59 @@ void ScreenOrientationController::setOrientation(ScreenOrientation* orientation)
     m_orientation = orientation;
     if (m_orientation)
         updateOrientation();
+    notifyDispatcher();
 }
 
 void ScreenOrientationController::lock(blink::WebScreenOrientationLockType orientation, blink::WebLockOrientationCallback* callback)
 {
-    if (!m_client) {
-        return;
-    }
-
+    ASSERT(m_client);
     m_client->lockOrientation(orientation, callback);
 }
 
 void ScreenOrientationController::unlock()
 {
-    if (!m_client) {
-        return;
-    }
-
+    ASSERT(m_client);
     m_client->unlockOrientation();
 }
 
 const LocalFrame& ScreenOrientationController::frame() const
 {
     return m_frame;
+}
+
+void ScreenOrientationController::dispatchEventTimerFired(Timer<ScreenOrientationController>*)
+{
+    if (!m_orientation)
+        return;
+    m_orientation->dispatchEvent(Event::create(EventTypeNames::change));
+}
+
+void ScreenOrientationController::didUpdateData()
+{
+    // Do nothing.
+}
+
+void ScreenOrientationController::registerWithDispatcher()
+{
+    ScreenOrientationDispatcher::instance().addController(this);
+}
+
+void ScreenOrientationController::unregisterWithDispatcher()
+{
+    ScreenOrientationDispatcher::instance().removeController(this);
+}
+
+bool ScreenOrientationController::hasLastData()
+{
+    return true;
+}
+
+void ScreenOrientationController::notifyDispatcher()
+{
+    if (m_orientation && page()->visibilityState() == PageVisibilityStateVisible)
+        startUpdating();
+    else
+        stopUpdating();
 }
 
 void ScreenOrientationController::trace(Visitor* visitor)

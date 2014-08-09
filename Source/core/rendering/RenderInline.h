@@ -84,14 +84,14 @@ public:
 
     LayoutSize offsetForInFlowPositionedInline(const RenderBox& child) const;
 
-    virtual void addFocusRingRects(Vector<IntRect>&, const LayoutPoint& additionalOffset, const RenderLayerModelObject* paintContainer = 0) OVERRIDE FINAL;
+    virtual void addFocusRingRects(Vector<IntRect>&, const LayoutPoint& additionalOffset, const RenderLayerModelObject* paintContainer = 0) const OVERRIDE FINAL;
     void paintOutline(PaintInfo&, const LayoutPoint&);
 
     using RenderBoxModelObject::continuation;
     using RenderBoxModelObject::setContinuation;
 
-    bool alwaysCreateLineBoxes() const { return m_alwaysCreateLineBoxes; }
-    void setAlwaysCreateLineBoxes() { m_alwaysCreateLineBoxes = true; }
+    bool alwaysCreateLineBoxes() const { return alwaysCreateLineBoxesForRenderInline(); }
+    void setAlwaysCreateLineBoxes(bool alwaysCreateLineBoxes = true) { setAlwaysCreateLineBoxesForRenderInline(alwaysCreateLineBoxes); }
     void updateAlwaysCreateLineBoxes(bool fullLayout);
 
     virtual LayoutRect localCaretRect(InlineBox*, int, LayoutUnit* extraWidthToEndOfLine) OVERRIDE FINAL;
@@ -118,8 +118,6 @@ private:
     LayoutRect culledInlineVisualOverflowBoundingBox() const;
     InlineBox* culledInlineFirstLineBox() const;
     InlineBox* culledInlineLastLineBox() const;
-
-    virtual void invalidateTreeIfNeeded(const PaintInvalidationState&) OVERRIDE FINAL;
 
     template<typename GeneratorContext>
     void generateLineBoxRects(GeneratorContext& yield) const;
@@ -186,8 +184,6 @@ private:
 
     RenderObjectChildList m_children;
     RenderLineBoxList m_lineBoxes;   // All of the line boxes created for this inline flow.  For example, <i>Hello<br>world.</i> will have two <i> line boxes.
-
-    bool m_alwaysCreateLineBoxes : 1;
 };
 
 DEFINE_RENDER_OBJECT_TYPE_CASTS(RenderInline, isRenderInline());

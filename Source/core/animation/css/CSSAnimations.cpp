@@ -44,6 +44,7 @@
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/Element.h"
 #include "core/dom/PseudoElement.h"
+#include "core/dom/StyleEngine.h"
 #include "core/events/TransitionEvent.h"
 #include "core/events/WebKitAnimationEvent.h"
 #include "core/frame/UseCounter.h"
@@ -68,15 +69,11 @@ CSSPropertyID propertyForAnimation(CSSPropertyID property)
         return CSSPropertyTransform;
     case CSSPropertyWebkitPerspectiveOriginX:
     case CSSPropertyWebkitPerspectiveOriginY:
-        if (RuntimeEnabledFeatures::cssTransformsUnprefixedEnabled())
-            return CSSPropertyPerspectiveOrigin;
-        break;
+        return CSSPropertyPerspectiveOrigin;
     case CSSPropertyWebkitTransformOriginX:
     case CSSPropertyWebkitTransformOriginY:
     case CSSPropertyWebkitTransformOriginZ:
-        if (RuntimeEnabledFeatures::cssTransformsUnprefixedEnabled())
-            return CSSPropertyTransformOrigin;
-        break;
+        return CSSPropertyTransformOrigin;
     default:
         break;
     }
@@ -203,10 +200,11 @@ static void resolveKeyframes(StyleResolver* resolver, Element* element, const El
 
 const StyleRuleKeyframes* CSSAnimations::matchScopedKeyframesRule(StyleResolver* resolver, const Element* element, const StringImpl* animationName)
 {
-    if (resolver->styleTreeHasOnlyScopedResolverForDocument())
-        return resolver->styleTreeScopedStyleResolverForDocument()->keyframeStylesForAnimation(animationName);
+    // FIXME: This is all implementation detail of style resolver, CSSAnimations shouldn't be reaching into any of it.
+    if (resolver->document().styleEngine()->hasOnlyScopedResolverForDocument())
+        return element->document().scopedStyleResolver()->keyframeStylesForAnimation(animationName);
 
-    Vector<ScopedStyleResolver*, 8> stack;
+    WillBeHeapVector<RawPtrWillBeMember<ScopedStyleResolver>, 8> stack;
     resolver->styleTreeResolveScopedKeyframesRules(element, stack);
     if (stack.isEmpty())
         return 0;
@@ -328,7 +326,7 @@ void CSSAnimations::maybeApplyPendingUpdate(Element* element)
 
     for (WillBeHeapVector<CSSAnimationUpdate::NewAnimation>::const_iterator iter = update->newAnimations().begin(); iter != update->newAnimations().end(); ++iter) {
         const InertAnimation* inertAnimation = iter->animation.get();
-        OwnPtr<AnimationEventDelegate> eventDelegate = adoptPtr(new AnimationEventDelegate(element, iter->name));
+        OwnPtrWillBeRawPtr<AnimationEventDelegate> eventDelegate = adoptPtrWillBeNoop(new AnimationEventDelegate(element, iter->name));
         RefPtrWillBeRawPtr<Animation> animation = Animation::create(element, inertAnimation->effect(), inertAnimation->specifiedTiming(), Animation::DefaultPriority, eventDelegate.release());
         RefPtrWillBeRawPtr<AnimationPlayer> player = element->document().timeline().createAnimationPlayer(animation.get());
         element->document().compositorPendingAnimations().add(player.get());
@@ -365,7 +363,7 @@ void CSSAnimations::maybeApplyPendingUpdate(Element* element)
 
         CSSPropertyID id = newTransition.id;
         InertAnimation* inertAnimation = newTransition.animation.get();
-        OwnPtr<TransitionEventDelegate> eventDelegate = adoptPtr(new TransitionEventDelegate(element, newTransition.eventId));
+        OwnPtrWillBeRawPtr<TransitionEventDelegate> eventDelegate = adoptPtrWillBeNoop(new TransitionEventDelegate(element, newTransition.eventId));
 
         RefPtrWillBeRawPtr<AnimationEffect> effect = inertAnimation->effect();
 
@@ -632,6 +630,12 @@ void CSSAnimations::AnimationEventDelegate::onEventCondition(const AnimationNode
     m_previousIteration = currentIteration;
 }
 
+void CSSAnimations::AnimationEventDelegate::trace(Visitor* visitor)
+{
+    visitor->trace(m_target);
+    AnimationNode::EventDelegate::trace(visitor);
+}
+
 void CSSAnimations::TransitionEventDelegate::onEventCondition(const AnimationNode* animationNode)
 {
     const AnimationNode::Phase currentPhase = animationNode->phase();
@@ -647,6 +651,12 @@ void CSSAnimations::TransitionEventDelegate::onEventCondition(const AnimationNod
     }
 
     m_previousPhase = currentPhase;
+}
+
+void CSSAnimations::TransitionEventDelegate::trace(Visitor* visitor)
+{
+    visitor->trace(m_target);
+    AnimationNode::EventDelegate::trace(visitor);
 }
 
 bool CSSAnimations::isAnimatableProperty(CSSPropertyID property)
@@ -746,26 +756,19 @@ bool CSSAnimations::isAnimatableProperty(CSSPropertyID property)
     case CSSPropertyWebkitMaskPositionY:
     case CSSPropertyWebkitMaskSize:
     case CSSPropertyPerspective:
+    case CSSPropertyPerspectiveOrigin:
     case CSSPropertyShapeOutside:
     case CSSPropertyShapeMargin:
     case CSSPropertyShapeImageThreshold:
     case CSSPropertyWebkitTextStrokeColor:
     case CSSPropertyTransform:
+    case CSSPropertyTransformOrigin:
     case CSSPropertyWidows:
     case CSSPropertyWidth:
     case CSSPropertyWordSpacing:
     case CSSPropertyZIndex:
     case CSSPropertyZoom:
         return true;
-    case CSSPropertyPerspectiveOrigin:
-    case CSSPropertyTransformOrigin:
-        return RuntimeEnabledFeatures::cssTransformsUnprefixedEnabled();
-    case CSSPropertyWebkitPerspectiveOriginX:
-    case CSSPropertyWebkitPerspectiveOriginY:
-    case CSSPropertyWebkitTransformOriginX:
-    case CSSPropertyWebkitTransformOriginY:
-    case CSSPropertyWebkitTransformOriginZ:
-        return !RuntimeEnabledFeatures::cssTransformsUnprefixedEnabled();
     default:
         return false;
     }

@@ -5,24 +5,32 @@
 #ifndef PrivateScriptTest_h
 #define PrivateScriptTest_h
 
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "wtf/RefCounted.h"
+#include "wtf/text/WTFString.h"
 
 namespace blink {
 
 class LocalFrame;
 
-class PrivateScriptTest : public GarbageCollected<PrivateScriptTest> {
+class PrivateScriptTest : public GarbageCollectedFinalized<PrivateScriptTest>, public ScriptWrappable {
 public:
     static PrivateScriptTest* create(LocalFrame* frame)
     {
         return new PrivateScriptTest(frame);
     }
 
+    int addIntegerImplementedInCPPForPrivateScriptOnly(int value1, int value2);
+    String stringAttributeImplementedInCPPForPrivateScriptOnly();
+    void setStringAttributeImplementedInCPPForPrivateScriptOnly(String);
+
     void trace(Visitor*) { }
 
 private:
-    PrivateScriptTest(LocalFrame*);
+    explicit PrivateScriptTest(LocalFrame*);
+
+    String m_stringAttributeImplementedInCPPForPrivateSriptOnly;
 };
 
 } // namespace blink

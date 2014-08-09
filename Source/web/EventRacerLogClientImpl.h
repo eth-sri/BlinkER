@@ -7,9 +7,6 @@
 
 namespace blink {
 
-using WebCore::EventAction;
-using WebCore::EventRacerLogClient;
-
 class WebEventRacerLogClient;
 
 class EventRacerLogClientImpl : public EventRacerLogClient {

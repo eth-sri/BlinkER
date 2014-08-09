@@ -26,7 +26,9 @@
 #ifndef MediaKeySession_h
 #define MediaKeySession_h
 
+#include "bindings/core/v8/ScriptPromiseProperty.h"
 #include "core/dom/ActiveDOMObject.h"
+#include "core/dom/DOMException.h"
 #include "modules/EventTargetModules.h"
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
@@ -40,9 +42,8 @@ class WebString;
 
 namespace blink {
 
-class ScriptState;
 class ScriptPromise;
-class ExceptionState;
+class ScriptState;
 class GenericEventQueue;
 class MediaKeyError;
 class MediaKeys;
@@ -66,16 +67,18 @@ class MediaKeySession FINAL
     DEFINE_EVENT_TARGET_REFCOUNTING_WILL_BE_REMOVED(RefCountedGarbageCollected<MediaKeySession>);
     WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(MediaKeySession);
 public:
-    static ScriptPromise create(ScriptState*, MediaKeys*, const String& initDataType, PassRefPtr<Uint8Array> initData, const String& sessionType);
+    static ScriptPromise create(ScriptState*, MediaKeys*, const String& initDataType, PassRefPtr<ArrayBuffer> initData, const String& sessionType);
     virtual ~MediaKeySession();
 
     const String& keySystem() const { return m_keySystem; }
     String sessionId() const;
+    ScriptPromise closed(ScriptState*);
 
     void setError(MediaKeyError*);
     MediaKeyError* error() { return m_error.get(); }
 
-    ScriptPromise update(ScriptState*, Uint8Array* response);
+    ScriptPromise update(ScriptState*, ArrayBuffer* response);
+    ScriptPromise update(ScriptState*, ArrayBufferView* response);
     ScriptPromise release(ScriptState*);
 
     void enqueueEvent(PassRefPtrWillBeRawPtr<Event>);
@@ -104,6 +107,8 @@ private:
     virtual void error(MediaKeyErrorCode, unsigned long systemCode) OVERRIDE;
     virtual void error(blink::WebContentDecryptionModuleException, unsigned long systemCode, const blink::WebString& errorMessage) OVERRIDE;
 
+    ScriptPromise updateInternal(ScriptState*, PassRefPtr<ArrayBuffer> response);
+
     String m_keySystem;
     RefPtrWillBeMember<MediaKeyError> m_error;
     OwnPtrWillBeMember<GenericEventQueue> m_asyncEventQueue;
@@ -114,6 +119,10 @@ private:
 
     // Is the CDM finished with this session?
     bool m_isClosed;
+
+    // Keep track of the closed promise.
+    typedef ScriptPromiseProperty<Member<MediaKeySession>, V8UndefinedType, RefPtrWillBeMember<DOMException> > ClosedPromise;
+    Member<ClosedPromise> m_closedPromise;
 
     HeapDeque<Member<PendingAction> > m_pendingActions;
     Timer<MediaKeySession> m_actionTimer;

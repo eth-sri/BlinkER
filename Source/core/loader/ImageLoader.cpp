@@ -42,6 +42,7 @@
 #include "core/rendering/RenderVideo.h"
 #include "core/rendering/svg/RenderSVGImage.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "public/platform/WebURLRequest.h"
 
 namespace blink {
 
@@ -74,15 +75,16 @@ static ImageLoader::BypassMainWorldBehavior shouldBypassMainWorldCSP(ImageLoader
 
 class ImageLoader::Task : public blink::WebThread::Task {
 public:
-    static PassOwnPtr<Task> create(ImageLoader* loader)
+    static PassOwnPtr<Task> create(ImageLoader* loader, UpdateFromElementBehavior updateBehavior)
     {
-        return adoptPtr(new Task(loader));
+        return adoptPtr(new Task(loader, updateBehavior));
     }
 
-    Task(ImageLoader* loader)
+    Task(ImageLoader* loader, UpdateFromElementBehavior updateBehavior)
         : m_loader(loader)
         , m_shouldBypassMainWorldCSP(shouldBypassMainWorldCSP(loader))
         , m_weakFactory(this)
+        , m_updateBehavior(updateBehavior)
         , m_startAction(0)
     {
         m_log = EventRacerContext::getLog();
@@ -101,9 +103,9 @@ public:
                 EventActionScope act(action);
                 m_log->join(m_startAction, action);
                 OperationScope op("img-ldr:tsk-run");
-                m_loader->doUpdateFromElement(m_shouldBypassMainWorldCSP);
+                m_loader->doUpdateFromElement(m_shouldBypassMainWorldCSP, m_updateBehavior);
             } else {
-                m_loader->doUpdateFromElement(m_shouldBypassMainWorldCSP);
+                m_loader->doUpdateFromElement(m_shouldBypassMainWorldCSP, m_updateBehavior);
             }
         }
     }
@@ -122,6 +124,7 @@ private:
     ImageLoader* m_loader;
     BypassMainWorldBehavior m_shouldBypassMainWorldCSP;
     WeakPtrFactory<Task> m_weakFactory;
+    UpdateFromElementBehavior m_updateBehavior;
     RefPtr<EventRacerLog> m_log;
     EventAction *m_startAction;
 };
@@ -229,15 +232,15 @@ inline void ImageLoader::clearFailedLoadURL()
     m_failedLoadURL = AtomicString();
 }
 
-inline void ImageLoader::enqueueImageLoadingMicroTask()
+inline void ImageLoader::enqueueImageLoadingMicroTask(UpdateFromElementBehavior updateBehavior)
 {
-    OwnPtr<Task> task = Task::create(this);
+    OwnPtr<Task> task = Task::create(this, updateBehavior);
     m_pendingTask = task->createWeakPtr();
     Microtask::enqueueMicrotask(task.release());
     m_loadDelayCounter = IncrementLoadEventDelayCount::create(m_element->document());
 }
 
-void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior)
+void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior, UpdateFromElementBehavior updateBehavior)
 {
     // We don't need to call clearLoader here: Either we were called from the
     // task, or our caller updateFromElement cleared the task's loader (and set
@@ -257,10 +260,12 @@ void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior)
     if (!url.isNull()) {
         // Unlike raw <img>, we block mixed content inside of <picture> or <img srcset>.
         ResourceLoaderOptions resourceLoaderOptions = ResourceFetcher::defaultResourceOptions();
-        if (isHTMLPictureElement(element()->parentNode()) || !element()->fastGetAttribute(HTMLNames::srcsetAttr).isEmpty())
+        ResourceRequest resourceRequest(url);
+        if (isHTMLPictureElement(element()->parentNode()) || !element()->fastGetAttribute(HTMLNames::srcsetAttr).isEmpty()) {
             resourceLoaderOptions.mixedContentBlockingTreatment = TreatAsActiveContent;
+            resourceRequest.setRequestContext(WebURLRequest::RequestContextImageSet);
+        }
         FetchRequest request(ResourceRequest(url), element()->localName(), resourceLoaderOptions);
-        request.mutableResourceRequest().setRequestContext(blink::WebURLRequest::RequestContextImage);
         configureRequest(request, bypassBehavior, *m_element);
 
         if (m_loadingImageDocument)
@@ -308,6 +313,8 @@ void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior)
 
         if (oldImage)
             oldImage->removeClient(this);
+    } else if (updateBehavior == UpdateSizeChanged && m_element->renderer() && m_element->renderer()->isImage()) {
+        toRenderImage(m_element->renderer())->intrinsicSizeChanged();
     }
 
     if (RenderImageResource* imageResource = renderImageResource())
@@ -318,11 +325,11 @@ void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior)
     updatedHasPendingEvent();
 }
 
-void ImageLoader::updateFromElement(UpdateFromElementBehavior behavior, LoadType loadType)
+void ImageLoader::updateFromElement(UpdateFromElementBehavior updateBehavior, LoadType loadType)
 {
     AtomicString imageSourceURL = m_element->imageSourceURL();
 
-    if (behavior == UpdateIgnorePreviousError)
+    if (updateBehavior == UpdateIgnorePreviousError)
         clearFailedLoadURL();
 
     if (!m_failedLoadURL.isEmpty() && imageSourceURL == m_failedLoadURL)
@@ -337,10 +344,10 @@ void ImageLoader::updateFromElement(UpdateFromElementBehavior behavior, LoadType
 
     KURL url = imageSourceToKURL(imageSourceURL);
     if (imageSourceURL.isNull() || url.isNull() || shouldLoadImmediately(url, loadType)) {
-        doUpdateFromElement(DoNotBypassMainWorldCSP);
+        doUpdateFromElement(DoNotBypassMainWorldCSP, updateBehavior);
         return;
     }
-    enqueueImageLoadingMicroTask();
+    enqueueImageLoadingMicroTask(updateBehavior);
 }
 
 KURL ImageLoader::imageSourceToKURL(AtomicString imageSourceURL) const

@@ -9,10 +9,41 @@
 WebInspector.AdvancedApp = function()
 {
     WebInspector.App.call(this);
+    if (WebInspector.overridesSupport.responsiveDesignAvailable()) {
+        this._toggleEmulationButton = new WebInspector.StatusBarButton(WebInspector.UIString("Toggle device mode."), "emulation-status-bar-item");
+        this._toggleEmulationButton.toggled = WebInspector.overridesSupport.emulationEnabled();
+        this._toggleEmulationButton.addEventListener("click", this._toggleEmulationEnabled, this);
+        WebInspector.overridesSupport.addEventListener(WebInspector.OverridesSupport.Events.EmulationStateChanged, this._emulationEnabledChanged, this);
+        WebInspector.overridesSupport.addEventListener(WebInspector.OverridesSupport.Events.OverridesWarningUpdated, this._overridesWarningUpdated, this);
+    }
     WebInspector.dockController.addEventListener(WebInspector.DockController.Events.BeforeDockSideChanged, this._openToolboxWindow, this);
 };
 
 WebInspector.AdvancedApp.prototype = {
+    _toggleEmulationEnabled: function()
+    {
+        var enabled = !this._toggleEmulationButton.toggled;
+        if (enabled)
+            WebInspector.userMetrics.DeviceModeEnabled.record();
+        WebInspector.overridesSupport.setEmulationEnabled(enabled);
+    },
+
+    _emulationEnabledChanged: function()
+    {
+        this._toggleEmulationButton.toggled = WebInspector.overridesSupport.emulationEnabled();
+        if (!WebInspector.overridesSupport.responsiveDesignAvailable() && WebInspector.overridesSupport.emulationEnabled())
+            WebInspector.inspectorView.showViewInDrawer("emulation", true);
+    },
+
+    _overridesWarningUpdated: function()
+    {
+        if (!this._toggleEmulationButton)
+            return;
+        var message = WebInspector.overridesSupport.warningMessage();
+        this._toggleEmulationButton.title = message || WebInspector.UIString("Toggle device mode.");
+        this._toggleEmulationButton.element.classList.toggle("warning", !!message);
+    },
+
     createRootView: function()
     {
         var rootView = new WebInspector.RootView();
@@ -35,6 +66,15 @@ WebInspector.AdvancedApp.prototype = {
         console.timeStamp("AdvancedApp.attachToBody");
         rootView.attachToBody();
         this._inspectedPagePlaceholder.update();
+    },
+
+    /**
+     * @param {!WebInspector.Target} mainTarget
+     */
+    presentUI: function(mainTarget)
+    {
+        WebInspector.App.prototype.presentUI.call(this, mainTarget);
+        this._overridesWarningUpdated();
     },
 
     /**
@@ -163,18 +203,62 @@ WebInspector.AdvancedApp.prototype = {
 
 /**
  * @constructor
+ * @implements {WebInspector.StatusBarItem.Provider}
+ */
+WebInspector.AdvancedApp.DeviceCounter = function()
+{
+    if (!WebInspector.experimentsSettings.devicesPanel.isEnabled() || !(WebInspector.app instanceof WebInspector.AdvancedApp)) {
+        this._counter = null;
+        return;
+    }
+
+    this._counter = new WebInspector.StatusBarCounter(["device-icon-small"]);
+    this._counter.addEventListener("click", showDevices);
+
+    function showDevices()
+    {
+        WebInspector.inspectorView.showViewInDrawer("devices", true);
+    }
+
+    InspectorFrontendHost.setDeviceCountUpdatesEnabled(true);
+    InspectorFrontendHost.events.addEventListener(InspectorFrontendHostAPI.Events.DeviceCountUpdated, this._onDeviceCountUpdated, this);
+}
+
+WebInspector.AdvancedApp.DeviceCounter.prototype = {
+    /**
+     * @param {!WebInspector.Event} event
+     */
+    _onDeviceCountUpdated: function(event)
+    {
+        var count = /** @type {number} */ (event.data);
+        this._counter.setCounter("device-icon-small", count, WebInspector.UIString(count > 1 ? "%d devices found" : "%d device found", count));
+        WebInspector.inspectorView.toolbarItemResized();
+    },
+
+    /**
+     * @return {?WebInspector.StatusBarItem}
+     */
+    item: function()
+    {
+        return this._counter;
+    }
+}
+
+/**
+ * @constructor
  */
 WebInspector.Toolbox = function()
 {
     if (!window.opener)
         return;
 
-    WebInspector.zoomManager = window.opener.WebInspector.zoomManager;
+    WebInspector.zoomManager = new WebInspector.ZoomManager(window.opener.InspectorFrontendHost);
     WebInspector.overridesSupport = window.opener.WebInspector.overridesSupport;
     WebInspector.settings = window.opener.WebInspector.settings;
     WebInspector.experimentsSettings = window.opener.WebInspector.experimentsSettings;
     WebInspector.targetManager = window.opener.WebInspector.targetManager;
     WebInspector.workspace = window.opener.WebInspector.workspace;
+    WebInspector.cssWorkspaceBinding = window.opener.WebInspector.cssWorkspaceBinding;
     WebInspector.Revealer = window.opener.WebInspector.Revealer;
     WebInspector.ContextMenu = window.opener.WebInspector.ContextMenu;
     WebInspector.installPortStyles();
@@ -187,4 +271,47 @@ WebInspector.Toolbox = function()
     this._responsiveDesignView.show(rootView.element);
     rootView.attachToBody();
     advancedApp._toolboxLoaded(this);
+}
+
+/**
+ * @constructor
+ * @implements {WebInspector.StatusBarItem.Provider}
+ */
+WebInspector.AdvancedApp.EmulationButtonProvider = function()
+{
+}
+
+WebInspector.AdvancedApp.EmulationButtonProvider.prototype = {
+    /**
+     * @return {?WebInspector.StatusBarItem}
+     */
+    item: function()
+    {
+        if (!(WebInspector.app instanceof WebInspector.AdvancedApp))
+            return null;
+        return WebInspector.app._toggleEmulationButton || null;
+    }
+}
+
+/**
+ * @constructor
+ * @implements {WebInspector.ActionDelegate}
+ */
+WebInspector.AdvancedApp.ToggleDeviceModeActionDelegate = function()
+{
+}
+
+WebInspector.AdvancedApp.ToggleDeviceModeActionDelegate.prototype = {
+    /**
+     * @return {boolean}
+     */
+    handleAction: function()
+    {
+        if (!WebInspector.overridesSupport.responsiveDesignAvailable())
+            return false;
+        if (!(WebInspector.app instanceof WebInspector.AdvancedApp))
+            return false;
+        WebInspector.app._toggleEmulationEnabled();
+        return true;
+    }
 }

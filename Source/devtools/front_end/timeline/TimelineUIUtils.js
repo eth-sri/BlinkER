@@ -252,7 +252,8 @@ WebInspector.TimelineUIUtils.generatePieChart = function(aggregatedStats, selfCa
     {
         return Number.millisToString(value, true);
     }
-    var pieChart = new WebInspector.PieChart(total, formatter);
+    var pieChart = new WebInspector.PieChart(100, formatter);
+    pieChart.setTotal(total);
     element.appendChild(pieChart.element);
     var footerElement = element.createChild("div", "timeline-aggregated-info-legend");
 
@@ -548,7 +549,7 @@ WebInspector.TimelineDetailsContentHelper.prototype = {
     {
         if (!this._linkifier || !this._target)
             return;
-        this.appendElementRow(title, this._linkifier.linkifyLocation(this._target, url, line - 1) || "");
+        this.appendElementRow(title, this._linkifier.linkifyScriptLocation(this._target, null, url, line - 1) || "");
     },
 
     /**
@@ -569,7 +570,7 @@ WebInspector.TimelineDetailsContentHelper.prototype = {
             var row = stackTraceElement.createChild("div");
             row.createTextChild(stackFrame.functionName || WebInspector.UIString("(anonymous function)"));
             row.createTextChild(" @ ");
-            var urlElement = this._linkifier.linkifyLocationByScriptId(this._target, stackFrame.scriptId, stackFrame.url, stackFrame.lineNumber - 1, stackFrame.columnNumber - 1);
+            var urlElement = this._linkifier.linkifyScriptLocation(this._target, stackFrame.scriptId, stackFrame.url, stackFrame.lineNumber - 1, stackFrame.columnNumber - 1);
             row.appendChild(urlElement);
         }
     }

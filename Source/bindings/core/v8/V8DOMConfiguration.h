@@ -43,8 +43,18 @@ public:
     // reduces the binary size by moving from code driven setup to data table
     // driven setup.
 
+    enum ExposeConfiguration {
+        ExposedToAllScripts,
+        OnlyExposedToPrivateScript,
+    };
+
+    enum InstanceOrPrototypeConfiguration {
+        OnInstance,
+        OnPrototype,
+    };
+
     // AttributeConfiguration translates into calls to SetAccessor() on either
-    // the instance or the prototype ObjectTemplate, based on |onPrototype|.
+    // the instance or the prototype ObjectTemplate, based on |instanceOrPrototypeConfiguration|.
     struct AttributeConfiguration {
         const char* const name;
         v8::AccessorGetterCallback getter;
@@ -54,7 +64,8 @@ public:
         const WrapperTypeInfo* data;
         v8::AccessControl settings;
         v8::PropertyAttribute attribute;
-        bool onPrototype;
+        ExposeConfiguration exposeConfiguration;
+        InstanceOrPrototypeConfiguration instanceOrPrototypeConfiguration;
     };
 
     // AccessorConfiguration translates into calls to SetAccessorProperty()
@@ -68,6 +79,7 @@ public:
         const WrapperTypeInfo* data;
         v8::AccessControl settings;
         v8::PropertyAttribute attribute;
+        ExposeConfiguration exposeConfiguration;
     };
 
     static void installAttributes(v8::Handle<v8::ObjectTemplate>, v8::Handle<v8::ObjectTemplate>, const AttributeConfiguration*, size_t attributeCount, v8::Isolate*);
@@ -75,15 +87,19 @@ public:
     template<class ObjectOrTemplate>
     static inline void installAttribute(v8::Handle<ObjectOrTemplate> instanceTemplate, v8::Handle<ObjectOrTemplate> prototype, const AttributeConfiguration& attribute, v8::Isolate* isolate)
     {
+        DOMWrapperWorld& world = DOMWrapperWorld::current(isolate);
+        if (attribute.exposeConfiguration == OnlyExposedToPrivateScript && !world.isPrivateScriptIsolatedWorld())
+            return;
+
         v8::AccessorGetterCallback getter = attribute.getter;
         v8::AccessorSetterCallback setter = attribute.setter;
-        if (DOMWrapperWorld::current(isolate).isMainWorld()) {
+        if (world.isMainWorld()) {
             if (attribute.getterForMainWorld)
                 getter = attribute.getterForMainWorld;
             if (attribute.setterForMainWorld)
                 setter = attribute.setterForMainWorld;
         }
-        (attribute.onPrototype ? prototype : instanceTemplate)->SetAccessor(v8AtomicString(isolate, attribute.name),
+        (attribute.instanceOrPrototypeConfiguration == OnPrototype ? prototype : instanceTemplate)->SetAccessor(v8AtomicString(isolate, attribute.name),
             getter,
             setter,
             v8::External::New(isolate, const_cast<WrapperTypeInfo*>(attribute.data)),
@@ -122,18 +138,30 @@ public:
         v8::FunctionCallback callback;
         v8::FunctionCallback callbackForMainWorld;
         int length;
+        ExposeConfiguration exposeConfiguration;
     };
 
     static void installMethods(v8::Handle<v8::ObjectTemplate>, v8::Handle<v8::Signature>, v8::PropertyAttribute, const MethodConfiguration*, size_t callbackCount, v8::Isolate*);
 
-    template<class ObjectOrTemplate>
-    static void installMethodCustomSignature(v8::Handle<ObjectOrTemplate> instanceTemplate, v8::Handle<v8::Signature> signature, v8::PropertyAttribute attribute, const MethodConfiguration& configuration, v8::Isolate* isolate)
+    template <class Template>
+    static void installMethod(v8::Handle<Template> prototype, v8::Handle<v8::Signature> signature, v8::PropertyAttribute attribute, const MethodConfiguration& callback, v8::Isolate* isolate)
     {
-        v8::FunctionCallback callback = configuration.callback;
-        if (DOMWrapperWorld::current(isolate).isMainWorld() && configuration.callbackForMainWorld)
-            callback = configuration.callbackForMainWorld;
-        v8::Local<v8::FunctionTemplate> functionTemplate = v8::FunctionTemplate::New(isolate, callback, v8Undefined(), signature, configuration.length);
-        instanceTemplate->Set(v8AtomicString(isolate, configuration.name), functionTemplate, attribute);
+        DOMWrapperWorld& world = DOMWrapperWorld::current(isolate);
+        if (callback.exposeConfiguration == OnlyExposedToPrivateScript && !world.isPrivateScriptIsolatedWorld())
+            return;
+
+        v8::Local<v8::FunctionTemplate> functionTemplate = functionTemplateForMethod(signature, callback, isolate);
+        prototype->Set(v8AtomicString(isolate, callback.name), functionTemplate, attribute);
+    }
+
+    static void installMethod(v8::Handle<v8::Object> object, v8::Handle<v8::Signature> signature, v8::PropertyAttribute, const MethodConfiguration& callback, v8::Isolate* isolate)
+    {
+        DOMWrapperWorld& world = DOMWrapperWorld::current(isolate);
+        if (callback.exposeConfiguration == OnlyExposedToPrivateScript && !world.isPrivateScriptIsolatedWorld())
+            return;
+
+        v8::Local<v8::FunctionTemplate> functionTemplate = functionTemplateForMethod(signature, callback, isolate);
+        object->Set(v8AtomicString(isolate, callback.name), functionTemplate->GetFunction());
     }
 
     static void installAccessors(v8::Handle<v8::ObjectTemplate>, v8::Handle<v8::Signature>, const AccessorConfiguration*, size_t accessorCount, v8::Isolate*);
@@ -145,6 +173,9 @@ public:
         v8::Isolate*);
 
     static v8::Handle<v8::FunctionTemplate> domClassTemplate(v8::Isolate*, WrapperTypeInfo*, void (*)(v8::Handle<v8::FunctionTemplate>, v8::Isolate*));
+
+private:
+    static v8::Handle<v8::FunctionTemplate> functionTemplateForMethod(v8::Handle<v8::Signature>, const MethodConfiguration&, v8::Isolate*);
 };
 
 } // namespace blink

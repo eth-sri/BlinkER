@@ -38,7 +38,7 @@
     background: white;
 }
 
-.profile-view .data-grid tr:not(.filler):hover td {
+.profile-view .data-grid tr:hover td:not(.bottom-filler-td) {
     background-color: rgba(0, 0, 0, 0.1);
 }
 
@@ -204,8 +204,12 @@
     margin-left: 22px;
 }
 
-.profile-launcher-view-content button.running:not(.status-bar-item) {
-    color: red;
+.profile-launcher-view-content button.running {
+    color: hsl(0, 100%, 58%);
+}
+
+.profile-launcher-view-content button.running:hover {
+    color: hsl(0, 100%, 42%);
 }
 
 body.inactive .profile-launcher-view-content button.running:not(.status-bar-item) {

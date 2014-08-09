@@ -115,6 +115,9 @@ protected:
 private:
     virtual String nodeName() const OVERRIDE FINAL;
 
+    bool isHTMLElement() const WTF_DELETED_FUNCTION; // This will catch anyone doing an unnecessary check.
+    bool isStyledElement() const WTF_DELETED_FUNCTION; // This will catch anyone doing an unnecessary check.
+
     void mapLanguageAttributeToLocale(const AtomicString&, MutableStylePropertySet*);
 
     PassRefPtrWillBeRawPtr<DocumentFragment> textToFragment(const String&, ExceptionState&);

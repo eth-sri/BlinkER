@@ -6,7 +6,7 @@
 #include "wtf/text/WTFString.h"
 #include <cstddef>
 
-namespace WebCore {
+namespace blink {
 
 using WTF::String;
 using WTF::Vector;
@@ -20,6 +20,6 @@ public:
     virtual void didUpdateStringTable(size_t, const Vector<String> &) = 0;
 };
 
-} // namespace WebCore
+} // end namespace blink
 
 #endif // EventRacerLogClient_h

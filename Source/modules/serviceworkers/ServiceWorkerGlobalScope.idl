@@ -37,9 +37,11 @@
 
   readonly attribute ServiceWorkerClients clients;
   [CallWith=ExecutionContext, Unforgeable] readonly attribute ScalarValueString scope;
+  // FIXME: Rename this once it's ready for testing.
+  [CallWith=ExecutionContext, Unforgeable, ImplementedAs=caches] readonly attribute CacheStorage nativeCaches;
 
-  [CallWith=ScriptState] Promise fetch(ScalarValueString request);
-  [CallWith=ScriptState] Promise fetch(Request request);
+  [CallWith=ScriptState] Promise fetch(DOMString request, optional Dictionary requestInitDict);
+  [CallWith=ScriptState] Promise fetch(Request request, optional Dictionary requestInitDict);
 
   attribute EventHandler onactivate;
   attribute EventHandler onfetch;

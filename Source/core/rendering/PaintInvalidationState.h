@@ -19,9 +19,7 @@ class RenderSVGModelObject;
 class PaintInvalidationState {
     WTF_MAKE_NONCOPYABLE(PaintInvalidationState);
 public:
-    PaintInvalidationState(const PaintInvalidationState& next, RenderInline& renderer, const RenderLayerModelObject& paintInvalidationContainer);
-    PaintInvalidationState(const PaintInvalidationState& next, RenderBox& renderer, const RenderLayerModelObject& paintInvalidationContainer);
-    PaintInvalidationState(const PaintInvalidationState& next, RenderSVGModelObject& renderer, const RenderLayerModelObject& paintInvalidationContainer);
+    PaintInvalidationState(const PaintInvalidationState& next, RenderLayerModelObject& renderer, const RenderLayerModelObject& paintInvalidationContainer);
 
     explicit PaintInvalidationState(RenderObject&);
 
@@ -30,6 +28,9 @@ public:
 
     bool cachedOffsetsEnabled() const { return m_cachedOffsetsEnabled; }
     bool isClipped() const { return m_clipped; }
+
+    bool forceCheckForPaintInvalidation() const { return m_forceCheckForPaintInvalidation; }
+    void setForceCheckForPaintInvalidation() { m_forceCheckForPaintInvalidation = true; }
 
     const RenderLayerModelObject& paintInvalidationContainer() const { return m_paintInvalidationContainer; }
     RenderObject& renderer() const { return m_renderer; }
@@ -45,6 +46,7 @@ private:
 
     bool m_clipped;
     mutable bool m_cachedOffsetsEnabled;
+    bool m_forceCheckForPaintInvalidation;
 
     LayoutRect m_clipRect;
 

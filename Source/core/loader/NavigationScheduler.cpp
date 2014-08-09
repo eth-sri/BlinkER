@@ -48,6 +48,7 @@
 #include "core/loader/FrameLoaderStateMachine.h"
 #include "core/page/BackForwardClient.h"
 #include "core/page/Page.h"
+#include "platform/SharedBuffer.h"
 #include "platform/UserGestureIndicator.h"
 #include "wtf/CurrentTime.h"
 
@@ -157,9 +158,23 @@ public:
         : ScheduledURLNavigation(0.0, originDocument, url, referrer, lockBackForwardList, true) { }
 };
 
-class ScheduledRefresh FINAL : public ScheduledURLNavigation {
+class ScheduledReload FINAL : public ScheduledNavigation {
 public:
-    ScheduledRefresh(Document* originDocument, const String& url, const Referrer& referrer)
+    ScheduledReload()
+        : ScheduledNavigation(0.0, true, true)
+    {
+    }
+
+    virtual void fire(LocalFrame* frame) OVERRIDE
+    {
+        OwnPtr<UserGestureIndicator> gestureIndicator = createUserGestureIndicator();
+        frame->loader().reload(NormalReload, KURL(), nullAtom, ClientRedirect);
+    }
+};
+
+class ScheduledPageBlock FINAL : public ScheduledURLNavigation {
+public:
+    ScheduledPageBlock(Document* originDocument, const String& url, const Referrer& referrer)
         : ScheduledURLNavigation(0.0, originDocument, url, referrer, true, true)
     {
     }
@@ -167,8 +182,9 @@ public:
     virtual void fire(LocalFrame* frame) OVERRIDE
     {
         OwnPtr<UserGestureIndicator> gestureIndicator = createUserGestureIndicator();
-        FrameLoadRequest request(originDocument(), ResourceRequest(KURL(ParsedURLString, url()), referrer(), ReloadIgnoringCacheData), "_self");
-        request.setLockBackForwardList(lockBackForwardList());
+        SubstituteData substituteData(SharedBuffer::create(), "text/plain", "UTF-8", KURL(), ForceSynchronousLoad);
+        FrameLoadRequest request(originDocument(), ResourceRequest(KURL(ParsedURLString, url()), referrer(), ReloadIgnoringCacheData), substituteData);
+        request.setLockBackForwardList(true);
         request.setClientRedirect(ClientRedirect);
         frame->loader().load(request);
     }
@@ -185,15 +201,6 @@ public:
     virtual void fire(LocalFrame* frame) OVERRIDE
     {
         OwnPtr<UserGestureIndicator> gestureIndicator = createUserGestureIndicator();
-
-        if (!m_historySteps) {
-            FrameLoadRequest frameRequest(frame->document(), ResourceRequest(frame->document()->url()));
-            frameRequest.setLockBackForwardList(lockBackForwardList());
-            // Special case for go(0) from a frame -> reload only the frame
-            // To follow Firefox and IE's behavior, history reload can only navigate the self frame.
-            frame->loader().load(frameRequest);
-            return;
-        }
         // go(i!=0) from a frame navigates into the history of the frame only,
         // in both IE and NS (but not in Mozilla). We can't easily do that.
         frame->page()->deprecatedLocalMainFrame()->loader().client()->navigateBackForward(m_historySteps);
@@ -243,14 +250,6 @@ NavigationScheduler::~NavigationScheduler()
 bool NavigationScheduler::locationChangePending()
 {
     return m_redirect && m_redirect->isLocationChange();
-}
-
-void NavigationScheduler::clear()
-{
-    if (m_timer.isActive())
-        InspectorInstrumentation::frameClearedScheduledNavigation(m_frame);
-    m_timer.stop();
-    m_redirect.clear();
 }
 
 inline bool NavigationScheduler::shouldScheduleNavigation() const
@@ -330,7 +329,8 @@ void NavigationScheduler::scheduleLocationChange(Document* originDocument, const
 void NavigationScheduler::schedulePageBlock(Document* originDocument, const Referrer& referrer)
 {
     ASSERT(m_frame->page());
-    schedule(adoptPtr(new ScheduledLocationChange(originDocument, SecurityOrigin::urlWithUniqueSecurityOrigin(), referrer, false)));
+    const KURL& url = m_frame->document()->url();
+    schedule(adoptPtr(new ScheduledPageBlock(originDocument, url, referrer)));
 }
 
 void NavigationScheduler::scheduleFormSubmission(PassRefPtrWillBeRawPtr<FormSubmission> submission)
@@ -339,15 +339,13 @@ void NavigationScheduler::scheduleFormSubmission(PassRefPtrWillBeRawPtr<FormSubm
     schedule(adoptPtr(new ScheduledFormSubmission(submission, mustLockBackForwardList(m_frame))));
 }
 
-void NavigationScheduler::scheduleRefresh()
+void NavigationScheduler::scheduleReload()
 {
     if (!shouldScheduleNavigation())
         return;
-    const KURL& url = m_frame->document()->url();
-    if (url.isEmpty())
+    if (m_frame->document()->url().isEmpty())
         return;
-
-    schedule(adoptPtr(new ScheduledRefresh(m_frame->document(), url.string(), Referrer(m_frame->document()->outgoingReferrer(), m_frame->document()->referrerPolicy()))));
+    schedule(adoptPtr(new ScheduledReload));
 }
 
 void NavigationScheduler::scheduleHistoryNavigation(int steps)
@@ -364,7 +362,10 @@ void NavigationScheduler::scheduleHistoryNavigation(int steps)
     }
 
     // In all other cases, schedule the history traversal to occur asynchronously.
-    schedule(adoptPtr(new ScheduledHistoryNavigation(steps)));
+    if (steps)
+        schedule(adoptPtr(new ScheduledHistoryNavigation(steps)));
+    else
+        schedule(adoptPtr(new ScheduledReload));
 }
 
 void NavigationScheduler::timerFired(EventRacerTimer<NavigationScheduler>*)

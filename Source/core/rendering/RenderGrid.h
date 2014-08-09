@@ -45,7 +45,6 @@ public:
 
     virtual void layoutBlock(bool relayoutChildren) OVERRIDE;
 
-    virtual bool avoidsFloats() const OVERRIDE { return true; }
     virtual bool canCollapseAnonymousBlockChild() const OVERRIDE { return false; }
 
     void dirtyGrid();
@@ -127,6 +126,8 @@ private:
 #if ENABLE(ASSERT)
     bool tracksAreWiderThanMinTrackBreadth(GridTrackSizingDirection, const Vector<GridTrack>&);
 #endif
+
+    size_t gridItemSpan(const RenderBox*, GridTrackSizingDirection);
 
     size_t gridColumnCount() const
     {

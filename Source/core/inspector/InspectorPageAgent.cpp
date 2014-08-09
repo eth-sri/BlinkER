@@ -305,9 +305,9 @@ bool InspectorPageAgent::dataContent(const char* data, unsigned size, const Stri
     return decodeBuffer(data, size, textEncodingName, result);
 }
 
-PassOwnPtr<InspectorPageAgent> InspectorPageAgent::create(Page* page, InjectedScriptManager* injectedScriptManager, InspectorClient* client, InspectorOverlay* overlay)
+PassOwnPtrWillBeRawPtr<InspectorPageAgent> InspectorPageAgent::create(Page* page, InjectedScriptManager* injectedScriptManager, InspectorClient* client, InspectorOverlay* overlay)
 {
-    return adoptPtr(new InspectorPageAgent(page, injectedScriptManager, client, overlay));
+    return adoptPtrWillBeNoop(new InspectorPageAgent(page, injectedScriptManager, client, overlay));
 }
 
 Resource* InspectorPageAgent::cachedResource(LocalFrame* frame, const KURL& url)
@@ -544,7 +544,7 @@ void InspectorPageAgent::reload(ErrorString*, const bool* const optionalIgnoreCa
 {
     m_pendingScriptToEvaluateOnLoadOnce = optionalScriptToEvaluateOnLoad ? *optionalScriptToEvaluateOnLoad : "";
     m_pendingScriptPreprocessor = optionalScriptPreprocessor ? *optionalScriptPreprocessor : "";
-    m_page->deprecatedLocalMainFrame()->loader().reload(optionalIgnoreCache && *optionalIgnoreCache ? EndToEndReload : NormalReload);
+    m_page->deprecatedLocalMainFrame()->loader().reload(asBool(optionalIgnoreCache) ? EndToEndReload : NormalReload);
 }
 
 void InspectorPageAgent::navigate(ErrorString*, const String& url, String* outFrameId)
@@ -739,9 +739,6 @@ void InspectorPageAgent::searchInResource(ErrorString*, const String& frameId, c
 {
     results = TypeBuilder::Array<TypeBuilder::Page::SearchMatch>::create();
 
-    bool isRegex = optionalIsRegex ? *optionalIsRegex : false;
-    bool caseSensitive = optionalCaseSensitive ? *optionalCaseSensitive : false;
-
     LocalFrame* frame = frameForId(frameId);
     KURL kurl(ParsedURLString, url);
 
@@ -759,7 +756,7 @@ void InspectorPageAgent::searchInResource(ErrorString*, const String& frameId, c
     if (!success)
         return;
 
-    results = ContentSearchUtils::searchInTextByLines(content, query, caseSensitive, isRegex);
+    results = ContentSearchUtils::searchInTextByLines(content, query, asBool(optionalCaseSensitive), asBool(optionalIsRegex));
 }
 
 void InspectorPageAgent::setDocumentContent(ErrorString* errorString, const String& frameId, const String& html)
@@ -1337,30 +1334,19 @@ void InspectorPageAgent::updateTouchEventEmulationInPage(bool enabled)
         m_originalDeviceSupportsTouch = m_page->settings().deviceSupportsTouch();
     }
     RuntimeEnabledFeatures::setTouchEnabled(enabled ? true : m_originalTouchEnabled);
-    m_page->settings().setDeviceSupportsMouse(enabled ? false : m_originalDeviceSupportsMouse);
-    m_page->settings().setDeviceSupportsTouch(enabled ? true : m_originalDeviceSupportsTouch);
+    if (!m_originalDeviceSupportsTouch) {
+        m_page->settings().setDeviceSupportsMouse(enabled ? false : m_originalDeviceSupportsMouse);
+        m_page->settings().setDeviceSupportsTouch(enabled ? true : m_originalDeviceSupportsTouch);
+    }
     m_touchEmulationEnabled = enabled;
     m_client->setTouchEventEmulationEnabled(enabled);
     m_page->deprecatedLocalMainFrame()->view()->layout();
 }
 
-void InspectorPageAgent::hasTouchInputs(ErrorString*, bool* result)
-{
-    *result = m_touchEmulationEnabled ? m_originalDeviceSupportsTouch : m_page->settings().deviceSupportsTouch();
-}
-
-void InspectorPageAgent::setTouchEmulationEnabled(ErrorString* error, bool enabled)
+void InspectorPageAgent::setTouchEmulationEnabled(ErrorString*, bool enabled)
 {
     if (m_state->getBoolean(PageAgentState::touchEventEmulationEnabled) == enabled)
         return;
-
-    bool hasTouch = false;
-    hasTouchInputs(error, &hasTouch);
-    if (enabled && hasTouch) {
-        if (error)
-            *error = "Device already supports touch input";
-        return;
-    }
 
     m_state->setBoolean(PageAgentState::touchEventEmulationEnabled, enabled);
     updateTouchEventEmulationInPage(enabled);
@@ -1416,7 +1402,7 @@ bool InspectorPageAgent::compositingEnabled(ErrorString* errorString)
 void InspectorPageAgent::setShowViewportSizeOnResize(ErrorString*, bool show, const bool* showGrid)
 {
     m_state->setBoolean(PageAgentState::showSizeOnResize, show);
-    m_state->setBoolean(PageAgentState::showGridOnResize, showGrid && *showGrid);
+    m_state->setBoolean(PageAgentState::showGridOnResize, asBool(showGrid));
 }
 
 void InspectorPageAgent::clearEditedResourcesContent()
@@ -1435,6 +1421,13 @@ bool InspectorPageAgent::getEditedResourceContent(const String& url, String* con
         return false;
     *content = m_editedResourceContent.get(url);
     return true;
+}
+
+void InspectorPageAgent::trace(Visitor* visitor)
+{
+    visitor->trace(m_page);
+    visitor->trace(m_injectedScriptManager);
+    InspectorBaseAgent::trace(visitor);
 }
 
 } // namespace blink

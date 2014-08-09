@@ -110,11 +110,6 @@ void WebRuntimeFeatures::enableFastMobileScrolling(bool enable)
     RuntimeEnabledFeatures::setFastMobileScrollingEnabled(enable);
 }
 
-void WebRuntimeFeatures::enableFastTextAutosizing(bool enable)
-{
-    RuntimeEnabledFeatures::setFastTextAutosizingEnabled(enable);
-}
-
 void WebRuntimeFeatures::enableFileSystem(bool enable)
 {
     RuntimeEnabledFeatures::setFileSystemEnabled(enable);
@@ -170,6 +165,11 @@ void WebRuntimeFeatures::enableNavigationTransitions(bool enable)
     RuntimeEnabledFeatures::setNavigationTransitionsEnabled(enable);
 }
 
+void WebRuntimeFeatures::enableNetworkInformation(bool enable)
+{
+    RuntimeEnabledFeatures::setNetworkInformationEnabled(enable);
+}
+
 void WebRuntimeFeatures::enableOrientationEvent(bool enable)
 {
     RuntimeEnabledFeatures::setOrientationEventEnabled(enable);
@@ -188,6 +188,11 @@ void WebRuntimeFeatures::enablePeerConnection(bool enable)
 void WebRuntimeFeatures::enableRequestAutocomplete(bool enable)
 {
     RuntimeEnabledFeatures::setRequestAutocompleteEnabled(enable);
+}
+
+void WebRuntimeFeatures::enableScreenOrientation(bool enable)
+{
+    RuntimeEnabledFeatures::setScreenOrientationEnabled(enable);
 }
 
 void WebRuntimeFeatures::enableScriptedSpeech(bool enable)

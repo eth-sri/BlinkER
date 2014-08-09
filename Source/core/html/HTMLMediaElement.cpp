@@ -169,6 +169,30 @@ private:
     RawPtrWillBeMember<HTMLMediaElement> m_mediaElement;
 };
 
+class AudioSourceProviderClientLockScope {
+    STACK_ALLOCATED();
+public:
+#if ENABLE(WEB_AUDIO)
+    AudioSourceProviderClientLockScope(HTMLMediaElement& element)
+        : m_client(element.audioSourceNode())
+    {
+        if (m_client)
+            m_client->lock();
+    }
+    ~AudioSourceProviderClientLockScope()
+    {
+        if (m_client)
+            m_client->unlock();
+    }
+
+private:
+    RawPtrWillBeMember<AudioSourceProviderClient> m_client;
+#else
+    explicit AudioSourceProviderClientLockScope(HTMLMediaElement&) { }
+    ~AudioSourceProviderClientLockScope() { }
+#endif
+};
+
 static const AtomicString& AudioKindToString(WebMediaPlayerClient::AudioTrackKind kind)
 {
     switch (kind) {
@@ -3408,17 +3432,10 @@ void HTMLMediaElement::clearMediaPlayer(int flags)
 
     cancelDeferredLoad();
 
-#if ENABLE(WEB_AUDIO)
-    if (m_audioSourceNode)
-        m_audioSourceNode->lock();
-#endif
-
-    clearMediaPlayerAndAudioSourceProviderClientWithoutLocking();
-
-#if ENABLE(WEB_AUDIO)
-    if (m_audioSourceNode)
-        m_audioSourceNode->unlock();
-#endif
+    {
+        AudioSourceProviderClientLockScope scope(*this);
+        clearMediaPlayerAndAudioSourceProviderClientWithoutLocking();
+    }
 
     stopPeriodicTimers();
     m_loadTimer.stop();
@@ -3482,7 +3499,7 @@ void HTMLMediaElement::exitFullscreen()
 {
     WTF_LOG(Media, "HTMLMediaElement::exitFullscreen");
 
-    FullscreenElementStack::from(document()).fullyExitFullscreen();
+    FullscreenElementStack::from(document()).exitFullscreen();
 }
 
 void HTMLMediaElement::didBecomeFullscreenElement()
@@ -3703,22 +3720,16 @@ void* HTMLMediaElement::preDispatchEventHandler(Event* event)
 
 void HTMLMediaElement::createMediaPlayer()
 {
-#if ENABLE(WEB_AUDIO)
-    if (m_audioSourceNode)
-        m_audioSourceNode->lock();
-#endif
+    AudioSourceProviderClientLockScope scope(*this);
 
     closeMediaSource();
 
     m_player = MediaPlayer::create(this);
 
 #if ENABLE(WEB_AUDIO)
-    if (m_audioSourceNode) {
+    if (m_audioSourceNode && audioSourceProvider()) {
         // When creating the player, make sure its AudioSourceProvider knows about the client.
-        if (audioSourceProvider())
-            audioSourceProvider()->setClient(m_audioSourceNode);
-
-        m_audioSourceNode->unlock();
+        audioSourceProvider()->setClient(m_audioSourceNode);
     }
 #endif
 }
@@ -3728,14 +3739,9 @@ void HTMLMediaElement::setAudioSourceNode(AudioSourceProviderClient* sourceNode)
 {
     m_audioSourceNode = sourceNode;
 
-    if (m_audioSourceNode)
-        m_audioSourceNode->lock();
-
+    AudioSourceProviderClientLockScope scope(*this);
     if (audioSourceProvider())
         audioSourceProvider()->setClient(m_audioSourceNode);
-
-    if (m_audioSourceNode)
-        m_audioSourceNode->unlock();
 }
 
 AudioSourceProvider* HTMLMediaElement::audioSourceProvider()

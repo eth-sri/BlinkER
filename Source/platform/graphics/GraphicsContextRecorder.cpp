@@ -57,7 +57,7 @@ GraphicsContext* GraphicsContextRecorder::record(const IntSize& size, bool isCer
     m_recorder = adoptPtr(new SkPictureRecorder);
     SkCanvas* canvas = m_recorder->beginRecording(size.width(), size.height(), 0, 0);
     m_context = adoptPtr(new GraphicsContext(canvas));
-    m_context->setTrackOpaqueRegion(isCertainlyOpaque);
+    m_context->setRegionTrackingMode(isCertainlyOpaque ? GraphicsContext::RegionTrackingOpaque : GraphicsContext::RegionTrackingDisabled);
     m_context->setCertainlyOpaque(isCertainlyOpaque);
     return m_context.get();
 }
@@ -106,12 +106,12 @@ PassOwnPtr<Vector<char> > GraphicsContextSnapshot::replay(unsigned fromStep, uns
     int height = ceil(scale * m_picture->height());
     SkBitmap bitmap;
     bitmap.allocPixels(SkImageInfo::MakeN32Premul(width, height));
-    ReplayingCanvas canvas(bitmap, fromStep, toStep);
-    canvas.scale(scale, scale);
-    canvas.resetStepCount();
-
-    m_picture->draw(&canvas, &canvas);
-
+    {
+        ReplayingCanvas canvas(bitmap, fromStep, toStep);
+        canvas.scale(scale, scale);
+        canvas.resetStepCount();
+        m_picture->draw(&canvas, &canvas);
+    }
     OwnPtr<Vector<char> > base64Data = adoptPtr(new Vector<char>());
     Vector<char> encodedImage;
     if (!PNGImageEncoder::encode(bitmap, reinterpret_cast<Vector<unsigned char>*>(&encodedImage)))

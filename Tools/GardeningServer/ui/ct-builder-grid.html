@@ -4,102 +4,40 @@ Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
 
+<link rel="import" href="../model/ct-builder.html">
 <link rel="import" href="ct-builder.html">
 
-<!-- Table of failure types, listing the failing builders for each type. -->
 <polymer-element name="ct-builder-grid" attributes="failures">
   <template>
-    <style>
-      table {
-        border-collapse: collapse;
-        font-size: 11px;
-        table-layout: fixed;
-        width: 350px;
-      }
-
-      tbody td:first-child {
-        width: 20%;
-      }
-
-      tbody td {
-        padding: 2px;
-        vertical-align: top;
-        width: 40%;
-      }
-
-      tr :first-child span {
-        padding: 0 2px;
-      }
-
-      .TIMEOUT span {
-        background-color: #fffc6c;
-      }
-
-      .TEXT span {
-        background-color: #e98080;
-      }
-
-      .CRASH span {
-        background-color: #ffc343;
-      }
-
-      .AUDIO span {
-        background-color: #bfdfff;
-      }
-
-      .IMAGE span {
-        background-color: #69f;
-      }
-
-      .IMAGE\+TEXT span {
-        background-color: #96f;
-      }
-
-      .MISSING span {
-        padding-left: 0px;
-      }
-
-      .BUILDING, .BUILDING ~ td {
-        opacity: 0.5;
-      }
-    </style>
-    <table>
-      <tbody>
-        <template repeat="{{ type in _resultTypes | _keys }}">
-          <tr>
-            <td class="{{ type }}">
-              <span>{{ type }}</span>
-            </td>
-            <td>
-              <template repeat="{{ builder in _resultTypes[type] | _keys }}">
-                <ct-builder builder="{{ builder }}"></ct-builder>
-              </template>
-            </td>
-          </tr>
-        </template>
-      </tbody>
-    </table>
+    <template repeat="{{ builder in _builders }}">
+      <ct-builder builder="{{ builder }}"></ct-builder>
+    </template>
   </template>
   <script>
     Polymer({
-      failures: [],
-      _resultTypes: {},
-
-      _keys: function(obj) {
-        return Object.keys(obj).sort();
-      },
+      failures: null,
+      _builders: null,
 
       failuresChanged: function() {
-        // Create a set of builders for each result type (e.g., text, crash).
-        this._resultTypes = {};
+        var builderMap = {};
         this.failures.forEach(function(failure) {
           var results = failure.resultNodesByBuilder;
-          Object.keys(results, (function(builder) {
-            var result = results[builder].actual;
-            if (!this._resultTypes[result])
-              this._resultTypes[result] = {};
-            this._resultTypes[result][builder] = 1;
+          Object.keys(results, (function(builder, result) {
+            if (!builderMap[builder])
+              builderMap[builder] = {};
+            // This assumes that duplicate builder/master pairs all have the same
+            // earliestFailingBuild.
+            builderMap[builder][result.masterUrl] = result.earliestFailingBuild;
           }).bind(this));
+        }, this);
+
+        this._builders = [];
+
+        Object.keys(builderMap).sort().forEach(function(builder) {
+          Object.keys(builderMap[builder]).sort().forEach(function(masterUrl) {
+            this._builders.push(new CTBuilder(masterUrl, builder,
+                builderMap[builder][masterUrl]));
+          }, this);
         }, this);
       },
     });

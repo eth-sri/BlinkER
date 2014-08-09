@@ -51,8 +51,8 @@
 namespace blink {
 struct FetchInitiatorInfo;
 struct TimelineImageInfo;
-struct TimelineThreadState;
 struct TimelineRecordEntry;
+struct TimelineThreadState;
 
 class LocalDOMWindow;
 class Document;
@@ -89,8 +89,7 @@ class XMLHttpRequest;
 typedef String ErrorString;
 
 class InspectorTimelineAgent FINAL
-    : public TraceEventTarget<InspectorTimelineAgent>
-    , public InspectorBaseAgent<InspectorTimelineAgent>
+    : public InspectorBaseAgent<InspectorTimelineAgent>
     , public ScriptGCEventListener
     , public InspectorBackendDispatcher::TimelineCommandHandler
     , public PlatformInstrumentationClient {
@@ -114,13 +113,14 @@ public:
         uint64_t limitGPUMemoryBytes;
     };
 
-    static PassOwnPtr<InspectorTimelineAgent> create(InspectorPageAgent* pageAgent, InspectorLayerTreeAgent* layerTreeAgent,
+    static PassOwnPtrWillBeRawPtr<InspectorTimelineAgent> create(InspectorPageAgent* pageAgent, InspectorLayerTreeAgent* layerTreeAgent,
         InspectorOverlay* overlay, InspectorType type, InspectorClient* client)
     {
-        return adoptPtr(new InspectorTimelineAgent(pageAgent, layerTreeAgent, overlay, type, client));
+        return adoptPtrWillBeNoop(new InspectorTimelineAgent(pageAgent, layerTreeAgent, overlay, type, client));
     }
 
     virtual ~InspectorTimelineAgent();
+    virtual void trace(Visitor*) OVERRIDE;
 
     virtual void setFrontend(InspectorFrontend*) OVERRIDE;
     virtual void clearFrontend() OVERRIDE;
@@ -286,8 +286,8 @@ private:
     void innerStop(bool fromConsole);
     void setLiveEvents(const String&);
 
-    InspectorPageAgent* m_pageAgent;
-    InspectorLayerTreeAgent* m_layerTreeAgent;
+    RawPtrWillBeMember<InspectorPageAgent> m_pageAgent;
+    RawPtrWillBeMember<InspectorLayerTreeAgent> m_layerTreeAgent;
     InspectorFrontend::Timeline* m_frontend;
     InspectorClient* m_client;
     InspectorOverlay* m_overlay;
@@ -313,7 +313,7 @@ private:
     double m_paintSetupEnd;
     RefPtr<JSONObject> m_gpuTask;
     RefPtr<JSONValue> m_pendingLayerTreeData;
-    typedef HashMap<ThreadIdentifier, TimelineThreadState> ThreadStateMap;
+    typedef WillBeHeapHashMap<ThreadIdentifier, TimelineThreadState> ThreadStateMap;
     ThreadStateMap m_threadStates;
     bool m_mayEmitFirstPaint;
     HashSet<String> m_liveEvents;

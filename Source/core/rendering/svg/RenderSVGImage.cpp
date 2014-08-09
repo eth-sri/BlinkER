@@ -188,9 +188,8 @@ bool RenderSVGImage::nodeAtFloatPoint(const HitTestRequest& request, HitTestResu
     PointerEventsHitRules hitRules(PointerEventsHitRules::SVG_IMAGE_HITTESTING, request, style()->pointerEvents());
     bool isVisible = (style()->visibility() == VISIBLE);
     if (isVisible || !hitRules.requireVisible) {
-        FloatPoint localPoint = localToParentTransform().inverse().mapPoint(pointInParent);
-
-        if (!SVGRenderSupport::pointInClippingArea(this, localPoint))
+        FloatPoint localPoint;
+        if (!SVGRenderSupport::transformToUserSpaceAndCheckClipping(this, localToParentTransform(), pointInParent, localPoint))
             return false;
 
         if (hitRules.canHitFill || hitRules.canHitBoundingBox) {
@@ -224,7 +223,7 @@ void RenderSVGImage::imageChanged(WrappedImagePtr, const IntRect*)
     paintInvalidationForWholeRenderer();
 }
 
-void RenderSVGImage::addFocusRingRects(Vector<IntRect>& rects, const LayoutPoint&, const RenderLayerModelObject*)
+void RenderSVGImage::addFocusRingRects(Vector<IntRect>& rects, const LayoutPoint&, const RenderLayerModelObject*) const
 {
     // this is called from paint() after the localTransform has already been applied
     IntRect contentRect = enclosingIntRect(paintInvalidationRectInLocalCoordinates());

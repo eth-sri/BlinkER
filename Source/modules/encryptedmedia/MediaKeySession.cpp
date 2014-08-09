@@ -26,10 +26,10 @@
 #include "config.h"
 #include "modules/encryptedmedia/MediaKeySession.h"
 
+#include "bindings/core/v8/DOMWrapperWorld.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "bindings/core/v8/ScriptState.h"
-#include "core/dom/DOMException.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/events/Event.h"
 #include "core/events/GenericEventQueue.h"
@@ -45,7 +45,8 @@
 #include "public/platform/WebContentDecryptionModuleSession.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURL.h"
-#include "wtf/Uint8Array.h"
+#include "wtf/ArrayBuffer.h"
+#include "wtf/ArrayBufferView.h"
 
 namespace blink {
 
@@ -60,9 +61,9 @@ public:
     Type type() const { return m_type; }
     const Persistent<ContentDecryptionModuleResult> result() const { return m_result; }
     // |data| is only valid for Update types.
-    const RefPtr<Uint8Array> data() const { return m_data; }
+    const RefPtr<ArrayBuffer> data() const { return m_data; }
 
-    static PendingAction* CreatePendingUpdate(ContentDecryptionModuleResult* result, PassRefPtr<Uint8Array> data)
+    static PendingAction* CreatePendingUpdate(ContentDecryptionModuleResult* result, PassRefPtr<ArrayBuffer> data)
     {
         ASSERT(result);
         ASSERT(data);
@@ -72,7 +73,7 @@ public:
     static PendingAction* CreatePendingRelease(ContentDecryptionModuleResult* result)
     {
         ASSERT(result);
-        return new PendingAction(Release, result, PassRefPtr<Uint8Array>());
+        return new PendingAction(Release, result, PassRefPtr<ArrayBuffer>());
     }
 
     ~PendingAction()
@@ -85,7 +86,7 @@ public:
     }
 
 private:
-    PendingAction(Type type, ContentDecryptionModuleResult* result, PassRefPtr<Uint8Array> data)
+    PendingAction(Type type, ContentDecryptionModuleResult* result, PassRefPtr<ArrayBuffer> data)
         : m_type(type)
         , m_result(result)
         , m_data(data)
@@ -94,7 +95,7 @@ private:
 
     const Type m_type;
     const Member<ContentDecryptionModuleResult> m_result;
-    const RefPtr<Uint8Array> m_data;
+    const RefPtr<ArrayBuffer> m_data;
 };
 
 // This class allows a MediaKeySession object to be created asynchronously.
@@ -102,14 +103,14 @@ class MediaKeySessionInitializer : public ScriptPromiseResolver {
     WTF_MAKE_NONCOPYABLE(MediaKeySessionInitializer);
 
 public:
-    static ScriptPromise create(ScriptState*, MediaKeys*, const String& initDataType, PassRefPtr<Uint8Array> initData, const String& sessionType);
+    static ScriptPromise create(ScriptState*, MediaKeys*, const String& initDataType, PassRefPtr<ArrayBuffer> initData, const String& sessionType);
     virtual ~MediaKeySessionInitializer();
 
     void completeWithSession(blink::WebContentDecryptionModuleResult::SessionStatus);
     void completeWithDOMException(ExceptionCode, const String& errorMessage);
 
 private:
-    MediaKeySessionInitializer(ScriptState*, MediaKeys*, const String& initDataType, PassRefPtr<Uint8Array> initData, const String& sessionType);
+    MediaKeySessionInitializer(ScriptState*, MediaKeys*, const String& initDataType, PassRefPtr<ArrayBuffer> initData, const String& sessionType);
     void timerFired(Timer<MediaKeySessionInitializer>*);
 
     Persistent<MediaKeys> m_mediaKeys;
@@ -118,7 +119,7 @@ private:
     // The next 3 values are simply the initialization data saved so that the
     // asynchronous creation has the data needed.
     String m_initDataType;
-    RefPtr<Uint8Array> m_initData;
+    RefPtr<ArrayBuffer> m_initData;
     String m_sessionType;
 
     Timer<MediaKeySessionInitializer> m_timer;
@@ -155,7 +156,7 @@ private:
     MediaKeySessionInitializer* m_initializer;
 };
 
-ScriptPromise MediaKeySessionInitializer::create(ScriptState* scriptState, MediaKeys* mediaKeys, const String& initDataType, PassRefPtr<Uint8Array> initData, const String& sessionType)
+ScriptPromise MediaKeySessionInitializer::create(ScriptState* scriptState, MediaKeys* mediaKeys, const String& initDataType, PassRefPtr<ArrayBuffer> initData, const String& sessionType)
 {
     RefPtr<MediaKeySessionInitializer> initializer = adoptRef(new MediaKeySessionInitializer(scriptState, mediaKeys, initDataType, initData, sessionType));
     initializer->suspendIfNeeded();
@@ -163,7 +164,7 @@ ScriptPromise MediaKeySessionInitializer::create(ScriptState* scriptState, Media
     return initializer->promise();
 }
 
-MediaKeySessionInitializer::MediaKeySessionInitializer(ScriptState* scriptState, MediaKeys* mediaKeys, const String& initDataType, PassRefPtr<Uint8Array> initData, const String& sessionType)
+MediaKeySessionInitializer::MediaKeySessionInitializer(ScriptState* scriptState, MediaKeys* mediaKeys, const String& initDataType, PassRefPtr<ArrayBuffer> initData, const String& sessionType)
     : ScriptPromiseResolver(scriptState)
     , m_mediaKeys(mediaKeys)
     , m_initDataType(initDataType)
@@ -207,7 +208,7 @@ void MediaKeySessionInitializer::timerFired(Timer<MediaKeySessionInitializer>*)
     //       that URL. The URL may be validated and/or normalized.
     m_cdmSession = adoptPtr(cdm->createSession());
     NewMediaKeySessionResult* result = new NewMediaKeySessionResult(this);
-    m_cdmSession->initializeNewSession(m_initDataType, m_initData->data(), m_initData->length(), m_sessionType, result->result());
+    m_cdmSession->initializeNewSession(m_initDataType, static_cast<unsigned char*>(m_initData->data()), m_initData->byteLength(), m_sessionType, result->result());
 
     WTF_LOG(Media, "MediaKeySessionInitializer::timerFired done");
     // Note: As soon as the promise is resolved (or rejected), the
@@ -271,7 +272,7 @@ void MediaKeySessionInitializer::completeWithDOMException(ExceptionCode code, co
     reject(DOMException::create(code, errorMessage));
 }
 
-ScriptPromise MediaKeySession::create(ScriptState* scriptState, MediaKeys* mediaKeys, const String& initDataType, PassRefPtr<Uint8Array> initData, const String& sessionType)
+ScriptPromise MediaKeySession::create(ScriptState* scriptState, MediaKeys* mediaKeys, const String& initDataType, PassRefPtr<ArrayBuffer> initData, const String& sessionType)
 {
     // Since creation is done asynchronously, use MediaKeySessionInitializer
     // to do it.
@@ -285,6 +286,7 @@ MediaKeySession::MediaKeySession(ExecutionContext* context, MediaKeys* keys, Pas
     , m_session(cdmSession)
     , m_keys(keys)
     , m_isClosed(false)
+    , m_closedPromise(new ClosedPromise(context, this, ClosedPromise::Closed))
     , m_actionTimer(this, &MediaKeySession::actionTimerFired)
 {
     WTF_LOG(Media, "MediaKeySession(%p)::MediaKeySession", this);
@@ -326,7 +328,24 @@ String MediaKeySession::sessionId() const
     return m_session->sessionId();
 }
 
-ScriptPromise MediaKeySession::update(ScriptState* scriptState, Uint8Array* response)
+ScriptPromise MediaKeySession::closed(ScriptState* scriptState)
+{
+    return m_closedPromise->promise(scriptState->world());
+}
+
+ScriptPromise MediaKeySession::update(ScriptState* scriptState, ArrayBuffer* response)
+{
+    RefPtr<ArrayBuffer> responseCopy = ArrayBuffer::create(response->data(), response->byteLength());
+    return updateInternal(scriptState, responseCopy.release());
+}
+
+ScriptPromise MediaKeySession::update(ScriptState* scriptState, ArrayBufferView* response)
+{
+    RefPtr<ArrayBuffer> responseCopy = ArrayBuffer::create(response->baseAddress(), response->byteLength());
+    return updateInternal(scriptState, responseCopy.release());
+}
+
+ScriptPromise MediaKeySession::updateInternal(ScriptState* scriptState, PassRefPtr<ArrayBuffer> response)
 {
     WTF_LOG(Media, "MediaKeySession(%p)::update", this);
     ASSERT(!m_isClosed);
@@ -338,13 +357,13 @@ ScriptPromise MediaKeySession::update(ScriptState* scriptState, Uint8Array* resp
     // 1. If response is an empty array, return a promise rejected with a new
     //    DOMException whose name is "InvalidAccessError" and that has the
     //    message "The response parameter is empty."
-    if (!response->length()) {
+    if (!response->byteLength()) {
         return ScriptPromise::rejectWithDOMException(
             scriptState, DOMException::create(InvalidAccessError, "The response parameter is empty."));
     }
 
     // 2. Let message be a copy of the contents of the response parameter.
-    RefPtr<Uint8Array> responseCopy = Uint8Array::create(response->data(), response->length());
+    //    (Copied in the caller.)
 
     // 3. Let promise be a new promise.
     SimpleContentDecryptionModuleResult* result = new SimpleContentDecryptionModuleResult(scriptState);
@@ -352,7 +371,7 @@ ScriptPromise MediaKeySession::update(ScriptState* scriptState, Uint8Array* resp
 
     // 4. Run the following steps asynchronously (documented in
     //    actionTimerFired())
-    m_pendingActions.append(PendingAction::CreatePendingUpdate(result, responseCopy.release()));
+    m_pendingActions.append(PendingAction::CreatePendingUpdate(result, response));
     if (!m_actionTimer.isActive())
         m_actionTimer.startOneShot(0, FROM_HERE);
 
@@ -412,7 +431,7 @@ void MediaKeySession::actionTimerFired(Timer<MediaKeySession>*)
             // NOTE: Continued from step 4 of MediaKeySession::update().
             // Continue the update call by passing message to the cdm. Once
             // completed, it will resolve/reject the promise.
-            m_session->update(action->data()->data(), action->data()->length(), action->result()->result());
+            m_session->update(static_cast<unsigned char*>(action->data()->data()), action->data()->byteLength(), action->result()->result());
             break;
         case PendingAction::Release:
             WTF_LOG(Media, "MediaKeySession(%p)::actionTimerFired: Release", this);
@@ -437,7 +456,7 @@ void MediaKeySession::message(const unsigned char* message, size_t messageLength
     MediaKeyMessageEventInit init;
     init.bubbles = false;
     init.cancelable = false;
-    init.message = Uint8Array::create(message, messageLength);
+    init.message = ArrayBuffer::create(static_cast<const void*>(message), messageLength);
     init.destinationURL = destinationURL.string();
 
     RefPtrWillBeRawPtr<MediaKeyMessageEvent> event = MediaKeyMessageEvent::create(EventTypeNames::message, init);
@@ -462,7 +481,8 @@ void MediaKeySession::close()
     // the CDM so this object can be garbage collected.
     m_isClosed = true;
 
-    // FIXME: Implement closed() attribute.
+    // Resolve the closed promise.
+    m_closedPromise->resolve(V8UndefinedType());
 }
 
 // Queue a task to fire a simple event named keyadded at the MediaKeySession object.
@@ -557,6 +577,7 @@ void MediaKeySession::trace(Visitor* visitor)
     visitor->trace(m_asyncEventQueue);
     visitor->trace(m_pendingActions);
     visitor->trace(m_keys);
+    visitor->trace(m_closedPromise);
     EventTargetWithInlineData::trace(visitor);
 }
 

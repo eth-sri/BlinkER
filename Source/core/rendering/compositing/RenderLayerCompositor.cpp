@@ -165,13 +165,17 @@ bool RenderLayerCompositor::acceleratedCompositingForOverflowScrollEnabled() con
 
 static RenderVideo* findFullscreenVideoRenderer(Document& document)
 {
+    // Recursively find the document that is in fullscreen.
     Element* fullscreenElement = FullscreenElementStack::fullscreenElementFrom(document);
+    Document* contentDocument = &document;
     while (fullscreenElement && fullscreenElement->isFrameOwnerElement()) {
-        Document* contentDocument = toHTMLFrameOwnerElement(fullscreenElement)->contentDocument();
+        contentDocument = toHTMLFrameOwnerElement(fullscreenElement)->contentDocument();
         if (!contentDocument)
             return 0;
         fullscreenElement = FullscreenElementStack::fullscreenElementFrom(*contentDocument);
     }
+    // Get the current fullscreen element from the document.
+    fullscreenElement = FullscreenElementStack::currentFullScreenElementFrom(*contentDocument);
     if (!isHTMLVideoElement(fullscreenElement))
         return 0;
     RenderObject* renderer = fullscreenElement->renderer();
@@ -379,6 +383,9 @@ bool RenderLayerCompositor::allocateOrClearCompositedLayerMapping(RenderLayer* l
         ASSERT(!layer->hasCompositedLayerMapping());
         setCompositingModeEnabled(true);
 
+        // If we need to repaint, do so before allocating the compositedLayerMapping and clearing out the groupedMapping.
+        repaintOnCompositingChange(layer);
+
         // If this layer was previously squashed, we need to remove its reference to a groupedMapping right away, so
         // that computing repaint rects will know the layer's correct compositingState.
         // FIXME: do we need to also remove the layer from it's location in the squashing list of its groupedMapping?
@@ -387,8 +394,6 @@ bool RenderLayerCompositor::allocateOrClearCompositedLayerMapping(RenderLayer* l
         layer->setLostGroupedMapping(false);
         layer->setGroupedMapping(0);
 
-        // If we need to repaint, do so before allocating the compositedLayerMapping
-        repaintOnCompositingChange(layer);
         layer->ensureCompositedLayerMapping();
         compositedLayerMappingChanged = true;
 
@@ -615,33 +620,23 @@ bool RenderLayerCompositor::parentFrameContentLayers(RenderPart* renderer)
     return true;
 }
 
-void RenderLayerCompositor::repaintCompositedLayers()
+static void fullyInvalidatePaintRecursive(RenderLayer* layer)
 {
-    recursiveRepaintLayer(rootRenderLayer());
-}
-
-void RenderLayerCompositor::recursiveRepaintLayer(RenderLayer* layer)
-{
-    // FIXME: This method does not work correctly with transforms.
     if (layer->compositingState() == PaintsIntoOwnBacking) {
         layer->compositedLayerMapping()->setContentsNeedDisplay();
-        // This function is called only when it is desired to repaint the entire compositing graphics layer tree.
-        // This includes squashing.
         layer->compositedLayerMapping()->setSquashingContentsNeedDisplay();
     }
 
-    layer->stackingNode()->updateLayerListsIfNeeded();
+    for (RenderLayer* child = layer->firstChild(); child; child = child->nextSibling())
+        fullyInvalidatePaintRecursive(child);
+}
 
-#if ENABLE(ASSERT)
-    LayerListMutationDetector mutationChecker(layer->stackingNode());
-#endif
-
-    unsigned childrenToVisit = NormalFlowChildren;
-    if (layer->hasCompositingDescendant())
-        childrenToVisit |= PositiveZOrderChildren | NegativeZOrderChildren;
-    RenderLayerStackingNodeIterator iterator(*layer->stackingNode(), childrenToVisit);
-    while (RenderLayerStackingNode* curNode = iterator.next())
-        recursiveRepaintLayer(curNode->layer());
+void RenderLayerCompositor::fullyInvalidatePaint()
+{
+    // We're walking all compositing layers and invalidating them, so there's
+    // no need to have up-to-date compositing state.
+    DisableCompositingQueryAsserts disabler;
+    fullyInvalidatePaintRecursive(rootRenderLayer());
 }
 
 RenderLayer* RenderLayerCompositor::rootRenderLayer() const

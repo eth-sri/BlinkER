@@ -128,8 +128,7 @@ WebInspector.HeapSnapshotView = function(dataDisplayDelegate, profile)
     this._perspectives.push(new WebInspector.HeapSnapshotView.ContainmentPerspective());
     if (this._allocationView)
         this._perspectives.push(new WebInspector.HeapSnapshotView.AllocationPerspective());
-    if (WebInspector.experimentsSettings.heapSnapshotStatistics.isEnabled())
-        this._perspectives.push(new WebInspector.HeapSnapshotView.StatisticsPerspective());
+    this._perspectives.push(new WebInspector.HeapSnapshotView.StatisticsPerspective());
 
     this._perspectiveSelect = new WebInspector.StatusBarComboBox(this._onSelectedPerspectiveChanged.bind(this));
     for (var i = 0; i < this._perspectives.length; ++i)
@@ -2082,8 +2081,7 @@ WebInspector.HeapSnapshotStatisticsView = function()
 {
     WebInspector.VBox.call(this);
     this.setMinimumSize(50, 25);
-    this._pieChart = new WebInspector.PieChart();
-    this._pieChart.setSize(150);
+    this._pieChart = new WebInspector.PieChart(150);
     this.element.appendChild(this._pieChart.element);
     this._labels = this.element.createChild("div", "heap-snapshot-stats-legend");
 }
@@ -2169,7 +2167,7 @@ WebInspector.HeapAllocationStackView.prototype = {
             var name = frameDiv.createChild("div");
             name.textContent = frame.functionName;
             if (frame.scriptId) {
-                var urlElement = this._linkifier.linkifyLocationByScriptId(this._weakTarget.get(), String(frame.scriptId), frame.scriptName, frame.line - 1, frame.column - 1);
+                var urlElement = this._linkifier.linkifyScriptLocation(this._weakTarget.get(), String(frame.scriptId), frame.scriptName, frame.line - 1, frame.column - 1);
                 frameDiv.appendChild(urlElement);
             }
         }

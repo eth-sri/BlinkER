@@ -24,6 +24,7 @@ devtools_core_js_files =
   gypi_values.devtools_ui_js_files +
   gypi_values.devtools_components_js_files +
   gypi_values.devtools_host_js_files +
+  gypi_values.devtools_screencast_js_files +
   gypi_values.devtools_toolbox_js_files
 
 devtools_extensions_js_files = gypi_values.devtools_extensions_js_files -
@@ -286,6 +287,12 @@ inline_js_imports("build_resources_module") {
   input = "front_end/resources/ResourcesPanel.js"
   imported_files = gypi_values.devtools_resources_js_files
   output = "$root_out_dir/resources/inspector/resources/ResourcesPanel.js"
+}
+
+inline_js_imports("build_documentation_module") {
+  input = "front_end/documentation/WikiParser.js"
+  imported_files = gypi_values.devtools_documentation_js_files
+  output = "$root_out_dir/resources/inspector/documentation/WikiParser.js"
 }
 
 inline_js_imports("build_settings_module") {

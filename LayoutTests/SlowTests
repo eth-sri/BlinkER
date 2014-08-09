@@ -55,6 +55,8 @@ crbug.com/24182 perf/append-text-nodes-without-renderers.html [ Slow ]
 crbug.com/24182 perf/set-attribute.html [ Slow ]
 crbug.com/24182 svg/filters/big-sized-filter.svg [ Slow ]
 crbug.com/24182 tables/mozilla/other/slashlogo.html [ Slow ]
+crbug.com/24182 virtual/gpu/fast/canvas/canvas-blend-image.html [ Slow ]
+crbug.com/24182 virtual/gpu/fast/canvas/canvas-blend-solid.html [ Slow ]
 crbug.com/24182 virtual/gpu/fast/canvas/canvas-composite-alpha.html [ Slow ]
 crbug.com/24182 virtual/gpu/fast/canvas/canvas-composite-canvas.html [ Slow ]
 crbug.com/24182 virtual/gpu/fast/canvas/canvas-createImageBitmap-drawImage.html [ Slow ]
@@ -94,6 +96,7 @@ crbug.com/254988 inspector/sources/debugger/callstack-placards-discarded.html [ 
 crbug.com/327078 http/tests/inspector/network/long-script-content.html [ Slow ]
 crbug.com/247466 [ Debug ] inspector-enabled/sources/debugger/script-formatter-breakpoints-1.html [ Slow ]
 crbug.com/247466 [ Debug ] inspector-enabled/sources/debugger/script-formatter-breakpoints-4.html [ Slow ]
+crbug.com/394210 [ Release ] inspector/profiler/webgl/webgl-profiler-api-changes.html [ Slow ]
 # inspector tests below are slow on LinuxASAN
 crbug.com/247466 [ Linux Release ] inspector/sources/debugger/debugger-activation-crash2.html [ Slow ]
 
@@ -167,3 +170,7 @@ crbug.com/363029 virtual/gpu/fast/canvas/canvas-composite-stroke-alpha.html [ Sl
 crbug.com/364225 virtual/gpu/fast/canvas/canvas-composite-text-alpha.html [ Slow ]
 
 crbug.com/372424 fast/dom/DOMImplementation/createDocument-with-used-doctype.html [ Slow ]
+
+crbug.com/301515 fast/workers/worker-exception-during-navigation.html [ Slow ]
+crbug.com/301515 fast/workers/worker-supplement-gc.html [ Slow ]
+crbug.com/301515 http/tests/serviceworker/chromium/service-worker-gc.html [ Slow ]

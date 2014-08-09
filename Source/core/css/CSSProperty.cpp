@@ -277,6 +277,7 @@ bool CSSProperty::isInheritedProperty(CSSPropertyID propertyID)
     case CSSPropertyFontFamily:
     case CSSPropertyFontSize:
     case CSSPropertyFontStyle:
+    case CSSPropertyFontStretch:
     case CSSPropertyFontVariant:
     case CSSPropertyFontWeight:
     case CSSPropertyGlyphOrientationHorizontal:
@@ -430,7 +431,6 @@ bool CSSProperty::isInheritedProperty(CSSPropertyID propertyID)
     case CSSPropertyFloat:
     case CSSPropertyFloodColor:
     case CSSPropertyFloodOpacity:
-    case CSSPropertyFontStretch:
     case CSSPropertyHeight:
     case CSSPropertyIsolation:
     case CSSPropertyJustifyItems:
@@ -484,19 +484,7 @@ bool CSSProperty::isInheritedProperty(CSSPropertyID propertyID)
     case CSSPropertyTextDecorationLine:
     case CSSPropertyTextDecorationStyle:
     case CSSPropertyTextDecorationColor:
-    case CSSPropertyTextLineThroughColor:
-    case CSSPropertyTextLineThroughMode:
-    case CSSPropertyTextLineThroughStyle:
-    case CSSPropertyTextLineThroughWidth:
     case CSSPropertyTextOverflow:
-    case CSSPropertyTextOverlineColor:
-    case CSSPropertyTextOverlineMode:
-    case CSSPropertyTextOverlineStyle:
-    case CSSPropertyTextOverlineWidth:
-    case CSSPropertyTextUnderlineColor:
-    case CSSPropertyTextUnderlineMode:
-    case CSSPropertyTextUnderlineStyle:
-    case CSSPropertyTextUnderlineWidth:
     case CSSPropertyTop:
     case CSSPropertyTouchAction:
     case CSSPropertyTransition:

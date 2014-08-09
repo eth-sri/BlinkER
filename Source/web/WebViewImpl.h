@@ -233,10 +233,6 @@ public:
     virtual void spellingMarkers(WebVector<uint32_t>* markers) OVERRIDE;
     virtual unsigned long createUniqueIdentifierForRequest() OVERRIDE;
     virtual void inspectElementAt(const WebPoint&) OVERRIDE;
-    virtual WebString inspectorSettings() const OVERRIDE;
-    virtual void setInspectorSettings(const WebString&) OVERRIDE;
-    virtual bool inspectorSetting(const WebString& key, WebString* value) const OVERRIDE;
-    virtual void setInspectorSetting(const WebString& key, const WebString& value) OVERRIDE;
     virtual void setCompositorDeviceScaleFactorOverride(float) OVERRIDE;
     virtual void setRootLayerTransform(const WebSize& offset, float scale) OVERRIDE;
     virtual WebDevToolsAgent* devToolsAgent() OVERRIDE;
@@ -521,6 +517,7 @@ private:
     virtual ~WebViewImpl();
 
     WebTextInputType textInputType();
+    int textInputFlags();
 
     WebString inputModeOfFocusedElement();
 
@@ -679,12 +676,6 @@ private:
 
     // Whether the user can press tab to focus links.
     bool m_tabsToLinks;
-
-    // Inspector settings.
-    WebString m_inspectorSettings;
-
-    typedef HashMap<WTF::String, WTF::String> SettingsMap;
-    OwnPtr<SettingsMap> m_inspectorSettingsMap;
 
     // If set, the (plugin) node which has mouse capture.
     RefPtrWillBePersistent<blink::Node> m_mouseCaptureNode;

@@ -67,6 +67,7 @@ InternalSettings::Backup::Backup(Settings* settings)
     , m_originalAccessibilityFontScaleFactor(settings->accessibilityFontScaleFactor())
     , m_originalMediaTypeOverride(settings->mediaTypeOverride())
     , m_originalMockScrollbarsEnabled(settings->mockScrollbarsEnabled())
+    , m_originalMockGestureTapHighlightsEnabled(settings->mockGestureTapHighlightsEnabled())
     , m_langAttributeAwareFormControlUIEnabled(RuntimeEnabledFeatures::langAttributeAwareFormControlUIEnabled())
     , m_imagesEnabled(settings->imagesEnabled())
     , m_defaultVideoPosterURL(settings->defaultVideoPosterURL())
@@ -87,6 +88,7 @@ void InternalSettings::Backup::restoreTo(Settings* settings)
     settings->setAccessibilityFontScaleFactor(m_originalAccessibilityFontScaleFactor);
     settings->setMediaTypeOverride(m_originalMediaTypeOverride);
     settings->setMockScrollbarsEnabled(m_originalMockScrollbarsEnabled);
+    settings->setMockGestureTapHighlightsEnabled(m_originalMockGestureTapHighlightsEnabled);
     RuntimeEnabledFeatures::setLangAttributeAwareFormControlUIEnabled(m_langAttributeAwareFormControlUIEnabled);
     settings->setImagesEnabled(m_imagesEnabled);
     settings->setDefaultVideoPosterURL(m_defaultVideoPosterURL);
@@ -142,6 +144,7 @@ InternalSettings::InternalSettings(Page& page)
     , m_page(&page)
     , m_backup(&page.settings())
 {
+    ScriptWrappable::init(this);
 }
 
 void InternalSettings::resetToConsistentState()
@@ -166,6 +169,12 @@ void InternalSettings::setMockScrollbarsEnabled(bool enabled, ExceptionState& ex
 {
     InternalSettingsGuardForSettings();
     settings()->setMockScrollbarsEnabled(enabled);
+}
+
+void InternalSettings::setMockGestureTapHighlightsEnabled(bool enabled, ExceptionState& exceptionState)
+{
+    InternalSettingsGuardForSettings();
+    settings()->setMockGestureTapHighlightsEnabled(enabled);
 }
 
 void InternalSettings::setAuthorShadowDOMForAnyElementEnabled(bool isEnabled)

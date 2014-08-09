@@ -3,81 +3,122 @@ Copyright 2014 The Chromium Authors. All rights reserved.
 Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
+<link href="../model/ct-builder-revisions.html" rel="import">
+
+<link rel="import" href="../model/ct-failure.html">
 
 <polymer-element name="ct-failure-analyzer" attributes="failures builderLatestRevisions">
   <script>
     // FIXME: Don't use a polymer component for this. Instead use a Failures model
     // object that knows how to do the XHR and process the data appropriately.
     Polymer({
-      builderLatestRevisions: {},
-      failures: {},
+      builderLatestRevisions: null,
+      failures: null,
+
+      // FIXME: Get this from https://chromium.googlesource.com/chromium/tools/build/+/master/scripts/slave/gatekeeper_trees.json?format=text.
+      _trees: {
+        blink: [
+          "https://build.chromium.org/p/chromium.webkit",
+        ],
+        chromium: [
+          "https://build.chromium.org/p/chromium",
+          "https://build.chromium.org/p/chromium.chrome",
+          "https://build.chromium.org/p/chromium.chromiumos",
+          "https://build.chromium.org/p/chromium.gpu",
+          "https://build.chromium.org/p/chromium.linux",
+          "https://build.chromium.org/p/chromium.mac",
+          "https://build.chromium.org/p/chromium.memory",
+          "https://build.chromium.org/p/chromium.win"
+        ],
+      },
 
       update: function() {
         net.json('http://auto-sheriff.appspot.com/data').then(function(data) {
           // FIXME: Don't special-case the blink master.
-          this.builderLatestRevisions = data.latest_revisions['chromium.webkit'];
-          this.failures.builders = {};
-          this.failures.unexpected = [];
+          this.builderLatestRevisions = new CTBuilderRevisions(data.latest_revisions['chromium.webkit']);
+          this.failures = {};
           data.range_groups.forEach(function(group) {
             this._processFailuresForGroup(group, data.alerts);
           }.bind(this));
+          // FIXME: Sort this.failures by severity of regression, then by oldestFailingRevision.
         }.bind(this));
+      },
+
+      _failureComparator: function(a, b) {
+        if (a.step > b.step)
+          return 1;
+        if (a.step < b.step)
+          return -1
+        if (a.testName > b.testName)
+          return 1;
+        if (a.testName < b.testName)
+          return -1
+        return 0;
       },
 
       _processFailuresForGroup: function(group, failures) {
         var failuresByReason = {};
-        var failingBuildersWithoutReasons = {};
+
+        var masterToTree = {};
+        Object.keys(this._trees, function(tree, masters) {
+          masters.forEach(function(master) {
+            masterToTree[master] = tree;
+          });
+        });
 
         group.failure_keys.forEach(function(failure_key) {
           var failure = failures.find(function(item) { return item.key == failure_key; });
           if (failure.ignored_by.length)
             return;
 
-          // FIXME: Make sheriff-o-matic work for all waterfalls.
-          if (!failure.master_url.endsWith('chromium.webkit'))
-            return;
-
-          // FIXME: Have sheriff-o-matic show non-webkit_tests failures by reason.
-          if (!failure.reason || failure.step_name != 'webkit_tests') {
-            var builder = failure.builder_name;
-            if (!failingBuildersWithoutReasons[builder])
-              failingBuildersWithoutReasons[builder] = {};
-            failingBuildersWithoutReasons[builder][failure.step_name] = 1;
-            return;
+          var reason, failureType;
+          if (failure.reason) {
+            // FIXME: Store the actual failure type in a different field instead of smashing it into the reason.
+            var parts = failure.reason.split(':');
+            reason = parts[0];
+            failureType = parts[1] || 'FAIL';
+          } else {
+            reason = null;
+            failureType = 'UNKNOWN';
           }
 
-          // FIXME: Store the actual failure type in a different field instead of smashing it into the reason.
-          var parts = failure.reason.split(':');
-          var reason = parts[0];
-          var failureType = parts[1];
+          var failureKey = JSON.stringify({
+            step: failure.step_name,
+            reason: reason,
+          });
 
-          if (!failuresByReason[reason])
-            failuresByReason[reason] = {}
-          failuresByReason[reason][failure.builder_name] = {
+          var tree = masterToTree[failure.master_url];
+
+          // FIXME: Use a model class instead of a dumb object.
+          if (!failuresByReason[failureKey])
+            failuresByReason[failureKey] = {};
+          if (!failuresByReason[failureKey][tree])
+            failuresByReason[failureKey][tree] = {};
+          failuresByReason[failureKey][tree][failure.builder_name] = {
+            // FIXME: Rename to failureType.
             actual: failureType,
+            lastFailingBuild: failure.last_failing_build,
+            earliestFailingBuild: failure.failing_build,
+            masterUrl: failure.master_url,
           };
         }.bind(this));
 
-        var groupedFailures = [];
-        var oldestFailingRevision = Number(group.merged_first_failing.blink);
-        var newestPassingRevision = group.merged_last_passing ? Number(group.merged_last_passing.blink) : undefined;
-
-        Object.keys(failuresByReason, function(reason, resultNodesByBuilder) {
-          groupedFailures.push({
-            testName: reason,
-            resultNodesByBuilder: resultNodesByBuilder,
-            oldestFailingRevision: oldestFailingRevision,
-            newestPassingRevision: newestPassingRevision,
-          });
+        var groupedFailures = {};
+        Object.keys(failuresByReason, function(failureKey, resultsByTree) {
+          var failure = JSON.parse(failureKey);
+          Object.keys(resultsByTree, function(tree, resultsByBuilder) {
+            if (!groupedFailures[tree])
+              groupedFailures[tree] = [];
+            groupedFailures[tree].push(new CTFailure(failure.step, failure.reason, resultsByBuilder, group.merged_first_failing, group.merged_last_passing));
+          })
         });
 
-        if (groupedFailures.length)
-          this.failures.unexpected.push(groupedFailures);
+        Object.keys(groupedFailures, function(tree, failures) {
+          failures.sort(this._failureComparator);
 
-        // FIXME: Show these in the failure stream with regression ranges like
-        // any other kind of failure.
-        Object.keys(failingBuildersWithoutReasons, function(builder, steps) {
-          this.failures.builders[builder] = Object.keys(steps);
+          if (!this.failures[tree])
+            this.failures[tree] = [];
+          this.failures[tree].push(failures);
         }.bind(this));
       },
     });

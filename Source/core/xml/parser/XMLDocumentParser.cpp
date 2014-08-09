@@ -62,7 +62,7 @@
 #include "platform/network/ResourceError.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/network/ResourceResponse.h"
-#include "public/platform/WebURLRequest.h"
+#include "platform/weborigin/SecurityOrigin.h"
 #include "wtf/StringExtras.h"
 #include "wtf/TemporaryChange.h"
 #include "wtf/Threading.h"
@@ -638,7 +638,6 @@ static void* openFunc(const char* uri)
 
         if (fetcher->frame()) {
             FetchRequest request(ResourceRequest(url), FetchInitiatorTypeNames::xml, ResourceFetcher::defaultResourceOptions());
-            request.mutableResourceRequest().setRequestContext(blink::WebURLRequest::RequestContextXSLT);
             ResourcePtr<Resource> resource = fetcher->fetchSynchronously(request);
             if (resource && !resource->errorOccurred()) {
                 data = resource->resourceBuffer();
@@ -813,15 +812,13 @@ XMLDocumentParser::XMLDocumentParser(DocumentFragment* fragment, Element* parent
 
     for (; !elemStack.isEmpty(); elemStack.removeLast()) {
         Element* element = elemStack.last();
-        if (element->hasAttributes()) {
-            AttributeCollection attributes = element->attributes();
-            AttributeCollection::const_iterator end = attributes.end();
-            for (AttributeCollection::const_iterator it = attributes.begin(); it != end; ++it) {
-                if (it->localName() == xmlnsAtom)
-                    m_defaultNamespaceURI = it->value();
-                else if (it->prefix() == xmlnsAtom)
-                    m_prefixToNamespaceMap.set(it->localName(), it->value());
-            }
+        AttributeCollection attributes = element->attributes();
+        AttributeCollection::const_iterator end = attributes.end();
+        for (AttributeCollection::const_iterator it = attributes.begin(); it != end; ++it) {
+            if (it->localName() == xmlnsAtom)
+                m_defaultNamespaceURI = it->value();
+            else if (it->prefix() == xmlnsAtom)
+                m_prefixToNamespaceMap.set(it->localName(), it->value());
         }
     }
 

@@ -209,9 +209,6 @@ static inline bool isColorPropertyID(CSSPropertyID propertyId)
     case CSSPropertyBorderRightColor:
     case CSSPropertyBorderTopColor:
     case CSSPropertyOutlineColor:
-    case CSSPropertyTextLineThroughColor:
-    case CSSPropertyTextOverlineColor:
-    case CSSPropertyTextUnderlineColor:
     case CSSPropertyWebkitBorderAfterColor:
     case CSSPropertyWebkitBorderBeforeColor:
     case CSSPropertyWebkitBorderEndColor:
@@ -391,7 +388,7 @@ bool isValidKeywordPropertyAndValue(CSSPropertyID propertyId, CSSValueID valueID
         // inline | block | list-item | inline-block | table |
         // inline-table | table-row-group | table-header-group | table-footer-group | table-row |
         // table-column-group | table-column | table-cell | table-caption | -webkit-box | -webkit-inline-box | none
-        // flex | inline-flex | -webkit-flex | -webkit-inline-flex | grid | inline-grid | lazy-block
+        // flex | inline-flex | -webkit-flex | -webkit-inline-flex | grid | inline-grid
         return (valueID >= CSSValueInline && valueID <= CSSValueInlineFlex) || valueID == CSSValueWebkitFlex || valueID == CSSValueWebkitInlineFlex || valueID == CSSValueNone
             || (RuntimeEnabledFeatures::cssGridLayoutEnabled() && (valueID == CSSValueGrid || valueID == CSSValueInlineGrid));
     case CSSPropertyEmptyCells: // show | hide
@@ -400,6 +397,8 @@ bool isValidKeywordPropertyAndValue(CSSPropertyID propertyId, CSSValueID valueID
         return valueID == CSSValueLeft || valueID == CSSValueRight || valueID == CSSValueNone || valueID == CSSValueCenter;
     case CSSPropertyFontStyle: // normal | italic | oblique
         return valueID == CSSValueNormal || valueID == CSSValueItalic || valueID == CSSValueOblique;
+    case CSSPropertyFontStretch: // normal | ultra-condensed | extra-condensed | condensed | semi-condensed | semi-expanded | expanded | extra-expanded | ultra-expanded
+        return valueID == CSSValueNormal || valueID == CSSValueUltraCondensed || valueID == CSSValueExtraCondensed || valueID == CSSValueCondensed || valueID == CSSValueSemiCondensed || valueID == CSSValueSemiExpanded || valueID == CSSValueExpanded || valueID == CSSValueExtraExpanded || valueID == CSSValueUltraExpanded;
     case CSSPropertyImageRendering: // auto | optimizeContrast | pixelated
         return valueID == CSSValueAuto || valueID == CSSValueWebkitOptimizeContrast || (RuntimeEnabledFeatures::imageRenderingPixelatedEnabled() && valueID == CSSValuePixelated);
     case CSSPropertyIsolation: // auto | isolate
@@ -454,14 +453,6 @@ bool isValidKeywordPropertyAndValue(CSSPropertyID propertyId, CSSValueID valueID
         // auto | none | inter-word | distribute
         return RuntimeEnabledFeatures::css3TextEnabled()
             && (valueID == CSSValueInterWord || valueID == CSSValueDistribute || valueID == CSSValueAuto || valueID == CSSValueNone);
-    case CSSPropertyTextLineThroughMode:
-    case CSSPropertyTextOverlineMode:
-    case CSSPropertyTextUnderlineMode:
-        return valueID == CSSValueContinuous || valueID == CSSValueSkipWhiteSpace;
-    case CSSPropertyTextLineThroughStyle:
-    case CSSPropertyTextOverlineStyle:
-    case CSSPropertyTextUnderlineStyle:
-        return valueID == CSSValueNone || valueID == CSSValueSolid || valueID == CSSValueDouble || valueID == CSSValueDashed || valueID == CSSValueDotDash || valueID == CSSValueDotDotDash || valueID == CSSValueWave;
     case CSSPropertyTextOverflow: // clip | ellipsis
         return valueID == CSSValueClip || valueID == CSSValueEllipsis;
     case CSSPropertyTextRendering: // auto | optimizeSpeed | optimizeLegibility | geometricPrecision
@@ -590,6 +581,7 @@ bool isKeywordPropertyID(CSSPropertyID propertyId)
     case CSSPropertyEmptyCells:
     case CSSPropertyFloat:
     case CSSPropertyFontStyle:
+    case CSSPropertyFontStretch:
     case CSSPropertyImageRendering:
     case CSSPropertyListStylePosition:
     case CSSPropertyListStyleType:
@@ -609,15 +601,9 @@ bool isKeywordPropertyID(CSSPropertyID propertyId)
     case CSSPropertyTableLayout:
     case CSSPropertyTextAlignLast:
     case CSSPropertyTextJustify:
-    case CSSPropertyTextLineThroughMode:
-    case CSSPropertyTextLineThroughStyle:
     case CSSPropertyTextOverflow:
-    case CSSPropertyTextOverlineMode:
-    case CSSPropertyTextOverlineStyle:
     case CSSPropertyTextRendering:
     case CSSPropertyTextTransform:
-    case CSSPropertyTextUnderlineMode:
-    case CSSPropertyTextUnderlineStyle:
     case CSSPropertyTouchActionDelay:
     case CSSPropertyVisibility:
     case CSSPropertyWebkitAppearance:
@@ -1122,6 +1108,17 @@ PassRefPtrWillBeRawPtr<MediaQuerySet> BisonCSSParser::parseMediaQueryList(const 
 
     ASSERT(m_mediaList);
     return m_mediaList.release();
+}
+
+bool BisonCSSParser::parseAttributeMatchType(CSSSelector::AttributeMatchType& matchType, const String& string)
+{
+    if (!RuntimeEnabledFeatures::cssAttributeCaseSensitivityEnabled() && !isUASheetBehavior(m_context.mode()))
+        return false;
+    if (string == "i") {
+        matchType = CSSSelector::CaseInsensitive;
+        return true;
+    }
+    return false;
 }
 
 static inline void filterProperties(bool important, const WillBeHeapVector<CSSProperty, 256>& input, WillBeHeapVector<CSSProperty, 256>& output, size_t& unusedEntries, BitArray<numCSSProperties>& seenProperties)

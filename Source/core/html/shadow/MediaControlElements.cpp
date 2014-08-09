@@ -54,10 +54,35 @@ using namespace HTMLNames;
 static const AtomicString& getMediaControlCurrentTimeDisplayElementShadowPseudoId();
 static const AtomicString& getMediaControlTimeRemainingDisplayElementShadowPseudoId();
 
-// If you change any of the following fade durations, then also update the
-// corresponding values in LayoutTests/media/media-controls.js.
-static const double fadeInDuration = 0.1;
+// This is the duration from mediaControls.css
 static const double fadeOutDuration = 0.3;
+
+static bool isUserInteractionEvent(Event* event)
+{
+    const AtomicString& type = event->type();
+    return type == EventTypeNames::mousedown
+        || type == EventTypeNames::mouseup
+        || type == EventTypeNames::click
+        || type == EventTypeNames::dblclick
+        || event->isKeyboardEvent()
+        || event->isTouchEvent();
+}
+
+// Sliders (the volume control and timeline) need to capture some additional events used when dragging the thumb.
+static bool isUserInteractionEventForSlider(Event* event)
+{
+    const AtomicString& type = event->type();
+    return type == EventTypeNames::mousedown
+        || type == EventTypeNames::mouseup
+        || type == EventTypeNames::click
+        || type == EventTypeNames::dblclick
+        || type == EventTypeNames::mouseover
+        || type == EventTypeNames::mouseout
+        || type == EventTypeNames::mousemove
+        || event->isKeyboardEvent()
+        || event->isTouchEvent();
+}
+
 
 MediaControlPanelElement::MediaControlPanelElement(MediaControls& mediaControls)
     : MediaControlDivElement(mediaControls, MediaControlsPanel)
@@ -119,10 +144,7 @@ void MediaControlPanelElement::makeOpaque()
     if (m_opaque)
         return;
 
-    setInlineStyleProperty(CSSPropertyTransitionProperty, CSSPropertyOpacity);
-    setInlineStyleProperty(CSSPropertyTransitionDuration, fadeInDuration, CSSPrimitiveValue::CSS_S);
     setInlineStyleProperty(CSSPropertyOpacity, 1.0, CSSPrimitiveValue::CSS_NUMBER);
-
     m_opaque = true;
 
     if (m_isDisplayed)
@@ -134,8 +156,6 @@ void MediaControlPanelElement::makeTransparent()
     if (!m_opaque)
         return;
 
-    setInlineStyleProperty(CSSPropertyTransitionProperty, CSSPropertyOpacity);
-    setInlineStyleProperty(CSSPropertyTransitionDuration, fadeOutDuration, CSSPrimitiveValue::CSS_S);
     setInlineStyleProperty(CSSPropertyOpacity, 0.0, CSSPrimitiveValue::CSS_NUMBER);
 
     m_opaque = false;
@@ -145,6 +165,11 @@ void MediaControlPanelElement::makeTransparent()
 void MediaControlPanelElement::setIsDisplayed(bool isDisplayed)
 {
     m_isDisplayed = isDisplayed;
+}
+
+bool MediaControlPanelElement::keepEventInNode(Event* event)
+{
+    return isUserInteractionEvent(event);
 }
 
 // ----------------------------
@@ -295,6 +320,11 @@ const AtomicString& MediaControlOverlayPlayButtonElement::shadowPseudoId() const
     return id;
 }
 
+bool MediaControlOverlayPlayButtonElement::keepEventInNode(Event* event)
+{
+    return isUserInteractionEvent(event);
+}
+
 
 // ----------------------------
 
@@ -402,11 +432,15 @@ void MediaControlTimelineElement::setDuration(double duration)
     setFloatingPointAttribute(maxAttr, std::isfinite(duration) ? duration : 0);
 }
 
-
 const AtomicString& MediaControlTimelineElement::shadowPseudoId() const
 {
     DEFINE_STATIC_LOCAL(AtomicString, id, ("-webkit-media-controls-timeline", AtomicString::ConstructFromLiteral));
     return id;
+}
+
+bool MediaControlTimelineElement::keepEventInNode(Event* event)
+{
+    return isUserInteractionEventForSlider(event);
 }
 
 // ----------------------------
@@ -470,6 +504,11 @@ const AtomicString& MediaControlVolumeSliderElement::shadowPseudoId() const
 {
     DEFINE_STATIC_LOCAL(AtomicString, id, ("-webkit-media-controls-volume-slider", AtomicString::ConstructFromLiteral));
     return id;
+}
+
+bool MediaControlVolumeSliderElement::keepEventInNode(Event* event)
+{
+    return isUserInteractionEventForSlider(event);
 }
 
 // ----------------------------

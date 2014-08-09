@@ -51,7 +51,9 @@ WebInspector.UserMetrics._ActionCodes = {
     ProfilesCPUProfileTaken: 5,
     ProfilesHeapProfileTaken: 6,
     AuditsStarted: 7,
-    ConsoleEvaluated: 8
+    ConsoleEvaluated: 8,
+    FileSavedInWorkspace: 9,
+    DeviceModeEnabled: 10
 }
 
 WebInspector.UserMetrics._PanelCodes = {

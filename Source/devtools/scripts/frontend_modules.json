@@ -7,7 +7,6 @@
             "common/Color.js",
             "common/Geometry.js",
             "common/Console.js",
-            "common/ModuleManager.js",
             "common/NotificationService.js",
             "common/Object.js",
             "common/ParsedURL.js",
@@ -18,7 +17,8 @@
             "common/Throttler.js",
             "common/UIString.js",
             "common/utilities.js",
-            "common/WebInspector.js"
+            "common/WebInspector.js",
+            "common/ModuleExtensionInterfaces.js"
         ]
     },
     {
@@ -27,6 +27,7 @@
         "sources": [
             "sdk/Target.js",
             "sdk/ApplicationCacheModel.js",
+            "sdk/BlackboxSupport.js",
             "sdk/CompilerScriptMapping.js",
             "sdk/ConsoleModel.js",
             "sdk/ContentProvider.js",
@@ -38,14 +39,12 @@
             "sdk/CSSMetadata.js",
             "sdk/CSSParser.js",
             "sdk/CSSStyleModel.js",
-            "sdk/CSSStyleSheetMapping.js",
             "sdk/CSSWorkspaceBinding.js",
             "sdk/BreakpointManager.js",
             "sdk/DOMModel.js",
             "sdk/DOMStorage.js",
             "sdk/Database.js",
             "sdk/DebuggerModel.js",
-            "sdk/DebuggerScriptMapping.js",
             "sdk/DebuggerWorkspaceBinding.js",
             "sdk/FileManager.js",
             "sdk/FileSystemMapping.js",
@@ -121,6 +120,7 @@
             "ui/ShortcutRegistry.js",
             "ui/ShowMoreDataGridNode.js",
             "ui/SoftContextMenu.js",
+            "ui/SortableDataGrid.js",
             "ui/SplitView.js",
             "ui/StackView.js",
             "ui/StatusBarButton.js",
@@ -170,7 +170,7 @@
         "name": "screencast",
         "dependencies": ["components"],
         "sources": [
-            "ScreencastView.js"
+            "screencast/ScreencastView.js"
         ]
     },
     {
@@ -409,6 +409,7 @@
             "profiler/HeapSnapshotView.js",
             "profiler/ProfilesPanel.js",
             "profiler/ProfileLauncherView.js",
+            "profiler/ProfileTypeRegistry.js",
             "profiler/CanvasProfileView.js",
             "profiler/CanvasReplayStateView.js"
         ]
@@ -453,11 +454,8 @@
     {
         "name": "main",
         "dependencies": [
-            "elements",
             "host",
             "screencast",
-            "settings",
-            "sources",
             "sdk",
             "toolbox"
         ],
@@ -498,5 +496,12 @@
             "main"
         ],
         "sources": []
+    },
+    {
+        "name": "documentation",
+        "dependencies": [],
+        "sources": [
+            "documentation/WikiParser.js"
+        ]
     }
 ]

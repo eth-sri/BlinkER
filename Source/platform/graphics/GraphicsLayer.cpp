@@ -198,19 +198,6 @@ void GraphicsLayer::addChild(GraphicsLayer* childLayer)
     updateChildList();
 }
 
-void GraphicsLayer::addChildAtIndex(GraphicsLayer* childLayer, int index)
-{
-    ASSERT(childLayer != this);
-
-    if (childLayer->parent())
-        childLayer->removeFromParent();
-
-    childLayer->setParent(this);
-    m_children.insert(index, childLayer);
-
-    updateChildList();
-}
-
 void GraphicsLayer::addChildBelow(GraphicsLayer* childLayer, GraphicsLayer* sibling)
 {
     ASSERT(childLayer != this);
@@ -231,53 +218,6 @@ void GraphicsLayer::addChildBelow(GraphicsLayer* childLayer, GraphicsLayer* sibl
         m_children.append(childLayer);
 
     updateChildList();
-}
-
-void GraphicsLayer::addChildAbove(GraphicsLayer* childLayer, GraphicsLayer* sibling)
-{
-    childLayer->removeFromParent();
-    ASSERT(childLayer != this);
-
-    bool found = false;
-    for (unsigned i = 0; i < m_children.size(); i++) {
-        if (sibling == m_children[i]) {
-            m_children.insert(i+1, childLayer);
-            found = true;
-            break;
-        }
-    }
-
-    childLayer->setParent(this);
-
-    if (!found)
-        m_children.append(childLayer);
-
-    updateChildList();
-}
-
-bool GraphicsLayer::replaceChild(GraphicsLayer* oldChild, GraphicsLayer* newChild)
-{
-    ASSERT(!newChild->parent());
-    bool found = false;
-    for (unsigned i = 0; i < m_children.size(); i++) {
-        if (oldChild == m_children[i]) {
-            m_children[i] = newChild;
-            found = true;
-            break;
-        }
-    }
-
-    if (found) {
-        oldChild->setParent(0);
-
-        newChild->removeFromParent();
-        newChild->setParent(this);
-
-        updateChildList();
-        return true;
-    }
-
-    return false;
 }
 
 void GraphicsLayer::removeAllChildren()
@@ -512,16 +452,6 @@ void GraphicsLayer::addRepaintRect(const FloatRect& repaintRect)
     }
 }
 
-void GraphicsLayer::collectTrackedRepaintRects(Vector<FloatRect>& rects) const
-{
-    if (!m_client->isTrackingRepaints())
-        return;
-
-    RepaintMap::iterator repaintIt = repaintRectMap().find(this);
-    if (repaintIt != repaintRectMap().end())
-        rects.appendVector(repaintIt->value);
-}
-
 static bool compareFloatRects(const FloatRect& a, const FloatRect& b)
 {
     if (a.x() != b.x())
@@ -623,9 +553,6 @@ PassRefPtr<JSONObject> GraphicsLayer::layerTreeAsJSON(LayerTreeFlags flags, Rend
 
     if (m_position != FloatPoint())
         json->setArray("position", pointAsJSONArray(m_position));
-
-    if (m_boundsOrigin != FloatPoint())
-        json->setArray("boundsOrigin", pointAsJSONArray(m_boundsOrigin));
 
     if (m_hasTransformOrigin && m_transformOrigin != FloatPoint3D(m_size.width() * 0.5f, m_size.height() * 0.5f, 0))
         json->setArray("transformOrigin", pointAsJSONArray(m_transformOrigin));
@@ -1059,7 +986,6 @@ void GraphicsLayer::setFilters(const FilterOperations& filters)
     builder.setCropOffset(FloatSize(outsets.left(), outsets.top()));
     builder.buildFilterOperations(filters, webFilters.get());
     m_layer->layer()->setFilters(*webFilters);
-    m_filters = filters;
 }
 
 void GraphicsLayer::setPaintingPhase(GraphicsLayerPaintingPhase phase)

@@ -187,7 +187,7 @@ CompositedLayerMapping::~CompositedLayerMapping()
     }
 
     updateClippingLayers(false, false);
-    updateOverflowControlsLayers(false, false, false);
+    updateOverflowControlsLayers(false, false, false, false);
     updateChildTransformLayer(false);
     updateForegroundLayer(false);
     updateBackgroundLayer(false);
@@ -388,7 +388,7 @@ bool CompositedLayerMapping::updateGraphicsLayerConfiguration()
     if (updateClippingLayers(needsAncestorClip, needsDescendantsClippingLayer))
         layerConfigChanged = true;
 
-    if (updateOverflowControlsLayers(requiresHorizontalScrollbarLayer(), requiresVerticalScrollbarLayer(), requiresScrollCornerLayer()))
+    if (updateOverflowControlsLayers(requiresHorizontalScrollbarLayer(), requiresVerticalScrollbarLayer(), requiresScrollCornerLayer(), needsAncestorClip))
         layerConfigChanged = true;
 
     bool scrollingConfigChanged = false;
@@ -598,7 +598,7 @@ void CompositedLayerMapping::updateSquashingLayerGeometry(const LayoutPoint& off
         layers[i].localClipRectForSquashedLayer = localClipRectForSquashedLayer(referenceLayer, layers[i], layers);
 }
 
-void CompositedLayerMapping::updateGraphicsLayerGeometry(const RenderLayer* compositingContainer, Vector<RenderLayer*>& layersNeedingPaintInvalidation)
+void CompositedLayerMapping::updateGraphicsLayerGeometry(const RenderLayer* compositingContainer, const RenderLayer* compositingStackingContext, Vector<RenderLayer*>& layersNeedingPaintInvalidation)
 {
     ASSERT(m_owningLayer.compositor()->lifecycle().state() == DocumentLifecycle::InCompositingUpdate);
 
@@ -632,6 +632,7 @@ void CompositedLayerMapping::updateGraphicsLayerGeometry(const RenderLayer* comp
 
     // Might update graphicsLayerParentLocation.
     updateAncestorClippingLayerGeometry(compositingContainer, snappedOffsetFromCompositedAncestor, graphicsLayerParentLocation);
+    updateOverflowControlsHostLayerGeometry(compositingStackingContext);
 
     FloatSize contentsSize = relativeCompositingBounds.size();
 
@@ -746,6 +747,31 @@ void CompositedLayerMapping::updateAncestorClippingLayerGeometry(const RenderLay
     graphicsLayerParentLocation = parentClipRect.location();
 }
 
+void CompositedLayerMapping::updateOverflowControlsHostLayerGeometry(const RenderLayer* compositingStackingContext)
+{
+    if (!m_overflowControlsHostLayer)
+        return;
+
+    if (needsToReparentOverflowControls()) {
+        if (m_overflowControlsClippingLayer) {
+            m_overflowControlsClippingLayer->setPosition(m_ancestorClippingLayer->position());
+            m_overflowControlsClippingLayer->setSize(m_ancestorClippingLayer->size());
+            m_overflowControlsClippingLayer->setOffsetFromRenderer(m_ancestorClippingLayer->offsetFromRenderer());
+            m_overflowControlsClippingLayer->setMasksToBounds(true);
+
+            m_overflowControlsHostLayer->setPosition(IntPoint(-m_overflowControlsClippingLayer->offsetFromRenderer()));
+        } else {
+            ASSERT(m_owningLayer.transformAncestor() == compositingStackingContext->transformAncestor());
+            LayoutPoint localOffsetToTransformedAncestor = m_owningLayer.computeOffsetFromTransformedAncestor();
+            LayoutPoint compositingStackingContextOffsetToTransformedAncestor = compositingStackingContext->computeOffsetFromTransformedAncestor();
+
+            m_overflowControlsHostLayer->setPosition(FloatPoint(localOffsetToTransformedAncestor - compositingStackingContextOffsetToTransformedAncestor));
+        }
+    } else {
+        m_overflowControlsHostLayer->setPosition(FloatPoint());
+    }
+}
+
 void CompositedLayerMapping::updateChildContainmentLayerGeometry(const IntRect& clippingBox, const IntRect& localCompositingBounds)
 {
     if (!m_childContainmentLayer)
@@ -817,7 +843,7 @@ void CompositedLayerMapping::updateReflectionLayerGeometry(Vector<RenderLayer*>&
         return;
 
     CompositedLayerMappingPtr reflectionCompositedLayerMapping = m_owningLayer.reflectionInfo()->reflectionLayer()->compositedLayerMapping();
-    reflectionCompositedLayerMapping->updateGraphicsLayerGeometry(&m_owningLayer, layersNeedingPaintInvalidation);
+    reflectionCompositedLayerMapping->updateGraphicsLayerGeometry(&m_owningLayer, &m_owningLayer, layersNeedingPaintInvalidation);
 }
 
 void CompositedLayerMapping::updateScrollingLayerGeometry(const IntRect& localCompositingBounds)
@@ -983,8 +1009,14 @@ void CompositedLayerMapping::updateInternalHierarchy()
     // The clip for child layers does not include space for overflow controls, so they exist as
     // siblings of the clipping layer if we have one. Normal children of this layer are set as
     // children of the clipping layer.
-    if (m_overflowControlsHostLayer)
+    if (m_overflowControlsClippingLayer) {
+        ASSERT(m_overflowControlsHostLayer);
+        m_graphicsLayer->addChild(m_overflowControlsClippingLayer.get());
+        m_overflowControlsClippingLayer->addChild(m_overflowControlsHostLayer.get());
+    } else if (m_overflowControlsHostLayer) {
         m_graphicsLayer->addChild(m_overflowControlsHostLayer.get());
+    }
+
     if (m_layerForHorizontalScrollbar)
         m_overflowControlsHostLayer->addChild(m_layerForHorizontalScrollbar.get());
     if (m_layerForVerticalScrollbar)
@@ -1167,7 +1199,7 @@ bool CompositedLayerMapping::toggleScrollbarLayerIfNeeded(OwnPtr<GraphicsLayer>&
     return true;
 }
 
-bool CompositedLayerMapping::updateOverflowControlsLayers(bool needsHorizontalScrollbarLayer, bool needsVerticalScrollbarLayer, bool needsScrollCornerLayer)
+bool CompositedLayerMapping::updateOverflowControlsLayers(bool needsHorizontalScrollbarLayer, bool needsVerticalScrollbarLayer, bool needsScrollCornerLayer, bool needsAncestorClip)
 {
     bool horizontalScrollbarLayerChanged = toggleScrollbarLayerIfNeeded(m_layerForHorizontalScrollbar, needsHorizontalScrollbarLayer, CompositingReasonLayerForHorizontalScrollbar);
     bool verticalScrollbarLayerChanged = toggleScrollbarLayerIfNeeded(m_layerForVerticalScrollbar, needsVerticalScrollbarLayer, CompositingReasonLayerForVerticalScrollbar);
@@ -1175,6 +1207,8 @@ bool CompositedLayerMapping::updateOverflowControlsLayers(bool needsHorizontalSc
 
     bool needsOverflowControlsHostLayer = needsHorizontalScrollbarLayer || needsVerticalScrollbarLayer || needsScrollCornerLayer;
     toggleScrollbarLayerIfNeeded(m_overflowControlsHostLayer, needsOverflowControlsHostLayer, CompositingReasonLayerForOverflowControlsHost);
+    bool needsOverflowClipLayer = needsOverflowControlsHostLayer && needsAncestorClip;
+    toggleScrollbarLayerIfNeeded(m_overflowControlsClippingLayer, needsOverflowClipLayer, CompositingReasonLayerForOverflowControlsHost);
 
     if (ScrollingCoordinator* scrollingCoordinator = scrollingCoordinatorFromLayer(m_owningLayer)) {
         if (horizontalScrollbarLayerChanged)
@@ -1791,13 +1825,20 @@ LayoutRect CompositedLayerMapping::contentsBox() const
     return contentsBox;
 }
 
+bool CompositedLayerMapping::needsToReparentOverflowControls() const
+{
+    return m_owningLayer.scrollableArea()
+        && m_owningLayer.scrollableArea()->hasOverlayScrollbars()
+        && m_owningLayer.scrollableArea()->topmostScrollChild();
+}
+
 GraphicsLayer* CompositedLayerMapping::detachLayerForOverflowControls(const RenderLayer& enclosingLayer)
 {
-    LayoutPoint localOffsetToTransformedAncestor = m_owningLayer.computeOffsetFromTransformedAncestor();
-    LayoutPoint enclosingLayerOffsetToTransformedAncestor = enclosingLayer.computeOffsetFromTransformedAncestor();
-    m_overflowControlsHostLayer->setPosition(FloatPoint(localOffsetToTransformedAncestor - enclosingLayerOffsetToTransformedAncestor));
-    m_overflowControlsHostLayer->removeFromParent();
-    return m_overflowControlsHostLayer.get();
+    GraphicsLayer* host = m_overflowControlsClippingLayer.get();
+    if (!host)
+        host = m_overflowControlsHostLayer.get();
+    host->removeFromParent();
+    return host;
 }
 
 GraphicsLayer* CompositedLayerMapping::parentForSublayers() const
@@ -1978,7 +2019,7 @@ IntRect CompositedLayerMapping::localClipRectForSquashedLayer(const RenderLayer&
     return parentClipRect;
 }
 
-void CompositedLayerMapping::doPaintTask(GraphicsLayerPaintInfo& paintInfo, GraphicsContext* context,
+void CompositedLayerMapping::doPaintTask(const GraphicsLayerPaintInfo& paintInfo, const PaintLayerFlags& paintLayerFlags, GraphicsContext* context,
     const IntRect& clip) // In the coords of rootLayer.
 {
     if (paintsIntoCompositedAncestor()) {
@@ -1987,25 +2028,6 @@ void CompositedLayerMapping::doPaintTask(GraphicsLayerPaintInfo& paintInfo, Grap
     }
 
     FontCachePurgePreventer fontCachePurgePreventer;
-
-    PaintLayerFlags paintFlags = 0;
-    if (paintInfo.paintingPhase & GraphicsLayerPaintBackground)
-        paintFlags |= PaintLayerPaintingCompositingBackgroundPhase;
-    if (paintInfo.paintingPhase & GraphicsLayerPaintForeground)
-        paintFlags |= PaintLayerPaintingCompositingForegroundPhase;
-    if (paintInfo.paintingPhase & GraphicsLayerPaintMask)
-        paintFlags |= PaintLayerPaintingCompositingMaskPhase;
-    if (paintInfo.paintingPhase & GraphicsLayerPaintChildClippingMask)
-        paintFlags |= PaintLayerPaintingChildClippingMaskPhase;
-    if (paintInfo.paintingPhase & GraphicsLayerPaintOverflowContents)
-        paintFlags |= PaintLayerPaintingOverflowContents;
-    if (paintInfo.paintingPhase & GraphicsLayerPaintCompositedScroll)
-        paintFlags |= PaintLayerPaintingCompositingScrollingPhase;
-
-    if (paintInfo.isBackgroundLayer)
-        paintFlags |= (PaintLayerPaintingRootBackgroundOnly | PaintLayerPaintingCompositingForegroundPhase); // Need PaintLayerPaintingCompositingForegroundPhase to walk child layers.
-    else if (compositor()->fixedRootBackgroundLayer())
-        paintFlags |= PaintLayerPaintingSkipRootBackground;
 
     // Note carefully: in theory it is appropriate to invoke context->save() here
     // and restore the context after painting. For efficiency, we are assuming that
@@ -2020,7 +2042,7 @@ void CompositedLayerMapping::doPaintTask(GraphicsLayerPaintInfo& paintInfo, Grap
     IntRect dirtyRect(clip);
     dirtyRect.move(offset);
 
-    if (!(paintInfo.paintingPhase & GraphicsLayerPaintOverflowContents)) {
+    if (!(paintLayerFlags & PaintLayerPaintingOverflowContents)) {
         LayoutRect bounds = paintInfo.compositedBounds;
         bounds.move(paintInfo.renderLayer->subpixelAccumulation());
         dirtyRect.intersect(pixelSnappedIntRect(bounds));
@@ -2035,12 +2057,10 @@ void CompositedLayerMapping::doPaintTask(GraphicsLayerPaintInfo& paintInfo, Grap
     if (paintInfo.renderLayer->compositingState() != PaintsIntoGroupedBacking) {
         // FIXME: GraphicsLayers need a way to split for RenderRegions.
         LayerPaintingInfo paintingInfo(paintInfo.renderLayer, dirtyRect, PaintBehaviorNormal, paintInfo.renderLayer->subpixelAccumulation());
-        paintInfo.renderLayer->paintLayerContents(context, paintingInfo, paintFlags);
-
-        ASSERT(!paintInfo.isBackgroundLayer || paintFlags & PaintLayerPaintingRootBackgroundOnly);
+        paintInfo.renderLayer->paintLayerContents(context, paintingInfo, paintLayerFlags);
 
         if (paintInfo.renderLayer->containsDirtyOverlayScrollbars())
-            paintInfo.renderLayer->paintLayerContents(context, paintingInfo, paintFlags | PaintLayerPaintingOverlayScrollbars);
+            paintInfo.renderLayer->paintLayerContents(context, paintingInfo, paintLayerFlags | PaintLayerPaintingOverlayScrollbars);
     } else {
         ASSERT(compositor()->layerSquashingEnabled());
         LayerPaintingInfo paintingInfo(paintInfo.renderLayer, dirtyRect, PaintBehaviorNormal, paintInfo.renderLayer->subpixelAccumulation());
@@ -2051,7 +2071,7 @@ void CompositedLayerMapping::doPaintTask(GraphicsLayerPaintInfo& paintInfo, Grap
         context->save();
         dirtyRect.intersect(paintInfo.localClipRectForSquashedLayer);
         context->clip(dirtyRect);
-        paintInfo.renderLayer->paintLayer(context, paintingInfo, paintFlags);
+        paintInfo.renderLayer->paintLayer(context, paintingInfo, paintLayerFlags);
         context->restore();
     }
 
@@ -2076,7 +2096,7 @@ static void paintScrollbar(Scrollbar* scrollbar, GraphicsContext& context, const
 }
 
 // Up-call from compositing layer drawing callback.
-void CompositedLayerMapping::paintContents(const GraphicsLayer* graphicsLayer, GraphicsContext& context, GraphicsLayerPaintingPhase paintingPhase, const IntRect& clip)
+void CompositedLayerMapping::paintContents(const GraphicsLayer* graphicsLayer, GraphicsContext& context, GraphicsLayerPaintingPhase graphicsLayerPaintingPhase, const IntRect& clip)
 {
     // https://code.google.com/p/chromium/issues/detail?id=343772
     DisableCompositingQueryAsserts disabler;
@@ -2090,6 +2110,25 @@ void CompositedLayerMapping::paintContents(const GraphicsLayer* graphicsLayer, G
     // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentation::willPaint(m_owningLayer.renderer(), graphicsLayer);
 
+    PaintLayerFlags paintLayerFlags = 0;
+    if (graphicsLayerPaintingPhase & GraphicsLayerPaintBackground)
+        paintLayerFlags |= PaintLayerPaintingCompositingBackgroundPhase;
+    if (graphicsLayerPaintingPhase & GraphicsLayerPaintForeground)
+        paintLayerFlags |= PaintLayerPaintingCompositingForegroundPhase;
+    if (graphicsLayerPaintingPhase & GraphicsLayerPaintMask)
+        paintLayerFlags |= PaintLayerPaintingCompositingMaskPhase;
+    if (graphicsLayerPaintingPhase & GraphicsLayerPaintChildClippingMask)
+        paintLayerFlags |= PaintLayerPaintingChildClippingMaskPhase;
+    if (graphicsLayerPaintingPhase & GraphicsLayerPaintOverflowContents)
+        paintLayerFlags |= PaintLayerPaintingOverflowContents;
+    if (graphicsLayerPaintingPhase & GraphicsLayerPaintCompositedScroll)
+        paintLayerFlags |= PaintLayerPaintingCompositingScrollingPhase;
+
+    if (graphicsLayer == m_backgroundLayer)
+        paintLayerFlags |= (PaintLayerPaintingRootBackgroundOnly | PaintLayerPaintingCompositingForegroundPhase); // Need PaintLayerPaintingCompositingForegroundPhase to walk child layers.
+    else if (compositor()->fixedRootBackgroundLayer())
+        paintLayerFlags |= PaintLayerPaintingSkipRootBackground;
+
     if (graphicsLayer == m_graphicsLayer.get()
         || graphicsLayer == m_foregroundLayer.get()
         || graphicsLayer == m_backgroundLayer.get()
@@ -2102,15 +2141,13 @@ void CompositedLayerMapping::paintContents(const GraphicsLayer* graphicsLayer, G
         paintInfo.renderLayer = &m_owningLayer;
         paintInfo.compositedBounds = compositedBounds();
         paintInfo.offsetFromRenderer = graphicsLayer->offsetFromRenderer();
-        paintInfo.paintingPhase = paintingPhase;
-        paintInfo.isBackgroundLayer = (graphicsLayer == m_backgroundLayer);
 
         // We have to use the same root as for hit testing, because both methods can compute and cache clipRects.
-        doPaintTask(paintInfo, &context, clip);
+        doPaintTask(paintInfo, paintLayerFlags, &context, clip);
     } else if (graphicsLayer == m_squashingLayer.get()) {
         ASSERT(compositor()->layerSquashingEnabled());
         for (size_t i = 0; i < m_squashedLayers.size(); ++i)
-            doPaintTask(m_squashedLayers[i], &context, clip);
+            doPaintTask(m_squashedLayers[i], paintLayerFlags, &context, clip);
     } else if (graphicsLayer == layerForHorizontalScrollbar()) {
         paintScrollbar(m_owningLayer.scrollableArea()->horizontalScrollbar(), context, clip);
     } else if (graphicsLayer == layerForVerticalScrollbar()) {
@@ -2165,14 +2202,12 @@ bool CompositedLayerMapping::updateSquashingLayerAssignment(RenderLayer* squashe
     paintInfo.renderLayer = squashedLayer;
     // NOTE: composited bounds are updated elsewhere
     // NOTE: offsetFromRenderer is updated elsewhere
-    paintInfo.paintingPhase = GraphicsLayerPaintAllWithOverflowClip;
-    paintInfo.isBackgroundLayer = false;
 
     // Change tracking on squashing layers: at the first sign of something changed, just invalidate the layer.
     // FIXME: Perhaps we can find a tighter more clever mechanism later.
     bool updatedAssignment = false;
     if (nextSquashedLayerIndex < m_squashedLayers.size()) {
-        if (!paintInfo.isEquivalentForSquashing(m_squashedLayers[nextSquashedLayerIndex])) {
+        if (paintInfo.renderLayer != m_squashedLayers[nextSquashedLayerIndex].renderLayer) {
             compositor()->repaintOnCompositingChange(squashedLayer);
             updatedAssignment = true;
             m_squashedLayers[nextSquashedLayerIndex] = paintInfo;
@@ -2243,6 +2278,8 @@ String CompositedLayerMapping::debugName(const GraphicsLayer* graphicsLayer)
         name = "Scroll Corner Layer";
     } else if (graphicsLayer == m_overflowControlsHostLayer.get()) {
         name = "Overflow Controls Host Layer";
+    } else if (graphicsLayer == m_overflowControlsClippingLayer.get()) {
+        name = "Overflow Controls ClipLayer Layer";
     } else if (graphicsLayer == m_scrollingLayer.get()) {
         name = "Scrolling Layer";
     } else if (graphicsLayer == m_scrollingContentsLayer.get()) {

@@ -55,11 +55,6 @@ var domExceptions = [
 
     // Web Crypto
     "OperationError",
-
-    // WebIDL exception types, handled by the binding layer.
-    // FIXME: Add GeneralError, EvalError, etc. when implemented in the bindings.
-    "TypeError",
-    "RangeError",
 ];
 
 var domExceptionCode = {};
@@ -78,12 +73,17 @@ function DOMExceptionInPrivateScript(code, message)
 {
     this.code = domExceptionCode[code] || 0;
     this.message = message;
-    this.type = "DOMExceptionInPrivateScript";
+    this.name = "DOMExceptionInPrivateScript";
+}
+
+function privateScriptClass()
+{
 }
 
 function installClass(className, implementation)
 {
-    installedClasses[className] = implementation(window);
+    installedClasses[className] = new privateScriptClass();
+    implementation(window, installedClasses[className]);
 }
 
 init();

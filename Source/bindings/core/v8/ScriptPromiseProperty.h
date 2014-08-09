@@ -52,7 +52,7 @@ public:
     // ScriptPromiseProperty::Foo to create. The name must be unique
     // per kind of holder.
     template<typename PassHolderType>
-    static PassRefPtrWillBeRawPtr<ScriptPromiseProperty<HolderType, ResolvedType, RejectedType> > create(ExecutionContext*, PassHolderType, Name);
+    ScriptPromiseProperty(ExecutionContext*, PassHolderType, Name);
 
     virtual ~ScriptPromiseProperty() { }
 
@@ -65,9 +65,6 @@ public:
     virtual void trace(Visitor*) OVERRIDE;
 
 private:
-    template<typename PassHolderType>
-    ScriptPromiseProperty(ExecutionContext*, PassHolderType, Name);
-
     virtual v8::Handle<v8::Object> holder(v8::Handle<v8::Object> creationContext, v8::Isolate*) OVERRIDE;
     virtual v8::Handle<v8::Value> resolvedValue(v8::Handle<v8::Object> creationContext, v8::Isolate*) OVERRIDE;
     virtual v8::Handle<v8::Value> rejectedValue(v8::Handle<v8::Object> creationContext, v8::Isolate*) OVERRIDE;
@@ -76,13 +73,6 @@ private:
     ResolvedType m_resolved;
     RejectedType m_rejected;
 };
-
-template<typename HolderType, typename ResolvedType, typename RejectedType>
-template<typename PassHolderType>
-PassRefPtrWillBeRawPtr<ScriptPromiseProperty<HolderType, ResolvedType, RejectedType> > ScriptPromiseProperty<HolderType, ResolvedType, RejectedType>::create(ExecutionContext* executionContext, PassHolderType holder, Name name)
-{
-    return adoptRefWillBeRefCountedGarbageCollected(new ScriptPromiseProperty<HolderType, ResolvedType, RejectedType>(executionContext, holder, name));
-}
 
 template<typename HolderType, typename ResolvedType, typename RejectedType>
 template<typename PassHolderType>
@@ -100,7 +90,7 @@ void ScriptPromiseProperty<HolderType, ResolvedType, RejectedType>::resolve(Pass
         ASSERT_NOT_REACHED();
         return;
     }
-    if (!executionContext())
+    if (!executionContext() || executionContext()->activeDOMObjectsAreStopped())
         return;
     m_resolved = value;
     resolveOrReject(Resolved);
@@ -114,7 +104,7 @@ void ScriptPromiseProperty<HolderType, ResolvedType, RejectedType>::reject(PassR
         ASSERT_NOT_REACHED();
         return;
     }
-    if (!executionContext())
+    if (!executionContext() || executionContext()->activeDOMObjectsAreStopped())
         return;
     m_rejected = value;
     resolveOrReject(Rejected);
@@ -144,11 +134,9 @@ v8::Handle<v8::Value> ScriptPromiseProperty<HolderType, ResolvedType, RejectedTy
 template<typename HolderType, typename ResolvedType, typename RejectedType>
 void ScriptPromiseProperty<HolderType, ResolvedType, RejectedType>::trace(Visitor* visitor)
 {
-#if ENABLE(OILPAN)
-    visitor->trace(m_holder);
-    visitor->trace(m_resolved);
-    visitor->trace(m_rejected);
-#endif
+    TraceIfNeeded<HolderType>::trace(visitor, &m_holder);
+    TraceIfNeeded<ResolvedType>::trace(visitor, &m_resolved);
+    TraceIfNeeded<RejectedType>::trace(visitor, &m_rejected);
     ScriptPromisePropertyBase::trace(visitor);
 }
 

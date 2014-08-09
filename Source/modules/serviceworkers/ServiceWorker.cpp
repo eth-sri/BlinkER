@@ -96,12 +96,7 @@ void ServiceWorker::dispatchStateChangeEvent()
     this->dispatchEvent(Event::create(EventTypeNames::statechange));
 }
 
-String ServiceWorker::scope() const
-{
-    return m_outerWorker->scope().string();
-}
-
-String ServiceWorker::url() const
+String ServiceWorker::scriptURL() const
 {
     return m_outerWorker->url().string();
 }
@@ -154,12 +149,19 @@ PassRefPtrWillBeRawPtr<ServiceWorker> ServiceWorker::from(ExecutionContext* exec
     return create(executionContext, adoptPtr(worker));
 }
 
-PassRefPtrWillBeRawPtr<ServiceWorker> ServiceWorker::from(ScriptPromiseResolver* resolver, WebType* worker)
+PassRefPtrWillBeRawPtr<ServiceWorker> ServiceWorker::take(ScriptPromiseResolver* resolver, WebType* worker)
 {
     RefPtrWillBeRawPtr<ServiceWorker> serviceWorker = ServiceWorker::from(resolver->scriptState()->executionContext(), worker);
     ScriptState::Scope scope(resolver->scriptState());
-    serviceWorker->waitOnPromise(resolver->promise());
+    if (serviceWorker->m_proxyState == Initial)
+        serviceWorker->waitOnPromise(resolver->promise());
     return serviceWorker;
+}
+
+void ServiceWorker::dispose(WebType* worker)
+{
+    if (worker && !worker->proxy())
+        delete worker;
 }
 
 void ServiceWorker::setProxyState(ProxyState state)

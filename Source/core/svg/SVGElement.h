@@ -196,6 +196,11 @@ protected:
 
     virtual void parseAttribute(const QualifiedName&, const AtomicString&) OVERRIDE;
 
+    // FIXME: |parseAttributeNew| is a new implementation of parseAttribute
+    // which maps attribute using |m_attributeToPropertyMap|.
+    // This is to replace |parseAttribute()| after all derived class switch to call this.
+    void parseAttributeNew(const QualifiedName&, const AtomicString&);
+
     virtual void attributeChanged(const QualifiedName&, const AtomicString&, AttributeModificationReason = ModifiedDirectly) OVERRIDE;
 
     virtual bool isPresentationAttribute(const QualifiedName&) const OVERRIDE;
@@ -229,6 +234,9 @@ private:
     // https://bugs.webkit.org/show_bug.cgi?id=77938
     virtual bool areAuthorShadowsAllowed() const OVERRIDE FINAL { return false; }
 
+    bool isSVGElement() const WTF_DELETED_FUNCTION; // This will catch anyone doing an unnecessary check.
+    bool isStyledElement() const WTF_DELETED_FUNCTION; // This will catch anyone doing an unnecessary check.
+
     RenderStyle* computedStyle(PseudoId = NOPSEUDO);
     virtual RenderStyle* virtualComputedStyle(PseudoId pseudoElementSpecifier = NOPSEUDO) OVERRIDE FINAL { return computedStyle(pseudoElementSpecifier); }
     virtual void willRecalcStyle(StyleRecalcChange) OVERRIDE;
@@ -238,7 +246,7 @@ private:
     WillBeHeapHashSet<RawPtrWillBeWeakMember<SVGElement> > m_elementsWithRelativeLengths;
 
     typedef HashMap<QualifiedName, RefPtr<SVGAnimatedPropertyBase> > AttributeToPropertyMap;
-    AttributeToPropertyMap m_newAttributeToPropertyMap;
+    AttributeToPropertyMap m_attributeToPropertyMap;
 
 #if ENABLE(ASSERT)
     bool m_inRelativeLengthClientsInvalidation;

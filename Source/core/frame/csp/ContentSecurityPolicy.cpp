@@ -421,78 +421,6 @@ void ContentSecurityPolicy::usesStyleHashAlgorithms(uint8_t algorithms)
     m_styleHashAlgorithmsUsed |= algorithms;
 }
 
-bool ContentSecurityPolicy::allowFromSource(const KURL& url, blink::WebURLRequest::RequestContext requestContext, ContentSecurityPolicy::ReportingStatus reportingStatus) const
-{
-    switch (requestContext) {
-    case blink::WebURLRequest::RequestContextFrame:
-    case blink::WebURLRequest::RequestContextIframe:
-        return allowChildFrameFromSource(url, reportingStatus);
-
-    case blink::WebURLRequest::RequestContextEmbed:
-    case blink::WebURLRequest::RequestContextObject:
-        return allowObjectFromSource(url, reportingStatus);
-
-    case blink::WebURLRequest::RequestContextFont:
-        return allowFontFromSource(url, reportingStatus);
-
-    case blink::WebURLRequest::RequestContextStyle:
-        return allowStyleFromSource(url, reportingStatus);
-
-    case blink::WebURLRequest::RequestContextBeacon:
-    case blink::WebURLRequest::RequestContextForm:
-    case blink::WebURLRequest::RequestContextPing:
-        return allowFormAction(url, reportingStatus);
-
-    case blink::WebURLRequest::RequestContextFavicon:
-    case blink::WebURLRequest::RequestContextImage:
-        return allowImageFromSource(url, reportingStatus);
-
-    case blink::WebURLRequest::RequestContextAudio:
-    case blink::WebURLRequest::RequestContextVideo:
-    case blink::WebURLRequest::RequestContextTrack:
-        return allowMediaFromSource(url, reportingStatus);
-
-    case blink::WebURLRequest::RequestContextXSLT:
-        ASSERT(RuntimeEnabledFeatures::xsltEnabled());
-    case blink::WebURLRequest::RequestContextScript:
-        return allowScriptFromSource(url, reportingStatus);
-
-    case blink::WebURLRequest::RequestContextServiceWorker:
-    case blink::WebURLRequest::RequestContextSharedWorker:
-    case blink::WebURLRequest::RequestContextWorker:
-        return allowWorkerContextFromSource(url, reportingStatus);
-
-    case blink::WebURLRequest::RequestContextEventSource:
-    case blink::WebURLRequest::RequestContextFetch:
-    case blink::WebURLRequest::RequestContextXMLHttpRequest:
-        return allowConnectToSource(url, reportingStatus);
-
-    // FIXME: Evaluate whether or not we can start applying 'object-src' restrictions to PPAPI requests, now that we can distinguish them.
-    case blink::WebURLRequest::RequestContextPlugin:
-        if (Document* document = this->document()) {
-            UseCounter::count(*document, allowObjectFromSource(url, SuppressReport) ? UseCounter::PPAPIRequestAllowedByObjectSrc : UseCounter::PPAPIRequestBypassedObjectSrc);
-        }
-        return true;
-
-    // FIXME: We should implement 'manifest-src' or something similar: http://w3c.github.io/manifest/#content-security-policy
-    case blink::WebURLRequest::RequestContextManifest:
-        return true;
-
-    // These resource types aren't directly affected by CSP:
-    case blink::WebURLRequest::RequestContextCSPReport:
-    case blink::WebURLRequest::RequestContextDownload:
-    case blink::WebURLRequest::RequestContextHyperlink:
-    case blink::WebURLRequest::RequestContextInternal:
-    case blink::WebURLRequest::RequestContextLocation:
-    case blink::WebURLRequest::RequestContextPrefetch:
-    case blink::WebURLRequest::RequestContextSubresource:
-    case blink::WebURLRequest::RequestContextUnspecified:
-        return true;
-    }
-    ASSERT_NOT_REACHED();
-    return false;
-}
-
 bool ContentSecurityPolicy::allowObjectFromSource(const KURL& url, ContentSecurityPolicy::ReportingStatus reportingStatus) const
 {
     return isAllowedByAllWithURL<&CSPDirectiveList::allowObjectFromSource>(m_policies, url, reportingStatus);
@@ -751,14 +679,19 @@ void ContentSecurityPolicy::reportUnsupportedDirective(const String& name) const
     DEFINE_STATIC_LOCAL(String, policyURIMessage, ("The 'policy-uri' directive has been removed from the specification. Please specify a complete policy via the Content-Security-Policy header."));
 
     String message = "Unrecognized Content-Security-Policy directive '" + name + "'.\n";
-    if (equalIgnoringCase(name, allow))
+    MessageLevel level = ErrorMessageLevel;
+    if (equalIgnoringCase(name, allow)) {
         message = allowMessage;
-    else if (equalIgnoringCase(name, options))
+    } else if (equalIgnoringCase(name, options)) {
         message = optionsMessage;
-    else if (equalIgnoringCase(name, policyURI))
+    } else if (equalIgnoringCase(name, policyURI)) {
         message = policyURIMessage;
+    } else if (isDirectiveName(name)) {
+        message = "The Content-Security-Policy directive '" + name + "' is implemented behind a flag which is currently disabled.\n";
+        level = InfoMessageLevel;
+    }
 
-    logToConsole(message);
+    logToConsole(message, level);
 }
 
 void ContentSecurityPolicy::reportDirectiveAsSourceExpression(const String& directiveName, const String& sourceExpression) const
@@ -823,9 +756,9 @@ void ContentSecurityPolicy::reportMissingReportURI(const String& policy) const
     logToConsole("The Content Security Policy '" + policy + "' was delivered in report-only mode, but does not specify a 'report-uri'; the policy will have no effect. Please either add a 'report-uri' directive, or deliver the policy via the 'Content-Security-Policy' header.");
 }
 
-void ContentSecurityPolicy::logToConsole(const String& message) const
+void ContentSecurityPolicy::logToConsole(const String& message, MessageLevel level) const
 {
-    m_executionContext->addConsoleMessage(SecurityMessageSource, ErrorMessageLevel, message);
+    m_executionContext->addConsoleMessage(SecurityMessageSource, level, message);
 }
 
 void ContentSecurityPolicy::reportBlockedScriptExecutionToInspector(const String& directiveText) const

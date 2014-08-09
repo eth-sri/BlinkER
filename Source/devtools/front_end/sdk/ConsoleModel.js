@@ -207,11 +207,11 @@ WebInspector.ConsoleMessage = function(target, source, level, messageText, type,
 
     if (this.request) {
         this.stackTrace = this.request.initiator.stackTrace;
+        this.asyncStackTrace = this.request.initiator.asyncStackTrace;
         if (this.request.initiator && this.request.initiator.url) {
             this.url = this.request.initiator.url;
             this.line = this.request.initiator.lineNumber;
         }
-        this.asyncStackTrace = undefined;
     }
 }
 
@@ -406,6 +406,24 @@ WebInspector.ConsoleMessage.MessageLevel = {
     Warning: "warning",
     Error: "error",
     Debug: "debug"
+};
+
+WebInspector.ConsoleMessage._messageLevelPriority = {
+    "debug": 0,
+    "log": 1,
+    "info": 2,
+    "warning": 3,
+    "error": 4
+};
+
+/**
+ * @param {!WebInspector.ConsoleMessage} a
+ * @param {!WebInspector.ConsoleMessage} b
+ * @return {number}
+ */
+WebInspector.ConsoleMessage.messageLevelComparator = function(a, b)
+{
+    return WebInspector.ConsoleMessage._messageLevelPriority[a.level] - WebInspector.ConsoleMessage._messageLevelPriority[b.level];
 }
 
 /**

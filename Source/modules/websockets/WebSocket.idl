@@ -43,10 +43,10 @@ enum BinaryType { "blob", "arraybuffer" };
     ConstructorCallWith=ExecutionContext,
     Exposed=Window&Worker,
     RaisesException=Constructor,
-    WillBeGarbageCollected,
+    GarbageCollected,
     ImplementedAs=DOMWebSocket,
 ] interface WebSocket : EventTarget {
-    [MeasureAs=WebSocketURL] readonly attribute DOMString URL; // Lowercased .url is the one in the spec, but leaving .URL for compatibility reasons.
+    [DeprecateAs=WebSocketURL] readonly attribute DOMString URL; // Lowercased .url is the one in the spec, but leaving .URL for compatibility reasons.
     readonly attribute DOMString url;
 
     // ready state

@@ -672,7 +672,7 @@ private:
         doWriteWebCoreString(file.uuid());
         doWriteWebCoreString(file.type());
 
-        // FIXME don't use 4 bytes to encode a flag.
+        // FIXME don't use 1 byte to encode a flag.
         if (file.hasValidSnapshotMetadata()) {
             doWriteUint32(static_cast<uint8_t>(1));
 
@@ -682,8 +682,10 @@ private:
             doWriteUint64(static_cast<uint64_t>(size));
             doWriteNumber(lastModified);
         } else {
-            append(static_cast<uint8_t>(0));
+            doWriteUint32(static_cast<uint8_t>(0));
         }
+
+        doWriteUint32(static_cast<uint8_t>((file.userVisibility() == File::IsUserVisible) ? 1 : 0));
     }
 
     void doWriteArrayBuffer(const ArrayBuffer& arrayBuffer)
@@ -1282,7 +1284,7 @@ private:
         if (blob->hasBeenClosed())
             return handleError(DataCloneError, "A Blob object has been closed, and could therefore not be cloned.", next);
         int blobIndex = -1;
-        m_blobDataHandles.add(blob->uuid(), blob->blobDataHandle());
+        m_blobDataHandles.set(blob->uuid(), blob->blobDataHandle());
         if (appendBlobInfo(blob->uuid(), blob->type(), blob->size(), &blobIndex))
             m_writer.writeBlobIndex(blobIndex);
         else
@@ -1309,7 +1311,7 @@ private:
         if (file->hasBeenClosed())
             return handleError(DataCloneError, "A File object has been closed, and could therefore not be cloned.", next);
         int blobIndex = -1;
-        m_blobDataHandles.add(file->uuid(), file->blobDataHandle());
+        m_blobDataHandles.set(file->uuid(), file->blobDataHandle());
         if (appendFileInfo(file, &blobIndex)) {
             ASSERT(blobIndex >= 0);
             m_writer.writeFileIndex(blobIndex);
@@ -1331,7 +1333,7 @@ private:
             const File* file = fileList->item(i);
             if (file->hasBeenClosed())
                 return handleError(DataCloneError, "A File object has been closed, and could therefore not be cloned.", next);
-            m_blobDataHandles.add(file->uuid(), file->blobDataHandle());
+            m_blobDataHandles.set(file->uuid(), file->blobDataHandle());
             if (appendFileInfo(file, &blobIndex)) {
                 ASSERT(!i || blobIndex > 0);
                 ASSERT(blobIndex >= 0);
@@ -1466,7 +1468,7 @@ private:
         if (!m_blobInfo)
             return false;
         *index = m_blobInfo->size();
-        m_blobInfo->append(blink::WebBlobInfo(uuid, type, size));
+        m_blobInfo->append(WebBlobInfo(uuid, type, size));
         return true;
     }
 
@@ -1479,7 +1481,7 @@ private:
         double lastModified = invalidFileTime();
         file->captureSnapshot(size, lastModified);
         *index = m_blobInfo->size();
-        m_blobInfo->append(blink::WebBlobInfo(file->uuid(), file->path(), file->name(), file->type(), lastModified, size));
+        m_blobInfo->append(WebBlobInfo(file->uuid(), file->path(), file->name(), file->type(), lastModified, size));
         return true;
     }
 
@@ -2316,7 +2318,11 @@ private:
             if (!doReadNumber(&lastModified))
                 return nullptr;
         }
-        return File::create(path, name, relativePath, hasSnapshot > 0, size, lastModified, getOrCreateBlobDataHandle(uuid, type));
+        uint32_t isUserVisible = 1;
+        if (m_version >= 7 && !doReadUint32(&isUserVisible))
+            return nullptr;
+        const File::UserVisibility userVisibility = (isUserVisible > 0) ? File::IsUserVisible : File::IsNotUserVisible;
+        return File::createFromSerialization(path, name, relativePath, userVisibility, hasSnapshot > 0, size, lastModified, getOrCreateBlobDataHandle(uuid, type));
     }
 
     PassRefPtrWillBeRawPtr<File> readFileIndexHelper()
@@ -2327,8 +2333,8 @@ private:
         uint32_t index;
         if (!doReadUint32(&index) || index >= m_blobInfo->size())
             return nullptr;
-        const blink::WebBlobInfo& info = (*m_blobInfo)[index];
-        return File::create(info.filePath(), info.fileName(), info.size(), info.lastModified(), getOrCreateBlobDataHandle(info.uuid(), info.type(), info.size()));
+        const WebBlobInfo& info = (*m_blobInfo)[index];
+        return File::createFromIndexedSerialization(info.filePath(), info.fileName(), info.size(), info.lastModified(), getOrCreateBlobDataHandle(info.uuid(), info.type(), info.size()));
     }
 
     template<class T>

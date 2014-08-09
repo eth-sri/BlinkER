@@ -1343,7 +1343,7 @@ private:
     bool m_isLast;
 };
 
-} // WebCore namespace
+} // namespace blink
 
 WTF_ALLOW_MOVE_INIT_AND_COMPARE_WITH_MEM_FUNCTIONS(blink::VectorObject);
 WTF_ALLOW_MOVE_INIT_AND_COMPARE_WITH_MEM_FUNCTIONS(blink::VectorObjectInheritedTrace);
@@ -2017,7 +2017,7 @@ public:
     static OffHeapContainer* create() { return new OffHeapContainer(); }
 
     static const int iterations = 300;
-    static const int deadWrappers = 1500;
+    static const int deadWrappers = 1200;
 
     OffHeapContainer()
     {
@@ -2026,14 +2026,12 @@ public:
             m_vector1.append(ShouldBeTraced(IntWrapper::create(i)));
             m_deque2.append(IntWrapper::create(i));
             m_vector2.append(IntWrapper::create(i));
-            m_ownedVector.append(adoptPtr(new ShouldBeTraced(IntWrapper::create(i))));
         }
 
         Deque<ShouldBeTraced>::iterator d1Iterator(m_deque1.begin());
         Vector<ShouldBeTraced>::iterator v1Iterator(m_vector1.begin());
         Deque<Member<IntWrapper> >::iterator d2Iterator(m_deque2.begin());
         Vector<Member<IntWrapper> >::iterator v2Iterator(m_vector2.begin());
-        Vector<OwnPtr<ShouldBeTraced> >::iterator ownedVectorIterator(m_ownedVector.begin());
 
         for (int i = 0; i < iterations; i++) {
             EXPECT_EQ(i, m_vector1[i].m_wrapper->value());
@@ -2042,18 +2040,15 @@ public:
             EXPECT_EQ(i, v1Iterator->m_wrapper->value());
             EXPECT_EQ(i, d2Iterator->get()->value());
             EXPECT_EQ(i, v2Iterator->get()->value());
-            EXPECT_EQ(i, ownedVectorIterator->get()->m_wrapper->value());
             ++d1Iterator;
             ++v1Iterator;
             ++d2Iterator;
             ++v2Iterator;
-            ++ownedVectorIterator;
         }
         EXPECT_EQ(d1Iterator, m_deque1.end());
         EXPECT_EQ(v1Iterator, m_vector1.end());
         EXPECT_EQ(d2Iterator, m_deque2.end());
         EXPECT_EQ(v2Iterator, m_vector2.end());
-        EXPECT_EQ(ownedVectorIterator, m_ownedVector.end());
     }
 
     void trace(Visitor* visitor)
@@ -2062,14 +2057,12 @@ public:
         visitor->trace(m_vector1);
         visitor->trace(m_deque2);
         visitor->trace(m_vector2);
-        visitor->trace(m_ownedVector);
     }
 
     Deque<ShouldBeTraced> m_deque1;
     Vector<ShouldBeTraced> m_vector1;
     Deque<Member<IntWrapper> > m_deque2;
     Vector<Member<IntWrapper> > m_vector2;
-    Vector<OwnPtr<ShouldBeTraced> > m_ownedVector;
 };
 
 const int OffHeapContainer::iterations;
@@ -3686,8 +3679,10 @@ void rawPtrInHashHelper()
     set.add(new int(42));
     set.add(new int(42));
     EXPECT_EQ(2u, set.size());
-    for (typename Set::iterator it = set.begin(); it != set.end(); ++it)
+    for (typename Set::iterator it = set.begin(); it != set.end(); ++it) {
         EXPECT_EQ(42, **it);
+        delete *it;
+    }
 }
 
 TEST(HeapTest, RawPtrInHash)
@@ -4443,7 +4438,6 @@ TEST(HeapTest, Ephemeron)
 {
     typedef HeapHashMap<WeakMember<IntWrapper>, PairWithWeakHandling>  WeakPairMap;
     typedef HeapHashMap<PairWithWeakHandling, WeakMember<IntWrapper> >  PairWeakMap;
-    typedef HeapHashMap<PairWithWeakHandling, PairWithWeakHandling>  PairPairMap;
     typedef HeapHashSet<WeakMember<IntWrapper> > Set;
 
     Persistent<WeakPairMap> weakPairMap = new WeakPairMap();
@@ -4660,8 +4654,6 @@ public:
             // shutting it down.
             stackPtrValue = reinterpret_cast<uintptr_t>(cto.get());
         }
-        RELEASE_ASSERT(stackPtrValue);
-
         // At this point it is "programatically" okay to shut down the worker thread
         // since the cto object should be dead. However out stackPtrValue will cause a
         // trace of the object when doing a conservative GC.
@@ -4684,6 +4676,13 @@ public:
         Heap::collectGarbage(ThreadState::HeapPointersOnStack);
         EXPECT_EQ(0, CrossThreadObject::s_destructorCalls);
         EXPECT_EQ(1, IntWrapper::s_destructorCalls);
+
+        // This release assert is here to ensure the stackValuePtr is not
+        // optimized away before doing the above conservative GC. If the
+        // EXPECT_EQ(0, CrossThreadObject::s_destructorCalls) call above
+        // starts failing it means we have to find a better way to ensure
+        // the stackPtrValue is not optimized away.
+        RELEASE_ASSERT(stackPtrValue);
 
         // Do a GC with no pointers on the stack to see the cto being collected.
         Heap::collectGarbage(ThreadState::NoHeapPointersOnStack);
@@ -4872,4 +4871,163 @@ TEST(HeapTest, GarbageCollectionDuringMixinConstruction)
     a->verify();
 }
 
-} // WebCore namespace
+static RecursiveMutex& recursiveMutex()
+{
+    AtomicallyInitializedStatic(RecursiveMutex&, recursiveMutex = *new RecursiveMutex);
+    return recursiveMutex;
+}
+
+class DestructorLockingObject : public GarbageCollectedFinalized<DestructorLockingObject> {
+public:
+    static DestructorLockingObject* create()
+    {
+        return new DestructorLockingObject();
+    }
+
+    virtual ~DestructorLockingObject()
+    {
+        SafePointAwareMutexLocker lock(recursiveMutex());
+        ++s_destructorCalls;
+    }
+
+    static int s_destructorCalls;
+    void trace(Visitor* visitor) { }
+
+private:
+    DestructorLockingObject() { }
+};
+
+int DestructorLockingObject::s_destructorCalls = 0;
+
+class RecursiveLockingTester {
+public:
+    static void test()
+    {
+        DestructorLockingObject::s_destructorCalls = 0;
+
+        MutexLocker locker(mainThreadMutex());
+        createThread(&workerThreadMain, 0, "Worker Thread");
+
+        // Park the main thread until the worker thread has initialized.
+        parkMainThread();
+
+        {
+            SafePointAwareMutexLocker recursiveLocker(recursiveMutex());
+
+            // Let the worker try to acquire the above mutex. It won't get it
+            // until the main thread has done its GC.
+            wakeWorkerThread();
+
+            Heap::collectGarbage(ThreadState::NoHeapPointersOnStack);
+
+            // The worker thread should not have swept yet since it is waiting
+            // to get the global mutex.
+            EXPECT_EQ(0, DestructorLockingObject::s_destructorCalls);
+        }
+        // At this point the main thread releases the global lock and the worker
+        // can acquire it and do its sweep of its heaps. Just wait for the worker
+        // to complete its sweep and check the result.
+        parkMainThread();
+        EXPECT_EQ(1, DestructorLockingObject::s_destructorCalls);
+    }
+
+private:
+    static void workerThreadMain(void* data)
+    {
+        MutexLocker locker(workerThreadMutex());
+        ThreadState::attach();
+
+        DestructorLockingObject* dlo = DestructorLockingObject::create();
+        ASSERT_UNUSED(dlo, dlo);
+
+        // Wake up the main thread which is waiting for the worker to do its
+        // allocation.
+        wakeMainThread();
+
+        // Wait for the main thread to get the global lock to ensure it has
+        // it before the worker tries to acquire it. We want the worker to
+        // block in the SafePointAwareMutexLocker until the main thread
+        // has done a GC. The GC will not mark the "dlo" object since the worker
+        // is entering the safepoint with NoHeapPointersOnStack. When the worker
+        // subsequently gets the global lock and leaves the safepoint it will
+        // sweep its heap and finalize "dlo". The destructor of "dlo" will try
+        // to acquire the same global lock that the thread just got and deadlock
+        // unless the global lock is recursive.
+        parkWorkerThread();
+        SafePointAwareMutexLocker recursiveLocker(recursiveMutex(), ThreadState::NoHeapPointersOnStack);
+
+        // We won't get here unless the lock is recursive since the sweep done
+        // in the constructor of SafePointAwareMutexLocker after
+        // getting the lock will not complete given the "dlo" destructor is
+        // waiting to get the same lock.
+        // Tell the main thread the worker has done its sweep.
+        wakeMainThread();
+
+        ThreadState::detach();
+    }
+
+    static volatile IntWrapper* s_workerObjectPointer;
+};
+
+TEST(HeapTest, RecursiveMutex)
+{
+    RecursiveLockingTester::test();
+}
+
+template<typename T>
+class TraceIfNeededTester : public GarbageCollected<TraceIfNeededTester<T> > {
+public:
+    static TraceIfNeededTester<T>* create() { return new TraceIfNeededTester<T>(); }
+    static TraceIfNeededTester<T>* create(const T& obj) { return new TraceIfNeededTester<T>(obj); }
+    void trace(Visitor* visitor) { TraceIfNeeded<T>::trace(visitor, &m_obj); }
+    T& obj() { return m_obj; }
+private:
+    TraceIfNeededTester() { }
+    explicit TraceIfNeededTester(const T& obj) : m_obj(obj) { }
+    T m_obj;
+};
+
+class PartObject {
+    DISALLOW_ALLOCATION();
+public:
+    PartObject() : m_obj(SimpleObject::create()) { }
+    void trace(Visitor* visitor) { visitor->trace(m_obj); }
+private:
+    Member<SimpleObject> m_obj;
+};
+
+TEST(HeapTest, TraceIfNeeded)
+{
+    CountingVisitor visitor;
+
+    {
+        TraceIfNeededTester<RefPtr<OffHeapInt> >* m_offHeap = TraceIfNeededTester<RefPtr<OffHeapInt> >::create(OffHeapInt::create(42));
+        visitor.reset();
+        m_offHeap->trace(&visitor);
+        EXPECT_EQ(0u, visitor.count());
+    }
+
+    {
+        TraceIfNeededTester<PartObject>* m_part = TraceIfNeededTester<PartObject>::create();
+        visitor.reset();
+        m_part->trace(&visitor);
+        EXPECT_EQ(1u, visitor.count());
+    }
+
+    {
+        TraceIfNeededTester<Member<SimpleObject> >* m_obj = TraceIfNeededTester<Member<SimpleObject> >::create(Member<SimpleObject>(SimpleObject::create()));
+        visitor.reset();
+        m_obj->trace(&visitor);
+        EXPECT_EQ(1u, visitor.count());
+    }
+
+    {
+        TraceIfNeededTester<HeapVector<Member<SimpleObject> > >* m_vec = TraceIfNeededTester<HeapVector<Member<SimpleObject> > >::create();
+        m_vec->obj().append(SimpleObject::create());
+        visitor.reset();
+        m_vec->trace(&visitor);
+        EXPECT_EQ(2u, visitor.count());
+    }
+}
+
+} // namespace blink

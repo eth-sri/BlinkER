@@ -3,7 +3,7 @@
 #include "EventRacerLog.h"
 #include "EventRacerTimer.h"
 
-namespace WebCore {
+namespace blink {
 
 void EventRacerTimerBase::start(double nextFireInterval, double repeatInterval, const TraceLocation& caller)
 {

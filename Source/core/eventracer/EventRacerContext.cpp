@@ -4,7 +4,7 @@
 
 #include "wtf/ThreadSpecific.h"
 
-namespace WebCore {
+namespace blink {
 
 // EventRacerContext ------------------------------------------------------------
 
@@ -69,5 +69,5 @@ OperationScope::~OperationScope() {
     log->logOperation(act, Operation::EXIT_SCOPE);
 }
 
-} // end namespace WebCore
+} // end namespace blink
 

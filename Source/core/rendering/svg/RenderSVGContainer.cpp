@@ -151,7 +151,7 @@ void RenderSVGContainer::paint(PaintInfo& paintInfo, const LayoutPoint&)
 }
 
 // addFocusRingRects is called from paintOutline and needs to be in the same coordinates as the paintOuline call
-void RenderSVGContainer::addFocusRingRects(Vector<IntRect>& rects, const LayoutPoint&, const RenderLayerModelObject*)
+void RenderSVGContainer::addFocusRingRects(Vector<IntRect>& rects, const LayoutPoint&, const RenderLayerModelObject*) const
 {
     IntRect paintRectInParent = enclosingIntRect(localToParentTransform().mapRect(paintInvalidationRectInLocalCoordinates()));
     if (!paintRectInParent.isEmpty())
@@ -170,9 +170,8 @@ bool RenderSVGContainer::nodeAtFloatPoint(const HitTestRequest& request, HitTest
     if (!pointIsInsideViewportClip(pointInParent))
         return false;
 
-    FloatPoint localPoint = localToParentTransform().inverse().mapPoint(pointInParent);
-
-    if (!SVGRenderSupport::pointInClippingArea(this, localPoint))
+    FloatPoint localPoint;
+    if (!SVGRenderSupport::transformToUserSpaceAndCheckClipping(this, localToParentTransform(), pointInParent, localPoint))
         return false;
 
     for (RenderObject* child = lastChild(); child; child = child->previousSibling()) {

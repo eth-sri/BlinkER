@@ -467,14 +467,6 @@
                 "hidden": true
             },
             {
-                "name": "hasTouchInputs",
-                "description": "Tells whether touch inputs are present.",
-                "returns": [
-                    { "name": "result", "type": "boolean", "description": "True if touch inputs are present." }
-                ],
-                "hidden": true
-            },
-            {
                 "name": "setTouchEmulationEnabled",
                 "parameters": [
                     { "name": "enabled", "type": "boolean", "description": "Whether the touch event emulation should be enabled." }
@@ -984,6 +976,13 @@
                     { "name": "heapObjectId", "type": "integer" }
                 ],
                 "hidden": true
+            },
+            {
+                "name": "setTracingBasedTimeline",
+                "parameters": [
+                    { "name": "enabled", "type": "boolean", "description": "Switch console.timeline to tracing based." }
+                ],
+                "hidden": true
             }
         ],
         "events": [
@@ -1138,7 +1137,8 @@
                     { "name": "type", "type": "string", "enum": ["parser", "script", "other"], "description": "Type of this initiator." },
                     { "name": "stackTrace", "$ref": "Console.StackTrace", "optional": true, "description": "Initiator JavaScript stack trace, set for Script only." },
                     { "name": "url", "type": "string", "optional": true, "description": "Initiator URL, set for Parser type only." },
-                    { "name": "lineNumber", "type": "number", "optional": true, "description": "Initiator line number, set for Parser type only." }
+                    { "name": "lineNumber", "type": "number", "optional": true, "description": "Initiator line number, set for Parser type only." },
+                    { "name": "asyncStackTrace", "$ref": "Console.AsyncStackTrace", "optional": true, "description": "Initiator asynchronous JavaScript stack trace, if available.", "hidden": true }
                 ]
             }
         ],
@@ -2019,7 +2019,9 @@
                     { "name": "paddingColor", "$ref": "RGBA", "optional": true, "description": "The padding highlight fill color (default: transparent)." },
                     { "name": "borderColor", "$ref": "RGBA", "optional": true, "description": "The border highlight fill color (default: transparent)." },
                     { "name": "marginColor", "$ref": "RGBA", "optional": true, "description": "The margin highlight fill color (default: transparent)." },
-                    { "name": "eventTargetColor", "$ref": "RGBA", "optional": true, "hidden": true, "description": "The event target element highlight fill color (default: transparent)." }
+                    { "name": "eventTargetColor", "$ref": "RGBA", "optional": true, "hidden": true, "description": "The event target element highlight fill color (default: transparent)." },
+                    { "name": "shapeColor", "$ref": "RGBA", "optional": true, "hidden": true, "description": "The shape outside fill color (default: transparent)." },
+                    { "name": "shapeMarginColor", "$ref": "RGBA", "optional": true, "hidden": true, "description": "The shape margin fill color (default: transparent)." }
                 ],
                 "description": "Configuration data for the highlighting of page elements."
             }
@@ -2155,7 +2157,8 @@
             {
                 "name": "performSearch",
                 "parameters": [
-                    { "name": "query", "type": "string", "description": "Plain text or query selector or XPath search query." }
+                    { "name": "query", "type": "string", "description": "Plain text or query selector or XPath search query." },
+                    { "name": "includeUserAgentShadowDOM", "type": "boolean", "optional": true, "description": "True to search in user agent shadow DOM.", "hidden": true }
                 ],
                 "returns": [
                     { "name": "searchId", "type": "string", "description": "Unique search session identifier." },
@@ -2294,11 +2297,24 @@
                 "description": "Returns attributes for the specified node."
             },
             {
+                "name": "copyTo",
+                "parameters": [
+                    { "name": "nodeId", "$ref": "NodeId", "description": "Id of the node to copy." },
+                    { "name": "targetNodeId", "$ref": "NodeId", "description": "Id of the element to drop the copy into." },
+                    { "name": "insertBeforeNodeId", "$ref": "NodeId", "optional": true, "description": "Drop the copy before this node (if absent, the copy becomes the last child of <code>targetNodeId</code>)." }
+                ],
+                "returns": [
+                    { "name": "nodeId", "$ref": "NodeId", "description": "Id of the node clone." }
+                ],
+                "description": "Creates a deep copy of the specified node and places it into the target container before the given anchor.",
+                "hidden": true
+            },
+            {
                 "name": "moveTo",
                 "parameters": [
-                    { "name": "nodeId", "$ref": "NodeId", "description": "Id of the node to drop." },
-                    { "name": "targetNodeId", "$ref": "NodeId", "description": "Id of the element to drop into." },
-                    { "name": "insertBeforeNodeId", "$ref": "NodeId", "optional": true, "description": "Drop node before given one." }
+                    { "name": "nodeId", "$ref": "NodeId", "description": "Id of the node to move." },
+                    { "name": "targetNodeId", "$ref": "NodeId", "description": "Id of the element to drop the moved node into." },
+                    { "name": "insertBeforeNodeId", "$ref": "NodeId", "optional": true, "description": "Drop node before this one (if absent, the moved node becomes the last child of <code>targetNodeId</code>)." }
                 ],
                 "returns": [
                     { "name": "nodeId", "$ref": "NodeId", "description": "New id of the moved node." }
@@ -2691,8 +2707,8 @@
                 "name": "getMatchedStylesForNode",
                 "parameters": [
                     { "name": "nodeId", "$ref": "DOM.NodeId" },
-                    { "name": "includePseudo", "type": "boolean", "optional": true, "description": "Whether to include pseudo styles (default: true)." },
-                    { "name": "includeInherited", "type": "boolean", "optional": true, "description": "Whether to include inherited styles (default: true)." }
+                    { "name": "excludePseudo", "type": "boolean", "optional": true, "description": "Whether to exclude pseudo styles (default: false)." },
+                    { "name": "excludeInherited", "type": "boolean", "optional": true, "description": "Whether to exclude inherited styles (default: false)." }
                 ],
                 "returns": [
                     { "name": "matchedCSSRules", "type": "array", "items": { "$ref": "RuleMatch" }, "optional": true, "description": "CSS rules matching this node, from all applicable stylesheets." },
@@ -3958,6 +3974,23 @@
                 ],
                 "description": "Dispatches a gesture event to the page.",
                 "handlers": ["browser"]
+            },
+            {
+                "name": "emulateTouchFromMouseEvent",
+                "hidden": true,
+                "parameters": [
+                    { "name": "type", "type": "string", "enum": ["mousePressed", "mouseReleased", "mouseMoved", "mouseWheel"], "description": "Type of the mouse event." },
+                    { "name": "x", "type": "integer", "description": "X coordinate of the mouse pointer in DIP."},
+                    { "name": "y", "type": "integer", "description": "Y coordinate of the mouse pointer in DIP."},
+                    { "name": "deltaX", "type": "number", "optional": true, "description": "X delta in DIP for mouse wheel event (default: 0)."},
+                    { "name": "deltaY", "type": "number", "optional": true, "description": "Y delta in DIP for mouse wheel event (default: 0)."},
+                    { "name": "modifiers", "type": "integer", "optional": true, "description": "Bit field representing pressed modifier keys. Alt=1, Ctrl=2, Meta/Command=4, Shift=8 (default: 0)." },
+                    { "name": "timestamp", "type": "number", "optional": true, "description": "Time at which the event occurred. Measured in UTC time in seconds since January 1, 1970 (default: current time)." },
+                    { "name": "button", "type": "string", "enum": ["none", "left", "middle", "right"], "optional": true, "description": "Mouse button (default: \"none\")." },
+                    { "name": "clickCount", "type": "integer", "optional": true, "description": "Number of times the mouse button was clicked (default: 0)." }
+                ],
+                "description": "Emulates touch event from the mouse event parameters.",
+                "handlers": ["browser"]
             }
         ],
         "events": []
@@ -4163,15 +4196,12 @@
                     { "name": "options", "type": "string", "description": "Tracing options" },
                     { "name": "bufferUsageReportingInterval", "type": "number", "optional": true, "description": "If set, the agent will issue bufferUsage events at this interval, specified in milliseconds" }
                 ],
-                "returns": [
-                    { "name": "sessionId", "type": "string", "description": "A system-unique identifier of the tracing session that allows associating of some of the trace events with the inspected page" }
-                ],
                 "handlers": ["browser", "renderer", "frontend"]
             },
             {
                 "name": "end",
                 "description": "Stop trace events collection.",
-                "handlers": ["browser", "frontend"]
+                "handlers": ["browser", "renderer", "frontend"]
             },
             {
                 "name": "getCategories",
@@ -4183,6 +4213,22 @@
             }
         ],
         "events": [
+            {
+                "name": "started",
+                "parameters": [
+                    { "name": "consoleTimeline", "type": "boolean", "description": "If specified, identifies that tracing was started using console.timeline() call." },
+                    { "name": "sessionId", "type": "string", "description": "A system-unique identifier of the tracing session that allows associating of some of the trace events with the inspected page" }
+                ],
+                "description": "Fired when tracing is started.",
+                "handlers": ["renderer", "browser", "frontend"],
+                "hidden": true
+            },
+            {
+                "name": "stopped",
+                "description": "Fired when tracing is stopped.",
+                "handlers": ["renderer", "browser", "frontend"],
+                "hidden": true
+            },
             {
                 "name": "dataCollected",
                 "parameters": [

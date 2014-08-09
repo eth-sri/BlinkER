@@ -76,12 +76,64 @@ PassRefPtr<StyleReflection> StyleBuilderConverter::convertBoxReflect(StyleResolv
     return reflection.release();
 }
 
+Color StyleBuilderConverter::convertColor(StyleResolverState& state, CSSValue* value, bool forVisitedLink)
+{
+    CSSPrimitiveValue* primitiveValue = toCSSPrimitiveValue(value);
+    return state.document().textLinkColors().colorFromPrimitiveValue(primitiveValue, state.style()->color(), forVisitedLink);
+}
+
 AtomicString StyleBuilderConverter::convertFragmentIdentifier(StyleResolverState& state, CSSValue* value)
 {
     CSSPrimitiveValue* primitiveValue = toCSSPrimitiveValue(value);
     if (primitiveValue->isURI())
         return SVGURIReference::fragmentIdentifierFromIRIString(primitiveValue->getStringValue(), state.element()->treeScope());
     return nullAtom;
+}
+
+FontDescription::VariantLigatures StyleBuilderConverter::convertFontVariantLigatures(StyleResolverState&, CSSValue* value)
+{
+    if (value->isValueList()) {
+        FontDescription::VariantLigatures ligatures;
+        CSSValueList* valueList = toCSSValueList(value);
+        for (size_t i = 0; i < valueList->length(); ++i) {
+            CSSValue* item = valueList->item(i);
+            CSSPrimitiveValue* primitiveValue = toCSSPrimitiveValue(item);
+            switch (primitiveValue->getValueID()) {
+            case CSSValueNoCommonLigatures:
+                ligatures.common = FontDescription::DisabledLigaturesState;
+                break;
+            case CSSValueCommonLigatures:
+                ligatures.common = FontDescription::EnabledLigaturesState;
+                break;
+            case CSSValueNoDiscretionaryLigatures:
+                ligatures.discretionary = FontDescription::DisabledLigaturesState;
+                break;
+            case CSSValueDiscretionaryLigatures:
+                ligatures.discretionary = FontDescription::EnabledLigaturesState;
+                break;
+            case CSSValueNoHistoricalLigatures:
+                ligatures.historical = FontDescription::DisabledLigaturesState;
+                break;
+            case CSSValueHistoricalLigatures:
+                ligatures.historical = FontDescription::EnabledLigaturesState;
+                break;
+            case CSSValueNoContextual:
+                ligatures.contextual = FontDescription::DisabledLigaturesState;
+                break;
+            case CSSValueContextual:
+                ligatures.contextual = FontDescription::EnabledLigaturesState;
+                break;
+            default:
+                ASSERT_NOT_REACHED();
+                break;
+            }
+        }
+        return ligatures;
+    }
+
+    ASSERT_WITH_SECURITY_IMPLICATION(value->isPrimitiveValue());
+    ASSERT(toCSSPrimitiveValue(value)->getValueID() == CSSValueNormal);
+    return FontDescription::VariantLigatures();
 }
 
 EGlyphOrientation StyleBuilderConverter::convertGlyphOrientation(StyleResolverState&, CSSValue* value)
@@ -388,7 +440,7 @@ PassRefPtr<ShadowList> StyleBuilderConverter::convertShadow(StyleResolverState& 
         ShadowStyle shadowStyle = item->style && item->style->getValueID() == CSSValueInset ? Inset : Normal;
         Color color;
         if (item->color)
-            color = state.document().textLinkColors().colorFromPrimitiveValue(item->color.get(), state.style()->color());
+            color = convertColor(state, item->color.get());
         else
             color = state.style()->color();
         shadows.append(ShadowData(FloatPoint(x, y), blur, spread, shadowStyle, color));

@@ -21,7 +21,7 @@ namespace {
     class ClientArray {
     public:
         typedef blink::WebServiceWorkerClientsInfo WebType;
-        static WillBeHeapVector<RefPtrWillBeMember<Client> > from(ScriptPromiseResolver*, WebType* webClientsRaw)
+        static WillBeHeapVector<RefPtrWillBeMember<Client> > take(ScriptPromiseResolver*, WebType* webClientsRaw)
         {
             OwnPtr<WebType> webClients = adoptPtr(webClientsRaw);
             WillBeHeapVector<RefPtrWillBeMember<Client> > clients;
@@ -29,6 +29,10 @@ namespace {
                 clients.append(Client::create(webClients->clientIDs[i]));
             }
             return clients;
+        }
+        static void dispose(WebType* webClientsRaw)
+        {
+            delete webClientsRaw;
         }
 
     private:

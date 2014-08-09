@@ -419,15 +419,6 @@ PassRefPtrWillBeRawPtr<NodeList> Node::childNodes()
     return ensureRareData().ensureNodeLists().ensureEmptyChildNodeList(*this);
 }
 
-Node& Node::lastDescendantOrSelf() const
-{
-    Node* n = const_cast<Node*>(this);
-    while (n && n->lastChild())
-        n = n->lastChild();
-    ASSERT(n);
-    return *n;
-}
-
 Node* Node::pseudoAwarePreviousSibling() const
 {
     if (parentElement() && !previousSibling()) {
@@ -444,7 +435,7 @@ Node* Node::pseudoAwareNextSibling() const
 {
     if (parentElement() && !nextSibling()) {
         Element* parent = parentElement();
-        if (isBeforePseudoElement() && parent->firstChild())
+        if (isBeforePseudoElement() && parent->hasChildren())
             return parent->firstChild();
         if (!isAfterPseudoElement())
             return parent->pseudoElement(AFTER);
@@ -717,24 +708,24 @@ void Node::markAncestorsWithChildNeedsDistributionRecalc()
 
 namespace {
 
-void addJsStack(TracedArray<TracedValue>& stackFrames)
+void addJsStack(TracedValue* stackFrames)
 {
     RefPtrWillBeRawPtr<ScriptCallStack> stack = createScriptCallStack(10);
     if (!stack)
         return;
     for (size_t i = 0; i < stack->size(); i++)
-        stackFrames.pushString(stack->at(i).functionName());
+        stackFrames->pushString(stack->at(i).functionName());
 }
 
 PassRefPtr<TraceEvent::ConvertableToTraceFormat> jsonObjectForStyleInvalidation(unsigned nodeCount, const Node* rootNode)
 {
-    TracedValue value;
-    value.setInteger("node_count", nodeCount);
-    value.setString("root_node", rootNode->debugName());
-    TracedArray<TracedValue>& array = value.beginArray("js_stack");
-    addJsStack(array);
-    array.endArray();
-    return value.finish();
+    RefPtr<TracedValue> value = TracedValue::create();
+    value->setInteger("node_count", nodeCount);
+    value->setString("root_node", rootNode->debugName());
+    value->beginArray("js_stack");
+    addJsStack(value.get());
+    value->endArray();
+    return value;
 }
 
 } // anonymous namespace'd functions supporting traceStyleChange
@@ -848,28 +839,6 @@ unsigned Node::nodeIndex() const
     for ( count=0; _tempNode; count++ )
         _tempNode = _tempNode->previousSibling();
     return count;
-}
-
-void Node::invalidateNodeListCachesInAncestors(const QualifiedName* attrName, Element* attributeOwnerElement)
-{
-    if (hasRareData() && (!attrName || isAttributeNode())) {
-        if (NodeListsNodeData* lists = rareData()->nodeLists())
-            lists->clearChildNodeListCache();
-    }
-
-    // Modifications to attributes that are not associated with an Element can't invalidate NodeList caches.
-    if (attrName && !attributeOwnerElement)
-        return;
-
-    if (!document().shouldInvalidateNodeListCaches(attrName))
-        return;
-
-    document().invalidateNodeListCaches(attrName);
-
-    for (Node* node = this; node; node = node->parentNode()) {
-        if (NodeListsNodeData* lists = node->nodeLists())
-            lists->invalidateCaches(attrName);
-    }
 }
 
 NodeListsNodeData* Node::nodeLists()
@@ -1091,7 +1060,7 @@ Node *Node::previousNodeConsideringAtomicNodes() const
 
 Node *Node::nextNodeConsideringAtomicNodes() const
 {
-    if (!isAtomicNode(this) && firstChild())
+    if (!isAtomicNode(this) && hasChildren())
         return firstChild();
     if (nextSibling())
         return nextSibling();
@@ -1209,27 +1178,6 @@ ContainerNode* Node::parentOrShadowHostOrTemplateHostNode() const
     return parentOrShadowHostNode();
 }
 
-bool Node::isBlockFlowElement() const
-{
-    return isElementNode() && renderer() && renderer()->isRenderBlockFlow();
-}
-
-Element *Node::enclosingBlockFlowElement() const
-{
-    Node *n = const_cast<Node *>(this);
-    if (isBlockFlowElement())
-        return toElement(n);
-
-    while (1) {
-        n = n->parentNode();
-        if (!n)
-            break;
-        if (n->isBlockFlowElement() || isHTMLBodyElement(*n))
-            return toElement(n);
-    }
-    return 0;
-}
-
 bool Node::isRootEditableElement() const
 {
     return hasEditableStyle() && isElementNode() && (!parentNode() || !parentNode()->hasEditableStyle()
@@ -1256,11 +1204,6 @@ Element* Node::rootEditableElement() const
             break;
     }
     return result;
-}
-
-bool Node::inSameContainingBlockFlowElement(Node *n)
-{
-    return n ? enclosingBlockFlowElement() == n->enclosingBlockFlowElement() : false;
 }
 
 // FIXME: End of obviously misplaced HTML editing functions.  Try to move these out of Node.
@@ -1339,13 +1282,11 @@ bool Node::isDefaultNamespace(const AtomicString& namespaceURIMaybeEmpty) const
             if (element.prefix().isNull())
                 return element.namespaceURI() == namespaceURI;
 
-            if (element.hasAttributes()) {
-                AttributeCollection attributes = element.attributes();
-                AttributeCollection::const_iterator end = attributes.end();
-                for (AttributeCollection::const_iterator it = attributes.begin(); it != end; ++it) {
-                    if (it->localName() == xmlnsAtom)
-                        return it->value() == namespaceURI;
-                }
+            AttributeCollection attributes = element.attributes();
+            AttributeCollection::const_iterator end = attributes.end();
+            for (AttributeCollection::const_iterator it = attributes.begin(); it != end; ++it) {
+                if (it->localName() == xmlnsAtom)
+                    return it->value() == namespaceURI;
             }
 
             if (Element* parent = parentElement())
@@ -1424,22 +1365,21 @@ const AtomicString& Node::lookupNamespaceURI(const String& prefix) const
             if (!element.namespaceURI().isNull() && element.prefix() == prefix)
                 return element.namespaceURI();
 
-            if (element.hasAttributes()) {
-                AttributeCollection attributes = element.attributes();
-                AttributeCollection::const_iterator end = attributes.end();
-                for (AttributeCollection::const_iterator it = attributes.begin(); it != end; ++it) {
-                    if (it->prefix() == xmlnsAtom && it->localName() == prefix) {
-                        if (!it->value().isEmpty())
-                            return it->value();
-                        return nullAtom;
-                    }
-                    if (it->localName() == xmlnsAtom && prefix.isNull()) {
-                        if (!it->value().isEmpty())
-                            return it->value();
-                        return nullAtom;
-                    }
+            AttributeCollection attributes = element.attributes();
+            AttributeCollection::const_iterator end = attributes.end();
+            for (AttributeCollection::const_iterator it = attributes.begin(); it != end; ++it) {
+                if (it->prefix() == xmlnsAtom && it->localName() == prefix) {
+                    if (!it->value().isEmpty())
+                        return it->value();
+                    return nullAtom;
+                }
+                if (it->localName() == xmlnsAtom && prefix.isNull()) {
+                    if (!it->value().isEmpty())
+                        return it->value();
+                    return nullAtom;
                 }
             }
+
             if (Element* parent = parentElement())
                 return parent->lookupNamespaceURI(prefix);
             return nullAtom;
@@ -1554,12 +1494,7 @@ bool Node::offsetInCharacters() const
     return false;
 }
 
-unsigned short Node::compareDocumentPosition(const Node* otherNode) const
-{
-    return compareDocumentPositionInternal(otherNode, TreatShadowTreesAsDisconnected);
-}
-
-unsigned short Node::compareDocumentPositionInternal(const Node* otherNode, ShadowTreesTreatment treatment) const
+unsigned short Node::compareDocumentPosition(const Node* otherNode, ShadowTreesTreatment treatment) const
 {
     // It is not clear what should be done if |otherNode| is 0.
     if (!otherNode)
@@ -1591,7 +1526,6 @@ unsigned short Node::compareDocumentPositionInternal(const Node* otherNode, Shad
     if (attr1 && attr2 && start1 == start2 && start1) {
         // We are comparing two attributes on the same node. Crawl our attribute map and see which one we hit first.
         const Element* owner1 = attr1->ownerElement();
-        owner1->synchronizeAllAttributes();
         AttributeCollection attributes = owner1->attributes();
         AttributeCollection::const_iterator end = attributes.end();
         for (AttributeCollection::const_iterator it = attributes.begin(); it != end; ++it) {
@@ -1682,53 +1616,28 @@ unsigned short Node::compareDocumentPositionInternal(const Node* otherNode, Shad
                DOCUMENT_POSITION_PRECEDING | DOCUMENT_POSITION_CONTAINS | connection;
 }
 
-FloatPoint Node::convertToPage(const FloatPoint& p) const
-{
-    // If there is a renderer, just ask it to do the conversion
-    if (renderer())
-        return renderer()->localToAbsolute(p, UseTransforms);
-
-    // Otherwise go up the tree looking for a renderer
-    if (Element* parent = parentElement())
-        return parent->convertToPage(p);
-
-    // No parent - no conversion needed
-    return p;
-}
-
-FloatPoint Node::convertFromPage(const FloatPoint& p) const
-{
-    // If there is a renderer, just ask it to do the conversion
-    if (renderer())
-        return renderer()->absoluteToLocal(p, UseTransforms);
-
-    // Otherwise go up the tree looking for a renderer
-    if (Element* parent = parentElement())
-        return parent->convertFromPage(p);
-
-    // No parent - no conversion needed
-    return p;
-}
-
 String Node::debugName() const
 {
     StringBuilder name;
     name.append(nodeName());
 
-    if (hasID()) {
-        name.appendLiteral(" id=\'");
-        name.append(toElement(this)->getIdAttribute());
-        name.append('\'');
-    }
-
-    if (hasClass()) {
-        name.appendLiteral(" class=\'");
-        for (size_t i = 0; i < toElement(this)->classNames().size(); ++i) {
-            if (i > 0)
-                name.append(' ');
-            name.append(toElement(this)->classNames()[i]);
+    if (isElementNode()) {
+        const Element& thisElement = toElement(*this);
+        if (thisElement.hasID()) {
+            name.appendLiteral(" id=\'");
+            name.append(thisElement.getIdAttribute());
+            name.append('\'');
         }
-        name.append('\'');
+
+        if (thisElement.hasClass()) {
+            name.appendLiteral(" class=\'");
+            for (size_t i = 0; i < thisElement.classNames().size(); ++i) {
+                if (i > 0)
+                    name.append(' ');
+                name.append(thisElement.classNames()[i]);
+            }
+            name.append('\'');
+        }
     }
 
     return name.toString();
@@ -1914,14 +1823,17 @@ void Node::showTreeForThisAcrossFrame() const
 
 // --------
 
-Node* Node::enclosingLinkEventParentOrSelf()
+Element* Node::enclosingLinkEventParentOrSelf()
 {
     for (Node* node = this; node; node = NodeRenderingTraversal::parent(node)) {
         // For imagemaps, the enclosing link node is the associated area element not the image itself.
         // So we don't let images be the enclosingLinkNode, even though isLink sometimes returns true
         // for them.
-        if (node->isLink() && !isHTMLImageElement(*node))
-            return node;
+        if (node->isLink() && !isHTMLImageElement(*node)) {
+            // Casting to Element is safe because only HTMLAnchorElement, HTMLImageElement and
+            // SVGAElement can return true for isLink().
+            return toElement(node);
+        }
     }
 
     return 0;

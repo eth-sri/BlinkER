@@ -557,6 +557,7 @@ public:
     float computedFontSize() const;
     int fontSize() const;
     FontWeight fontWeight() const;
+    FontStretch fontStretch() const;
 
     float textAutosizingMultiplier() const { return inherited->textAutosizingMultiplier; }
 
@@ -1107,6 +1108,7 @@ public:
     bool setFontDescription(const FontDescription&);
     // Only used for blending font sizes when animating and for text autosizing.
     void setFontSize(float);
+    void setFontStretch(FontStretch);
     void setFontWeight(FontWeight);
 
     void setTextAutosizingMultiplier(float v)
@@ -1608,7 +1610,7 @@ public:
     static Length initialFlexBasis() { return Length(Auto); }
     static int initialOrder() { return 0; }
     static EAlignContent initialAlignContent() { return AlignContentStretch; }
-    static ItemPosition initialAlignItems() { return ItemPositionStretch; }
+    static ItemPosition initialAlignItems() { return ItemPositionAuto; }
     static OverflowAlignment initialAlignItemsOverflowAlignment() { return OverflowAlignmentDefault; }
     static ItemPosition initialAlignSelf() { return ItemPositionAuto; }
     static OverflowAlignment initialAlignSelfOverflowAlignment() { return OverflowAlignmentDefault; }
@@ -1660,7 +1662,6 @@ public:
     static Length initialPerspectiveOriginX() { return Length(50.0, Percent); }
     static Length initialPerspectiveOriginY() { return Length(50.0, Percent); }
     static Color initialBackgroundColor() { return Color::transparent; }
-    static Color initialTextEmphasisColor() { return TextEmphasisFillFilled; }
     static TextEmphasisFill initialTextEmphasisFill() { return TextEmphasisFillFilled; }
     static TextEmphasisMark initialTextEmphasisMark() { return TextEmphasisMarkNone; }
     static const AtomicString& initialTextEmphasisCustomMark() { return nullAtom; }

@@ -37,7 +37,7 @@
 #include "platform/graphics/ImageOrientation.h"
 #include "platform/graphics/GraphicsContextAnnotation.h"
 #include "platform/graphics/GraphicsContextState.h"
-#include "platform/graphics/skia/OpaqueRegionSkia.h"
+#include "platform/graphics/RegionTracker.h"
 #include "wtf/FastAllocBase.h"
 #include "wtf/Forward.h"
 #include "wtf/Noncopyable.h"
@@ -100,16 +100,6 @@ public:
 
     bool paintingDisabled() const { return m_disabledState & PaintingDisabled; }
     bool contextDisabled() const { return m_disabledState; }
-
-    // This is just a heuristic that currently happens to work. We need either
-    // a more reliable way to know that we are recording, or (better) we need
-    // to obviate the need for this query, and address whatever the caller
-    // needed in some other way.
-    // See bug# 372110
-    bool isRecordingCanvas() const
-    {
-        return m_canvas->imageInfo().colorType() == kUnknown_SkColorType;
-    }
 
     // ---------- State management methods -----------------
     void save();
@@ -223,8 +213,14 @@ public:
 
     // The opaque region is empty until tracking is turned on.
     // It is never clerared by the context.
-    void setTrackOpaqueRegion(bool track) { m_trackOpaqueRegion = track; }
-    const OpaqueRegionSkia& opaqueRegion() const { return m_opaqueRegion; }
+    enum RegionTrackingMode {
+        RegionTrackingDisabled = 0,
+        RegionTrackingOpaque,
+        RegionTrackingOverwrite
+    };
+    void setRegionTrackingMode(RegionTrackingMode);
+    bool regionTrackingEnabled() { return m_regionTrackingMode != RegionTrackingDisabled; }
+    const RegionTracker& opaqueRegion() const { return m_trackedRegion; }
 
     // The text region is empty until tracking is turned on.
     // It is never clerared by the context.
@@ -237,7 +233,7 @@ public:
     AnnotationModeFlags annotationMode() const { return m_annotationMode; }
     void setAnnotationMode(const AnnotationModeFlags mode) { m_annotationMode = mode; }
 
-    SkColorFilter* colorFilter();
+    SkColorFilter* colorFilter() const;
     void setColorFilter(ColorFilter);
     // ---------- End state management methods -----------------
 
@@ -293,7 +289,7 @@ public:
         const FloatSize& tileScaleFactor, Image::TileRule hRule = Image::StretchTile, Image::TileRule vRule = Image::StretchTile,
         CompositeOperator = CompositeSourceOver);
 
-    void drawImageBuffer(ImageBuffer*, const FloatRect& destRect, const FloatRect* srcRect = 0, CompositeOperator = CompositeSourceOver);
+    void drawImageBuffer(ImageBuffer*, const FloatRect& destRect, const FloatRect* srcRect = 0, CompositeOperator = CompositeSourceOver, WebBlendMode = WebBlendModeNormal);
 
     void drawPicture(PassRefPtr<SkPicture>, const FloatRect& dest, const FloatRect& src, CompositeOperator, blink::WebBlendMode);
 
@@ -411,6 +407,20 @@ public:
     void beginAnnotation(const AnnotationList&);
     void endAnnotation();
 
+    void preparePaintForDrawRectToRect(
+        SkPaint*,
+        const SkRect& srcRect,
+        const SkRect& destRect,
+        CompositeOperator,
+        blink::WebBlendMode,
+        bool isLazyDecoded = false,
+        bool isDataComplete = true) const;
+
+    static int focusRingOutsetExtent(int offset, int width)
+    {
+        return focusRingOutset(offset) + (focusRingWidth(width) + 1) / 2;
+    }
+
 private:
     const GraphicsContextState* immutableState() const { return m_paintState; }
 
@@ -426,9 +436,11 @@ private:
     static PassRefPtr<SkColorFilter> WebCoreColorFilterToSkiaColorFilter(ColorFilter);
 
 #if OS(MACOSX)
-    static inline int getFocusRingOutset(int offset) { return offset + 2; }
+    static inline int focusRingOutset(int offset) { return offset + 2; }
+    static inline int focusRingWidth(int width) { return width; }
 #else
-    static inline int getFocusRingOutset(int offset) { return 0; }
+    static inline int focusRingOutset(int offset) { return 0; }
+    static inline int focusRingWidth(int width) { return 1; }
     static const SkPMColor lineColors(int);
     static const SkPMColor antiColors1(int);
     static const SkPMColor antiColors2(int);
@@ -437,14 +449,16 @@ private:
 #endif
 
     // Helpers for drawing a focus ring (drawFocusRing)
-    void drawOuterPath(const SkPath&, SkPaint&, int);
-    void drawInnerPath(const SkPath&, SkPaint&, int);
+    float prepareFocusRingPaint(SkPaint&, const Color&, int width) const;
+    void drawFocusRingPath(const SkPath&, const Color&, int width);
+    void drawFocusRingRect(const SkRect&, const Color&, int width);
+
 
     // SkCanvas wrappers.
     void clipPath(const SkPath&, AntiAliasingMode = NotAntiAliased, SkRegion::Op = SkRegion::kIntersect_Op);
     void clipRRect(const SkRRect&, AntiAliasingMode = NotAntiAliased, SkRegion::Op = SkRegion::kIntersect_Op);
-
     void concat(const SkMatrix&);
+    void drawRRect(const SkRRect&, const SkPaint&);
 
     // Apply deferred paint state saves
     void realizePaintSave()
@@ -512,7 +526,7 @@ private:
     bool m_disableDestructionChecks;
 #endif
     // Tracks the region painted opaque via the GraphicsContext.
-    OpaqueRegionSkia m_opaqueRegion;
+    RegionTracker m_trackedRegion;
 
     // Tracks the region where text is painted via the GraphicsContext.
     SkRect m_textRegion;
@@ -522,7 +536,7 @@ private:
     float m_deviceScaleFactor;
 
     // Activation for the above region tracking features
-    bool m_trackOpaqueRegion : 1;
+    unsigned m_regionTrackingMode : 2;
     bool m_trackTextRegion : 1;
 
     // FIXME: Make this go away: crbug.com/236892

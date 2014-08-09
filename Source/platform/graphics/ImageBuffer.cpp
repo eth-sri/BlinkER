@@ -55,6 +55,7 @@
 #include "third_party/skia/include/core/SkPicture.h"
 #include "third_party/skia/include/effects/SkTableColorFilter.h"
 #include "wtf/MathExtras.h"
+#include "wtf/Vector.h"
 #include "wtf/text/Base64.h"
 #include "wtf/text/WTFString.h"
 
@@ -97,20 +98,35 @@ GraphicsContext* ImageBuffer::context() const
 {
     if (!isSurfaceValid())
         return 0;
-    m_surface->willUse();
     ASSERT(m_context.get());
     return m_context.get();
 }
 
 const SkBitmap& ImageBuffer::bitmap() const
 {
-    m_surface->willUse();
     return m_surface->bitmap();
 }
 
 bool ImageBuffer::isSurfaceValid() const
 {
     return m_surface->isValid();
+}
+
+bool ImageBuffer::isDirty()
+{
+    return m_client ? m_client->isDirty() : false;
+}
+
+void ImageBuffer::didFinalizeFrame()
+{
+    if (m_client)
+        m_client->didFinalizeFrame();
+}
+
+void ImageBuffer::finalizeFrame()
+{
+    m_surface->finalizeFrame();
+    didFinalizeFrame();
 }
 
 bool ImageBuffer::restoreSurface() const
@@ -122,12 +138,6 @@ void ImageBuffer::notifySurfaceInvalid()
 {
     if (m_client)
         m_client->notifySurfaceInvalid();
-}
-
-void ImageBuffer::didPresent()
-{
-    if (m_client)
-        m_client->didPresent();
 }
 
 static SkBitmap deepSkBitmapCopy(const SkBitmap& bitmap)
@@ -237,7 +247,7 @@ bool ImageBuffer::copyRenderingResultsFromDrawingBuffer(DrawingBuffer* drawingBu
         GL_UNSIGNED_BYTE, 0, true, false, fromFrontBuffer);
 }
 
-void ImageBuffer::draw(GraphicsContext* context, const FloatRect& destRect, const FloatRect* srcPtr, CompositeOperator op)
+void ImageBuffer::draw(GraphicsContext* context, const FloatRect& destRect, const FloatRect* srcPtr, CompositeOperator op, WebBlendMode blendMode)
 {
     if (!isSurfaceValid())
         return;
@@ -245,7 +255,7 @@ void ImageBuffer::draw(GraphicsContext* context, const FloatRect& destRect, cons
     FloatRect srcRect = srcPtr ? *srcPtr : FloatRect(FloatPoint(), size());
     RefPtr<SkPicture> picture = m_surface->getPicture();
     if (picture) {
-        context->drawPicture(picture.release(), destRect, srcRect, op, blink::WebBlendModeNormal);
+        context->drawPicture(picture.release(), destRect, srcRect, op, blendMode);
         return;
     }
 
@@ -259,7 +269,7 @@ void ImageBuffer::draw(GraphicsContext* context, const FloatRect& destRect, cons
 
     RefPtr<Image> image = BitmapImage::create(NativeImageSkia::create(drawNeedsCopy(m_context.get(), context) ? deepSkBitmapCopy(bitmap) : bitmap));
 
-    context->drawImage(image.get(), destRect, srcRect, op, blink::WebBlendModeNormal, DoNotRespectImageOrientation);
+    context->drawImage(image.get(), destRect, srcRect, op, blendMode, DoNotRespectImageOrientation);
 }
 
 void ImageBuffer::flush()

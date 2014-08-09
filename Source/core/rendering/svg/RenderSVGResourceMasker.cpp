@@ -28,7 +28,6 @@
 #include "platform/graphics/DisplayList.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
 #include "platform/transforms/AffineTransform.h"
-#include "wtf/Vector.h"
 
 namespace blink {
 
@@ -137,9 +136,9 @@ PassRefPtr<DisplayList> RenderSVGResourceMasker::asDisplayList(GraphicsContext* 
     // with local clips/mask, which may yield incorrect results when mixing objectBoundingBox and
     // userSpaceOnUse units (http://crbug.com/294900).
     context->beginRecording(strokeBoundingBox());
-    for (Element* childElement = ElementTraversal::firstWithin(*element()); childElement; childElement = ElementTraversal::nextSibling(*childElement)) {
+    for (SVGElement* childElement = Traversal<SVGElement>::firstChild(*element()); childElement; childElement = Traversal<SVGElement>::nextSibling(*childElement)) {
         RenderObject* renderer = childElement->renderer();
-        if (!childElement->isSVGElement() || !renderer)
+        if (!renderer)
             continue;
         RenderStyle* style = renderer->style();
         if (!style || style->display() == NONE || style->visibility() != VISIBLE)

@@ -47,15 +47,20 @@ class ServiceWorkerGlobalScopeProxy;
 class WebServiceWorkerNetworkProvider;
 class WebView;
 
-class WebEmbeddedWorkerImpl FINAL :
-    public WebEmbeddedWorker,
-    public WebFrameClient {
+class WebEmbeddedWorkerImpl FINAL
+    : public WebEmbeddedWorker
+    , public WebFrameClient {
     WTF_MAKE_NONCOPYABLE(WebEmbeddedWorkerImpl);
 public:
     WebEmbeddedWorkerImpl(
         PassOwnPtr<WebServiceWorkerContextClient>,
         PassOwnPtr<WebWorkerPermissionClientProxy>);
     virtual ~WebEmbeddedWorkerImpl();
+
+    // Terminate all WebEmbeddedWorkerImpl for testing purposes.
+    // Note that this only schedules termination and
+    // does not synchronously wait for it to complete.
+    static void terminateAll();
 
     // WebEmbeddedWorker overrides.
     virtual void startWorkerContext(const WebEmbeddedWorkerStartData&) OVERRIDE;
@@ -66,7 +71,6 @@ public:
     virtual void reattachDevTools(const WebString& savedState) OVERRIDE;
     virtual void detachDevTools() OVERRIDE;
     virtual void dispatchDevToolsMessage(const WebString&) OVERRIDE;
-
 
 private:
     class Loader;

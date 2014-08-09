@@ -34,7 +34,6 @@
 #include "core/html/imports/HTMLImport.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
-#include "wtf/Vector.h"
 #include "wtf/WeakPtr.h"
 
 namespace blink {
@@ -91,6 +90,7 @@ private:
     void didFinish();
     void shareLoader();
     void createCustomElementMicrotaskStepIfNeeded();
+    void invalidateCustomElementMicrotaskStep();
 
     KURL m_url;
     WeakPtrWillBeWeakMember<CustomElementMicrotaskImportStep> m_customElementMicrotaskStep;

@@ -151,20 +151,7 @@
     white-space: nowrap;
 }
 
-.overrides-device-value {
-    padding-left: 10px;
-    color: gray;
-}
-
-.overrides-device-value-label {
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    margin-top: 10px;
-}
-
 .overrides-device button {
-    height: 20px;
     margin: 0 3px;
 }
 
@@ -209,10 +196,8 @@
     height: 20px;
 }
 
-.custom-device-title-dialog input {
-    margin: 0 5px;
-    line-height: 18px;
-    padding: 0 2px;
+.custom-device-title-dialog {
+    padding: 10px;
 }
 
 /* Media tab */
@@ -325,8 +310,8 @@
     margin: -4px 0;
 }
 
-.overrides-reset-button,
-.overrides-disable-button {
+#overrides-reset-button,
+#overrides-disable-button {
     margin: 9px 0 0 17px;
     display: block;
     width: 60px;

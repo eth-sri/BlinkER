@@ -52,8 +52,6 @@ namespace blink {
     class ResourceResponse;
     struct CrossThreadResourceResponseData;
     struct CrossThreadResourceRequestData;
-    struct ThreadableLoaderOptions;
-    struct ResourceLoaderOptions;
 
     template<typename T> struct CrossThreadCopierPassThrough {
         typedef T Type;
@@ -71,12 +69,6 @@ namespace blink {
 
     // To allow a type to be passed across threads using its copy constructor, add a forward declaration of the type and
     // a CopyThreadCopierBase<false, false, TypeName> : public CrossThreadCopierPassThrough<TypeName> { }; to this file.
-    template<> struct CrossThreadCopierBase<false, false, false, ThreadableLoaderOptions> : public CrossThreadCopierPassThrough<ThreadableLoaderOptions> {
-    };
-
-    template<> struct CrossThreadCopierBase<false, false, false, ResourceLoaderOptions> : public CrossThreadCopierPassThrough<ResourceLoaderOptions> {
-    };
-
     template<> struct CrossThreadCopierBase<false, false, false, IntRect> : public CrossThreadCopierPassThrough<IntRect> {
     };
 
@@ -188,10 +180,17 @@ namespace blink {
     };
 
     template<typename T> struct AllowCrossThreadAccessWrapper {
+        STACK_ALLOCATED();
     public:
         explicit AllowCrossThreadAccessWrapper(T* value) : m_value(value) { }
         T* value() const { return m_value; }
     private:
+        // This raw pointer is safe since AllowCrossThreadAccessWrapper is
+        // always stack-allocated. Ideally this should be Member<T> if T is
+        // garbage-collected and T* otherwise, but we don't want to introduce
+        // another template magic just for distinguishing Member<T> from T*.
+        // From the perspective of GC, T* always works correctly.
+        GC_PLUGIN_IGNORE("")
         T* m_value;
     };
 

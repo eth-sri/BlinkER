@@ -30,6 +30,7 @@
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptValue.h"
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/css/CSSComputedStyleDeclaration.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
@@ -59,7 +60,6 @@ class InternalRuntimeFlags;
 class InternalSettings;
 class LayerRectList;
 class LocalFrame;
-class MallocStatistics;
 class Node;
 class Page;
 class PagePopupController;
@@ -70,7 +70,7 @@ class StaticNodeList;
 class ShadowRoot;
 class TypeConversions;
 
-class Internals FINAL : public RefCountedWillBeGarbageCollectedFinalized<Internals>, public ContextLifecycleObserver {
+class Internals FINAL : public RefCountedWillBeGarbageCollectedFinalized<Internals>, public ScriptWrappable, public ContextLifecycleObserver {
 public:
     static PassRefPtrWillBeRawPtr<Internals> create(Document*);
     virtual ~Internals();
@@ -257,7 +257,6 @@ public:
     void registerURLSchemeAsBypassingContentSecurityPolicy(const String& scheme);
     void removeURLSchemeRegisteredAsBypassingContentSecurityPolicy(const String& scheme);
 
-    PassRefPtrWillBeRawPtr<MallocStatistics> mallocStatistics() const;
     PassRefPtrWillBeRawPtr<TypeConversions> typeConversions() const;
     PrivateScriptTest* privateScriptTest() const;
 
@@ -284,6 +283,8 @@ public:
     String getImageSourceURL(Element*, ExceptionState&);
 
     bool isSelectPopupVisible(Node*);
+    bool selectPopupItemStyleIsRtl(Node*, int);
+    int selectPopupItemStyleFontHeight(Node*, int);
 
     PassRefPtrWillBeRawPtr<ClientRect> selectionBounds(ExceptionState&);
     String baseURL(Document*, ExceptionState&);

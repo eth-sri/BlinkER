@@ -1652,6 +1652,8 @@ static bool findDropZone(Node* target, DataTransfer* dataTransfer)
         if (dropZoneStr.isEmpty())
             continue;
 
+        UseCounter::count(element->document(), UseCounter::PrefixedHTMLElementDropzone);
+
         dropZoneStr = dropZoneStr.lower();
 
         SpaceSplitString keywords(dropZoneStr, false);
@@ -2207,6 +2209,7 @@ bool EventHandler::handleGestureScrollEvent(const PlatformGestureEvent& gestureE
 
 bool EventHandler::handleGestureTap(const GestureEventWithHitTestResults& targetedEvent)
 {
+    RefPtr<FrameView> protector(m_frame->view());
     const PlatformGestureEvent& gestureEvent = targetedEvent.event();
 
     UserGestureIndicator gestureIndicator(DefinitelyProcessingUserGesture);
@@ -2224,29 +2227,51 @@ bool EventHandler::handleGestureTap(const GestureEventWithHitTestResults& target
 
     // We use the adjusted position so the application isn't surprised to see a event with
     // co-ordinates outside the target's bounds.
-    IntPoint adjustedPoint = gestureEvent.position();
+    IntPoint adjustedPoint = m_frame->view()->windowToContents(gestureEvent.position());
+
+    // Do a new hit-test at the (adjusted) gesture co-ordinates. This is necessary because
+    // touch adjustment sometimes returns a different node than what hit testing would return
+    // for the same point.
+    // FIXME: Fix touch adjustment to avoid the need for a redundant hit test. http://crbug.com/398914
+    HitTestResult newHitTest = hitTestResultInFrame(m_frame, adjustedPoint, HitTestRequest::ReadOnly);
 
     PlatformMouseEvent fakeMouseMove(adjustedPoint, gestureEvent.globalPosition(),
         NoButton, PlatformEvent::MouseMoved, /* clickCount */ 0,
         modifiers, PlatformMouseEvent::FromTouch, gestureEvent.timestamp());
-    dispatchMouseEvent(EventTypeNames::mousemove, targetedEvent.targetNode(), 0, fakeMouseMove, true);
+    dispatchMouseEvent(EventTypeNames::mousemove, newHitTest.targetNode(), 0, fakeMouseMove, true);
+
+    // Do a new hit-test in case the mousemove event changed the DOM.
+    // FIXME: Use a hit-test cache to avoid unnecessary hit tests. http://crbug.com/398920
+    newHitTest = hitTestResultInFrame(m_frame, adjustedPoint, HitTestRequest::ReadOnly);
+    m_clickNode = newHitTest.targetNode();
+    if (m_clickNode && m_clickNode->isTextNode())
+        m_clickNode = NodeRenderingTraversal::parent(m_clickNode.get());
 
     PlatformMouseEvent fakeMouseDown(adjustedPoint, gestureEvent.globalPosition(),
         LeftButton, PlatformEvent::MousePressed, gestureEvent.tapCount(),
         modifiers, PlatformMouseEvent::FromTouch,  gestureEvent.timestamp());
-    bool swallowMouseDownEvent = !dispatchMouseEvent(EventTypeNames::mousedown, targetedEvent.targetNode(), gestureEvent.tapCount(), fakeMouseDown, true);
+    bool swallowMouseDownEvent = !dispatchMouseEvent(EventTypeNames::mousedown, newHitTest.targetNode(), gestureEvent.tapCount(), fakeMouseDown, true);
     if (!swallowMouseDownEvent)
         swallowMouseDownEvent = handleMouseFocus(fakeMouseDown);
     if (!swallowMouseDownEvent)
-        swallowMouseDownEvent = handleMousePressEvent(MouseEventWithHitTestResults(fakeMouseDown, targetedEvent.hitTestResult()));
+        swallowMouseDownEvent = handleMousePressEvent(MouseEventWithHitTestResults(fakeMouseDown, newHitTest));
 
+    // FIXME: Use a hit-test cache to avoid unnecessary hit tests. http://crbug.com/398920
+    newHitTest = hitTestResultInFrame(m_frame, adjustedPoint, HitTestRequest::ReadOnly);
     PlatformMouseEvent fakeMouseUp(adjustedPoint, gestureEvent.globalPosition(),
         LeftButton, PlatformEvent::MouseReleased, gestureEvent.tapCount(),
         modifiers, PlatformMouseEvent::FromTouch,  gestureEvent.timestamp());
-    bool swallowMouseUpEvent = !dispatchMouseEvent(EventTypeNames::mouseup, targetedEvent.targetNode(), gestureEvent.tapCount(), fakeMouseUp, false);
-    bool swallowClickEvent = !dispatchMouseEvent(EventTypeNames::click, targetedEvent.targetNode(), gestureEvent.tapCount(), fakeMouseUp, true);
+    bool swallowMouseUpEvent = !dispatchMouseEvent(EventTypeNames::mouseup, newHitTest.targetNode(), gestureEvent.tapCount(), fakeMouseUp, false);
+
+    bool swallowClickEvent = false;
+    if (m_clickNode) {
+        Node* clickTargetNode = newHitTest.targetNode()->commonAncestor(*m_clickNode, parentForClickEvent);
+        swallowClickEvent = !dispatchMouseEvent(EventTypeNames::click, clickTargetNode, gestureEvent.tapCount(), fakeMouseUp, true);
+        m_clickNode = nullptr;
+    }
+
     if (!swallowMouseUpEvent)
-        swallowMouseUpEvent = handleMouseReleaseEvent(MouseEventWithHitTestResults(fakeMouseUp, targetedEvent.hitTestResult()));
+        swallowMouseUpEvent = handleMouseReleaseEvent(MouseEventWithHitTestResults(fakeMouseUp, newHitTest));
 
     return swallowMouseDownEvent | swallowMouseUpEvent | swallowClickEvent;
 }
@@ -3047,6 +3072,11 @@ static FocusType focusDirectionForKey(const AtomicString& keyIdentifier)
 void EventHandler::defaultKeyboardEventHandler(KeyboardEvent* event)
 {
     if (event->type() == EventTypeNames::keydown) {
+        // Clear caret blinking suspended state to make sure that caret blinks
+        // when we type again after long pressing on an empty input field.
+        if (m_frame && m_frame->selection().isCaretBlinkingSuspended())
+            m_frame->selection().setCaretBlinkingSuspended(false);
+
         m_frame->editor().handleKeyboardEvent(event);
         if (event->defaultHandled())
             return;
@@ -3285,7 +3315,7 @@ void EventHandler::defaultSpaceEventHandler(KeyboardEvent* event)
 {
     ASSERT(event->type() == EventTypeNames::keypress);
 
-    if (event->ctrlKey() || event->metaKey() || event->altKey() || event->altGraphKey())
+    if (event->ctrlKey() || event->metaKey() || event->altKey())
         return;
 
     ScrollDirection direction = event->shiftKey() ? ScrollBlockDirectionBackward : ScrollBlockDirectionForward;
@@ -3306,7 +3336,7 @@ void EventHandler::defaultBackspaceEventHandler(KeyboardEvent* event)
 {
     ASSERT(event->type() == EventTypeNames::keydown);
 
-    if (event->ctrlKey() || event->metaKey() || event->altKey() || event->altGraphKey())
+    if (event->ctrlKey() || event->metaKey() || event->altKey())
         return;
 
     if (!m_frame->editor().behavior().shouldNavigateBackOnBackspace())
@@ -3324,7 +3354,7 @@ void EventHandler::defaultArrowEventHandler(FocusType focusType, KeyboardEvent* 
 {
     ASSERT(event->type() == EventTypeNames::keydown);
 
-    if (event->ctrlKey() || event->metaKey() || event->altGraphKey() || event->shiftKey())
+    if (event->ctrlKey() || event->metaKey() || event->shiftKey())
         return;
 
     Page* page = m_frame->page();
@@ -3348,7 +3378,7 @@ void EventHandler::defaultTabEventHandler(KeyboardEvent* event)
     ASSERT(event->type() == EventTypeNames::keydown);
 
     // We should only advance focus on tabs if no special modifier keys are held down.
-    if (event->ctrlKey() || event->metaKey() || event->altGraphKey())
+    if (event->ctrlKey() || event->metaKey())
         return;
 
     Page* page = m_frame->page();

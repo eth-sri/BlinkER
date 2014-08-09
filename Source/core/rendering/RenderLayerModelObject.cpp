@@ -122,14 +122,12 @@ void RenderLayerModelObject::styleDidChange(StyleDifference diff, const RenderSt
             if (s_wasFloating && isFloating())
                 setChildNeedsLayout();
             createLayer(type);
-            if (parent() && !needsLayout() && containingBlock()) {
+            if (parent() && !needsLayout()) {
                 // FIXME: This invalidation is overly broad. We should update to
                 // do the correct invalidation at RenderStyle::diff time. crbug.com/349061
                 layer()->renderer()->setShouldDoFullPaintInvalidation(true);
-                // Hit in animations/interpolation/perspective-interpolation.html
-                // FIXME: I suspect we can remove this assert disabler now.
-                DisableCompositingQueryAsserts disabler;
-                layer()->updateLayerPositionRecursive();
+                // FIXME: We should call a specialized version of this function.
+                layer()->updateLayerPositionsAfterLayout();
             }
         }
     } else if (layer() && layer()->parent()) {
@@ -177,6 +175,42 @@ void RenderLayerModelObject::addLayerHitTestRects(LayerHitTestRects& rects, cons
     } else {
         RenderObject::addLayerHitTestRects(rects, currentLayer, layerOffset, containerRect);
     }
+}
+
+InvalidationReason RenderLayerModelObject::invalidatePaintIfNeeded(const PaintInvalidationState& paintInvalidationState, const RenderLayerModelObject& newPaintInvalidationContainer)
+{
+    const LayoutRect oldPaintInvalidationRect = previousPaintInvalidationRect();
+    const LayoutPoint oldPositionFromPaintInvalidationContainer = previousPositionFromPaintInvalidationContainer();
+    setPreviousPaintInvalidationRect(boundsRectForPaintInvalidation(&newPaintInvalidationContainer, &paintInvalidationState));
+    setPreviousPositionFromPaintInvalidationContainer(RenderLayer::positionFromPaintInvalidationContainer(this, &newPaintInvalidationContainer, &paintInvalidationState));
+
+    // If we are set to do a full paint invalidation that means the RenderView will issue
+    // paint invalidations. We can then skip issuing of paint invalidations for the child
+    // renderers as they'll be covered by the RenderView.
+    if (view()->doingFullPaintInvalidation())
+        return InvalidationNone;
+
+    return RenderObject::invalidatePaintIfNeeded(newPaintInvalidationContainer, oldPaintInvalidationRect, oldPositionFromPaintInvalidationContainer, paintInvalidationState);
+}
+
+void RenderLayerModelObject::invalidateTreeIfNeeded(const PaintInvalidationState& paintInvalidationState)
+{
+    // FIXME: SVG should probably also go through this unified paint invalidation system.
+    ASSERT(!needsLayout());
+
+    if (!shouldCheckForPaintInvalidation(paintInvalidationState))
+        return;
+
+    bool establishesNewPaintInvalidationContainer = isPaintInvalidationContainer();
+    const RenderLayerModelObject& newPaintInvalidationContainer = *adjustCompositedContainerForSpecialAncestors(establishesNewPaintInvalidationContainer ? this : &paintInvalidationState.paintInvalidationContainer());
+    ASSERT(&newPaintInvalidationContainer == containerForPaintInvalidation());
+
+    InvalidationReason reason = invalidatePaintIfNeeded(paintInvalidationState, newPaintInvalidationContainer);
+
+    PaintInvalidationState childTreeWalkState(paintInvalidationState, *this, newPaintInvalidationContainer);
+    if (reason == InvalidationLocationChange || reason == InvalidationFull)
+        childTreeWalkState.setForceCheckForPaintInvalidation();
+    RenderObject::invalidateTreeIfNeeded(childTreeWalkState);
 }
 
 } // namespace blink

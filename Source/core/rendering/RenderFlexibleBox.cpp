@@ -32,9 +32,9 @@
 #include "core/rendering/RenderFlexibleBox.h"
 
 #include "core/frame/UseCounter.h"
-#include "core/rendering/FastTextAutosizer.h"
 #include "core/rendering/RenderLayer.h"
 #include "core/rendering/RenderView.h"
+#include "core/rendering/TextAutosizer.h"
 #include "platform/LengthFunctions.h"
 #include "wtf/MathExtras.h"
 #include <limits>
@@ -116,11 +116,7 @@ void RenderFlexibleBox::computeIntrinsicLogicalWidths(LayoutUnit& minLogicalWidt
                 minLogicalWidth += minPreferredLogicalWidth;
         } else {
             minLogicalWidth = std::max(minPreferredLogicalWidth, minLogicalWidth);
-            if (isMultiline()) {
-                // For multiline, the max preferred width is if you never break between items.
-                maxLogicalWidth += maxPreferredLogicalWidth;
-            } else
-                maxLogicalWidth = std::max(maxPreferredLogicalWidth, maxLogicalWidth);
+            maxLogicalWidth = std::max(maxPreferredLogicalWidth, maxLogicalWidth);
         }
     }
 
@@ -200,7 +196,7 @@ static ItemPosition resolveAlignment(const RenderStyle* parentStyle, const Rende
 {
     ItemPosition align = childStyle->alignSelf();
     if (align == ItemPositionAuto)
-        align = parentStyle->alignItems();
+        align = (parentStyle->alignItems() == ItemPositionAuto) ? ItemPositionStretch : parentStyle->alignItems();
     return align;
 }
 
@@ -239,7 +235,7 @@ void RenderFlexibleBox::layoutBlock(bool relayoutChildren)
     setLogicalHeight(borderAndPaddingLogicalHeight() + scrollbarLogicalHeight());
 
     {
-        FastTextAutosizer::LayoutScope fastTextAutosizerLayoutScope(this);
+        TextAutosizer::LayoutScope textAutosizerLayoutScope(this);
         LayoutState state(*this, locationOffset());
 
         m_numberOfInFlowChildrenOnFirstLine = -1;
@@ -426,7 +422,7 @@ LayoutUnit RenderFlexibleBox::computeMainAxisExtentForChild(RenderBox* child, Si
         // We don't have to check for "auto" here - computeContentLogicalHeight will just return -1 for that case anyway.
         if (size.isIntrinsic())
             child->layoutIfNeeded();
-        return child->computeContentLogicalHeight(size, child->logicalHeight() - child->borderAndPaddingLogicalHeight());
+        return child->computeContentLogicalHeight(size, child->logicalHeight() - child->borderAndPaddingLogicalHeight()) + child->scrollbarLogicalHeight();
     }
     return child->computeLogicalWidthUsing(sizeType, size, contentLogicalWidth(), this) - child->borderAndPaddingLogicalWidth();
 }

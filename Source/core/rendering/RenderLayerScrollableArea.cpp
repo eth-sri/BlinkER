@@ -205,18 +205,10 @@ void RenderLayerScrollableArea::invalidateScrollbarRect(Scrollbar* scrollbar, co
 
     IntRect intRect = pixelSnappedIntRect(repaintRect);
 
-    if (box().frameView()->isInPerformLayout()) {
-        if (scrollbar == m_vBar.get()) {
-            m_verticalBarDamage = intRect;
-            m_hasVerticalBarDamage = true;
-        } else {
-            m_horizontalBarDamage = intRect;
-            m_hasHorizontalBarDamage = true;
-        }
-
-    } else {
+    if (box().frameView()->isInPerformLayout())
+        addScrollbarDamage(scrollbar, intRect);
+    else
         box().invalidatePaintRectangle(intRect);
-    }
 }
 
 void RenderLayerScrollableArea::invalidateScrollCornerRect(const IntRect& rect)
@@ -1473,4 +1465,4 @@ void RenderLayerScrollableArea::setTopmostScrollChild(RenderLayer* scrollChild)
     m_nextTopmostScrollChild = scrollChild;
 }
 
-} // Namespace WebCore
+} // namespace blink

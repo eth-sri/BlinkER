@@ -245,11 +245,6 @@ short Range::comparePoint(Node* refNode, int offset, ExceptionState& exceptionSt
     // This method returns -1, 0 or 1 depending on if the point described by the
     // refNode node and an offset within the node is before, same as, or after the range respectively.
 
-    if (!refNode) {
-        exceptionState.throwDOMException(HierarchyRequestError, "The node provided was null.");
-        return 0;
-    }
-
     if (!refNode->inActiveDocument()) {
         exceptionState.throwDOMException(WrongDocumentError, "The node provided is not in an active document.");
         return 0;
@@ -321,7 +316,7 @@ Range::CompareResults Range::compareNode(Node* refNode, ExceptionState& exceptio
     return NODE_INSIDE; // ends inside the range
 }
 
-short Range::compareBoundaryPoints(CompareHow how, const PassRefPtrWillBeRawPtr<Range> sourceRange, ExceptionState& exceptionState) const
+short Range::compareBoundaryPoints(CompareHow how, const Range* sourceRange, ExceptionState& exceptionState) const
 {
     if (!(how == START_TO_START || how == START_TO_END || how == END_TO_END || how == END_TO_START)) {
         exceptionState.throwDOMException(NotSupportedError, "The comparison method provided must be one of 'START_TO_START', 'START_TO_END', 'END_TO_END', or 'END_TO_START'.");
@@ -913,7 +908,7 @@ void Range::insertNode(PassRefPtrWillBeRawPtr<Node> prpNewNode, ExceptionState& 
         }
 
         container = m_start.container();
-        container->insertBefore(newNode.release(), container->traverseToChildAt(m_start.offset()), exceptionState);
+        container->insertBefore(newNode.release(), NodeTraversal::childAt(*container, m_start.offset()), exceptionState);
         if (exceptionState.hadException())
             return;
 
@@ -1025,7 +1020,7 @@ Node* Range::checkNodeWOffset(Node* n, int offset, ExceptionState& exceptionStat
         case Node::ELEMENT_NODE: {
             if (!offset)
                 return 0;
-            Node* childBefore = n->traverseToChildAt(offset - 1);
+            Node* childBefore = NodeTraversal::childAt(*n, offset - 1);
             if (!childBefore)
                 exceptionState.throwDOMException(IndexSizeError, "There is no child at offset " + String::number(offset) + ".");
             return childBefore;
@@ -1315,7 +1310,7 @@ Node* Range::firstNode() const
 {
     if (m_start.container()->offsetInCharacters())
         return m_start.container();
-    if (Node* child = m_start.container()->traverseToChildAt(m_start.offset()))
+    if (Node* child = NodeTraversal::childAt(*m_start.container(), m_start.offset()))
         return child;
     if (!m_start.offset())
         return m_start.container();
@@ -1331,7 +1326,7 @@ Node* Range::pastLastNode() const
 {
     if (m_end.container()->offsetInCharacters())
         return NodeTraversal::nextSkippingChildren(*m_end.container());
-    if (Node* child = m_end.container()->traverseToChildAt(m_end.offset()))
+    if (Node* child = NodeTraversal::childAt(*m_end.container(), m_end.offset()))
         return child;
     return NodeTraversal::nextSkippingChildren(*m_end.container());
 }
@@ -1596,7 +1591,6 @@ void Range::didSplitTextNode(Text& oldNode)
 {
     ASSERT(oldNode.document() == m_ownerDocument);
     ASSERT(oldNode.parentNode());
-    ASSERT(oldNode.isTextNode());
     ASSERT(oldNode.nextSibling());
     ASSERT(oldNode.nextSibling()->isTextNode());
     boundaryTextNodeSplit(m_start, oldNode);
@@ -1665,14 +1659,13 @@ void Range::getBorderAndTextQuads(Vector<FloatQuad>& quads) const
                 }
             }
         } else if (node->isTextNode()) {
-            if (RenderObject* renderer = toText(node)->renderer()) {
-                RenderText& renderText = toRenderText(*renderer);
+            if (RenderText* renderText = toText(node)->renderer()) {
                 int startOffset = (node == startContainer) ? m_start.offset() : 0;
                 int endOffset = (node == endContainer) ? m_end.offset() : INT_MAX;
 
                 Vector<FloatQuad> textQuads;
-                renderText.absoluteQuadsForRange(textQuads, startOffset, endOffset);
-                m_ownerDocument->adjustFloatQuadsForScrollAndAbsoluteZoom(textQuads, renderText);
+                renderText->absoluteQuadsForRange(textQuads, startOffset, endOffset);
+                m_ownerDocument->adjustFloatQuadsForScrollAndAbsoluteZoom(textQuads, *renderText);
 
                 quads.appendVector(textQuads);
             }

@@ -143,8 +143,6 @@ StyleResolver::StyleResolver(Document& document)
     else
         m_medium = adoptPtr(new MediaQueryEvaluator("all"));
 
-    m_styleTree.clear();
-
     initWatchedSelectorRules(CSSSelectorWatch::from(document).watchedCallbackSelectors());
 
 #if ENABLE(SVG_FONTS)
@@ -190,14 +188,14 @@ void StyleResolver::appendCSSStyleSheet(CSSStyleSheet* cssSheet)
     if (!scopingNode)
         return;
 
-    ScopedStyleResolver* resolver = m_styleTree.ensureScopedStyleResolver(*scopingNode);
+    ScopedStyleResolver* resolver = &scopingNode->treeScope().ensureScopedStyleResolver();
+    document().styleEngine()->addScopedStyleResolver(resolver);
     ASSERT(resolver);
     resolver->addRulesFromSheet(cssSheet, *m_medium, this);
 }
 
 void StyleResolver::appendPendingAuthorStyleSheets()
 {
-    setBuildScopedStyleTreeInDocumentOrder(false);
     for (WillBeHeapListHashSet<RawPtrWillBeMember<CSSStyleSheet>, 16>::iterator it = m_pendingStyleSheets.begin(); it != m_pendingStyleSheets.end(); ++it)
         appendCSSStyleSheet(*it);
 
@@ -238,8 +236,10 @@ void StyleResolver::resetRuleFeatures()
 void StyleResolver::processScopedRules(const RuleSet& authorRules, CSSStyleSheet* parentStyleSheet, ContainerNode& scope)
 {
     const WillBeHeapVector<RawPtrWillBeMember<StyleRuleKeyframes> > keyframesRules = authorRules.keyframesRules();
+    ScopedStyleResolver* resolver = &scope.treeScope().ensureScopedStyleResolver();
+    document().styleEngine()->addScopedStyleResolver(resolver);
     for (unsigned i = 0; i < keyframesRules.size(); ++i)
-        m_styleTree.ensureScopedStyleResolver(scope)->addKeyframeStyle(keyframesRules[i]);
+        resolver->addKeyframeStyle(keyframesRules[i]);
 
     m_treeBoundaryCrossingRules.addTreeBoundaryCrossingRules(authorRules, scope, parentStyleSheet);
 
@@ -247,26 +247,28 @@ void StyleResolver::processScopedRules(const RuleSet& authorRules, CSSStyleSheet
     if (scope.isDocumentNode()) {
         const WillBeHeapVector<RawPtrWillBeMember<StyleRuleFontFace> > fontFaceRules = authorRules.fontFaceRules();
         for (unsigned i = 0; i < fontFaceRules.size(); ++i)
-            addFontFaceRule(&m_document, document().styleEngine()->fontSelector(), fontFaceRules[i]);
+            addFontFaceRule(m_document, document().styleEngine()->fontSelector(), fontFaceRules[i]);
         if (fontFaceRules.size())
             invalidateMatchedPropertiesCache();
     }
 }
 
-void StyleResolver::resetAuthorStyle(const ContainerNode* scopingNode)
+void StyleResolver::resetAuthorStyle(TreeScope& treeScope)
 {
-    ScopedStyleResolver* resolver = scopingNode ? m_styleTree.lookupScopedStyleResolverFor(scopingNode) : m_styleTree.scopedStyleResolverForDocument();
+    ScopedStyleResolver* resolver = treeScope.scopedStyleResolver();
     if (!resolver)
         return;
 
-    m_treeBoundaryCrossingRules.reset(scopingNode);
+    m_treeBoundaryCrossingRules.reset(&treeScope.rootNode());
 
     resolver->resetAuthorStyle();
     resetRuleFeatures();
-    if (!scopingNode)
+    if (treeScope.rootNode().isDocumentNode())
         return;
 
-    m_styleTree.remove(scopingNode);
+    // resolver is going to be freed below.
+    document().styleEngine()->removeScopedStyleResolver(resolver);
+    treeScope.clearScopedStyleResolver();
 }
 
 static PassOwnPtrWillBeRawPtr<RuleSet> makeRuleSet(const WillBeHeapVector<RuleFeature>& rules)
@@ -301,7 +303,7 @@ void StyleResolver::collectFeatures()
 
     m_treeBoundaryCrossingRules.collectFeaturesTo(m_features);
 
-    m_styleTree.collectFeaturesTo(m_features);
+    document().styleEngine()->collectScopedStyleFeaturesTo(m_features);
 
     m_siblingRuleSet = makeRuleSet(m_features.siblingRules);
     m_uncommonAttributeRuleSet = makeRuleSet(m_features.uncommonAttributeRules);
@@ -335,7 +337,7 @@ StyleSharingList& StyleResolver::styleSharingList()
     unsigned depth = std::max(std::min(m_styleSharingDepth, styleSharingMaxDepth), 1u) - 1u;
 
     if (!m_styleSharingLists[depth])
-        m_styleSharingLists[depth] = adoptPtr(new StyleSharingList);
+        m_styleSharingLists[depth] = adoptPtrWillBeNoop(new StyleSharingList);
     return *m_styleSharingLists[depth];
 }
 
@@ -356,9 +358,6 @@ void StyleResolver::pushParentElement(Element& parent)
         m_selectorFilter.setupParentStack(parent);
     else
         m_selectorFilter.pushParent(parent);
-
-    // Note: We mustn't skip ShadowRoot nodes for the scope stack.
-    m_styleTree.pushStyleCache(parent, parent.parentOrShadowHostNode());
 }
 
 void StyleResolver::popParentElement(Element& parent)
@@ -367,20 +366,6 @@ void StyleResolver::popParentElement(Element& parent)
     // Pause maintaining the stack in this case.
     if (m_selectorFilter.parentStackIsConsistent(&parent))
         m_selectorFilter.popParent();
-
-    m_styleTree.popStyleCache(parent);
-}
-
-void StyleResolver::pushParentShadowRoot(const ShadowRoot& shadowRoot)
-{
-    ASSERT(shadowRoot.host());
-    m_styleTree.pushStyleCache(shadowRoot, shadowRoot.host());
-}
-
-void StyleResolver::popParentShadowRoot(const ShadowRoot& shadowRoot)
-{
-    ASSERT(shadowRoot.host());
-    m_styleTree.popStyleCache(shadowRoot);
 }
 
 StyleResolver::~StyleResolver()
@@ -392,7 +377,7 @@ static inline bool applyAuthorStylesOf(const Element* element)
     return element->treeScope().applyAuthorStyles();
 }
 
-void StyleResolver::matchAuthorRulesForShadowHost(Element* element, ElementRuleCollector& collector, bool includeEmptyRules, Vector<ScopedStyleResolver*, 8>& resolvers, Vector<ScopedStyleResolver*, 8>& resolversInShadowTree)
+void StyleResolver::matchAuthorRulesForShadowHost(Element* element, ElementRuleCollector& collector, bool includeEmptyRules, WillBeHeapVector<RawPtrWillBeMember<ScopedStyleResolver>, 8>& resolvers, WillBeHeapVector<RawPtrWillBeMember<ScopedStyleResolver>, 8>& resolversInShadowTree)
 {
     collector.clearMatchedRules();
     collector.matchedResult().ranges.lastAuthorRule = collector.matchedResult().matchedProperties.size() - 1;
@@ -420,18 +405,18 @@ void StyleResolver::matchAuthorRules(Element* element, ElementRuleCollector& col
     collector.matchedResult().ranges.lastAuthorRule = collector.matchedResult().matchedProperties.size() - 1;
 
     bool applyAuthorStyles = applyAuthorStylesOf(element);
-    if (m_styleTree.hasOnlyScopedResolverForDocument()) {
-        m_styleTree.scopedStyleResolverForDocument()->collectMatchingAuthorRules(collector, includeEmptyRules, applyAuthorStyles, ignoreCascadeScope);
+    if (document().styleEngine()->hasOnlyScopedResolverForDocument()) {
+        document().scopedStyleResolver()->collectMatchingAuthorRules(collector, includeEmptyRules, applyAuthorStyles, ignoreCascadeScope);
         m_treeBoundaryCrossingRules.collectTreeBoundaryCrossingRules(element, collector, includeEmptyRules);
         collector.sortAndTransferMatchedRules();
         return;
     }
 
-    Vector<ScopedStyleResolver*, 8> resolvers;
-    m_styleTree.resolveScopedStyles(element, resolvers);
+    WillBeHeapVector<RawPtrWillBeMember<ScopedStyleResolver>, 8> resolvers;
+    resolveScopedStyles(element, resolvers);
 
-    Vector<ScopedStyleResolver*, 8> resolversInShadowTree;
-    m_styleTree.collectScopedResolversForHostedShadowTrees(element, resolversInShadowTree);
+    WillBeHeapVector<RawPtrWillBeMember<ScopedStyleResolver>, 8> resolversInShadowTree;
+    collectScopedResolversForHostedShadowTrees(element, resolversInShadowTree);
     if (!resolversInShadowTree.isEmpty()) {
         matchAuthorRulesForShadowHost(element, collector, includeEmptyRules, resolvers, resolversInShadowTree);
         return;
@@ -580,7 +565,7 @@ static void addContentAttrValuesToFeatures(const Vector<AtomicString>& contentAt
 
 void StyleResolver::adjustRenderStyle(StyleResolverState& state, Element* element)
 {
-    StyleAdjuster adjuster(m_document.inQuirksMode());
+    StyleAdjuster adjuster(document().inQuirksMode());
     adjuster.adjustRenderStyle(state.style(), state.parentStyle(), element, state.cachedUAStyle());
 }
 
@@ -670,6 +655,9 @@ PassRefPtr<RenderStyle> StyleResolver::styleForElement(Element* element, RenderS
         addContentAttrValuesToFeatures(state.contentAttrValues(), m_features);
     }
 
+    // Cache our original display.
+    state.style()->setOriginalDisplay(state.style()->display());
+
     adjustRenderStyle(state, element);
 
     // FIXME: The CSSWG wants to specify that the effects of animations are applied before
@@ -729,10 +717,6 @@ PassRefPtr<RenderStyle> StyleResolver::styleForKeyframe(Element* element, const 
 
     // Now do rest of the properties.
     applyMatchedProperties<LowPriorityProperties>(state, result, false, 0, result.matchedProperties.size() - 1, inheritedOnly);
-
-    // If our font got dirtied by one of the non-essential font props,
-    // go ahead and update it a second time.
-    updateFont(state);
 
     loadPendingResources(state);
 
@@ -841,6 +825,9 @@ bool StyleResolver::pseudoStyleForElementInternal(Element& element, const Pseudo
         addContentAttrValuesToFeatures(state.contentAttrValues(), m_features);
     }
 
+    // Cache our original display.
+    state.style()->setOriginalDisplay(state.style()->display());
+
     // FIXME: Passing 0 as the Element* introduces a lot of complexity
     // in the adjustRenderStyle code.
     adjustRenderStyle(state, 0);
@@ -893,7 +880,7 @@ PassRefPtr<RenderStyle> StyleResolver::styleForPage(int pageIndex)
 
     collector.matchPageRules(CSSDefaultStyleSheets::instance().defaultPrintStyle());
 
-    if (ScopedStyleResolver* scopedResolver = m_styleTree.scopedStyleResolverForDocument())
+    if (ScopedStyleResolver* scopedResolver = document().scopedStyleResolver())
         scopedResolver->matchPageRules(collector);
 
     state.setLineHeightValue(0);
@@ -932,7 +919,7 @@ void StyleResolver::collectViewportRules()
     if (document().isMobileDocument())
         viewportStyleResolver()->collectViewportRules(defaultStyleSheets.defaultXHTMLMobileProfileStyle(), ViewportStyleResolver::UserAgentOrigin);
 
-    if (ScopedStyleResolver* scopedResolver = m_styleTree.scopedStyleResolverForDocument())
+    if (ScopedStyleResolver* scopedResolver = document().scopedStyleResolver())
         scopedResolver->collectViewportRulesTo(this);
 
     viewportStyleResolver()->resolve();
@@ -954,8 +941,7 @@ PassRefPtr<RenderStyle> StyleResolver::styleForText(Text* textNode)
 {
     ASSERT(textNode);
 
-    NodeRenderingTraversal::ParentDetails parentDetails;
-    Node* parentNode = NodeRenderingTraversal::parent(textNode, &parentDetails);
+    Node* parentNode = NodeRenderingTraversal::parent(textNode);
     if (!parentNode || !parentNode->renderStyle())
         return defaultStyleForElement();
     return parentNode->renderStyle();
@@ -1045,6 +1031,52 @@ bool StyleResolver::applyAnimatedProperties(StyleResolverState& state, Element* 
     return true;
 }
 
+static inline ScopedStyleResolver* scopedResolverFor(const Element* element)
+{
+    for (TreeScope* treeScope = &element->treeScope(); treeScope; treeScope = treeScope->parentTreeScope()) {
+        if (ScopedStyleResolver* scopedStyleResolver = treeScope->scopedStyleResolver())
+            return scopedStyleResolver;
+    }
+    return 0;
+}
+
+void StyleResolver::resolveScopedStyles(const Element* element, WillBeHeapVector<RawPtrWillBeMember<ScopedStyleResolver>, 8>& resolvers)
+{
+    for (ScopedStyleResolver* scopedResolver = scopedResolverFor(element); scopedResolver; scopedResolver = scopedResolver->parent())
+        resolvers.append(scopedResolver);
+}
+
+void StyleResolver::collectScopedResolversForHostedShadowTrees(const Element* element, WillBeHeapVector<RawPtrWillBeMember<ScopedStyleResolver>, 8>& resolvers)
+{
+    ElementShadow* shadow = element->shadow();
+    if (!shadow)
+        return;
+
+    // Adding scoped resolver for active shadow roots for shadow host styling.
+    for (ShadowRoot* shadowRoot = shadow->youngestShadowRoot(); shadowRoot; shadowRoot = shadowRoot->olderShadowRoot()) {
+        if (shadowRoot->numberOfStyles() > 0) {
+            if (ScopedStyleResolver* resolver = shadowRoot->scopedStyleResolver())
+                resolvers.append(resolver);
+        }
+    }
+}
+
+void StyleResolver::styleTreeResolveScopedKeyframesRules(const Element* element, WillBeHeapVector<RawPtrWillBeMember<ScopedStyleResolver>, 8>& resolvers)
+{
+    Document& document = element->document();
+    TreeScope& treeScope = element->treeScope();
+    bool applyAuthorStyles = treeScope.applyAuthorStyles();
+
+    // Add resolvers for shadow roots hosted by the given element.
+    collectScopedResolversForHostedShadowTrees(element, resolvers);
+
+    // Add resolvers while walking up DOM tree from the given element.
+    for (ScopedStyleResolver* scopedResolver = scopedResolverFor(element); scopedResolver; scopedResolver = scopedResolver->parent()) {
+        if (scopedResolver->treeScope() == treeScope || (applyAuthorStyles && scopedResolver->treeScope() == document))
+            resolvers.append(scopedResolver);
+    }
+}
+
 template <StyleResolver::StyleApplicationPass pass>
 void StyleResolver::applyAnimatedProperties(StyleResolverState& state, const WillBeHeapHashMap<CSSPropertyID, RefPtrWillBeMember<Interpolation> >& activeInterpolations)
 {
@@ -1077,6 +1109,7 @@ static inline bool isValidCueStyleProperty(CSSPropertyID id)
     case CSSPropertyFont:
     case CSSPropertyFontFamily:
     case CSSPropertyFontSize:
+    case CSSPropertyFontStretch:
     case CSSPropertyFontStyle:
     case CSSPropertyFontVariant:
     case CSSPropertyFontWeight:
@@ -1243,7 +1276,7 @@ template<> CSSPropertyID StyleResolver::firstCSSPropertyId<StyleResolver::HighPr
 // This method returns the last CSSPropertyId of high priority properties.
 template<> CSSPropertyID StyleResolver::lastCSSPropertyId<StyleResolver::HighPriorityProperties>()
 {
-    COMPILE_ASSERT(CSSPropertyLineHeight == CSSPropertyColor + 17, CSS_line_height_is_end_of_high_prioity_property_range);
+    COMPILE_ASSERT(CSSPropertyLineHeight == CSSPropertyColor + 18, CSS_line_height_is_end_of_high_prioity_property_range);
     COMPILE_ASSERT(CSSPropertyZoom == CSSPropertyLineHeight - 1, CSS_zoom_is_before_line_height);
     return CSSPropertyLineHeight;
 }
@@ -1509,7 +1542,7 @@ void StyleResolver::printStats()
 {
     if (!m_styleResolverStats)
         return;
-    fprintf(stderr, "=== Style Resolver Stats (resolve #%u) (%s) ===\n", ++m_styleResolverStatsSequence, m_document.url().string().utf8().data());
+    fprintf(stderr, "=== Style Resolver Stats (resolve #%u) (%s) ===\n", ++m_styleResolverStatsSequence, document().url().string().utf8().data());
     fprintf(stderr, "%s\n", m_styleResolverStats->report().utf8().data());
     fprintf(stderr, "== Totals ==\n");
     fprintf(stderr, "%s\n", m_styleResolverStatsTotals->report().utf8().data());
@@ -1561,13 +1594,16 @@ void StyleResolver::trace(Visitor* visitor)
     visitor->trace(m_keyframesRuleMap);
     visitor->trace(m_matchedPropertiesCache);
     visitor->trace(m_viewportDependentMediaQueryResults);
+    visitor->trace(m_selectorFilter);
     visitor->trace(m_viewportStyleResolver);
     visitor->trace(m_features);
     visitor->trace(m_siblingRuleSet);
     visitor->trace(m_uncommonAttributeRuleSet);
     visitor->trace(m_watchedSelectorsRules);
     visitor->trace(m_treeBoundaryCrossingRules);
+    visitor->trace(m_styleSharingLists);
     visitor->trace(m_pendingStyleSheets);
+    visitor->trace(m_document);
 #endif
 }
 

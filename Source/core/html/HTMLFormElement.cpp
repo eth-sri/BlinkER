@@ -33,6 +33,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/IdTargetObserverRegistry.h"
+#include "core/dom/NodeListsNodeData.h"
 #include "core/events/AutocompleteErrorEvent.h"
 #include "core/events/Event.h"
 #include "core/events/GenericEventQueue.h"
@@ -167,13 +168,13 @@ void HTMLFormElement::removedFrom(ContainerNode* insertionPoint)
     // We don't need to take care of form association by 'form' content
     // attribute becuse IdTargetObserver handles it.
     if (m_hasElementsAssociatedByParser) {
-        Node& root = highestAncestorOrSelf();
+        Node& root = NodeTraversal::highestAncestorOrSelf(*this);
         if (!m_associatedElementsAreDirty) {
             FormAssociatedElement::List elements(associatedElements());
             notifyFormRemovedFromTree(elements, root);
         } else {
             FormAssociatedElement::List elements;
-            collectAssociatedElements(insertionPoint->highestAncestorOrSelf(), elements);
+            collectAssociatedElements(NodeTraversal::highestAncestorOrSelf(*insertionPoint), elements);
             notifyFormRemovedFromTree(elements, root);
             collectAssociatedElements(root, elements);
             notifyFormRemovedFromTree(elements, root);
@@ -184,7 +185,7 @@ void HTMLFormElement::removedFrom(ContainerNode* insertionPoint)
             notifyFormRemovedFromTree(images, root);
         } else {
             WillBeHeapVector<RawPtrWillBeMember<HTMLImageElement> > images;
-            collectImageElements(insertionPoint->highestAncestorOrSelf(), images);
+            collectImageElements(NodeTraversal::highestAncestorOrSelf(*insertionPoint), images);
             notifyFormRemovedFromTree(images, root);
             collectImageElements(root, images);
             notifyFormRemovedFromTree(images, root);
@@ -502,7 +503,7 @@ void HTMLFormElement::parseAttribute(const QualifiedName& name, const AtomicStri
         // If the new action attribute is pointing to insecure "action" location from a secure page
         // it is marked as "passive" mixed content.
         KURL actionURL = document().completeURL(m_attributes.action().isEmpty() ? document().url().string() : m_attributes.action());
-        if (MixedContentChecker::isMixedContent(document().securityOrigin(), actionURL))
+        if (document().frame() && MixedContentChecker::isMixedContent(document().securityOrigin(), actionURL))
             document().frame()->loader().mixedContentChecker()->canSubmitToInsecureForm(document().securityOrigin(), actionURL);
     } else if (name == targetAttr)
         m_attributes.setTarget(value);
@@ -589,7 +590,7 @@ void HTMLFormElement::didAssociateByParser()
 
 PassRefPtrWillBeRawPtr<HTMLFormControlsCollection> HTMLFormElement::elements()
 {
-    return toHTMLFormControlsCollection(ensureCachedHTMLCollection(FormControls).get());
+    return ensureCachedCollection<HTMLFormControlsCollection>(FormControls);
 }
 
 void HTMLFormElement::collectAssociatedElements(Node& root, FormAssociatedElement::List& elements) const
@@ -617,7 +618,7 @@ const FormAssociatedElement::List& HTMLFormElement::associatedElements() const
     HTMLFormElement* mutableThis = const_cast<HTMLFormElement*>(this);
     Node* scope = mutableThis;
     if (m_hasElementsAssociatedByParser)
-        scope = &highestAncestorOrSelf();
+        scope = &NodeTraversal::highestAncestorOrSelf(*mutableThis);
     if (inDocument() && treeScope().idTargetObserverRegistry().hasObservers(fastGetAttribute(idAttr)))
         scope = &treeScope().rootNode();
     ASSERT(scope);
@@ -639,7 +640,7 @@ const WillBeHeapVector<RawPtrWillBeMember<HTMLImageElement> >& HTMLFormElement::
 {
     if (!m_imageElementsAreDirty)
         return m_imageElements;
-    collectImageElements(m_hasElementsAssociatedByParser ? highestAncestorOrSelf() : *this, m_imageElements);
+    collectImageElements(m_hasElementsAssociatedByParser ? NodeTraversal::highestAncestorOrSelf(*this) : *this, m_imageElements);
     m_imageElementsAreDirty = false;
     return m_imageElements;
 }

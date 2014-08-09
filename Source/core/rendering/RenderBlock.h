@@ -37,14 +37,13 @@
 
 namespace blink {
 
-class LineLayoutState;
-class RenderInline;
-
-struct PaintInfo;
-class WordMeasurement;
-
 class LineInfo;
+class LineLayoutState;
+struct PaintInfo;
+class RenderInline;
 class RenderRubyRun;
+class RenderText;
+class WordMeasurement;
 
 template <class Run> class BidiRunList;
 typedef WTF::ListHashSet<RenderBox*, 16> TrackedRendererListHashSet;
@@ -140,9 +139,6 @@ public:
     // FIXME: Do we really need this to be virtual? It's just so we can call this on
     // RenderBoxes without needed to check whether they're RenderBlocks first.
     virtual void markForPaginationRelayoutIfNeeded(SubtreeLayoutScope&) OVERRIDE FINAL;
-
-    // FIXME-BLOCKFLOW: Remove virtualizaion when all of the line layout code has been moved out of RenderBlock
-    virtual bool containsFloats() const { return false; }
 
     LayoutUnit textIndentOffset() const;
 
@@ -254,6 +250,8 @@ public:
     bool recalcChildOverflowAfterStyleChange();
     bool recalcOverflowAfterStyleChange();
 
+    void invalidatePositionedObjectsAffectedByOverflowClip();
+
 protected:
     virtual void willBeDestroyed() OVERRIDE;
 
@@ -321,7 +319,7 @@ protected:
     void addOverflowFromBlockChildren();
     void addVisualOverflowFromTheme();
 
-    virtual void addFocusRingRects(Vector<IntRect>&, const LayoutPoint& additionalOffset, const RenderLayerModelObject* paintContainer = 0) OVERRIDE;
+    virtual void addFocusRingRects(Vector<IntRect>&, const LayoutPoint& additionalOffset, const RenderLayerModelObject* paintContainer = 0) const OVERRIDE;
 
     virtual void computeSelfHitTestRects(Vector<LayoutRect>&, const LayoutPoint& layerOffset) const OVERRIDE;
 
@@ -359,7 +357,7 @@ private:
     void insertIntoTrackedRendererMaps(RenderBox* descendant, TrackedDescendantsMap*&, TrackedContainerMap*&);
     static void removeFromTrackedRendererMaps(RenderBox* descendant, TrackedDescendantsMap*&, TrackedContainerMap*&);
 
-    void createFirstLetterRenderer(RenderObject* firstLetterBlock, RenderObject* currentChild, unsigned length);
+    void createFirstLetterRenderer(RenderObject* firstLetterBlock, RenderText& currentChild, unsigned length);
     void updateFirstLetterStyle(RenderObject* firstLetterBlock, RenderObject* firstLetterContainer);
 
     Node* nodeForHitTest() const;
@@ -374,7 +372,7 @@ private:
 
     bool hasCaret() const;
 
-    virtual bool avoidsFloats() const OVERRIDE;
+    virtual bool avoidsFloats() const OVERRIDE { return true; }
 
     bool hitTestColumns(const HitTestRequest&, HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction);
     bool hitTestContents(const HitTestRequest&, HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction);
@@ -443,6 +441,8 @@ private:
 
     // End helper functions and structs used by layoutBlockChildren.
 
+    bool widthAvailableToChildrenHasChanged();
+
 protected:
     // Returns the logicalOffset at the top of the next page. If the offset passed in is already at the top of the current page,
     // then nextPageLogicalTop with ExcludePageBoundary will still move to the top of the next page. nextPageLogicalTop with
@@ -455,7 +455,6 @@ protected:
     bool createsBlockFormattingContext() const;
 
 public:
-    LayoutUnit pageLogicalTopForOffset(LayoutUnit offset) const;
     LayoutUnit pageLogicalHeightForOffset(LayoutUnit offset) const;
     LayoutUnit pageRemainingLogicalHeightForOffset(LayoutUnit offset, PageBoundaryRule = IncludePageBoundary) const;
 

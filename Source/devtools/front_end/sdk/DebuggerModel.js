@@ -63,7 +63,7 @@ WebInspector.DebuggerModel = function(target)
     this._applySkipStackFrameSettings();
 }
 
-/** @typedef {{location: ?WebInspector.DebuggerModel.Location, functionName: string, scopeChain: (Array.<!DebuggerAgent.Scope>|null)}} */
+/** @typedef {{location: ?WebInspector.DebuggerModel.Location, sourceURL: ?string, functionName: string, scopeChain: (Array.<!DebuggerAgent.Scope>|null)}} */
 WebInspector.DebuggerModel.FunctionDetails;
 
 /**
@@ -112,8 +112,11 @@ WebInspector.DebuggerModel.prototype = {
     {
         if (this._debuggerEnabled)
             return;
-
-        this._agent.enable(this._debuggerWasEnabled.bind(this));
+        this._agent.enable();
+        this._debuggerEnabled = true;
+        this._pauseOnExceptionStateChanged();
+        this._asyncStackTracesStateChanged();
+        this.dispatchEventToListeners(WebInspector.DebuggerModel.Events.DebuggerWasEnabled);
     },
 
     disableDebugger: function()
@@ -121,7 +124,10 @@ WebInspector.DebuggerModel.prototype = {
         if (!this._debuggerEnabled)
             return;
 
-        this._agent.disable(this._debuggerWasDisabled.bind(this));
+        this._agent.disable();
+        this._debuggerEnabled = false;
+        this._isPausing = false;
+        this.dispatchEventToListeners(WebInspector.DebuggerModel.Events.DebuggerWasDisabled);
     },
 
     /**
@@ -147,14 +153,6 @@ WebInspector.DebuggerModel.prototype = {
         this._agent.setSkipAllPauses(true, true);
         // If reload happens before the timeout, the flag will be already unset and the timeout callback won't change anything.
         this._skipAllPausesTimeout = setTimeout(this.skipAllPauses.bind(this, false), timeout);
-    },
-
-    _debuggerWasEnabled: function()
-    {
-        this._debuggerEnabled = true;
-        this._pauseOnExceptionStateChanged();
-        this._asyncStackTracesStateChanged();
-        this.dispatchEventToListeners(WebInspector.DebuggerModel.Events.DebuggerWasEnabled);
     },
 
     _pauseOnExceptionStateChanged: function()
@@ -186,13 +184,6 @@ WebInspector.DebuggerModel.prototype = {
         const maxAsyncStackChainDepth = 4;
         var enabled = WebInspector.settings.enableAsyncStackTraces.get() && !this.target().profilingLock.isAcquired();
         this._agent.setAsyncCallStackDepth(enabled ? maxAsyncStackChainDepth : 0);
-    },
-
-    _debuggerWasDisabled: function()
-    {
-        this._debuggerEnabled = false;
-        this._isPausing = false;
-        this.dispatchEventToListeners(WebInspector.DebuggerModel.Events.DebuggerWasDisabled);
     },
 
     stepInto: function()
@@ -249,20 +240,6 @@ WebInspector.DebuggerModel.prototype = {
         this._isPausing = true;
         this.skipAllPauses(false);
         this._agent.pause();
-    },
-
-    /**
-     * @param {!WebInspector.DebuggerModel.Location} rawLocation
-     * @param {string} condition
-     * @param {function(?DebuggerAgent.BreakpointId, !Array.<!WebInspector.DebuggerModel.Location>):void=} callback
-     */
-    setBreakpointByScriptLocation: function(rawLocation, condition, callback)
-    {
-        var script = rawLocation.script();
-        if (script.sourceURL)
-            this.setBreakpointByURL(script.sourceURL, rawLocation.lineNumber, rawLocation.columnNumber, condition, callback);
-        else
-            this.setBreakpointBySourceId(rawLocation, condition, callback);
     },
 
     /**
@@ -450,8 +427,6 @@ WebInspector.DebuggerModel.prototype = {
     _setDebuggerPausedDetails: function(debuggerPausedDetails)
     {
         this._isPausing = false;
-        if (this._debuggerPausedDetails)
-            this._debuggerPausedDetails.dispose();
         this._debuggerPausedDetails = debuggerPausedDetails;
         if (this._debuggerPausedDetails)
             this.dispatchEventToListeners(WebInspector.DebuggerModel.Events.DebuggerPaused, this._debuggerPausedDetails);
@@ -564,7 +539,7 @@ WebInspector.DebuggerModel.prototype = {
     },
 
     /**
-     * @param {!DebuggerAgent.ScriptId} scriptId
+     * @param {?DebuggerAgent.ScriptId} scriptId
      * @param {string} sourceUrl
      * @param {number} lineNumber
      * @param {number} columnNumber
@@ -572,7 +547,7 @@ WebInspector.DebuggerModel.prototype = {
      */
     createRawLocationByScriptId: function(scriptId, sourceUrl, lineNumber, columnNumber)
     {
-        var script = this.scriptForId(scriptId);
+        var script = scriptId ? this.scriptForId(scriptId) : null;
         return script ? this.createRawLocation(script, lineNumber, columnNumber) : this.createRawLocationByURL(sourceUrl, lineNumber, columnNumber);
     },
 
@@ -675,29 +650,6 @@ WebInspector.DebuggerModel.prototype = {
     },
 
     /**
-     * @param {!WebInspector.DebuggerModel.Location} rawLocation
-     * @param {function(!WebInspector.UILocation):(boolean|undefined)} updateDelegate
-     * @return {!WebInspector.Script.Location}
-     */
-    createLiveLocation: function(rawLocation, updateDelegate)
-    {
-        var script = this._scripts[rawLocation.scriptId];
-        return script.createLiveLocation(rawLocation, updateDelegate);
-    },
-
-    /**
-     * @param {!WebInspector.DebuggerModel.Location} rawLocation
-     * @return {?WebInspector.UILocation}
-     */
-    rawLocationToUILocation: function(rawLocation)
-    {
-        var script = this._scripts[rawLocation.scriptId];
-        if (!script)
-            return null;
-        return script.rawLocationToUILocation(rawLocation.lineNumber, rawLocation.columnNumber);
-    },
-
-    /**
      * Handles notification from JavaScript VM about updated stack (liveedit or frame restart action).
      * @param {!Array.<!DebuggerAgent.CallFrame>=} newCallFrames
      * @param {!Object=} details
@@ -742,7 +694,8 @@ WebInspector.DebuggerModel.prototype = {
             var location = response.location;
             var script = this.scriptForId(location.scriptId);
             var rawLocation = script ? this.createRawLocation(script, location.lineNumber + 1, location.columnNumber + 1) : null;
-            callback({location: rawLocation, functionName: response.functionName, scopeChain: response.scopeChain || null});
+            var sourceURL = script ? script.contentURL() : null;
+            callback({location: rawLocation, sourceURL: sourceURL, functionName: response.functionName, scopeChain: response.scopeChain || null});
         }
     },
 
@@ -909,15 +862,6 @@ WebInspector.DebuggerModel.Location.prototype = {
         return this._debuggerModel.scriptForId(this.scriptId);
     },
 
-    /**
-     * @param {function(!WebInspector.UILocation):(boolean|undefined)} updateDelegate
-     * @return {!WebInspector.Script.Location}
-     */
-    createLiveLocation: function(updateDelegate)
-    {
-        return this._debuggerModel.createLiveLocation(this, updateDelegate);
-    },
-
     continueToLocation: function()
     {
         this._debuggerModel._agent.continueToLocation(this.payload());
@@ -948,8 +892,6 @@ WebInspector.DebuggerModel.CallFrame = function(target, script, payload, isAsync
     this._debuggerAgent = target.debuggerModel._agent;
     this._script = script;
     this._payload = payload;
-    /** @type {!Array.<!WebInspector.Script.Location>} */
-    this._liveLocations = [];
     this._isAsync = isAsync;
     this._location = WebInspector.DebuggerModel.Location.fromPayload(target, payload.location);
 }
@@ -1097,24 +1039,6 @@ WebInspector.DebuggerModel.CallFrame.prototype = {
         this._debuggerAgent.restartFrame(this._payload.callFrameId, protocolCallback.bind(this));
     },
 
-    /**
-     * @param {function(!WebInspector.UILocation):(boolean|undefined)} updateDelegate
-     * @return {!WebInspector.Script.Location}
-     */
-    createLiveLocation: function(updateDelegate)
-    {
-        var liveLocation = this._location.createLiveLocation(updateDelegate);
-        this._liveLocations.push(liveLocation);
-        return liveLocation;
-    },
-
-    dispose: function()
-    {
-        for (var i = 0; i < this._liveLocations.length; ++i)
-            this._liveLocations[i].dispose();
-        this._liveLocations = [];
-    },
-
     __proto__: WebInspector.SDKObject.prototype
 }
 
@@ -1148,16 +1072,6 @@ WebInspector.DebuggerModel.StackTrace.fromPayload = function(target, payload, is
     return new WebInspector.DebuggerModel.StackTrace(callFrames, asyncStackTrace, payload.description);
 }
 
-WebInspector.DebuggerModel.StackTrace.prototype = {
-    dispose: function()
-    {
-        for (var i = 0; i < this.callFrames.length; ++i)
-            this.callFrames[i].dispose();
-        if (this.asyncStackTrace)
-            this.asyncStackTrace.dispose();
-    }
-}
-
 /**
  * @constructor
  * @extends {WebInspector.SDKObject}
@@ -1187,14 +1101,6 @@ WebInspector.DebuggerPausedDetails.prototype = {
         if (this.reason !== WebInspector.DebuggerModel.BreakReason.Exception)
             return null;
         return this.target().runtimeModel.createRemoteObject(/** @type {!RuntimeAgent.RemoteObject} */(this.auxData));
-    },
-
-    dispose: function()
-    {
-        for (var i = 0; i < this.callFrames.length; ++i)
-            this.callFrames[i].dispose();
-        if (this.asyncStackTrace)
-            this.asyncStackTrace.dispose();
     },
 
     __proto__: WebInspector.SDKObject.prototype

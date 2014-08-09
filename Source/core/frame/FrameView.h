@@ -151,7 +151,7 @@ public:
     virtual IntSize inputEventsOffsetForEmulation() const OVERRIDE;
     void setInputEventsTransformForEmulation(const IntSize&, float);
 
-    virtual void setScrollPosition(const IntPoint&) OVERRIDE;
+    virtual void setScrollPosition(const IntPoint&, ScrollBehavior = ScrollBehaviorInstant) OVERRIDE;
     virtual bool isRubberBandInProgress() const OVERRIDE;
     void setScrollPositionNonProgrammatically(const IntPoint&);
 
@@ -163,11 +163,6 @@ public:
     AtomicString mediaType() const;
     void setMediaType(const AtomicString&);
     void adjustMediaTypeForPrinting(bool printing);
-
-    void setCannotBlitToWindow();
-    void setIsOverlapped(bool);
-    bool isOverlapped() const { return m_isOverlapped; }
-    void setContentIsOpaque(bool);
 
     void addSlowRepaintObject();
     void removeSlowRepaintObject();
@@ -305,7 +300,6 @@ public:
     virtual void didAddScrollbar(Scrollbar*, ScrollbarOrientation) OVERRIDE;
     virtual void willRemoveScrollbar(Scrollbar*, ScrollbarOrientation) OVERRIDE;
 
-    virtual bool shouldAttemptToScrollUsingFastPath() const OVERRIDE;
     // FIXME: This should probably be renamed as the 'inSubtreeLayout' parameter
     // passed around the FrameView layout methods can be true while this returns
     // false.
@@ -346,8 +340,6 @@ private:
     virtual bool isFrameView() const OVERRIDE { return true; }
 
     friend class RenderWidget;
-    bool useSlowRepaints(bool considerOverlap = true) const;
-    bool useSlowRepaintsIfNotOverlapped() const;
 
     bool contentsInCompositedLayer() const;
 
@@ -430,9 +422,6 @@ private:
     bool m_doFullPaintInvalidation;
 
     bool m_canHaveScrollbars;
-    bool m_cannotBlitToWindow;
-    bool m_isOverlapped;
-    bool m_contentIsOpaque;
     unsigned m_slowRepaintObjectCount;
 
     bool m_hasPendingLayout;

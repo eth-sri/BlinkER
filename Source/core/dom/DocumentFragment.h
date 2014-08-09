@@ -47,6 +47,8 @@ private:
     virtual NodeType nodeType() const OVERRIDE FINAL;
     virtual PassRefPtrWillBeRawPtr<Node> cloneNode(bool deep = true) OVERRIDE;
     virtual bool childTypeAllowed(NodeType) const OVERRIDE;
+
+    bool isDocumentFragment() const WTF_DELETED_FUNCTION; // This will catch anyone doing an unnecessary check.
 };
 
 DEFINE_NODE_TYPE_CASTS(DocumentFragment, isDocumentFragment());

@@ -26,7 +26,7 @@
 #ifndef WebHitTestResult_h
 #define WebHitTestResult_h
 
-#include "../platform/WebPrivateOwnPtr.h"
+#include "../platform/WebPrivatePtr.h"
 
 namespace blink {
 class HitTestResult;
@@ -78,7 +78,7 @@ public:
 #endif
 
 protected:
-    WebPrivateOwnPtr<WebHitTestResultPrivate> m_private;
+    WebPrivatePtr<WebHitTestResultPrivate> m_private;
 };
 
 } // namespace blink

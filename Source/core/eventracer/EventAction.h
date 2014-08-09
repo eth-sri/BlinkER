@@ -6,7 +6,7 @@
 #include "wtf/Vector.h"
 #include <utility>
 
-namespace WebCore {
+namespace blink {
 
 class EventAction {
 public:

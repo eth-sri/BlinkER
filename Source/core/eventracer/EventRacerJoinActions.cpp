@@ -2,7 +2,7 @@
 #include "EventRacerJoinActions.h"
 #include "EventRacerLog.h"
 
-namespace WebCore {
+namespace blink {
 
 void EventRacerJoinActions::deferJoin(EventAction *act) {
     act->willDeferJoin();

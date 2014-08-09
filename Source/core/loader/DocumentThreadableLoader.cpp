@@ -35,6 +35,7 @@
 #include "core/dom/Document.h"
 #include "core/fetch/CrossOriginAccessControl.h"
 #include "core/fetch/FetchRequest.h"
+#include "core/fetch/FetchUtils.h"
 #include "core/fetch/Resource.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/frame/LocalFrame.h"
@@ -90,7 +91,7 @@ DocumentThreadableLoader::DocumentThreadableLoader(Document& document, Threadabl
     const HTTPHeaderMap& headerMap = request.httpHeaderFields();
     HTTPHeaderMap::const_iterator end = headerMap.end();
     for (HTTPHeaderMap::const_iterator it = headerMap.begin(); it != end; ++it) {
-        if (isOnAccessControlSimpleRequestHeaderWhitelist(it->key, it->value))
+        if (FetchUtils::isSimpleHeader(it->key, it->value))
             m_simpleRequestHeaders.add(it->key, it->value);
     }
 
@@ -120,7 +121,7 @@ void DocumentThreadableLoader::makeCrossOriginAccessRequest(const ResourceReques
         return;
     }
 
-    if ((m_options.preflightPolicy == ConsiderPreflight && isSimpleCrossOriginAccessRequest(request.httpMethod(), request.httpHeaderFields())) || m_options.preflightPolicy == PreventPreflight) {
+    if ((m_options.preflightPolicy == ConsiderPreflight && FetchUtils::isSimpleOrForbiddenRequest(request.httpMethod(), request.httpHeaderFields())) || m_options.preflightPolicy == PreventPreflight) {
         ResourceRequest crossOriginRequest(request);
         ResourceLoaderOptions crossOriginOptions(m_resourceLoaderOptions);
         updateRequestForAccessControl(crossOriginRequest, securityOrigin(), effectiveAllowCredentials());
@@ -186,6 +187,14 @@ void DocumentThreadableLoader::redirectReceived(Resource* resource, ResourceRequ
     ASSERT_UNUSED(resource, resource == this->resource());
 
     RefPtr<DocumentThreadableLoader> protect(this);
+
+    // FIXME: Support redirect in Fetch API.
+    if (resource->resourceRequest().requestContext() == blink::WebURLRequest::RequestContextFetch) {
+        m_client->didFailRedirectCheck();
+        request = ResourceRequest();
+        return;
+    }
+
     if (!isAllowedByPolicy(request.url())) {
         m_client->didFailRedirectCheck();
         request = ResourceRequest();
@@ -322,9 +331,27 @@ void DocumentThreadableLoader::handleResponse(unsigned long identifier, const Re
         return;
     }
 
-    // FIXME: When response.wasFetchedViaServiceWorker() is true, we need to check the URL of the response for CSP and CORS.
-
-    if (!m_sameOriginRequest && m_options.crossOriginRequestPolicy == UseAccessControl) {
+    // If the response is fetched via ServiceWorker, the original URL of the response could be different from the URL of the request.
+    bool isCrossOriginResponse = false;
+    if (response.wasFetchedViaServiceWorker()) {
+        if (!isAllowedByPolicy(response.url())) {
+            m_client->didFailRedirectCheck();
+            return;
+        }
+        isCrossOriginResponse = !securityOrigin()->canRequest(response.url());
+        if (m_options.crossOriginRequestPolicy == DenyCrossOriginRequests && isCrossOriginResponse) {
+            m_client->didFail(ResourceError(errorDomainBlinkInternal, 0, response.url().string(), "Cross origin requests are not supported."));
+            return;
+        }
+        if (isCrossOriginResponse && m_resourceLoaderOptions.credentialsRequested == ClientDidNotRequestCredentials) {
+            // Since the request is no longer same-origin, if the user didn't request credentials in
+            // the first place, update our state so we neither request them nor expect they must be allowed.
+            m_forceDoNotAllowStoredCredentials = true;
+        }
+    } else {
+        isCrossOriginResponse = !m_sameOriginRequest;
+    }
+    if (isCrossOriginResponse && m_options.crossOriginRequestPolicy == UseAccessControl) {
         String accessControlErrorDescription;
         if (!passesAccessControlCheck(response, effectiveAllowCredentials(), securityOrigin(), accessControlErrorDescription)) {
             m_client->didFailAccessControlCheck(ResourceError(errorDomainBlinkInternal, 0, response.url().string(), accessControlErrorDescription));
@@ -368,8 +395,9 @@ void DocumentThreadableLoader::handleSuccessfulFinish(unsigned long identifier, 
         ASSERT(!m_sameOriginRequest);
         ASSERT(m_options.crossOriginRequestPolicy == UseAccessControl);
         loadActualRequest();
-    } else
+    } else {
         m_client->didFinishLoading(identifier, finishTime);
+    }
 }
 
 void DocumentThreadableLoader::didTimeout(Timer<DocumentThreadableLoader>* timer)

@@ -239,15 +239,6 @@ WebInspector.TimelineModel.prototype = {
         throw new Error("Not implemented");
     },
 
-    /**
-     * @param {string} url
-     * @param {!WebInspector.Progress} progress
-     */
-    loadFromURL: function(url, progress)
-    {
-        throw new Error("Not implemented");
-    },
-
     saveToFile: function()
     {
         throw new Error("Not implemented");
@@ -281,6 +272,14 @@ WebInspector.TimelineModel.prototype = {
     maximumRecordTime: function()
     {
         return this._maximumRecordTime;
+    },
+
+    /**
+     * @return {boolean}
+     */
+    isEmpty: function()
+    {
+        return this.minimumRecordTime() === 0 && this.maximumRecordTime() === 0;
     },
 
     /**

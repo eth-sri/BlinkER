@@ -25,8 +25,8 @@
 
 #include <algorithm>
 #include "core/css/resolver/StyleResolver.h"
-#include "core/rendering/FastTextAutosizer.h"
 #include "core/rendering/RenderTheme.h"
+#include "core/rendering/TextAutosizer.h"
 #include "core/rendering/style/AppliedTextDecoration.h"
 #include "core/rendering/style/ContentData.h"
 #include "core/rendering/style/QuotesData.h"
@@ -179,7 +179,9 @@ StyleRecalcChange RenderStyle::stylePropagationDiff(const RenderStyle* oldStyle,
         || oldStyle->hasPseudoStyle(FIRST_LETTER) != newStyle->hasPseudoStyle(FIRST_LETTER)
         || oldStyle->columnSpan() != newStyle->columnSpan()
         || !oldStyle->contentDataEquivalent(newStyle)
-        || oldStyle->hasTextCombine() != newStyle->hasTextCombine())
+        || oldStyle->hasTextCombine() != newStyle->hasTextCombine()
+        || oldStyle->justifyItems() != newStyle->justifyItems()
+        || oldStyle->alignItems() != newStyle->alignItems())
         return Reattach;
 
     if (*oldStyle == *newStyle)
@@ -1121,6 +1123,7 @@ float RenderStyle::specifiedFontSize() const { return fontDescription().specifie
 float RenderStyle::computedFontSize() const { return fontDescription().computedSize(); }
 int RenderStyle::fontSize() const { return fontDescription().computedPixelSize(); }
 FontWeight RenderStyle::fontWeight() const { return fontDescription().weight(); }
+FontStretch RenderStyle::fontStretch() const { return fontDescription().stretch(); }
 
 TextDecoration RenderStyle::textDecorationsInEffect() const
 {
@@ -1170,7 +1173,7 @@ Length RenderStyle::lineHeight() const
     // too, though this involves messily poking into CalcExpressionLength.
     float multiplier = textAutosizingMultiplier();
     if (multiplier > 1 && lh.isFixed())
-        return Length(FastTextAutosizer::computeAutosizedFontSize(lh.value(), multiplier), Fixed);
+        return Length(TextAutosizer::computeAutosizedFontSize(lh.value(), multiplier), Fixed);
 
     return lh;
 }
@@ -1227,7 +1230,7 @@ void RenderStyle::setFontSize(float size)
 
     float multiplier = textAutosizingMultiplier();
     if (multiplier > 1) {
-        float autosizedFontSize = FastTextAutosizer::computeAutosizedFontSize(size, multiplier);
+        float autosizedFontSize = TextAutosizer::computeAutosizedFontSize(size, multiplier);
         desc.setComputedSize(std::min(maximumAllowedFontSize, autosizedFontSize));
     }
 
@@ -1293,6 +1296,15 @@ void RenderStyle::clearAppliedTextDecorations()
 
     if (rareInheritedData->appliedTextDecorations)
         rareInheritedData.access()->appliedTextDecorations = nullptr;
+}
+
+void RenderStyle::setFontStretch(FontStretch stretch)
+{
+    FontSelector* currentFontSelector = font().fontSelector();
+    FontDescription desc(fontDescription());
+    desc.setStretch(stretch);
+    setFontDescription(desc);
+    font().update(currentFontSelector);
 }
 
 void RenderStyle::getShadowExtent(const ShadowList* shadowList, LayoutUnit &top, LayoutUnit &right, LayoutUnit &bottom, LayoutUnit &left) const

@@ -210,13 +210,13 @@ Position Position::parentAnchoredEquivalent() const
 
     // FIXME: This should only be necessary for legacy positions, but is also needed for positions before and after Tables
     if (m_offset <= 0 && (m_anchorType != PositionIsAfterAnchor && m_anchorType != PositionIsAfterChildren)) {
-        if (m_anchorNode->parentNode() && (editingIgnoresContent(m_anchorNode.get()) || isRenderedTableElement(m_anchorNode.get())))
+        if (m_anchorNode->parentNode() && (editingIgnoresContent(m_anchorNode.get()) || isRenderedHTMLTableElement(m_anchorNode.get())))
             return positionInParentBeforeNode(*m_anchorNode);
         return Position(m_anchorNode.get(), 0, PositionIsOffsetInAnchor);
     }
     if (!m_anchorNode->offsetInCharacters()
         && (m_anchorType == PositionIsAfterAnchor || m_anchorType == PositionIsAfterChildren || static_cast<unsigned>(m_offset) == m_anchorNode->countChildren())
-        && (editingIgnoresContent(m_anchorNode.get()) || isRenderedTableElement(m_anchorNode.get()))
+        && (editingIgnoresContent(m_anchorNode.get()) || isRenderedHTMLTableElement(m_anchorNode.get()))
         && containerNode()) {
         return positionInParentAfterNode(*m_anchorNode);
     }
@@ -234,7 +234,7 @@ Node* Position::computeNodeBeforePosition() const
     case PositionIsAfterChildren:
         return m_anchorNode->lastChild();
     case PositionIsOffsetInAnchor:
-        return m_anchorNode->traverseToChildAt(m_offset - 1); // -1 converts to traverseToChildAt((unsigned)-1) and returns null.
+        return m_offset ? NodeTraversal::childAt(*m_anchorNode, m_offset - 1) : 0;
     case PositionIsBeforeAnchor:
         return m_anchorNode->previousSibling();
     case PositionIsAfterAnchor:
@@ -255,7 +255,7 @@ Node* Position::computeNodeAfterPosition() const
     case PositionIsAfterChildren:
         return 0;
     case PositionIsOffsetInAnchor:
-        return m_anchorNode->traverseToChildAt(m_offset);
+        return NodeTraversal::childAt(*m_anchorNode, m_offset);
     case PositionIsBeforeAnchor:
         return m_anchorNode.get();
     case PositionIsAfterAnchor:
@@ -303,7 +303,7 @@ Position Position::previous(PositionMoveType moveType) const
     ASSERT(offset >= 0);
 
     if (offset > 0) {
-        if (Node* child = node->traverseToChildAt(offset - 1))
+        if (Node* child = NodeTraversal::childAt(*node, offset - 1))
             return lastPositionInOrAfterNode(child);
 
         // There are two reasons child might be 0:
@@ -338,7 +338,7 @@ Position Position::next(PositionMoveType moveType) const
     // FIXME: Negative offsets shouldn't be allowed. We should catch this earlier.
     ASSERT(offset >= 0);
 
-    if (Node* child = node->traverseToChildAt(offset))
+    if (Node* child = NodeTraversal::childAt(*node, offset))
         return firstPositionInOrBeforeNode(child);
 
     if (!node->hasChildren() && offset < lastOffsetForEditing(node)) {
@@ -497,7 +497,7 @@ static bool endsOfNodeAreVisuallyDistinctPositions(Node* node)
         return true;
 
     // There is a VisiblePosition inside an empty inline-block container.
-    return node->renderer()->isReplaced() && canHaveChildrenForEditing(node) && toRenderBox(node->renderer())->height() != 0 && !node->firstChild();
+    return node->renderer()->isReplaced() && canHaveChildrenForEditing(node) && toRenderBox(node->renderer())->height() != 0 && !node->hasChildren();
 }
 
 static Node* enclosingVisualBoundary(Node* node)
@@ -582,7 +582,7 @@ Position Position::upstream(EditingBoundaryCrossingRule rule) const
             return lastVisible;
 
         // Return position after tables and nodes which have content that can be ignored.
-        if (editingIgnoresContent(currentNode) || isRenderedTableElement(currentNode)) {
+        if (editingIgnoresContent(currentNode) || isRenderedHTMLTableElement(currentNode)) {
             if (currentPos.atEndOfNode())
                 return positionAfterNode(currentNode);
             continue;
@@ -710,7 +710,7 @@ Position Position::downstream(EditingBoundaryCrossingRule rule) const
             lastVisible = currentPos;
 
         // Return position before tables and nodes which have content that can be ignored.
-        if (editingIgnoresContent(currentNode) || isRenderedTableElement(currentNode)) {
+        if (editingIgnoresContent(currentNode) || isRenderedHTMLTableElement(currentNode)) {
             if (currentPos.offsetInLeafNode() <= renderer->caretMinOffset())
                 return createLegacyEditingPosition(currentNode, renderer->caretMinOffset());
             continue;
@@ -842,7 +842,7 @@ bool Position::isCandidate() const
         return false;
     }
 
-    if (isRenderedTableElement(deprecatedNode()) || editingIgnoresContent(deprecatedNode()))
+    if (isRenderedHTMLTableElement(deprecatedNode()) || editingIgnoresContent(deprecatedNode()))
         return (atFirstEditingPositionForNode() || atLastEditingPositionForNode()) && !nodeIsUserSelectNone(deprecatedNode()->parentNode());
 
     if (isHTMLHtmlElement(*m_anchorNode))
@@ -948,7 +948,7 @@ bool Position::rendersInDifferentPosition(const Position &pos) const
     if (isHTMLBRElement(*pos.deprecatedNode()) && isCandidate())
         return true;
 
-    if (deprecatedNode()->enclosingBlockFlowElement() != pos.deprecatedNode()->enclosingBlockFlowElement())
+    if (!inSameContainingBlockFlowElement(deprecatedNode(), pos.deprecatedNode()))
         return true;
 
     if (deprecatedNode()->isTextNode() && !inRenderedText())

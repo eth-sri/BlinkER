@@ -171,7 +171,6 @@ public:
 
     // DOM methods & attributes for Node
 
-    bool hasTagName(const QualifiedName&) const;
     bool hasTagName(const HTMLQualifiedName&) const;
     bool hasTagName(const SVGQualifiedName&) const;
     virtual String nodeName() const = 0;
@@ -219,8 +218,6 @@ public:
     String textContent(bool convertBRsToNewlines = false) const;
     void setTextContent(const String&);
 
-    Node& lastDescendantOrSelf() const;
-
     // Other methods (not part of DOM)
 
     bool isElementNode() const { return getFlag(IsElementFlag); }
@@ -232,7 +229,7 @@ public:
     bool isPseudoElement() const { return pseudoId() != NOPSEUDO; }
     bool isBeforePseudoElement() const { return pseudoId() == BEFORE; }
     bool isAfterPseudoElement() const { return pseudoId() == AFTER; }
-    PseudoId pseudoId() const { return (isElementNode() && hasCustomStyleCallbacks()) ? customPseudoId() : NOPSEUDO; }
+    virtual PseudoId pseudoId() const { return NOPSEUDO; }
 
     bool isCustomElement() const { return getFlag(CustomElementFlag); }
     enum CustomElementState {
@@ -288,7 +285,6 @@ public:
     ContainerNode* parentOrShadowHostNode() const;
     Element* parentOrShadowHostElement() const;
     void setParentOrShadowHostNode(ContainerNode*);
-    Node& highestAncestorOrSelf() const;
 
     // Knows about all kinds of hosts.
     ContainerNode* parentOrShadowHostOrTemplateHostNode() const;
@@ -299,10 +295,8 @@ public:
     bool selfOrAncestorHasDirAutoAttribute() const { return getFlag(SelfOrAncestorHasDirAutoFlag); }
     void setSelfOrAncestorHasDirAutoAttribute(bool flag) { setFlag(flag, SelfOrAncestorHasDirAutoFlag); }
 
-    // Returns the enclosing event parent node (or self) that, when clicked, would trigger a navigation.
-    Node* enclosingLinkEventParentOrSelf();
-
-    bool isBlockFlowElement() const;
+    // Returns the enclosing event parent Element (or self) that, when clicked, would trigger a navigation.
+    Element* enclosingLinkEventParentOrSelf();
 
     // These low-level calls give the caller responsibility for maintaining the integrity of the tree.
     void setPreviousSibling(Node* previous) { m_previous = previous; }
@@ -326,14 +320,9 @@ public:
     // out of the Node class into an editing-specific source file.
     Node* previousLeafNode() const;
 
-    // enclosingBlockFlowElement() is deprecated. Use enclosingBlock instead.
-    Element* enclosingBlockFlowElement() const;
-
     bool isRootEditableElement() const;
     Element* rootEditableElement() const;
     Element* rootEditableElement(EditableType) const;
-
-    bool inSameContainingBlockFlowElement(Node*);
 
     // For <link> and <style> elements.
     virtual bool sheetLoaded() { return true; }
@@ -341,8 +330,6 @@ public:
     virtual void startLoadingDynamicSheet() { ASSERT_NOT_REACHED(); }
 
     bool hasName() const { return !isTextNode() && getFlag(HasNameOrIsEditingTextFlag); }
-    bool hasID() const;
-    bool hasClass() const;
 
     bool isUserActionElement() const { return getFlag(IsUserActionElementFlag); }
     void setUserActionElement(bool flag) { setFlag(flag, IsUserActionElementFlag); }
@@ -479,7 +466,6 @@ public:
     bool isDocumentTypeNode() const { return nodeType() == DOCUMENT_TYPE_NODE; }
     virtual bool childTypeAllowed(NodeType) const { return false; }
     unsigned countChildren() const;
-    Node* traverseToChildAt(unsigned index) const;
 
     bool isDescendantOf(const Node*) const;
     bool contains(const Node*) const;
@@ -495,10 +481,6 @@ public:
 
     // Whether or not a selection can be started in this object
     virtual bool canStartSelection() const;
-
-    // Getting points into and out of screen space
-    FloatPoint convertToPage(const FloatPoint&) const;
-    FloatPoint convertFromPage(const FloatPoint&) const;
 
     // -----------------------------------------------------------------------------
     // Integration with rendering tree
@@ -593,7 +575,6 @@ public:
     void showTreeForThisAcrossFrame() const;
 #endif
 
-    void invalidateNodeListCachesInAncestors(const QualifiedName* attrName = 0, Element* attributeOwnerElement = 0);
     NodeListsNodeData* nodeLists();
     void clearNodeLists();
 
@@ -601,14 +582,12 @@ public:
     virtual bool willRespondToMouseClickEvents();
     virtual bool willRespondToTouchEvents();
 
-    unsigned short compareDocumentPosition(const Node*) const;
-
     enum ShadowTreesTreatment {
         TreatShadowTreesAsDisconnected,
         TreatShadowTreesAsComposed
     };
 
-    unsigned short compareDocumentPositionInternal(const Node*, ShadowTreesTreatment) const;
+    unsigned short compareDocumentPosition(const Node*, ShadowTreesTreatment = TreatShadowTreesAsDisconnected) const;
 
     virtual Node* toNode() OVERRIDE FINAL;
 
@@ -793,12 +772,6 @@ protected:
 private:
     friend class TreeShared<Node>;
     friend class WeakNodeMap;
-
-    virtual PseudoId customPseudoId() const
-    {
-        ASSERT(hasCustomStyleCallbacks());
-        return NOPSEUDO;
-    }
 
     unsigned styledSubtreeSize() const;
 

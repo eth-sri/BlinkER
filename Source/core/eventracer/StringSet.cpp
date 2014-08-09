@@ -9,7 +9,7 @@
 #include "StringSet.h"
 #include <string.h>
 
-namespace WebCore {
+namespace blink {
 
 StringSet::StringSet() {
     m_hashes.resize(33);

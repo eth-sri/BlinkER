@@ -40,6 +40,7 @@
 
 namespace blink {
 
+class ExecutionContext;
 class InjectedScriptManager;
 class InspectorFrontend;
 class InspectorOverlay;
@@ -52,12 +53,14 @@ class ScriptProfile;
 typedef String ErrorString;
 
 class InspectorProfilerAgent FINAL : public InspectorBaseAgent<InspectorProfilerAgent>, public InspectorBackendDispatcher::ProfilerCommandHandler {
-    WTF_MAKE_NONCOPYABLE(InspectorProfilerAgent); WTF_MAKE_FAST_ALLOCATED;
+    WTF_MAKE_NONCOPYABLE(InspectorProfilerAgent);
+    WTF_MAKE_FAST_ALLOCATED_WILL_BE_REMOVED;
 public:
-    static PassOwnPtr<InspectorProfilerAgent> create(InjectedScriptManager*, InspectorOverlay*);
+    static PassOwnPtrWillBeRawPtr<InspectorProfilerAgent> create(InjectedScriptManager*, InspectorOverlay*);
     virtual ~InspectorProfilerAgent();
+    virtual void trace(Visitor*) OVERRIDE;
 
-    void consoleProfile(const String& title, ScriptState*);
+    void consoleProfile(ExecutionContext*, const String& title, ScriptState*);
     void consoleProfileEnd(const String& title, ScriptState*);
 
     virtual void enable(ErrorString*) OVERRIDE;
@@ -82,7 +85,7 @@ private:
     void stop(ErrorString*, RefPtr<TypeBuilder::Profiler::CPUProfile>*);
     String nextProfileId();
 
-    InjectedScriptManager* m_injectedScriptManager;
+    RawPtrWillBeMember<InjectedScriptManager> m_injectedScriptManager;
     InspectorFrontend::Profiler* m_frontend;
     bool m_recordingCPUProfile;
     class ProfileDescriptor;

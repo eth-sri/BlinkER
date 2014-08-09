@@ -37,10 +37,6 @@
 
 namespace blink {
 
-ScriptValue::~ScriptValue()
-{
-}
-
 v8::Handle<v8::Value> ScriptValue::v8Value() const
 {
     if (isEmpty())
@@ -55,6 +51,13 @@ v8::Handle<v8::Value> ScriptValue::v8Value() const
     //       return v8::Handle<v8::Value>();
     // instead of triggering RELEASE_ASSERT.
     RELEASE_ASSERT(&m_scriptState->world() == &DOMWrapperWorld::current(isolate()));
+    return m_value->newLocal(isolate());
+}
+
+v8::Handle<v8::Value> ScriptValue::v8ValueUnsafe() const
+{
+    if (isEmpty())
+        return v8::Handle<v8::Value>();
     return m_value->newLocal(isolate());
 }
 

@@ -163,7 +163,7 @@ static inline void appendContextSubtargetsForNode(Node* node, SubtargetGeometryL
         return appendBasicSubtargetsForNode(node, subtargets);
 
     Text* textNode = toText(node);
-    RenderText* textRenderer = toRenderText(textNode->renderer());
+    RenderText* textRenderer = textNode->renderer();
 
     if (textRenderer->frame()->editor().behavior().shouldSelectOnContextualMenuClick()) {
         // Make subtargets out of every word.
@@ -473,6 +473,11 @@ bool findNodeWithLowestDistanceMetric(Node*& targetNode, IntPoint& targetPoint, 
             }
         }
     }
+
+    // As for HitTestResult.innerNode, we skip over pseudo elements.
+    if (targetNode && targetNode->isPseudoElement())
+        targetNode = targetNode->parentOrShadowHostNode();
+
     if (targetNode) {
         targetArea = targetNode->document().view()->contentsToWindow(targetArea);
     }

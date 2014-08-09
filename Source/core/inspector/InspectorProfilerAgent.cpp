@@ -32,6 +32,8 @@
 
 #include "bindings/core/v8/ScriptCallStackFactory.h"
 #include "bindings/core/v8/ScriptProfiler.h"
+#include "core/frame/ConsoleTypes.h"
+#include "core/frame/UseCounter.h"
 #include "core/inspector/InjectedScript.h"
 #include "core/inspector/InjectedScriptHost.h"
 #include "core/inspector/InspectorOverlay.h"
@@ -39,7 +41,6 @@
 #include "core/inspector/InstrumentingAgents.h"
 #include "core/inspector/ScriptCallStack.h"
 #include "core/inspector/ScriptProfile.h"
-#include "core/frame/ConsoleTypes.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/text/StringConcatenate.h"
 
@@ -83,9 +84,9 @@ public:
     String m_title;
 };
 
-PassOwnPtr<InspectorProfilerAgent> InspectorProfilerAgent::create(InjectedScriptManager* injectedScriptManager, InspectorOverlay* overlay)
+PassOwnPtrWillBeRawPtr<InspectorProfilerAgent> InspectorProfilerAgent::create(InjectedScriptManager* injectedScriptManager, InspectorOverlay* overlay)
 {
-    return adoptPtr(new InspectorProfilerAgent(injectedScriptManager, overlay));
+    return adoptPtrWillBeNoop(new InspectorProfilerAgent(injectedScriptManager, overlay));
 }
 
 InspectorProfilerAgent::InspectorProfilerAgent(InjectedScriptManager* injectedScriptManager, InspectorOverlay* overlay)
@@ -103,8 +104,9 @@ InspectorProfilerAgent::~InspectorProfilerAgent()
 {
 }
 
-void InspectorProfilerAgent::consoleProfile(const String& title, ScriptState* scriptState)
+void InspectorProfilerAgent::consoleProfile(ExecutionContext* context, const String& title, ScriptState* scriptState)
 {
+    UseCounter::count(context, UseCounter::DevToolsConsoleProfile);
     ASSERT(m_frontend && enabled());
     String id = nextProfileId();
     m_startedProfiles.append(ProfileDescriptor(id, title));
@@ -293,6 +295,12 @@ void InspectorProfilerAgent::willEnterNestedRunLoop()
 void InspectorProfilerAgent::didLeaveNestedRunLoop()
 {
     idleFinished();
+}
+
+void InspectorProfilerAgent::trace(Visitor* visitor)
+{
+    visitor->trace(m_injectedScriptManager);
+    InspectorBaseAgent::trace(visitor);
 }
 
 } // namespace blink

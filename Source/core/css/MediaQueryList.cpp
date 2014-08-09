@@ -41,6 +41,7 @@ MediaQueryList::MediaQueryList(ExecutionContext* context, PassRefPtrWillBeRawPtr
     , m_matchesDirty(true)
     , m_matches(false)
 {
+    ScriptWrappable::init(this);
     m_matcher->addMediaQueryList(this);
     updateMatches();
 }
@@ -91,6 +92,8 @@ bool MediaQueryList::hasPendingActivity() const
 
 void MediaQueryList::stop()
 {
+    // m_listeners.clear() can drop the last ref to this MediaQueryList.
+    RefPtrWillBeRawPtr<MediaQueryList> protect(this);
     m_listeners.clear();
 }
 

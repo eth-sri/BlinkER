@@ -10,7 +10,7 @@
 
 namespace blink {
 
-PassRefPtrWillBeRawPtr<DOMException> PushError::from(ScriptPromiseResolver*, WebType* webErrorRaw)
+PassRefPtrWillBeRawPtr<DOMException> PushError::take(ScriptPromiseResolver*, WebType* webErrorRaw)
 {
     OwnPtr<WebType> webError = adoptPtr(webErrorRaw);
     switch (webError->errorType) {
@@ -21,6 +21,11 @@ PassRefPtrWillBeRawPtr<DOMException> PushError::from(ScriptPromiseResolver*, Web
     }
     ASSERT_NOT_REACHED();
     return DOMException::create(UnknownError);
+}
+
+void PushError::dispose(WebType* webErrorRaw)
+{
+    delete webErrorRaw;
 }
 
 } // namespace blink

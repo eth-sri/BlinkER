@@ -27,14 +27,10 @@ void CompositingReasonFinder::updateTriggers()
     m_compositingTriggers = 0;
 
     Settings& settings = m_renderView.document().page()->settings();
-    if (settings.acceleratedCompositingForVideoEnabled())
-        m_compositingTriggers |= VideoTrigger;
     if (settings.acceleratedCompositingForCanvasEnabled())
         m_compositingTriggers |= CanvasTrigger;
     if (settings.compositedScrollingForFramesEnabled())
         m_compositingTriggers |= ScrollableInnerFrameTrigger;
-    if (settings.acceleratedCompositingForFiltersEnabled())
-        m_compositingTriggers |= FilterTrigger;
 
     // We map both these settings to universal overlow scrolling.
     // FIXME: Replace these settings with a generic compositing setting for HighDPI.
@@ -85,9 +81,6 @@ CompositingReasons CompositingReasonFinder::potentialCompositingReasonsFromStyle
 
     if (requiresCompositingForTransform(renderer))
         reasons |= CompositingReason3DTransform;
-
-    if (requiresCompositingForFilters(renderer))
-        reasons |= CompositingReasonFilters;
 
     if (style->backfaceVisibility() == BackfaceVisibilityHidden)
         reasons |= CompositingReasonBackfaceVisibilityHidden;
@@ -140,28 +133,18 @@ bool CompositingReasonFinder::requiresCompositingForTransform(RenderObject* rend
     return renderer->hasTransform() && renderer->style()->transform().has3DOperation();
 }
 
-bool CompositingReasonFinder::requiresCompositingForFilters(RenderObject* renderer) const
-{
-    if (!(m_compositingTriggers & FilterTrigger))
-        return false;
-
-    return renderer->hasFilter();
-}
-
 CompositingReasons CompositingReasonFinder::nonStyleDeterminedDirectReasons(const RenderLayer* layer) const
 {
     CompositingReasons directReasons = CompositingReasonNone;
     RenderObject* renderer = layer->renderer();
 
     if (hasOverflowScrollTrigger()) {
-        if (const RenderLayer* scrollingAncestor = layer->ancestorScrollingLayer()) {
-            if (scrollingAncestor->needsCompositedScrolling()) {
-                if (layer->clipParent())
-                    directReasons |= CompositingReasonOutOfFlowClipping;
+        if (layer->clipParent())
+            directReasons |= CompositingReasonOutOfFlowClipping;
 
-                if (layer->scrollParent())
-                    directReasons |= CompositingReasonOverflowScrollingParent;
-            }
+        if (const RenderLayer* scrollingAncestor = layer->ancestorScrollingLayer()) {
+            if (scrollingAncestor->needsCompositedScrolling() && layer->scrollParent())
+                directReasons |= CompositingReasonOverflowScrollingParent;
         }
 
         if (layer->needsCompositedScrolling())

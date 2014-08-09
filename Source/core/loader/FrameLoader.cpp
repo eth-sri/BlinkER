@@ -266,7 +266,7 @@ void FrameLoader::clear()
 
     m_frame->script().enableEval();
 
-    m_frame->navigationScheduler().clear();
+    m_frame->navigationScheduler().cancel();
 
     m_checkTimer.stop();
     m_shouldCallCheckCompleted = false;
@@ -861,7 +861,7 @@ ResourceRequest FrameLoader::requestFromHistoryItem(HistoryItem* item, ResourceR
     return request;
 }
 
-void FrameLoader::reload(ReloadPolicy reloadPolicy, const KURL& overrideURL, const AtomicString& overrideEncoding)
+void FrameLoader::reload(ReloadPolicy reloadPolicy, const KURL& overrideURL, const AtomicString& overrideEncoding, ClientRedirectPolicy clientRedirectPolicy)
 {
     if (!m_currentItem)
         return;
@@ -870,13 +870,23 @@ void FrameLoader::reload(ReloadPolicy reloadPolicy, const KURL& overrideURL, con
     ResourceRequest request = requestFromHistoryItem(m_currentItem.get(), cachePolicy);
     request.setFrameType(m_frame->isMainFrame() ? WebURLRequest::FrameTypeTopLevel : WebURLRequest::FrameTypeNested);
     request.setRequestContext(WebURLRequest::RequestContextInternal);
+
+    // ClientRedirectPolicy is an indication that this load was triggered by
+    // some direct interaction with the page. If this reload is not a client
+    // redirect, we should reuse the referrer from the original load of the
+    // current document. If this reload is a client redirect (e.g., location.reload()),
+    // it was initiated by something in the current document and should
+    // therefore show the current document's url as the referrer.
+    if (clientRedirectPolicy == ClientRedirect)
+        request.setHTTPReferrer(Referrer(m_frame->document()->outgoingReferrer(), m_frame->document()->referrerPolicy()));
+
     if (!overrideURL.isEmpty()) {
         request.setURL(overrideURL);
         request.clearHTTPReferrer();
     }
 
     FrameLoadType type = reloadPolicy == EndToEndReload ? FrameLoadTypeReloadFromOrigin : FrameLoadTypeReload;
-    loadWithNavigationAction(NavigationAction(request, type), type, nullptr, SubstituteData(), CheckContentSecurityPolicy, NotClientRedirect, overrideEncoding);
+    loadWithNavigationAction(NavigationAction(request, type), type, nullptr, SubstituteData(), CheckContentSecurityPolicy, clientRedirectPolicy, overrideEncoding);
 }
 
 void FrameLoader::stopAllLoaders()
@@ -972,7 +982,8 @@ void FrameLoader::commitProvisionalLoad()
             client()->dispatchWillClose();
             closeURL();
         }
-        detachChildren();
+
+        m_frame->detachChildren();
         if (pdl != m_provisionalDocumentLoader)
             return;
         if (m_documentLoader)
@@ -1153,20 +1164,6 @@ void FrameLoader::restoreScrollPositionAndViewState()
     }
 }
 
-void FrameLoader::detachChildren()
-{
-    typedef Vector<RefPtr<LocalFrame> > FrameVector;
-    FrameVector childrenToDetach;
-    childrenToDetach.reserveCapacity(m_frame->tree().childCount());
-    for (Frame* child = m_frame->tree().lastChild(); child; child = child->tree().previousSibling()) {
-        if (child->isLocalFrame())
-            childrenToDetach.append(toLocalFrame(child));
-    }
-    FrameVector::iterator end = childrenToDetach.end();
-    for (FrameVector::iterator it = childrenToDetach.begin(); it != end; ++it)
-        (*it)->loader().detachFromParent();
-}
-
 // Called every time a resource is completely loaded or an error is received.
 void FrameLoader::checkLoadComplete()
 {
@@ -1184,28 +1181,12 @@ String FrameLoader::userAgent(const KURL& url) const
     return userAgent;
 }
 
-void FrameLoader::frameDetached()
-{
-    // stopAllLoaders can detach the LocalFrame, so protect it.
-    RefPtr<LocalFrame> protect(m_frame);
-    stopAllLoaders();
-    detachFromParent();
-}
-
 void FrameLoader::detachFromParent()
 {
     // Temporary explosions. We should never re-enter this code when this condition is true.
     RELEASE_ASSERT(!m_willDetachClient);
-
-    // stopAllLoaders can detach the LocalFrame, so protect it.
-    RefPtr<LocalFrame> protect(m_frame);
-
-    closeURL();
-    detachChildren();
-    // stopAllLoaders() needs to be called after detachChildren(), because detachedChildren()
-    // will trigger the unload event handlers of any child frames, and those event
-    // handlers might start a new subresource load in this frame.
-    stopAllLoaders();
+    // The caller must protect a reference to m_frame.
+    ASSERT(m_frame->refCount() > 1);
 
     InspectorInstrumentation::frameDetachedFromParent(m_frame);
 

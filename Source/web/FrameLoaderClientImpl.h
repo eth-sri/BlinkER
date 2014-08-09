@@ -45,7 +45,7 @@ class WebPluginLoadObserver;
 
 class FrameLoaderClientImpl FINAL : public blink::FrameLoaderClient {
 public:
-    FrameLoaderClientImpl(WebLocalFrameImpl* webFrame);
+    explicit FrameLoaderClientImpl(WebLocalFrameImpl* webFrame);
     virtual ~FrameLoaderClientImpl();
 
     WebLocalFrameImpl* webFrame() const { return m_webFrame; }
@@ -165,7 +165,7 @@ public:
 
     virtual void dispatchDidChangeManifest() OVERRIDE;
 
-    virtual PassOwnPtr<WebCore::EventRacerLogClient> createEventRacerLogClient() OVERRIDE;
+    virtual PassOwnPtr<EventRacerLogClient> createEventRacerLogClient() OVERRIDE;
 
 private:
     virtual bool isFrameLoaderClientImpl() const OVERRIDE { return true; }

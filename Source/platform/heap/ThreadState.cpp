@@ -446,7 +446,7 @@ void ThreadState::detach()
     shutdownHeapIfNecessary();
 }
 
-void ThreadState::visitRoots(Visitor* visitor)
+void ThreadState::visitPersistentRoots(Visitor* visitor)
 {
     {
         // All threads are at safepoints so this is not strictly necessary.
@@ -458,17 +458,14 @@ void ThreadState::visitRoots(Visitor* visitor)
 
     AttachedThreadStateSet& threads = attachedThreads();
     for (AttachedThreadStateSet::iterator it = threads.begin(), end = threads.end(); it != end; ++it)
-        (*it)->trace(visitor);
+        (*it)->visitPersistents(visitor);
 }
 
-void ThreadState::visitLocalRoots(Visitor* visitor)
+void ThreadState::visitStackRoots(Visitor* visitor)
 {
-    // We assume that orphaned pages have no objects reachable from persistent
-    // handles on other threads or CrossThreadPersistents. The only cases where
-    // this could happen is if a global conservative GC finds a "pointer" on
-    // the stack or due to a programming error where an object has a dangling
-    // cross-thread pointer to an object on this heap.
-    m_persistents->trace(visitor);
+    AttachedThreadStateSet& threads = attachedThreads();
+    for (AttachedThreadStateSet::iterator it = threads.begin(), end = threads.end(); it != end; ++it)
+        (*it)->visitStack(visitor);
 }
 
 NO_SANITIZE_ADDRESS
@@ -502,6 +499,9 @@ void ThreadState::visitAsanFakeStackForPointer(Visitor* visitor, Address ptr)
 NO_SANITIZE_ADDRESS
 void ThreadState::visitStack(Visitor* visitor)
 {
+    if (m_stackState == NoHeapPointersOnStack)
+        return;
+
     Address* start = reinterpret_cast<Address*>(m_startOfStack);
     // If there is a safepoint scope marker we should stop the stack
     // scanning there to not touch active parts of the stack. Anything
@@ -544,13 +544,6 @@ void ThreadState::visitStack(Visitor* visitor)
 void ThreadState::visitPersistents(Visitor* visitor)
 {
     m_persistents->trace(visitor);
-}
-
-void ThreadState::trace(Visitor* visitor)
-{
-    if (m_stackState == HeapPointersOnStack)
-        visitStack(visitor);
-    visitPersistents(visitor);
 }
 
 bool ThreadState::checkAndMarkPointer(Visitor* visitor, Address address)
@@ -890,12 +883,13 @@ void ThreadState::performPendingSweep()
         return;
 
     TRACE_EVENT0("blink", "ThreadState::performPendingSweep");
-    ScriptForbiddenScope forbiddenScope;
 
     double timeStamp = WTF::currentTimeMS();
     const char* samplingState = TRACE_EVENT_GET_SAMPLING_STATE();
-    if (isMainThread())
+    if (isMainThread()) {
+        ScriptForbiddenScope::enter();
         TRACE_EVENT_SET_SAMPLING_STATE("blink", "BlinkGCSweeping");
+    }
 
     m_sweepInProgress = true;
     // Disallow allocation during weak processing.
@@ -916,8 +910,10 @@ void ThreadState::performPendingSweep()
         blink::Platform::current()->histogramCustomCounts("BlinkGC.PerformPendingSweep", WTF::currentTimeMS() - timeStamp, 0, 10 * 1000, 50);
     }
 
-    if (isMainThread())
+    if (isMainThread()) {
         TRACE_EVENT_SET_NONCONST_SAMPLING_STATE(samplingState);
+        ScriptForbiddenScope::exit();
+    }
 }
 
 void ThreadState::addInterruptor(Interruptor* interruptor)

@@ -29,9 +29,10 @@
                         ' | '.join(attribute.access_control_list) %}
 {% set property_attribute = 'static_cast<v8::PropertyAttribute>(%s)' %
                             ' | '.join(attribute.property_attributes) %}
-{% set on_prototype = '1 /* on prototype */'
+{% set only_exposed_to_private_script = 'V8DOMConfiguration::OnlyExposedToPrivateScript' if attribute.only_exposed_to_private_script else 'V8DOMConfiguration::ExposedToAllScripts' %}
+{% set on_prototype = 'V8DOMConfiguration::OnPrototype'
        if interface_name == 'Window' and attribute.idl_type == 'EventHandler'
-       else '0 /* on instance */' %}
+       else 'V8DOMConfiguration::OnInstance' %}
 {% set attribute_configuration_list = [
        '"%s"' % attribute.name,
        getter_callback,
@@ -41,6 +42,7 @@
        wrapper_type_info,
        access_control,
        property_attribute,
+       only_exposed_to_private_script,
    ] %}
 {% if not attribute.is_expose_js_accessors %}
 {% set attribute_configuration_list = attribute_configuration_list
@@ -57,7 +59,8 @@
 {% set method_callback_for_main_world =
    '%sV8Internal::%sMethodCallbackForMainWorld' % (cpp_class, method.name)
    if method.is_per_world_bindings else '0' %}
-{"{{method.name}}", {{method_callback}}, {{method_callback_for_main_world}}, {{method.length}}}
+{% set only_exposed_to_private_script = 'V8DOMConfiguration::OnlyExposedToPrivateScript' if method.only_exposed_to_private_script else 'V8DOMConfiguration::ExposedToAllScripts' %}
+{"{{method.name}}", {{method_callback}}, {{method_callback_for_main_world}}, {{method.length}}, {{only_exposed_to_private_script}}}
 {%- endmacro %}
 
 
@@ -727,7 +730,7 @@ void {{v8_class}}::visitDOMWrapper(void* object, const v8::Persistent<v8::Object
 {% block shadow_attributes %}
 {% if interface_name == 'Window' %}
 static const V8DOMConfiguration::AttributeConfiguration shadowAttributes[] = {
-    {% for attribute in attributes if attribute.is_unforgeable %}
+    {% for attribute in attributes if attribute.is_unforgeable and attribute.should_be_exposed_to_script %}
     {{attribute_configuration(attribute)}},
     {% endfor %}
 };
@@ -745,7 +748,8 @@ static const V8DOMConfiguration::AttributeConfiguration {{v8_class}}Attributes[]
                attribute.is_static or
                attribute.runtime_enabled_function or
                attribute.per_context_enabled_function or
-               (interface_name == 'Window' and attribute.is_unforgeable)) %}
+               (interface_name == 'Window' and attribute.is_unforgeable))
+           and attribute.should_be_exposed_to_script %}
     {% filter conditional(attribute.conditional_string) %}
     {{attribute_configuration(attribute)}},
     {% endfilter %}
@@ -760,7 +764,7 @@ static const V8DOMConfiguration::AttributeConfiguration {{v8_class}}Attributes[]
 {% block install_accessors %}
 {% if has_accessors %}
 static const V8DOMConfiguration::AccessorConfiguration {{v8_class}}Accessors[] = {
-    {% for attribute in attributes if attribute.is_expose_js_accessors %}
+    {% for attribute in attributes if attribute.is_expose_js_accessors and attribute.should_be_exposed_to_script %}
     {{attribute_configuration(attribute)}},
     {% endfor %}
 };
@@ -828,7 +832,7 @@ void {{v8_class}}::constructorCallback(const v8::FunctionCallbackInfo<v8::Value>
     UseCounter::count(callingExecutionContext(info.GetIsolate()), UseCounter::{{measure_as}});
     {% endif %}
     if (!info.IsConstructCall()) {
-        throwTypeError(ExceptionMessages::constructorNotCallableAsFunction("{{interface_name}}"), info.GetIsolate());
+        V8ThrowException::throwTypeError(ExceptionMessages::constructorNotCallableAsFunction("{{interface_name}}"), info.GetIsolate());
         return;
     }
 
@@ -1047,8 +1051,9 @@ static void install{{v8_class}}Template(v8::Handle<v8::FunctionTemplate> functio
 {% set property_attribute =
     'static_cast<v8::PropertyAttribute>(%s)' %
     ' | '.join(method.property_attributes or ['v8::DontDelete']) %}
+{% set only_exposed_to_private_script = 'V8DOMConfiguration::OnlyExposedToPrivateScript' if method.only_exposed_to_private_script else 'V8DOMConfiguration::ExposedToAllScripts' %}
 static const V8DOMConfiguration::AttributeConfiguration {{method.name}}OriginSafeAttributeConfiguration = {
-    "{{method.name}}", {{getter_callback}}, {{setter_callback}}, {{getter_callback_for_main_world}}, {{setter_callback_for_main_world}}, &{{v8_class}}::wrapperTypeInfo, v8::ALL_CAN_READ, {{property_attribute}}, false
+    "{{method.name}}", {{getter_callback}}, {{setter_callback}}, {{getter_callback_for_main_world}}, {{setter_callback_for_main_world}}, &{{v8_class}}::wrapperTypeInfo, v8::ALL_CAN_READ, {{property_attribute}}, {{only_exposed_to_private_script}}, V8DOMConfiguration::OnInstance,
 };
 V8DOMConfiguration::installAttribute({{method.function_template}}, v8::Handle<v8::ObjectTemplate>(), {{method.name}}OriginSafeAttributeConfiguration, isolate);
 {%- endmacro %}
@@ -1062,10 +1067,11 @@ V8DOMConfiguration::installAttribute({{method.function_template}}, v8::Handle<v8
 {% set property_attribute =
   'static_cast<v8::PropertyAttribute>(%s)' % ' | '.join(method.property_attributes)
   if method.property_attributes else 'v8::None' %}
+{% set only_exposed_to_private_script = 'V8DOMConfiguration::OnlyExposedToPrivateScript' if method.only_exposed_to_private_script else 'V8DOMConfiguration::ExposedToAllScripts' %}
 static const V8DOMConfiguration::MethodConfiguration {{method.name}}MethodConfiguration = {
-    "{{method.name}}", {{method_callback}}, {{method_callback_for_main_world}}, {{method.length}}
+    "{{method.name}}", {{method_callback}}, {{method_callback_for_main_world}}, {{method.length}}, {{only_exposed_to_private_script}},
 };
-V8DOMConfiguration::installMethodCustomSignature({{method.function_template}}, {{method.signature}}, {{property_attribute}}, {{method.name}}MethodConfiguration, isolate);
+V8DOMConfiguration::installMethod({{method.function_template}}, {{method.signature}}, {{property_attribute}}, {{method.name}}MethodConfiguration, isolate);
 {%- endmacro %}
 
 
@@ -1151,14 +1157,14 @@ v8::Handle<v8::Object> {{v8_class}}::findInstanceInPrototypeChain(v8::Handle<v8:
 {##############################################################################}
 {% block install_per_context_attributes %}
 {% if has_per_context_enabled_attributes %}
-void {{v8_class}}::installPerContextEnabledProperties(v8::Handle<v8::Object> instanceTemplate, {{cpp_class}}* impl, v8::Isolate* isolate)
+void {{v8_class}}::installPerContextEnabledProperties(v8::Handle<v8::Object> instanceObject, {{cpp_class}}* impl, v8::Isolate* isolate)
 {
-    v8::Local<v8::Object> prototypeTemplate = v8::Local<v8::Object>::Cast(instanceTemplate->GetPrototype());
+    v8::Local<v8::Object> prototypeObject = v8::Local<v8::Object>::Cast(instanceObject->GetPrototype());
     {% for attribute in attributes if attribute.per_context_enabled_function %}
     if ({{attribute.per_context_enabled_function}}(impl->document())) {
         static const V8DOMConfiguration::AttributeConfiguration attributeConfiguration =\
         {{attribute_configuration(attribute)}};
-        V8DOMConfiguration::installAttribute(instanceTemplate, prototypeTemplate, attributeConfiguration, isolate);
+        V8DOMConfiguration::installAttribute(instanceObject, prototypeObject, attributeConfiguration, isolate);
     }
     {% endfor %}
 }
@@ -1170,15 +1176,18 @@ void {{v8_class}}::installPerContextEnabledProperties(v8::Handle<v8::Object> ins
 {##############################################################################}
 {% block install_per_context_methods %}
 {% if per_context_enabled_methods %}
-void {{v8_class}}::installPerContextEnabledMethods(v8::Handle<v8::Object> prototypeTemplate, v8::Isolate* isolate)
+void {{v8_class}}::installPerContextEnabledMethods(v8::Handle<v8::Object> prototypeObject, v8::Isolate* isolate)
 {
     {# Define per-context enabled operations #}
     v8::Local<v8::Signature> defaultSignature = v8::Signature::New(isolate, domTemplate(isolate));
 
-    ExecutionContext* context = toExecutionContext(prototypeTemplate->CreationContext());
+    ExecutionContext* context = toExecutionContext(prototypeObject->CreationContext());
+    ASSERT(context);
     {% for method in per_context_enabled_methods %}
-    if (context && context->isDocument() && {{method.per_context_enabled_function}}(toDocument(context)))
-        prototypeTemplate->Set(v8AtomicString(isolate, "{{method.name}}"), v8::FunctionTemplate::New(isolate, {{cpp_class}}V8Internal::{{method.name}}MethodCallback, v8Undefined(), defaultSignature, {{method.number_of_required_arguments}})->GetFunction());
+    if (context->isDocument() && {{method.per_context_enabled_function}}(toDocument(context))) {
+        static const V8DOMConfiguration::MethodConfiguration methodConfiguration = {{method_configuration(method)}};
+        V8DOMConfiguration::installMethod(prototypeObject, defaultSignature, v8::None, methodConfiguration, isolate);
+    }
     {% endfor %}
 }
 

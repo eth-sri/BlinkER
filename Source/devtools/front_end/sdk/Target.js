@@ -26,11 +26,10 @@ WebInspector.Target = function(name, connection, callback)
 
     /** @type {!Object.<string, boolean>} */
     this._capabilities = {};
-    this.pageAgent().canScreencast(this._initializeCapability.bind(this, WebInspector.Target.Capabilities.canScreencast, null));
-    this.pageAgent().hasTouchInputs(this._initializeCapability.bind(this, WebInspector.Target.Capabilities.hasTouchInputs, null));
+    this.pageAgent().canScreencast(this._initializeCapability.bind(this, WebInspector.Target.Capabilities.CanScreencast, null));
     if (WebInspector.experimentsSettings.timelinePowerProfiler.isEnabled())
-        this.powerAgent().canProfilePower(this._initializeCapability.bind(this, WebInspector.Target.Capabilities.canProfilePower, null));
-    this.workerAgent().canInspectWorkers(this._initializeCapability.bind(this, WebInspector.Target.Capabilities.canInspectWorkers, this._loadedWithCapabilities.bind(this, callback)));
+        this.powerAgent().canProfilePower(this._initializeCapability.bind(this, WebInspector.Target.Capabilities.CanProfilePower, null));
+    this.workerAgent().canInspectWorkers(this._initializeCapability.bind(this, WebInspector.Target.Capabilities.CanInspectWorkers, this._loadedWithCapabilities.bind(this, callback)));
 
     /** @type {!WebInspector.Lock} */
     this.profilingLock = new WebInspector.Lock();
@@ -40,10 +39,10 @@ WebInspector.Target = function(name, connection, callback)
  * @enum {string}
  */
 WebInspector.Target.Capabilities = {
-    canScreencast: "canScreencast",
-    hasTouchInputs: "hasTouchInputs",
-    canProfilePower: "canProfilePower",
-    canInspectWorkers: "canInspectWorkers"
+    CanScreencast: "CanScreencast",
+    HasTouchInputs: "HasTouchInputs",
+    CanProfilePower: "CanProfilePower",
+    CanInspectWorkers: "CanInspectWorkers"
 }
 
 WebInspector.Target._nextId = 1;
@@ -137,11 +136,11 @@ WebInspector.Target.prototype = {
             WebInspector.cssModel = this.cssModel;
 
         /** @type {!WebInspector.WorkerManager} */
-        this.workerManager = new WebInspector.WorkerManager(this, this.hasCapability(WebInspector.Target.Capabilities.canInspectWorkers));
+        this.workerManager = new WebInspector.WorkerManager(this, this.hasCapability(WebInspector.Target.Capabilities.CanInspectWorkers));
         if (!WebInspector.workerManager)
             WebInspector.workerManager = this.workerManager;
 
-        if (this.hasCapability(WebInspector.Target.Capabilities.canProfilePower))
+        if (this.hasCapability(WebInspector.Target.Capabilities.CanProfilePower))
             WebInspector.powerProfiler = new WebInspector.PowerProfiler();
 
         /** @type {!WebInspector.TimelineManager} */
@@ -184,7 +183,7 @@ WebInspector.Target.prototype = {
      */
     isWorkerTarget: function()
     {
-        return !this.hasCapability(WebInspector.Target.Capabilities.canInspectWorkers);
+        return !this.hasCapability(WebInspector.Target.Capabilities.CanInspectWorkers);
     },
 
     /**
@@ -192,8 +191,8 @@ WebInspector.Target.prototype = {
      */
     isMobile: function()
     {
-        // FIXME: either add a separate capability or rename canScreencast to isMobile.
-        return this.hasCapability(WebInspector.Target.Capabilities.canScreencast);
+        // FIXME: either add a separate capability or rename CanScreencast to IsMobile.
+        return this.hasCapability(WebInspector.Target.Capabilities.CanScreencast);
     },
 
     _onDisconnect: function()
@@ -208,6 +207,14 @@ WebInspector.Target.prototype = {
         this.debuggerModel.dispose();
         this.networkManager.dispose();
         this.cpuProfilerModel.dispose();
+    },
+
+    /**
+     * @return {boolean}
+     */
+    isDetached: function()
+    {
+        return this._connection.isClosed();
     },
 
     __proto__: Protocol.Agents.prototype

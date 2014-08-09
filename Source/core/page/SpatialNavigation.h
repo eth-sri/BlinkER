@@ -98,10 +98,12 @@ enum RectsAlignment {
 };
 
 struct FocusCandidate {
+    STACK_ALLOCATED();
+public:
     FocusCandidate()
-        : visibleNode(0)
-        , focusableNode(0)
-        , enclosingScrollableBox(0)
+        : visibleNode(nullptr)
+        , focusableNode(nullptr)
+        , enclosingScrollableBox(nullptr)
         , distance(maxDistance())
         , alignment(None)
         , isOffscreen(true)
@@ -119,9 +121,9 @@ struct FocusCandidate {
     // We handle differently visibleNode and FocusableNode to properly handle the areas of imagemaps,
     // where visibleNode would represent the image element and focusableNode would represent the area element.
     // In all other cases, visibleNode and focusableNode are one and the same.
-    Node* visibleNode;
-    Node* focusableNode;
-    Node* enclosingScrollableBox;
+    RawPtrWillBeMember<Node> visibleNode;
+    RawPtrWillBeMember<Node> focusableNode;
+    RawPtrWillBeMember<Node> enclosingScrollableBox;
     long long distance;
     RectsAlignment alignment;
     LayoutRect rect;
@@ -144,6 +146,6 @@ LayoutRect virtualRectForDirection(FocusType, const LayoutRect& startingRect, La
 LayoutRect virtualRectForAreaElementAndDirection(HTMLAreaElement&, FocusType);
 HTMLFrameOwnerElement* frameOwnerElement(FocusCandidate&);
 
-} // namspace WebCore
+} // namespace blink
 
 #endif // SpatialNavigation_h

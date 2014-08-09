@@ -209,7 +209,6 @@
     void registerURLSchemeAsBypassingContentSecurityPolicy(DOMString scheme);
     void removeURLSchemeRegisteredAsBypassingContentSecurityPolicy(DOMString scheme);
 
-    MallocStatistics mallocStatistics();
     TypeConversions typeConversions();
 
     // This is enabled only in Debug builds.
@@ -250,6 +249,8 @@
     [RaisesException] DOMString getImageSourceURL(Element element);
 
     boolean isSelectPopupVisible(Node node);
+    boolean selectPopupItemStyleIsRtl(Node select, long itemIndex);
+    long selectPopupItemStyleFontHeight(Node select, long itemIndex);
 
     [RaisesException] ClientRect selectionBounds();
 

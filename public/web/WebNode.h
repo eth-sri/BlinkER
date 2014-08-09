@@ -40,8 +40,6 @@ namespace blink { class Node; }
 
 namespace blink {
 class WebDOMEvent;
-class WebDOMEventListener;
-class WebDOMEventListenerPrivate;
 class WebDocument;
 class WebElement;
 class WebElementCollection;
@@ -109,8 +107,6 @@ public:
     BLINK_EXPORT bool isFocusable() const;
     BLINK_EXPORT bool isContentEditable() const;
     BLINK_EXPORT bool isElementNode() const;
-    // addEventListener only works with a small set of eventTypes.
-    BLINK_EXPORT void addEventListener(const WebString& eventType, WebDOMEventListener* listener, bool useCapture);
     BLINK_EXPORT bool dispatchEvent(const WebDOMEvent&);
     BLINK_EXPORT void simulateClick();
     // The argument should be lower-cased.
@@ -124,6 +120,8 @@ public:
     // This does not 100% guarantee the user can see it, but is pretty close.
     // Note: This method only works properly after layout has occurred.
     BLINK_EXPORT bool hasNonEmptyBoundingBox() const;
+
+    BLINK_EXPORT bool containsIncludingShadowDOM(const WebNode&) const;
     BLINK_EXPORT WebPluginContainer* pluginContainer() const;
     BLINK_EXPORT WebElement shadowHost() const;
 

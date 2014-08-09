@@ -182,13 +182,14 @@ private:
 
     bool parseColorParameters(CSSParserValue*, int* colorValues, bool parseAlpha);
     bool parseHSLParameters(CSSParserValue*, double* colorValues, bool parseAlpha);
-    PassRefPtrWillBeRawPtr<CSSPrimitiveValue> parseColor(CSSParserValue* = 0);
-    bool parseColorFromValue(CSSParserValue*, RGBA32&);
+    PassRefPtrWillBeRawPtr<CSSPrimitiveValue> parseColor(CSSParserValue* = 0, bool acceptQuirkyColors = false);
+    bool parseColorFromValue(CSSParserValue*, RGBA32&, bool acceptQuirkyColors = false);
 
     bool parseLineHeight(bool important);
     bool parseFontSize(bool important);
     bool parseFontVariant(bool important);
     bool parseFontWeight(bool important);
+    bool parseFontStretch(bool important);
     bool parseFontFaceSrc();
     bool parseFontFaceUnicodeRange();
 
@@ -360,7 +361,6 @@ private:
 
     bool parseBorderImageQuad(Units, RefPtrWillBeRawPtr<CSSPrimitiveValue>&);
     int colorIntFromValue(CSSParserValue*);
-    double parsedDouble(CSSParserValue*, ReleaseParsedCalcValueCondition releaseCalc = DoNotReleaseParsedCalcValue);
     bool isCalculation(CSSParserValue*);
 
 private:

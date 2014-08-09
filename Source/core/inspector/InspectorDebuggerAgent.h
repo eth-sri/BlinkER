@@ -74,7 +74,8 @@ class XMLHttpRequest;
 typedef String ErrorString;
 
 class InspectorDebuggerAgent : public InspectorBaseAgent<InspectorDebuggerAgent>, public ScriptDebugListener, public InspectorBackendDispatcher::DebuggerCommandHandler {
-    WTF_MAKE_NONCOPYABLE(InspectorDebuggerAgent); WTF_MAKE_FAST_ALLOCATED;
+    WTF_MAKE_NONCOPYABLE(InspectorDebuggerAgent);
+    WTF_MAKE_FAST_ALLOCATED_WILL_BE_REMOVED;
 public:
     enum BreakpointSource {
         UserBreakpointSource,
@@ -85,6 +86,7 @@ public:
     static const char backtraceObjectGroup[];
 
     virtual ~InspectorDebuggerAgent();
+    virtual void trace(Visitor*);
 
     virtual void canSetScriptSource(ErrorString*, bool* result) OVERRIDE FINAL { *result = true; }
 
@@ -165,7 +167,7 @@ public:
     void didKillAllExecutionContextTasks(ExecutionContext*);
     void willPerformExecutionContextTask(ExecutionContext*, ExecutionContextTask*);
     void didPerformExecutionContextTask();
-    int traceAsyncOperationStarting(ExecutionContext*, const String& operationName);
+    int traceAsyncOperationStarting(ExecutionContext*, const String& operationName, int prevOperationId = 0);
     void traceAsyncOperationCompleted(ExecutionContext*, int operationId);
     void traceAsyncOperationCompletedCallbackStarting(ExecutionContext*, int operationId);
     void traceAsyncCallbackStarting(ExecutionContext*, int operationId);
@@ -174,7 +176,7 @@ public:
     void breakProgram(InspectorFrontend::Debugger::Reason::Enum breakReason, PassRefPtr<JSONObject> data);
     void scriptExecutionBlockedByCSP(const String& directiveText);
 
-    class Listener {
+    class Listener : public WillBeGarbageCollectedMixin {
     public:
         virtual ~Listener() { }
         virtual void debuggerWasEnabled() = 0;
@@ -234,13 +236,14 @@ private:
 
     String sourceMapURLForScript(const Script&, CompileResult);
 
+    PassRefPtrWillBeRawPtr<JavaScriptCallFrame> topCallFrameSkipUnknownSources();
     String scriptURL(JavaScriptCallFrame*);
 
     typedef HashMap<String, Script> ScriptsMap;
     typedef HashMap<String, Vector<String> > BreakpointIdToDebugServerBreakpointIdsMap;
     typedef HashMap<String, std::pair<String, BreakpointSource> > DebugServerBreakpointToBreakpointIdAndSourceMap;
 
-    InjectedScriptManager* m_injectedScriptManager;
+    RawPtrWillBeMember<InjectedScriptManager> m_injectedScriptManager;
     InspectorFrontend::Debugger* m_frontend;
     RefPtr<ScriptState> m_pausedScriptState;
     ScriptValue m_currentCallStack;
@@ -254,7 +257,7 @@ private:
     bool m_debuggerStepScheduled;
     bool m_steppingFromFramework;
     bool m_pausingOnNativeEvent;
-    Listener* m_listener;
+    RawPtrWillBeMember<Listener> m_listener;
 
     int m_skippedStepInCount;
     int m_minFrameCountForSkip;

@@ -38,7 +38,8 @@ class RenderStyle;
 class FontDescriptionChangeScope;
 
 class FontBuilder {
-    WTF_MAKE_NONCOPYABLE(FontBuilder); WTF_MAKE_FAST_ALLOCATED;
+    STACK_ALLOCATED();
+    WTF_MAKE_NONCOPYABLE(FontBuilder);
 public:
     FontBuilder();
 
@@ -63,10 +64,7 @@ public:
     void setWeight(FontWeight);
     void setWeightBolder();
     void setWeightLighter();
-
-    void setFontVariantLigaturesInitial();
-    void setFontVariantLigaturesInherit(const FontDescription&);
-    void setFontVariantLigaturesValue(CSSValue*);
+    void setStretch(FontStretch);
 
     void setFeatureSettingsNormal();
     void setFeatureSettingsValue(CSSValue*);
@@ -74,6 +72,7 @@ public:
     void setScript(const String& locale);
     void setStyle(FontStyle);
     void setVariant(FontVariant);
+    void setVariantLigatures(const FontDescription::VariantLigatures&);
     void setTextRendering(TextRenderingMode);
     void setKerning(FontDescription::Kerning);
     void setFontSmoothing(FontSmoothingMode);
@@ -94,9 +93,11 @@ public:
     static FontDescription::GenericFamilyType initialGenericFamily() { return FontDescription::NoFamily; }
     static TextRenderingMode initialTextRendering() { return AutoTextRendering; }
     static FontVariant initialVariant() { return FontVariantNormal; }
+    static FontDescription::VariantLigatures initialVariantLigatures() { return FontDescription::VariantLigatures(); }
     static FontStyle initialStyle() { return FontStyleNormal; }
     static FontDescription::Kerning initialKerning() { return FontDescription::AutoKerning; }
     static FontSmoothingMode initialFontSmoothing() { return AutoSmoothing; }
+    static FontStretch initialStretch() { return FontStretchNormal; }
 
     friend class FontDescriptionChangeScope;
 
@@ -111,7 +112,7 @@ private:
 
     float getComputedSizeFromSpecifiedSize(FontDescription&, float effectiveZoom, float specifiedSize);
 
-    const Document* m_document;
+    RawPtrWillBeMember<const Document> m_document;
     bool m_fontSizehasViewportUnits;
     // FIXME: This member is here on a short-term lease. The plan is to remove
     // any notion of RenderStyle from here, allowing FontBuilder to build Font objects

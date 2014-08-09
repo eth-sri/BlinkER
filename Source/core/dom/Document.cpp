@@ -112,6 +112,7 @@
 #include "core/events/PageTransitionEvent.h"
 #include "core/events/ScopedEventQueue.h"
 #include "core/fetch/ResourceFetcher.h"
+#include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/FrameConsole.h"
 #include "core/frame/FrameHost.h"
@@ -170,7 +171,6 @@
 #include "core/page/Page.h"
 #include "core/page/PointerLockController.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
-#include "core/rendering/FastTextAutosizer.h"
 #include "core/rendering/HitTestResult.h"
 #include "core/rendering/RenderView.h"
 #include "core/rendering/RenderWidget.h"
@@ -178,6 +178,7 @@
 #include "core/rendering/compositing/RenderLayerCompositor.h"
 #include "core/svg/SVGDocumentExtensions.h"
 #include "core/svg/SVGFontFaceElement.h"
+#include "core/svg/SVGTitleElement.h"
 #include "core/svg/SVGUseElement.h"
 #include "core/workers/SharedWorkerRepositoryClient.h"
 #include "core/xml/XSLTProcessor.h"
@@ -197,6 +198,7 @@
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/Platform.h"
 #include "wtf/CurrentTime.h"
+#include "wtf/DateMath.h"
 #include "wtf/HashFunctions.h"
 #include "wtf/MainThread.h"
 #include "wtf/StdLibExtras.h"
@@ -463,7 +465,6 @@ Document::Document(const DocumentInit& initializer, DocumentClassFlags documentC
     , m_updateFocusAppearanceRestoresSelection(false)
     , m_containsPlugins(false)
     , m_ignoreDestructiveWriteCount(0)
-    , m_titleSetExplicitly(false)
     , m_markers(adoptPtrWillBeNoop(new DocumentMarkerController))
     , m_updateFocusAppearanceTimer(this, &Document::updateFocusAppearanceTimerFired)
     , m_cssTarget(nullptr)
@@ -957,12 +958,6 @@ bool Document::importContainerNodeChildren(ContainerNode* oldContainerNode, Pass
     return true;
 }
 
-PassRefPtrWillBeRawPtr<Node> Document::importNode(Node* importedNode, ExceptionState& ec)
-{
-    UseCounter::countDeprecation(this, UseCounter::DocumentImportNodeOptionalArgument);
-    return importNode(importedNode, true, ec);
-}
-
 PassRefPtrWillBeRawPtr<Node> Document::importNode(Node* importedNode, bool deep, ExceptionState& exceptionState)
 {
     switch (importedNode->nodeType()) {
@@ -1395,14 +1390,14 @@ void Document::updateTitle(const String& title)
 void Document::setTitle(const String& title)
 {
     // Title set by JavaScript -- overrides any title elements.
-    m_titleSetExplicitly = true;
     if (!isHTMLDocument() && !isXHTMLDocument())
         m_titleElement = nullptr;
     else if (!m_titleElement) {
-        if (HTMLElement* headElement = head()) {
-            m_titleElement = HTMLTitleElement::create(*this);
-            headElement->appendChild(m_titleElement.get());
-        }
+        HTMLElement* headElement = head();
+        if (!headElement)
+            return;
+        m_titleElement = HTMLTitleElement::create(*this);
+        headElement->appendChild(m_titleElement.get());
     }
 
     if (isHTMLTitleElement(m_titleElement))
@@ -1411,16 +1406,23 @@ void Document::setTitle(const String& title)
         updateTitle(title);
 }
 
-void Document::setTitleElement(const String& title, Element* titleElement)
+void Document::setTitleElement(Element* titleElement)
 {
-    if (titleElement != m_titleElement) {
-        if (m_titleElement || m_titleSetExplicitly)
-            // Only allow the first title element to change the title -- others have no effect.
-            return;
+    // Only allow the first title element to change the title -- others have no effect.
+    if (m_titleElement && m_titleElement != titleElement) {
+        if (isHTMLDocument() || isXHTMLDocument()) {
+            m_titleElement = Traversal<HTMLTitleElement>::firstWithin(*this);
+        } else if (isSVGDocument()) {
+            m_titleElement = Traversal<SVGTitleElement>::firstWithin(*this);
+        }
+    } else {
         m_titleElement = titleElement;
     }
 
-    updateTitle(title);
+    if (isHTMLTitleElement(m_titleElement))
+        updateTitle(toHTMLTitleElement(m_titleElement)->text());
+    else if (isSVGTitleElement(m_titleElement))
+        updateTitle(toSVGTitleElement(m_titleElement)->textContent());
 }
 
 void Document::removeTitle(Element* titleElement)
@@ -1429,13 +1431,14 @@ void Document::removeTitle(Element* titleElement)
         return;
 
     m_titleElement = nullptr;
-    m_titleSetExplicitly = false;
 
-    // FIXME: This is broken for SVG.
-    // Update title based on first title element in the head, if one exists.
-    if (HTMLElement* headElement = head()) {
-        if (HTMLTitleElement* title = Traversal<HTMLTitleElement>::firstChild(*headElement))
-            setTitleElement(title->text(), title);
+    // Update title based on first title element in the document, if one exists.
+    if (isHTMLDocument() || isXHTMLDocument()) {
+        if (HTMLTitleElement* title = Traversal<HTMLTitleElement>::firstWithin(*this))
+            setTitleElement(title);
+    } else if (isSVGDocument()) {
+        if (SVGTitleElement* title = Traversal<SVGTitleElement>::firstWithin(*this))
+            setTitleElement(title);
     }
 
     if (!m_titleElement)
@@ -1785,6 +1788,9 @@ void Document::updateRenderTree(StyleRecalcChange change)
     ASSERT(isMainThread());
 
     ScriptForbiddenScope forbidScript;
+
+    if (!view() || !isActive())
+        return;
 
     if (change != Force && !needsRenderTreeUpdate())
         return;
@@ -2156,9 +2162,9 @@ void Document::attach(const AttachContext& context)
 
     ContainerNode::attach(context);
 
-    // FastTextAutosizer can't update render view info while the Document is detached, so update now in case anything changed.
-    if (FastTextAutosizer* textAutosizer = fastTextAutosizer())
-        textAutosizer->updatePageInfo();
+    // The TextAutosizer can't update render view info while the Document is detached, so update now in case anything changed.
+    if (TextAutosizer* autosizer = textAutosizer())
+        autosizer->updatePageInfo();
 
     m_lifecycle.advanceTo(DocumentLifecycle::StyleClean);
 }
@@ -2213,6 +2219,7 @@ void Document::detach(const AttachContext& context)
 
     if (Document* parentDoc = parentDocument())
         parentDoc->didClearTouchEventHandlers(this);
+    frameHost()->eventHandlerRegistry().documentDetached(*this);
 
     // This is required, as our LocalFrame might delete itself as soon as it detaches
     // us. However, this violates Node::detach() semantics, as it's never
@@ -2407,7 +2414,7 @@ HTMLElement* Document::body() const
     if (!documentElement())
         return 0;
 
-    for (HTMLElement* child = Traversal<HTMLElement>::firstWithin(*documentElement()); child; child = Traversal<HTMLElement>::nextSibling(*child)) {
+    for (HTMLElement* child = Traversal<HTMLElement>::firstChild(*documentElement()); child; child = Traversal<HTMLElement>::nextSibling(*child)) {
         if (isHTMLFrameSetElement(*child) || isHTMLBodyElement(*child))
             return child;
     }
@@ -3414,6 +3421,8 @@ void Document::evaluateMediaQueryList()
 
 void Document::notifyResizeForViewportUnits()
 {
+    if (m_mediaQueryMatcher)
+        m_mediaQueryMatcher->viewportChanged();
     if (!hasViewportUnits())
         return;
     ensureStyleResolver().notifyResizeForViewportUnits();
@@ -3436,7 +3445,7 @@ void Document::styleResolverChanged(StyleResolverUpdateMode updateMode)
 
         ASSERT(renderView() || importsController());
         if (renderView())
-            renderView()->repaintViewAndCompositedLayers();
+            renderView()->invalidatePaintForViewAndCompositedLayers();
     }
 }
 
@@ -3500,7 +3509,7 @@ void Document::activeChainNodeDetached(Node* node)
     if (!m_activeHoverElement)
         return;
 
-    if (node != m_activeHoverElement && (!m_activeHoverElement->isTextNode() || node != NodeRenderingTraversal::parent(m_activeHoverElement.get())))
+    if (node != m_activeHoverElement)
         return;
 
     Node* activeNode = NodeRenderingTraversal::parent(node);
@@ -4093,7 +4102,7 @@ String Document::lastModified() const
         if (DocumentLoader* documentLoader = loader()) {
             const AtomicString& httpLastModified = documentLoader->response().httpHeaderField("Last-Modified");
             if (!httpLastModified.isEmpty()) {
-                date.setMillisecondsSinceEpochForDateTime(parseDate(httpLastModified));
+                date.setMillisecondsSinceEpochForDateTime(convertToLocalTime(parseDate(httpLastModified)));
                 foundDate = true;
             }
         }
@@ -4102,7 +4111,7 @@ String Document::lastModified() const
     // specificiation tells us to read the last modification date from the file
     // system.
     if (!foundDate)
-        date.setMillisecondsSinceEpochForDateTime(currentTimeMS());
+        date.setMillisecondsSinceEpochForDateTime(convertToLocalTime(currentTimeMS()));
     return String::format("%02d/%02d/%04d %02d:%02d:%02d", date.month() + 1, date.monthDay(), date.fullYear(), date.hour(), date.minute(), date.second());
 }
 
@@ -4560,44 +4569,39 @@ bool Document::hasSVGRootNode() const
     return isSVGSVGElement(documentElement());
 }
 
-PassRefPtrWillBeRawPtr<HTMLCollection> Document::ensureCachedCollection(CollectionType type)
-{
-    return ensureRareData().ensureNodeLists().addCache<HTMLCollection>(*this, type);
-}
-
 PassRefPtrWillBeRawPtr<HTMLCollection> Document::images()
 {
-    return ensureCachedCollection(DocImages);
+    return ensureCachedCollection<HTMLCollection>(DocImages);
 }
 
 PassRefPtrWillBeRawPtr<HTMLCollection> Document::applets()
 {
-    return ensureCachedCollection(DocApplets);
+    return ensureCachedCollection<HTMLCollection>(DocApplets);
 }
 
 PassRefPtrWillBeRawPtr<HTMLCollection> Document::embeds()
 {
-    return ensureCachedCollection(DocEmbeds);
+    return ensureCachedCollection<HTMLCollection>(DocEmbeds);
 }
 
 PassRefPtrWillBeRawPtr<HTMLCollection> Document::scripts()
 {
-    return ensureCachedCollection(DocScripts);
+    return ensureCachedCollection<HTMLCollection>(DocScripts);
 }
 
 PassRefPtrWillBeRawPtr<HTMLCollection> Document::links()
 {
-    return ensureCachedCollection(DocLinks);
+    return ensureCachedCollection<HTMLCollection>(DocLinks);
 }
 
 PassRefPtrWillBeRawPtr<HTMLCollection> Document::forms()
 {
-    return ensureCachedCollection(DocForms);
+    return ensureCachedCollection<HTMLCollection>(DocForms);
 }
 
 PassRefPtrWillBeRawPtr<HTMLCollection> Document::anchors()
 {
-    return ensureCachedCollection(DocAnchors);
+    return ensureCachedCollection<HTMLCollection>(DocAnchors);
 }
 
 PassRefPtrWillBeRawPtr<HTMLAllCollection> Document::allForBinding()
@@ -4608,17 +4612,17 @@ PassRefPtrWillBeRawPtr<HTMLAllCollection> Document::allForBinding()
 
 PassRefPtrWillBeRawPtr<HTMLAllCollection> Document::all()
 {
-    return ensureRareData().ensureNodeLists().addCache<HTMLAllCollection>(*this, DocAll);
+    return ensureCachedCollection<HTMLAllCollection>(DocAll);
 }
 
 PassRefPtrWillBeRawPtr<HTMLCollection> Document::windowNamedItems(const AtomicString& name)
 {
-    return ensureRareData().ensureNodeLists().addCache<WindowNameCollection>(*this, WindowNamedItems, name);
+    return ensureCachedCollection<WindowNameCollection>(WindowNamedItems, name);
 }
 
 PassRefPtrWillBeRawPtr<HTMLCollection> Document::documentNamedItems(const AtomicString& name)
 {
-    return ensureRareData().ensureNodeLists().addCache<DocumentNameCollection>(*this, DocumentNamedItems, name);
+    return ensureCachedCollection<DocumentNameCollection>(DocumentNamedItems, name);
 }
 
 void Document::finishedParsing()
@@ -4639,14 +4643,6 @@ void Document::finishedParsing()
 
     if (!m_documentTiming.domContentLoadedEventEnd)
         m_documentTiming.domContentLoadedEventEnd = monotonicallyIncreasingTime();
-
-    if (frame() && frame()->isMainFrame()) {
-        // Reset the text autosizing multipliers on main frame when DOM is loaded.
-        // This is to allow for a fresh text autosizing pass when the page layout
-        // changes significantly in the end.
-        if (TextAutosizer* textAutosizer = this->textAutosizer())
-            textAutosizer->recalculateMultipliers();
-    }
 
     // The loader's finishedParsing() method may invoke script that causes this object to
     // be dereferenced (when this document is in an iframe and the onload causes the iframe's src to change).
@@ -5697,16 +5693,9 @@ void Document::modifiedStyleSheet(StyleSheet* sheet, StyleResolverUpdateMode upd
 
 TextAutosizer* Document::textAutosizer()
 {
-    if (!m_textAutosizer && !RuntimeEnabledFeatures::fastTextAutosizingEnabled())
+    if (!m_textAutosizer)
         m_textAutosizer = TextAutosizer::create(this);
     return m_textAutosizer.get();
-}
-
-FastTextAutosizer* Document::fastTextAutosizer()
-{
-    if (!m_fastTextAutosizer && RuntimeEnabledFeatures::fastTextAutosizingEnabled())
-        m_fastTextAutosizer = FastTextAutosizer::create(this);
-    return m_fastTextAutosizer.get();
 }
 
 void Document::setAutofocusElement(Element* element)
@@ -5765,6 +5754,20 @@ void Document::getTransitionElementData(Vector<TransitionElementData>& elementDa
         newElements.selector = selector;
         newElements.markup = markup.toString();
         elementData.append(newElements);
+    }
+}
+
+void Document::hideTransitionElements(const AtomicString& cssSelector)
+{
+    TrackExceptionState exceptionState;
+    RefPtrWillBeRawPtr<StaticNodeList> nodeList = querySelectorAll(cssSelector, exceptionState);
+    if (nodeList && !exceptionState.hadException()) {
+        unsigned nodeListLength = nodeList->length();
+
+        for (unsigned nodeIndex = 0; nodeIndex < nodeListLength; ++nodeIndex) {
+            Node* node = nodeList->item(nodeIndex);
+            toElement(node)->setInlineStyleProperty(CSSPropertyDisplay, CSSValueNone);
+        }
     }
 }
 
@@ -5886,6 +5889,7 @@ void Document::trace(Visitor* visitor)
     visitor->trace(m_ranges);
     visitor->trace(m_styleEngine);
     visitor->trace(m_formController);
+    visitor->trace(m_visitedLinkState);
     visitor->trace(m_domWindow);
     visitor->trace(m_fetcher);
     visitor->trace(m_parser);
@@ -5893,6 +5897,7 @@ void Document::trace(Visitor* visitor)
     visitor->trace(m_styleSheetList);
     visitor->trace(m_mediaQueryMatcher);
     visitor->trace(m_scriptedAnimationController);
+    visitor->trace(m_textAutosizer);
     visitor->trace(m_registrationContext);
     visitor->trace(m_customElementMicrotaskRunQueue);
     visitor->trace(m_elementDataCache);

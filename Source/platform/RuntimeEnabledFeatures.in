@@ -33,15 +33,16 @@ BleedingEdgeFastPaths
 ThemeColor status=stable
 
 ClientHintsDpr status=experimental
+ContextMenu status=experimental
 Crypto status=stable
 CSSAnimationUnprefixed status=experimental
+CSSAttributeCaseSensitivity status=experimental
 CSSCompositing status=experimental
 CSSGridLayout status=experimental
 CSSMaskSourceType status=experimental
 CSSOMSmoothScroll status=experimental
 CSSTouchAction status=stable
 CSSTouchActionDelay status=test
-CSSTransformsUnprefixed status=stable
 CSSViewport status=experimental
 CSSWillChange status=stable
 CSS3Text status=experimental
@@ -53,7 +54,7 @@ DeviceLight status=test
 DialogElement status=stable
 DisplayList2dCanvas
 SVGFontsOnNonGDIPlatforms
-EncodingAPI status=experimental
+EncodingAPI status=stable
 EncryptedMedia status=test
 EncryptedMediaAnyVersion status=stable
 ExperimentalCanvasFeatures status=test
@@ -64,9 +65,9 @@ FileAPIBlobClose status=experimental
 FileConstructor status=stable
 FileSystem status=stable
 FontLoadEvents status=stable
-FastTextAutosizing status=stable
 Gamepad status=stable
 Geofencing status=test
+GeometryInterfaces status=test
 HTMLImports status=stable
 HighResolutionTimeInWorkers status=stable
 IMEAPI status=experimental
@@ -89,7 +90,7 @@ MediaStream status=stable
 MemoryInfoInWorkers status=experimental
 NavigationTransitions status=experimental
 NavigatorContentUtils
-NetworkInformation status=experimental
+NetworkInformation status=stable
 Notifications status=stable
 ObjectFitPosition status=stable
 OrientationEvent
@@ -97,7 +98,7 @@ OrientationEvent
 OverlayFullscreenVideo
 PagePopup status=stable
 Path2D status=stable
-PathOpsSVGClipping status=experimental
+PathOpsSVGClipping status=stable
 PeerConnection depends_on=MediaStream, status=stable
 PreciseMemoryInfo
 PushMessaging status=experimental
@@ -106,7 +107,7 @@ OverlayScrollbars
 RegionBasedColumns status=experimental
 
 RequestAutocomplete status=test
-ScreenOrientation status=experimental
+ScreenOrientation status=stable
 ScriptedSpeech status=stable
 
 // Implements documentElement.scrollTop/Left and bodyElement.scrollTop/Left
@@ -117,7 +118,7 @@ ServiceWorker status=experimental
 SessionStorage status=stable
 SharedWorker status=stable
 PictureSizes status=stable
-Picture status=experimental
+Picture status=stable
 
 // window.showModalDialog is deprecated and slated for removal. crbug.com/345831
 ShowModalDialog status=deprecated
@@ -141,6 +142,7 @@ TargetedStyleRecalc status=stable
 Touch status=stable
 
 TouchIconLoading
+ThreadedParserDataReceiver status=experimental
 UserSelectAll status=experimental
 WebAnimationsSVG
 WebAnimationsElementAnimate status=stable

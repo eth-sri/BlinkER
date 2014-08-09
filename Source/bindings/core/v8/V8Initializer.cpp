@@ -41,6 +41,7 @@
 #include "bindings/core/v8/V8Window.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/dom/NoEventDispatchAssertion.h"
 #include "core/frame/ConsoleTypes.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
@@ -130,7 +131,19 @@ static void messageHandlerInMainThread(v8::Handle<v8::Message> message, v8::Hand
     if (frame && frame->script().existingWindowShell(scriptState->world())) {
         V8ErrorHandler::storeExceptionOnErrorEventWrapper(event.get(), data, scriptState->context()->Global(), isolate);
     }
-    enteredWindow->document()->reportException(event.release(), callStack, corsStatus);
+
+    if (scriptState->world().isPrivateScriptIsolatedWorld()) {
+        // We allow a private script to dispatch error events even in a NoEventDispatchAssertion scope.
+        // Without having this ability, it's hard to debug the private script because syntax errors
+        // in the private script are not reported to console (the private script just crashes silently).
+        // Allowing error events in private scripts is safe because error events don't propagate to
+        // other isolated worlds (which means that the error events won't fire any event listeners
+        // in user's scripts).
+        NoEventDispatchAssertion::AllowUserAgentEvents allowUserAgentEvents;
+        enteredWindow->document()->reportException(event.release(), callStack, corsStatus);
+    } else {
+        enteredWindow->document()->reportException(event.release(), callStack, corsStatus);
+    }
 }
 
 static void failedAccessCheckCallbackInMainThread(v8::Local<v8::Object> host, v8::AccessType type, v8::Local<v8::Value> data)
@@ -226,8 +239,12 @@ static void messageHandlerInWorker(v8::Handle<v8::Message> message, v8::Handle<v
         RefPtrWillBeRawPtr<ErrorEvent> event = ErrorEvent::create(errorMessage, sourceURL, message->GetLineNumber(), message->GetStartColumn() + 1, &DOMWrapperWorld::current(isolate));
         AccessControlStatus corsStatus = message->IsSharedCrossOrigin() ? SharableCrossOrigin : NotSharableCrossOrigin;
 
-        V8ErrorHandler::storeExceptionOnErrorEventWrapper(event.get(), data, scriptState->context()->Global(), isolate);
-        context->reportException(event.release(), nullptr, corsStatus);
+        // If execution termination has been triggered as part of constructing
+        // the error event from the v8::Message, quietly leave.
+        if (!v8::V8::IsExecutionTerminating(isolate)) {
+            V8ErrorHandler::storeExceptionOnErrorEventWrapper(event.get(), data, scriptState->context()->Global(), isolate);
+            context->reportException(event.release(), nullptr, corsStatus);
+        }
     }
 
     isReportingException = false;

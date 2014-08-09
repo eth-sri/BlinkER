@@ -31,7 +31,6 @@
 #include "core/css/TreeBoundaryCrossingRules.h"
 #include "core/css/resolver/MatchedPropertiesCache.h"
 #include "core/css/resolver/ScopedStyleResolver.h"
-#include "core/css/resolver/ScopedStyleTree.h"
 #include "core/css/resolver/StyleBuilder.h"
 #include "core/css/resolver/StyleResourceLoader.h"
 #include "platform/heap/Handle.h"
@@ -85,7 +84,7 @@ enum RuleMatchingBehavior {
 
 const unsigned styleSharingListSize = 15;
 const unsigned styleSharingMaxDepth = 32;
-typedef WTF::Deque<Element*, styleSharingListSize> StyleSharingList;
+typedef WillBeHeapDeque<RawPtrWillBeMember<Element>, styleSharingListSize> StyleSharingList;
 
 struct CSSPropertyValue {
     STACK_ALLOCATED();
@@ -111,8 +110,6 @@ public:
     // Using these during tree walk will allow style selector to optimize child and descendant selector lookups.
     void pushParentElement(Element&);
     void popParentElement(Element&);
-    void pushParentShadowRoot(const ShadowRoot&);
-    void popParentShadowRoot(const ShadowRoot&);
 
     PassRefPtr<RenderStyle> styleForElement(Element*, RenderStyle* parentStyle = 0, StyleSharingBehavior = AllowStyleSharing,
         RuleMatchingBehavior = MatchAllRules);
@@ -131,12 +128,12 @@ public:
 
     // FIXME: This only has 5 callers and should be removed. Callers should be explicit about
     // their dependency on Document* instead of grabbing one through StyleResolver.
-    Document& document() { return m_document; }
+    Document& document() { return *m_document; }
 
     // FIXME: It could be better to call appendAuthorStyleSheets() directly after we factor StyleResolver further.
     // https://bugs.webkit.org/show_bug.cgi?id=108890
     void appendAuthorStyleSheets(const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet> >&);
-    void resetAuthorStyle(const ContainerNode*);
+    void resetAuthorStyle(TreeScope&);
     void finishAppendAuthorStyleSheets();
 
     void processScopedRules(const RuleSet& authorRules, CSSStyleSheet*, ContainerNode& scope);
@@ -148,15 +145,7 @@ public:
 
     SelectorFilter& selectorFilter() { return m_selectorFilter; }
 
-    void setBuildScopedStyleTreeInDocumentOrder(bool enabled) { m_styleTree.setBuildInDocumentOrder(enabled); }
-    bool buildScopedStyleTreeInDocumentOrder() const { return m_styleTree.buildInDocumentOrder(); }
-    bool styleTreeHasOnlyScopedResolverForDocument() const { return m_styleTree.hasOnlyScopedResolverForDocument(); }
-    ScopedStyleResolver* styleTreeScopedStyleResolverForDocument() const { return m_styleTree.scopedStyleResolverForDocument(); }
-
-    void styleTreeResolveScopedKeyframesRules(const Element* element, Vector<ScopedStyleResolver*, 8>& resolvers)
-    {
-        m_styleTree.resolveScopedKeyframesRules(element, resolvers);
-    }
+    void styleTreeResolveScopedKeyframesRules(const Element*, WillBeHeapVector<RawPtrWillBeMember<ScopedStyleResolver>, 8>&);
 
     // These methods will give back the set of rules that matched for a given element (or a pseudo-element).
     enum CSSRuleFilter {
@@ -239,7 +228,7 @@ private:
     void collectPseudoRulesForElement(Element*, ElementRuleCollector&, PseudoId, unsigned rulesToInclude);
     void matchUARules(ElementRuleCollector&, RuleSet*);
     void matchAuthorRules(Element*, ElementRuleCollector&, bool includeEmptyRules);
-    void matchAuthorRulesForShadowHost(Element*, ElementRuleCollector&, bool includeEmptyRules, Vector<ScopedStyleResolver*, 8>& resolvers, Vector<ScopedStyleResolver*, 8>& resolversInShadowTree);
+    void matchAuthorRulesForShadowHost(Element*, ElementRuleCollector&, bool includeEmptyRules, WillBeHeapVector<RawPtrWillBeMember<ScopedStyleResolver>, 8>& resolvers, WillBeHeapVector<RawPtrWillBeMember<ScopedStyleResolver>, 8>& resolversInShadowTree);
     void matchAllRules(StyleResolverState&, ElementRuleCollector&, bool includeSMILProperties);
     void matchUARules(ElementRuleCollector&);
     // FIXME: watched selectors should be implemented using injected author stylesheets: http://crbug.com/316960
@@ -251,6 +240,9 @@ private:
 
     void applyMatchedProperties(StyleResolverState&, const MatchResult&);
     bool applyAnimatedProperties(StyleResolverState&, Element* animatingElement);
+
+    void resolveScopedStyles(const Element*, WillBeHeapVector<RawPtrWillBeMember<ScopedStyleResolver>, 8>&);
+    void collectScopedResolversForHostedShadowTrees(const Element*, WillBeHeapVector<RawPtrWillBeMember<ScopedStyleResolver>, 8>&);
 
     enum StyleApplicationPass {
         HighPriorityProperties,
@@ -295,14 +287,12 @@ private:
     OwnPtr<MediaQueryEvaluator> m_medium;
     MediaQueryResultList m_viewportDependentMediaQueryResults;
 
-    Document& m_document;
+    RawPtrWillBeMember<Document> m_document;
     SelectorFilter m_selectorFilter;
 
     OwnPtrWillBeMember<ViewportStyleResolver> m_viewportStyleResolver;
 
     WillBeHeapListHashSet<RawPtrWillBeMember<CSSStyleSheet>, 16> m_pendingStyleSheets;
-
-    ScopedStyleTree m_styleTree;
 
     // FIXME: The entire logic of collecting features on StyleResolver, as well as transferring them
     // between various parts of machinery smells wrong. This needs to be better somehow.
@@ -319,7 +309,7 @@ private:
     StyleResourceLoader m_styleResourceLoader;
 
     unsigned m_styleSharingDepth;
-    Vector<OwnPtr<StyleSharingList>, styleSharingMaxDepth> m_styleSharingLists;
+    WillBeHeapVector<OwnPtrWillBeMember<StyleSharingList>, styleSharingMaxDepth> m_styleSharingLists;
 
     OwnPtr<StyleResolverStats> m_styleResolverStats;
     OwnPtr<StyleResolverStats> m_styleResolverStatsTotals;

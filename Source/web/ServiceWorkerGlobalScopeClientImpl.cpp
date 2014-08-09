@@ -61,6 +61,11 @@ WebURL ServiceWorkerGlobalScopeClientImpl::scope() const
     return m_client.scope();
 }
 
+WebServiceWorkerCacheStorage* ServiceWorkerGlobalScopeClientImpl::cacheStorage() const
+{
+    return m_client.cacheStorage();
+}
+
 void ServiceWorkerGlobalScopeClientImpl::didHandleActivateEvent(int eventID, WebServiceWorkerEventResult result)
 {
     m_client.didHandleActivateEvent(eventID, result);
@@ -80,6 +85,11 @@ void ServiceWorkerGlobalScopeClientImpl::didHandleFetchEvent(int fetchEventID, P
 
     WebServiceWorkerResponse webResponse;
     response->populateWebServiceWorkerResponse(webResponse);
+    if (webResponse.status() == 0) {
+        // The status code is 0 means a network error.
+        m_client.didHandleFetchEvent(fetchEventID);
+        return;
+    }
     m_client.didHandleFetchEvent(fetchEventID, webResponse);
 }
 

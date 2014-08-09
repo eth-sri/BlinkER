@@ -26,7 +26,6 @@
 #define SVGAnimationElement_h
 
 #include "core/svg/SVGAnimatedBoolean.h"
-#include "core/svg/SVGTests.h"
 #include "core/svg/animation/SVGSMILElement.h"
 #include "platform/animation/UnitBezier.h"
 #include "wtf/Functional.h"
@@ -57,8 +56,7 @@ enum CalcMode {
     CalcModeSpline
 };
 
-class SVGAnimationElement : public SVGSMILElement,
-                            public SVGTests {
+class SVGAnimationElement : public SVGSMILElement {
 public:
     // SVGAnimationElement
     float getStartTime() const;
@@ -168,6 +166,8 @@ protected:
     void setCalcMode(CalcMode calcMode) { m_calcMode = calcMode; }
 
 private:
+    virtual bool isValid() const OVERRIDE FINAL { return SVGTests::isValid(); }
+
     virtual void animationAttributeChanged() OVERRIDE;
     void setAttributeType(const AtomicString&);
 

@@ -3419,7 +3419,7 @@ template<> inline CSSPrimitiveValue::CSSPrimitiveValue(FontWeight weight)
         m_value.valueID = CSSValue800;
         return;
     case FontWeight700:
-        m_value.valueID = CSSValue700;
+        m_value.valueID = CSSValueBold;
         return;
     case FontWeight600:
         m_value.valueID = CSSValue600;
@@ -3428,7 +3428,7 @@ template<> inline CSSPrimitiveValue::CSSPrimitiveValue(FontWeight weight)
         m_value.valueID = CSSValue500;
         return;
     case FontWeight400:
-        m_value.valueID = CSSValue400;
+        m_value.valueID = CSSValueNormal;
         return;
     case FontWeight300:
         m_value.valueID = CSSValue300;
@@ -3511,6 +3511,74 @@ template<> inline CSSPrimitiveValue::operator FontStyle() const
     }
     ASSERT_NOT_REACHED();
     return FontStyleNormal;
+}
+
+template<> inline CSSPrimitiveValue::CSSPrimitiveValue(FontStretch stretch)
+    : CSSValue(PrimitiveClass)
+{
+    m_primitiveUnitType = CSS_VALUE_ID;
+    switch (stretch) {
+    case FontStretchUltraCondensed:
+        m_value.valueID = CSSValueUltraCondensed;
+        return;
+    case FontStretchExtraCondensed:
+        m_value.valueID = CSSValueExtraCondensed;
+        return;
+    case FontStretchCondensed:
+        m_value.valueID = CSSValueCondensed;
+        return;
+    case FontStretchSemiCondensed:
+        m_value.valueID = CSSValueSemiCondensed;
+        return;
+    case FontStretchNormal:
+        m_value.valueID = CSSValueNormal;
+        return;
+    case FontStretchSemiExpanded:
+        m_value.valueID = CSSValueSemiExpanded;
+        return;
+    case FontStretchExpanded:
+        m_value.valueID = CSSValueExpanded;
+        return;
+    case FontStretchExtraExpanded:
+        m_value.valueID = CSSValueExtraExpanded;
+        return;
+    case FontStretchUltraExpanded:
+        m_value.valueID = CSSValueUltraExpanded;
+        return;
+    }
+
+    ASSERT_NOT_REACHED();
+    m_value.valueID = CSSValueNormal;
+}
+
+template<> inline CSSPrimitiveValue::operator FontStretch() const
+{
+    ASSERT(isValueID());
+    switch (m_value.valueID) {
+    case CSSValueUltraCondensed:
+        return FontStretchUltraCondensed;
+    case CSSValueExtraCondensed:
+        return FontStretchExtraCondensed;
+    case CSSValueCondensed:
+        return FontStretchCondensed;
+    case CSSValueSemiCondensed:
+        return FontStretchSemiCondensed;
+    case CSSValueNormal:
+        return FontStretchNormal;
+    case CSSValueSemiExpanded:
+        return FontStretchSemiExpanded;
+    case CSSValueExpanded:
+        return FontStretchExpanded;
+    case CSSValueExtraExpanded:
+        return FontStretchExtraExpanded;
+    case CSSValueUltraExpanded:
+        return FontStretchUltraExpanded;
+    default:
+        break;
+    }
+
+    ASSERT_NOT_REACHED();
+    return FontStretchNormal;
 }
 
 template<> inline CSSPrimitiveValue::CSSPrimitiveValue(FontVariant smallCaps)

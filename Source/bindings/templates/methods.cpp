@@ -318,9 +318,9 @@ v8SetReturnValueNull(info);
 exceptionState.throwTypeError({{error_message}});
 {{throw_from_exception_state(method)}};
 {% elif method.is_constructor %}
-throwTypeError(ExceptionMessages::failedToConstruct("{{interface_name}}", {{error_message}}), info.GetIsolate());
+V8ThrowException::throwTypeError(ExceptionMessages::failedToConstruct("{{interface_name}}", {{error_message}}), info.GetIsolate());
 {% else %}{# method.has_exception_state #}
-throwTypeError(ExceptionMessages::failedToExecute("{{method.name}}", "{{interface_name}}", {{error_message}}), info.GetIsolate());
+V8ThrowException::throwTypeError(ExceptionMessages::failedToExecute("{{method.name}}", "{{interface_name}}", {{error_message}}), info.GetIsolate());
 {% endif %}{# method.has_exception_state #}
 {% endmacro %}
 
@@ -435,8 +435,6 @@ static void {{method.name}}MethodCallback{{world_suffix}}(const v8::FunctionCall
     {% else %}
     if (contextData && contextData->activityLogger()) {
     {% endif %}
-        {# FIXME: replace toVectorOfArguments with toNativeArguments(info, 0)
-           and delete toVectorOfArguments #}
         Vector<v8::Handle<v8::Value> > loggerArgs = toNativeArguments<v8::Handle<v8::Value> >(info, 0);
         contextData->activityLogger()->logMethod("{{interface_name}}.{{method.name}}", info.Length(), loggerArgs.data());
     }
@@ -500,10 +498,12 @@ static void {{method.name}}OriginSafeMethodGetterCallback{{world_suffix}}(v8::Lo
 
 {##############################################################################}
 {% macro method_implemented_in_private_script(method) %}
-static bool {{method.name}}MethodImplementedInPrivateScript({{method.argument_declarations_for_private_script | join(', ')}})
+bool {{v8_class}}::{{method.name}}MethodImplementedInPrivateScript({{method.argument_declarations_for_private_script | join(', ')}})
 {
     if (!frame)
         return false;
+    v8::HandleScope handleScope(toIsolate(frame));
+    ScriptForbiddenScope::AllowUserAgentScript script;
     v8::Handle<v8::Context> context = toV8Context(frame, DOMWrapperWorld::privateScriptIsolatedWorld());
     if (context.IsEmpty())
         return false;
@@ -559,7 +559,7 @@ static void {{name}}(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     {% if constructor.is_named_constructor %}
     if (!info.IsConstructCall()) {
-        throwTypeError(ExceptionMessages::constructorNotCallableAsFunction("{{constructor.name}}"), info.GetIsolate());
+        V8ThrowException::throwTypeError(ExceptionMessages::constructorNotCallableAsFunction("{{constructor.name}}"), info.GetIsolate());
         return;
     }
 
@@ -573,7 +573,6 @@ static void {{name}}(const v8::FunctionCallbackInfo<v8::Value>& info)
     {% endif %}
     {# Overloaded constructors have length checked during overload resolution #}
     {% if constructor.number_of_required_arguments and not constructor.overload_index %}
-    {# FIXME: remove UNLIKELY: constructors are expensive, so no difference. #}
     if (UNLIKELY(info.Length() < {{constructor.number_of_required_arguments}})) {
         {{throw_minimum_arity_type_error(constructor, constructor.number_of_required_arguments)}};
         return;

@@ -72,6 +72,13 @@ InspectorCanvasAgent::~InspectorCanvasAgent()
 {
 }
 
+void InspectorCanvasAgent::trace(Visitor* visitor)
+{
+    visitor->trace(m_pageAgent);
+    visitor->trace(m_injectedScriptManager);
+    InspectorBaseAgent::trace(visitor);
+}
+
 void InspectorCanvasAgent::setFrontend(InspectorFrontend* frontend)
 {
     ASSERT(frontend);

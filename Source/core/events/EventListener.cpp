@@ -1,7 +1,7 @@
 #include "config.h"
 #include "EventListener.h"
 
-namespace WebCore {
+namespace blink {
 
 volatile unsigned int EventListener::nextSerial;
 

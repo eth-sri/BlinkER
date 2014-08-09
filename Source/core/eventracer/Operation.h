@@ -3,7 +3,7 @@
 
 #include <cstddef>
 
-namespace WebCore {
+namespace blink {
 
 class Operation {
 public:

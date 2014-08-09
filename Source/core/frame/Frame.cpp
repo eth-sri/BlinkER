@@ -33,7 +33,6 @@
 #include "core/dom/DocumentType.h"
 #include "core/events/Event.h"
 #include "core/frame/LocalDOMWindow.h"
-#include "core/frame/FrameDestructionObserver.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLFrameElementBase.h"
@@ -90,20 +89,18 @@ Frame::~Frame()
 #ifndef NDEBUG
     frameCounter.decrement();
 #endif
-
-    HashSet<FrameDestructionObserver*>::iterator stop = m_destructionObservers.end();
-    for (HashSet<FrameDestructionObserver*>::iterator it = m_destructionObservers.begin(); it != stop; ++it)
-        (*it)->frameDestroyed();
 }
 
-void Frame::addDestructionObserver(FrameDestructionObserver* observer)
+void Frame::detachChildren()
 {
-    m_destructionObservers.add(observer);
-}
-
-void Frame::removeDestructionObserver(FrameDestructionObserver* observer)
-{
-    m_destructionObservers.remove(observer);
+    typedef Vector<RefPtr<Frame> > FrameVector;
+    FrameVector childrenToDetach;
+    childrenToDetach.reserveCapacity(tree().childCount());
+    for (Frame* child = tree().firstChild(); child; child = child->tree().nextSibling())
+        childrenToDetach.append(child);
+    FrameVector::iterator end = childrenToDetach.end();
+    for (FrameVector::iterator it = childrenToDetach.begin(); it != end; ++it)
+        (*it)->detach();
 }
 
 FrameHost* Frame::host() const
@@ -173,24 +170,6 @@ void Frame::setRemotePlatformLayer(blink::WebLayer* layer)
     toHTMLFrameOwnerElement(owner())->setNeedsCompositingUpdate();
     if (RenderPart* renderer = ownerRenderer())
         renderer->layer()->updateSelfPaintingLayer();
-}
-
-void Frame::willDetachFrameHost()
-{
-    HashSet<FrameDestructionObserver*>::iterator stop = m_destructionObservers.end();
-    for (HashSet<FrameDestructionObserver*>::iterator it = m_destructionObservers.begin(); it != stop; ++it)
-        (*it)->willDetachFrameHost();
-
-    // FIXME: Page should take care of updating focus/scrolling instead of Frame.
-    // FIXME: It's unclear as to why this is called more than once, but it is,
-    // so page() could be null.
-    if (page() && page()->focusController().focusedFrame() == this)
-        page()->focusController().setFocusedFrame(nullptr);
-}
-
-void Frame::detachFromFrameHost()
-{
-    m_host = 0;
 }
 
 bool Frame::isMainFrame() const

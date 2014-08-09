@@ -4,13 +4,13 @@
 
 "use strict";
 
-installClass("PrivateScriptTest", function(global) {
-    var InternalsPrototype = Object.create(Element.prototype);
+installClass("PrivateScriptTest", function(global, InternalsPrototype) {
 
     InternalsPrototype.initialize = function() {
         this.m_shortAttribute = -1;
         this.m_stringAttribute = "xxx";
         this.m_nodeAttribute = null;
+        this.m_stringAttributeForPrivateScriptOnly = "yyy";
     }
 
     InternalsPrototype.doNothing = function() {
@@ -32,12 +32,16 @@ installClass("PrivateScriptTest", function(global) {
         return value;
     }
 
-    InternalsPrototype.addInteger = function(value1, value2) {
+    InternalsPrototype.addValues_ = function(value1, value2) {
         return value1 + value2;
     }
 
+    InternalsPrototype.addInteger = function(value1, value2) {
+        return this.addValues_(value1, value2);
+    }
+
     InternalsPrototype.addString = function(value1, value2) {
-        return value1 + value2;
+        return this.addValues_(value1, value2);
     }
 
     InternalsPrototype.setIntegerToDocument = function(document, value) {
@@ -115,9 +119,50 @@ installClass("PrivateScriptTest", function(global) {
         set: function(value) { throw new DOMExceptionInPrivateScript("IndexSizeError", "setter threw error"); }
     });
 
-    InternalsPrototype.voidMethodThrowsSyntaxError = function() {
+    InternalsPrototype.voidMethodThrowsDOMSyntaxError = function() {
         throw new DOMExceptionInPrivateScript("SyntaxError", "method threw error");
     }
 
-    return InternalsPrototype;
+    InternalsPrototype.voidMethodThrowsError = function() {
+        throw new Error("method threw Error");
+    }
+
+    InternalsPrototype.voidMethodThrowsTypeError = function() {
+        throw new TypeError("method threw TypeError");
+    }
+
+    InternalsPrototype.voidMethodThrowsRangeError = function() {
+        throw new RangeError("method threw RangeError");
+    }
+
+    InternalsPrototype.voidMethodThrowsSyntaxError = function() {
+        throw new SyntaxError("method threw SyntaxError");
+    }
+
+    InternalsPrototype.voidMethodThrowsReferenceError = function() {
+        throw new ReferenceError("method threw ReferenceError");
+    }
+
+    InternalsPrototype.voidMethodWithStackOverflow = function() {
+        function f() { f(); }
+        f();
+    }
+
+    InternalsPrototype.addIntegerForPrivateScriptOnly = function(value1, value2) {
+        return value1 + value2;
+    }
+
+    Object.defineProperty(InternalsPrototype, "stringAttributeForPrivateScriptOnly", {
+        get: function() { return this.m_stringAttributeForPrivateScriptOnly; },
+        set: function(value) { this.m_stringAttributeForPrivateScriptOnly = value; }
+    });
+
+    InternalsPrototype.addIntegerImplementedInCPP = function(value1, value2) {
+        return this.addIntegerImplementedInCPPForPrivateScriptOnly(value1, value2);
+    }
+
+    Object.defineProperty(InternalsPrototype, "stringAttributeImplementedInCPP", {
+        get: function() { return this.m_stringAttributeImplementedInCPPForPrivateScriptOnly; },
+        set: function(value) { this.m_stringAttributeImplementedInCPPForPrivateScriptOnly = value; }
+    });
 });

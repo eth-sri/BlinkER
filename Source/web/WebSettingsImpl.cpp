@@ -58,7 +58,6 @@ WebSettingsImpl::WebSettingsImpl(Settings* settings, InspectorController* inspec
     , m_viewportMetaNonUserScalableQuirk(false)
     , m_clobberUserAgentInitialScaleQuirk(false)
     , m_mainFrameResizesAreOrientationChanges(false)
-    , m_disallowFullscreenForNonMediaElements(false)
 {
     ASSERT(settings);
 }
@@ -73,6 +72,11 @@ void WebSettingsImpl::setFixedFontFamily(const WebString& font, UScriptCode scri
 {
     if (m_settings->genericFontFamilySettings().updateFixed(font, script))
         m_settings->notifyGenericFontFamilyChange();
+}
+
+void WebSettingsImpl::setFullscreenSupported(bool enabled)
+{
+    m_settings->setFullscreenSupported(enabled);
 }
 
 void WebSettingsImpl::setSerifFontFamily(const WebString& font, UScriptCode script)
@@ -435,14 +439,9 @@ void WebSettingsImpl::setMockScrollbarsEnabled(bool enabled)
     m_settings->setMockScrollbarsEnabled(enabled);
 }
 
-void WebSettingsImpl::setAcceleratedCompositingForFiltersEnabled(bool enabled)
+void WebSettingsImpl::setMockGestureTapHighlightsEnabled(bool enabled)
 {
-    m_settings->setAcceleratedCompositingForFiltersEnabled(enabled);
-}
-
-void WebSettingsImpl::setAcceleratedCompositingForVideoEnabled(bool enabled)
-{
-    m_settings->setAcceleratedCompositingForVideoEnabled(enabled);
+    m_settings->setMockGestureTapHighlightsEnabled(enabled);
 }
 
 void WebSettingsImpl::setAcceleratedCompositingForOverflowScrollEnabled(bool enabled)
@@ -586,24 +585,14 @@ void WebSettingsImpl::setEnableTouchAdjustment(bool enabled)
     m_settings->setTouchAdjustmentEnabled(enabled);
 }
 
-bool WebSettingsImpl::scrollAnimatorEnabled() const
-{
-    return m_settings->scrollAnimatorEnabled();
-}
-
-bool WebSettingsImpl::touchEditingEnabled() const
-{
-    return m_settings->touchEditingEnabled();
-}
-
 bool WebSettingsImpl::viewportEnabled() const
 {
     return m_settings->viewportEnabled();
 }
 
-bool WebSettingsImpl::viewportMetaEnabled() const
+bool WebSettingsImpl::mockGestureTapHighlightsEnabled() const
 {
-    return m_settings->viewportMetaEnabled();
+    return m_settings->mockGestureTapHighlightsEnabled();
 }
 
 bool WebSettingsImpl::mainFrameResizesAreOrientationChanges() const
@@ -666,11 +655,6 @@ void WebSettingsImpl::setCompositedScrollingForFramesEnabled(bool enabled)
     m_settings->setCompositedScrollingForFramesEnabled(enabled);
 }
 
-void WebSettingsImpl::setCompositorTouchHitTesting(bool enabled)
-{
-    m_settings->setCompositorTouchHitTesting(enabled);
-}
-
 void WebSettingsImpl::setSelectTrailingWhitespaceEnabled(bool enabled)
 {
     m_settings->setSelectTrailingWhitespaceEnabled(enabled);
@@ -708,7 +692,12 @@ void WebSettingsImpl::setMainFrameResizesAreOrientationChanges(bool enabled)
 
 void WebSettingsImpl::setDisallowFullscreenForNonMediaElements(bool enabled)
 {
-    m_disallowFullscreenForNonMediaElements = enabled;
+    m_settings->setDisallowFullscreenForNonMediaElements(enabled);
+}
+
+void WebSettingsImpl::setV8CacheOptions(V8CacheOptions options)
+{
+    m_settings->setV8CacheOptions(static_cast<blink::V8CacheOptions>(options));
 }
 
 } // namespace blink

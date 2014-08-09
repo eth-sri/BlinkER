@@ -457,7 +457,7 @@ VisiblePosition VisiblePosition::honorEditingBoundaryAtOrBefore(const VisiblePos
     if (pos.isNull())
         return pos;
 
-    Node* highestRoot = highestEditableRoot(deepEquivalent());
+    ContainerNode* highestRoot = highestEditableRoot(deepEquivalent());
 
     // Return empty position if pos is not somewhere inside the editable region containing this position
     if (highestRoot && !pos.deepEquivalent().deprecatedNode()->isDescendantOf(highestRoot))
@@ -483,7 +483,7 @@ VisiblePosition VisiblePosition::honorEditingBoundaryAtOrAfter(const VisiblePosi
     if (pos.isNull())
         return pos;
 
-    Node* highestRoot = highestEditableRoot(deepEquivalent());
+    ContainerNode* highestRoot = highestEditableRoot(deepEquivalent());
 
     // Return empty position if pos is not somewhere inside the editable region containing this position
     if (highestRoot && !pos.deepEquivalent().deprecatedNode()->isDescendantOf(highestRoot))
@@ -509,8 +509,8 @@ VisiblePosition VisiblePosition::skipToStartOfEditingBoundary(const VisiblePosit
     if (pos.isNull())
         return pos;
 
-    Node* highestRoot = highestEditableRoot(deepEquivalent());
-    Node* highestRootOfPos = highestEditableRoot(pos.deepEquivalent());
+    ContainerNode* highestRoot = highestEditableRoot(deepEquivalent());
+    ContainerNode* highestRootOfPos = highestEditableRoot(pos.deepEquivalent());
 
     // Return pos itself if the two are from the very same editable region, or both are non-editable.
     if (highestRootOfPos == highestRoot)
@@ -529,8 +529,8 @@ VisiblePosition VisiblePosition::skipToEndOfEditingBoundary(const VisiblePositio
     if (pos.isNull())
         return pos;
 
-    Node* highestRoot = highestEditableRoot(deepEquivalent());
-    Node* highestRootOfPos = highestEditableRoot(pos.deepEquivalent());
+    ContainerNode* highestRoot = highestEditableRoot(deepEquivalent());
+    ContainerNode* highestRootOfPos = highestEditableRoot(pos.deepEquivalent());
 
     // Return pos itself if the two are from the very same editable region, or both are non-editable.
     if (highestRootOfPos == highestRoot)
@@ -594,7 +594,7 @@ Position VisiblePosition::canonicalPosition(const Position& passedPosition)
     if (isHTMLHtmlElement(node) && !node->hasEditableStyle() && node->document().body() && node->document().body()->hasEditableStyle())
         return next.isNotNull() ? next : prev;
 
-    Node* editingRoot = editableRootForPosition(position);
+    Element* editingRoot = editableRootForPosition(position);
 
     // If the html element is editable, descending into its body will look like a descent
     // from non-editable to editable content since rootEditableElement() always stops at the body.
@@ -613,7 +613,7 @@ Position VisiblePosition::canonicalPosition(const Position& passedPosition)
         return Position();
 
     // The new position should be in the same block flow element. Favor that.
-    Node* originalBlock = node ? node->enclosingBlockFlowElement() : 0;
+    Element* originalBlock = node ? enclosingBlockFlowElement(*node) : 0;
     bool nextIsOutsideOriginalBlock = !nextNode->isDescendantOf(originalBlock) && nextNode != originalBlock;
     bool prevIsOutsideOriginalBlock = !prevNode->isDescendantOf(originalBlock) && prevNode != originalBlock;
     if (nextIsOutsideOriginalBlock && !prevIsOutsideOriginalBlock)
@@ -649,24 +649,8 @@ UChar32 VisiblePosition::characterAfter() const
 
 LayoutRect VisiblePosition::localCaretRect(RenderObject*& renderer) const
 {
-    if (m_deepPosition.isNull()) {
-        renderer = 0;
-        return IntRect();
-    }
-    Node* node = m_deepPosition.anchorNode();
-
-    renderer = node->renderer();
-    if (!renderer)
-        return LayoutRect();
-
-    InlineBox* inlineBox;
-    int caretOffset;
-    getInlineBoxAndOffset(inlineBox, caretOffset);
-
-    if (inlineBox)
-        renderer = &inlineBox->renderer();
-
-    return renderer->localCaretRect(inlineBox, caretOffset);
+    PositionWithAffinity positionWithAffinity(m_deepPosition, m_affinity);
+    return localCaretRectOfPosition(positionWithAffinity, renderer);
 }
 
 IntRect VisiblePosition::absoluteCaretBounds() const
@@ -758,15 +742,15 @@ bool setEnd(Range *r, const VisiblePosition &visiblePosition)
     return !exceptionState.hadException();
 }
 
-Element* enclosingBlockFlowElement(const VisiblePosition &visiblePosition)
+Element* enclosingBlockFlowElement(const VisiblePosition& visiblePosition)
 {
     if (visiblePosition.isNull())
-        return NULL;
+        return 0;
 
-    return visiblePosition.deepEquivalent().deprecatedNode()->enclosingBlockFlowElement();
+    return enclosingBlockFlowElement(*visiblePosition.deepEquivalent().deprecatedNode());
 }
 
-bool isFirstVisiblePositionInNode(const VisiblePosition &visiblePosition, const Node *node)
+bool isFirstVisiblePositionInNode(const VisiblePosition& visiblePosition, const ContainerNode* node)
 {
     if (visiblePosition.isNull())
         return false;
@@ -778,7 +762,7 @@ bool isFirstVisiblePositionInNode(const VisiblePosition &visiblePosition, const 
     return previous.isNull() || !previous.deepEquivalent().deprecatedNode()->isDescendantOf(node);
 }
 
-bool isLastVisiblePositionInNode(const VisiblePosition &visiblePosition, const Node *node)
+bool isLastVisiblePositionInNode(const VisiblePosition& visiblePosition, const ContainerNode* node)
 {
     if (visiblePosition.isNull())
         return false;

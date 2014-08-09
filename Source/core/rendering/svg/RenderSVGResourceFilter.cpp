@@ -136,19 +136,47 @@ static bool createImageBuffer(const Filter* filter, OwnPtr<ImageBuffer>& imageBu
     return true;
 }
 
-static void beginDeferredFilter(GraphicsContext* context, FilterData* filterData, SVGFilterElement* filterElement)
+static void beginDeferredFilter(GraphicsContext* context, FilterData* filterData)
+{
+    context->beginRecording(filterData->boundaries);
+    // We pass the boundaries to SkPictureImageFilter so it knows the
+    // world-space position of the filter primitives. It gets them
+    // from the DisplayList, which also applies the inverse translate
+    // to the origin. So we apply the forward translate here to avoid
+    // it being applied twice.
+    // FIXME: we should fix SkPicture to handle this offset itself, or
+    // make the translate optional on SkPictureImageFilter.
+    // See https://code.google.com/p/skia/issues/detail?id=2801
+    context->translate(filterData->boundaries.x(), filterData->boundaries.y());
+}
+
+static void endDeferredFilter(GraphicsContext* context, FilterData* filterData)
+{
+    // FIXME: maybe filterData should just hold onto SourceGraphic after creation?
+    SourceGraphic* sourceGraphic = static_cast<SourceGraphic*>(filterData->builder->getEffectById(SourceGraphic::effectName()));
+    ASSERT(sourceGraphic);
+    sourceGraphic->setDisplayList(context->endRecording());
+}
+
+static void drawDeferredFilter(GraphicsContext* context, FilterData* filterData, SVGFilterElement* filterElement)
 {
     SkiaImageFilterBuilder builder(context);
+    SourceGraphic* sourceGraphic = static_cast<SourceGraphic*>(filterData->builder->getEffectById(SourceGraphic::effectName()));
+    ASSERT(sourceGraphic);
+    builder.setSourceGraphic(sourceGraphic);
     RefPtr<ImageFilter> imageFilter = builder.build(filterData->builder->lastEffect(), ColorSpaceDeviceRGB);
-    // FIXME: Remove the cache when impl-size painting is enabled on every platform and the non impl-side painting path is removed
-    if (!context->isRecordingCanvas()) // Recording canvases do not use the cache
-        filterData->filter->enableCache();
     FloatRect boundaries = enclosingIntRect(filterData->boundaries);
     context->save();
-    float scaledArea = boundaries.width() * boundaries.height();
+
+    FloatSize deviceSize = context->getCTM().mapSize(boundaries.size());
+    float scaledArea = deviceSize.width() * deviceSize.height();
 
     // If area of scaled size is bigger than the upper limit, adjust the scale
-    // to fit.
+    // to fit. Note that this only really matters in the non-impl-side painting
+    // case, since the impl-side case never allocates a full-sized backing
+    // store, only tile-sized.
+    // FIXME: remove this once all platforms are using impl-side painting.
+    // crbug.com/169282.
     if (scaledArea > FilterEffect::maxFilterArea()) {
         float scale = sqrtf(FilterEffect::maxFilterArea() / scaledArea);
         context->scale(scale, scale);
@@ -185,15 +213,8 @@ static void beginDeferredFilter(GraphicsContext* context, FilterData* filterData
         imageFilter = builder.buildTransform(shearAndRotate, imageFilter.get());
     }
     context->beginLayer(1, CompositeSourceOver, &boundaries, ColorFilterNone, imageFilter.get());
-}
-
-static void endDeferredFilter(GraphicsContext* context, FilterData* filterData)
-{
     context->endLayer();
     context->restore();
-    // FIXME: Remove the cache when impl-size painting is enabled on every platform and the non impl-side painting path is removed
-    if (!context->isRecordingCanvas()) // Recording canvases do not use the cache
-        filterData->filter->disableCache();
 }
 
 bool RenderSVGResourceFilter::applyResource(RenderObject* object, RenderStyle*, GraphicsContext*& context, unsigned short resourceMode)
@@ -209,11 +230,6 @@ bool RenderSVGResourceFilter::applyResource(RenderObject* object, RenderStyle*, 
         FilterData* filterData = m_filter.get(object);
         if (filterData->state == FilterData::PaintingSource || filterData->state == FilterData::Applying)
             filterData->state = FilterData::CycleDetected;
-        if (deferredFiltersEnabled && filterData->state == FilterData::Built) {
-            SVGFilterElement* filterElement = toSVGFilterElement(element());
-            beginDeferredFilter(context, filterData, filterElement);
-            return true;
-        }
         return false; // Already built, or we're in a cycle, or we're marked for removal. Regardless, just do nothing more now.
     }
 
@@ -278,7 +294,7 @@ bool RenderSVGResourceFilter::applyResource(RenderObject* object, RenderStyle*, 
     if (deferredFiltersEnabled) {
         FilterData* data = filterData.get();
         m_filter.set(object, filterData.release());
-        beginDeferredFilter(context, data, filterElement);
+        beginDeferredFilter(context, data);
         return true;
     }
 
@@ -323,11 +339,7 @@ void RenderSVGResourceFilter::postApplyResource(RenderObject* object, GraphicsCo
     if (!filterData)
         return;
 
-    if (object->document().settings()->deferredFiltersEnabled() && (filterData->state == FilterData::PaintingSource || filterData->state == FilterData::Built)) {
-        endDeferredFilter(context, filterData);
-        filterData->state = FilterData::Built;
-        return;
-    }
+    bool deferredFiltersEnabled = object->document().settings()->deferredFiltersEnabled();
 
     switch (filterData->state) {
     case FilterData::MarkedForRemoval:
@@ -344,16 +356,26 @@ void RenderSVGResourceFilter::postApplyResource(RenderObject* object, GraphicsCo
         return;
 
     case FilterData::PaintingSource:
-        if (!filterData->savedContext) {
-            removeClientFromCache(object);
-            return;
-        }
+        if (deferredFiltersEnabled) {
+            endDeferredFilter(context, filterData);
+        } else {
+            if (!filterData->savedContext) {
+                removeClientFromCache(object);
+                return;
+            }
 
-        context = filterData->savedContext;
-        filterData->savedContext = 0;
+            context = filterData->savedContext;
+            filterData->savedContext = 0;
+        }
         break;
 
     case FilterData::Built: { } // Empty
+    }
+
+    if (deferredFiltersEnabled) {
+        drawDeferredFilter(context, filterData, toSVGFilterElement(element()));
+        filterData->state = FilterData::Built;
+        return;
     }
 
     FilterEffect* lastEffect = filterData->builder->lastEffect();

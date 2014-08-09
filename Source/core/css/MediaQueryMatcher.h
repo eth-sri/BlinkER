@@ -23,7 +23,6 @@
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
 #include "wtf/RefCounted.h"
-#include "wtf/Vector.h"
 
 namespace blink {
 
@@ -47,9 +46,13 @@ public:
     void addMediaQueryList(MediaQueryList*);
     void removeMediaQueryList(MediaQueryList*);
 
+    void addViewportListener(MediaQueryListListener*);
+    void removeViewportListener(MediaQueryListListener*);
+
     PassRefPtrWillBeRawPtr<MediaQueryList> matchMedia(const String&);
 
     void mediaFeaturesChanged();
+    void viewportChanged();
     bool evaluate(const MediaQuerySet*);
 
     void trace(Visitor*);
@@ -64,6 +67,9 @@ private:
 
     typedef WillBeHeapLinkedHashSet<RawPtrWillBeWeakMember<MediaQueryList> > MediaQueryListSet;
     MediaQueryListSet m_mediaLists;
+
+    typedef WillBeHeapLinkedHashSet<RawPtrWillBeWeakMember<MediaQueryListListener> > ViewportListenerSet;
+    ViewportListenerSet m_viewportListeners;
 };
 
 }

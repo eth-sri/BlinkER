@@ -173,8 +173,7 @@ public:
     static bool isAnimatableProperty(CSSPropertyID);
     static const StylePropertyShorthand& animatableProperties();
     static bool isAllowedAnimation(CSSPropertyID);
-    // FIXME: This should take a const ScopedStyleTree instead of a StyleResolver.
-    // We should also change the Element* to a const Element*
+    // FIXME: We should change the Element* to a const Element*
     static PassOwnPtrWillBeRawPtr<CSSAnimationUpdate> calculateUpdate(Element*, const Element& parentElement, const RenderStyle&, RenderStyle* parentStyle, StyleResolver*);
 
     void setPendingUpdate(PassOwnPtrWillBeRawPtr<CSSAnimationUpdate> update) { m_pendingUpdate = update; }
@@ -227,9 +226,11 @@ private:
         {
         }
         virtual void onEventCondition(const AnimationNode*) OVERRIDE;
+        virtual void trace(Visitor*) OVERRIDE;
+
     private:
         void maybeDispatch(Document::ListenerType, const AtomicString& eventName, double elapsedTime);
-        Element* m_target;
+        RawPtrWillBeMember<Element> m_target;
         const AtomicString m_name;
         AnimationNode::Phase m_previousPhase;
         double m_previousIteration;
@@ -244,8 +245,10 @@ private:
         {
         }
         virtual void onEventCondition(const AnimationNode*) OVERRIDE;
+        virtual void trace(Visitor*) OVERRIDE;
+
     private:
-        Element* m_target;
+        RawPtrWillBeMember<Element> m_target;
         const CSSPropertyID m_property;
         AnimationNode::Phase m_previousPhase;
     };

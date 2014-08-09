@@ -225,6 +225,16 @@ inline static PassRefPtrWillBeRawPtr<AnimatableValue> createFromShapeValue(Shape
     return AnimatableUnknown::create(CSSValueNone);
 }
 
+static double fontStretchToDouble(FontStretch fontStretch)
+{
+    return static_cast<unsigned>(fontStretch);
+}
+
+static PassRefPtrWillBeRawPtr<AnimatableValue> createFromFontStretch(FontStretch fontStretch)
+{
+    return createFromDouble(fontStretchToDouble(fontStretch));
+}
+
 static double fontWeightToDouble(FontWeight fontWeight)
 {
     switch (fontWeight) {
@@ -341,6 +351,8 @@ PassRefPtrWillBeRawPtr<AnimatableValue> CSSAnimatableValueFactory::create(CSSPro
         // FIXME: Should we introduce an option to pass the computed font size here, allowing consumers to
         // enable text zoom rather than Text Autosizing? See http://crbug.com/227545.
         return createFromDouble(style.specifiedFontSize());
+    case CSSPropertyFontStretch:
+        return createFromFontStretch(style.fontStretch());
     case CSSPropertyFontWeight:
         return createFromFontWeight(style.fontWeight());
     case CSSPropertyHeight:
@@ -459,16 +471,9 @@ PassRefPtrWillBeRawPtr<AnimatableValue> CSSAnimatableValueFactory::create(CSSPro
     case CSSPropertyPerspective:
         return createFromDouble(style.perspective());
     case CSSPropertyPerspectiveOrigin:
-        ASSERT(RuntimeEnabledFeatures::cssTransformsUnprefixedEnabled());
         return AnimatableLengthPoint::create(
             createFromLength(style.perspectiveOriginX(), style),
             createFromLength(style.perspectiveOriginY(), style));
-    case CSSPropertyWebkitPerspectiveOriginX:
-        ASSERT(!RuntimeEnabledFeatures::cssTransformsUnprefixedEnabled());
-        return createFromLength(style.perspectiveOriginX(), style);
-    case CSSPropertyWebkitPerspectiveOriginY:
-        ASSERT(!RuntimeEnabledFeatures::cssTransformsUnprefixedEnabled());
-        return createFromLength(style.perspectiveOriginY(), style);
     case CSSPropertyShapeOutside:
         return createFromShapeValue(style.shapeOutside());
     case CSSPropertyShapeMargin:
@@ -480,20 +485,10 @@ PassRefPtrWillBeRawPtr<AnimatableValue> CSSAnimatableValueFactory::create(CSSPro
     case CSSPropertyTransform:
         return AnimatableTransform::create(style.transform());
     case CSSPropertyTransformOrigin:
-        ASSERT(RuntimeEnabledFeatures::cssTransformsUnprefixedEnabled());
         return AnimatableLengthPoint3D::create(
             createFromLength(style.transformOriginX(), style),
             createFromLength(style.transformOriginY(), style),
             createFromDouble(style.transformOriginZ()));
-    case CSSPropertyWebkitTransformOriginX:
-        ASSERT(!RuntimeEnabledFeatures::cssTransformsUnprefixedEnabled());
-        return createFromLength(style.transformOriginX(), style);
-    case CSSPropertyWebkitTransformOriginY:
-        ASSERT(!RuntimeEnabledFeatures::cssTransformsUnprefixedEnabled());
-        return createFromLength(style.transformOriginY(), style);
-    case CSSPropertyWebkitTransformOriginZ:
-        ASSERT(!RuntimeEnabledFeatures::cssTransformsUnprefixedEnabled());
-        return createFromDouble(style.transformOriginZ());
     case CSSPropertyWidows:
         return createFromDouble(style.widows());
     case CSSPropertyWidth:

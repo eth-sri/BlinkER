@@ -121,7 +121,7 @@ Element* FrameSelection::rootEditableElementOrDocumentElement() const
     return selectionRoot ? selectionRoot : m_frame->document()->documentElement();
 }
 
-Node* FrameSelection::rootEditableElementOrTreeScopeRootNode() const
+ContainerNode* FrameSelection::rootEditableElementOrTreeScopeRootNode() const
 {
     Element* selectionRoot = m_selection.rootEditableElement();
     if (selectionRoot)
@@ -223,7 +223,7 @@ void FrameSelection::setSelection(const VisibleSelection& newSelection, SetSelec
     bool shouldClearTypingStyle = options & ClearTypingStyle;
     EUserTriggered userTriggered = selectionOptionsToUserTriggered(options);
 
-    VisibleSelection s = newSelection;
+    VisibleSelection s = validateSelection(newSelection);
     if (shouldAlwaysUseDirectionalSelection(m_frame))
         s.setIsDirectional(true);
 
@@ -472,7 +472,10 @@ void FrameSelection::updateSelectionIfNeeded(const Position& base, const Positio
     if (base == m_selection.base() && extent == m_selection.extent() && start == m_selection.start() && end == m_selection.end())
         return;
     VisibleSelection newSelection;
-    newSelection.setWithoutValidation(base, extent);
+    if (m_selection.isBaseFirst())
+        newSelection.setWithoutValidation(start, end);
+    else
+        newSelection.setWithoutValidation(end, start);
     setSelection(newSelection, DoNotSetFocus);
 }
 
@@ -1212,7 +1215,7 @@ void FrameSelection::setExtent(const VisiblePosition &pos, EUserTriggered userTr
     setSelection(VisibleSelection(m_selection.base(), pos.deepEquivalent(), pos.affinity(), selectionHasDirection), CloseTyping | ClearTypingStyle | userTriggered);
 }
 
-RenderObject* FrameSelection::caretRenderer() const
+RenderBlock* FrameSelection::caretRenderer() const
 {
     return CaretBase::caretRenderer(m_selection.start().deprecatedNode());
 }
@@ -1222,13 +1225,20 @@ static bool isNonOrphanedCaret(const VisibleSelection& selection)
     return selection.isCaret() && !selection.start().isOrphan() && !selection.end().isOrphan();
 }
 
+static bool isTextFormControl(const VisibleSelection& selection)
+{
+    return enclosingTextFormControl(selection.start());
+}
+
 LayoutRect FrameSelection::localCaretRect()
 {
     if (shouldUpdateCaretRect()) {
         if (!isNonOrphanedCaret(m_selection))
             clearCaretRect();
-        else if (updateCaretRect(m_frame->document(), VisiblePosition(m_selection.start(), m_selection.affinity())))
-            m_absCaretBoundsDirty = true;
+        else if (isTextFormControl(m_selection))
+            m_absCaretBoundsDirty |= updateCaretRect(m_frame->document(), PositionWithAffinity(m_selection.start().isCandidate() ? m_selection.start() : Position(), m_selection.affinity()));
+        else
+            m_absCaretBoundsDirty |= updateCaretRect(m_frame->document(), VisiblePosition(m_selection.start(), m_selection.affinity()));
     }
 
     return localCaretRectWithoutUpdate();
@@ -1346,7 +1356,7 @@ void FrameSelection::selectFrameElementInParentIfFullySelected()
 
     // Get to the <iframe> or <frame> (or even <object>) element in the parent frame.
     // FIXME: Doesn't work for OOPI.
-    Element* ownerElement = m_frame->deprecatedLocalOwner();
+    HTMLFrameOwnerElement* ownerElement = m_frame->deprecatedLocalOwner();
     if (!ownerElement)
         return;
     ContainerNode* ownerElementParent = ownerElement->parentNode();
@@ -1470,7 +1480,7 @@ void FrameSelection::focusedOrActiveStateChanged()
     // RenderObject::selectionForegroundColor() check if the frame is active,
     // we have to update places those colors were painted.
     if (RenderView* view = document->renderView())
-        view->repaintSelection();
+        view->invalidatePaintForSelection();
 
     // Caret appears in the active frame.
     if (activeAndFocused)
@@ -1624,7 +1634,7 @@ bool FrameSelection::shouldBlinkCaret() const
     if (m_frame->settings() && m_frame->settings()->caretBrowsingEnabled())
         return false;
 
-    Node* root = rootEditableElement();
+    Element* root = rootEditableElement();
     if (!root)
         return false;
 
@@ -1813,11 +1823,10 @@ void FrameSelection::setSelectionFromNone()
     if (!isNone() || !(document->hasEditableStyle() || caretBrowsing))
         return;
 
-    Node* node = document->documentElement();
-    if (!node)
+    Element* documentElement = document->documentElement();
+    if (!documentElement)
         return;
-    Node* body = isHTMLBodyElement(*node) ? node : Traversal<HTMLBodyElement>::next(*node);
-    if (body)
+    if (HTMLBodyElement* body = Traversal<HTMLBodyElement>::firstChild(*documentElement))
         setSelection(VisibleSelection(firstPositionInOrBeforeNode(body), DOWNSTREAM));
 }
 
@@ -1846,6 +1855,28 @@ void FrameSelection::didChangeVisibleSelection()
     m_logicalRange = nullptr;
     m_selection.clearChangeObserver();
     m_observingVisibleSelection = false;
+}
+
+VisibleSelection FrameSelection::validateSelection(const VisibleSelection& selection)
+{
+    if (!m_frame || selection.isNone())
+        return selection;
+
+    Position base = selection.base();
+    Position extent = selection.extent();
+    bool isBaseValid = base.document() == m_frame->document();
+    bool isExtentValid = extent.document() == m_frame->document();
+
+    if (isBaseValid && isExtentValid)
+        return selection;
+
+    VisibleSelection newSelection;
+    if (isBaseValid) {
+        newSelection.setWithoutValidation(base, base);
+    } else if (isExtentValid) {
+        newSelection.setWithoutValidation(extent, extent);
+    }
+    return newSelection;
 }
 
 void FrameSelection::startObservingVisibleSelectionChange()

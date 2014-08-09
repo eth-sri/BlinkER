@@ -48,6 +48,7 @@
 #include "core/inspector/InspectorState.h"
 #include "core/inspector/InstrumentingAgents.h"
 #include "core/inspector/NetworkResourcesData.h"
+#include "core/inspector/ScriptAsyncCallStack.h"
 #include "core/inspector/ScriptCallStack.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/DocumentThreadableLoader.h"
@@ -288,11 +289,24 @@ static PassRefPtr<TypeBuilder::Network::Response> buildObjectForResourceResponse
 
 InspectorResourceAgent::~InspectorResourceAgent()
 {
+#if !ENABLE(OILPAN)
     if (m_state->getBoolean(ResourceAgentState::resourceAgentEnabled)) {
         ErrorString error;
         disable(&error);
     }
     ASSERT(!m_instrumentingAgents->inspectorResourceAgent());
+#endif
+}
+
+void InspectorResourceAgent::trace(Visitor* visitor)
+{
+    visitor->trace(m_pageAgent);
+#if ENABLE(OILPAN)
+    visitor->trace(m_pendingXHRReplayData);
+    visitor->trace(m_replayXHRs);
+    visitor->trace(m_replayXHRsToBeDeleted);
+#endif
+    InspectorBaseAgent::trace(visitor);
 }
 
 void InspectorResourceAgent::willSendRequest(unsigned long identifier, DocumentLoader* loader, ResourceRequest& request, const ResourceResponse& redirectResponse, const FetchInitiatorInfo& initiatorInfo)
@@ -468,7 +482,7 @@ void InspectorResourceAgent::documentThreadableLoaderStartedLoadingForClient(uns
 void InspectorResourceAgent::willLoadXHR(XMLHttpRequest* xhr, ThreadableLoaderClient* client, const AtomicString& method, const KURL& url, bool async, FormData* formData, const HTTPHeaderMap& headers, bool includeCredentials)
 {
     ASSERT(xhr);
-    RefPtr<XHRReplayData> xhrReplayData = XHRReplayData::create(xhr->executionContext(), method, urlWithoutFragment(url), async, formData, includeCredentials);
+    RefPtrWillBeRawPtr<XHRReplayData> xhrReplayData = XHRReplayData::create(xhr->executionContext(), method, urlWithoutFragment(url), async, formData, includeCredentials);
     HTTPHeaderMap::const_iterator end = headers.end();
     for (HTTPHeaderMap::const_iterator it = headers.begin(); it!= end; ++it)
         xhrReplayData->addHeader(it->key, it->value);
@@ -548,6 +562,9 @@ PassRefPtr<TypeBuilder::Network::Initiator> InspectorResourceAgent::buildInitiat
         RefPtr<TypeBuilder::Network::Initiator> initiatorObject = TypeBuilder::Network::Initiator::create()
             .setType(TypeBuilder::Network::Initiator::Type::Script);
         initiatorObject->setStackTrace(stackTrace->buildInspectorArray());
+        RefPtrWillBeRawPtr<ScriptAsyncCallStack> asyncStackTrace = stackTrace->asyncCallStack();
+        if (asyncStackTrace)
+            initiatorObject->setAsyncStackTrace(asyncStackTrace->buildInspectorObject());
         return initiatorObject;
     }
 

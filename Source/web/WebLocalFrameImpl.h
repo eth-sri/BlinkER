@@ -179,12 +179,14 @@ public:
     virtual bool setEditableSelectionOffsets(int start, int end) OVERRIDE;
     virtual bool setCompositionFromExistingText(int compositionStart, int compositionEnd, const WebVector<WebCompositionUnderline>& underlines) OVERRIDE;
     virtual void extendSelectionAndDelete(int before, int after) OVERRIDE;
+    virtual void navigateToSandboxedMarkup(const WebData& markup) OVERRIDE;
     virtual void setCaretVisible(bool) OVERRIDE;
     virtual int printBegin(const WebPrintParams&, const WebNode& constrainToNode) OVERRIDE;
     virtual float printPage(int pageToPrint, WebCanvas*) OVERRIDE;
     virtual float getPrintPageShrink(int page) OVERRIDE;
     virtual void printEnd() OVERRIDE;
     virtual bool isPrintScalingDisabledForPlugin(const WebNode&) OVERRIDE;
+    virtual int getPrintCopiesForPlugin(const WebNode&) OVERRIDE;
     virtual bool hasCustomPageSizeStyle(int pageIndex) OVERRIDE;
     virtual bool isPageBoxVisible(int pageIndex) OVERRIDE;
     virtual void pageSizeAndMarginsInPixels(

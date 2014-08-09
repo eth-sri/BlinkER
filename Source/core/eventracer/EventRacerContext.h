@@ -8,7 +8,7 @@ namespace WTF {
 class String;
 }
 
-namespace WebCore {
+namespace blink {
 
 class EventRacerLog;
 
@@ -41,6 +41,6 @@ public:
 private:
 };
 
-} // end namespace WebCore
+} // end namespace blink
 
 #endif // EventRacerContext_h

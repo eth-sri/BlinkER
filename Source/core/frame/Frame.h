@@ -31,7 +31,6 @@
 #include "core/page/FrameTree.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
-#include "wtf/HashSet.h"
 #include "wtf/RefCounted.h"
 
 namespace blink {
@@ -42,7 +41,6 @@ namespace blink {
 
 class ChromeClient;
 class FrameClient;
-class FrameDestructionObserver;
 class FrameHost;
 class FrameOwner;
 class HTMLFrameOwnerElement;
@@ -58,11 +56,8 @@ public:
 
     virtual ~Frame();
 
-    void addDestructionObserver(FrameDestructionObserver*);
-    void removeDestructionObserver(FrameDestructionObserver*);
-
-    virtual void willDetachFrameHost();
-    virtual void detachFromFrameHost();
+    virtual void detach() = 0;
+    void detachChildren();
 
     FrameClient* client() const;
     void clearClient();
@@ -115,8 +110,6 @@ protected:
 
 private:
     FrameClient* m_client;
-    HashSet<FrameDestructionObserver*> m_destructionObservers;
-
     blink::WebLayer* m_remotePlatformLayer;
 };
 

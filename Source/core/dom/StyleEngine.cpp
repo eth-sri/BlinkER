@@ -99,6 +99,9 @@ void StyleEngine::detachFromDocument()
     m_fontSelector.clear();
     m_resolver.clear();
     m_styleSheetCollectionMap.clear();
+    for (ScopedStyleResolverSet::iterator it = m_scopedStyleResolvers.begin(); it != m_scopedStyleResolvers.end(); ++it)
+        const_cast<TreeScope&>((*it)->treeScope()).clearScopedStyleResolver();
+    m_scopedStyleResolvers.clear();
 }
 #endif
 
@@ -319,7 +322,7 @@ void StyleEngine::addXSLStyleSheet(ProcessingInstruction* node, bool createdByPa
     if (createdByParser || !m_xslStyleSheet) {
         needToUpdate = !m_xslStyleSheet;
     } else {
-        unsigned position = m_xslStyleSheet->compareDocumentPositionInternal(node, Node::TreatShadowTreesAsDisconnected);
+        unsigned position = m_xslStyleSheet->compareDocumentPosition(node, Node::TreatShadowTreesAsDisconnected);
         needToUpdate = position & Node::DOCUMENT_POSITION_FOLLOWING;
     }
 
@@ -451,6 +454,8 @@ const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet> > StyleEngine::activeSt
 
 void StyleEngine::didRemoveShadowRoot(ShadowRoot* shadowRoot)
 {
+    if (shadowRoot->scopedStyleResolver())
+        removeScopedStyleResolver(shadowRoot->scopedStyleResolver());
     m_styleSheetCollectionMap.remove(shadowRoot);
 }
 
@@ -458,7 +463,6 @@ void StyleEngine::appendActiveAuthorStyleSheets()
 {
     ASSERT(isMaster());
 
-    m_resolver->setBuildScopedStyleTreeInDocumentOrder(true);
     m_resolver->appendAuthorStyleSheets(documentStyleSheetCollection()->activeAuthorStyleSheets());
 
     TreeScopeSet::iterator begin = m_activeTreeScopes.begin();
@@ -468,7 +472,6 @@ void StyleEngine::appendActiveAuthorStyleSheets()
             m_resolver->appendAuthorStyleSheets(collection->activeAuthorStyleSheets());
     }
     m_resolver->finishAppendAuthorStyleSheets();
-    m_resolver->setBuildScopedStyleTreeInDocumentOrder(false);
 }
 
 void StyleEngine::createResolver()
@@ -480,6 +483,8 @@ void StyleEngine::createResolver()
     ASSERT(document().frame());
 
     m_resolver = adoptPtrWillBeNoop(new StyleResolver(*m_document));
+    addScopedStyleResolver(&m_document->ensureScopedStyleResolver());
+
     appendActiveAuthorStyleSheets();
     combineCSSFeatureFlags(m_resolver->ensureUpdatedRuleFeatureSet());
 }
@@ -488,6 +493,11 @@ void StyleEngine::clearResolver()
 {
     ASSERT(!document().inStyleRecalc());
     ASSERT(isMaster() || !m_resolver);
+
+    for (ScopedStyleResolverSet::iterator it = m_scopedStyleResolvers.begin(); it != m_scopedStyleResolvers.end(); ++it)
+        const_cast<TreeScope&>((*it)->treeScope()).clearScopedStyleResolver();
+    m_scopedStyleResolvers.clear();
+
     if (m_resolver)
         document().updateStyleInvalidationIfNeeded();
     m_resolver.clear();
@@ -551,9 +561,8 @@ void StyleEngine::resolverChanged(StyleResolverUpdateMode mode)
 
 void StyleEngine::clearFontCache()
 {
-    // We should not recreate FontSelector. Instead, clear fontFaceCache.
     if (m_fontSelector)
-        m_fontSelector->fontFaceCache()->clear();
+        m_fontSelector->fontFaceCache()->clearCSSConnected();
     if (m_resolver)
         m_resolver->invalidateMatchedPropertiesCache();
 }
@@ -667,6 +676,13 @@ void StyleEngine::removeSheet(StyleSheetContents* contents)
     m_sheetToTextCache.remove(contents);
 }
 
+void StyleEngine::collectScopedStyleFeaturesTo(RuleFeatureSet& features) const
+{
+    HashSet<const StyleSheetContents*> visitedSharedStyleSheetContents;
+    for (ScopedStyleResolverSet::iterator it = m_scopedStyleResolvers.begin(); it != m_scopedStyleResolvers.end(); ++it)
+        (*it)->collectFeaturesTo(features, visitedSharedStyleSheetContents);
+}
+
 void StyleEngine::fontsNeedUpdate(CSSFontSelector*)
 {
     if (!document().isActive())
@@ -685,6 +701,7 @@ void StyleEngine::trace(Visitor* visitor)
     visitor->trace(m_authorStyleSheets);
     visitor->trace(m_documentStyleSheetCollection);
     visitor->trace(m_styleSheetCollectionMap);
+    visitor->trace(m_scopedStyleResolvers);
     visitor->trace(m_resolver);
     visitor->trace(m_fontSelector);
     visitor->trace(m_textToSheetCache);

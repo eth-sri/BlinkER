@@ -30,11 +30,13 @@
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ScriptProfiler.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/UseCounter.h"
 #include "core/inspector/InjectedScriptHost.h"
 #include "core/inspector/InjectedScriptManager.h"
 #include "core/inspector/InspectorConsoleMessage.h"
 #include "core/inspector/InspectorState.h"
 #include "core/inspector/InspectorTimelineAgent.h"
+#include "core/inspector/InspectorTracingAgent.h"
 #include "core/inspector/InstrumentingAgents.h"
 #include "core/inspector/ScriptArguments.h"
 #include "core/inspector/ScriptCallFrame.h"
@@ -57,13 +59,15 @@ static const int expireConsoleMessagesStep = 100;
 namespace ConsoleAgentState {
 static const char monitoringXHR[] = "monitoringXHR";
 static const char consoleMessagesEnabled[] = "consoleMessagesEnabled";
+static const char tracingBasedTimeline[] = "tracingBasedTimeline";
 }
 
 int InspectorConsoleAgent::s_enabledAgentCount = 0;
 
-InspectorConsoleAgent::InspectorConsoleAgent(InspectorTimelineAgent* timelineAgent, InjectedScriptManager* injectedScriptManager)
+InspectorConsoleAgent::InspectorConsoleAgent(InspectorTimelineAgent* timelineAgent, InspectorTracingAgent* tracingAgent, InjectedScriptManager* injectedScriptManager)
     : InspectorBaseAgent<InspectorConsoleAgent>("Console")
     , m_timelineAgent(timelineAgent)
+    , m_tracingAgent(tracingAgent)
     , m_injectedScriptManager(injectedScriptManager)
     , m_frontend(0)
     , m_expiredConsoleMessageCount(0)
@@ -73,10 +77,17 @@ InspectorConsoleAgent::InspectorConsoleAgent(InspectorTimelineAgent* timelineAge
 
 InspectorConsoleAgent::~InspectorConsoleAgent()
 {
+#if !ENABLE(OILPAN)
     m_instrumentingAgents->setInspectorConsoleAgent(0);
-    m_instrumentingAgents = 0;
-    m_state = 0;
-    m_injectedScriptManager = 0;
+#endif
+}
+
+void InspectorConsoleAgent::trace(Visitor* visitor)
+{
+    visitor->trace(m_timelineAgent);
+    visitor->trace(m_tracingAgent);
+    visitor->trace(m_injectedScriptManager);
+    InspectorBaseAgent::trace(visitor);
 }
 
 void InspectorConsoleAgent::init()
@@ -222,19 +233,31 @@ void InspectorConsoleAgent::consoleTimeEnd(ExecutionContext*, const String& titl
     addConsoleAPIMessageToConsole(LogMessageType, DebugMessageLevel, message, scriptState, nullptr);
 }
 
+void InspectorConsoleAgent::setTracingBasedTimeline(ErrorString*, bool enabled)
+{
+    m_state->setBoolean(ConsoleAgentState::tracingBasedTimeline, enabled);
+}
+
 void InspectorConsoleAgent::consoleTimeline(ExecutionContext* context, const String& title, ScriptState* scriptState)
 {
-    m_timelineAgent->consoleTimeline(context, title, scriptState);
+    UseCounter::count(context, UseCounter::DevToolsConsoleTimeline);
+    if (m_tracingAgent && m_state->getBoolean(ConsoleAgentState::tracingBasedTimeline))
+        m_tracingAgent->consoleTimeline(title);
+    else
+        m_timelineAgent->consoleTimeline(context, title, scriptState);
 }
 
 void InspectorConsoleAgent::consoleTimelineEnd(ExecutionContext* context, const String& title, ScriptState* scriptState)
 {
-    m_timelineAgent->consoleTimelineEnd(context, title, scriptState);
+    if (m_state->getBoolean(ConsoleAgentState::tracingBasedTimeline))
+        m_tracingAgent->consoleTimelineEnd(title);
+    else
+        m_timelineAgent->consoleTimelineEnd(context, title, scriptState);
 }
 
 void InspectorConsoleAgent::consoleCount(ScriptState* scriptState, PassRefPtrWillBeRawPtr<ScriptArguments> arguments)
 {
-    RefPtrWillBeRawPtr<ScriptCallStack> callStack(createScriptCallStackForConsole(scriptState));
+    RefPtrWillBeRawPtr<ScriptCallStack> callStack(createScriptCallStackForConsole(scriptState, 1));
     const ScriptCallFrame& lastCaller = callStack->at(0);
     // Follow Firebug's behavior of counting with null and undefined title in
     // the same bucket as no argument

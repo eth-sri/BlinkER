@@ -1,7 +1,7 @@
 /*
  * (C) 1999 Lars Knoll (knoll@kde.org)
  * (C) 2000 Dirk Mueller (mueller@kde.org)
- * Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009 Apple Inc. All rights reserved.
+ * Copyright (C) 2004-2009, 2013 Apple Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -23,6 +23,7 @@
 #ifndef RenderText_h
 #define RenderText_h
 
+#include "core/dom/Text.h"
 #include "core/rendering/RenderObject.h"
 #include "platform/LengthFunctions.h"
 #include "platform/text/TextPath.h"
@@ -141,14 +142,12 @@ public:
     bool isAllCollapsibleWhitespace() const;
 
     bool canUseSimpleFontCodePath() const { return m_canUseSimpleFontCodePath; }
-    bool knownToHaveNoOverflowAndNoFallbackFonts() const { return m_knownToHaveNoOverflowAndNoFallbackFonts; }
 
     void removeAndDestroyTextBoxes();
 
     PassRefPtr<AbstractInlineTextBox> firstAbstractInlineTextBox();
 
 protected:
-    virtual void computePreferredLogicalWidths(float leadWidth);
     virtual void willBeDestroyed() OVERRIDE;
 
     virtual void styleWillChange(StyleDifference, const RenderStyle&) OVERRIDE FINAL { }
@@ -162,6 +161,7 @@ protected:
     virtual InlineTextBox* createTextBox(); // Subclassed by SVG.
 
 private:
+    void computePreferredLogicalWidths(float leadWidth);
     void computePreferredLogicalWidths(float leadWidth, HashSet<const SimpleFontData*>& fallbackFonts, GlyphOverflow&);
 
     bool computeCanUseSimpleFontCodePath() const;
@@ -181,6 +181,8 @@ private:
     bool isAllASCII() const { return m_isAllASCII; }
 
     void secureText(UChar mask);
+
+    bool isText() const WTF_DELETED_FUNCTION; // This will catch anyone doing an unnecessary check.
 
     // We put the bitfield first to minimize padding on 64-bit.
     bool m_hasBreakableChar : 1; // Whether or not we can be broken into multiple lines.
@@ -230,6 +232,11 @@ inline void RenderText::checkConsistency() const
 {
 }
 #endif
+
+inline RenderText* Text::renderer() const
+{
+    return toRenderText(CharacterData::renderer());
+}
 
 void applyTextTransform(const RenderStyle*, String&, UChar);
 

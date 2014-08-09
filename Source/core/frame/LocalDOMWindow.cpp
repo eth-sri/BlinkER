@@ -70,7 +70,6 @@
 #include "core/frame/Navigator.h"
 #include "core/frame/Screen.h"
 #include "core/frame/Settings.h"
-#include "core/frame/WebKitPoint.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InspectorTraceEvents.h"
@@ -992,6 +991,8 @@ void LocalDOMWindow::close(ExecutionContext* context)
     if (!m_frame->loader().shouldClose())
         return;
 
+    InspectorInstrumentation::willCloseWindow(context);
+
     page->chrome().closeWindowSoon();
 }
 
@@ -1342,36 +1343,6 @@ PassRefPtrWillBeRawPtr<CSSRuleList> LocalDOMWindow::getMatchedCSSRules(Element* 
     return m_frame->document()->ensureStyleResolver().pseudoCSSRulesForElement(element, pseudoId, rulesToInclude);
 }
 
-PassRefPtrWillBeRawPtr<WebKitPoint> LocalDOMWindow::webkitConvertPointFromNodeToPage(Node* node, const WebKitPoint* p) const
-{
-    if (!node || !p)
-        return nullptr;
-
-    if (!document())
-        return nullptr;
-
-    document()->updateLayoutIgnorePendingStylesheets();
-
-    FloatPoint pagePoint(p->x(), p->y());
-    pagePoint = node->convertToPage(pagePoint);
-    return WebKitPoint::create(pagePoint.x(), pagePoint.y());
-}
-
-PassRefPtrWillBeRawPtr<WebKitPoint> LocalDOMWindow::webkitConvertPointFromPageToNode(Node* node, const WebKitPoint* p) const
-{
-    if (!node || !p)
-        return nullptr;
-
-    if (!document())
-        return nullptr;
-
-    document()->updateLayoutIgnorePendingStylesheets();
-
-    FloatPoint nodePoint(p->x(), p->y());
-    nodePoint = node->convertFromPage(nodePoint);
-    return WebKitPoint::create(nodePoint.x(), nodePoint.y());
-}
-
 double LocalDOMWindow::devicePixelRatio() const
 {
     if (!m_frame)
@@ -1395,7 +1366,7 @@ static bool scrollBehaviorFromScrollOptions(const Dictionary& scrollOptions, Scr
     return false;
 }
 
-void LocalDOMWindow::scrollBy(int x, int y) const
+void LocalDOMWindow::scrollBy(int x, int y, ScrollBehavior scrollBehavior) const
 {
     if (!isCurrentlyDisplayedInFrame())
         return;
@@ -1407,8 +1378,7 @@ void LocalDOMWindow::scrollBy(int x, int y) const
         return;
 
     IntSize scaledOffset(x * m_frame->pageZoomFactor(), y * m_frame->pageZoomFactor());
-    // FIXME: Use scrollBehavior to decide whether to scroll smoothly or instantly.
-    view->scrollBy(scaledOffset);
+    view->scrollBy(scaledOffset, scrollBehavior);
 }
 
 void LocalDOMWindow::scrollBy(int x, int y, const Dictionary& scrollOptions, ExceptionState &exceptionState) const
@@ -1416,10 +1386,10 @@ void LocalDOMWindow::scrollBy(int x, int y, const Dictionary& scrollOptions, Exc
     ScrollBehavior scrollBehavior = ScrollBehaviorAuto;
     if (!scrollBehaviorFromScrollOptions(scrollOptions, scrollBehavior, exceptionState))
         return;
-    scrollBy(x, y);
+    scrollBy(x, y, scrollBehavior);
 }
 
-void LocalDOMWindow::scrollTo(int x, int y) const
+void LocalDOMWindow::scrollTo(int x, int y, ScrollBehavior scrollBehavior) const
 {
     if (!isCurrentlyDisplayedInFrame())
         return;
@@ -1431,8 +1401,7 @@ void LocalDOMWindow::scrollTo(int x, int y) const
         return;
 
     IntPoint layoutPos(x * m_frame->pageZoomFactor(), y * m_frame->pageZoomFactor());
-    // FIXME: Use scrollBehavior to decide whether to scroll smoothly or instantly.
-    view->setScrollPosition(layoutPos);
+    view->setScrollPosition(layoutPos, scrollBehavior);
 }
 
 void LocalDOMWindow::scrollTo(int x, int y, const Dictionary& scrollOptions, ExceptionState& exceptionState) const
@@ -1440,7 +1409,7 @@ void LocalDOMWindow::scrollTo(int x, int y, const Dictionary& scrollOptions, Exc
     ScrollBehavior scrollBehavior = ScrollBehaviorAuto;
     if (!scrollBehaviorFromScrollOptions(scrollOptions, scrollBehavior, exceptionState))
         return;
-    scrollTo(x, y);
+    scrollTo(x, y, scrollBehavior);
 }
 
 void LocalDOMWindow::moveBy(float x, float y) const
@@ -1725,6 +1694,9 @@ void LocalDOMWindow::setLocation(const String& urlString, LocalDOMWindow* callin
 
 void LocalDOMWindow::printErrorMessage(const String& message)
 {
+    if (!isCurrentlyDisplayedInFrame())
+        return;
+
     if (message.isEmpty())
         return;
 

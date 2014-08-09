@@ -6,15 +6,17 @@
 #define RecordingImageBufferSurface_h
 
 #include "platform/graphics/ImageBufferSurface.h"
+#include "public/platform/WebThread.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/RefPtr.h"
 
 class SkPicture;
 class SkPictureRecorder;
+class RecordingImageBufferSurfaceTest;
 
-namespace WebCore {
+namespace blink {
 
-class GraphicsContext;
+class ImageBuffer;
 
 class PLATFORM_EXPORT RecordingImageBufferSurface : public ImageBufferSurface {
     WTF_MAKE_NONCOPYABLE(RecordingImageBufferSurface); WTF_MAKE_FAST_ALLOCATED;
@@ -27,21 +29,24 @@ public:
     virtual PassRefPtr<SkPicture> getPicture() OVERRIDE;
     virtual bool isValid() const OVERRIDE { return true; }
     virtual void willReadback() OVERRIDE;
+    virtual void finalizeFrame() OVERRIDE;
     virtual void didClearCanvas() OVERRIDE;
     virtual void setImageBuffer(ImageBuffer*) OVERRIDE;
 
 private:
+    friend class ::RecordingImageBufferSurfaceTest; // for unit testing
     void fallBackToRasterCanvas();
     void initializeCurrentFrame();
-    bool handleOpaqueFrame();
+    bool finalizeFrameInternal();
 
     OwnPtr<SkPictureRecorder> m_currentFrame;
     RefPtr<SkPicture> m_previousFrame;
     OwnPtr<SkCanvas> m_rasterCanvas;
-    GraphicsContext* m_graphicsContext;
+    ImageBuffer* m_imageBuffer;
+    int m_initialSaveCount;
     bool m_frameWasCleared;
 };
 
-} // namespace WebCore
+} // namespace blink
 
 #endif

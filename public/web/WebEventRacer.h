@@ -17,7 +17,7 @@ struct WebOperation {
     size_t location;
 
 #if BLINK_IMPLEMENTATION
-    WebOperation(const WebCore::Operation &op)
+    WebOperation(const Operation &op)
     : type(op.getType())
     , location(op.getLocation())
     {}
@@ -30,7 +30,7 @@ struct WebEventAction {
     std::vector<WebOperation> ops;
 
 #if BLINK_IMPLEMENTATION
-    WebEventAction(const WebCore::EventAction &a)
+    WebEventAction(const EventAction &a)
     : id(a.getId())
     , type(a.getType())
     , ops(a.getOps().begin(), a.getOps().end())

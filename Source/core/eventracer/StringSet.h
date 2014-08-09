@@ -11,7 +11,7 @@
 #include "wtf/text/WTFString.h"
 #include "wtf/Vector.h"
 
-namespace WebCore {
+namespace blink {
 
 class StringSet {
 public:

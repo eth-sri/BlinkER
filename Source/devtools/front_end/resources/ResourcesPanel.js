@@ -1213,7 +1213,7 @@ WebInspector.FrameResourceTreeElement.prototype = {
     _setBubbleText: function(x)
     {
         if (!this._bubbleElement)
-            this._bubbleElement = this._statusElement.createChild("div", "bubble");
+            this._bubbleElement = this._statusElement.createChild("div", "bubble-repeat-count");
         this._bubbleElement.textContent = x;
     },
 
@@ -1343,7 +1343,7 @@ WebInspector.DatabaseTreeElement.prototype = {
  */
 WebInspector.DatabaseTableTreeElement = function(storagePanel, database, tableName)
 {
-    WebInspector.BaseStorageTreeElement.call(this, storagePanel, null, tableName, ["database-storage-tree-item"]);
+    WebInspector.BaseStorageTreeElement.call(this, storagePanel, null, tableName, ["database-table-storage-tree-item"]);
     this._database = database;
     this._tableName = tableName;
 }

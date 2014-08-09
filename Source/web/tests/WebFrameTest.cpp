@@ -41,6 +41,7 @@
 #include "core/css/resolver/ViewportStyleResolver.h"
 #include "core/dom/DocumentMarkerController.h"
 #include "core/dom/FullscreenElementStack.h"
+#include "core/dom/NodeRenderStyle.h"
 #include "core/dom/Range.h"
 #include "core/editing/Editor.h"
 #include "core/editing/FrameSelection.h"
@@ -60,7 +61,6 @@
 #include "core/page/Page.h"
 #include "core/rendering/HitTestResult.h"
 #include "core/rendering/RenderView.h"
-#include "core/rendering/TextAutosizer.h"
 #include "core/rendering/compositing/RenderLayerCompositor.h"
 #include "platform/DragImage.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -2113,7 +2113,7 @@ TEST_F(WebFrameTest, pageScaleFactorScalesPaintClip)
     SkCanvas canvas(bitmap);
 
     blink::GraphicsContext context(&canvas);
-    context.setTrackOpaqueRegion(true);
+    context.setRegionTrackingMode(GraphicsContext::RegionTrackingOpaque);
 
     EXPECT_EQ_RECT(blink::IntRect(0, 0, 0, 0), context.opaqueRegion().asRect());
 
@@ -4339,6 +4339,27 @@ TEST_F(WebFrameTest, MoveCaretSelectionTowardsWindowPointWithNoSelection)
     frame->moveCaretSelection(WebPoint(0, 0));
 }
 
+TEST_F(WebFrameTest, NavigateToSandboxedMarkup)
+{
+    FrameTestHelpers::WebViewHelper webViewHelper;
+    WebViewImpl* webViewImpl = webViewHelper.initializeAndLoad("about:blank", true);
+    WebLocalFrameImpl* frame = toWebLocalFrameImpl(webViewHelper.webView()->mainFrame());
+
+    frame->document().setIsTransitionDocument();
+
+    std::string markup("<div id='foo'></div><script>document.getElementById('foo').setAttribute('dir', 'rtl')</script>");
+    frame->navigateToSandboxedMarkup(WebData(markup.data(), markup.length()));
+    FrameTestHelpers::runPendingTasks();
+
+    WebDocument document = webViewImpl->mainFrame()->document();
+    WebElement transitionElement = document.getElementById("foo");
+    // Check that the markup got navigated to successfully.
+    EXPECT_FALSE(transitionElement.isNull());
+
+    // Check that the inline script was not executed.
+    EXPECT_FALSE(transitionElement.hasAttribute("dir"));
+}
+
 class SpellCheckClient : public WebSpellCheckClient {
 public:
     explicit SpellCheckClient(uint32_t hash = 0) : m_numberOfTimesChecked(0), m_hash(hash) { }
@@ -5916,17 +5937,15 @@ TEST_F(WebFrameTest, LoaderOriginAccess)
     // First try to load the request with regular access. Should fail.
     options.crossOriginRequestPolicy = blink::UseAccessControl;
     blink::ResourceLoaderOptions resourceLoaderOptions;
-    blink::ResourceRequest request(resourceUrl);
-    request.setRequestContext(WebURLRequest::RequestContextInternal);
     blink::DocumentThreadableLoader::loadResourceSynchronously(
-        *frame->document(), request, client, options, resourceLoaderOptions);
+        *frame->document(), blink::ResourceRequest(resourceUrl), client, options, resourceLoaderOptions);
     EXPECT_TRUE(client.failed());
 
     client.reset();
     // Try to load the request with cross origin access. Should succeed.
     options.crossOriginRequestPolicy = blink::AllowCrossOriginRequests;
     blink::DocumentThreadableLoader::loadResourceSynchronously(
-        *frame->document(), request, client, options, resourceLoaderOptions);
+        *frame->document(), blink::ResourceRequest(resourceUrl), client, options, resourceLoaderOptions);
     EXPECT_FALSE(client.failed());
 }
 

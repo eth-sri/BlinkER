@@ -44,6 +44,7 @@
 #include "modules/serviceworkers/ServiceWorker.h"
 #include "modules/serviceworkers/ServiceWorkerContainerClient.h"
 #include "modules/serviceworkers/ServiceWorkerError.h"
+#include "modules/serviceworkers/ServiceWorkerRegistration.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "public/platform/WebServiceWorker.h"
 #include "public/platform/WebServiceWorkerProvider.h"
@@ -94,33 +95,54 @@ ScriptPromise ServiceWorkerContainer::registerServiceWorker(ScriptState* scriptS
         return promise;
     }
 
+    // FIXME: This should use the container's execution context, not
+    // the callers.
     ExecutionContext* executionContext = scriptState->executionContext();
     RefPtr<SecurityOrigin> documentOrigin = executionContext->securityOrigin();
+    String errorMessage;
+    if (!documentOrigin->canAccessFeatureRequiringSecureOrigin(errorMessage)) {
+        resolver->reject(DOMException::create(NotSupportedError, errorMessage));
+        return promise;
+    }
+
     KURL patternURL = executionContext->completeURL(options.scope);
     patternURL.removeFragmentIdentifier();
     if (!documentOrigin->canRequest(patternURL)) {
-        resolver->reject(DOMException::create(SecurityError, "Can only register for patterns in the document's origin."));
+        resolver->reject(DOMException::create(SecurityError, "The scope must match the current origin."));
         return promise;
     }
 
     KURL scriptURL = executionContext->completeURL(url);
     scriptURL.removeFragmentIdentifier();
     if (!documentOrigin->canRequest(scriptURL)) {
-        resolver->reject(DOMException::create(SecurityError, "Script must be in document's origin."));
+        resolver->reject(DOMException::create(SecurityError, "The origin of the script must match the current origin."));
         return promise;
     }
 
+#ifdef DISABLE_SERVICE_WORKER_REGISTRATION
     m_provider->registerServiceWorker(patternURL, scriptURL, new CallbackPromiseAdapter<ServiceWorker, ServiceWorkerError>(resolver));
+#else
+    m_provider->registerServiceWorker(patternURL, scriptURL, new CallbackPromiseAdapter<ServiceWorkerRegistration, ServiceWorkerError>(resolver));
+#endif
+
     return promise;
 }
 
 class UndefinedValue {
 public:
+#ifdef DISABLE_SERVICE_WORKER_REGISTRATION
     typedef WebServiceWorker WebType;
-    static V8UndefinedType from(ScriptPromiseResolver* resolver, WebServiceWorker* worker)
+#else
+    typedef WebServiceWorkerRegistration WebType;
+#endif
+    static V8UndefinedType take(ScriptPromiseResolver* resolver, WebType* registration)
     {
-        ASSERT(!worker); // Anything passed here will be leaked.
+        ASSERT(!registration); // Anything passed here will be leaked.
         return V8UndefinedType();
+    }
+    static void dispose(WebType* registration)
+    {
+        ASSERT(!registration); // Anything passed here will be leaked.
     }
 
 private:
@@ -138,11 +160,19 @@ ScriptPromise ServiceWorkerContainer::unregisterServiceWorker(ScriptState* scrip
         return promise;
     }
 
+    // FIXME: This should use the container's execution context, not
+    // the callers.
     RefPtr<SecurityOrigin> documentOrigin = scriptState->executionContext()->securityOrigin();
+    String errorMessage;
+    if (!documentOrigin->canAccessFeatureRequiringSecureOrigin(errorMessage)) {
+        resolver->reject(DOMException::create(NotSupportedError, errorMessage));
+        return promise;
+    }
+
     KURL patternURL = scriptState->executionContext()->completeURL(pattern);
     patternURL.removeFragmentIdentifier();
     if (!pattern.isEmpty() && !documentOrigin->canRequest(patternURL)) {
-        resolver->reject(DOMException::create(SecurityError, "Can only unregister for patterns in the document's origin."));
+        resolver->reject(DOMException::create(SecurityError, "The scope must match the current origin."));
         return promise;
     }
 
@@ -150,9 +180,9 @@ ScriptPromise ServiceWorkerContainer::unregisterServiceWorker(ScriptState* scrip
     return promise;
 }
 
-PassRefPtrWillBeRawPtr<ServiceWorkerContainer::ReadyProperty> ServiceWorkerContainer::createReadyProperty()
+ServiceWorkerContainer::ReadyProperty* ServiceWorkerContainer::createReadyProperty()
 {
-    return ReadyProperty::create(executionContext(), this, ReadyProperty::Ready);
+    return new ReadyProperty(executionContext(), this, ReadyProperty::Ready);
 }
 
 ScriptPromise ServiceWorkerContainer::ready(ScriptState* callerState)

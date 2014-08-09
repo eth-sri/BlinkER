@@ -201,7 +201,7 @@ void SpellChecker::advanceToNextMisspelling(bool startBeforeSelection)
     }
 
     // topNode defines the whole range we want to operate on
-    Node* topNode = highestEditableRoot(position);
+    ContainerNode* topNode = highestEditableRoot(position);
     // FIXME: lastOffsetForEditing() is wrong here if editingIgnoresContent(highestEditableRoot()) returns true (e.g. a <table>)
     spellingSearchRange->setEnd(topNode, lastOffsetForEditing(topNode), IGNORE_EXCEPTION);
 
@@ -861,7 +861,7 @@ static Node* findFirstMarkable(Node* node)
             return node;
         if (node->renderer()->isTextControl())
             node = toRenderTextControl(node->renderer())->textFormControlElement()->visiblePositionForIndex(1).deepEquivalent().deprecatedNode();
-        else if (node->firstChild())
+        else if (node->hasChildren())
             node = node->firstChild();
         else
             node = node->nextSibling();

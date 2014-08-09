@@ -341,10 +341,12 @@ v8::Local<v8::String>, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackI
 
 {##############################################################################}
 {% macro attribute_getter_implemented_in_private_script(attribute) %}
-static bool {{attribute.name}}AttributeGetterImplementedInPrivateScript(LocalFrame* frame, {{cpp_class}}* holderImpl, {{attribute.cpp_type}}* result)
+bool {{v8_class}}::{{attribute.name}}AttributeGetterImplementedInPrivateScript(LocalFrame* frame, {{cpp_class}}* holderImpl, {{attribute.cpp_type}}* result)
 {
     if (!frame)
         return false;
+    v8::HandleScope handleScope(toIsolate(frame));
+    ScriptForbiddenScope::AllowUserAgentScript script;
     v8::Handle<v8::Context> context = toV8Context(frame, DOMWrapperWorld::privateScriptIsolatedWorld());
     if (context.IsEmpty())
         return false;
@@ -375,10 +377,12 @@ static bool {{attribute.name}}AttributeGetterImplementedInPrivateScript(LocalFra
 
 
 {% macro attribute_setter_implemented_in_private_script(attribute) %}
-static bool {{attribute.name}}AttributeSetterImplementedInPrivateScript(LocalFrame* frame, {{cpp_class}}* holderImpl, {{attribute.argument_cpp_type}} cppValue)
+bool {{v8_class}}::{{attribute.name}}AttributeSetterImplementedInPrivateScript(LocalFrame* frame, {{cpp_class}}* holderImpl, {{attribute.argument_cpp_type}} cppValue)
 {
     if (!frame)
         return false;
+    v8::HandleScope handleScope(toIsolate(frame));
+    ScriptForbiddenScope::AllowUserAgentScript script;
     v8::Handle<v8::Context> context = toV8Context(frame, DOMWrapperWorld::privateScriptIsolatedWorld());
     if (context.IsEmpty())
         return false;

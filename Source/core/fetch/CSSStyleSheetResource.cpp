@@ -33,7 +33,6 @@
 #include "platform/SharedBuffer.h"
 #include "platform/network/HTTPParsers.h"
 #include "wtf/CurrentTime.h"
-#include "wtf/Vector.h"
 
 namespace blink {
 
@@ -58,6 +57,12 @@ void CSSStyleSheetResource::dispose()
     if (m_parsedStyleSheetCache)
         m_parsedStyleSheetCache->removedFromMemoryCache();
     m_parsedStyleSheetCache.clear();
+}
+
+void CSSStyleSheetResource::trace(Visitor* visitor)
+{
+    visitor->trace(m_parsedStyleSheetCache);
+    StyleSheetResource::trace(visitor);
 }
 
 void CSSStyleSheetResource::didAddClient(ResourceClient* c)

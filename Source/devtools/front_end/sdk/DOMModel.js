@@ -456,12 +456,17 @@ WebInspector.DOMNode.prototype = {
         this._agent.removeNode(this.id, this._domModel._markRevision(this, callback));
     },
 
-    copyNode: function()
+    /**
+     * @param {function(?string)=} callback
+     */
+    copyNode: function(callback)
     {
         function copy(error, text)
         {
             if (!error)
                 InspectorFrontendHost.copyText(text);
+            if (callback)
+                callback(error ? null : text);
         }
         this._agent.getOuterHTML(this.id, copy);
     },
@@ -702,6 +707,16 @@ WebInspector.DOMNode.prototype = {
             this._attributes.remove(attr);
             delete this._attributesMap[name];
         }
+    },
+
+    /**
+     * @param {!WebInspector.DOMNode} targetNode
+     * @param {?WebInspector.DOMNode} anchorNode
+     * @param {function(?Protocol.Error, !DOMAgent.NodeId=)=} callback
+     */
+    copyTo: function(targetNode, anchorNode, callback)
+    {
+        this._agent.copyTo(this.id, targetNode.id, anchorNode ? anchorNode.id : undefined, this._domModel._markRevision(this, callback));
     },
 
     /**
@@ -1355,9 +1370,10 @@ WebInspector.DOMModel.prototype = {
 
     /**
      * @param {string} query
+     * @param {boolean} includeUserAgentShadowDOM
      * @param {function(number)} searchCallback
      */
-    performSearch: function(query, searchCallback)
+    performSearch: function(query, includeUserAgentShadowDOM, searchCallback)
     {
         this.cancelSearch();
 
@@ -1372,14 +1388,15 @@ WebInspector.DOMModel.prototype = {
             this._searchId = searchId;
             searchCallback(resultsCount);
         }
-        this._agent.performSearch(query, callback.bind(this));
+        this._agent.performSearch(query, includeUserAgentShadowDOM, callback.bind(this));
     },
 
     /**
      * @param {string} query
+     * @param {boolean} includeUserAgentShadowDOM
      * @return {!Promise.<number>}
      */
-    performSearchPromise: function(query)
+    performSearchPromise: function(query, includeUserAgentShadowDOM)
     {
         return new Promise(performSearch.bind(this));
 
@@ -1389,7 +1406,7 @@ WebInspector.DOMModel.prototype = {
          */
         function performSearch(resolve)
         {
-            this._agent.performSearch(query, callback.bind(this));
+            this._agent.performSearch(query, includeUserAgentShadowDOM, callback.bind(this));
 
             /**
              * @param {?Protocol.Error} error
@@ -1399,9 +1416,8 @@ WebInspector.DOMModel.prototype = {
              */
             function callback(error, searchId, resultsCount)
             {
-                if (error)
-                    return;
-                this._searchId = searchId;
+                if (!error)
+                    this._searchId = searchId;
                 resolve(error ? 0 : resultsCount);
             }
         }
@@ -1544,9 +1560,11 @@ WebInspector.DOMModel.prototype = {
         if (mode === "all" || mode === "margin")
             highlightConfig.marginColor = WebInspector.Color.PageHighlight.Margin.toProtocolRGBA();
 
-        if (mode === "all")
+        if (mode === "all") {
             highlightConfig.eventTargetColor = WebInspector.Color.PageHighlight.EventTarget.toProtocolRGBA();
-
+            highlightConfig.shapeColor = WebInspector.Color.PageHighlight.Shape.toProtocolRGBA();
+            highlightConfig.shapeMarginColor = WebInspector.Color.PageHighlight.ShapeMargin.toProtocolRGBA();
+        }
         return highlightConfig;
     },
 
@@ -1837,6 +1855,12 @@ WebInspector.DOMModel.EventListener = function(target, payload)
 {
     WebInspector.SDKObject.call(this, target);
     this._payload = payload;
+    var sourceName = this._payload.sourceName;
+    if (!sourceName) {
+        var script = target.debuggerModel.scriptForId(payload.location.scriptId);
+        sourceName = script ? script.contentURL() : "";
+    }
+    this._sourceName = sourceName;
 }
 
 WebInspector.DOMModel.EventListener.prototype = {
@@ -1870,6 +1894,14 @@ WebInspector.DOMModel.EventListener.prototype = {
     handler: function()
     {
         return this._payload.handler ? this.target().runtimeModel.createRemoteObject(this._payload.handler) : null;
+    },
+
+    /**
+     * @return {string}
+     */
+    sourceName: function()
+    {
+        return this._sourceName;
     },
 
     __proto__: WebInspector.SDKObject.prototype

@@ -184,13 +184,13 @@ void RenderView::checkLayoutState()
 }
 #endif
 
-bool RenderView::shouldDoFullRepaintForNextLayout() const
+bool RenderView::shouldDoFullPaintInvalidationForNextLayout() const
 {
-    // It's hard to predict here which of full repaint or per-descendant repaint costs less.
-    // For vertical writing mode or width change it's more likely that per-descendant repaint
-    // eventually turns out to be full repaint but with the cost to handle more layout states
-    // and discrete repaint rects, so marking full repaint here is more likely to cost less.
-    // Otherwise, per-descendant repaint is more likely to avoid unnecessary full repaints.
+    // It's hard to predict here which of full paint invalidation or per-descendant paint invalidation costs less.
+    // For vertical writing mode or width change it's more likely that per-descendant paint invalidation
+    // eventually turns out to be full paint invalidation but with the cost to handle more layout states
+    // and discrete paint invalidation rects, so marking full paint invalidation here is more likely to cost less.
+    // Otherwise, per-descendant paint invalidation is more likely to avoid unnecessary full paint invalidation.
 
     if (shouldUsePrintingLayout())
         return true;
@@ -201,8 +201,8 @@ bool RenderView::shouldDoFullRepaintForNextLayout() const
     if (height() != viewHeight()) {
         if (RenderObject* backgroundRenderer = this->backgroundRenderer()) {
             // When background-attachment is 'fixed', we treat the viewport (instead of the 'root'
-            // i.e. html or body) as the background positioning area, and we should full repaint
-            // viewport resize if the background image is not composited and needs full repaint on
+            // i.e. html or body) as the background positioning area, and we should full paint invalidation
+            // viewport resize if the background image is not composited and needs full paint invalidation on
             // background positioning area resize.
             if (!m_compositor || !m_compositor->needsFixedRootBackgroundLayer(layer())) {
                 if (backgroundRenderer->style()->hasFixedBackgroundImage()
@@ -391,25 +391,6 @@ bool RenderView::rootFillsViewportBackground(RenderBox* rootBox) const
 
 void RenderView::paintBoxDecorationBackground(PaintInfo& paintInfo, const LayoutPoint&)
 {
-    // Check to see if we are enclosed by a layer that requires complex painting rules.  If so, we cannot blit
-    // when scrolling, and we need to use slow repaints.  Examples of layers that require this are transparent layers,
-    // layers with reflections, or transformed layers.
-    // FIXME: This needs to be dynamic.  We should be able to go back to blitting if we ever stop being inside
-    // a transform, transparency layer, etc.
-    Element* elt;
-    for (elt = document().ownerElement(); view() && elt && elt->renderer(); elt = elt->document().ownerElement()) {
-        RenderLayer* layer = elt->renderer()->enclosingLayer();
-        if (layer->cannotBlitToWindow()) {
-            frameView()->setCannotBlitToWindow();
-            break;
-        }
-
-        if (layer->enclosingLayerForPaintInvalidation()) {
-            frameView()->setCannotBlitToWindow();
-            break;
-        }
-    }
-
     if (document().ownerElement() || !view())
         return;
 
@@ -429,9 +410,7 @@ void RenderView::paintBoxDecorationBackground(PaintInfo& paintInfo, const Layout
     // if there is a transform on the <html>, or if there is a page scale factor less than 1.
     // Only fill with the base background color (typically white) if we're the root document,
     // since iframes/frames with no background in the child document should show the parent's background.
-    if (frameView()->isTransparent()) // FIXME: This needs to be dynamic.  We should be able to go back to blitting if we ever stop being transparent.
-        frameView()->setCannotBlitToWindow(); // The parent must show behind the child.
-    else {
+    if (!frameView()->isTransparent()) {
         Color baseColor = frameView()->baseBackgroundColor();
         if (baseColor.alpha()) {
             CompositeOperator previousOperator = paintInfo.context->compositeOperation();
@@ -450,15 +429,15 @@ void RenderView::invalidateTreeIfNeeded(const PaintInvalidationState& paintInval
 
     // We specifically need to repaint the viewRect since other renderers
     // short-circuit on full-repaint.
-    if (doingFullRepaint() && !viewRect().isEmpty())
-        repaintViewRectangle(viewRect());
+    if (doingFullPaintInvalidation() && !viewRect().isEmpty())
+        invalidatePaintForRectangle(viewRect());
 
     RenderBlock::invalidateTreeIfNeeded(paintInvalidationState);
 }
 
-void RenderView::repaintViewRectangle(const LayoutRect& repaintRect) const
+void RenderView::invalidatePaintForRectangle(const LayoutRect& paintInvalidationRect) const
 {
-    ASSERT(!repaintRect.isEmpty());
+    ASSERT(!paintInvalidationRect.isEmpty());
 
     if (document().printing() || !m_frameView)
         return;
@@ -467,24 +446,24 @@ void RenderView::repaintViewRectangle(const LayoutRect& repaintRect) const
     // or even invisible.
     Element* owner = document().ownerElement();
     if (layer()->compositingState() == PaintsIntoOwnBacking) {
-        layer()->repainter().setBackingNeedsRepaintInRect(repaintRect);
+        layer()->repainter().setBackingNeedsRepaintInRect(paintInvalidationRect);
     } else if (!owner) {
-        m_frameView->contentRectangleForPaintInvalidation(pixelSnappedIntRect(repaintRect));
+        m_frameView->contentRectangleForPaintInvalidation(pixelSnappedIntRect(paintInvalidationRect));
     } else if (RenderBox* obj = owner->renderBox()) {
+        // Intersect the viewport with the paint invalidation rect.
         LayoutRect viewRectangle = viewRect();
-        LayoutRect rectToRepaint = intersection(repaintRect, viewRectangle);
+        LayoutRect rectToInvalidate = intersection(paintInvalidationRect, viewRectangle);
 
-        // Subtract out the contentsX and contentsY offsets to get our coords within the viewing
-        // rectangle.
-        rectToRepaint.moveBy(-viewRectangle.location());
+        // Adjust for scroll offset of the view.
+        rectToInvalidate.moveBy(-viewRectangle.location());
 
-        // FIXME: Hardcoded offsets here are not good.
-        rectToRepaint.moveBy(obj->contentBoxRect().location());
-        obj->invalidatePaintRectangle(rectToRepaint);
+        // Adjust for frame border.
+        rectToInvalidate.moveBy(obj->contentBoxRect().location());
+        obj->invalidatePaintRectangle(rectToInvalidate);
     }
 }
 
-void RenderView::repaintViewAndCompositedLayers()
+void RenderView::invalidatePaintForViewAndCompositedLayers()
 {
     paintInvalidationForWholeRenderer();
 
@@ -492,7 +471,7 @@ void RenderView::repaintViewAndCompositedLayers()
     DisableCompositingQueryAsserts disabler;
 
     if (compositor()->inCompositingMode())
-        compositor()->repaintCompositedLayers();
+        compositor()->fullyInvalidatePaint();
 }
 
 void RenderView::mapRectToPaintInvalidationBacking(const RenderLayerModelObject* paintInvalidationContainer, LayoutRect& rect, bool fixed, const PaintInvalidationState* paintInvalidationState) const
@@ -576,10 +555,10 @@ IntRect RenderView::selectionBounds(bool clipToVisibleContent) const
     SelectionMap::iterator end = selectedObjects.end();
     for (SelectionMap::iterator i = selectedObjects.begin(); i != end; ++i) {
         RenderSelectionInfo* info = i->value.get();
-        // RenderSelectionInfo::rect() is in the coordinates of the repaintContainer, so map to page coordinates.
+        // RenderSelectionInfo::rect() is in the coordinates of the paintInvalidationContainer, so map to page coordinates.
         LayoutRect currRect = info->rect();
-        if (const RenderLayerModelObject* repaintContainer = info->repaintContainer()) {
-            FloatQuad absQuad = repaintContainer->localToAbsoluteQuad(FloatRect(currRect));
+        if (const RenderLayerModelObject* paintInvalidationContainer = info->repaintContainer()) {
+            FloatQuad absQuad = paintInvalidationContainer->localToAbsoluteQuad(FloatRect(currRect));
             currRect = absQuad.enclosingBoundingBox();
         }
         selRect.unite(currRect);
@@ -587,7 +566,7 @@ IntRect RenderView::selectionBounds(bool clipToVisibleContent) const
     return pixelSnappedIntRect(selRect);
 }
 
-void RenderView::repaintSelection() const
+void RenderView::invalidatePaintForSelection() const
 {
     HashSet<RenderBlock*> processedBlocks;
 

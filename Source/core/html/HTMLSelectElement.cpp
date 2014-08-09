@@ -35,6 +35,7 @@
 #include "core/accessibility/AXObjectCache.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/ElementTraversal.h"
+#include "core/dom/NodeListsNodeData.h"
 #include "core/dom/NodeTraversal.h"
 #include "core/events/GestureEvent.h"
 #include "core/events/KeyboardEvent.h"
@@ -82,7 +83,6 @@ HTMLSelectElement::HTMLSelectElement(Document& document, HTMLFormElement* form)
     , m_suggestedIndex(-1)
 {
     ScriptWrappable::init(this);
-    setHasCustomStyleCallbacks();
 }
 
 PassRefPtrWillBeRawPtr<HTMLSelectElement> HTMLSelectElement::create(Document& document)
@@ -174,18 +174,6 @@ bool HTMLSelectElement::valueMissing() const
 
     // If a non-placeholer label option is selected (firstSelectionIndex > 0), it's not value-missing.
     return firstSelectionIndex < 0 || (!firstSelectionIndex && hasPlaceholderLabelOption());
-}
-
-void HTMLSelectElement::listBoxSelectItem(int listIndex, bool allowMultiplySelections, bool shift, bool fireOnChangeNow)
-{
-    if (!multiple())
-        optionSelectedByUser(listToOptionIndex(listIndex), fireOnChangeNow, false);
-    else {
-        updateSelectedState(listIndex, allowMultiplySelections, shift);
-        setNeedsValidityCheck();
-        if (fireOnChangeNow)
-            listBoxOnChange();
-    }
 }
 
 bool HTMLSelectElement::usesMenuList() const
@@ -334,7 +322,7 @@ void HTMLSelectElement::parseAttribute(const QualifiedName& name, const AtomicSt
         AtomicString attrSize = AtomicString::number(size);
         if (attrSize != value) {
             // FIXME: This is horribly factored.
-            if (Attribute* sizeAttribute = ensureUniqueElementData().findAttributeByName(sizeAttr))
+            if (Attribute* sizeAttribute = ensureUniqueElementData().attributes().find(sizeAttr))
                 sizeAttribute->setValue(attrSize);
         }
         size = std::max(size, 1);
@@ -387,12 +375,12 @@ RenderObject* HTMLSelectElement::createRenderer(RenderStyle*)
 PassRefPtrWillBeRawPtr<HTMLCollection> HTMLSelectElement::selectedOptions()
 {
     updateListItemSelectedStates();
-    return ensureCachedHTMLCollection(SelectedOptions);
+    return ensureCachedCollection<HTMLCollection>(SelectedOptions);
 }
 
 PassRefPtrWillBeRawPtr<HTMLOptionsCollection> HTMLSelectElement::options()
 {
-    return toHTMLOptionsCollection(ensureCachedHTMLCollection(SelectOptions).get());
+    return ensureCachedCollection<HTMLOptionsCollection>(SelectOptions);
 }
 
 void HTMLSelectElement::updateListItemSelectedStates()
@@ -755,7 +743,7 @@ const WillBeHeapVector<RawPtrWillBeMember<HTMLElement> >& HTMLSelectElement::lis
 
 void HTMLSelectElement::invalidateSelectedItems()
 {
-    if (HTMLCollection* collection = cachedHTMLCollection(SelectedOptions))
+    if (HTMLCollection* collection = cachedCollection<HTMLCollection>(SelectedOptions))
         collection->invalidateCache();
 }
 
@@ -770,7 +758,7 @@ void HTMLSelectElement::setRecalcListItems()
     setOptionsChangedOnRenderer();
     setNeedsStyleRecalc(SubtreeStyleChange);
     if (!inDocument()) {
-        if (HTMLCollection* collection = cachedHTMLCollection(SelectOptions))
+        if (HTMLOptionsCollection* collection = cachedCollection<HTMLOptionsCollection>(SelectOptions))
             collection->invalidateCache();
     }
     if (!inDocument())
@@ -1186,7 +1174,7 @@ bool HTMLSelectElement::shouldOpenPopupForKeyDownEvent(KeyboardEvent* keyEvent)
         return false;
 
     return ((renderTheme.popsMenuByArrowKeys() &&  (keyIdentifier == "Down" || keyIdentifier == "Up"))
-        || (renderTheme.popsMenuByAltDownUpOrF4Key() && (keyIdentifier == "Down" || keyIdentifier == "Up") && (keyEvent->altKey() || keyEvent->altGraphKey()))
+        || (renderTheme.popsMenuByAltDownUpOrF4Key() && (keyIdentifier == "Down" || keyIdentifier == "Up") && keyEvent->altKey())
         || (renderTheme.popsMenuByAltDownUpOrF4Key() && (!keyEvent->altKey() && !keyEvent->ctrlKey() && keyIdentifier == "F4")));
 }
 

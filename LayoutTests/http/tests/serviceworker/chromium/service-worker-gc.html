@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<script src="/js-test-resources/js-test.js"></script>
+<script>
+window.jsTestIsAsync = true;
+description('Test that a registered Service Worker with an event handler is not garbage collected prematurely');
+var swObservation = null;
+var scope = 'gc';
+
+if (!window.internals) {
+    testFailed('This test requires internals.observeGC');
+    finishJSTest();
+} else {
+    setup();
+}
+
+function setup() {
+    var worker = '../resources/empty-worker.js';
+    unregisterAndRegister(worker, scope).then(onRegister);
+}
+
+function unregisterAndRegister(url, scope) {
+    return navigator.serviceWorker.unregister(scope).then(function() {
+        return navigator.serviceWorker.register(url, { scope: scope });
+    }).catch(function(error) {
+        testFailed('Could not register worker: ' + error);
+        finishJSTest();
+    });
+}
+
+function onRegister(sw) {
+    swObservation = internals.observeGC(sw);
+    sw.addEventListener('statechange', onStateChange);
+}
+
+function onStateChange(event) {
+    // Use setTimeout to ensure a fresh stack with no references to the worker.
+    switch (event.target.state) {
+    case 'activated':
+        setTimeout(unregister, 0);
+        break;
+    case 'redundant':
+        setTimeout(finish, 0);
+        break;
+    }
+}
+
+function unregister() {
+    // The worker has an event handler that can still receive the state change
+    // to 'redundant', so it shouldn't be collected yet.
+    gc();
+    shouldBeFalse('swObservation.wasCollected');
+    navigator.serviceWorker.unregister(scope).catch(function(error) {
+        testFailed('Could not unregister worker: ' + error);
+        finishJSTest();
+    });
+}
+
+function finish()
+{
+    gc();
+    shouldBeTrue('swObservation.wasCollected');
+    finishJSTest();
+}
+</script>

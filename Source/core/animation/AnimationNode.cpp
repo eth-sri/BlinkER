@@ -50,7 +50,7 @@ Timing::FillMode resolvedFillMode(Timing::FillMode fillMode, bool isAnimation)
 
 } // namespace
 
-AnimationNode::AnimationNode(const Timing& timing, PassOwnPtr<EventDelegate> eventDelegate)
+AnimationNode::AnimationNode(const Timing& timing, PassOwnPtrWillBeRawPtr<EventDelegate> eventDelegate)
     : m_parent(nullptr)
     , m_startTime(0)
     , m_player(nullptr)
@@ -60,6 +60,7 @@ AnimationNode::AnimationNode(const Timing& timing, PassOwnPtr<EventDelegate> eve
     , m_needsUpdate(true)
     , m_lastUpdateTime(nullValue())
 {
+    ScriptWrappable::init(this);
     m_timing.assertValid();
 }
 
@@ -190,6 +191,7 @@ void AnimationNode::trace(Visitor* visitor)
 {
     visitor->trace(m_parent);
     visitor->trace(m_player);
+    visitor->trace(m_eventDelegate);
 }
 
 } // namespace blink

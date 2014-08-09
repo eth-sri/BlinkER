@@ -5,14 +5,15 @@
 #include "platform/Timer.h"
 #include "wtf/RefCounted.h"
 
-namespace WebCore {
+namespace blink {
 
 class EventAction;
 class EventRacerContext;
 
-class EventRacerTimerBase : public TimerBase {
+class EventRacerTimerBase : public blink::TimerBase {
 public:
-    virtual void start(double nextFireInterval, double repeatInterval, const TraceLocation&) OVERRIDE;
+    virtual void start(double nextFireInterval, double repeatInterval,
+                       const blink::TraceLocation&) OVERRIDE;
     virtual void stop() OVERRIDE;
 
     unsigned int getSerial() const { return m_data ? m_data->serial : 0; }
@@ -66,7 +67,8 @@ public:
     EventRacerTimerDebug(TimerFiredClass* o, TimerFiredFunction f)
         : EventRacerTimer<TimerFiredClass>(o, f) {}
 
-    virtual void start(double nextFireInterval, double repeatInterval, const TraceLocation&loc ) {
+    virtual void start(double nextFireInterval, double repeatInterval,
+                       const blink::TraceLocation&loc ) {
         EventRacerTimer<TimerFiredClass>::start(nextFireInterval, repeatInterval, loc);
     }
 };

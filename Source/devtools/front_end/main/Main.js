@@ -50,11 +50,11 @@ WebInspector.Main = function()
 WebInspector.Main.prototype = {
     _createGlobalStatusBarItems: function()
     {
-        var extensions = WebInspector.moduleManager.extensions(WebInspector.StatusBarButton.Provider);
+        var extensions = self.runtime.extensions(WebInspector.StatusBarItem.Provider);
 
         /**
-         * @param {!WebInspector.ModuleManager.Extension} left
-         * @param {!WebInspector.ModuleManager.Extension} right
+         * @param {!Runtime.Extension} left
+         * @param {!Runtime.Extension} right
          */
         function orderComparator(left, right)
         {
@@ -62,31 +62,31 @@ WebInspector.Main.prototype = {
         }
         extensions.sort(orderComparator);
         extensions.forEach(function(extension) {
-            var button;
+            var item;
             switch (extension.descriptor()["location"]) {
             case "toolbar-left":
-                button = createButton(extension);
-                if (button)
-                    WebInspector.inspectorView.appendToLeftToolbar(button);
+                item = createItem(extension);
+                if (item)
+                    WebInspector.inspectorView.appendToLeftToolbar(item);
                 break;
             case "toolbar-right":
-                button = createButton(extension);
-                if (button)
-                    WebInspector.inspectorView.appendToRightToolbar(button);
+                item = createItem(extension);
+                if (item)
+                    WebInspector.inspectorView.appendToRightToolbar(item);
                 break;
             }
-            if (button && extension.descriptor()["actionId"]) {
-                button.addEventListener("click", function() {
+            if (item && extension.descriptor()["actionId"]) {
+                item.addEventListener("click", function() {
                     WebInspector.actionRegistry.execute(extension.descriptor()["actionId"]);
                 });
             }
         });
 
-        function createButton(extension)
+        function createItem(extension)
         {
             var descriptor = extension.descriptor();
             if (descriptor.className)
-                return extension.instance().button();
+                return extension.instance().item();
             return new WebInspector.StatusBarButton(WebInspector.UIString(descriptor["title"]), descriptor["elementClass"]);
         }
     },
@@ -181,7 +181,7 @@ WebInspector.Main.prototype = {
     _createModuleManager: function()
     {
         console.timeStamp("Main._createModuleManager");
-        WebInspector.moduleManager = new WebInspector.ModuleManager(allDescriptors);
+        self.runtime = new Runtime(allDescriptors);
 
         // FIXME: define html-per-app, make configuration a part of the app.
         var configuration = ["main", "elements", "network", "sources", "timeline", "profiler", "resources", "audits", "console", "source_frame", "extensions", "settings"];
@@ -191,7 +191,7 @@ WebInspector.Main.prototype = {
             configuration.push("devices");
         if (WebInspector.isWorkerFrontend())
             configuration = ["main", "sources", "timeline", "profiler", "console", "source_frame"];
-        WebInspector.moduleManager.registerModules(configuration);
+        self.runtime.registerModules(configuration);
     },
 
     _createAppUI: function()
@@ -211,7 +211,7 @@ WebInspector.Main.prototype = {
         }
 
         var canDock = !!WebInspector.queryParam("can_dock");
-        WebInspector.zoomManager = new WebInspector.ZoomManager();
+        WebInspector.zoomManager = new WebInspector.ZoomManager(InspectorFrontendHost);
         WebInspector.inspectorView = new WebInspector.InspectorView();
         WebInspector.ContextMenu.initialize();
         WebInspector.dockController = new WebInspector.DockController(canDock);
@@ -298,15 +298,15 @@ WebInspector.Main.prototype = {
         }
         WebInspector.ContextMenu.initialize();
         WebInspector.targetManager.createTarget(WebInspector.UIString("Main"), connection, this._mainTargetCreated.bind(this));
-        WebInspector.cssWorkspaceBinding = new WebInspector.CSSWorkspaceBinding();
-        WebInspector.debuggerWorkspaceBinding = new WebInspector.DebuggerWorkspaceBinding();
         WebInspector.isolatedFileSystemManager = new WebInspector.IsolatedFileSystemManager();
         WebInspector.workspace = new WebInspector.Workspace(WebInspector.isolatedFileSystemManager.mapping());
         WebInspector.networkWorkspaceBinding = new WebInspector.NetworkWorkspaceBinding(WebInspector.workspace);
         new WebInspector.NetworkUISourceCodeProvider(WebInspector.networkWorkspaceBinding, WebInspector.workspace);
         new WebInspector.PresentationConsoleMessageHelper(WebInspector.workspace);
+        WebInspector.cssWorkspaceBinding = new WebInspector.CSSWorkspaceBinding();
+        WebInspector.debuggerWorkspaceBinding = new WebInspector.DebuggerWorkspaceBinding(WebInspector.targetManager, WebInspector.workspace, WebInspector.networkWorkspaceBinding);
         WebInspector.fileSystemWorkspaceBinding = new WebInspector.FileSystemWorkspaceBinding(WebInspector.isolatedFileSystemManager, WebInspector.workspace);
-        WebInspector.breakpointManager = new WebInspector.BreakpointManager(WebInspector.settings.breakpoints, WebInspector.workspace, WebInspector.targetManager);
+        WebInspector.breakpointManager = new WebInspector.BreakpointManager(WebInspector.settings.breakpoints, WebInspector.workspace, WebInspector.targetManager, WebInspector.debuggerWorkspaceBinding);
         WebInspector.scriptSnippetModel = new WebInspector.ScriptSnippetModel(WebInspector.workspace);
         this._executionContextSelector = new WebInspector.ExecutionContextSelector();
 
@@ -359,20 +359,11 @@ WebInspector.Main.prototype = {
         WebInspector.openAnchorLocationRegistry.registerHandler(autoselectPanel, function() { return false; });
         WebInspector.Linkifier.setLinkHandler(new WebInspector.HandlerRegistry.LinkHandler());
         new WebInspector.WorkspaceController(WebInspector.workspace);
-        new WebInspector.CSSStyleSheetMapping(WebInspector.cssModel, WebInspector.workspace, WebInspector.networkWorkspaceBinding);
         new WebInspector.RenderingOptions();
         new WebInspector.Main.PauseListener();
-        new WebInspector.Main.WarningErrorCounter();
         new WebInspector.Main.InspectedNodeRevealer();
 
         this._addMainEventListeners(document);
-
-        var errorWarningCount = document.getElementById("error-warning-count");
-        function showConsole()
-        {
-            WebInspector.console.show();
-        }
-        errorWarningCount.addEventListener("click", showConsole, false);
 
         WebInspector.extensionServerProxy.setFrontendReady();
 
@@ -383,6 +374,7 @@ WebInspector.Main.prototype = {
             console.timeStamp("Main.inspectorAgentEnableCallback");
             WebInspector.app.presentUI(mainTarget);
             console.timeStamp("Main.inspectorAgentEnableCallbackPresentUI");
+            WebInspector.notifications.dispatchEventToListeners(WebInspector.NotificationService.Events.InspectorUILoadedForTests);
         }
 
         WebInspector.actionRegistry = new WebInspector.ActionRegistry();
@@ -393,7 +385,6 @@ WebInspector.Main.prototype = {
 
         this._loadCompletedForWorkers();
         InspectorFrontendAPI.loadCompleted();
-        WebInspector.notifications.dispatchEventToListeners(WebInspector.NotificationService.Events.InspectorLoaded);
     },
 
     _registerForwardedShortcuts: function()
@@ -494,6 +485,8 @@ WebInspector.Main.prototype = {
         var toggleConsoleLabel = WebInspector.UIString("Show console");
         section.addKey(shortcut.makeDescriptor(shortcut.Keys.Tilde, shortcut.Modifiers.Ctrl), toggleConsoleLabel);
         section.addKey(shortcut.makeDescriptor(shortcut.Keys.Esc), WebInspector.UIString("Toggle drawer"));
+        if (WebInspector.overridesSupport.responsiveDesignAvailable())
+            section.addKey(shortcut.makeDescriptor("M", shortcut.Modifiers.CtrlOrMeta | shortcut.Modifiers.Shift), WebInspector.UIString("Toggle device mode"));
         section.addKey(shortcut.makeDescriptor("f", shortcut.Modifiers.CtrlOrMeta), WebInspector.UIString("Search"));
 
         var advancedSearchShortcutModifier = WebInspector.isMac()
@@ -535,14 +528,30 @@ WebInspector.Main.prototype = {
 
     _documentCanCopy: function(event)
     {
-        if (WebInspector.inspectorView.currentPanel() && WebInspector.inspectorView.currentPanel()["handleCopyEvent"])
+        var panel = WebInspector.inspectorView.currentPanel();
+        if (panel && panel["handleCopyEvent"])
             event.preventDefault();
     },
 
     _documentCopy: function(event)
     {
-        if (WebInspector.inspectorView.currentPanel() && WebInspector.inspectorView.currentPanel()["handleCopyEvent"])
-            WebInspector.inspectorView.currentPanel()["handleCopyEvent"](event);
+        var panel = WebInspector.inspectorView.currentPanel();
+        if (panel && panel["handleCopyEvent"])
+            panel["handleCopyEvent"](event);
+    },
+
+    _documentCut: function(event)
+    {
+        var panel = WebInspector.inspectorView.currentPanel();
+        if (panel && panel["handleCutEvent"])
+            panel["handleCutEvent"](event);
+    },
+
+    _documentPaste: function(event)
+    {
+        var panel = WebInspector.inspectorView.currentPanel();
+        if (panel && panel["handlePasteEvent"])
+            panel["handlePasteEvent"](event);
     },
 
     _contextMenuEventFired: function(event)
@@ -556,6 +565,8 @@ WebInspector.Main.prototype = {
         doc.addEventListener("keydown", this._postDocumentKeyDown.bind(this), false);
         doc.addEventListener("beforecopy", this._documentCanCopy.bind(this), true);
         doc.addEventListener("copy", this._documentCopy.bind(this), false);
+        doc.addEventListener("cut", this._documentCut.bind(this), false);
+        doc.addEventListener("paste", this._documentPaste.bind(this), false);
         doc.addEventListener("contextmenu", this._contextMenuEventFired.bind(this), true);
         doc.addEventListener("click", this._documentClick.bind(this), false);
     },
@@ -569,24 +580,10 @@ WebInspector.Main.prototype = {
     {
         var object = WebInspector.runtimeModel.createRemoteObject(payload);
         if (object.isNode()) {
-            object.pushNodeToFrontend(callback);
-            var elementsPanel = /** @type {!WebInspector.ElementsPanel} */ (WebInspector.inspectorView.panel("elements"));
-            elementsPanel.omitDefaultSelection();
-            WebInspector.inspectorView.setCurrentPanel(elementsPanel);
+            var nodeObjectInspector = runtime.instance(WebInspector.NodeRemoteObjectInspector, object);
+            if (nodeObjectInspector)
+                nodeObjectInspector.inspectNodeObject(object);
             return;
-        }
-
-        /**
-         * @param {!WebInspector.DOMNode} node
-         */
-        function callback(node)
-        {
-            elementsPanel.stopOmittingDefaultSelection();
-            WebInspector.Revealer.reveal(node);
-            if (!WebInspector.inspectorView.drawerVisible() && !WebInspector._notFirstInspectElement)
-                InspectorFrontendHost.inspectElementCompleted();
-            WebInspector._notFirstInspectElement = true;
-            object.release();
         }
 
         if (object.type === "function") {
@@ -604,7 +601,6 @@ WebInspector.Main.prototype = {
             if (!response || !response.location)
                 return;
 
-            var location = WebInspector.DebuggerModel.Location.fromPayload(object.target(), response.location);
             WebInspector.Revealer.reveal(WebInspector.debuggerWorkspaceBinding.rawLocationToUILocation(response.location));
         }
 
@@ -834,9 +830,18 @@ WebInspector.panel = function(name)
 
 /**
  * @constructor
+ * @implements {WebInspector.StatusBarItem.Provider}
  */
 WebInspector.Main.WarningErrorCounter = function()
 {
+    this._counter = new WebInspector.StatusBarCounter(["error-icon-small", "warning-icon-small"]);
+    this._counter.addEventListener("click", showConsole);
+
+    function showConsole()
+    {
+        WebInspector.console.show();
+    }
+
     WebInspector.multitargetConsoleModel.addEventListener(WebInspector.ConsoleModel.Events.ConsoleCleared, this._updateErrorAndWarningCounts, this);
     WebInspector.multitargetConsoleModel.addEventListener(WebInspector.ConsoleModel.Events.MessageAdded, this._updateErrorAndWarningCounts, this);
 }
@@ -851,7 +856,17 @@ WebInspector.Main.WarningErrorCounter.prototype = {
             errors = errors + targets[i].consoleModel.errors;
             warnings = warnings + targets[i].consoleModel.warnings;
         }
-        WebInspector.inspectorView.setErrorAndWarningCounts(errors, warnings);
+        this._counter.setCounter("error-icon-small", errors, WebInspector.UIString(errors > 1 ? "%d errors" : "%d error", errors));
+        this._counter.setCounter("warning-icon-small", warnings, WebInspector.UIString(warnings > 1 ? "%d warnings" : "%d warning", warnings));
+        WebInspector.inspectorView.toolbarItemResized();
+    },
+
+    /**
+     * @return {?WebInspector.StatusBarItem}
+     */
+    item: function()
+    {
+        return this._counter;
     }
 }
 

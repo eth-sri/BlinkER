@@ -46,7 +46,7 @@
 
 namespace blink {
 
-PassRefPtrWillBeRawPtr<Animation> Animation::create(Element* target, PassRefPtrWillBeRawPtr<AnimationEffect> effect, const Timing& timing, Priority priority, PassOwnPtr<EventDelegate> eventDelegate)
+PassRefPtrWillBeRawPtr<Animation> Animation::create(Element* target, PassRefPtrWillBeRawPtr<AnimationEffect> effect, const Timing& timing, Priority priority, PassOwnPtrWillBeRawPtr<EventDelegate> eventDelegate)
 {
     return adoptRefWillBeNoop(new Animation(target, effect, timing, priority, eventDelegate));
 }
@@ -88,7 +88,7 @@ PassRefPtrWillBeRawPtr<Animation> Animation::create(Element* element, const Vect
     return create(element, EffectInput::convert(element, keyframeDictionaryVector, exceptionState), Timing());
 }
 
-Animation::Animation(Element* target, PassRefPtrWillBeRawPtr<AnimationEffect> effect, const Timing& timing, Priority priority, PassOwnPtr<EventDelegate> eventDelegate)
+Animation::Animation(Element* target, PassRefPtrWillBeRawPtr<AnimationEffect> effect, const Timing& timing, Priority priority, PassOwnPtrWillBeRawPtr<EventDelegate> eventDelegate)
     : AnimationNode(timing, eventDelegate)
     , m_target(target)
     , m_effect(effect)
@@ -112,7 +112,7 @@ Animation::~Animation()
 void Animation::attach(AnimationPlayer* player)
 {
     if (m_target) {
-        m_target->ensureActiveAnimations().addPlayer(player);
+        m_target->ensureActiveAnimations().players().add(player);
         m_target->setNeedsAnimationStyleRecalc();
     }
     AnimationNode::attach(player);
@@ -121,7 +121,7 @@ void Animation::attach(AnimationPlayer* player)
 void Animation::detach()
 {
     if (m_target)
-        m_target->activeAnimations()->removePlayer(player());
+        m_target->activeAnimations()->players().remove(player());
     if (m_sampledEffect)
         clearEffects();
     AnimationNode::detach();

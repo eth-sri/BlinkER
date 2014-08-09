@@ -4,12 +4,11 @@
 #ifndef {{namespace}}ElementTypeHelpers_h
 #define {{namespace}}ElementTypeHelpers_h
 
-#include "core/dom/ContextFeatures.h"
 #include "core/dom/Element.h"
 #include "{{namespace}}Names.h"
 #include "platform/RuntimeEnabledFeatures.h"
 
-namespace WebCore {
+namespace blink {
 // Type checking.
 {% for tag in tags|sort if not tag.multipleTagNames and not tag.noTypeHelpers %}
 {% filter enable_conditional(tag.Conditional) %}
@@ -18,10 +17,6 @@ void is{{tag.interface}}(const {{tag.interface}}&); // Catch unnecessary runtime
 void is{{tag.interface}}(const {{tag.interface}}*); // Catch unnecessary runtime check of type known at compile time.
 
 inline bool is{{tag.interface}}(const {{namespace}}Element& element) {
-    {% if tag.contextConditional %}
-    if (!ContextFeatures::{{tag.contextConditional}}Enabled(&element.document()))
-        return false;
-    {% endif %}
     {% if tag.runtimeEnabled %}
     if (!RuntimeEnabledFeatures::{{tag.runtimeEnabled}}Enabled())
         return false;
@@ -43,9 +38,9 @@ template <> inline bool isElementOfType<const {{tag.interface}}>(const {{namespa
 
 {% for tag in tags|sort if not tag.multipleTagNames and not tag.noTypeHelpers %}
 {% filter enable_conditional(tag.Conditional) %}
-#define to{{tag.interface}}(x) WebCore::toElement<WebCore::{{tag.interface}}>(x)
+#define to{{tag.interface}}(x) blink::toElement<blink::{{tag.interface}}>(x)
 {% endfilter %}
 {% endfor %}
-} // WebCore
+} // namespace blink
 
 #endif

@@ -80,7 +80,7 @@ static void toScriptCallFramesVector(v8::Handle<v8::StackTrace> stackTrace, Vect
         // Successfully grabbed stack trace, but there are no frames. It may happen in case
         // when a bound function is called from native code for example.
         // Fallback to setting lineNumber to 0, and source and function name to "undefined".
-        scriptCallFrames.append(ScriptCallFrame("undefined", "", "undefined", 0));
+        scriptCallFrames.append(ScriptCallFrame());
     }
 }
 
@@ -91,7 +91,7 @@ static PassRefPtrWillBeRawPtr<ScriptCallStack> createScriptCallStack(v8::Handle<
     Vector<ScriptCallFrame> scriptCallFrames;
     toScriptCallFramesVector(stackTrace, scriptCallFrames, maxStackSize, emptyStackIsAllowed, isolate);
     RefPtrWillBeRawPtr<ScriptCallStack> callStack = ScriptCallStack::create(scriptCallFrames);
-    if (InspectorInstrumentation::hasFrontends())
+    if (InspectorInstrumentation::hasFrontends() && maxStackSize > 1)
         InspectorInstrumentation::appendAsyncCallStack(currentExecutionContext(isolate), callStack.get());
     return callStack.release();
 }

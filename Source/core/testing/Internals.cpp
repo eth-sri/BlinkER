@@ -114,7 +114,6 @@
 #include "core/testing/InternalSettings.h"
 #include "core/testing/LayerRect.h"
 #include "core/testing/LayerRectList.h"
-#include "core/testing/MallocStatistics.h"
 #include "core/testing/MockPagePopupDriver.h"
 #include "core/testing/PrivateScriptTest.h"
 #include "core/testing/TypeConversions.h"
@@ -207,6 +206,7 @@ Internals::Internals(Document* document)
     : ContextLifecycleObserver(document)
     , m_runtimeFlags(InternalRuntimeFlags::create())
 {
+    ScriptWrappable::init(this);
 }
 
 Document* Internals::contextDocument() const
@@ -1616,6 +1616,9 @@ bool Internals::hasGrammarMarker(Document* document, int from, int length, Excep
 
 unsigned Internals::numberOfScrollableAreas(Document* document, ExceptionState&)
 {
+    if (!document || !document->frame())
+        return 0;
+
     unsigned count = 0;
     LocalFrame* frame = document->frame();
     if (frame->view()->scrollableAreas())
@@ -1908,11 +1911,6 @@ void Internals::removeURLSchemeRegisteredAsBypassingContentSecurityPolicy(const 
     SchemeRegistry::removeURLSchemeRegisteredAsBypassingContentSecurityPolicy(scheme);
 }
 
-PassRefPtrWillBeRawPtr<MallocStatistics> Internals::mallocStatistics() const
-{
-    return MallocStatistics::create();
-}
-
 PassRefPtrWillBeRawPtr<TypeConversions> Internals::typeConversions() const
 {
     return TypeConversions::create();
@@ -1981,7 +1979,7 @@ void Internals::forceFullRepaint(Document* document, ExceptionState& exceptionSt
     }
 
     if (RenderView *renderView = document->renderView())
-        renderView->repaintViewAndCompositedLayers();
+        renderView->invalidatePaintForViewAndCompositedLayers();
 }
 
 PassRefPtrWillBeRawPtr<ClientRectList> Internals::draggableRegions(Document* document, ExceptionState& exceptionState)
@@ -2170,6 +2168,38 @@ bool Internals::isSelectPopupVisible(Node* node)
 
     RenderMenuList* menuList = toRenderMenuList(renderer);
     return menuList->popupIsVisible();
+}
+
+bool Internals::selectPopupItemStyleIsRtl(Node* node, int itemIndex)
+{
+    if (!node || !isHTMLSelectElement(*node))
+        return false;
+
+    HTMLSelectElement& select = toHTMLSelectElement(*node);
+
+    RenderObject* renderer = select.renderer();
+    if (!renderer || !renderer->isMenuList())
+        return false;
+
+    RenderMenuList& menuList = toRenderMenuList(*renderer);
+    PopupMenuStyle itemStyle = menuList.itemStyle(itemIndex);
+    return itemStyle.textDirection() == RTL;
+}
+
+int Internals::selectPopupItemStyleFontHeight(Node* node, int itemIndex)
+{
+    if (!node || !isHTMLSelectElement(*node))
+        return false;
+
+    HTMLSelectElement& select = toHTMLSelectElement(*node);
+
+    RenderObject* renderer = select.renderer();
+    if (!renderer || !renderer->isMenuList())
+        return false;
+
+    RenderMenuList& menuList = toRenderMenuList(*renderer);
+    PopupMenuStyle itemStyle = menuList.itemStyle(itemIndex);
+    return itemStyle.font().fontMetrics().height();
 }
 
 bool Internals::loseSharedGraphicsContext3D()

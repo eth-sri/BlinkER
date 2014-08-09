@@ -14,6 +14,7 @@
 #ifndef NDEBUG
 #include "core/PrivateScriptSourcesForTesting.h"
 #endif
+#include "core/dom/ExceptionCode.h"
 
 namespace blink {
 
@@ -98,6 +99,15 @@ static void initializeHolderIfNeeded(ScriptState* scriptState, v8::Handle<v8::Ob
                 RELEASE_ASSERT_NOT_REACHED();
             }
         }
+
+        // Inject the prototype object of the private script into the prototype chain of the holder object.
+        // This is necessary to let the holder object use properties defined on the prototype object
+        // of the private script. (e.g., if the prototype object has |foo|, the holder object should be able
+        // to use it with |this.foo|.)
+        if (classObject->GetPrototype() != holderObject->GetPrototype())
+            classObject->SetPrototype(holderObject->GetPrototype());
+        holderObject->SetPrototype(classObject);
+
         isInitialized = v8Boolean(true, isolate);
         V8HiddenValue::setHiddenValue(isolate, holderObject, V8HiddenValue::privateScriptObjectIsInitialized(isolate), isInitialized);
     }
@@ -172,20 +182,55 @@ bool PrivateScriptRunner::throwDOMExceptionInPrivateScriptIfNeeded(v8::Isolate* 
         return false;
 
     v8::Handle<v8::Object> exceptionObject = v8::Handle<v8::Object>::Cast(exception);
-    v8::Handle<v8::Value> type = exceptionObject->Get(v8String(isolate, "type"));
-    if (type.IsEmpty() || !type->IsString())
+    v8::Handle<v8::Value> name = exceptionObject->Get(v8String(isolate, "name"));
+    if (name.IsEmpty() || !name->IsString())
         return false;
-    if (toCoreString(v8::Handle<v8::String>::Cast(type)) != "DOMExceptionInPrivateScript")
-        return false;
-
-    v8::Handle<v8::Value> message = exceptionObject->Get(v8String(isolate, "message"));
-    RELEASE_ASSERT(!message.IsEmpty() && message->IsString());
-    v8::Handle<v8::Value> code = exceptionObject->Get(v8String(isolate, "code"));
-    RELEASE_ASSERT(!code.IsEmpty() && code->IsInt32());
-    // FIXME: Support JavaScript errors such as TypeError, RangeError and SecurityError.
-    exceptionState.throwDOMException(toInt32(code), toCoreString(v8::Handle<v8::String>::Cast(message)));
-    exceptionState.throwIfNeeded();
-    return true;
+    String exceptionName = toCoreString(v8::Handle<v8::String>::Cast(name));
+    if (exceptionName == "DOMExceptionInPrivateScript") {
+        v8::Handle<v8::Value> message = exceptionObject->Get(v8String(isolate, "message"));
+        RELEASE_ASSERT(!message.IsEmpty() && message->IsString());
+        v8::Handle<v8::Value> code = exceptionObject->Get(v8String(isolate, "code"));
+        RELEASE_ASSERT(!code.IsEmpty() && code->IsInt32());
+        exceptionState.throwDOMException(toInt32(code), toCoreString(v8::Handle<v8::String>::Cast(message)));
+        exceptionState.throwIfNeeded();
+        return true;
+    }
+    if (exceptionName == "Error") {
+        v8::Handle<v8::Value> message = exceptionObject->Get(v8String(isolate, "message"));
+        RELEASE_ASSERT(!message.IsEmpty() && message->IsString());
+        exceptionState.throwDOMException(V8GeneralError, toCoreString(v8::Handle<v8::String>::Cast(message)));
+        exceptionState.throwIfNeeded();
+        return true;
+    }
+    if (exceptionName == "TypeError") {
+        v8::Handle<v8::Value> message = exceptionObject->Get(v8String(isolate, "message"));
+        RELEASE_ASSERT(!message.IsEmpty() && message->IsString());
+        exceptionState.throwDOMException(V8TypeError, toCoreString(v8::Handle<v8::String>::Cast(message)));
+        exceptionState.throwIfNeeded();
+        return true;
+    }
+    if (exceptionName == "RangeError") {
+        v8::Handle<v8::Value> message = exceptionObject->Get(v8String(isolate, "message"));
+        RELEASE_ASSERT(!message.IsEmpty() && message->IsString());
+        exceptionState.throwDOMException(V8RangeError, toCoreString(v8::Handle<v8::String>::Cast(message)));
+        exceptionState.throwIfNeeded();
+        return true;
+    }
+    if (exceptionName == "SyntaxError") {
+        v8::Handle<v8::Value> message = exceptionObject->Get(v8String(isolate, "message"));
+        RELEASE_ASSERT(!message.IsEmpty() && message->IsString());
+        exceptionState.throwDOMException(V8SyntaxError, toCoreString(v8::Handle<v8::String>::Cast(message)));
+        exceptionState.throwIfNeeded();
+        return true;
+    }
+    if (exceptionName == "ReferenceError") {
+        v8::Handle<v8::Value> message = exceptionObject->Get(v8String(isolate, "message"));
+        RELEASE_ASSERT(!message.IsEmpty() && message->IsString());
+        exceptionState.throwDOMException(V8ReferenceError, toCoreString(v8::Handle<v8::String>::Cast(message)));
+        exceptionState.throwIfNeeded();
+        return true;
+    }
+    return false;
 }
 
 } // namespace blink

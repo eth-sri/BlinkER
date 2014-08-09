@@ -1,4 +1,13 @@
 CONSOLE WARNING: 'window.webkitStorageInfo' is deprecated. Please use 'navigator.webkitTemporaryStorage' or 'navigator.webkitPersistentStorage' instead.
+CONSOLE WARNING: 'webkitIDBTransaction' is deprecated. Please use 'IDBTransaction' instead.
+CONSOLE WARNING: 'webkitIDBRequest' is deprecated. Please use 'IDBRequest' instead.
+CONSOLE WARNING: 'webkitIDBObjectStore' is deprecated. Please use 'IDBObjectStore' instead.
+CONSOLE WARNING: 'webkitIDBKeyRange' is deprecated. Please use 'IDBKeyRange' instead.
+CONSOLE WARNING: 'webkitIDBIndex' is deprecated. Please use 'IDBIndex' instead.
+CONSOLE WARNING: 'webkitIDBFactory' is deprecated. Please use 'IDBFactory' instead.
+CONSOLE WARNING: 'webkitIDBDatabase' is deprecated. Please use 'IDBDatabase' instead.
+CONSOLE WARNING: 'webkitIDBCursor' is deprecated. Please use 'IDBCursor' instead.
+CONSOLE WARNING: 'webkitIndexedDB' is deprecated. Please use 'indexedDB' instead.
 This test documents the Constructor properties on the global window object.
 
 On success, you will see a series of "PASS" messages, followed by "TEST COMPLETE".
@@ -149,6 +158,7 @@ HTMLOptionsCollection
 HTMLOutputElement
 HTMLParagraphElement
 HTMLParamElement
+HTMLPictureElement
 HTMLPreElement
 HTMLProgressElement
 HTMLQuoteElement
@@ -193,6 +203,7 @@ Int32Array
 Int8Array
 KeyboardEvent
 Location
+Map
 MediaElementAudioSourceNode
 MediaError
 MediaKeyError
@@ -389,8 +400,10 @@ SVGViewElement
 SVGViewSpec
 SVGZoomEvent
 Screen
+ScreenOrientation
 ScriptProcessorNode
 Selection
+Set
 ShadowRoot
 SharedWorker
 SpeechSynthesisEvent
@@ -400,8 +413,11 @@ StorageEvent
 String
 StyleSheet
 StyleSheetList
+Symbol
 SyntaxError
 Text
+TextDecoder
+TextEncoder
 TextEvent
 TextMetrics
 TextTrack

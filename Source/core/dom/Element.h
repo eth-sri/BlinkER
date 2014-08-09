@@ -35,7 +35,6 @@
 #include "core/html/CollectionType.h"
 #include "core/page/FocusType.h"
 #include "platform/heap/Handle.h"
-#include "platform/scroll/ScrollTypes.h"
 
 namespace blink {
 
@@ -140,9 +139,6 @@ public:
     bool hasNamedNodeMap() const;
 #endif
     bool hasAttributes() const;
-    // This variant will not update the potentially invalid attributes. To be used when not interested
-    // in style attribute or one of the SVG animation attributes.
-    bool hasAttributesWithoutUpdate() const;
 
     bool hasAttribute(const AtomicString& name) const;
     bool hasAttributeNS(const AtomicString& namespaceURI, const AtomicString& localName) const;
@@ -168,16 +164,17 @@ public:
     // so this function is not suitable for non-style uses.
     const AtomicString& idForStyleResolution() const;
 
-    // Internal method that assumes the existence of attribute storage, one should use hasAttributes()
-    // before calling it. This is not a trivial getter and its return value should be cached for
-    // performance.
+    // This getter takes care of synchronizing all attributes before returning the
+    // AttributeCollection. If the Element has no attributes, an empty AttributeCollection
+    // will be returned. This is not a trivial getter and its return value should be cached
+    // for performance.
     AttributeCollection attributes() const;
+    // This variant will not update the potentially invalid attributes. To be used when not interested
+    // in style attribute or one of the SVG animation attributes.
+    AttributeCollection attributesWithoutUpdate() const;
 
     void scrollIntoView(bool alignToTop = true);
     void scrollIntoViewIfNeeded(bool centerIfNeeded = true);
-
-    void scrollByLines(int lines);
-    void scrollByPages(int pages);
 
     int offsetLeft();
     int offsetTop();
@@ -268,7 +265,6 @@ public:
     const StylePropertySet* inlineStyle() const { return elementData() ? elementData()->m_inlineStyle.get() : 0; }
 
     bool setInlineStyleProperty(CSSPropertyID, CSSValueID identifier, bool important = false);
-    bool setInlineStyleProperty(CSSPropertyID, CSSPropertyID identifier, bool important = false);
     bool setInlineStyleProperty(CSSPropertyID, double value, CSSPrimitiveValue::UnitType, bool important = false);
     bool setInlineStyleProperty(CSSPropertyID, const String& value, bool important = false);
     bool removeInlineStyleProperty(CSSPropertyID);
@@ -481,7 +477,6 @@ public:
     bool isInTopLayer() const { return hasElementFlag(IsInTopLayer); }
     void setIsInTopLayer(bool);
 
-    void webkitRequestPointerLock();
     void requestPointerLock();
 
     bool isSpellCheckingEnabled() const;
@@ -543,8 +538,6 @@ protected:
     // moved to RenderObject because some focusable nodes don't have renderers,
     // e.g., HTMLOptionElement.
     virtual bool rendererIsFocusable() const;
-    PassRefPtrWillBeRawPtr<HTMLCollection> ensureCachedHTMLCollection(CollectionType);
-    HTMLCollection* cachedHTMLCollection(CollectionType);
 
     // classAttributeChanged() exists to share code between
     // parseAttribute (called via setAttribute()) and
@@ -560,6 +553,10 @@ private:
     void setElementFlag(ElementFlags, bool value = true);
     void clearElementFlag(ElementFlags);
     bool hasElementFlagInternal(ElementFlags) const;
+
+    bool isElementNode() const WTF_DELETED_FUNCTION; // This will catch anyone doing an unnecessary check.
+    bool isDocumentFragment() const WTF_DELETED_FUNCTION; // This will catch anyone doing an unnecessary check.
+    bool isDocumentNode() const WTF_DELETED_FUNCTION; // This will catch anyone doing an unnecessary check.
 
     void styleAttributeChanged(const AtomicString& newStyleString, AttributeModificationReason);
 
@@ -598,8 +595,6 @@ private:
     void updateId(const AtomicString& oldId, const AtomicString& newId);
     void updateId(TreeScope&, const AtomicString& oldId, const AtomicString& newId);
     void updateName(const AtomicString& oldName, const AtomicString& newName);
-
-    void scrollByUnits(int units, ScrollGranularity);
 
     virtual NodeType nodeType() const OVERRIDE FINAL;
     virtual bool childTypeAllowed(NodeType) const OVERRIDE FINAL;
@@ -687,11 +682,6 @@ inline bool isDisabledFormControl(const Node* node)
     return node->isElementNode() && toElement(node)->isDisabledFormControl();
 }
 
-inline bool Node::hasTagName(const QualifiedName& name) const
-{
-    return isElementNode() && toElement(this)->hasTagName(name);
-}
-
 inline Element* Node::parentElement() const
 {
     ContainerNode* parent = parentNode();
@@ -701,14 +691,14 @@ inline Element* Node::parentElement() const
 inline bool Element::fastHasAttribute(const QualifiedName& name) const
 {
     ASSERT(fastAttributeLookupAllowed(name));
-    return elementData() && attributes().findIndex(name) != kNotFound;
+    return elementData() && elementData()->attributes().findIndex(name) != kNotFound;
 }
 
 inline const AtomicString& Element::fastGetAttribute(const QualifiedName& name) const
 {
     ASSERT(fastAttributeLookupAllowed(name));
     if (elementData()) {
-        if (const Attribute* attribute = attributes().find(name))
+        if (const Attribute* attribute = elementData()->attributes().find(name))
             return attribute->value();
     }
     return nullAtom;
@@ -716,13 +706,22 @@ inline const AtomicString& Element::fastGetAttribute(const QualifiedName& name) 
 
 inline AttributeCollection Element::attributes() const
 {
-    ASSERT(elementData());
+    if (!elementData())
+        return AttributeCollection();
+    synchronizeAllAttributes();
     return elementData()->attributes();
 }
 
-inline bool Element::hasAttributesWithoutUpdate() const
+inline AttributeCollection Element::attributesWithoutUpdate() const
 {
-    return elementData() && !elementData()->attributes().isEmpty();
+    if (!elementData())
+        return AttributeCollection();
+    return elementData()->attributes();
+}
+
+inline bool Element::hasAttributes() const
+{
+    return !attributes().isEmpty();
 }
 
 inline const AtomicString& Element::idForStyleResolution() const
@@ -786,17 +785,6 @@ inline UniqueElementData& Element::ensureUniqueElementData()
     if (!elementData() || !elementData()->isUnique())
         createUniqueElementData();
     return toUniqueElementData(*m_elementData);
-}
-
-// Put here to make them inline.
-inline bool Node::hasID() const
-{
-    return isElementNode() && toElement(this)->hasID();
-}
-
-inline bool Node::hasClass() const
-{
-    return isElementNode() && toElement(this)->hasClass();
 }
 
 inline Node::InsertionNotificationRequest Node::insertedInto(ContainerNode* insertionPoint)

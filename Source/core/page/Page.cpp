@@ -30,7 +30,6 @@
 #include "core/fetch/ResourceFetcher.h"
 #include "core/frame/DOMTimer.h"
 #include "core/frame/LocalDOMWindow.h"
-#include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
@@ -53,7 +52,6 @@
 #include "core/page/StorageClient.h"
 #include "core/page/ValidationMessageClient.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
-#include "core/rendering/FastTextAutosizer.h"
 #include "core/rendering/RenderView.h"
 #include "core/rendering/TextAutosizer.h"
 #include "core/storage/StorageNamespace.h"
@@ -217,7 +215,6 @@ void Page::documentDetached(Document* document)
     m_contextMenuController->documentDetached(document);
     if (m_validationMessageClient)
         m_validationMessageClient->documentDetached(*document);
-    m_frameHost->eventHandlerRegistry().documentDetached(*document);
 }
 
 bool Page::openedByDOM() const
@@ -451,10 +448,10 @@ void Page::setVisibilityState(PageVisibilityState visibilityState, bool isInitia
         return;
     m_visibilityState = visibilityState;
 
-    if (visibilityState == blink::PageVisibilityStateHidden)
-        setTimerAlignmentInterval(DOMTimer::hiddenPageAlignmentInterval());
-    else
+    if (visibilityState == blink::PageVisibilityStateVisible)
         setTimerAlignmentInterval(DOMTimer::visiblePageAlignmentInterval());
+    else
+        setTimerAlignmentInterval(DOMTimer::hiddenPageAlignmentInterval());
 
     if (!isInitialState)
         lifecycleNotifier().notifyPageVisibilityChanged();
@@ -522,19 +519,8 @@ void Page::settingsChanged(SettingsDelegate::ChangeType changeType)
     case SettingsDelegate::TextAutosizingChange:
         if (!mainFrame() || !mainFrame()->isLocalFrame())
             break;
-        if (FastTextAutosizer* textAutosizer = deprecatedLocalMainFrame()->document()->fastTextAutosizer()) {
+        if (TextAutosizer* textAutosizer = deprecatedLocalMainFrame()->document()->textAutosizer())
             textAutosizer->updatePageInfoInAllFrames();
-        } else {
-            for (Frame* frame = mainFrame(); frame; frame = frame->tree().traverseNext()) {
-                if (!frame->isLocalFrame())
-                    continue;
-                if (TextAutosizer* textAutosizer = toLocalFrame(frame)->document()->textAutosizer())
-                    textAutosizer->recalculateMultipliers();
-            }
-            // TextAutosizing updates RenderStyle during layout phase (via TextAutosizer::processSubtree).
-            // We should invoke setNeedsLayout here.
-            setNeedsLayoutInAllFrames();
-        }
         break;
     case SettingsDelegate::ScriptEnableChange:
         m_inspectorController->scriptsEnabled(settings().scriptEnabled());
@@ -602,6 +588,7 @@ void Page::trace(Visitor* visitor)
     visitor->trace(m_dragCaretController);
     visitor->trace(m_dragController);
     visitor->trace(m_contextMenuController);
+    visitor->trace(m_inspectorController);
     visitor->trace(m_pointerLockController);
     visitor->trace(m_undoStack);
     visitor->trace(m_validationMessageClient);
@@ -615,8 +602,7 @@ void Page::willBeDestroyed()
 {
     RefPtr<Frame> mainFrame = m_mainFrame;
 
-    if (mainFrame->isLocalFrame())
-        toLocalFrame(mainFrame.get())->loader().frameDetached();
+    mainFrame->detach();
 
     // Disable all agents prior to resetting the frame view.
     m_inspectorController->willBeDestroyed();

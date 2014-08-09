@@ -56,6 +56,10 @@ HTMLOptionElement::HTMLOptionElement(Document& document)
     ScriptWrappable::init(this);
 }
 
+HTMLOptionElement::~HTMLOptionElement()
+{
+}
+
 PassRefPtrWillBeRawPtr<HTMLOptionElement> HTMLOptionElement::create(Document& document)
 {
     RefPtrWillBeRawPtr<HTMLOptionElement> option = adoptRefWillBeNoop(new HTMLOptionElement(document));
@@ -344,8 +348,10 @@ Node::InsertionNotificationRequest HTMLOptionElement::insertedInto(ContainerNode
 
 void HTMLOptionElement::removedFrom(ContainerNode* insertionPoint)
 {
-    if (HTMLSelectElement* select = Traversal<HTMLSelectElement>::firstAncestorOrSelf(*insertionPoint))
+    if (HTMLSelectElement* select = Traversal<HTMLSelectElement>::firstAncestorOrSelf(*insertionPoint)) {
+        select->setRecalcListItems();
         select->optionRemoved(*this);
+    }
     HTMLElement::removedFrom(insertionPoint);
 }
 

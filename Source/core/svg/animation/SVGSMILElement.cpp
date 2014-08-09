@@ -33,6 +33,7 @@
 #include "core/events/Event.h"
 #include "core/events/EventListener.h"
 #include "core/events/EventSender.h"
+#include "core/frame/UseCounter.h"
 #include "core/svg/SVGDocumentExtensions.h"
 #include "core/svg/SVGSVGElement.h"
 #include "core/svg/SVGURIReference.h"
@@ -170,6 +171,7 @@ SVGSMILElement::Condition::Condition(Type type, BeginOrEnd beginOrEnd, const Str
 
 SVGSMILElement::SVGSMILElement(const QualifiedName& tagName, Document& doc)
     : SVGElement(tagName, doc)
+    , SVGTests(this)
     , m_attributeName(anyQName())
     , m_targetElement(nullptr)
     , m_syncBaseConditionsConnected(false)
@@ -312,6 +314,8 @@ Node::InsertionNotificationRequest SVGSMILElement::insertedInto(ContainerNode* r
     if (!rootParent->inDocument())
         return InsertionDone;
 
+    UseCounter::count(document(), UseCounter::SVGSMILElementInDocument);
+
     setAttributeName(constructQualifiedName(this, fastGetAttribute(SVGNames::attributeNameAttr)));
     SVGSVGElement* owner = ownerSVGElement();
     if (!owner)
@@ -370,7 +374,7 @@ SMILTime SVGSMILElement::parseOffsetValue(const String& data)
         result = parse.left(parse.length() - 1).toDouble(&ok);
     else
         result = parse.toDouble(&ok);
-    if (!ok)
+    if (!ok || !SMILTime(result).isFinite())
         return SMILTime::unresolved();
     return result;
 }
@@ -406,7 +410,7 @@ SMILTime SVGSMILElement::parseClockValue(const String& data)
     } else
         return parseOffsetValue(parse);
 
-    if (!ok)
+    if (!ok || !SMILTime(result).isFinite())
         return SMILTime::unresolved();
     return result;
 }
@@ -505,6 +509,7 @@ bool SVGSMILElement::isSupportedAttribute(const QualifiedName& attrName)
 {
     DEFINE_STATIC_LOCAL(HashSet<QualifiedName>, supportedAttributes, ());
     if (supportedAttributes.isEmpty()) {
+        SVGTests::addSupportedAttributes(supportedAttributes);
         supportedAttributes.add(SVGNames::beginAttr);
         supportedAttributes.add(SVGNames::endAttr);
         supportedAttributes.add(SVGNames::durAttr);
@@ -542,8 +547,9 @@ void SVGSMILElement::parseAttribute(const QualifiedName& name, const AtomicStrin
         setAttributeEventListener(EventTypeNames::endEvent, createAttributeEventListener(this, name, value, eventParameterName()));
     } else if (name == SVGNames::onrepeatAttr) {
         setAttributeEventListener(EventTypeNames::repeatEvent, createAttributeEventListener(this, name, value, eventParameterName()));
-    } else
-        SVGElement::parseAttribute(name, value);
+    } else {
+        SVGElement::parseAttributeNew(name, value);
+    }
 }
 
 void SVGSMILElement::svgAttributeChanged(const QualifiedName& attrName)

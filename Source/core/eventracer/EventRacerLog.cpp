@@ -4,7 +4,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-namespace WebCore {
+namespace blink {
 
 // EventAction -----------------------------------------------------------------
 void EventAction::addEdge(unsigned int dst) {
@@ -225,4 +225,4 @@ ScriptValue EventRacerLog::ER_writeArray(LocalDOMWindow &, const ScriptValue &ar
     return arr;
 }
 
-} // end namespace WebCore
+} // end namespace blink

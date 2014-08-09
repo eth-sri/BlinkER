@@ -32,23 +32,24 @@
 #include "core/inspector/InjectedScriptManager.h"
 
 #include "bindings/core/v8/ScriptValue.h"
-#include "core/InjectedScriptSource.h"
 #include "core/inspector/InjectedScript.h"
 #include "core/inspector/InjectedScriptHost.h"
 #include "core/inspector/JSONParser.h"
 #include "platform/JSONValues.h"
+#include "public/platform/Platform.h"
+#include "public/platform/WebData.h"
 #include "wtf/PassOwnPtr.h"
 
 namespace blink {
 
-PassOwnPtr<InjectedScriptManager> InjectedScriptManager::createForPage()
+PassOwnPtrWillBeRawPtr<InjectedScriptManager> InjectedScriptManager::createForPage()
 {
-    return adoptPtr(new InjectedScriptManager(&InjectedScriptManager::canAccessInspectedWindow));
+    return adoptPtrWillBeNoop(new InjectedScriptManager(&InjectedScriptManager::canAccessInspectedWindow));
 }
 
-PassOwnPtr<InjectedScriptManager> InjectedScriptManager::createForWorker()
+PassOwnPtrWillBeRawPtr<InjectedScriptManager> InjectedScriptManager::createForWorker()
 {
-    return adoptPtr(new InjectedScriptManager(&InjectedScriptManager::canAccessInspectedWorkerGlobalScope));
+    return adoptPtrWillBeNoop(new InjectedScriptManager(&InjectedScriptManager::canAccessInspectedWorkerGlobalScope));
 }
 
 InjectedScriptManager::InjectedScriptManager(InspectedStateAccessCheck accessCheck)
@@ -60,6 +61,11 @@ InjectedScriptManager::InjectedScriptManager(InspectedStateAccessCheck accessChe
 
 InjectedScriptManager::~InjectedScriptManager()
 {
+}
+
+void InjectedScriptManager::trace(Visitor* visitor)
+{
+    visitor->trace(m_injectedScriptHost);
 }
 
 void InjectedScriptManager::disconnect()
@@ -157,7 +163,8 @@ void InjectedScriptManager::releaseObjectGroup(const String& objectGroup)
 
 String InjectedScriptManager::injectedScriptSource()
 {
-    return String(reinterpret_cast<const char*>(InjectedScriptSource_js), sizeof(InjectedScriptSource_js));
+    const blink::WebData& injectedScriptSourceResource = blink::Platform::current()->loadResource("InjectedScriptSource.js");
+    return String(injectedScriptSourceResource.data(), injectedScriptSourceResource.size());
 }
 
 InjectedScript InjectedScriptManager::injectedScriptFor(ScriptState* inspectedScriptState)

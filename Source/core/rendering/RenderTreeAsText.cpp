@@ -348,17 +348,18 @@ void RenderTreeAsText::writeRenderObject(TextStream& ts, const RenderObject& o, 
     }
 
     if (behavior & RenderAsTextShowIDAndClass) {
-        if (Node* node = o.node()) {
-            if (node->hasID())
-                ts << " id=\"" + toElement(node)->getIdAttribute() + "\"";
+        Node* node = o.node();
+        if (node && node->isElementNode()) {
+            Element& element = toElement(*node);
+            if (element.hasID())
+                ts << " id=\"" + element.getIdAttribute() + "\"";
 
-            if (node->hasClass()) {
+            if (element.hasClass()) {
                 ts << " class=\"";
-                Element* element = toElement(node);
-                for (size_t i = 0; i < element->classNames().size(); ++i) {
+                for (size_t i = 0; i < element.classNames().size(); ++i) {
                     if (i > 0)
                         ts << " ";
-                    ts << element->classNames()[i];
+                    ts << element.classNames()[i];
                 }
                 ts << "\"";
             }
@@ -484,7 +485,7 @@ void write(TextStream& ts, const RenderObject& o, int indent, RenderAsTextBehavi
         Widget* widget = toRenderWidget(o).widget();
         if (widget && widget->isFrameView()) {
             FrameView* view = toFrameView(widget);
-            RenderView* root = view->frame().contentRenderer();
+            RenderView* root = view->renderView();
             if (root) {
                 view->layout();
                 RenderLayer* l = root->layer();
@@ -581,7 +582,7 @@ void RenderTreeAsText::writeLayers(TextStream& ts, const RenderLayer* rootLayer,
     if (rootLayer == layer) {
         paintDirtyRect.setWidth(max<LayoutUnit>(paintDirtyRect.width(), rootLayer->renderBox()->layoutOverflowRect().maxX()));
         paintDirtyRect.setHeight(max<LayoutUnit>(paintDirtyRect.height(), rootLayer->renderBox()->layoutOverflowRect().maxY()));
-        layer->setSize(layer->size().expandedTo(pixelSnappedIntSize(layer->renderBox()->maxLayoutOverflow(), LayoutPoint(0, 0))));
+        layer->setSizeHackForRenderTreeAsText(layer->size().expandedTo(pixelSnappedIntSize(layer->renderBox()->maxLayoutOverflow(), LayoutPoint(0, 0))));
     }
 
     // Calculate the clip rects we should use.

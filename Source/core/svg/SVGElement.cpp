@@ -602,6 +602,20 @@ void SVGElement::parseAttribute(const QualifiedName& name, const AtomicString& v
     }
 }
 
+void SVGElement::parseAttributeNew(const QualifiedName& name, const AtomicString& value)
+{
+    RefPtr<SVGAnimatedPropertyBase> property = propertyFromAttribute(name);
+    if (property) {
+        SVGParsingError parseError = NoError;
+        property->setBaseValueAsString(value, parseError);
+        reportAttributeParsingError(parseError, name, value);
+
+        return;
+    }
+
+    SVGElement::parseAttribute(name, value);
+}
+
 typedef HashMap<QualifiedName, AnimatedPropertyType> AttributeToPropertyTypeMap;
 AnimatedPropertyType SVGElement::animatedPropertyTypeForCSSAttribute(const QualifiedName& attributeName)
 {
@@ -675,12 +689,16 @@ void SVGElement::addToPropertyMap(PassRefPtr<SVGAnimatedPropertyBase> passProper
 {
     RefPtr<SVGAnimatedPropertyBase> property(passProperty);
     QualifiedName attributeName = property->attributeName();
-    m_newAttributeToPropertyMap.set(attributeName, property.release());
+    m_attributeToPropertyMap.set(attributeName, property.release());
 }
 
 PassRefPtr<SVGAnimatedPropertyBase> SVGElement::propertyFromAttribute(const QualifiedName& attributeName)
 {
-    return m_newAttributeToPropertyMap.get(attributeName);
+    AttributeToPropertyMap::iterator it = m_attributeToPropertyMap.find<SVGAttributeHashTranslator>(attributeName);
+    if (it == m_attributeToPropertyMap.end())
+        return nullptr;
+
+    return it->value;
 }
 
 bool SVGElement::isAnimatableCSSProperty(const QualifiedName& attrName)
@@ -879,8 +897,8 @@ void SVGElement::synchronizeAnimatedSVGAttribute(const QualifiedName& name) cons
         return;
 
     if (name == anyQName()) {
-        AttributeToPropertyMap::const_iterator::Values it = m_newAttributeToPropertyMap.values().begin();
-        AttributeToPropertyMap::const_iterator::Values end = m_newAttributeToPropertyMap.values().end();
+        AttributeToPropertyMap::const_iterator::Values it = m_attributeToPropertyMap.values().begin();
+        AttributeToPropertyMap::const_iterator::Values end = m_attributeToPropertyMap.values().end();
         for (; it != end; ++it) {
             if ((*it)->needsSynchronizeAttribute())
                 (*it)->synchronizeAttribute();
@@ -888,7 +906,7 @@ void SVGElement::synchronizeAnimatedSVGAttribute(const QualifiedName& name) cons
 
         elementData()->m_animatedSVGAttributesAreDirty = false;
     } else {
-        RefPtr<SVGAnimatedPropertyBase> property = m_newAttributeToPropertyMap.get(name);
+        RefPtr<SVGAnimatedPropertyBase> property = m_attributeToPropertyMap.get(name);
         if (property && property->needsSynchronizeAttribute())
             property->synchronizeAttribute();
     }

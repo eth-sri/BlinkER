@@ -55,12 +55,14 @@ public:
     };
 
     struct SelectorCheckingContext {
+        STACK_ALLOCATED();
+    public:
         // Initial selector constructor
         SelectorCheckingContext(const CSSSelector& selector, Element* element, VisitedMatchType visitedMatchType)
             : selector(&selector)
             , element(element)
-            , previousElement(0)
-            , scope(0)
+            , previousElement(nullptr)
+            , scope(nullptr)
             , visitedMatchType(visitedMatchType)
             , pseudoId(NOPSEUDO)
             , elementStyle(0)
@@ -71,12 +73,13 @@ public:
             , hasSelectionPseudo(false)
             , isUARule(false)
             , contextFlags(DefaultBehavior)
-        { }
+        {
+        }
 
         const CSSSelector* selector;
-        Element* element;
-        Element* previousElement;
-        const ContainerNode* scope;
+        RawPtrWillBeMember<Element> element;
+        RawPtrWillBeMember<Element> previousElement;
+        RawPtrWillBeMember<const ContainerNode> scope;
         VisitedMatchType visitedMatchType;
         PseudoId pseudoId;
         RenderStyle* elementStyle;
@@ -162,9 +165,7 @@ inline bool SelectorChecker::tagMatches(const Element& element, const QualifiedN
 
 inline bool SelectorChecker::checkExactAttribute(const Element& element, const QualifiedName& selectorAttributeName, const StringImpl* value)
 {
-    if (!element.hasAttributesWithoutUpdate())
-        return false;
-    AttributeCollection attributes = element.attributes();
+    AttributeCollection attributes = element.attributesWithoutUpdate();
     AttributeCollection::const_iterator end = attributes.end();
     for (AttributeCollection::const_iterator it = attributes.begin(); it != end; ++it) {
         if (it->matches(selectorAttributeName) && (!value || it->value().impl() == value))

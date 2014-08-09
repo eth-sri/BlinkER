@@ -95,24 +95,7 @@ bool SVGUseElement::isSupportedAttribute(const QualifiedName& attrName)
 
 void SVGUseElement::parseAttribute(const QualifiedName& name, const AtomicString& value)
 {
-    SVGParsingError parseError = NoError;
-
-    if (!isSupportedAttribute(name)) {
-        SVGGraphicsElement::parseAttribute(name, value);
-    } else if (name == SVGNames::xAttr) {
-        m_x->setBaseValueAsString(value, parseError);
-    } else if (name == SVGNames::yAttr) {
-        m_y->setBaseValueAsString(value, parseError);
-    } else if (name == SVGNames::widthAttr) {
-        m_width->setBaseValueAsString(value, parseError);
-    } else if (name == SVGNames::heightAttr) {
-        m_height->setBaseValueAsString(value, parseError);
-    } else if (SVGURIReference::parseAttribute(name, value, parseError)) {
-    } else {
-        ASSERT_NOT_REACHED();
-    }
-
-    reportAttributeParsingError(parseError, name, value);
+    parseAttributeNew(name, value);
 }
 
 #if ENABLE(ASSERT)
@@ -423,15 +406,15 @@ RenderObject* SVGUseElement::createRenderer(RenderStyle*)
     return new RenderSVGTransformableContainer(this);
 }
 
-static bool isDirectReference(const Node& node)
+static bool isDirectReference(const SVGElement& element)
 {
-    return isSVGPathElement(node)
-        || isSVGRectElement(node)
-        || isSVGCircleElement(node)
-        || isSVGEllipseElement(node)
-        || isSVGPolygonElement(node)
-        || isSVGPolylineElement(node)
-        || isSVGTextElement(node);
+    return isSVGPathElement(element)
+        || isSVGRectElement(element)
+        || isSVGCircleElement(element)
+        || isSVGEllipseElement(element)
+        || isSVGPolygonElement(element)
+        || isSVGPolylineElement(element)
+        || isSVGTextElement(element);
 }
 
 void SVGUseElement::toClipPath(Path& path)
@@ -439,15 +422,16 @@ void SVGUseElement::toClipPath(Path& path)
     ASSERT(path.isEmpty());
 
     Node* n = userAgentShadowRoot()->firstChild();
-    if (!n)
+    if (!n || !n->isSVGElement())
         return;
+    SVGElement& element = toSVGElement(*n);
 
-    if (n->isSVGElement() && toSVGElement(n)->isSVGGraphicsElement()) {
-        if (!isDirectReference(*n)) {
+    if (element.isSVGGraphicsElement()) {
+        if (!isDirectReference(element)) {
             // Spec: Indirect references are an error (14.3.5)
             document().accessSVGExtensions().reportError("Not allowed to use indirect reference in <clip-path>");
         } else {
-            toSVGGraphicsElement(n)->toClipPath(path);
+            toSVGGraphicsElement(element).toClipPath(path);
             // FIXME: Avoid manual resolution of x/y here. Its potentially harmful.
             SVGLengthContext lengthContext(this);
             path.translate(FloatSize(m_x->currentValue()->value(lengthContext), m_y->currentValue()->value(lengthContext)));
@@ -459,8 +443,8 @@ void SVGUseElement::toClipPath(Path& path)
 RenderObject* SVGUseElement::rendererClipChild() const
 {
     if (Node* n = userAgentShadowRoot()->firstChild()) {
-        if (n->isSVGElement() && isDirectReference(*n))
-            return toSVGElement(n)->renderer();
+        if (n->isSVGElement() && isDirectReference(toSVGElement(*n)))
+            return n->renderer();
     }
 
     return 0;

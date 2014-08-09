@@ -108,7 +108,7 @@ private:
             Impl* impl, KeyType* key, v8::PersistentContainerValue value)
         {
             v8::PersistentContainerValue oldValue = Get(impl, key);
-            impl->add(key, value);
+            impl->set(key, value);
             return oldValue;
         }
         static v8::PersistentContainerValue Get(const Impl* impl, KeyType* key)
@@ -161,7 +161,6 @@ inline void DOMWrapperMap<void>::PersistentValueMapTraits::Dispose(
     v8::UniquePersistent<v8::Object> value,
     void* key)
 {
-    ScriptForbiddenScope forbiddenScope;
     RELEASE_ASSERT(!value.IsEmpty()); // See crbug.com/368095.
     releaseObject(v8::Local<v8::Object>::New(isolate, value));
 }

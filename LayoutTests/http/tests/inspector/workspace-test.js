@@ -2,12 +2,15 @@ var initialize_WorkspaceTest = function() {
 
 InspectorTest.createWorkspace = function(ignoreEvents)
 {
+    WebInspector.settings.createSetting("fileSystemMapping", {}).set({});
     InspectorTest.testFileSystemMapping = new WebInspector.FileSystemMapping();
     InspectorTest.testFileSystemMapping._fileSystemMappingSetting = new InspectorTest.MockSetting({});
     InspectorTest.testFileSystemMapping._excludedFoldersSetting = new InspectorTest.MockSetting({});
 
+    InspectorTest.testTargetManager = new WebInspector.TargetManager();
     InspectorTest.testWorkspace = new WebInspector.Workspace(InspectorTest.testFileSystemMapping);
     InspectorTest.testNetworkWorkspaceBinding = new WebInspector.NetworkWorkspaceBinding(InspectorTest.testWorkspace);
+    InspectorTest.testDebuggerWorkspaceBinding = new WebInspector.DebuggerWorkspaceBinding(InspectorTest.testTargetManager, InspectorTest.testWorkspace, InspectorTest.testNetworkWorkspaceBinding);
     if (ignoreEvents)
         return;
     InspectorTest.testWorkspace.addEventListener(WebInspector.Workspace.Events.UISourceCodeAdded, InspectorTest._defaultWorkspaceEventHandler);

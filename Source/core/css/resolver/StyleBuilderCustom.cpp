@@ -198,9 +198,9 @@ void StyleBuilderFunctions::applyValueCSSPropertyColor(StyleResolverState& state
     }
 
     if (state.applyPropertyToRegularStyle())
-        state.style()->setColor(state.document().textLinkColors().colorFromPrimitiveValue(primitiveValue, state.style()->color()));
+        state.style()->setColor(StyleBuilderConverter::convertColor(state, value));
     if (state.applyPropertyToVisitedLinkStyle())
-        state.style()->setVisitedLinkColor(state.document().textLinkColors().colorFromPrimitiveValue(primitiveValue, state.style()->color(), true));
+        state.style()->setVisitedLinkColor(StyleBuilderConverter::convertColor(state, value, true));
 }
 
 void StyleBuilderFunctions::applyInitialCSSPropertyJustifyItems(StyleResolverState& state)
@@ -614,16 +614,6 @@ void StyleBuilderFunctions::applyValueCSSPropertyTextAlign(StyleResolverState& s
         state.style()->setTextAlign(state.parentStyle()->textAlign());
 }
 
-void StyleBuilderFunctions::applyValueCSSPropertyTextDecoration(StyleResolverState& state, CSSValue* value)
-{
-    TextDecoration t = RenderStyle::initialTextDecoration();
-    for (CSSValueListIterator i(value); i.hasMore(); i.advance()) {
-        CSSValue* item = i.value();
-        t |= *toCSSPrimitiveValue(item);
-    }
-    state.style()->setTextDecoration(t);
-}
-
 void StyleBuilderFunctions::applyInheritCSSPropertyTextIndent(StyleResolverState& state)
 {
     state.style()->setTextIndent(state.parentStyle()->textIndent());
@@ -809,15 +799,6 @@ void StyleBuilderFunctions::applyValueCSSPropertyVerticalAlign(StyleResolverStat
     state.style()->setVerticalAlignLength(primitiveValue->convertToLength<FixedConversion | PercentConversion>(state.cssToLengthConversionData()));
 }
 
-void StyleBuilderFunctions::applyValueCSSPropertyTouchAction(StyleResolverState& state, CSSValue* value)
-{
-    TouchAction action = RenderStyle::initialTouchAction();
-    for (CSSValueListIterator i(value); i.hasMore(); i.advance())
-        action |= *toCSSPrimitiveValue(i.value());
-
-    state.style()->setTouchAction(action);
-}
-
 static void resetEffectiveZoom(StyleResolverState& state)
 {
     // Reset the zoom in effect. This allows the setZoom method to accurately compute a new zoom in effect.
@@ -921,21 +902,6 @@ void StyleBuilderFunctions::applyValueCSSPropertyWebkitFilter(StyleResolverState
         state.style()->setFilter(operations);
 }
 
-void StyleBuilderFunctions::applyInitialCSSPropertyFontVariantLigatures(StyleResolverState& state)
-{
-    state.fontBuilder().setFontVariantLigaturesInitial();
-}
-
-void StyleBuilderFunctions::applyInheritCSSPropertyFontVariantLigatures(StyleResolverState& state)
-{
-    state.fontBuilder().setFontVariantLigaturesInherit(state.parentFontDescription());
-}
-
-void StyleBuilderFunctions::applyValueCSSPropertyFontVariantLigatures(StyleResolverState& state, CSSValue* value)
-{
-    state.fontBuilder().setFontVariantLigaturesValue(value);
-}
-
 void StyleBuilderFunctions::applyValueCSSPropertyInternalMarqueeIncrement(StyleResolverState& state, CSSValue* value)
 {
     if (!value->isPrimitiveValue())
@@ -983,7 +949,7 @@ void StyleBuilderFunctions::applyValueCSSPropertyInternalMarqueeSpeed(StyleResol
             break;
         }
     } else if (primitiveValue->isTime()) {
-        state.style()->setMarqueeSpeed(primitiveValue->computeTime<int, CSSPrimitiveValue::Milliseconds>());
+        state.style()->setMarqueeSpeed(static_cast<int>(primitiveValue->computeSeconds()) * 1000);
     } else if (primitiveValue->isNumber()) { // For scrollamount support.
         state.style()->setMarqueeSpeed(primitiveValue->getIntValue());
     }
@@ -1006,14 +972,6 @@ void StyleBuilderFunctions::applyValueCSSPropertyWebkitPerspectiveOrigin(StyleRe
 {
     // This is expanded in the parser
     ASSERT_NOT_REACHED();
-}
-
-void StyleBuilderFunctions::applyValueCSSPropertyWebkitTapHighlightColor(StyleResolverState& state, CSSValue* value)
-{
-    if (!value->isPrimitiveValue())
-        return;
-    Color color = state.document().textLinkColors().colorFromPrimitiveValue(toCSSPrimitiveValue(value), state.style()->color());
-    state.style()->setTapHighlightColor(color);
 }
 
 void StyleBuilderFunctions::applyInitialCSSPropertyWebkitTextEmphasisStyle(StyleResolverState& state)
@@ -1072,24 +1030,6 @@ void StyleBuilderFunctions::applyValueCSSPropertyWebkitTextEmphasisStyle(StyleRe
         state.style()->setTextEmphasisFill(TextEmphasisFillFilled);
         state.style()->setTextEmphasisMark(*primitiveValue);
     }
-}
-
-void StyleBuilderFunctions::applyValueCSSPropertyTextUnderlinePosition(StyleResolverState& state, CSSValue* value)
-{
-    // This is true if value is 'auto' or 'alphabetic'.
-    if (value->isPrimitiveValue()) {
-        TextUnderlinePosition t = *toCSSPrimitiveValue(value);
-        state.style()->setTextUnderlinePosition(t);
-        return;
-    }
-
-    unsigned t = 0;
-    for (CSSValueListIterator i(value); i.hasMore(); i.advance()) {
-        CSSValue* item = i.value();
-        TextUnderlinePosition t2 = *toCSSPrimitiveValue(item);
-        t |= t2;
-    }
-    state.style()->setTextUnderlinePosition(static_cast<TextUnderlinePosition>(t));
 }
 
 void StyleBuilderFunctions::applyInitialCSSPropertyWillChange(StyleResolverState& state)

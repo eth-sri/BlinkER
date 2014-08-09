@@ -52,11 +52,7 @@ source_set("generated") {
   deps = [
     ":make_core_generated",
     ":prerequisites",
-    "inspector:debugger_script_source",
-    "inspector:inspector_overlay_page",
     "inspector:protocol_sources",
-    "inspector:injected_script_source",
-    "inspector:injected_canvas_script_source",
     "inspector:instrumentation_sources",
     "//gin",
     "//skia",
@@ -102,10 +98,6 @@ source_set("prerequisites") {
 
   deps = [
     ":make_core_generated",
-    "inspector:debugger_script_source",
-    "inspector:injected_canvas_script_source",
-    "inspector:injected_script_source",
-    "inspector:inspector_overlay_page",
     "inspector:protocol_sources",
     "inspector:instrumentation_sources",
     "//third_party/WebKit/Source/bindings/core/v8:bindings_core_v8_generated",
@@ -298,7 +290,6 @@ source_set("rendering") {
 }
 
 # GYP version: WebKit/Source/core/core.gyp:webcore_testing
-
 source_set("testing") {
   configs += [
     "//third_party/WebKit/Source:inside_blink",
@@ -311,10 +302,12 @@ source_set("testing") {
 
   sources = webcore_testing_files
   sources += [
+    "$bindings_core_v8_output_dir/V8GarbageCollectedScriptWrappable.cpp",
+    "$bindings_core_v8_output_dir/V8GarbageCollectedScriptWrappable.h",
     "$bindings_core_v8_output_dir/V8GCObservation.cpp",
     "$bindings_core_v8_output_dir/V8GCObservation.h",
-    "$bindings_core_v8_output_dir/V8MallocStatistics.cpp",
-    "$bindings_core_v8_output_dir/V8MallocStatistics.h",
+    "$bindings_core_v8_output_dir/V8PrivateScriptTest.cpp",
+    "$bindings_core_v8_output_dir/V8PrivateScriptTest.h",
     "$bindings_core_v8_output_dir/V8TypeConversions.cpp",
     "$bindings_core_v8_output_dir/V8TypeConversions.h",
     "$bindings_core_v8_output_dir/V8Internals.cpp",
@@ -331,6 +324,8 @@ source_set("testing") {
     "$bindings_core_v8_output_dir/V8LayerRect.h",
     "$bindings_core_v8_output_dir/V8LayerRectList.cpp",
     "$bindings_core_v8_output_dir/V8LayerRectList.h",
+    "$bindings_core_v8_output_dir/V8RefCountedScriptWrappable.cpp",
+    "$bindings_core_v8_output_dir/V8RefCountedScriptWrappable.h",
   ]
 }
 
@@ -431,12 +426,8 @@ source_set("core_generated") {
   deps = [
     ":make_core_generated",
     ":prerequisites",
-    "inspector:inspector_overlay_page",
     "inspector:protocol_sources",
     "inspector:instrumentation_sources",
-    "inspector:injected_canvas_script_source",
-    "inspector:injected_script_source",
-    "inspector:debugger_script_source",
     "//gin",
     "//skia",
     "//third_party/iccjpeg",
@@ -562,6 +553,7 @@ action("generated_testing_idls_internal_runtime_flags") {
 group("make_core_generated") {
   deps = [
     ":make_core_generated_private_script",
+    ":make_core_generated_private_script_for_testing",
     ":make_core_generated_html_entity_table",
     ":make_core_generated_css_property_names",
     ":make_core_generated_media_feature_names",
@@ -1036,7 +1028,7 @@ action("make_core_generated_user_agent_style_sheets") {
   ]
 
   args =
-    [ "--namespace", "WebCore" ] +
+    [ "--namespace", "blink" ] +
     [ "--out-h=" + rebase_path(outputs[0], root_build_dir) ] +
     [ "--out-cpp=" + rebase_path(outputs[1], root_build_dir) ] +
     rebase_path(inputs, root_build_dir)

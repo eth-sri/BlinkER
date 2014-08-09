@@ -46,7 +46,7 @@ WebInspector.InspectorView = function()
     this._drawerSplitView.show(this.element);
 
     this._tabbedPane = new WebInspector.TabbedPane();
-    this._tabbedPane.setRetainTabOrder(true, WebInspector.moduleManager.orderComparator(WebInspector.Panel, "name", "order"));
+    this._tabbedPane.setRetainTabOrder(true, self.runtime.orderComparator(WebInspector.Panel, "name", "order"));
     this._tabbedPane.show(this._drawerSplitView.mainElement());
     this._drawer = new WebInspector.Drawer(this._drawerSplitView);
 
@@ -61,23 +61,10 @@ WebInspector.InspectorView = function()
     this._rightToolbarElement = this._toolbarElement.createChild("div", "toolbar-controls-right");
     this._toolbarItems = [];
 
-    if (WebInspector.experimentsSettings.devicesPanel.isEnabled()) {
-        this._remoteDeviceCountElement = this._rightToolbarElement.createChild("div", "hidden");
-        this._remoteDeviceCountElement.addEventListener("click", this.showViewInDrawer.bind(this, "devices", true), false);
-        this._remoteDeviceCountElement.id = "remote-device-count";
-        InspectorFrontendHost.setDeviceCountUpdatesEnabled(true);
-        InspectorFrontendHost.events.addEventListener(InspectorFrontendHostAPI.Events.DeviceCountUpdated, this._onDeviceCountUpdated, this);
-    }
-
-    this._errorWarningCountElement = this._rightToolbarElement.createChild("div", "hidden");
-    this._errorWarningCountElement.id = "error-warning-count";
-
     this._closeButtonToolbarItem = document.createElementWithClass("div", "toolbar-close-button-item");
     var closeButtonElement = this._closeButtonToolbarItem.createChild("div", "close-button");
     closeButtonElement.addEventListener("click", InspectorFrontendHost.closeWindow.bind(InspectorFrontendHost), true);
     this._rightToolbarElement.appendChild(this._closeButtonToolbarItem);
-
-    this.appendToRightToolbar(this._drawer.toggleButton());
 
     this._panels = {};
     // Used by tests.
@@ -99,22 +86,18 @@ WebInspector.InspectorView = function()
     InspectorFrontendHost.events.addEventListener(InspectorFrontendHostAPI.Events.ShowConsole, this.showPanel.bind(this, "console"));
 };
 
-WebInspector.InspectorView.Events = {
-    DeviceCountChanged: "DeviceCountChanged"
-}
-
 WebInspector.InspectorView.prototype = {
     _loadPanelDesciptors: function()
     {
         WebInspector.startBatchUpdate();
-        WebInspector.moduleManager.extensions(WebInspector.Panel).forEach(processPanelExtensions.bind(this));
+        self.runtime.extensions(WebInspector.Panel).forEach(processPanelExtensions.bind(this));
         /**
-         * @param {!WebInspector.ModuleManager.Extension} extension
+         * @param {!Runtime.Extension} extension
          * @this {!WebInspector.InspectorView}
          */
         function processPanelExtensions(extension)
         {
-            this.addPanel(new WebInspector.ModuleManagerExtensionPanelDescriptor(extension));
+            this.addPanel(new WebInspector.RuntimeExtensionPanelDescriptor(extension));
         }
         WebInspector.endBatchUpdate();
     },
@@ -213,32 +196,6 @@ WebInspector.InspectorView.prototype = {
         this._tabbedPane.addEventListener(WebInspector.TabbedPane.EventTypes.TabSelected, this._tabSelected, this);
         this._tabSelected();
         this._drawer.initialPanelShown();
-    },
-
-    showDrawerEditor: function()
-    {
-        this._drawer.showDrawerEditor();
-    },
-
-    /**
-     * @return {boolean}
-     */
-    isDrawerEditorShown: function()
-    {
-        return this._drawer.isDrawerEditorShown();
-    },
-
-    hideDrawerEditor: function()
-    {
-        this._drawer.hideDrawerEditor();
-    },
-
-    /**
-     * @param {boolean} available
-     */
-    setDrawerEditorAvailable: function(available)
-    {
-        this._drawer.setDrawerEditorAvailable(available);
     },
 
     _tabSelected: function()
@@ -452,53 +409,8 @@ WebInspector.InspectorView.prototype = {
         return this._tabbedPane.headerElement();
     },
 
-    _createImagedCounterElementIfNeeded: function(parent, count, id, styleName)
+    toolbarItemResized: function()
     {
-        if (!count)
-            return;
-
-        var imageElement = parent.createChild("div", styleName);
-        var counterElement = parent.createChild("span");
-        counterElement.id = id;
-        counterElement.textContent = count;
-    },
-
-    /**
-     * @param {number} errors
-     * @param {number} warnings
-     */
-    setErrorAndWarningCounts: function(errors, warnings)
-    {
-        if (this._errors === errors && this._warnings === warnings)
-            return;
-        this._errors = errors;
-        this._warnings = warnings;
-        this._errorWarningCountElement.classList.toggle("hidden", !errors && !warnings);
-        this._errorWarningCountElement.removeChildren();
-
-        this._createImagedCounterElementIfNeeded(this._errorWarningCountElement, errors, "error-count", "error-icon-small");
-        this._createImagedCounterElementIfNeeded(this._errorWarningCountElement, warnings, "warning-count", "warning-icon-small");
-
-        var errorString = errors ?  WebInspector.UIString("%d error%s", errors, errors > 1 ? "s" : "") : "";
-        var warningString = warnings ?  WebInspector.UIString("%d warning%s", warnings, warnings > 1 ? "s" : "") : "";
-        var commaString = errors && warnings ? ", " : "";
-        this._errorWarningCountElement.title = errorString + commaString + warningString;
-        this._tabbedPane.headerResized();
-    },
-
-    /**
-     * @param {!WebInspector.Event} event
-     */
-    _onDeviceCountUpdated: function(event)
-    {
-        var count = /** @type {number} */ (event.data);
-        if (count === this.deviceCount_)
-            return;
-        this.deviceCount_ = count;
-        this._remoteDeviceCountElement.classList.toggle("hidden", !count);
-        this._remoteDeviceCountElement.removeChildren();
-        this._createImagedCounterElementIfNeeded(this._remoteDeviceCountElement, count, "device-count", "device-icon-small");
-        this._remoteDeviceCountElement.title = WebInspector.UIString(((count > 1) ? "%d devices found" : "%d device found"), count);
         this._tabbedPane.headerResized();
     },
 
@@ -535,6 +447,24 @@ WebInspector.InspectorView.DrawerToggleActionDelegate.prototype = {
 
 /**
  * @constructor
+ * @implements {WebInspector.StatusBarItem.Provider}
+ */
+WebInspector.InspectorView.ToggleDrawerButtonProvider = function()
+{
+}
+
+WebInspector.InspectorView.ToggleDrawerButtonProvider.prototype = {
+    /**
+     * @return {?WebInspector.StatusBarItem}
+     */
+    item: function()
+    {
+        return WebInspector.inspectorView._drawer.toggleButton();
+    }
+}
+
+/**
+ * @constructor
  * @extends {WebInspector.VBox}
  */
 WebInspector.RootView = function()
@@ -543,8 +473,7 @@ WebInspector.RootView = function()
     this.markAsRoot();
     this.element.classList.add("root-view");
     this.element.setAttribute("spellcheck", false);
-    window.addEventListener("resize", this.doResize.bind(this), true);
-    this._onScrollBound = this._onScroll.bind(this);
+    window.addEventListener("resize", this.doResize.bind(this), false);
 };
 
 WebInspector.RootView.prototype = {
@@ -554,31 +483,15 @@ WebInspector.RootView.prototype = {
         this.show(document.body);
     },
 
-    _onScroll: function()
-    {
-        // If we didn't have enough space at the start, we may have wrong scroll offsets.
-        if (document.body.scrollTop !== 0)
-            document.body.scrollTop = 0;
-        if (document.body.scrollLeft !== 0)
-            document.body.scrollLeft = 0;
-    },
-
     doResize: function()
     {
         var size = this.constraints().minimum;
         var zoom = WebInspector.zoomManager.zoomFactor();
         var right = Math.min(0, window.innerWidth - size.width / zoom);
-        this.element.style.right = right + "px";
+        this.element.style.marginRight = right + "px";
         var bottom = Math.min(0, window.innerHeight - size.height / zoom);
-        this.element.style.bottom = bottom + "px";
-
-        if (window.innerWidth < size.width || window.innerHeight < size.height)
-            window.addEventListener("scroll", this._onScrollBound, false);
-        else
-            window.removeEventListener("scroll", this._onScrollBound, false);
-
+        this.element.style.marginBottom = bottom + "px";
         WebInspector.VBox.prototype.doResize.call(this);
-        this._onScroll();
     },
 
     __proto__: WebInspector.VBox.prototype

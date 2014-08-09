@@ -29,20 +29,42 @@ var ui = ui || {};
 
 // FIXME: Put this all in a more appropriate place.
 
+// FIXME: Replace the flakiness dashboard's sense of groups with sheriff-o-matic's
+// sense of trees and get rid of this mapping.
+var treeToDashboardGroup = {
+    blink: '@ToT%20Blink',
+    chromium: '@ToT%20Chromium',
+};
+
 ui.displayNameForBuilder = function(builderName)
 {
     return builderName.replace(/Webkit /i, '');
 }
 
-ui.urlForFlakinessDashboard = function(opt_testNameList)
+// FIXME: Take a master name argument as well.
+ui.urlForFlakinessDashboard = function(testNames, testType, tree)
 {
-    var testsParameter = opt_testNameList ? opt_testNameList.join(',') : '';
-    return 'http://test-results.appspot.com/dashboards/flakiness_dashboard.html#tests=' + encodeURIComponent(testsParameter);
+    if (Array.isArray(testNames))
+        testNames = testNames.join(',');
+
+    // FIXME: Remove this once the flakiness dashboard stops having webkit_tests
+    // masquerade as layout-tests.
+    if (testType == 'webkit_tests')
+        testType = 'layout-tests';
+
+    // FIXME: sugarjs's toQueryString makes spaces into pluses instead of %20, which confuses
+    // the flakiness dashboard, which just uses decodeURIComponent.
+    return 'http://test-results.appspot.com/dashboards/flakiness_dashboard.html#group=' +
+        treeToDashboardGroup[tree] + '&' +
+        Object.toQueryString({
+            tests: testNames,
+            testType: testType,
+        });
 }
 
-ui.urlForEmbeddedFlakinessDashboard = function(opt_testNameList)
+ui.urlForEmbeddedFlakinessDashboard = function(testNames, testType, tree)
 {
-    return ui.urlForFlakinessDashboard(opt_testNameList) + '&showChrome=false';
+    return ui.urlForFlakinessDashboard(testNames, testType, tree) + '&showChrome=false';
 }
 
 })();

@@ -31,11 +31,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     <meta http-equiv="content-type" content="text/html; charset=utf-8">
     <meta http-equiv="Content-Security-Policy" content="object-src 'none'; script-src 'self' 'unsafe-eval'">
     <link rel="stylesheet" type="text/css" href="inspector.css">
+    <script type="text/javascript" src="Runtime.js"></script>
     <script type="text/javascript" src="common/utilities.js"></script>
     <script type="text/javascript" src="common/modules.js"></script>
     <script type="text/javascript" src="common/WebInspector.js"></script>
     <script type="text/javascript" src="common/Object.js"></script>
-    <script type="text/javascript" src="common/ModuleManager.js"></script>
     <script type="text/javascript" src="common/NotificationService.js"></script>
     <script type="text/javascript" src="common/UIString.js"></script>
     <script type="text/javascript" src="common/Console.js"></script>
@@ -47,6 +47,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     <script type="text/javascript" src="common/Settings.js"></script>
     <script type="text/javascript" src="common/TextUtils.js"></script>
     <script type="text/javascript" src="common/Progress.js"></script>
+    <script type="text/javascript" src="common/ModuleExtensionInterfaces.js"></script>
     <script type="text/javascript" src="ui/CompletionDictionary.js"></script>
     <script type="text/javascript" src="ui/DOMExtension.js"></script>
     <script type="text/javascript" src="ui/treeoutline.js"></script>
@@ -58,6 +59,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     <script type="text/javascript" src="host/Platform.js"></script>
     <script type="text/javascript" src="host/UserMetrics.js"></script>
     <script type="text/javascript" src="sdk/Target.js"></script>
+    <script type="text/javascript" src="sdk/BlackboxSupport.js"></script>
     <script type="text/javascript" src="ui/Context.js"></script>
     <script type="text/javascript" src="components/ExecutionContextSelector.js"></script>
     <script type="text/javascript" src="ui/View.js"></script>
@@ -102,6 +104,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     <script type="text/javascript" src="sdk/HeapProfilerModel.js"></script>
     <script type="text/javascript" src="ui/DataGrid.js"></script>
     <script type="text/javascript" src="ui/ShowMoreDataGridNode.js"></script>
+    <script type="text/javascript" src="ui/SortableDataGrid.js"></script>
     <script type="text/javascript" src="components/CookiesTable.js"></script>
     <script type="text/javascript" src="sdk/ApplicationCacheModel.js"></script>
     <script type="text/javascript" src="sdk/IndexedDBModel.js"></script>
@@ -134,7 +137,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     <script type="text/javascript" src="sdk/LayerTreeModel.js"></script>
     <script type="text/javascript" src="sdk/Script.js"></script>
     <script type="text/javascript" src="sdk/Linkifier.js"></script>
-    <script type="text/javascript" src="sdk/DebuggerScriptMapping.js"></script>
     <script type="text/javascript" src="sdk/PresentationConsoleMessageHelper.js"></script>
     <script type="text/javascript" src="sdk/FileSystemWorkspaceBinding.js"></script>
     <script type="text/javascript" src="sdk/FileSystemMapping.js"></script>
@@ -150,7 +152,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     <script type="text/javascript" src="sdk/ResourceScriptMapping.js"></script>
     <script type="text/javascript" src="sdk/CompilerScriptMapping.js"></script>
     <script type="text/javascript" src="sdk/LiveEditSupport.js"></script>
-    <script type="text/javascript" src="sdk/CSSStyleSheetMapping.js"></script>
     <script type="text/javascript" src="sdk/SASSSourceMapping.js"></script>
     <script type="text/javascript" src="sdk/DOMModel.js"></script>
     <script type="text/javascript" src="ui/ForwardedInputEventHandler.js"></script>
@@ -187,7 +188,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     <script type="text/javascript" src="main/ScreencastApp.js"></script>
     <script type="text/javascript" src="main/OverridesView.js"></script>
     <script type="text/javascript" src="ui/ZoomManager.js"></script>
-    <script type="text/javascript" src="ScreencastView.js"></script>
+    <script type="text/javascript" src="screencast/ScreencastView.js"></script>
     <script type="text/javascript" src="ui/ResizerWidget.js"></script>
     <script type="text/javascript" src="toolbox/InspectedPagePlaceholder.js"></script>
     <script type="text/javascript" src="toolbox/MediaQueryInspector.js"></script>

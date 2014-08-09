@@ -150,9 +150,9 @@ WorkerScriptController::~WorkerScriptController()
     m_world->dispose();
 
     // The corresponding call to didStartWorkerRunLoop is in
-    // WorkerThread::workerThread().
+    // WorkerThread::initialize().
     // See http://webkit.org/b/83104#c14 for why this is here.
-    blink::Platform::current()->didStopWorkerRunLoop(blink::WebWorkerRunLoop(&m_workerGlobalScope.thread()->runLoop()));
+    blink::Platform::current()->didStopWorkerRunLoop(blink::WebWorkerRunLoop(m_workerGlobalScope.thread()));
 
     if (isContextInitialized())
         m_scriptState->disposePerContextData();
@@ -316,7 +316,7 @@ void WorkerScriptController::rethrowExceptionFromImportedScript(PassRefPtrWillBe
     const String& errorMessage = errorEvent->message();
     if (m_globalScopeExecutionState)
         m_globalScopeExecutionState->m_errorEventFromImportedScript = errorEvent;
-    exceptionState.rethrowV8Exception(V8ThrowException::createError(v8GeneralError, errorMessage, m_isolate));
+    exceptionState.rethrowV8Exception(V8ThrowException::createGeneralError(errorMessage, m_isolate));
 }
 
 } // namespace blink

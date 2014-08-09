@@ -26,6 +26,7 @@
 
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/Node.h"
+#include "core/html/CollectionType.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/Vector.h"
 
@@ -74,7 +75,6 @@ public:
     PassRefPtrWillBeRawPtr<HTMLCollection> children();
 
     unsigned countChildren() const;
-    Node* traverseToChildAt(unsigned index) const;
 
     PassRefPtrWillBeRawPtr<Element> querySelector(const AtomicString& selectors, ExceptionState&);
     PassRefPtrWillBeRawPtr<StaticNodeList> querySelectorAll(const AtomicString& selectors, ExceptionState&);
@@ -145,7 +145,7 @@ public:
     // FIXME: These methods should all be renamed to something better than "check",
     // since it's not clear that they alter the style bits of siblings and children.
     void checkForChildrenAdjacentRuleChanges();
-    enum SiblingCheckType { FinishedParsingChildren, SiblingRemoved, Other };
+    enum SiblingCheckType { FinishedParsingChildren, SiblingElementInserted, SiblingElementRemoved };
     void checkForSiblingStyleChanges(SiblingCheckType, Node* nodeBeforeChange, Node* nodeAfterChange);
 
     bool childrenSupportStyleSharing() const { return !hasRestyleFlags(); }
@@ -153,11 +153,37 @@ public:
     // -----------------------------------------------------------------------------
     // Notification of document structure changes (see core/dom/Node.h for more notification methods)
 
-    enum ChildrenChangeType { ChildInserted, ChildRemoved, AllChildrenRemoved, TextChanged };
+    enum ChildrenChangeType { ElementInserted, NonElementInserted, ElementRemoved, NonElementRemoved, AllChildrenRemoved, TextChanged };
     enum ChildrenChangeSource { ChildrenChangeSourceAPI, ChildrenChangeSourceParser };
     struct ChildrenChange {
         STACK_ALLOCATED();
     public:
+        static ChildrenChange forInsertion(Node& node, ChildrenChangeSource byParser)
+        {
+            ChildrenChange change = {
+                node.isElementNode() ? ElementInserted : NonElementInserted,
+                node.previousSibling(),
+                node.nextSibling(),
+                byParser
+            };
+            return change;
+        }
+
+        static ChildrenChange forRemoval(Node& node, Node* previousSibling, Node* nextSibling, ChildrenChangeSource byParser)
+        {
+            ChildrenChange change = {
+                node.isElementNode() ? ElementRemoved : NonElementRemoved,
+                previousSibling,
+                nextSibling,
+                byParser
+            };
+            return change;
+        }
+
+        bool isChildInsertion() const { return type == ElementInserted || type == NonElementInserted; }
+        bool isChildRemoval() const { return type == ElementRemoved || type == NonElementRemoved; }
+        bool isChildElementChange() const { return type == ElementInserted || type == ElementRemoved; }
+
         ChildrenChangeType type;
         RawPtrWillBeMember<Node> siblingBeforeChange;
         RawPtrWillBeMember<Node> siblingAfterChange;
@@ -172,11 +198,10 @@ public:
 
     virtual void trace(Visitor*) OVERRIDE;
 
-    void notifyNodeInserted(Node&);
-    void notifyNodeRemoved(Node&);
-
 protected:
     ContainerNode(TreeScope*, ConstructionType = CreateContainer);
+
+    void invalidateNodeListCachesInAncestors(const QualifiedName* attrName = 0, Element* attributeOwnerElement = 0);
 
 #if !ENABLE(OILPAN)
     void removeDetachedChildren();
@@ -185,7 +210,17 @@ protected:
     void setFirstChild(Node* child) { m_firstChild = child; }
     void setLastChild(Node* child) { m_lastChild = child; }
 
+    // Utility functions for NodeListsNodeData API.
+    template <typename Collection> PassRefPtrWillBeRawPtr<Collection> ensureCachedCollection(CollectionType);
+    template <typename Collection> PassRefPtrWillBeRawPtr<Collection> ensureCachedCollection(CollectionType, const AtomicString& name);
+    template <typename Collection> PassRefPtrWillBeRawPtr<Collection> ensureCachedCollection(CollectionType, const AtomicString& namespaceURI, const AtomicString& localName);
+    template <typename Collection> Collection* cachedCollection(CollectionType);
+
 private:
+    bool isContainerNode() const WTF_DELETED_FUNCTION; // This will catch anyone doing an unnecessary check.
+    bool isTextNode() const WTF_DELETED_FUNCTION; // This will catch anyone doing an unnecessary check.
+
+    NodeListsNodeData& ensureNodeLists();
     void removeBetween(Node* previousChild, Node* nextChild, Node& oldChild);
     void insertBeforeCommon(Node& nextChild, Node& oldChild);
     void appendChildCommon(Node& child);
@@ -195,7 +230,9 @@ private:
     void removeDetachedChildrenInContainer(ContainerNode&);
     void addChildNodesToDeletionQueue(Node*&, Node*&, ContainerNode&);
 
+    void notifyNodeInserted(Node&, ChildrenChangeSource = ChildrenChangeSourceAPI);
     void notifyNodeInsertedInternal(Node&, NodeVector& postInsertionNotificationTargets);
+    void notifyNodeRemoved(Node&);
 
     bool hasRestyleFlag(DynamicRestyleFlags mask) const { return hasRareData() && hasRestyleFlagInternal(mask); }
     bool hasRestyleFlags() const { return hasRareData() && hasRestyleFlagsInternal(); }
@@ -269,13 +306,6 @@ inline unsigned Node::countChildren() const
     return toContainerNode(this)->countChildren();
 }
 
-inline Node* Node::traverseToChildAt(unsigned index) const
-{
-    if (!isContainerNode())
-        return 0;
-    return toContainerNode(this)->traverseToChildAt(index);
-}
-
 inline Node* Node::firstChild() const
 {
     if (!isContainerNode())
@@ -288,15 +318,6 @@ inline Node* Node::lastChild() const
     if (!isContainerNode())
         return 0;
     return toContainerNode(this)->lastChild();
-}
-
-inline Node& Node::highestAncestorOrSelf() const
-{
-    Node* node = const_cast<Node*>(this);
-    Node* highest = node;
-    for (; node; node = node->parentNode())
-        highest = node;
-    return *highest;
 }
 
 inline ContainerNode* Node::parentElementOrShadowRoot() const
@@ -316,7 +337,7 @@ inline bool Node::isTreeScope() const
     return &treeScope().rootNode() == this;
 }
 
-inline void getChildNodes(Node& node, NodeVector& nodes)
+inline void getChildNodes(ContainerNode& node, NodeVector& nodes)
 {
     ASSERT(!nodes.size());
     for (Node* child = node.firstChild(); child; child = child->nextSibling())

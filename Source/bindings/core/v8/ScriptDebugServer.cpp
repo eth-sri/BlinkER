@@ -39,10 +39,11 @@
 #include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8JavaScriptCallFrame.h"
 #include "bindings/core/v8/V8ScriptRunner.h"
-#include "core/DebuggerScriptSource.h"
 #include "core/inspector/JavaScriptCallFrame.h"
 #include "core/inspector/ScriptDebugListener.h"
 #include "platform/JSONValues.h"
+#include "public/platform/Platform.h"
+#include "public/platform/WebData.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/Vector.h"
 #include "wtf/dtoa/utils.h"
@@ -317,12 +318,12 @@ int ScriptDebugServer::frameCount()
     return 0;
 }
 
-PassRefPtrWillBeRawPtr<JavaScriptCallFrame> ScriptDebugServer::toJavaScriptCallFrame(const ScriptValue& value)
+PassRefPtrWillBeRawPtr<JavaScriptCallFrame> ScriptDebugServer::toJavaScriptCallFrameUnsafe(const ScriptValue& value)
 {
     if (value.isEmpty())
         return nullptr;
     ASSERT(value.isObject());
-    return V8JavaScriptCallFrame::toNative(v8::Handle<v8::Object>::Cast(value.v8Value()));
+    return V8JavaScriptCallFrame::toNative(v8::Handle<v8::Object>::Cast(value.v8ValueUnsafe()));
 }
 
 PassRefPtrWillBeRawPtr<JavaScriptCallFrame> ScriptDebugServer::wrapCallFrames(int maximumLimit, ScopeInfoDetails scopeDetails)
@@ -376,9 +377,20 @@ ScriptValue ScriptDebugServer::currentCallFramesForAsyncStack()
     return currentCallFramesInner(FastAsyncScopes);
 }
 
-PassRefPtrWillBeRawPtr<JavaScriptCallFrame> ScriptDebugServer::topCallFrameNoScopes()
+PassRefPtrWillBeRawPtr<JavaScriptCallFrame> ScriptDebugServer::callFrameNoScopes(int index)
 {
-    return wrapCallFrames(1, NoScopes);
+    v8::Handle<v8::Value> currentCallFrameV8;
+    if (m_executionState.IsEmpty()) {
+        v8::Handle<v8::Function> currentCallFrameFunction = v8::Local<v8::Function>::Cast(m_debuggerScript.newLocal(m_isolate)->Get(v8AtomicString(m_isolate, "currentCallFrameByIndex")));
+        currentCallFrameV8 = v8::Debug::Call(currentCallFrameFunction, v8::Integer::New(m_isolate, index));
+    } else {
+        v8::Handle<v8::Value> argv[] = { m_executionState, v8::Integer::New(m_isolate, index) };
+        currentCallFrameV8 = callDebuggerMethod("currentCallFrameByIndex", WTF_ARRAY_LENGTH(argv), argv);
+    }
+    ASSERT(!currentCallFrameV8.IsEmpty());
+    if (!currentCallFrameV8->IsObject())
+        return nullptr;
+    return JavaScriptCallFrame::create(v8::Debug::GetDebugContext(), v8::Handle<v8::Object>::Cast(currentCallFrameV8));
 }
 
 void ScriptDebugServer::interruptAndRun(PassOwnPtr<Task> task, v8::Isolate* isolate)
@@ -491,10 +503,6 @@ void ScriptDebugServer::handleV8DebugEvent(const v8::Debug::EventDetails& eventD
             v8::Handle<v8::Object> object = v8::Handle<v8::Object>::Cast(value);
             dispatchDidParseSource(listener, object, event != v8::AfterCompile ? CompileError : CompileSuccess);
         } else if (event == v8::Exception) {
-            v8::Local<v8::StackTrace> stackTrace = v8::StackTrace::CurrentStackTrace(m_isolate, 1);
-            // Stack trace is empty in case of syntax error. Silently continue execution in such cases.
-            if (!stackTrace->GetFrameCount())
-                return;
             v8::Handle<v8::Object> eventData = eventDetails.GetEventData();
             v8::Handle<v8::Value> exception = callInternalGetterFunction(eventData, "exception", m_isolate);
             handleProgramBreak(ScriptState::from(eventContext), eventDetails.GetExecutionState(), exception, v8::Handle<v8::Array>());
@@ -515,12 +523,6 @@ void ScriptDebugServer::handleV8AsyncTaskEvent(ScriptDebugListener* listener, Sc
     String type = toCoreStringWithUndefinedOrNullCheck(callInternalGetterFunction(eventData, "type", m_isolate));
     String name = toCoreStringWithUndefinedOrNullCheck(callInternalGetterFunction(eventData, "name", m_isolate));
     int id = callInternalGetterFunction(eventData, "id", m_isolate)->ToInteger()->Value();
-
-    // FIXME: Remove when not needed.
-    if (name == "Promise.Resolved")
-        name = "Promise.resolve";
-    else if (name == "Promise.Rejected")
-        name = "Promise.reject";
 
     m_pausedScriptState = pausedScriptState;
     m_executionState = executionState;
@@ -556,7 +558,8 @@ void ScriptDebugServer::ensureDebuggerScriptCompiled()
 
     v8::HandleScope scope(m_isolate);
     v8::Context::Scope contextScope(v8::Debug::GetDebugContext());
-    v8::Handle<v8::String> source = v8String(m_isolate, String(reinterpret_cast<const char*>(DebuggerScriptSource_js), sizeof(DebuggerScriptSource_js)));
+    const blink::WebData& debuggerScriptSourceResource = blink::Platform::current()->loadResource("DebuggerScriptSource.js");
+    v8::Handle<v8::String> source = v8String(m_isolate, String(debuggerScriptSourceResource.data(), debuggerScriptSourceResource.size()));
     v8::Local<v8::Value> value = V8ScriptRunner::compileAndRunInternalScript(source, m_isolate);
     ASSERT(!value.IsEmpty());
     ASSERT(value->IsObject());

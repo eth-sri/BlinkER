@@ -269,6 +269,9 @@ ETextAlign RenderBlockFlow::textAlignmentForLine(bool endsWithSoftBreak) const
     if (!RuntimeEnabledFeatures::css3TextEnabled())
         return (alignment == JUSTIFY) ? TASTART : alignment;
 
+    if (alignment != JUSTIFY)
+        return alignment;
+
     TextAlignLast alignmentLast = style()->textAlignLast();
     switch (alignmentLast) {
     case TextAlignLastStart:
@@ -284,8 +287,6 @@ ETextAlign RenderBlockFlow::textAlignmentForLine(bool endsWithSoftBreak) const
     case TextAlignLastJustify:
         return JUSTIFY;
     case TextAlignLastAuto:
-        if (alignment != JUSTIFY)
-            return alignment;
         if (style()->textJustify() == TextJustifyDistribute)
             return JUSTIFY;
         return TASTART;
@@ -444,7 +445,7 @@ static inline void setLogicalWidthForTextRun(RootInlineBox* lineBox, BidiRun* ru
         copyToVector(fallbackFonts, it->value.first);
         run->m_box->parent()->clearDescendantsHaveSameLineHeightAndBaseline();
     }
-    if ((glyphOverflow.top || glyphOverflow.bottom || glyphOverflow.left || glyphOverflow.right)) {
+    if (!glyphOverflow.isZero()) {
         ASSERT(run->m_box->isText());
         GlyphOverflowAndFallbackFontsMap::ValueType* it = textBoxDataMap.add(toInlineTextBox(run->m_box), std::make_pair(Vector<const SimpleFontData*>(), GlyphOverflow())).storedValue;
         it->value.second = glyphOverflow;
@@ -568,7 +569,7 @@ void RenderBlockFlow::computeInlineDirectionPositionsForLine(RootInlineBox* line
     // The widths of all runs are now known. We can now place every inline box (and
     // compute accurate widths for the inline flow boxes).
     needsWordSpacing = false;
-    lineBox->placeBoxesInInlineDirection(lineLogicalLeft, needsWordSpacing, textBoxDataMap);
+    lineBox->placeBoxesInInlineDirection(lineLogicalLeft, needsWordSpacing);
 }
 
 BidiRun* RenderBlockFlow::computeInlineDirectionPositionsForSegment(RootInlineBox* lineBox, const LineInfo& lineInfo, ETextAlign textAlign, float& logicalLeft,
@@ -1746,7 +1747,7 @@ RootInlineBox* RenderBlockFlow::determineStartPosition(LineLayoutState& layoutSt
         if (style()->unicodeBidi() == Plaintext)
             direction = determinePlaintextDirectionality(this);
         resolver.setStatus(BidiStatus(direction, isOverride(style()->unicodeBidi())));
-        InlineIterator iter = InlineIterator(this, bidiFirstSkippingEmptyInlines(this, &resolver), 0);
+        InlineIterator iter = InlineIterator(this, bidiFirstSkippingEmptyInlines(this, resolver.runs(), &resolver), 0);
         resolver.setPosition(iter, numberOfIsolateAncestors(iter));
     }
     return curr;

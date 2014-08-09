@@ -92,7 +92,7 @@ public:
 
     // These functions start a load. All eventually call into loadWithNavigationAction() or loadInSameDocument().
     void load(const FrameLoadRequest&); // The entry point for non-reload, non-history loads.
-    void reload(ReloadPolicy = NormalReload, const KURL& overrideURL = KURL(), const AtomicString& overrideEncoding = nullAtom);
+    void reload(ReloadPolicy = NormalReload, const KURL& overrideURL = KURL(), const AtomicString& overrideEncoding = nullAtom, ClientRedirectPolicy = NotClientRedirect);
     void loadHistoryItem(HistoryItem*, HistoryLoadType = HistoryDifferentDocumentLoad, ResourceRequestCachePolicy = UseProtocolCachePolicy); // The entry point for all back/forward loads
 
     static void reportLocalLoadFailed(LocalFrame*, const String& url);
@@ -161,7 +161,7 @@ public:
     LocalFrame* opener();
     void setOpener(LocalFrame*);
 
-    void frameDetached();
+    void detachFromParent();
 
     void loadDone();
     void finishedParsing();
@@ -219,8 +219,6 @@ private:
 
     bool validateTransitionNavigationMode();
     bool dispatchNavigationTransitionData();
-    void detachFromParent();
-    void detachChildren();
     void detachClient();
 
     void setHistoryItemStateForCommit(HistoryCommitType, bool isPushOrReplaceState = false, PassRefPtr<SerializedScriptValue> = nullptr);

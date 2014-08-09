@@ -37,13 +37,12 @@ public:
     bool has(const String&) const;
     void clearList();
 
+    bool containsNonSimpleHeader() const;
+
     const Vector<OwnPtr<Header> >& list() const { return m_headerList; }
 
     static bool isValidHeaderName(const String&);
     static bool isValidHeaderValue(const String&);
-    static bool isSimpleHeader(const String&, const String&);
-    static bool isForbiddenHeaderName(const String&);
-    static bool isForbiddenResponseHeaderName(const String&);
 
     void trace(Visitor*) { }
 

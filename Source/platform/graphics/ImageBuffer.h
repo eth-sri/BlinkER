@@ -42,7 +42,6 @@
 #include "wtf/PassOwnPtr.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/Uint8ClampedArray.h"
-#include "wtf/Vector.h"
 
 class SkCanvas;
 
@@ -93,6 +92,12 @@ public:
 
     GraphicsContext* context() const;
 
+    // Called at the end of a task that rendered a whole frame
+    void finalizeFrame();
+    void didFinalizeFrame();
+
+    bool isDirty();
+
     const SkBitmap& bitmap() const;
 
     PassRefPtr<Image> copyImage(BackingStoreCopy = CopyBackingStore, ScaleBehavior = Scaled) const;
@@ -122,12 +127,11 @@ public:
     void flush();
 
     void notifySurfaceInvalid();
-    void didPresent();
 
 private:
     ImageBuffer(PassOwnPtr<ImageBufferSurface>);
 
-    void draw(GraphicsContext*, const FloatRect&, const FloatRect* = 0, CompositeOperator = CompositeSourceOver);
+    void draw(GraphicsContext*, const FloatRect&, const FloatRect* = 0, CompositeOperator = CompositeSourceOver, WebBlendMode = WebBlendModeNormal);
     void drawPattern(GraphicsContext*, const FloatRect&, const FloatSize&, const FloatPoint&, CompositeOperator, const FloatRect&, blink::WebBlendMode, const IntSize& repeatSpacing = IntSize());
     static PassRefPtr<SkColorFilter> createColorSpaceFilter(ColorSpace srcColorSpace, ColorSpace dstColorSpace);
 

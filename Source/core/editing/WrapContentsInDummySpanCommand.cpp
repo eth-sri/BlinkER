@@ -28,7 +28,7 @@
 
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/editing/ApplyStyleCommand.h"
-#include "core/html/HTMLElement.h"
+#include "core/html/HTMLSpanElement.h"
 
 namespace blink {
 
@@ -41,9 +41,8 @@ WrapContentsInDummySpanCommand::WrapContentsInDummySpanCommand(PassRefPtrWillBeR
 
 void WrapContentsInDummySpanCommand::executeApply()
 {
-    WillBeHeapVector<RefPtrWillBeMember<Node> > children;
-    for (Node* child = m_element->firstChild(); child; child = child->nextSibling())
-        children.append(child);
+    NodeVector children;
+    getChildNodes(*m_element, children);
 
     size_t size = children.size();
     for (size_t i = 0; i < size; ++i)
@@ -66,9 +65,8 @@ void WrapContentsInDummySpanCommand::doUnapply()
     if (!m_dummySpan || !m_element->hasEditableStyle())
         return;
 
-    WillBeHeapVector<RefPtrWillBeMember<Node> > children;
-    for (Node* child = m_dummySpan->firstChild(); child; child = child->nextSibling())
-        children.append(child);
+    NodeVector children;
+    getChildNodes(*m_dummySpan, children);
 
     size_t size = children.size();
     for (size_t i = 0; i < size; ++i)

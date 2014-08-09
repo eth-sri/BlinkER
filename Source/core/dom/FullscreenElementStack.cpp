@@ -33,8 +33,10 @@
 #include "core/events/Event.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLFrameOwnerElement.h"
+#include "core/html/HTMLMediaElement.h"
 #include "core/page/Chrome.h"
 #include "core/page/ChromeClient.h"
 #include "core/rendering/RenderFullScreen.h"
@@ -53,6 +55,20 @@ static bool fullscreenIsAllowedForAllOwners(const Document& document)
             return false;
     }
     return true;
+}
+
+static bool fullscreenIsSupported(const Document& document)
+{
+    // Fullscreen is supported if there is no previously-established user preference,
+    // security risk, or platform limitation.
+    return document.settings()->fullscreenSupported();
+}
+
+static bool fullscreenIsSupported(const Document& document, const Element& element)
+{
+    if (document.settings()->disallowFullscreenForNonMediaElements() && !isHTMLMediaElement(element))
+        return false;
+    return fullscreenIsSupported(document);
 }
 
 static PassRefPtrWillBeRawPtr<Event> createEvent(const AtomicString& type, EventTarget& target)
@@ -127,7 +143,7 @@ void FullscreenElementStack::documentWasDetached()
     m_eventQueue.clear();
 
     if (m_fullScreenRenderer)
-        setFullScreenRenderer(0);
+        m_fullScreenRenderer->destroy();
 
 #if ENABLE(OILPAN)
     m_fullScreenElement = nullptr;
@@ -211,7 +227,9 @@ void FullscreenElementStack::requestFullScreenForElement(Element& element, Reque
         if (!UserGestureIndicator::processingUserGesture())
             break;
 
-        // There is a previously-established user preference, security risk, or platform limitation.
+        // Fullscreen is not supported.
+        if (!fullscreenIsSupported(element.document(), element))
+            break;
 
         // 2. Let doc be element's node document. (i.e. "this")
         Document* currentDoc = document();
@@ -371,11 +389,11 @@ void FullscreenElementStack::exitFullscreen()
 
 bool FullscreenElementStack::fullscreenEnabled(Document& document)
 {
-    // 4. The fullscreenEnabled attribute must return true if the context object and all ancestor
-    // browsing context's documents have their fullscreen enabled flag set, or false otherwise.
+    // 4. The fullscreenEnabled attribute must return true if the context object has its
+    //    fullscreen enabled flag set and fullscreen is supported, and false otherwise.
 
     // Top-level browsing contexts are implied to have their allowFullScreen attribute set.
-    return fullscreenIsAllowedForAllOwners(document);
+    return fullscreenIsAllowedForAllOwners(document) && fullscreenIsSupported(document);
 }
 
 void FullscreenElementStack::willEnterFullScreenForElement(Element* element)
@@ -475,7 +493,7 @@ void FullscreenElementStack::setFullScreenRenderer(RenderFullScreen* renderer)
     }
 
     if (m_fullScreenRenderer)
-        m_fullScreenRenderer->destroy();
+        m_fullScreenRenderer->unwrapRenderer();
     ASSERT(!m_fullScreenRenderer);
 
     m_fullScreenRenderer = renderer;

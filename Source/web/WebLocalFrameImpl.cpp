@@ -161,7 +161,6 @@
 #include "public/platform/WebVector.h"
 #include "public/web/WebConsoleMessage.h"
 #include "public/web/WebDOMEvent.h"
-#include "public/web/WebDOMEventListener.h"
 #include "public/web/WebDocument.h"
 #include "public/web/WebFindOptions.h"
 #include "public/web/WebFormElement.h"
@@ -179,7 +178,6 @@
 #include "public/web/WebSerializedScriptValue.h"
 #include "web/AssociatedURLLoader.h"
 #include "web/CompositionUnderlineVectorBuilder.h"
-#include "web/EventListenerWrapper.h"
 #include "web/FindInPageCoordinates.h"
 #include "web/GeolocationClientProxy.h"
 #include "web/LocalFileSystemClient.h"
@@ -1224,6 +1222,13 @@ void WebLocalFrameImpl::extendSelectionAndDelete(int before, int after)
     frame()->inputMethodController().extendSelectionAndDelete(before, after);
 }
 
+void WebLocalFrameImpl::navigateToSandboxedMarkup(const WebData& markup)
+{
+    ASSERT(document().securityOrigin().isUnique());
+    frame()->loader().forceSandboxFlags(SandboxAll);
+    loadHTMLString(markup, document().url(), WebURL(), true);
+}
+
 void WebLocalFrameImpl::setCaretVisible(bool visible)
 {
     frame()->selection().setCaretVisible(visible);
@@ -1317,6 +1322,16 @@ bool WebLocalFrameImpl::isPrintScalingDisabledForPlugin(const WebNode& node)
         return false;
 
     return pluginContainer->isPrintScalingDisabled();
+}
+
+int WebLocalFrameImpl::getPrintCopiesForPlugin(const WebNode& node)
+{
+    WebPluginContainerImpl* pluginContainer = node.isNull() ? pluginContainerFromFrame(frame()) : toWebPluginContainerImpl(node.pluginContainer());
+
+    if (!pluginContainer || !pluginContainer->supportsPaginatedPrint())
+        return 1;
+
+    return pluginContainer->getCopiesToPrint();
 }
 
 bool WebLocalFrameImpl::hasCustomPageSizeStyle(int pageIndex)
@@ -1453,7 +1468,7 @@ WebString WebLocalFrameImpl::contentAsMarkup() const
 {
     if (!frame())
         return WebString();
-    return createFullMarkup(frame()->document());
+    return createMarkup(frame()->document());
 }
 
 WebString WebLocalFrameImpl::renderTreeAsText(RenderAsTextControls toShow) const

@@ -60,7 +60,7 @@ public:
 
     // blink::WebExternalTextureLayerClient implementation.
     virtual bool prepareMailbox(blink::WebExternalTextureMailbox*, blink::WebExternalBitmap*) OVERRIDE;
-    virtual void mailboxReleased(const blink::WebExternalTextureMailbox&) OVERRIDE;
+    virtual void mailboxReleased(const blink::WebExternalTextureMailbox&, bool lostResource) OVERRIDE;
 
     // SkDeferredCanvas::NotificationClient implementation
     virtual void prepareForDraw() OVERRIDE;
@@ -69,7 +69,7 @@ public:
     virtual void skippedPendingDrawCommands() OVERRIDE;
 
     // ImageBufferSurface implementation
-    void willUse();
+    void finalizeFrame();
     void willReadback();
     SkCanvas* canvas() const { return m_canvas.get(); }
     bool checkSurfaceValid();

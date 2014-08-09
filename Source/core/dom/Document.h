@@ -91,7 +91,6 @@ class EventListener;
 template <typename EventType>
 class EventWithHitTestResults;
 class ExceptionState;
-class FastTextAutosizer;
 class FloatQuad;
 class FloatRect;
 class FormController;
@@ -268,8 +267,6 @@ public:
     DEFINE_ATTRIBUTE_EVENT_LISTENER(touchstart);
     DEFINE_ATTRIBUTE_EVENT_LISTENER(webkitfullscreenchange);
     DEFINE_ATTRIBUTE_EVENT_LISTENER(webkitfullscreenerror);
-    DEFINE_ATTRIBUTE_EVENT_LISTENER(webkitpointerlockchange);
-    DEFINE_ATTRIBUTE_EVENT_LISTENER(webkitpointerlockerror);
     DEFINE_ATTRIBUTE_EVENT_LISTENER(wheel);
 
     bool shouldMergeWithLegacyDescription(ViewportDescription::Type);
@@ -309,7 +306,6 @@ public:
     PassRefPtrWillBeRawPtr<ProcessingInstruction> createProcessingInstruction(const String& target, const String& data, ExceptionState&);
     PassRefPtrWillBeRawPtr<Attr> createAttribute(const AtomicString& name, ExceptionState&);
     PassRefPtrWillBeRawPtr<Attr> createAttributeNS(const AtomicString& namespaceURI, const AtomicString& qualifiedName, ExceptionState&, bool shouldIgnoreNamespaceChecks = false);
-    PassRefPtrWillBeRawPtr<Node> importNode(Node* importedNode, ExceptionState&);
     PassRefPtrWillBeRawPtr<Node> importNode(Node* importedNode, bool deep, ExceptionState&);
     PassRefPtrWillBeRawPtr<Element> createElementNS(const AtomicString& namespaceURI, const AtomicString& qualifiedName, ExceptionState&);
     PassRefPtrWillBeRawPtr<Element> createElement(const QualifiedName&, bool createdByParser);
@@ -390,6 +386,7 @@ public:
 
     bool isTransitionDocument() const { return m_isTransitionDocument; }
     void setIsTransitionDocument() { m_isTransitionDocument = true; }
+    void hideTransitionElements(const AtomicString& cssSelector);
 
     struct TransitionElementData {
         String scope;
@@ -720,7 +717,7 @@ public:
     void setTitle(const String&);
 
     Element* titleElement() const { return m_titleElement.get(); }
-    void setTitleElement(const String& title, Element* titleElement);
+    void setTitleElement(Element*);
     void removeTitle(Element* titleElement);
 
     const AtomicString& dir();
@@ -964,10 +961,7 @@ public:
 
     IntSize initialViewportSize() const;
 
-    // There are currently two parallel autosizing implementations: TextAutosizer and FastTextAutosizer.
-    // See http://tinyurl.com/chromium-fast-autosizer for more details.
     TextAutosizer* textAutosizer();
-    FastTextAutosizer* fastTextAutosizer();
 
     PassRefPtrWillBeRawPtr<Element> createElement(const AtomicString& localName, const AtomicString& typeExtension, ExceptionState&);
     PassRefPtrWillBeRawPtr<Element> createElementNS(const AtomicString& namespaceURI, const AtomicString& qualifiedName, const AtomicString& typeExtension, ExceptionState&);
@@ -1075,6 +1069,10 @@ private:
     friend class Node;
     friend class IgnoreDestructiveWriteCountIncrementer;
 
+    bool isDocumentFragment() const WTF_DELETED_FUNCTION; // This will catch anyone doing an unnecessary check.
+    bool isDocumentNode() const WTF_DELETED_FUNCTION; // This will catch anyone doing an unnecessary check.
+    bool isElementNode() const WTF_DELETED_FUNCTION; // This will catch anyone doing an unnecessary check.
+
     ScriptedAnimationController& ensureScriptedAnimationController();
     virtual SecurityContext& securityContext() OVERRIDE FINAL { return *this; }
     virtual EventQueue* eventQueue() const OVERRIDE FINAL;
@@ -1135,8 +1133,6 @@ private:
     void pluginLoadingTimerFired(Timer<Document>*);
 
     PageVisibilityState pageVisibilityState() const;
-
-    PassRefPtrWillBeRawPtr<HTMLCollection> ensureCachedCollection(CollectionType);
 
     // Note that dispatching a window load event may cause the LocalDOMWindow to be detached from
     // the LocalFrame, so callers should take a reference to the LocalDOMWindow (which owns us) to
@@ -1242,7 +1238,7 @@ private:
     OwnPtrWillBeMember<FormController> m_formController;
 
     TextLinkColors m_textLinkColors;
-    const OwnPtr<VisitedLinkState> m_visitedLinkState;
+    const OwnPtrWillBeMember<VisitedLinkState> m_visitedLinkState;
 
     bool m_visuallyOrdered;
     ReadyState m_readyState;
@@ -1260,7 +1256,6 @@ private:
 
     String m_title;
     String m_rawTitle;
-    bool m_titleSetExplicitly;
     RefPtrWillBeMember<Element> m_titleElement;
 
     OwnPtr<AXObjectCache> m_axObjectCache;
@@ -1356,8 +1351,7 @@ private:
 
     RefPtrWillBeMember<ScriptedAnimationController> m_scriptedAnimationController;
     OwnPtr<MainThreadTaskRunner> m_taskRunner;
-    OwnPtr<TextAutosizer> m_textAutosizer;
-    OwnPtr<FastTextAutosizer> m_fastTextAutosizer;
+    OwnPtrWillBeMember<TextAutosizer> m_textAutosizer;
 
     RefPtrWillBeMember<CustomElementRegistrationContext> m_registrationContext;
     RefPtrWillBeMember<CustomElementMicrotaskRunQueue> m_customElementMicrotaskRunQueue;

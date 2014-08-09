@@ -39,6 +39,7 @@ namespace blink {
 // FIXME: This scoping class is a short-term fix to minimize the changes in
 // Font-constructing logic.
 class FontDescriptionChangeScope {
+    STACK_ALLOCATED();
 public:
     FontDescriptionChangeScope(FontBuilder* fontBuilder)
         : m_fontBuilder(fontBuilder)
@@ -56,12 +57,12 @@ public:
     }
 
 private:
-    FontBuilder* m_fontBuilder;
+    RawPtrWillBeMember<FontBuilder> m_fontBuilder;
     FontDescription m_fontDescription;
 };
 
 FontBuilder::FontBuilder()
-    : m_document(0)
+    : m_document(nullptr)
     , m_fontSizehasViewportUnits(false)
     , m_style(0)
     , m_fontDirty(false)
@@ -373,85 +374,11 @@ void FontBuilder::setWeightLighter()
     scope.fontDescription().setWeight(scope.fontDescription().lighterWeight());
 }
 
-void FontBuilder::setFontVariantLigaturesInitial()
+void FontBuilder::setStretch(FontStretch fontStretch)
 {
     FontDescriptionChangeScope scope(this);
 
-    scope.fontDescription().setCommonLigaturesState(FontDescription::NormalLigaturesState);
-    scope.fontDescription().setDiscretionaryLigaturesState(FontDescription::NormalLigaturesState);
-    scope.fontDescription().setHistoricalLigaturesState(FontDescription::NormalLigaturesState);
-    scope.fontDescription().setContextualLigaturesState(FontDescription::NormalLigaturesState);
-}
-
-void FontBuilder::setFontVariantLigaturesInherit(const FontDescription& parentFontDescription)
-{
-    FontDescriptionChangeScope scope(this);
-
-    scope.fontDescription().setCommonLigaturesState(parentFontDescription.commonLigaturesState());
-    scope.fontDescription().setDiscretionaryLigaturesState(parentFontDescription.discretionaryLigaturesState());
-    scope.fontDescription().setHistoricalLigaturesState(parentFontDescription.historicalLigaturesState());
-    scope.fontDescription().setContextualLigaturesState(parentFontDescription.historicalLigaturesState());
-}
-
-void FontBuilder::setFontVariantLigaturesValue(CSSValue* value)
-{
-    FontDescriptionChangeScope scope(this);
-
-    FontDescription::LigaturesState commonLigaturesState = FontDescription::NormalLigaturesState;
-    FontDescription::LigaturesState discretionaryLigaturesState = FontDescription::NormalLigaturesState;
-    FontDescription::LigaturesState historicalLigaturesState = FontDescription::NormalLigaturesState;
-    FontDescription::LigaturesState contextualLigaturesState = FontDescription::NormalLigaturesState;
-
-    if (value->isValueList()) {
-        CSSValueList* valueList = toCSSValueList(value);
-        for (size_t i = 0; i < valueList->length(); ++i) {
-            CSSValue* item = valueList->item(i);
-            ASSERT(item->isPrimitiveValue());
-            if (item->isPrimitiveValue()) {
-                CSSPrimitiveValue* primitiveValue = toCSSPrimitiveValue(item);
-                switch (primitiveValue->getValueID()) {
-                case CSSValueNoCommonLigatures:
-                    commonLigaturesState = FontDescription::DisabledLigaturesState;
-                    break;
-                case CSSValueCommonLigatures:
-                    commonLigaturesState = FontDescription::EnabledLigaturesState;
-                    break;
-                case CSSValueNoDiscretionaryLigatures:
-                    discretionaryLigaturesState = FontDescription::DisabledLigaturesState;
-                    break;
-                case CSSValueDiscretionaryLigatures:
-                    discretionaryLigaturesState = FontDescription::EnabledLigaturesState;
-                    break;
-                case CSSValueNoHistoricalLigatures:
-                    historicalLigaturesState = FontDescription::DisabledLigaturesState;
-                    break;
-                case CSSValueHistoricalLigatures:
-                    historicalLigaturesState = FontDescription::EnabledLigaturesState;
-                    break;
-                case CSSValueNoContextual:
-                    contextualLigaturesState = FontDescription::DisabledLigaturesState;
-                    break;
-                case CSSValueContextual:
-                    contextualLigaturesState = FontDescription::EnabledLigaturesState;
-                    break;
-                default:
-                    ASSERT_NOT_REACHED();
-                    break;
-                }
-            }
-        }
-    }
-#if ENABLE(ASSERT)
-    else {
-        ASSERT_WITH_SECURITY_IMPLICATION(value->isPrimitiveValue());
-        ASSERT(toCSSPrimitiveValue(value)->getValueID() == CSSValueNormal);
-    }
-#endif
-
-    scope.fontDescription().setCommonLigaturesState(commonLigaturesState);
-    scope.fontDescription().setDiscretionaryLigaturesState(discretionaryLigaturesState);
-    scope.fontDescription().setHistoricalLigaturesState(historicalLigaturesState);
-    scope.fontDescription().setContextualLigaturesState(contextualLigaturesState);
+    scope.fontDescription().setStretch(fontStretch);
 }
 
 void FontBuilder::setScript(const String& locale)
@@ -474,6 +401,13 @@ void FontBuilder::setVariant(FontVariant smallCaps)
     FontDescriptionChangeScope scope(this);
 
     scope.fontDescription().setVariant(smallCaps);
+}
+
+void FontBuilder::setVariantLigatures(const FontDescription::VariantLigatures& ligatures)
+{
+    FontDescriptionChangeScope scope(this);
+
+    scope.fontDescription().setVariantLigatures(ligatures);
 }
 
 void FontBuilder::setTextRendering(TextRenderingMode textRenderingMode)

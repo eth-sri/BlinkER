@@ -197,7 +197,7 @@ KURL CSSPropertyParser::completeURL(const String& url) const
 
 bool CSSPropertyParser::validCalculationUnit(CSSParserValue* value, Units unitflags, ReleaseParsedCalcValueCondition releaseCalc)
 {
-    bool mustBeNonNegative = unitflags & FNonNeg;
+    bool mustBeNonNegative = unitflags & (FNonNeg | FPositiveInteger);
 
     if (!parseCalculation(value, mustBeNonNegative ? ValueRangeNonNegative : ValueRangeAll))
         return false;
@@ -207,15 +207,29 @@ bool CSSPropertyParser::validCalculationUnit(CSSParserValue* value, Units unitfl
     case CalcLength:
         b = (unitflags & FLength);
         break;
-    case CalcPercent:
-        b = (unitflags & FPercent);
-        if (b && mustBeNonNegative && m_parsedCalculation->isNegative())
-            b = false;
-        break;
     case CalcNumber:
         b = (unitflags & FNumber);
-        if (!b && (unitflags & FInteger) && m_parsedCalculation->isInt())
+        if (!b && (unitflags & (FInteger | FPositiveInteger)) && m_parsedCalculation->isInt())
             b = true;
+        if (b && mustBeNonNegative && m_parsedCalculation->isNegative())
+            b = false;
+        // Always resolve calc() to a CSS_NUMBER in the CSSParserValue if there are no non-numbers specified in the unitflags.
+        if (b && !(unitflags & ~(FInteger | FNumber | FPositiveInteger | FNonNeg))) {
+            double number = m_parsedCalculation->doubleValue();
+            if ((unitflags & FPositiveInteger) && number <= 0) {
+                b = false;
+            } else {
+                delete value->function;
+                value->unit = CSSPrimitiveValue::CSS_NUMBER;
+                value->fValue = number;
+                value->isInt = m_parsedCalculation->isInt();
+            }
+            m_parsedCalculation.release();
+            return b;
+        }
+        break;
+    case CalcPercent:
+        b = (unitflags & FPercent);
         if (b && mustBeNonNegative && m_parsedCalculation->isNegative())
             b = false;
         break;
@@ -224,6 +238,15 @@ bool CSSPropertyParser::validCalculationUnit(CSSParserValue* value, Units unitfl
         break;
     case CalcPercentNumber:
         b = (unitflags & FPercent) && (unitflags & FNumber);
+        break;
+    case CalcAngle:
+        b = (unitflags & FAngle);
+        break;
+    case CalcTime:
+        b = (unitflags & FTime);
+        break;
+    case CalcFrequency:
+        b = (unitflags & FFrequency);
         break;
     case CalcOther:
         break;
@@ -530,6 +553,13 @@ bool CSSPropertyParser::parseValue(CSSPropertyID propId, bool important)
             return false;
         return parseFontWeight(important);
     }
+
+    case CSSPropertyFontStretch: { // normal | ultra-condensed | extra-condensed | condensed | semi-condensed | semi-expanded | expanded | extra-expanded | ultra-expanded
+        if (m_valueList->size() != 1)
+            return false;
+        return parseFontStretch(important);
+    }
+
     case CSSPropertyBorderSpacing: {
         if (num == 1) {
             ShorthandScope scope(this, CSSPropertyBorderSpacing);
@@ -570,9 +600,6 @@ bool CSSPropertyParser::parseValue(CSSPropertyID propId, bool important)
     case CSSPropertyWebkitBorderAfterColor:
     case CSSPropertyColor: // <color> | inherit
     case CSSPropertyTextDecorationColor: // CSS3 text decoration colors
-    case CSSPropertyTextLineThroughColor:
-    case CSSPropertyTextUnderlineColor:
-    case CSSPropertyTextOverlineColor:
     case CSSPropertyWebkitColumnRuleColor:
     case CSSPropertyWebkitTextEmphasisColor:
     case CSSPropertyWebkitTextFillColor:
@@ -584,7 +611,30 @@ bool CSSPropertyParser::parseValue(CSSPropertyID propId, bool important)
         if ((id >= CSSValueAqua && id <= CSSValueWebkitText) || id == CSSValueMenu) {
             validPrimitive = isValueAllowedInMode(id, m_context.mode());
         } else {
-            parsedValue = parseColor();
+            if (!inQuirksMode()) {
+                parsedValue = parseColor();
+                if (parsedValue)
+                    m_valueList->next();
+                break;
+            }
+
+            bool acceptQuirkyColors = false;
+            switch (propId) {
+            case CSSPropertyBackgroundColor:
+                if (!inShorthand())
+                    acceptQuirkyColors = true;
+                break;
+            case CSSPropertyBorderBottomColor:
+            case CSSPropertyBorderLeftColor:
+            case CSSPropertyBorderRightColor:
+            case CSSPropertyBorderTopColor:
+            case CSSPropertyColor:
+                acceptQuirkyColors = true;
+                break;
+            default:
+                break;
+            }
+            parsedValue = parseColor(0, acceptQuirkyColors);
             if (parsedValue)
                 m_valueList->next();
         }
@@ -614,7 +664,7 @@ bool CSSPropertyParser::parseValue(CSSPropertyID propId, bool important)
 
             Vector<int> coords;
             value = m_valueList->next();
-            while (value && value->unit == CSSPrimitiveValue::CSS_NUMBER) {
+            while (value && validUnit(value, FNumber)) {
                 coords.append(int(value->fValue));
                 value = m_valueList->next();
             }
@@ -1285,15 +1335,6 @@ bool CSSPropertyParser::parseValue(CSSPropertyID propId, bool important)
         }
         return false;
     }
-    case CSSPropertyTextLineThroughWidth:
-    case CSSPropertyTextOverlineWidth:
-    case CSSPropertyTextUnderlineWidth:
-        if (id == CSSValueAuto || id == CSSValueNormal || id == CSSValueThin ||
-            id == CSSValueMedium || id == CSSValueThick)
-            validPrimitive = true;
-        else
-            validPrimitive = !id && validUnit(value, FNumber | FLength | FPercent);
-        break;
     case CSSPropertyWebkitColumnCount:
         parsedValue = parseColumnCount();
         break;
@@ -1304,10 +1345,7 @@ bool CSSPropertyParser::parseValue(CSSPropertyID propId, bool important)
             validPrimitive = validUnit(value, FLength | FNonNeg);
         break;
     case CSSPropertyWebkitColumnSpan: // none | all | 1 (will be dropped in the unprefixed property)
-        if (id == CSSValueAll || id == CSSValueNone)
-            validPrimitive = true;
-        else
-            validPrimitive = validUnit(value, FNumber | FNonNeg) && value->fValue == 1;
+        validPrimitive = id == CSSValueAll || id == CSSValueNone || (value->unit == CSSPrimitiveValue::CSS_NUMBER && value->fValue == 1);
         break;
     case CSSPropertyWebkitColumnWidth:         // auto | <length>
         parsedValue = parseColumnWidth();
@@ -1456,8 +1494,6 @@ bool CSSPropertyParser::parseValue(CSSPropertyID propId, bool important)
         return false;
     case CSSPropertyPage:
         return parsePage(propId, important);
-    case CSSPropertyFontStretch:
-        return false;
     // CSS Text Layout Module Level 3: Vertical writing support
     case CSSPropertyWebkitTextEmphasis:
         return parseShorthand(propId, webkitTextEmphasisShorthand(), important);
@@ -1554,15 +1590,9 @@ bool CSSPropertyParser::parseValue(CSSPropertyID propId, bool important)
     case CSSPropertyTableLayout:
     case CSSPropertyTextAlignLast:
     case CSSPropertyTextJustify:
-    case CSSPropertyTextLineThroughMode:
-    case CSSPropertyTextLineThroughStyle:
     case CSSPropertyTextOverflow:
-    case CSSPropertyTextOverlineMode:
-    case CSSPropertyTextOverlineStyle:
     case CSSPropertyTextRendering:
     case CSSPropertyTextTransform:
-    case CSSPropertyTextUnderlineMode:
-    case CSSPropertyTextUnderlineStyle:
     case CSSPropertyTouchActionDelay:
     case CSSPropertyVisibility:
     case CSSPropertyWebkitAppearance:
@@ -1976,8 +2006,7 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseColumnWidth()
     CSSParserValue* value = m_valueList->current();
     // Always parse lengths in strict mode here, since it would be ambiguous otherwise when used in
     // the 'columns' shorthand property.
-    if (value->id == CSSValueAuto
-        || (validUnit(value, FLength | FNonNeg, HTMLStandardMode) && value->fValue)) {
+    if (value->id == CSSValueAuto || (validUnit(value, FLength | FNonNeg, HTMLStandardMode) && (m_parsedCalculation || value->fValue != 0))) {
         RefPtrWillBeRawPtr<CSSValue> parsedValue = parseValidPrimitive(value->id, value);
         m_valueList->next();
         return parsedValue;
@@ -4555,6 +4584,7 @@ bool CSSPropertyParser::parseFont(bool important)
     bool fontStyleParsed = false;
     bool fontVariantParsed = false;
     bool fontWeightParsed = false;
+    bool fontStretchParsed = false;
     CSSParserValue* value = m_valueList->current();
     for (; value; value = m_valueList->next()) {
         if (!fontStyleParsed && isValidKeywordPropertyAndValue(CSSPropertyFontStyle, value->id, m_context)) {
@@ -4564,10 +4594,13 @@ bool CSSPropertyParser::parseFont(bool important)
             // Font variant in the shorthand is particular, it only accepts normal or small-caps.
             addProperty(CSSPropertyFontVariant, cssValuePool().createIdentifierValue(value->id), important);
             fontVariantParsed = true;
-        } else if (!fontWeightParsed && parseFontWeight(important))
+        } else if (!fontWeightParsed && parseFontWeight(important)) {
             fontWeightParsed = true;
-        else
+        } else if (!fontStretchParsed && parseFontStretch(important)) {
+            fontStretchParsed = true;
+        } else {
             break;
+        }
     }
 
     if (!value)
@@ -4579,6 +4612,8 @@ bool CSSPropertyParser::parseFont(bool important)
         addProperty(CSSPropertyFontVariant, cssValuePool().createIdentifierValue(CSSValueNormal), important, true);
     if (!fontWeightParsed)
         addProperty(CSSPropertyFontWeight, cssValuePool().createIdentifierValue(CSSValueNormal), important, true);
+    if (!fontStretchParsed)
+        addProperty(CSSPropertyFontStretch, cssValuePool().createIdentifierValue(CSSValueNormal), important, true);
 
     // Now a font size _must_ come.
     // <absolute-size> | <relative-size> | <length> | <percentage> | inherit
@@ -4809,12 +4844,22 @@ bool CSSPropertyParser::parseFontWeight(bool important)
         addProperty(CSSPropertyFontWeight, cssValuePool().createIdentifierValue(value->id), important);
         return true;
     }
-    if (validUnit(value, FInteger | FNonNeg, HTMLQuirksMode)) {
+    if (value->unit == CSSPrimitiveValue::CSS_NUMBER) {
         int weight = static_cast<int>(value->fValue);
         if (!(weight % 100) && weight >= 100 && weight <= 900) {
             addProperty(CSSPropertyFontWeight, cssValuePool().createIdentifierValue(static_cast<CSSValueID>(CSSValue100 + weight / 100 - 1)), important);
             return true;
         }
+    }
+    return false;
+}
+
+bool CSSPropertyParser::parseFontStretch(bool important)
+{
+    CSSParserValue* value = m_valueList->current();
+    if (value->id == CSSValueNormal || (value->id >= CSSValueUltraCondensed && value->id <= CSSValueUltraExpanded)) {
+        addProperty(CSSPropertyFontStretch, cssValuePool().createIdentifierValue(value->id), important);
+        return true;
     }
     return false;
 }
@@ -5304,14 +5349,6 @@ bool CSSPropertyParser::fastParseColor(RGBA32& rgb, const StringType& name, bool
 
 template bool CSSPropertyParser::fastParseColor(RGBA32&, const String&, bool strict);
 
-inline double CSSPropertyParser::parsedDouble(CSSParserValue *v, ReleaseParsedCalcValueCondition releaseCalc)
-{
-    const double result = m_parsedCalculation ? m_parsedCalculation->doubleValue() : v->fValue;
-    if (releaseCalc == ReleaseParsedCalcValue)
-        m_parsedCalculation.release();
-    return result;
-}
-
 bool CSSPropertyParser::isCalculation(CSSParserValue* value)
 {
     return (value->unit == CSSParserValue::Function)
@@ -5322,13 +5359,16 @@ bool CSSPropertyParser::isCalculation(CSSParserValue* value)
 inline int CSSPropertyParser::colorIntFromValue(CSSParserValue* v)
 {
     bool isPercent;
+    double value;
 
-    if (m_parsedCalculation)
+    if (m_parsedCalculation) {
         isPercent = m_parsedCalculation->category() == CalcPercent;
-    else
+        value = m_parsedCalculation->doubleValue();
+        m_parsedCalculation.release();
+    } else {
         isPercent = v->unit == CSSPrimitiveValue::CSS_PERCENTAGE;
-
-    const double value = parsedDouble(v, ReleaseParsedCalcValue);
+        value = v->fValue;
+    }
 
     if (value <= 0.0)
         return 0;
@@ -5375,10 +5415,9 @@ bool CSSPropertyParser::parseColorParameters(CSSParserValue* value, int* colorAr
         v = args->next();
         if (!validUnit(v, FNumber, HTMLStandardMode))
             return false;
-        const double value = parsedDouble(v, ReleaseParsedCalcValue);
         // Convert the floating pointer number of alpha to an integer in the range [0, 256),
         // with an equal distribution across all 256 values.
-        colorArray[3] = static_cast<int>(std::max(0.0, std::min(1.0, value)) * nextafter(256.0, 0.0));
+        colorArray[3] = static_cast<int>(std::max(0.0, std::min(1.0, v->fValue)) * nextafter(256.0, 0.0));
     }
     return true;
 }
@@ -5396,7 +5435,7 @@ bool CSSPropertyParser::parseHSLParameters(CSSParserValue* value, double* colorA
     if (!validUnit(v, FNumber, HTMLStandardMode))
         return false;
     // normalize the Hue value and change it to be between 0 and 1.0
-    colorArray[0] = (((static_cast<int>(parsedDouble(v, ReleaseParsedCalcValue)) % 360) + 360) % 360) / 360.0;
+    colorArray[0] = (((static_cast<int>(v->fValue) % 360) + 360) % 360) / 360.0;
     for (int i = 1; i < 3; i++) {
         v = args->next();
         if (v->unit != CSSParserValue::Operator && v->iValue != ',')
@@ -5404,7 +5443,8 @@ bool CSSPropertyParser::parseHSLParameters(CSSParserValue* value, double* colorA
         v = args->next();
         if (!validUnit(v, FPercent, HTMLStandardMode))
             return false;
-        colorArray[i] = std::max(0.0, std::min(100.0, parsedDouble(v, ReleaseParsedCalcValue))) / 100.0; // needs to be value between 0 and 1.0
+        double percentValue = m_parsedCalculation ? m_parsedCalculation.release()->doubleValue() : v->fValue;
+        colorArray[i] = std::max(0.0, std::min(100.0, percentValue)) / 100.0; // needs to be value between 0 and 1.0
     }
     if (parseAlpha) {
         v = args->next();
@@ -5413,31 +5453,31 @@ bool CSSPropertyParser::parseHSLParameters(CSSParserValue* value, double* colorA
         v = args->next();
         if (!validUnit(v, FNumber, HTMLStandardMode))
             return false;
-        colorArray[3] = std::max(0.0, std::min(1.0, parsedDouble(v, ReleaseParsedCalcValue)));
+        colorArray[3] = std::max(0.0, std::min(1.0, v->fValue));
     }
     return true;
 }
 
-PassRefPtrWillBeRawPtr<CSSPrimitiveValue> CSSPropertyParser::parseColor(CSSParserValue* value)
+PassRefPtrWillBeRawPtr<CSSPrimitiveValue> CSSPropertyParser::parseColor(CSSParserValue* value, bool acceptQuirkyColors)
 {
     RGBA32 c = Color::transparent;
-    if (!parseColorFromValue(value ? value : m_valueList->current(), c))
+    if (!parseColorFromValue(value ? value : m_valueList->current(), c, acceptQuirkyColors))
         return nullptr;
     return cssValuePool().createColorValue(c);
 }
 
-bool CSSPropertyParser::parseColorFromValue(CSSParserValue* value, RGBA32& c)
+bool CSSPropertyParser::parseColorFromValue(CSSParserValue* value, RGBA32& c, bool acceptQuirkyColors)
 {
-    if (inQuirksMode() && value->unit == CSSPrimitiveValue::CSS_NUMBER
+    if (acceptQuirkyColors && value->unit == CSSPrimitiveValue::CSS_NUMBER
         && value->fValue >= 0. && value->fValue < 1000000.) {
         String str = String::format("%06d", static_cast<int>((value->fValue+.5)));
         // FIXME: This should be strict parsing for SVG as well.
-        if (!fastParseColor(c, str, !inQuirksMode()))
+        if (!fastParseColor(c, str, !acceptQuirkyColors))
             return false;
-    } else if (value->unit == CSSPrimitiveValue::CSS_PARSER_HEXCOLOR ||
-                value->unit == CSSPrimitiveValue::CSS_IDENT ||
-                (inQuirksMode() && value->unit == CSSPrimitiveValue::CSS_DIMENSION)) {
-        if (!fastParseColor(c, value->string, !inQuirksMode() && value->unit == CSSPrimitiveValue::CSS_IDENT))
+    } else if (value->unit == CSSPrimitiveValue::CSS_PARSER_HEXCOLOR
+        || value->unit == CSSPrimitiveValue::CSS_IDENT
+        || (acceptQuirkyColors && value->unit == CSSPrimitiveValue::CSS_DIMENSION)) {
+        if (!fastParseColor(c, value->string, !acceptQuirkyColors && value->unit == CSSPrimitiveValue::CSS_IDENT))
             return false;
     } else if (value->unit == CSSParserValue::Function &&
                 value->function->args != 0 &&
@@ -5735,7 +5775,7 @@ bool CSSPropertyParser::parseFlex(CSSParserValueList* args, bool important)
                 // We only allow 3 numbers without units if the last value is 0. E.g., flex:1 1 1 is invalid.
                 return false;
             }
-        } else if (!flexBasis && (arg->id == CSSValueAuto || (validUnit(arg, FLength | FPercent | FNonNeg) && !isFlexBasisMiddleArg(flexGrow, flexShrink, unsetValue, args->size()))))
+        } else if (!flexBasis && (arg->id == CSSValueAuto || validUnit(arg, FLength | FPercent | FNonNeg)) && !isFlexBasisMiddleArg(flexGrow, flexShrink, unsetValue, args->size()))
             flexBasis = parseValidPrimitive(arg->id, arg);
         else {
             // Not a valid arg for flex.
@@ -7342,10 +7382,13 @@ PassRefPtrWillBeRawPtr<CSSFilterValue> CSSPropertyParser::parseBuiltinFilterArgu
 
         if (args->size()) {
             CSSParserValue* value = args->current();
-            if (!validUnit(value, FNumber | FPercent | FNonNeg, HTMLStandardMode))
+            // FIXME (crbug.com/397061): Support calc expressions like calc(10% + 0.5)
+            if (value->unit != CSSPrimitiveValue::CSS_PERCENTAGE && !validUnit(value, FNumber | FNonNeg, HTMLStandardMode))
                 return nullptr;
 
             double amount = value->fValue;
+            if (amount < 0)
+                return nullptr;
 
             // Saturate and Contrast allow values over 100%.
             if (filterType != CSSFilterValue::SaturateFilterOperation
@@ -7366,7 +7409,8 @@ PassRefPtrWillBeRawPtr<CSSFilterValue> CSSPropertyParser::parseBuiltinFilterArgu
 
         if (args->size()) {
             CSSParserValue* value = args->current();
-            if (!validUnit(value, FNumber | FPercent, HTMLStandardMode))
+            // FIXME (crbug.com/397061): Support calc expressions like calc(10% + 0.5)
+            if (value->unit != CSSPrimitiveValue::CSS_PERCENTAGE && !validUnit(value, FNumber, HTMLStandardMode))
                 return nullptr;
 
             filterValue->append(cssValuePool().createValue(value->fValue, static_cast<CSSPrimitiveValue::UnitType>(value->unit)));
@@ -7817,32 +7861,25 @@ bool CSSPropertyParser::parseLineBoxContain(bool important)
     LineBoxContain lineBoxContain = LineBoxContainNone;
 
     for (CSSParserValue* value = m_valueList->current(); value; value = m_valueList->next()) {
+        LineBoxContainFlags flag;
         if (value->id == CSSValueBlock) {
-            if (lineBoxContain & LineBoxContainBlock)
-                return false;
-            lineBoxContain |= LineBoxContainBlock;
+            flag = LineBoxContainBlock;
         } else if (value->id == CSSValueInline) {
-            if (lineBoxContain & LineBoxContainInline)
-                return false;
-            lineBoxContain |= LineBoxContainInline;
+            flag = LineBoxContainInline;
         } else if (value->id == CSSValueFont) {
-            if (lineBoxContain & LineBoxContainFont)
-                return false;
-            lineBoxContain |= LineBoxContainFont;
+            flag = LineBoxContainFont;
         } else if (value->id == CSSValueGlyphs) {
-            if (lineBoxContain & LineBoxContainGlyphs)
-                return false;
-            lineBoxContain |= LineBoxContainGlyphs;
+            flag = LineBoxContainGlyphs;
         } else if (value->id == CSSValueReplaced) {
-            if (lineBoxContain & LineBoxContainReplaced)
-                return false;
-            lineBoxContain |= LineBoxContainReplaced;
+            flag = LineBoxContainReplaced;
         } else if (value->id == CSSValueInlineBox) {
-            if (lineBoxContain & LineBoxContainInlineBox)
-                return false;
-            lineBoxContain |= LineBoxContainInlineBox;
-        } else
+            flag = LineBoxContainInlineBox;
+        } else {
             return false;
+        }
+        if (lineBoxContain & flag)
+            return false;
+        lineBoxContain |= flag;
     }
 
     if (!lineBoxContain)

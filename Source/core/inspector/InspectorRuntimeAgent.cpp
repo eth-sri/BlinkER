@@ -46,11 +46,6 @@ namespace InspectorRuntimeAgentState {
 static const char runtimeEnabled[] = "runtimeEnabled";
 };
 
-static bool asBool(const bool* const b)
-{
-    return b ? *b : false;
-}
-
 InspectorRuntimeAgent::InspectorRuntimeAgent(InjectedScriptManager* injectedScriptManager, ScriptDebugServer* scriptDebugServer)
     : InspectorBaseAgent<InspectorRuntimeAgent>("Runtime")
     , m_enabled(false)
@@ -62,6 +57,12 @@ InspectorRuntimeAgent::InspectorRuntimeAgent(InjectedScriptManager* injectedScri
 
 InspectorRuntimeAgent::~InspectorRuntimeAgent()
 {
+}
+
+void InspectorRuntimeAgent::trace(Visitor* visitor)
+{
+    visitor->trace(m_injectedScriptManager);
+    InspectorBaseAgent::trace(visitor);
 }
 
 static ScriptDebugServer::PauseOnExceptionsState setPauseOnExceptionsState(ScriptDebugServer* scriptDebugServer, ScriptDebugServer::PauseOnExceptionsState newState)
@@ -128,10 +129,9 @@ void InspectorRuntimeAgent::getProperties(ErrorString* errorString, const String
     ScriptDebugServer::PauseOnExceptionsState previousPauseOnExceptionsState = setPauseOnExceptionsState(m_scriptDebugServer, ScriptDebugServer::DontPauseOnExceptions);
     muteConsole();
 
-    bool accessorPropertiesOnlyValue = accessorPropertiesOnly && *accessorPropertiesOnly;
-    injectedScript.getProperties(errorString, objectId, ownProperties && *ownProperties, accessorPropertiesOnlyValue, &result);
+    injectedScript.getProperties(errorString, objectId, asBool(ownProperties), asBool(accessorPropertiesOnly), &result);
 
-    if (!accessorPropertiesOnlyValue)
+    if (!asBool(accessorPropertiesOnly))
         injectedScript.getInternalProperties(errorString, objectId, &internalProperties);
 
     unmuteConsole();

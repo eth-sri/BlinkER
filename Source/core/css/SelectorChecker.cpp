@@ -81,17 +81,13 @@ static bool matchesCustomPseudoElement(const Element* element, const CSSSelector
 
 static Element* parentElement(const SelectorChecker::SelectorCheckingContext& context)
 {
-    // If context.scope is a shadow root, we should walk up to its shadow host.
-    if (context.scope && context.scope == context.element->containingShadowRoot())
+    // - If context.scope is a shadow root, we should walk up to its shadow host.
+    // - If context.scope is some element in some shadow tree and querySelector initialized the context,
+    //   e.g. shadowRoot.querySelector(':host *'),
+    //   (a) context.element has the same treescope as context.scope, need to walk up to its shadow host.
+    //   (b) Otherwise, should not walk up from a shadow root to a shadow host.
+    if (context.scope && (context.scope == context.element->containingShadowRoot() || context.scope->treeScope() == context.element->treeScope()))
         return context.element->parentOrShadowHostElement();
-
-    // If context.scope is some element in some shadow tree and querySelector initialized the context,
-    // e.g. shadowRoot.querySelector(':host *'),
-    // (a) context.element has the same treescope as context.scope, need to walk up to its shadow host.
-    // (b) Otherwise, should not walk up from a shadow root to a shadow host.
-    if (context.scope && context.scope->treeScope() == context.element->treeScope())
-        return context.element->parentOrShadowHostElement();
-
     return context.element->parentElement();
 }
 
@@ -467,12 +463,10 @@ static bool anyAttributeMatches(Element& element, CSSSelector::Match match, cons
     // Currently all lazy properties have a null namespace, so only pass localName().
     element.synchronizeAttribute(selectorAttr.localName());
 
-    if (!element.hasAttributesWithoutUpdate())
-        return false;
+    const AtomicString& selectorValue = selector.value();
+    bool caseInsensitive = selector.attributeMatchType() == CSSSelector::CaseInsensitive;
 
-    const AtomicString& selectorValue =  selector.value();
-
-    AttributeCollection attributes = element.attributes();
+    AttributeCollection attributes = element.attributesWithoutUpdate();
     AttributeCollection::const_iterator end = attributes.end();
     for (AttributeCollection::const_iterator it = attributes.begin(); it != end; ++it) {
         const Attribute& attributeItem = *it;
@@ -480,16 +474,20 @@ static bool anyAttributeMatches(Element& element, CSSSelector::Match match, cons
         if (!attributeItem.matches(selectorAttr))
             continue;
 
-        if (attributeValueMatches(attributeItem, match, selectorValue, true))
+        if (attributeValueMatches(attributeItem, match, selectorValue, !caseInsensitive))
             return true;
 
-        // Case sensitivity for attribute matching is looser than hasAttribute or
-        // Element::shouldIgnoreAttributeCase() for now. Unclear if that's correct.
-        bool caseSensitive = !element.document().isHTMLDocument() || HTMLDocument::isCaseSensitiveAttribute(selectorAttr);
+        if (caseInsensitive)
+            continue;
+
+        // Legacy dictates that values of some attributes should be compared in
+        // a case-insensitive manner regardless of whether the case insensitive
+        // flag is set or not.
+        bool legacyCaseInsensitive = element.document().isHTMLDocument() && !HTMLDocument::isCaseSensitiveAttribute(selectorAttr);
 
         // If case-insensitive, re-check, and count if result differs.
         // See http://code.google.com/p/chromium/issues/detail?id=327060
-        if (!caseSensitive && attributeValueMatches(attributeItem, match, selectorValue, false)) {
+        if (legacyCaseInsensitive && attributeValueMatches(attributeItem, match, selectorValue, false)) {
             UseCounter::count(element.document(), UseCounter::CaseInsensitiveAttrSelectorMatch);
             return true;
         }
@@ -788,6 +786,8 @@ bool SelectorChecker::checkOne(const SelectorCheckingContext& context, const Sib
         case CSSSelector::PseudoEnabled:
             if (element.isFormControlElement() || isHTMLOptionElement(element) || isHTMLOptGroupElement(element))
                 return !element.isDisabledFormControl();
+            else if (isHTMLAnchorElement(element) || isHTMLAreaElement(element))
+                return element.isLink();
             break;
         case CSSSelector::PseudoFullPageMedia:
             return element.document().isMediaDocument();
@@ -934,7 +934,7 @@ bool SelectorChecker::checkOne(const SelectorCheckingContext& context, const Sib
                             break;
                         }
                         hostContext.contextFlags = DefaultBehavior;
-                        hostContext.scope = 0;
+                        hostContext.scope = nullptr;
 
                         if (selector.pseudoType() == CSSSelector::PseudoHost)
                             break;

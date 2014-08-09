@@ -1,9 +1,7 @@
 var captionsButtonElement;
 var captionsButtonCoordinates;
 
-// These reflect the values used to fade in/out the media controls. Should
-// mirror the values 'fadeInDuration'/'fadeOutDuration' in MediaControlElements.cpp.
-const controlsFadeInDurationMs = 100;
+// As specified in mediaControls.css, this is how long it takes to fade out controls
 const controlsFadeOutDurationMs = 300;
 
 // The timeout for the hide-after-no-mouse-movement behavior. Defined (and
@@ -90,7 +88,7 @@ function textTrackDisplayElement(parentElement, id, cueNumber)
 function testClosedCaptionsButtonVisibility(expected)
 {
     try {
-        captionsButtonElement = mediaControlsElement(internals.shadowRoot(mediaElement).firstChild, "-webkit-media-controls-toggle-closed-captions-button");
+        captionsButtonElement = mediaControlsButton(mediaElement, "toggle-closed-captions-button");
         captionsButtonCoordinates = mediaControlsButtonCoordinates(mediaElement, "toggle-closed-captions-button");
     } catch (exception) {
         consoleWrite("Failed to find a closed captions button or its coordinates: " + exception);

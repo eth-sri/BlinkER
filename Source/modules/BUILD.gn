@@ -37,7 +37,6 @@ source_set("modules") {
 
   deps = [
     ":make_modules_generated",
-    ":modules_fetch_polyfill",
     ":modules_cache_polyfill",
     ":modules_cache_storage_polyfill",
     "//third_party/WebKit/Source/core",
@@ -53,22 +52,13 @@ source_set("modules") {
   }
 }
 
-# GYP version: WebKit/Source/modules/modules.gyp:modules (FetchPolyfill action)
-make_file_arrays("modules_fetch_polyfill") {
-  filename = "modules/FetchPolyfill"
-  resources = [
-    "serviceworkers/polyfills/fetchPolyfill.js",
-  ]
-  namespace = "WebCore"
-}
-
 # GYP version: WebKit/Source/modules/modules.gyp:modules (CachePolyfill action)
 make_file_arrays("modules_cache_polyfill") {
   filename = "modules/CachePolyfill"
   resources = [
     "serviceworkers/polyfills/cachePolyfill.js",
   ]
-  namespace = "WebCore"
+  namespace = "blink"
 }
 
 # GYP version: WebKit/Source/modules/modules.gyp:modules (CacheStoragePolyfill action)
@@ -77,7 +67,7 @@ make_file_arrays("modules_cache_storage_polyfill") {
   resources = [
     "serviceworkers/polyfills/cacheStoragePolyfill.js",
   ]
-  namespace = "WebCore"
+  namespace = "blink"
 }
 
 # GYP version: WebKit/Source/modules/modules.gyp:modules_testing

@@ -8,16 +8,18 @@
 
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/ImageBuffer.h"
+#include "public/platform/Platform.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkPictureRecorder.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/PassRefPtr.h"
 
-namespace WebCore {
+namespace blink {
 
 RecordingImageBufferSurface::RecordingImageBufferSurface(const IntSize& size, OpacityMode opacityMode)
     : ImageBufferSurface(size, opacityMode)
-    , m_graphicsContext(0)
+    , m_imageBuffer(0)
+    , m_initialSaveCount(0)
     , m_frameWasCleared(true)
 {
     initializeCurrentFrame();
@@ -31,18 +33,19 @@ void RecordingImageBufferSurface::initializeCurrentFrame()
     static SkRTreeFactory rTreeFactory;
     m_currentFrame = adoptPtr(new SkPictureRecorder);
     m_currentFrame->beginRecording(size().width(), size().height(), &rTreeFactory);
-    if (m_graphicsContext) {
-        m_graphicsContext->resetCanvas(m_currentFrame->getRecordingCanvas());
-        m_graphicsContext->setTrackOpaqueRegion(true);
+    m_initialSaveCount = m_currentFrame->getRecordingCanvas()->getSaveCount();
+    if (m_imageBuffer) {
+        m_imageBuffer->context()->resetCanvas(m_currentFrame->getRecordingCanvas());
+        m_imageBuffer->context()->setRegionTrackingMode(GraphicsContext::RegionTrackingOverwrite);
     }
 }
 
 void RecordingImageBufferSurface::setImageBuffer(ImageBuffer* imageBuffer)
 {
-    m_graphicsContext = imageBuffer ? imageBuffer->context() : 0;
-    if (m_currentFrame && m_graphicsContext) {
-        m_graphicsContext->setTrackOpaqueRegion(true);
-        m_graphicsContext->resetCanvas(m_currentFrame->getRecordingCanvas());
+    m_imageBuffer = imageBuffer;
+    if (m_currentFrame && m_imageBuffer) {
+        m_imageBuffer->context()->setRegionTrackingMode(GraphicsContext::RegionTrackingOverwrite);
+        m_imageBuffer->context()->resetCanvas(m_currentFrame->getRecordingCanvas());
     }
 }
 
@@ -70,9 +73,9 @@ void RecordingImageBufferSurface::fallBackToRasterCanvas()
         m_currentFrame.clear();
     }
 
-    if (m_graphicsContext) {
-        m_graphicsContext->setTrackOpaqueRegion(false);
-        m_graphicsContext->resetCanvas(m_rasterCanvas.get());
+    if (m_imageBuffer) {
+        m_imageBuffer->context()->setRegionTrackingMode(GraphicsContext::RegionTrackingDisabled);
+        m_imageBuffer->context()->resetCanvas(m_rasterCanvas.get());
     }
 }
 
@@ -87,12 +90,23 @@ SkCanvas* RecordingImageBufferSurface::canvas() const
 
 PassRefPtr<SkPicture> RecordingImageBufferSurface::getPicture()
 {
-    if (handleOpaqueFrame())
+    bool canUsePicture = finalizeFrameInternal();
+    m_imageBuffer->didFinalizeFrame();
+
+    if (canUsePicture) {
         return m_previousFrame;
+    }
 
     if (!m_rasterCanvas)
         fallBackToRasterCanvas();
     return nullptr;
+}
+
+void RecordingImageBufferSurface::finalizeFrame()
+{
+    if (!finalizeFrameInternal() && !m_rasterCanvas) {
+        fallBackToRasterCanvas();
+    }
 }
 
 void RecordingImageBufferSurface::didClearCanvas()
@@ -100,19 +114,32 @@ void RecordingImageBufferSurface::didClearCanvas()
     m_frameWasCleared = true;
 }
 
-bool RecordingImageBufferSurface::handleOpaqueFrame()
+bool RecordingImageBufferSurface::finalizeFrameInternal()
 {
-    if (!m_currentFrame)
+    if (!m_imageBuffer->isDirty()) {
+        if (m_currentFrame && !m_previousFrame) {
+            // Create an initial blank frame
+            m_previousFrame = adoptRef(m_currentFrame->endRecording());
+            initializeCurrentFrame();
+        }
+        return m_currentFrame;
+    }
+
+    if (!m_currentFrame) {
         return false;
+    }
+
     IntRect canvasRect(IntPoint(0, 0), size());
-    if (!m_frameWasCleared && !m_graphicsContext->opaqueRegion().asRect().contains(canvasRect))
+    if (!m_frameWasCleared && !m_imageBuffer->context()->opaqueRegion().asRect().contains(canvasRect)) {
         return false;
+    }
 
     SkCanvas* oldCanvas = m_currentFrame->getRecordingCanvas(); // Could be raster or picture
 
     // FIXME(crbug.com/392614): handle transferring complex state from the current picture to the new one.
-    if (oldCanvas->getSaveCount())
+    if (oldCanvas->getSaveCount() > m_initialSaveCount)
         return false;
+
     if (!oldCanvas->isClipRect())
         return false;
 
@@ -131,4 +158,4 @@ bool RecordingImageBufferSurface::handleOpaqueFrame()
     return true;
 }
 
-} // namespace WebCore
+} // namespace blink

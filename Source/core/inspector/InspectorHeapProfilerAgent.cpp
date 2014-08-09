@@ -48,21 +48,22 @@ static const char heapObjectsTrackingEnabled[] = "heapObjectsTrackingEnabled";
 static const char allocationTrackingEnabled[] = "allocationTrackingEnabled";
 }
 
-class InspectorHeapProfilerAgent::HeapStatsUpdateTask {
+class InspectorHeapProfilerAgent::HeapStatsUpdateTask FINAL : public NoBaseWillBeGarbageCollectedFinalized<InspectorHeapProfilerAgent::HeapStatsUpdateTask> {
 public:
-    HeapStatsUpdateTask(InspectorHeapProfilerAgent*);
+    explicit HeapStatsUpdateTask(InspectorHeapProfilerAgent*);
     void startTimer();
     void resetTimer() { m_timer.stop(); }
     void onTimer(Timer<HeapStatsUpdateTask>*);
+    void trace(Visitor*);
 
 private:
-    InspectorHeapProfilerAgent* m_heapProfilerAgent;
+    RawPtrWillBeMember<InspectorHeapProfilerAgent> m_heapProfilerAgent;
     Timer<HeapStatsUpdateTask> m_timer;
 };
 
-PassOwnPtr<InspectorHeapProfilerAgent> InspectorHeapProfilerAgent::create(InjectedScriptManager* injectedScriptManager)
+PassOwnPtrWillBeRawPtr<InspectorHeapProfilerAgent> InspectorHeapProfilerAgent::create(InjectedScriptManager* injectedScriptManager)
 {
-    return adoptPtr(new InspectorHeapProfilerAgent(injectedScriptManager));
+    return adoptPtrWillBeNoop(new InspectorHeapProfilerAgent(injectedScriptManager));
 }
 
 InspectorHeapProfilerAgent::InspectorHeapProfilerAgent(InjectedScriptManager* injectedScriptManager)
@@ -126,6 +127,11 @@ void InspectorHeapProfilerAgent::HeapStatsUpdateTask::startTimer()
     m_timer.startRepeating(0.05, FROM_HERE);
 }
 
+void InspectorHeapProfilerAgent::HeapStatsUpdateTask::trace(Visitor* visitor)
+{
+    visitor->trace(m_heapProfilerAgent);
+}
+
 class InspectorHeapProfilerAgent::HeapStatsStream FINAL : public ScriptProfiler::OutputStream {
 public:
     HeapStatsStream(InspectorHeapProfilerAgent* heapProfilerAgent)
@@ -146,7 +152,7 @@ private:
 void InspectorHeapProfilerAgent::startTrackingHeapObjects(ErrorString*, const bool* trackAllocations)
 {
     m_state->setBoolean(HeapProfilerAgentState::heapObjectsTrackingEnabled, true);
-    bool allocationTrackingEnabled = trackAllocations && *trackAllocations;
+    bool allocationTrackingEnabled = asBool(trackAllocations);
     m_state->setBoolean(HeapProfilerAgentState::allocationTrackingEnabled, allocationTrackingEnabled);
     startTrackingHeapObjectsInternal(allocationTrackingEnabled);
 }
@@ -186,7 +192,7 @@ void InspectorHeapProfilerAgent::startTrackingHeapObjectsInternal(bool trackAllo
     if (m_heapStatsUpdateTask)
         return;
     ScriptProfiler::startTrackingHeapObjects(trackAllocations);
-    m_heapStatsUpdateTask = adoptPtr(new HeapStatsUpdateTask(this));
+    m_heapStatsUpdateTask = adoptPtrWillBeNoop(new HeapStatsUpdateTask(this));
     m_heapStatsUpdateTask->startTimer();
 }
 
@@ -245,7 +251,7 @@ void InspectorHeapProfilerAgent::takeHeapSnapshot(ErrorString* errorString, cons
     };
 
     String title = "Snapshot " + String::number(m_nextUserInitiatedHeapSnapshotNumber++);
-    HeapSnapshotProgress progress(reportProgress && *reportProgress ? m_frontend : 0);
+    HeapSnapshotProgress progress(asBool(reportProgress) ? m_frontend : 0);
     RefPtr<ScriptHeapSnapshot> snapshot = ScriptProfiler::takeHeapSnapshot(title, &progress);
     if (!snapshot) {
         *errorString = "Failed to take heap snapshot";
@@ -310,6 +316,13 @@ void InspectorHeapProfilerAgent::getHeapObjectId(ErrorString* errorString, const
     }
     unsigned id = ScriptProfiler::getHeapObjectId(value);
     *heapSnapshotObjectId = String::number(id);
+}
+
+void InspectorHeapProfilerAgent::trace(Visitor* visitor)
+{
+    visitor->trace(m_injectedScriptManager);
+    visitor->trace(m_heapStatsUpdateTask);
+    InspectorBaseAgent::trace(visitor);
 }
 
 } // namespace blink

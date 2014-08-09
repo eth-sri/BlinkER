@@ -34,6 +34,7 @@
 #include "platform/LifecycleContext.h"
 #include "platform/Supplementable.h"
 #include "platform/heap/Handle.h"
+#include "platform/scroll/ScrollableArea.h"
 
 #include "wtf/Forward.h"
 
@@ -43,7 +44,6 @@ namespace blink {
     class CSSRuleList;
     class CSSStyleDeclaration;
     class Console;
-    class WebKitPoint;
     class DOMSelection;
     class DOMURL;
     class DOMWindowProperty;
@@ -218,9 +218,6 @@ enum PageshowEventPersistence {
         PassRefPtrWillBeRawPtr<CSSRuleList> getMatchedCSSRules(Element*, const String& pseudoElt) const;
         double devicePixelRatio() const;
 
-        PassRefPtrWillBeRawPtr<WebKitPoint> webkitConvertPointFromPageToNode(Node*, const WebKitPoint*) const;
-        PassRefPtrWillBeRawPtr<WebKitPoint> webkitConvertPointFromNodeToPage(Node*, const WebKitPoint*) const;
-
         Console& console() const;
         FrameConsole* frameConsole() const;
 
@@ -232,9 +229,9 @@ enum PageshowEventPersistence {
         void postMessageTimerFired(PostMessageTimer*);
         void dispatchMessageEventWithOriginCheck(SecurityOrigin* intendedTargetOrigin, PassRefPtrWillBeRawPtr<Event>, PassRefPtrWillBeRawPtr<ScriptCallStack>);
 
-        void scrollBy(int x, int y) const;
+        void scrollBy(int x, int y, ScrollBehavior = ScrollBehaviorAuto) const;
         void scrollBy(int x, int y, const Dictionary& scrollOptions, ExceptionState&) const;
-        void scrollTo(int x, int y) const;
+        void scrollTo(int x, int y, ScrollBehavior = ScrollBehaviorAuto) const;
         void scrollTo(int x, int y, const Dictionary& scrollOptions, ExceptionState&) const;
         void scroll(int x, int y) const { scrollTo(x, y); }
         void scroll(int x, int y, const Dictionary& scrollOptions, ExceptionState& exceptionState) const { scrollTo(x, y, scrollOptions, exceptionState); }

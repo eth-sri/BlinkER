@@ -41,13 +41,11 @@
 namespace blink {
 
 class EventAction;
-class EventTarget;
 
 typedef Vector<RegisteredEventListener, 1> EventListenerVector;
 
 struct EventListenerMapEntryInit {
-    EventListenerMapEntryInit(const WTF::AtomicString &typ,
-                              WTF::PassOwnPtr<EventListenerVector> lis,
+    EventListenerMapEntryInit(const WTF::AtomicString &typ, WTF::PassOwnPtr<EventListenerVector> lis,
                               EventAction *act)
         : type(typ), listeners(lis), action(act)
     {}
@@ -70,14 +68,14 @@ private:
     EventListenerMapEntry(const EventListenerMapEntry &);
 };
 
-} // end namespace WebCore
+} // end namespace blink
 
 namespace WTF {
     template<>
-    struct VectorTraits<WebCore::EventListenerMapEntry>
+    struct VectorTraits<blink::EventListenerMapEntry>
     {
         typedef VectorTraits<AtomicString> FirstTraits;
-        typedef VectorTraits<OwnPtr<WebCore::EventListenerVector> > SecondTraits;
+        typedef VectorTraits<OwnPtr<blink::EventListenerVector> > SecondTraits;
 
         static const bool needsDestruction = FirstTraits::needsDestruction || SecondTraits::needsDestruction;
         static const bool canInitializeWithMemset = FirstTraits::canInitializeWithMemset && SecondTraits::canInitializeWithMemset;
@@ -93,7 +91,7 @@ namespace WTF {
     };
 } // end namespace WTF
 
-namespace WebCore {
+namespace blink {
 
 class EventListenerMap {
 public:
@@ -104,9 +102,9 @@ public:
     bool containsCapturing(const AtomicString& eventType) const;
 
     void clear();
-    bool add(const AtomicString& eventType, PassRefPtr<EventListener>, bool useCapture);
-    bool remove(const AtomicString& eventType, EventListener*, bool useCapture, size_t& indexOfRemovedListener);
-    EventListenerVector* find(const AtomicString& eventType);
+    bool add(const AtomicString& eventType, PassRefPtr<blink::EventListener>, bool useCapture);
+    bool remove(const AtomicString& eventType, blink::EventListener*, bool useCapture, size_t& indexOfRemovedListener);
+    blink::EventListenerVector* find(const AtomicString& eventType);
     EventAction *getEventAction(const AtomicString &eventType);
     void setEventAction(const AtomicString &eventType, EventAction *act);
     Vector<AtomicString> eventTypes() const;
@@ -119,7 +117,7 @@ private:
 
     void assertNoActiveIterators();
 
-    Vector<EventListenerMapEntry, 2> m_entries;
+    Vector<blink::EventListenerMapEntry, 2> m_entries;
 
 #if ENABLE(ASSERT)
     int m_activeIteratorCount;
@@ -135,7 +133,7 @@ public:
     ~EventListenerIterator();
 #endif
 
-    EventListener* nextListener();
+    blink::EventListener* nextListener();
 
 private:
     EventListenerMap* m_map;

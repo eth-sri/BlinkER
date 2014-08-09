@@ -266,7 +266,7 @@ WebInspector.ConsoleViewMessage.prototype = {
             return this._linkifier.linkifyCSSLocation(cssLocation, "console-message-url");
         }
 
-        return this._linkifier.linkifyLocation(target, url, lineNumber, columnNumber, "console-message-url");
+        return this._linkifier.linkifyScriptLocation(target, null, url, lineNumber, columnNumber, "console-message-url");
     },
 
     /**
@@ -277,13 +277,10 @@ WebInspector.ConsoleViewMessage.prototype = {
     {
         console.assert(this._linkifier);
         var target = this._target();
-        if (!this._linkifier || !target)
+        if (!this._linkifier)
             return null;
-        // FIXME(62725): stack trace line/column numbers are one-based.
-        var lineNumber = callFrame.lineNumber ? callFrame.lineNumber - 1 : 0;
-        var columnNumber = callFrame.columnNumber ? callFrame.columnNumber - 1 : 0;
-        var rawLocation = new WebInspector.DebuggerModel.Location(target, callFrame.scriptId, lineNumber, columnNumber);
-        return this._linkifier.linkifyRawLocation(rawLocation, "console-message-url");
+
+        return this._linkifier.linkifyConsoleCallFrame(target, callFrame, "console-message-url");
     },
 
     /**
@@ -553,7 +550,7 @@ WebInspector.ConsoleViewMessage.prototype = {
                 this._formatParameterAsObject(object, elem, false);
                 return;
             }
-            var renderer = WebInspector.moduleManager.instance(WebInspector.Renderer, node);
+            var renderer = self.runtime.instance(WebInspector.Renderer, node);
             if (renderer)
                 elem.appendChild(renderer.render(node));
             else
@@ -647,7 +644,7 @@ WebInspector.ConsoleViewMessage.prototype = {
         }
 
         columnNames.unshift(WebInspector.UIString("(index)"));
-        var dataGrid = WebInspector.DataGrid.createSortableDataGrid(columnNames, flatValues);
+        var dataGrid = WebInspector.SortableDataGrid.create(columnNames, flatValues);
         dataGrid.renderInline();
         this._dataGrids.push(dataGrid);
         this._dataGridParents.put(dataGrid, dataGridContainer);
@@ -1083,7 +1080,7 @@ WebInspector.ConsoleViewMessage.prototype = {
             if (!asyncTrace.callFrames || !asyncTrace.callFrames.length)
                 break;
             var content = document.createElementWithClass("div", "stacktrace-entry");
-            var description = asyncTrace.description ? asyncTrace.description + " " + WebInspector.UIString("(async)") : WebInspector.UIString("Async Call");
+            var description = WebInspector.asyncStackTraceLabel(asyncTrace.description);
             content.createChild("span", "console-message-text source-code console-async-trace-text").textContent = description;
             parentTreeElement.appendChild(new TreeElement(content));
             appendStackTrace.call(this, asyncTrace.callFrames);
@@ -1113,7 +1110,7 @@ WebInspector.ConsoleViewMessage.prototype = {
 
         if (!this._repeatCountElement) {
             this._repeatCountElement = document.createElement("span");
-            this._repeatCountElement.className = "bubble";
+            this._repeatCountElement.className = "bubble-repeat-count";
 
             this._element.insertBefore(this._repeatCountElement, this._element.firstChild);
             this._element.classList.add("repeated-message");

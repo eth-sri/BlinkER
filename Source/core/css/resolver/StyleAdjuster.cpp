@@ -166,9 +166,6 @@ void StyleAdjuster::adjustRenderStyle(RenderStyle* style, RenderStyle* parentSty
 {
     ASSERT(parentStyle);
 
-    // Cache our original display.
-    style->setOriginalDisplay(style->display());
-
     if (style->display() != NONE) {
         if (e)
             adjustStyleForTagName(style, parentStyle, *e);
@@ -253,6 +250,60 @@ void StyleAdjuster::adjustRenderStyle(RenderStyle* style, RenderStyle* parentSty
         // (The autosizer will update it during layout if it needs to be changed.)
         style->setTextAutosizingMultiplier(e->renderStyle()->textAutosizingMultiplier());
         style->setUnique();
+    }
+
+    adjustStyleForAlignment(*style, *parentStyle);
+}
+
+void StyleAdjuster::adjustStyleForAlignment(RenderStyle& style, const RenderStyle& parentStyle)
+{
+    bool isFlexOrGrid = style.isDisplayFlexibleOrGridBox();
+    bool absolutePositioned = style.position() == AbsolutePosition;
+
+    // If the inherited value of justify-items includes the legacy keyword, 'auto'
+    // computes to the the inherited value.
+    // Otherwise, auto computes to:
+    //  - 'stretch' for flex containers and grid containers.
+    //  - 'start' for everything else.
+    if (style.justifyItems() == ItemPositionAuto) {
+        if (parentStyle.justifyItemsPositionType() == LegacyPosition) {
+            style.setJustifyItems(parentStyle.justifyItems());
+            style.setJustifyItemsPositionType(parentStyle.justifyItemsPositionType());
+        } else if (isFlexOrGrid) {
+            style.setJustifyItems(ItemPositionStretch);
+        }
+    }
+
+    // The 'auto' keyword computes to 'stretch' on absolutely-positioned elements,
+    // and to the computed value of justify-items on the parent (minus
+    // any legacy keywords) on all other boxes.
+    if (style.justifySelf() == ItemPositionAuto) {
+        if (absolutePositioned) {
+            style.setJustifySelf(ItemPositionStretch);
+        } else {
+            style.setJustifySelf(parentStyle.justifyItems());
+            style.setJustifySelfOverflowAlignment(parentStyle.justifyItemsOverflowAlignment());
+        }
+    }
+
+    // The 'auto' keyword computes to:
+    //  - 'stretch' for flex containers and grid containers,
+    //  - 'start' for everything else.
+    if (style.alignItems() == ItemPositionAuto) {
+        if (isFlexOrGrid)
+            style.setAlignItems(ItemPositionStretch);
+    }
+
+    // The 'auto' keyword computes to 'stretch' on absolutely-positioned elements,
+    // and to the computed value of align-items on the parent (minus
+    // any 'legacy' keywords) on all other boxes.
+    if (style.alignSelf() == ItemPositionAuto) {
+        if (absolutePositioned) {
+            style.setAlignSelf(ItemPositionStretch);
+        } else {
+            style.setAlignSelf(parentStyle.alignItems());
+            style.setAlignSelfOverflowAlignment(parentStyle.alignItemsOverflowAlignment());
+        }
     }
 }
 

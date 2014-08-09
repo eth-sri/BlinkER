@@ -210,7 +210,7 @@ WebInspector.Setting.prototype = {
  */
 WebInspector.RegExpSetting = function(name, defaultValue, eventSupport, storage, regexFlags)
 {
-    WebInspector.Setting.call(this, name, [defaultValue], eventSupport, storage);
+    WebInspector.Setting.call(this, name, defaultValue ? [{ pattern: defaultValue }] : [], eventSupport, storage);
     this._regexFlags = regexFlags;
 }
 
@@ -221,19 +221,22 @@ WebInspector.RegExpSetting.prototype = {
      */
     get: function()
     {
-        return this.getAsArray().join("|");
+        var result = [];
+        var items = this.getAsArray();
+        for (var i = 0; i < items.length; ++i) {
+            var item = items[i];
+            if (item.pattern && !item.disabled)
+                result.push(item.pattern);
+        }
+        return result.join("|");
     },
 
     /**
-     * @return {!Array.<string>}
+     * @return {!Array.<{pattern: string, disabled: (boolean|undefined)}>}
      */
     getAsArray: function()
     {
-        var value = WebInspector.Setting.prototype.get.call(this);
-        if (typeof value === "string") // Backward compatibility.
-            value = [value];
-        value.remove("");
-        return value;
+        return WebInspector.Setting.prototype.get.call(this);
     },
 
     /**
@@ -242,16 +245,15 @@ WebInspector.RegExpSetting.prototype = {
      */
     set: function(value)
     {
-        this.setAsArray([value]);
+        this.setAsArray([{ pattern: value }]);
     },
 
     /**
-     * @param {!Array.<string>} value
+     * @param {!Array.<{pattern: string, disabled: (boolean|undefined)}>} value
      */
     setAsArray: function(value)
     {
         delete this._regex;
-        value.remove("");
         WebInspector.Setting.prototype.set.call(this, value);
     },
 
@@ -292,16 +294,13 @@ WebInspector.ExperimentsSettings = function(experimentsEnabled)
     this.devicesPanel = this._createExperiment("devicesPanel", "Devices panel");
     this.disableAgentsWhenProfile = this._createExperiment("disableAgentsWhenProfile", "Disable other agents and UI when profiler is active", true);
     this.dockToLeft = this._createExperiment("dockToLeft", "Dock to left", true);
-    this.editorInDrawer = this._createExperiment("showEditorInDrawer", "Editor in drawer", true);
     this.fileSystemInspection = this._createExperiment("fileSystemInspection", "FileSystem inspection");
     this.frameworksDebuggingSupport = this._createExperiment("frameworksDebuggingSupport", "JavaScript frameworks debugging");
     this.gpuTimeline = this._createExperiment("gpuTimeline", "GPU data on timeline", true);
-    this.heapSnapshotStatistics = this._createExperiment("heapSnapshotStatistics", "Heap snapshot statistics", true);
-    this.layersPanel = this._createExperiment("layersPanel", "Layers panel", true);
-    this.timelineOnTraceEvents = this._createExperiment("timelineOnTraceEvents", "Timeline on trace events", true);
+    this.layersPanel = this._createExperiment("layersPanel", "Layers panel");
+    this.timelineOnTraceEvents = this._createExperiment("timelineOnTraceEvents", "Timeline on trace events");
     this.timelinePowerProfiler = this._createExperiment("timelinePowerProfiler", "Timeline power profiler");
     this.timelineJSCPUProfile = this._createExperiment("timelineJSCPUProfile", "Timeline with JS sampling");
-    this.timelineNoLiveUpdate = this._createExperiment("timelineNoLiveUpdate", "Timeline w/o live update", true);
     this.workersInMainWindow = this._createExperiment("workersInMainWindow", "Workers in main window", true);
 
     this._cleanUpSetting();
@@ -454,7 +453,7 @@ WebInspector.VersionController = function()
 {
 }
 
-WebInspector.VersionController.currentVersion = 8;
+WebInspector.VersionController.currentVersion = 9;
 
 WebInspector.VersionController.prototype = {
     updateVersion: function()
@@ -596,7 +595,6 @@ WebInspector.VersionController.prototype = {
             "sourcesPanelNavigatorSplitViewState": "sourcesPanelNavigatorSplitViewState",
             "elementsPanelSplitViewState": "elementsPanelSplitViewState",
             "canvasProfileViewReplaySplitViewState": "canvasProfileViewReplaySplitViewState",
-            "editorInDrawerSplitViewState": "editorInDrawerSplitViewState",
             "stylesPaneSplitViewState": "stylesPaneSplitViewState",
             "sourcesPanelDebuggerSidebarSplitViewState": "sourcesPanelDebuggerSidebarSplitViewState"
         };
@@ -639,6 +637,36 @@ WebInspector.VersionController.prototype = {
         }
         value = components.join("x");
         setting.set(value);
+    },
+
+    _updateVersionFrom8To9: function()
+    {
+        if (!window.localStorage)
+            return;
+
+        var settingNames = [
+            "skipStackFramesPattern",
+            "workspaceFolderExcludePattern"
+        ];
+
+        for (var i = 0; i < settingNames.length; ++i) {
+            var settingName = settingNames[i];
+            if (!(settingName in window.localStorage))
+                continue;
+            try {
+                var value = JSON.parse(window.localStorage[settingName]);
+                if (!value)
+                    continue;
+                if (typeof value === "string")
+                    value = [value];
+                for (var j = 0; j < value.length; ++j) {
+                    if (typeof value[j] === "string")
+                        value[j] = { pattern: value[j] };
+                }
+                window.localStorage[settingName] = JSON.stringify(value);
+            } catch(e) {
+            }
+        }
     },
 
     /**

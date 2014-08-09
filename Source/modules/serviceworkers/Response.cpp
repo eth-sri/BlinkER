@@ -19,6 +19,17 @@ PassRefPtrWillBeRawPtr<Response> Response::create(Blob* body, const Dictionary& 
     return create(body, ResponseInit(responseInit), exceptionState);
 }
 
+PassRefPtrWillBeRawPtr<Response> Response::create(const String& body, const Dictionary& responseInit, ExceptionState& exceptionState)
+{
+    OwnPtr<BlobData> blobData = BlobData::create();
+    blobData->appendText(body, false);
+    // "Set |Content-Type| to `text/plain;charset=UTF-8`."
+    blobData->setContentType("text/plain;charset=UTF-8");
+    const long long length = blobData->length();
+    RefPtrWillBeRawPtr<Blob> blob = Blob::create(BlobDataHandle::create(blobData.release(), length));
+    return create(blob.get(), ResponseInit(responseInit), exceptionState);
+}
+
 PassRefPtrWillBeRawPtr<Response> Response::create(Blob* body, const ResponseInit& responseInit, ExceptionState& exceptionState)
 {
     // "1. If |init|'s status member is not in the range 200 to 599, throw a
@@ -78,11 +89,7 @@ PassRefPtrWillBeRawPtr<Response> Response::create(Blob* body, const ResponseInit
     // FIXME: "8. Set |r|'s FetchBodyStream object's MIME type to the result of
     //        extracting a MIME type from |r|'s response's header list."
 
-    // FIXME: "9. Set |r|'s FetchBodyStream object's codings to the result of
-    //        parsing `Content-Encoding` in |r|'s response's header list if that
-    //        result is not failure."
-
-    // "10. Return r."
+    // "9. Return |r|."
     return r.release();
 }
 
@@ -142,6 +149,8 @@ PassRefPtrWillBeRawPtr<Headers> Response::headers() const
 
 PassRefPtrWillBeRawPtr<FetchBodyStream> Response::body(ExecutionContext* context)
 {
+    if (!m_response->blobDataHandle())
+        return nullptr;
     if (!m_fetchBodyStream)
         m_fetchBodyStream = FetchBodyStream::create(context, m_response->blobDataHandle());
     return m_fetchBodyStream;

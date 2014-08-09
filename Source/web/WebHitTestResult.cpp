@@ -41,77 +41,78 @@ using namespace blink;
 
 namespace blink {
 
-class WebHitTestResultPrivate {
+class WebHitTestResultPrivate : public RefCountedWillBeGarbageCollectedFinalized<WebHitTestResultPrivate> {
 public:
+    static PassRefPtrWillBeRawPtr<WebHitTestResultPrivate> create(const HitTestResult&);
+    static PassRefPtrWillBeRawPtr<WebHitTestResultPrivate> create(const WebHitTestResultPrivate&);
+    void trace(Visitor* visitor) { visitor->trace(m_result); }
+    const HitTestResult& result() const { return m_result; }
+
+private:
     WebHitTestResultPrivate(const HitTestResult&);
     WebHitTestResultPrivate(const WebHitTestResultPrivate&);
 
-    RefPtrWillBePersistent<Node> innerNode;
-    RefPtrWillBePersistent<Element> innerURLElement;
-    LayoutPoint localPoint;
-    KURL absoluteImageURL;
-    KURL absoluteLinkURL;
-    bool isContentEditable;
+    HitTestResult m_result;
 };
 
 inline WebHitTestResultPrivate::WebHitTestResultPrivate(const HitTestResult& result)
-    : innerNode(result.innerNode())
-    , innerURLElement(result.URLElement())
-    , localPoint(result.localPoint())
-    , absoluteImageURL(result.absoluteImageURL())
-    , absoluteLinkURL(result.absoluteLinkURL())
-    , isContentEditable(result.isContentEditable())
+    : m_result(result)
 {
 }
 
 inline WebHitTestResultPrivate::WebHitTestResultPrivate(const WebHitTestResultPrivate& result)
-    : innerNode(result.innerNode)
-    , innerURLElement(result.innerURLElement)
-    , localPoint(result.localPoint)
-    , absoluteImageURL(result.absoluteImageURL)
-    , absoluteLinkURL(result.absoluteLinkURL)
-    , isContentEditable(result.isContentEditable)
+    : m_result(result.m_result)
 {
+}
+
+PassRefPtrWillBeRawPtr<WebHitTestResultPrivate> WebHitTestResultPrivate::create(const HitTestResult& result)
+{
+    return adoptRefWillBeNoop(new WebHitTestResultPrivate(result));
+}
+
+PassRefPtrWillBeRawPtr<WebHitTestResultPrivate> WebHitTestResultPrivate::create(const WebHitTestResultPrivate& result)
+{
+    return adoptRefWillBeNoop(new WebHitTestResultPrivate(result));
 }
 
 WebNode WebHitTestResult::node() const
 {
-    return WebNode(m_private->innerNode);
+    return WebNode(m_private->result().innerNode());
 }
 
 WebPoint WebHitTestResult::localPoint() const
 {
-    return roundedIntPoint(m_private->localPoint);
+    return roundedIntPoint(m_private->result().localPoint());
 }
 
 WebElement WebHitTestResult::urlElement() const
 {
-    return WebElement(m_private->innerURLElement);
+    return WebElement(m_private->result().URLElement());
 }
 
 WebURL WebHitTestResult::absoluteImageURL() const
 {
-    return m_private->absoluteImageURL;
+    return m_private->result().absoluteImageURL();
 }
 
 WebURL WebHitTestResult::absoluteLinkURL() const
 {
-    return m_private->absoluteLinkURL;
+    return m_private->result().absoluteLinkURL();
 }
 
 bool WebHitTestResult::isContentEditable() const
 {
-    return m_private->isContentEditable;
+    return m_private->result().isContentEditable();
 }
 
 WebHitTestResult::WebHitTestResult(const HitTestResult& result)
+    : m_private(WebHitTestResultPrivate::create(result))
 {
-    m_private.reset(new WebHitTestResultPrivate(result));
 }
 
 WebHitTestResult& WebHitTestResult::operator=(const HitTestResult& result)
 {
-    m_private.reset(new WebHitTestResultPrivate(result));
+    m_private = WebHitTestResultPrivate::create(result);
     return *this;
 }
 
@@ -123,14 +124,14 @@ bool WebHitTestResult::isNull() const
 void WebHitTestResult::assign(const WebHitTestResult& info)
 {
     if (info.isNull())
-        m_private.reset(0);
+        m_private.reset();
     else
-        m_private.reset(new WebHitTestResultPrivate(*info.m_private.get()));
+        m_private = WebHitTestResultPrivate::create(*info.m_private.get());
 }
 
 void WebHitTestResult::reset()
 {
-    m_private.reset(0);
+    m_private.reset();
 }
 
 } // namespace blink

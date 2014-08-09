@@ -37,6 +37,7 @@
 #include "core/clipboard/DataObject.h"
 #include "core/dom/Document.h"
 #include "core/dom/DocumentMarkerController.h"
+#include "core/dom/NodeRenderingTraversal.h"
 #include "core/dom/Text.h"
 #include "core/editing/Editor.h"
 #include "core/editing/FrameSelection.h"
@@ -79,7 +80,6 @@
 #include "core/page/PointerLockController.h"
 #include "core/page/ScopedPageLoadDeferrer.h"
 #include "core/page/TouchDisambiguation.h"
-#include "core/rendering/FastTextAutosizer.h"
 #include "core/rendering/RenderView.h"
 #include "core/rendering/RenderWidget.h"
 #include "core/rendering/TextAutosizer.h"
@@ -438,8 +438,6 @@ WebViewImpl::WebViewImpl(WebViewClient* client)
         setDeviceScaleFactor(m_client->screenInfo().deviceScaleFactor);
         setVisibilityState(m_client->visibilityState(), true);
     }
-
-    m_inspectorSettingsMap = adoptPtr(new SettingsMap);
 
     initializeLayerTreeView();
 }
@@ -1654,11 +1652,11 @@ void WebViewImpl::resize(const WebSize& newSize)
                                  FloatSize(viewportAnchorXCoord, viewportAnchorYCoord));
     }
 
-    // FIXME: FastTextAutosizer does not yet support out-of-process frames.
+    // FIXME: TextAutosizer does not yet support out-of-process frames.
     if (mainFrameImpl() && mainFrameImpl()->frame()->isLocalFrame())
     {
-        // Avoids unnecessary invalidations while various bits of state in FastTextAutosizer are updated.
-        FastTextAutosizer::DeferUpdatePageInfo deferUpdatePageInfo(page());
+        // Avoids unnecessary invalidations while various bits of state in TextAutosizer are updated.
+        TextAutosizer::DeferUpdatePageInfo deferUpdatePageInfo(page());
         performResize();
     } else {
         performResize();
@@ -2158,13 +2156,14 @@ WebTextInputInfo WebViewImpl::textInputInfo()
         return info;
 
     FrameSelection& selection = focused->selection();
-    Node* node = selection.selection().rootEditableElement();
-    if (!node)
+    Element* element = selection.selection().rootEditableElement();
+    if (!element)
         return info;
 
     info.inputMode = inputModeOfFocusedElement();
 
     info.type = textInputType();
+    info.flags = textInputFlags();
     if (info.type == WebTextInputTypeNone)
         return info;
 
@@ -2173,13 +2172,13 @@ WebTextInputInfo WebViewImpl::textInputInfo()
 
     // Emits an object replacement character for each replaced element so that
     // it is exposed to IME and thus could be deleted by IME on android.
-    info.value = plainText(rangeOfContents(node).get(), TextIteratorEmitsObjectReplacementCharacter);
+    info.value = plainText(rangeOfContents(element).get(), TextIteratorEmitsObjectReplacementCharacter);
 
     if (info.value.isEmpty())
         return info;
 
     if (RefPtrWillBeRawPtr<Range> range = selection.selection().firstRange()) {
-        PlainTextRange plainTextRange(PlainTextRange::create(*node, *range.get()));
+        PlainTextRange plainTextRange(PlainTextRange::create(*element, *range.get()));
         if (plainTextRange.isNotNull()) {
             info.selectionStart = plainTextRange.start();
             info.selectionEnd = plainTextRange.end();
@@ -2187,7 +2186,7 @@ WebTextInputInfo WebViewImpl::textInputInfo()
     }
 
     if (RefPtrWillBeRawPtr<Range> range = focused->inputMethodController().compositionRange()) {
-        PlainTextRange plainTextRange(PlainTextRange::create(*node, *range.get()));
+        PlainTextRange plainTextRange(PlainTextRange::create(*element, *range.get()));
         if (plainTextRange.isNotNull()) {
             info.compositionStart = plainTextRange.start();
             info.compositionEnd = plainTextRange.end();
@@ -2254,6 +2253,35 @@ WebTextInputType WebViewImpl::textInputType()
         return WebTextInputTypeContentEditable;
 
     return WebTextInputTypeNone;
+}
+
+int WebViewImpl::textInputFlags()
+{
+    Element* element = focusedElement();
+    if (!element)
+        return WebTextInputFlagNone;
+
+    int flags = 0;
+
+    const AtomicString& autocomplete = element->getAttribute("autocomplete");
+    if (autocomplete == "on")
+        flags |= WebTextInputFlagAutocompleteOn;
+    else if (autocomplete == "off")
+        flags |= WebTextInputFlagAutocompleteOff;
+
+    const AtomicString& autocorrect = element->getAttribute("autocorrect");
+    if (autocorrect == "on")
+        flags |= WebTextInputFlagAutocorrectOn;
+    else if (autocorrect == "off")
+        flags |= WebTextInputFlagAutocorrectOff;
+
+    const AtomicString& spellcheck = element->getAttribute("spellcheck");
+    if (spellcheck == "on")
+        flags |= WebTextInputFlagSpellcheckOn;
+    else if (spellcheck == "off")
+        flags |= WebTextInputFlagSpellcheckOff;
+
+    return flags;
 }
 
 WebString WebViewImpl::inputModeOfFocusedElement()
@@ -3056,7 +3084,7 @@ void WebViewImpl::updatePageDefinedViewportConstraints(const ViewportDescription
     updateMainFrameLayoutSize();
 
     if (LocalFrame* frame = page()->deprecatedLocalMainFrame()) {
-        if (FastTextAutosizer* textAutosizer = frame->document()->fastTextAutosizer())
+        if (TextAutosizer* textAutosizer = frame->document()->textAutosizer())
             textAutosizer->updatePageInfoInAllFrames();
     }
 }
@@ -3072,15 +3100,8 @@ void WebViewImpl::updateMainFrameLayoutSize()
 
     WebSize layoutSize = m_size;
 
-    if (settings()->viewportEnabled()) {
+    if (settings()->viewportEnabled())
         layoutSize = flooredIntSize(m_pageScaleConstraintsSet.pageDefinedConstraints().layoutSize);
-
-        bool textAutosizingEnabled = page()->settings().textAutosizingEnabled();
-        if (textAutosizingEnabled && layoutSize.width != view->layoutSize().width()) {
-            if (TextAutosizer* textAutosizer = page()->deprecatedLocalMainFrame()->document()->textAutosizer())
-                textAutosizer->recalculateMultipliers();
-        }
-    }
 
     view->setLayoutSize(layoutSize);
 }
@@ -3466,31 +3487,6 @@ void WebViewImpl::inspectElementAt(const WebPoint& point)
             node = m_page->deprecatedLocalMainFrame()->document()->documentElement();
         m_page->inspectorController().inspect(node);
     }
-}
-
-WebString WebViewImpl::inspectorSettings() const
-{
-    return m_inspectorSettings;
-}
-
-void WebViewImpl::setInspectorSettings(const WebString& settings)
-{
-    m_inspectorSettings = settings;
-}
-
-bool WebViewImpl::inspectorSetting(const WebString& key, WebString* value) const
-{
-    if (!m_inspectorSettingsMap->contains(key))
-        return false;
-    *value = m_inspectorSettingsMap->get(key);
-    return true;
-}
-
-void WebViewImpl::setInspectorSetting(const WebString& key,
-                                      const WebString& value)
-{
-    m_inspectorSettingsMap->set(key, value);
-    client()->didUpdateInspectorSetting(key, value);
 }
 
 void WebViewImpl::setCompositorDeviceScaleFactorOverride(float deviceScaleFactor)
@@ -4158,7 +4154,7 @@ bool WebViewImpl::detectContentOnTouch(const WebPoint& position)
 
     // Ignore when tapping on links or nodes listening to click events, unless the click event is on the
     // body element, in which case it's unlikely that the original node itself was intended to be clickable.
-    for (; node && !isHTMLBodyElement(*node); node = node->parentNode()) {
+    for (; node && !isHTMLBodyElement(*node); node = NodeRenderingTraversal::parent(node)) {
         if (node->isLink() || node->willRespondToTouchEvents() || node->willRespondToMouseClickEvents())
             return false;
     }

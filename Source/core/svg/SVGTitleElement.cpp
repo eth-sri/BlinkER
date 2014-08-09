@@ -39,8 +39,8 @@ Node::InsertionNotificationRequest SVGTitleElement::insertedInto(ContainerNode* 
     SVGElement::insertedInto(rootParent);
     if (!rootParent->inDocument())
         return InsertionDone;
-    if (firstChild() && document().isSVGDocument())
-        document().setTitleElement(textContent(), this);
+    if (hasChildren() && document().isSVGDocument())
+        document().setTitleElement(this);
     return InsertionDone;
 }
 
@@ -55,7 +55,7 @@ void SVGTitleElement::childrenChanged(const ChildrenChange& change)
 {
     SVGElement::childrenChanged(change);
     if (inDocument() && document().isSVGDocument())
-        document().setTitleElement(textContent(), this);
+        document().setTitleElement(this);
 }
 
 }

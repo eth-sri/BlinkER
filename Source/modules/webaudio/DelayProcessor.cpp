@@ -36,13 +36,19 @@ DelayProcessor::DelayProcessor(AudioContext* context, float sampleRate, unsigned
     : AudioDSPKernelProcessor(sampleRate, numberOfChannels)
     , m_maxDelayTime(maxDelayTime)
 {
-    m_delayTime = AudioParam::create(context, "delayTime", 0.0, 0.0, maxDelayTime);
+    m_delayTime = AudioParam::create(context, 0.0);
 }
 
 DelayProcessor::~DelayProcessor()
 {
     if (isInitialized())
         uninitialize();
+}
+
+void DelayProcessor::trace(Visitor* visitor)
+{
+    visitor->trace(m_delayTime);
+    AudioDSPKernelProcessor::trace(visitor);
 }
 
 PassOwnPtr<AudioDSPKernel> DelayProcessor::createKernel()

@@ -43,6 +43,11 @@
         '../wtf/wtf.gypi',
         'web.gypi',
     ],
+    'target_defaults': {
+        'variables': {
+            'clang_warning_flags': ['-Wglobal-constructors'],
+        },
+    },
     'targets': [
         {
             'target_name': 'blink_web',
@@ -104,11 +109,17 @@
                         '<(DEPTH)/url/url.gyp:url_lib',
                         '<(DEPTH)/v8/tools/gyp/v8.gyp:v8',
                     ],
+                    'variables': {
+                      'clang_warning_flags_unset': [
+                        # FIXME: It would be nice to enable this in shared builds too,
+                        # but the test files have global constructors from the GTEST macro
+                        # and we pull in the test files into the blink_web target in the
+                        # shared build.
+                        '-Wglobal-constructors',
+                      ],
+                    },
                     'sources': [
                         # Compile Blink unittest files into blink_web.dll in component build mode
-                        # since there're methods that are tested but not exported.
-                        # WebUnitTests.* exports an API that runs all the unittests inside
-                        # blink_web.dll.
                         '<@(bindings_unittest_files)',
                         '<@(core_unittest_files)',
                         '<@(modules_unittest_files)',
@@ -116,23 +127,12 @@
                         '<@(platform_web_unittest_files)',
                         '<@(web_unittest_files)',
                         'WebTestingSupport.cpp',
-                        'tests/WebUnitTests.cpp',   # Components test runner support.
                     ],
                     'conditions': [
                         ['OS=="win" or OS=="mac"', {
                             'dependencies': [
                                 '<(DEPTH)/third_party/nss/nss.gyp:*',
                             ],
-                        }],
-                        ['clang==1', {
-                            # FIXME: It would be nice to enable this in shared builds too,
-                            # but the test files have global constructors from the GTEST macro
-                            # and we pull in the test files into the blink_web target in the
-                            # shared build.
-                            'cflags!': ['-Wglobal-constructors'],
-                            'xcode_settings': {
-                              'WARNING_CFLAGS!': ['-Wglobal-constructors'],
-                            },
                         }],
                     ],
                     'msvs_settings': {
@@ -206,6 +206,7 @@
             ],
         },
         {
+            # GN version: //third_party/WebKit/Source/web:test_support
             'target_name': 'blink_web_test_support',
             'conditions': [
                 ['component=="shared_library"', {
@@ -249,14 +250,6 @@
                     }],
                 },
             ],
-        }],
-        ['clang==1', {
-            'target_defaults': {
-                'cflags': ['-Wglobal-constructors'],
-                'xcode_settings': {
-                    'WARNING_CFLAGS': ['-Wglobal-constructors'],
-                },
-            },
         }],
     ], # conditions
 }

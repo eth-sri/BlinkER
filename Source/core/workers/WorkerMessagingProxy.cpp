@@ -115,8 +115,8 @@ void WorkerMessagingProxy::startWorkerGlobalScope(const KURL& scriptURL, const S
     double originTime = document->loader() ? document->loader()->timing()->referenceMonotonicTime() : monotonicallyIncreasingTime();
 
     RefPtr<DedicatedWorkerThread> thread = DedicatedWorkerThread::create(*this, *m_workerObjectProxy.get(), originTime, startupData.release());
-    workerThreadCreated(thread);
     thread->start();
+    workerThreadCreated(thread);
     InspectorInstrumentation::didStartWorkerGlobalScope(m_executionContext.get(), this, scriptURL);
 }
 
@@ -250,7 +250,7 @@ void WorkerMessagingProxy::sendMessageToInspector(const String& message)
     if (m_askedToTerminate)
         return;
     m_workerThread->postDebuggerTask(createCrossThreadTask(dispatchOnInspectorBackendTask, String(message)));
-    WorkerDebuggerAgent::interruptAndDispatchInspectorCommands(m_workerThread.get());
+    m_workerThread->interruptAndDispatchInspectorCommands();
 }
 
 void WorkerMessagingProxy::workerGlobalScopeDestroyed()
