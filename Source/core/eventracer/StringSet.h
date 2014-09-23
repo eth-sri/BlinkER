@@ -30,7 +30,7 @@ public:
 
     // Returns the string for an index. The returned pointer is guaranteed
     // to be valid only until the next modification of StringSet.
-    const LChar *peek(size_t index) const;
+    const char *peek(size_t index) const;
 
     // Returns the number of strings in the set.
     size_t size() const {
@@ -38,15 +38,15 @@ public:
     }
 
 private:
-    size_t addL(const LChar *, size_t);
-    bool findL(const LChar *, size_t, size_t, size_t &) const;
-    size_t hashL(const LChar *, size_t) const;
-    size_t hashZ(const LChar *, size_t &) const;
+    size_t addL(const char *, size_t);
+    bool findL(const char *, size_t, size_t, size_t &) const;
+    size_t hashL(const char *, size_t) const;
+    size_t hashZ(const char *, size_t &) const;
     void addHash(size_t, size_t value);
     void addHashNoRehash(size_t, size_t);
     void rehashAll();
 
-    WTF::Vector<LChar> m_data;
+    WTF::Vector<char> m_data;
     WTF::Vector<size_t> m_hashes;
     WTF::Vector<size_t> m_offsets;
 };
