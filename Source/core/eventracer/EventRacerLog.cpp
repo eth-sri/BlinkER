@@ -199,22 +199,32 @@ size_t EventRacerLog::internf(const char *fmt, ...) {
 }
 
 // JS instrumentation calls
-ScriptValue EventRacerLog::ER_read(LocalDOMWindow &, const V8StringResource<> &, const ScriptValue &val) {
+ScriptValue EventRacerLog::ER_read(LocalDOMWindow &, const V8StringResource<> &,
+                                   const ScriptValue &val) {
     return val;
 }
 
-ScriptValue EventRacerLog::ER_write(LocalDOMWindow &, const V8StringResource<> &, const ScriptValue &val) {
+ScriptValue EventRacerLog::ER_write(LocalDOMWindow &, const V8StringResource<> &,
+                                    const ScriptValue &val) {
     return val;
 }
 
-ScriptValue EventRacerLog::ER_readProp(LocalDOMWindow &, const ScriptValue &, const V8StringResource<> &,
-                                        const ScriptValue &val) {
+ScriptValue EventRacerLog::ER_readProp(LocalDOMWindow &, const ScriptValue &,
+                                       const V8StringResource<> &, const ScriptValue &val) {
     return val;
 }
 
-ScriptValue EventRacerLog::ER_writeProp(LocalDOMWindow &, const ScriptValue &, const V8StringResource<> &,
-                                         const ScriptValue &val) {
+ScriptValue EventRacerLog::ER_writeProp(LocalDOMWindow &, const ScriptValue &,
+                                        const V8StringResource<> &, const ScriptValue &val) {
     return val;
+}
+
+void EventRacerLog::ER_delete(LocalDOMWindow &, const V8StringResource <>&) {
+}
+
+void EventRacerLog::ER_deleteProp(LocalDOMWindow &, const ScriptValue &,
+                                  const V8StringResource<> &) {
+
 }
 
 ScriptValue EventRacerLog::ER_readArray(LocalDOMWindow &, const ScriptValue &arr) {

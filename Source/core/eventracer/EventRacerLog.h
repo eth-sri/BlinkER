@@ -81,24 +81,21 @@ public:
     EventAction *getCurrentAction() const { return m_currentAction; }
 
     // JS instrumentation calls
-    static blink::ScriptValue ER_read(blink::LocalDOMWindow &,
-                                      const blink::V8StringResource<> &,
-                                      const blink::ScriptValue &);
-    static blink::ScriptValue ER_write(blink::LocalDOMWindow &,
-                                       const blink::V8StringResource<> &,
-                                       const blink::ScriptValue &);
-    static blink::ScriptValue ER_readProp(LocalDOMWindow &,
-                                          const blink::ScriptValue &,
-                                          const blink::V8StringResource<> &,
-                                          const blink::ScriptValue &);
-    static ScriptValue ER_writeProp(blink::LocalDOMWindow &,
-                                    const blink::ScriptValue &,
-                                    const blink::V8StringResource<> &,
-                                    const blink::ScriptValue &);
-    static blink::ScriptValue ER_readArray(LocalDOMWindow &,
-                                           const blink::ScriptValue &);
-    static blink::ScriptValue ER_writeArray(LocalDOMWindow &,
-                                            const blink::ScriptValue &);
+    static ScriptValue ER_read(LocalDOMWindow &, const V8StringResource<> &,
+                               const ScriptValue &);
+    static ScriptValue ER_write(LocalDOMWindow &, const V8StringResource<> &,
+                                const ScriptValue &);
+    static ScriptValue ER_readProp(LocalDOMWindow &, const ScriptValue &,
+                                   const V8StringResource<> &,
+                                   const ScriptValue &);
+    static ScriptValue ER_writeProp(LocalDOMWindow &, const ScriptValue &,
+                                    const V8StringResource<> &,
+                                    const ScriptValue &);
+    static void ER_delete(LocalDOMWindow &, const V8StringResource<> &);
+    static void ER_deleteProp(LocalDOMWindow &, const ScriptValue &,
+                              const V8StringResource<> &);
+    static ScriptValue ER_readArray(LocalDOMWindow &, const ScriptValue &);
+    static ScriptValue ER_writeArray(LocalDOMWindow &, const ScriptValue &);
 
 private:
     EventRacerLog();

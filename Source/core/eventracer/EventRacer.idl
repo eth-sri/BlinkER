@@ -7,6 +7,8 @@
     any ER_write(DOMString name, any value);
     any ER_readProp(any obj, DOMString name, any value);
     any ER_writeProp(any obj, DOMString name, any value);
+    void ER_delete(DOMString name);
+    void ER_deleteProp(any obj, DOMString name);
     any ER_readArray(any obj);
     any ER_writeArray(any obj);
 };
