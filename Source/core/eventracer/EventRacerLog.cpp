@@ -1,4 +1,6 @@
 #include "config.h"
+#include "bindings/core/v8/V8Element.h"
+#include "EventRacerContext.h"
 #include "EventRacerLog.h"
 #include "EventRacerLogClient.h"
 #include <stdarg.h>
@@ -199,32 +201,72 @@ size_t EventRacerLog::internf(const char *fmt, ...) {
 }
 
 // JS instrumentation calls
-ScriptValue EventRacerLog::ER_read(LocalDOMWindow &, const V8StringResource<> &,
+ScriptValue EventRacerLog::ER_read(LocalDOMWindow &, const V8StringResource<> &name,
                                    const ScriptValue &val) {
+    if (RefPtr<EventRacerLog> log = EventRacerContext::getLog())
+        log->logOperation(log->getCurrentAction(), Operation::READ_MEMORY, WTF::String(name));
     return val;
 }
 
-ScriptValue EventRacerLog::ER_write(LocalDOMWindow &, const V8StringResource<> &,
+ScriptValue EventRacerLog::ER_write(LocalDOMWindow &, const V8StringResource<> &name,
                                     const ScriptValue &val) {
+    if (RefPtr<EventRacerLog> log = EventRacerContext::getLog())
+        log->logOperation(log->getCurrentAction(), Operation::WRITE_MEMORY, WTF::String(name));
     return val;
 }
 
-ScriptValue EventRacerLog::ER_readProp(LocalDOMWindow &, const ScriptValue &,
-                                       const V8StringResource<> &, const ScriptValue &val) {
+void EventRacerLog::logFieldAccess(Operation::Type op, const ScriptValue &obj,
+                                   const V8StringResource<> &name) {
+    // Check that we in fact have an object.
+    v8::Handle<v8::Value> v = obj.v8Value();
+    if (!v->IsObject())
+        return;
+    v8::Local<v8::Object> object = v->ToObject();
+    WTF::String attr(name);
+    v8::Isolate *isolate = v8::Isolate::GetCurrent();
+    if (Element *elt = V8Element::toNativeWithTypeCheck(isolate, object)) {
+        // If we've got an DOM Element wrapper, use "DOMNode" kind of memory
+        // location in order to be able to detect potentiall conflicts with
+        // |getAttribute| and |setAttribute|. Do this only for |id| and |class|
+        // attributes, other property read/writes are logged as usual.
+        if (attr == "className")
+            attr = "class";
+        if (attr == "id" || attr == "class") {
+            logOperation(getCurrentAction(), op,
+                         internf("DOMNode[0x%x].%s", elt->getSerial(),
+                                 attr.utf8().data()));
+            return;
+        }
+    }
+
+    logOperation(getCurrentAction(), op,
+                 internf("JSObject[%d].%s", object->GetIdentityHash(),
+                         attr.utf8().data()));
+}
+
+ScriptValue EventRacerLog::ER_readProp(LocalDOMWindow &, const ScriptValue &obj,
+                                       const V8StringResource<> &name, const ScriptValue &val) {
+    if (RefPtr<EventRacerLog> log = EventRacerContext::getLog())
+        log->logFieldAccess(Operation::READ_MEMORY, obj, name);
     return val;
 }
 
-ScriptValue EventRacerLog::ER_writeProp(LocalDOMWindow &, const ScriptValue &,
-                                        const V8StringResource<> &, const ScriptValue &val) {
+ScriptValue EventRacerLog::ER_writeProp(LocalDOMWindow &, const ScriptValue &obj,
+                                        const V8StringResource<> &name, const ScriptValue &val) {
+    if (RefPtr<EventRacerLog> log = EventRacerContext::getLog())
+        log->logFieldAccess(Operation::WRITE_MEMORY, obj, name);
     return val;
 }
 
-void EventRacerLog::ER_delete(LocalDOMWindow &, const V8StringResource <>&) {
+void EventRacerLog::ER_delete(LocalDOMWindow &, const V8StringResource <>&name) {
+    if (RefPtr<EventRacerLog> log = EventRacerContext::getLog())
+        log->logOperation(log->getCurrentAction(), Operation::WRITE_MEMORY, WTF::String(name));
 }
 
-void EventRacerLog::ER_deleteProp(LocalDOMWindow &, const ScriptValue &,
-                                  const V8StringResource<> &) {
-
+void EventRacerLog::ER_deleteProp(LocalDOMWindow &, const ScriptValue &obj,
+                                  const V8StringResource<> &name) {
+    if (RefPtr<EventRacerLog> log = EventRacerContext::getLog())
+        log->logFieldAccess(Operation::WRITE_MEMORY, obj, name);
 }
 
 ScriptValue EventRacerLog::ER_readArray(LocalDOMWindow &, const ScriptValue &arr) {

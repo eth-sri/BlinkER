@@ -106,6 +106,10 @@ private:
     void flushPendingEdges();
     void flushPendingStrings();
 
+    // Convenience function to log JS object property or DOM element attribute
+    // reads or write.
+    void logFieldAccess(Operation::Type, const ScriptValue &obj, const V8StringResource<> &name);
+
     unsigned int m_id;
     EventAction *m_currentAction;
     unsigned int m_nextEventActionId;
