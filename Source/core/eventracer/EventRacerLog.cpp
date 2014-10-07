@@ -21,7 +21,7 @@ PassRefPtr<EventRacerLog> EventRacerLog::create() {
 unsigned int EventRacerLog::m_nextLogId;
 
 EventRacerLog::EventRacerLog()
-    : m_id(++m_nextLogId), m_currentAction(NULL), m_nextEventActionId(1), m_pendingString(1),
+    : m_id(++m_nextLogId), m_currentAction(NULL), m_nextEventActionId(1),
       m_needFlushAll(true)
 {}
 
@@ -77,13 +77,13 @@ void EventRacerLog::flushPendingEdges() {
 }
 
 void EventRacerLog::flushPendingStrings() {
-    if (m_pendingString < m_strings.size()) {
+    if (m_pendingStrings.size()) {
         WTF::Vector<WTF::String> s;
-        s.reserveInitialCapacity(m_strings.size() - m_pendingString);
-        for (size_t i = m_pendingString; i < m_strings.size(); ++i)
-            s.append(m_strings.get(i));
-        m_client->didUpdateStringTable(m_pendingString, s);
-        m_pendingString = m_strings.size();
+        s.reserveInitialCapacity(m_pendingStrings.size());
+        for (size_t i = 0; i < m_pendingStrings.size(); ++i)
+            s.append(m_strings.get(m_pendingStrings[i]));
+        m_client->didUpdateStringTable(0, s); // FIXME(chill):  get rid of the first parameter
+        m_pendingStrings.clear();
     }
 }
 
@@ -176,7 +176,11 @@ void EventRacerLog::logOperation(EventAction *act, Operation::Type type,
 
 // Interns a string.
 size_t EventRacerLog::intern(const WTF::String &s) {
-    return m_strings.put(s);
+    bool added;
+    size_t idx = m_strings.put(s, added);
+    if (added)
+        m_pendingStrings.append(idx);
+    return idx;
 }
 
 // Formats and interns a string.

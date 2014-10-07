@@ -19,7 +19,7 @@ public:
 
     // Adds a string to the set. Returns the index of the added string. Duplicate
     // strings get identical indices.
-    size_t put(const WTF::String &);
+    size_t put(const WTF::String &, bool &);
 
     // Returns a copy of the string for an index.
     WTF::String get(size_t index) const;
@@ -33,12 +33,10 @@ public:
     const char *peek(size_t index) const;
 
     // Returns the number of strings in the set.
-    size_t size() const {
-        return m_offsets.size();
-    }
+    size_t size() const { return m_size; }
 
 private:
-    size_t addL(const char *, size_t);
+    size_t addL(const char *, size_t, bool &);
     bool findL(const char *, size_t, size_t, size_t &) const;
     size_t hashL(const char *, size_t) const;
     size_t hashZ(const char *, size_t &) const;
@@ -46,9 +44,9 @@ private:
     void addHashNoRehash(size_t, size_t);
     void rehashAll();
 
+    size_t m_size;
     WTF::Vector<char> m_data;
     WTF::Vector<size_t> m_hashes;
-    WTF::Vector<size_t> m_offsets;
 };
 
 } // end namespace

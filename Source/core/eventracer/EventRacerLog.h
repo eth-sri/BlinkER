@@ -117,7 +117,7 @@ private:
     EventActionsMapType m_eventActions;
     WTF::Vector<EventAction::Edge> m_pendingEdges;
     StringSet m_strings;
-    size_t m_pendingString;
+    WTF::Vector<size_t> m_pendingStrings;
 
     bool m_needFlushAll;
     OwnPtr<EventRacerLogClient> m_client;

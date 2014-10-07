@@ -12,17 +12,18 @@
 namespace blink {
 
 StringSet::StringSet() {
+    m_size = 1;
+    m_data.append('\0');
     m_hashes.resize(33);
     for (size_t i = 0; i < m_hashes.size(); ++i)
         m_hashes[i] = 0;
-    m_offsets.append(0);
 }
 
 // Adds a string to the set. Returns the index of the added string. Duplicate
 // strings get identical indices.
-size_t StringSet::put(const WTF::String &s) {
+size_t StringSet::put(const WTF::String &s, bool &added) {
     CString tmp = s.utf8();
-    return addL(tmp.data(), tmp.length());
+    return addL(tmp.data(), tmp.length(), added);
 }
 
 // Returns a copy of the string for an index.
@@ -46,20 +47,20 @@ bool StringSet::contains(const WTF::String &s, size_t &index) const {
 // Returns the string for an index. The returned pointer is guaranteed
 // to be valid only until the next modification of StringSet.
 const char *StringSet::peek(size_t index) const {
-    ASSERT(index < m_offsets.size());
-    ASSERT(m_offsets[index] < m_data.size());
-    return &m_data[m_offsets[index]];
+    ASSERT(index < m_data.size());
+    return &m_data[index];
 }
 
-size_t StringSet::addL(const char *s, size_t len) {
-    size_t off, idx, hash = hashL(s, len);
+size_t StringSet::addL(const char *s, size_t len, bool &added) {
+    size_t idx, hash = hashL(s, len);
+    added = false;
     if (!findL(s, len, hash, idx)) {
-        off = m_data.size();
+        idx = m_data.size();
         m_data.append(s, len);
         m_data.append('\0');
-        idx = m_offsets.size();
-        m_offsets.append(off);
         addHash(hash, idx);
+        added = true;
+        ++m_size;
     }
     return idx;
 }
@@ -69,8 +70,8 @@ bool StringSet::findL(const char *s, size_t len, size_t hash, size_t &index) con
        return false;
     size_t p = hash % m_hashes.size();
     while (m_hashes[p]) {
-        ASSERT(m_hashes[p] < m_offsets.size());
-        const char *ss = &m_data[m_offsets[m_hashes[p]]];
+        ASSERT(m_hashes[p] < m_data.size());
+        const char *ss = &m_data[m_hashes[p]];
         if (strncmp(s, ss, len) == 0 && ss[len] == '\0') {
             index = m_hashes[p];
             return true;
@@ -126,8 +127,10 @@ void StringSet::rehashAll() {
     size_t i, len;
     for (i = 0; i < m_hashes.size(); ++i)
         m_hashes[i] = 0;
-    for (i = 1; i < m_offsets.size(); ++i)
-        addHashNoRehash(hashZ(&m_data[m_offsets[i]], len), i);
+    for (size_t index = 1; index < m_data.size(); index += len + 1) {
+        const char *p = &m_data[index];
+        addHashNoRehash(hashZ(p, len), index);
+    }
 }
 
 } // end namespace
