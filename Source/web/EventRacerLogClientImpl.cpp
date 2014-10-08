@@ -22,8 +22,8 @@ void EventRacerLogClientImpl::didHappenBefore(const Vector<EventAction::Edge> &v
     m_client->didHappenBefore(WebVector<WebEventActionEdge>(v));
 }
 
-void EventRacerLogClientImpl::didUpdateStringTable(size_t idx, const Vector<String> &v) {
-    m_client->didUpdateStringTable(idx, WebVector<WebString>(v));
+void EventRacerLogClientImpl::didUpdateStringTable(size_t kind, const Vector<String> &v) {
+    m_client->didUpdateStringTable(kind, WebVector<WebString>(v));
 }
 
 } // end namespace blink

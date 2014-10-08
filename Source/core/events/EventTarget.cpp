@@ -127,10 +127,11 @@ void eventTargetAccess(PassRefPtr<EventRacerLog> lg, Operation::Type op, EventTa
     RefPtr<EventRacerLog> log = lg;
     Node *node = target->toNode();
     String name = node ? node->nodeName() : "";
-    log->logOperation(log->getCurrentAction(), op, log->internf("%s[0x%x].%s",
-                                                                name.isEmpty() ? "" : name.ascii().data(),
-                                                                target->getSerial(),
-                                                                eventType.string().ascii().data()));
+    log->logOperation(log->getCurrentAction(), op,
+                      log->getStrings(VAR_STRINGS).putf("%s[0x%x].%s",
+                                                        name.isEmpty() ? "" : name.ascii().data(),
+                                                        target->getSerial(),
+                                                        eventType.string().ascii().data()));
 }
 
 }
@@ -147,7 +148,8 @@ bool EventTarget::addEventListener(const AtomicString& eventType, PassRefPtr<Eve
         OperationScope scope("addEventListener");
         eventTargetAccess(log, Operation::WRITE_MEMORY, this, eventType);
         log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE,
-                          log->internf("Event[0x%x]", !listener ? 0 : listener->getSerial()));
+                          log->getStrings(VALUE_STRINGS).putf("Event[0x%x]",
+                                                              !listener ? 0 : listener->getSerial()));
     }
 
     // FIXME: listener null check should throw TypeError (and be done in

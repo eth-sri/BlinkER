@@ -864,7 +864,9 @@ const AtomicString& Element::getAttribute(const AtomicString& localName) const
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
     if (log && log->hasAction()) {
         log->logOperation(log->getCurrentAction(), Operation::READ_MEMORY,
-                          log->internf("DOMNode[0x%x].%s", getSerial(), localName.string().ascii().data()));
+                          log->getStrings(VAR_STRINGS).putf("DOMNode[0x%x].%s",
+                                                            getSerial(),
+                                                            localName.string().ascii().data()));
         log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE, value.string());
     }
 
@@ -886,7 +888,8 @@ void Element::setAttribute(const AtomicString& localName, const AtomicString& va
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
     if (log && log->hasAction()) {
         log->logOperation(log->getCurrentAction(), Operation::WRITE_MEMORY,
-                          log->internf("DOMNode[0x%x].%s", getSerial(), localName.string().ascii().data()));
+                          log->getStrings(VAR_STRINGS).putf("DOMNode[0x%x].%s", getSerial(),
+                                                            localName.string().ascii().data()));
         log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE, value.string());
     }
 
@@ -2006,7 +2009,8 @@ void Element::removeAttribute(const AtomicString& name)
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
     if (log && log->hasAction()) {
         log->logOperation(log->getCurrentAction(), Operation::WRITE_MEMORY,
-                          log->internf("DOMNode[0x%x].%s", getSerial(), name.string().ascii().data()));
+                          log->getStrings(VAR_STRINGS).putf("DOMNode[0x%x].%s", getSerial(),
+                                                            name.string().ascii().data()));
         log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE, "");
     }
 

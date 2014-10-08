@@ -8,7 +8,7 @@
 #include "config.h"
 #include "StringSet.h"
 #include <string.h>
-
+#include <stdarg.h>
 #include "EventRacerLogClient.h"
 
 namespace blink {
@@ -26,6 +26,26 @@ StringSet::StringSet() {
 size_t StringSet::put(const WTF::String &s) {
     CString tmp = s.utf8();
     return addL(tmp.data(), tmp.length());
+}
+
+// Formats and interns a string.
+size_t StringSet::putf(const char *fmt, ...) {
+    va_list ap;
+    Vector<char, 64> buf(64);
+
+    va_start(ap, fmt);
+    int len = vsnprintf(buf.data(), buf.size(), fmt, ap);
+    va_end(ap);
+    if (len < 0)
+        return 0;
+    if (static_cast<size_t>(len) >= buf.size()) {
+        buf.resize(len + 1);
+        va_start(ap, fmt);
+        len = vsnprintf(buf.data(), buf.size(), fmt, ap);
+        va_end(ap);
+    }
+
+    return addL(buf.data(), len);
 }
 
 // Returns a copy of the string for an index.
@@ -136,7 +156,7 @@ void StringSet::rehashAll() {
 
 StringSetWithFlush::StringSetWithFlush() : m_pending(1) {}
 
-void StringSetWithFlush::flush(EventRacerLogClient *clnt) {
+void StringSetWithFlush::flush(size_t kind, EventRacerLogClient *clnt) {
     if (m_pending < m_data.size()) {
         size_t pos = m_pending;
         WTF::Vector<WTF::String> v;
@@ -145,7 +165,7 @@ void StringSetWithFlush::flush(EventRacerLogClient *clnt) {
             v.append(s);
             pos += s.length() + 1;
         }
-        clnt->didUpdateStringTable(0, v); // FIXME(chill):  get rid of the first parameter
+        clnt->didUpdateStringTable(kind, v);
         m_pending = pos;
         ASSERT(m_pending == m_data.size());
     }

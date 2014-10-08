@@ -90,7 +90,7 @@ void DOMTimer::removeByID(ExecutionContext* context, int timeoutID)
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
     if (log && log->hasAction()) {
         log->logOperation(log->getCurrentAction(), Operation::WRITE_MEMORY,
-                          log->internf("Timer:%d",  timeoutID));
+                          log->getStrings(VAR_STRINGS).putf("Timer:%d",  timeoutID));
         log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE, "undefined");
     }
 }
@@ -116,9 +116,9 @@ DOMTimer::DOMTimer(ExecutionContext* context, PassOwnPtr<ScheduledAction> action
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
     if (log && log->hasAction()) {
         log->logOperation(log->getCurrentAction(), Operation::WRITE_MEMORY,
-                          log->internf("Timer:%d", m_timeoutID));
+                          log->getStrings(VAR_STRINGS).putf("Timer:%d", m_timeoutID));
         log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE,
-                          log->internf("DOMTimer[0x%x]", getSerial()));
+                          log->getStrings(VALUE_STRINGS).putf("DOMTimer[0x%x]", getSerial()));
     }
 }
 
@@ -146,9 +146,9 @@ void DOMTimer::didFire()
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
     ASSERT(log && log->hasAction());
     log->logOperation(log->getCurrentAction(), Operation::READ_MEMORY,
-                      log->internf("Timer:%d", m_timeoutID));
+                      log->getStrings(VAR_STRINGS).putf("Timer:%d", m_timeoutID));
     log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE,
-                      log->internf("DOMTimer[0x%x]", getSerial()));
+                      log->getStrings(VALUE_STRINGS).putf("DOMTimer[0x%x]", getSerial()));
 
     // Simple case for non-one-shot timers.
     if (isActive()) {
@@ -170,7 +170,7 @@ void DOMTimer::didFire()
     OwnPtr<ScheduledAction> action = m_action.release();
 
     log->logOperation(log->getCurrentAction(), Operation::WRITE_MEMORY,
-                      log->internf("Timer:%d",  m_timeoutID));
+                      log->getStrings(VAR_STRINGS).putf("Timer:%d",  m_timeoutID));
     log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE, "undefined");
 
     // This timer is being deleted; no access to member variables allowed after this point.

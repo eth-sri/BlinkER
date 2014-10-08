@@ -18,6 +18,15 @@ namespace blink {
 
 class EventRacerLogClient;
 
+enum StringTableKind {
+    STRING_TABLE_KIND_FIRST = 0,
+    VAR_STRINGS =  0,
+    SCOPE_STRINGS,
+    SOURCE_STRINGS,
+    VALUE_STRINGS,
+    STRING_TABLE_KIND_COUNT
+};
+
 class EventRacerLog : public RefCounted<EventRacerLog> {
 public:
     ~EventRacerLog();
@@ -68,17 +77,15 @@ public:
     void logOperation(EventAction *act, Operation::Type, size_t = 0);
     void logOperation(EventAction *act, Operation::Type, const WTF::String &);
 
-    // Interns a string.
-    size_t intern(const WTF::String &);
-
-    // Formats and interns a string.
-    size_t internf(const char *, ...);
+    // Returns the |StringSet| of the given |kind|.
+    StringSet &getStrings(enum StringTableKind kind);
 
     // Checks if there is an active event-action.
     bool hasAction() const { return !!m_currentAction; }
 
     // Returns the current event-action.
     EventAction *getCurrentAction() const { return m_currentAction; }
+
 
     // JS instrumentation calls
     static ScriptValue ER_read(LocalDOMWindow &, const V8StringResource<> &,
@@ -116,7 +123,7 @@ private:
     typedef WTF::HashMap<unsigned int, WTF::OwnPtr<EventAction> > EventActionsMapType;
     EventActionsMapType m_eventActions;
     WTF::Vector<EventAction::Edge> m_pendingEdges;
-    StringSetWithFlush m_strings;
+    StringSetWithFlush m_strings[STRING_TABLE_KIND_COUNT];
 
     bool m_needFlushAll;
     OwnPtr<EventRacerLogClient> m_client;

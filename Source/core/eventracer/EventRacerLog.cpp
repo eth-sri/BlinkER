@@ -77,7 +77,8 @@ void EventRacerLog::flushPendingEdges() {
 }
 
 void EventRacerLog::flushPendingStrings() {
-    m_strings.flush(m_client.get());
+    for (int k = STRING_TABLE_KIND_FIRST; k < STRING_TABLE_KIND_COUNT; ++k)
+        m_strings[k].flush(k, m_client.get());
 }
 
 // Creates an event action of the given type.
@@ -164,33 +165,30 @@ void EventRacerLog::logOperation(EventAction *act, Operation::Type type, size_t 
 void EventRacerLog::logOperation(EventAction *act, Operation::Type type,
                                   const WTF::String &loc) {
     ASSERT(act->getState() == EventAction::ACTIVE);
-    act->getOps().append(Operation(type, intern(loc)));
-}
-
-// Interns a string.
-size_t EventRacerLog::intern(const WTF::String &s) {
-    return m_strings.put(s);
-}
-
-// Formats and interns a string.
-size_t EventRacerLog::internf(const char *fmt, ...) {
-    va_list ap;
-    Vector<char, 64> buf(64);
-
-    va_start(ap, fmt);
-    int len = vsnprintf(buf.data(), buf.size(), fmt, ap);
-    va_end(ap);
-    if (len < 0)
-        return 0;
-    if (static_cast<size_t>(len) >= buf.size()) {
-        buf.resize(len + 1);
-        va_start(ap, fmt);
-        len = vsnprintf(buf.data(), buf.size(), fmt, ap);
-        va_end(ap);
+    enum StringTableKind k;
+    switch(type) {
+    case Operation::ENTER_SCOPE:
+        k = SCOPE_STRINGS;
+        break;
+    case Operation::READ_MEMORY:
+    case Operation::WRITE_MEMORY:
+        k = VAR_STRINGS;
+        break;
+    case Operation::MEMORY_VALUE:
+        k = VALUE_STRINGS;
+        break;
+    default:
+    case Operation::EXIT_SCOPE: 
+    case Operation::TRIGGER_ARC:
+        ASSERT_NOT_REACHED();
     }
+    act->getOps().append(Operation(type, m_strings[k].put(loc)));
+}
 
-    String str(buf.data(), len);
-    return intern(str);
+// Returns the |StringSet| of the given |kind|.
+StringSet &EventRacerLog::getStrings(enum StringTableKind kind) {
+    ASSERT(kind < STRING_TABLE_KIND_COUNT);
+    return m_strings[kind];
 }
 
 // JS instrumentation calls
@@ -226,15 +224,15 @@ void EventRacerLog::logFieldAccess(Operation::Type op, const ScriptValue &obj,
             attr = "class";
         if (attr == "id" || attr == "class") {
             logOperation(getCurrentAction(), op,
-                         internf("DOMNode[0x%x].%s", elt->getSerial(),
-                                 attr.utf8().data()));
+                         m_strings[VAR_STRINGS].putf("DOMNode[0x%x].%s", elt->getSerial(),
+                                                     attr.utf8().data()));
             return;
         }
     }
 
     logOperation(getCurrentAction(), op,
-                 internf("JSObject[%d].%s", object->GetIdentityHash(),
-                         attr.utf8().data()));
+                 m_strings[VAR_STRINGS].putf("JSObject[%d].%s", object->GetIdentityHash(),
+                                             attr.utf8().data()));
 }
 
 ScriptValue EventRacerLog::ER_readProp(LocalDOMWindow &, const ScriptValue &obj,

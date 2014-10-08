@@ -23,6 +23,9 @@ public:
     // strings get identical indices.
     size_t put(const WTF::String &);
 
+    // Formats a string and calls |put|.
+    size_t putf(const char *fmt, ...);
+
     // Returns a copy of the string for an index.
     WTF::String get(size_t index) const;
 
@@ -55,7 +58,7 @@ protected:
 class StringSetWithFlush : public StringSet {
 public:
     StringSetWithFlush();
-    void flush(EventRacerLogClient *);
+    void flush(size_t kind, EventRacerLogClient *);
 protected:
     size_t m_pending;
 };

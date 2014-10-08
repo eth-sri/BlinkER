@@ -174,11 +174,11 @@ Element* TreeScope::getElementById(const AtomicString& elementId) const
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
     if (log && log->hasAction()) {
         log->logOperation(log->getCurrentAction(), Operation::READ_MEMORY,
-                          log->internf("Tree[0x%x]:%s", document().getSerial(), 
-                                       elementId.string().ascii().data()));
+                          log->getStrings(VAR_STRINGS).putf("Tree[0x%x]:%s", document().getSerial(), 
+                                                            elementId.string().ascii().data()));
         if (elt) {
             log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE,
-                              log->internf("DOMNode[0x%x]", elt->getSerial()));
+                              log->getStrings(VALUE_STRINGS).putf("DOMNode[0x%x]", elt->getSerial()));
         } else {
             log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE, "undefined");
         }
@@ -196,8 +196,8 @@ const WillBeHeapVector<RawPtrWillBeMember<Element> >& TreeScope::getAllElementsB
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
     if (log && log->hasAction()) {
         log->logOperation(log->getCurrentAction(), Operation::READ_MEMORY,
-                          log->internf("Tree[0x%x]:%s", document().getSerial(), 
-                                       elementId.string().ascii().data()));
+                          log->getStrings(VAR_STRINGS).putf("Tree[0x%x]:%s", document().getSerial(), 
+                                                            elementId.string().ascii().data()));
     }
 
     if (!m_elementsById)
@@ -216,11 +216,11 @@ void TreeScope::addElementById(const AtomicString& elementId, Element* element)
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
     if (log && log->hasAction()) {
         log->logOperation(log->getCurrentAction(), Operation::WRITE_MEMORY,
-                          log->internf("Tree[0x%x]:%s", document().getSerial(), 
-                                       elementId.string().ascii().data()));
+                          log->getStrings(VAR_STRINGS).putf("Tree[0x%x]:%s", document().getSerial(), 
+                                                            elementId.string().ascii().data()));
         if (element) {
             log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE,
-                              log->internf("DOMNode[0x%x]", element->getSerial()));
+                              log->getStrings(VALUE_STRINGS).putf("DOMNode[0x%x]", element->getSerial()));
         } else {
             log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE, "undefined");
         }
@@ -232,11 +232,11 @@ void TreeScope::removeElementById(const AtomicString& elementId, Element* elemen
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
     if (log && log->hasAction()) {
         log->logOperation(log->getCurrentAction(), Operation::WRITE_MEMORY,
-                          log->internf("Tree[0x%x]:%s", document().getSerial(), 
-                                       elementId.string().ascii().data()));
+                          log->getStrings(VAR_STRINGS).putf("Tree[0x%x]:%s", document().getSerial(), 
+                                                            elementId.string().ascii().data()));
         if (element) {
             log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE,
-                              log->internf("DOMNode[0x%x]", element->getSerial()));
+                              log->getStrings(VALUE_STRINGS).putf("DOMNode[0x%x]", element->getSerial()));
         } else {
             log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE, "undefined");
         }
