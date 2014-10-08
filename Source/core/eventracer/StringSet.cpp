@@ -9,6 +9,8 @@
 #include "StringSet.h"
 #include <string.h>
 
+#include "EventRacerLogClient.h"
+
 namespace blink {
 
 StringSet::StringSet() {
@@ -21,9 +23,9 @@ StringSet::StringSet() {
 
 // Adds a string to the set. Returns the index of the added string. Duplicate
 // strings get identical indices.
-size_t StringSet::put(const WTF::String &s, bool &added) {
+size_t StringSet::put(const WTF::String &s) {
     CString tmp = s.utf8();
-    return addL(tmp.data(), tmp.length(), added);
+    return addL(tmp.data(), tmp.length());
 }
 
 // Returns a copy of the string for an index.
@@ -51,15 +53,13 @@ const char *StringSet::peek(size_t index) const {
     return &m_data[index];
 }
 
-size_t StringSet::addL(const char *s, size_t len, bool &added) {
+size_t StringSet::addL(const char *s, size_t len) {
     size_t idx, hash = hashL(s, len);
-    added = false;
     if (!findL(s, len, hash, idx)) {
         idx = m_data.size();
         m_data.append(s, len);
         m_data.append('\0');
         addHash(hash, idx);
-        added = true;
         ++m_size;
     }
     return idx;
@@ -130,6 +130,24 @@ void StringSet::rehashAll() {
     for (size_t index = 1; index < m_data.size(); index += len + 1) {
         const char *p = &m_data[index];
         addHashNoRehash(hashZ(p, len), index);
+    }
+}
+
+
+StringSetWithFlush::StringSetWithFlush() : m_pending(1) {}
+
+void StringSetWithFlush::flush(EventRacerLogClient *clnt) {
+    if (m_pending < m_data.size()) {
+        size_t pos = m_pending;
+        WTF::Vector<WTF::String> v;
+        while(pos < m_data.size()) {
+            WTF::String s = get(pos);
+            v.append(s);
+            pos += s.length() + 1;
+        }
+        clnt->didUpdateStringTable(0, v); // FIXME(chill):  get rid of the first parameter
+        m_pending = pos;
+        ASSERT(m_pending == m_data.size());
     }
 }
 

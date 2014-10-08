@@ -116,8 +116,7 @@ private:
     typedef WTF::HashMap<unsigned int, WTF::OwnPtr<EventAction> > EventActionsMapType;
     EventActionsMapType m_eventActions;
     WTF::Vector<EventAction::Edge> m_pendingEdges;
-    StringSet m_strings;
-    WTF::Vector<size_t> m_pendingStrings;
+    StringSetWithFlush m_strings;
 
     bool m_needFlushAll;
     OwnPtr<EventRacerLogClient> m_client;

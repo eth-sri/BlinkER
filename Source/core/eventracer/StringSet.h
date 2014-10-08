@@ -13,13 +13,15 @@
 
 namespace blink {
 
+class EventRacerLogClient;
+
 class StringSet {
 public:
     StringSet();
 
     // Adds a string to the set. Returns the index of the added string. Duplicate
     // strings get identical indices.
-    size_t put(const WTF::String &, bool &);
+    size_t put(const WTF::String &);
 
     // Returns a copy of the string for an index.
     WTF::String get(size_t index) const;
@@ -35,8 +37,8 @@ public:
     // Returns the number of strings in the set.
     size_t size() const { return m_size; }
 
-private:
-    size_t addL(const char *, size_t, bool &);
+protected:
+    size_t addL(const char *, size_t);
     bool findL(const char *, size_t, size_t, size_t &) const;
     size_t hashL(const char *, size_t) const;
     size_t hashZ(const char *, size_t &) const;
@@ -47,6 +49,15 @@ private:
     size_t m_size;
     WTF::Vector<char> m_data;
     WTF::Vector<size_t> m_hashes;
+};
+
+
+class StringSetWithFlush : public StringSet {
+public:
+    StringSetWithFlush();
+    void flush(EventRacerLogClient *);
+protected:
+    size_t m_pending;
 };
 
 } // end namespace

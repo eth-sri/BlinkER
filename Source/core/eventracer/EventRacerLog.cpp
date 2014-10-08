@@ -77,14 +77,7 @@ void EventRacerLog::flushPendingEdges() {
 }
 
 void EventRacerLog::flushPendingStrings() {
-    if (m_pendingStrings.size()) {
-        WTF::Vector<WTF::String> s;
-        s.reserveInitialCapacity(m_pendingStrings.size());
-        for (size_t i = 0; i < m_pendingStrings.size(); ++i)
-            s.append(m_strings.get(m_pendingStrings[i]));
-        m_client->didUpdateStringTable(0, s); // FIXME(chill):  get rid of the first parameter
-        m_pendingStrings.clear();
-    }
+    m_strings.flush(m_client.get());
 }
 
 // Creates an event action of the given type.
@@ -176,11 +169,7 @@ void EventRacerLog::logOperation(EventAction *act, Operation::Type type,
 
 // Interns a string.
 size_t EventRacerLog::intern(const WTF::String &s) {
-    bool added;
-    size_t idx = m_strings.put(s, added);
-    if (added)
-        m_pendingStrings.append(idx);
-    return idx;
+    return m_strings.put(s);
 }
 
 // Formats and interns a string.
