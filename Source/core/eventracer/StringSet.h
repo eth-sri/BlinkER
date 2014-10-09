@@ -23,6 +23,9 @@ public:
     // strings get identical indices.
     size_t put(const WTF::String &);
 
+    // Adds a UTF-8 encoded string to the set.
+    size_t put(const char *, size_t);
+
     // Formats a string and calls |put|.
     size_t putf(const char *fmt, ...);
 
@@ -41,7 +44,6 @@ public:
     size_t size() const { return m_size; }
 
 protected:
-    size_t addL(const char *, size_t);
     bool findL(const char *, size_t, size_t, size_t &) const;
     size_t hashL(const char *, size_t) const;
     size_t hashZ(const char *, size_t &) const;

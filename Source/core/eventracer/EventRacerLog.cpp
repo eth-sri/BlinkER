@@ -178,7 +178,7 @@ void EventRacerLog::logOperation(EventAction *act, Operation::Type type,
         k = VALUE_STRINGS;
         break;
     default:
-    case Operation::EXIT_SCOPE: 
+    case Operation::EXIT_SCOPE:
     case Operation::TRIGGER_ARC:
         ASSERT_NOT_REACHED();
     }
@@ -191,23 +191,9 @@ StringSet &EventRacerLog::getStrings(enum StringTableKind kind) {
     return m_strings[kind];
 }
 
-// JS instrumentation calls
-ScriptValue EventRacerLog::ER_read(LocalDOMWindow &, const V8StringResource<> &name,
-                                   const ScriptValue &val) {
-    if (RefPtr<EventRacerLog> log = EventRacerContext::getLog())
-        log->logOperation(log->getCurrentAction(), Operation::READ_MEMORY, WTF::String(name));
-    return val;
-}
-
-ScriptValue EventRacerLog::ER_write(LocalDOMWindow &, const V8StringResource<> &name,
-                                    const ScriptValue &val) {
-    if (RefPtr<EventRacerLog> log = EventRacerContext::getLog())
-        log->logOperation(log->getCurrentAction(), Operation::WRITE_MEMORY, WTF::String(name));
-    return val;
-}
-
 void EventRacerLog::logFieldAccess(Operation::Type op, const ScriptValue &obj,
-                                   const V8StringResource<> &name) {
+                                   const V8StringResource<> &name,
+                                   const ScriptValue *val) {
     // Check that we in fact have an object.
     v8::Handle<v8::Value> v = obj.v8Value();
     if (!v->IsObject())
@@ -226,6 +212,8 @@ void EventRacerLog::logFieldAccess(Operation::Type op, const ScriptValue &obj,
             logOperation(getCurrentAction(), op,
                          m_strings[VAR_STRINGS].putf("DOMNode[0x%x].%s", elt->getSerial(),
                                                      attr.utf8().data()));
+            if (val)
+                logMemoryValue(*val);
             return;
         }
     }
@@ -233,31 +221,106 @@ void EventRacerLog::logFieldAccess(Operation::Type op, const ScriptValue &obj,
     logOperation(getCurrentAction(), op,
                  m_strings[VAR_STRINGS].putf("JSObject[%d].%s", object->GetIdentityHash(),
                                              attr.utf8().data()));
+    if (val)
+        logMemoryValue(*val);
+}
+
+void EventRacerLog::logMemoryValue(const ScriptValue &val) {
+    v8::Handle<v8::Value> v = val.v8Value();
+    if (v->IsUndefined())
+        logOperation(getCurrentAction(), Operation::MEMORY_VALUE, "undefined");
+    else if (v->IsNull())
+        logOperation(getCurrentAction(), Operation::MEMORY_VALUE, "NULL");
+    else if (v->IsTrue())
+        logOperation(getCurrentAction(), Operation::MEMORY_VALUE, "true");
+    else if (v->IsFalse())
+        logOperation(getCurrentAction(), Operation::MEMORY_VALUE, "false");
+    else if (v->IsString()) {
+        v8::String::Utf8Value str(v);
+        if (str.length()) {
+            logOperation(getCurrentAction(), Operation::MEMORY_VALUE,
+                         m_strings[VALUE_STRINGS].put(*str, str.length()));
+        }
+    } else if (v->IsStringObject()) {
+        v8::String::Utf8Value str(v);
+        if (str.length()) {
+            logOperation(getCurrentAction(), Operation::MEMORY_VALUE,
+                         m_strings[VALUE_STRINGS].put(*str, str.length()));
+        }
+    } else if (v->IsObject()) {
+        v8::Local<v8::Object> object = v->ToObject();
+        v8::Isolate *isolate = v8::Isolate::GetCurrent();
+        if (Element *elt = V8Element::toNativeWithTypeCheck(isolate, object)) {
+            logOperation(getCurrentAction(), Operation::MEMORY_VALUE,
+                         m_strings[VALUE_STRINGS].putf("DOMNode[0x%x]", elt->getSerial()));
+        } else {
+            logOperation(getCurrentAction(), Operation::MEMORY_VALUE,
+                         m_strings[VALUE_STRINGS].putf("JSObject[%d]", object->GetIdentityHash()));
+        }
+    } else if (v->IsBoolean())
+        logOperation(getCurrentAction(), Operation::MEMORY_VALUE,
+                     m_strings[VALUE_STRINGS].put(v->BooleanValue() ? "true" : "false"));
+    else if (v->IsBooleanObject()) {
+        logOperation(getCurrentAction(), Operation::MEMORY_VALUE,
+                     m_strings[VALUE_STRINGS].put(v->BooleanValue() ? "true" : "false"));
+    } else if (v->IsNumber())
+        logOperation(getCurrentAction(), Operation::MEMORY_VALUE,
+                     m_strings[VALUE_STRINGS].putf("%f", v->NumberValue()));
+    else if (v->IsNumberObject())
+        logOperation(getCurrentAction(), Operation::MEMORY_VALUE,
+                     m_strings[VALUE_STRINGS].putf("%f", v->NumberValue()));
+    else if (v->IsInt32())
+        logOperation(getCurrentAction(), Operation::MEMORY_VALUE,
+                     m_strings[VALUE_STRINGS].putf("%d", v->Int32Value()));
+    else if (v->IsUint32())
+        logOperation(getCurrentAction(), Operation::MEMORY_VALUE,
+                     m_strings[VALUE_STRINGS].putf("%d", v->Uint32Value()));
+}
+
+// JS instrumentation calls
+ScriptValue EventRacerLog::ER_read(LocalDOMWindow &, const V8StringResource<> &name,
+                                   const ScriptValue &val) {
+    if (RefPtr<EventRacerLog> log = EventRacerContext::getLog()) {
+        log->logOperation(log->getCurrentAction(), Operation::READ_MEMORY, WTF::String(name));
+        log->logMemoryValue(val);
+    }
+    return val;
+}
+
+ScriptValue EventRacerLog::ER_write(LocalDOMWindow &, const V8StringResource<> &name,
+                                    const ScriptValue &val) {
+    if (RefPtr<EventRacerLog> log = EventRacerContext::getLog()) {
+        log->logOperation(log->getCurrentAction(), Operation::WRITE_MEMORY, WTF::String(name));
+        log->logMemoryValue(val);
+    }
+    return val;
 }
 
 ScriptValue EventRacerLog::ER_readProp(LocalDOMWindow &, const ScriptValue &obj,
                                        const V8StringResource<> &name, const ScriptValue &val) {
     if (RefPtr<EventRacerLog> log = EventRacerContext::getLog())
-        log->logFieldAccess(Operation::READ_MEMORY, obj, name);
+        log->logFieldAccess(Operation::READ_MEMORY, obj, name, &val);
     return val;
 }
 
 ScriptValue EventRacerLog::ER_writeProp(LocalDOMWindow &, const ScriptValue &obj,
                                         const V8StringResource<> &name, const ScriptValue &val) {
     if (RefPtr<EventRacerLog> log = EventRacerContext::getLog())
-        log->logFieldAccess(Operation::WRITE_MEMORY, obj, name);
+        log->logFieldAccess(Operation::WRITE_MEMORY, obj, name, &val);
     return val;
 }
 
 void EventRacerLog::ER_delete(LocalDOMWindow &, const V8StringResource <>&name) {
-    if (RefPtr<EventRacerLog> log = EventRacerContext::getLog())
+    if (RefPtr<EventRacerLog> log = EventRacerContext::getLog()) {
         log->logOperation(log->getCurrentAction(), Operation::WRITE_MEMORY, WTF::String(name));
+        log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE, "undefined");
+    }
 }
 
 void EventRacerLog::ER_deleteProp(LocalDOMWindow &, const ScriptValue &obj,
                                   const V8StringResource<> &name) {
     if (RefPtr<EventRacerLog> log = EventRacerContext::getLog())
-        log->logFieldAccess(Operation::WRITE_MEMORY, obj, name);
+        log->logFieldAccess(Operation::WRITE_MEMORY, obj, name, NULL);
 }
 
 ScriptValue EventRacerLog::ER_readArray(LocalDOMWindow &, const ScriptValue &arr) {

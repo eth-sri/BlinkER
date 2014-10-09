@@ -25,7 +25,7 @@ StringSet::StringSet() {
 // strings get identical indices.
 size_t StringSet::put(const WTF::String &s) {
     CString tmp = s.utf8();
-    return addL(tmp.data(), tmp.length());
+    return put(tmp.data(), tmp.length());
 }
 
 // Formats and interns a string.
@@ -45,7 +45,7 @@ size_t StringSet::putf(const char *fmt, ...) {
         va_end(ap);
     }
 
-    return addL(buf.data(), len);
+    return put(buf.data(), len);
 }
 
 // Returns a copy of the string for an index.
@@ -73,7 +73,7 @@ const char *StringSet::peek(size_t index) const {
     return &m_data[index];
 }
 
-size_t StringSet::addL(const char *s, size_t len) {
+size_t StringSet::put(const char *s, size_t len) {
     size_t idx, hash = hashL(s, len);
     if (!findL(s, len, hash, idx)) {
         idx = m_data.size();

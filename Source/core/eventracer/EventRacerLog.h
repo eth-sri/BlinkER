@@ -115,7 +115,11 @@ private:
 
     // Convenience function to log JS object property or DOM element attribute
     // reads or write.
-    void logFieldAccess(Operation::Type, const ScriptValue &obj, const V8StringResource<> &name);
+    void logFieldAccess(Operation::Type, const ScriptValue &obj, const V8StringResource<> &name,
+                        const ScriptValue *val);
+
+    // Convenience function to format and log a value.
+    void logMemoryValue(const ScriptValue &);
 
     unsigned int m_id;
     EventAction *m_currentAction;
