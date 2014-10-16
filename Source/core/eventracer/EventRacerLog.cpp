@@ -280,7 +280,8 @@ void EventRacerLog::logMemoryValue(const ScriptValue &val) {
 // JS instrumentation calls
 ScriptValue EventRacerLog::ER_read(LocalDOMWindow &, const V8StringResource<> &name,
                                    const ScriptValue &val) {
-    if (RefPtr<EventRacerLog> log = EventRacerContext::getLog()) {
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction()) {
         log->logOperation(log->getCurrentAction(), Operation::READ_MEMORY, WTF::String(name));
         log->logMemoryValue(val);
     }
@@ -289,7 +290,8 @@ ScriptValue EventRacerLog::ER_read(LocalDOMWindow &, const V8StringResource<> &n
 
 ScriptValue EventRacerLog::ER_write(LocalDOMWindow &, const V8StringResource<> &name,
                                     const ScriptValue &val) {
-    if (RefPtr<EventRacerLog> log = EventRacerContext::getLog()) {
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction()) {
         log->logOperation(log->getCurrentAction(), Operation::WRITE_MEMORY, WTF::String(name));
         log->logMemoryValue(val);
     }
@@ -298,20 +300,23 @@ ScriptValue EventRacerLog::ER_write(LocalDOMWindow &, const V8StringResource<> &
 
 ScriptValue EventRacerLog::ER_readProp(LocalDOMWindow &, const ScriptValue &obj,
                                        const V8StringResource<> &name, const ScriptValue &val) {
-    if (RefPtr<EventRacerLog> log = EventRacerContext::getLog())
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction())
         log->logFieldAccess(Operation::READ_MEMORY, obj, name, &val);
     return val;
 }
 
 ScriptValue EventRacerLog::ER_writeProp(LocalDOMWindow &, const ScriptValue &obj,
                                         const V8StringResource<> &name, const ScriptValue &val) {
-    if (RefPtr<EventRacerLog> log = EventRacerContext::getLog())
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction())
         log->logFieldAccess(Operation::WRITE_MEMORY, obj, name, &val);
     return val;
 }
 
 void EventRacerLog::ER_delete(LocalDOMWindow &, const V8StringResource <>&name) {
-    if (RefPtr<EventRacerLog> log = EventRacerContext::getLog()) {
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction()) {
         log->logOperation(log->getCurrentAction(), Operation::WRITE_MEMORY, WTF::String(name));
         log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE, "undefined");
     }
@@ -319,7 +324,8 @@ void EventRacerLog::ER_delete(LocalDOMWindow &, const V8StringResource <>&name) 
 
 void EventRacerLog::ER_deleteProp(LocalDOMWindow &, const ScriptValue &obj,
                                   const V8StringResource<> &name) {
-    if (RefPtr<EventRacerLog> log = EventRacerContext::getLog())
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction())
         log->logFieldAccess(Operation::WRITE_MEMORY, obj, name, NULL);
 }
 
