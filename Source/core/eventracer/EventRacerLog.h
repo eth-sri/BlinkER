@@ -92,12 +92,17 @@ public:
                                const ScriptValue &);
     static ScriptValue ER_write(LocalDOMWindow &, const V8StringResource<> &,
                                 const ScriptValue &);
+    static ScriptValue ER_writeFunc(LocalDOMWindow &, const V8StringResource<> &,
+                                    const ScriptValue &, int);
     static ScriptValue ER_readProp(LocalDOMWindow &, const ScriptValue &,
                                    const V8StringResource<> &,
                                    const ScriptValue &);
     static ScriptValue ER_writeProp(LocalDOMWindow &, const ScriptValue &,
                                     const V8StringResource<> &,
                                     const ScriptValue &);
+    static ScriptValue ER_writePropFunc(LocalDOMWindow &, const ScriptValue &,
+                                        const V8StringResource<> &,
+                                        const ScriptValue &, int);
     static void ER_delete(LocalDOMWindow &, const V8StringResource<> &);
     static void ER_deleteProp(LocalDOMWindow &, const ScriptValue &,
                               const V8StringResource<> &);
@@ -116,10 +121,10 @@ private:
     // Convenience function to log JS object property or DOM element attribute
     // reads or write.
     void logFieldAccess(Operation::Type, const ScriptValue &obj, const V8StringResource<> &name,
-                        const ScriptValue *val);
+                        const ScriptValue *val, int = -1);
 
     // Convenience function to format and log a value.
-    void logMemoryValue(const ScriptValue &);
+    void logMemoryValue(const ScriptValue &, int = -1);
 
     unsigned int m_id;
     EventAction *m_currentAction;

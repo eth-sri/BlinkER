@@ -5,8 +5,10 @@
 ] interface EventRacer {
     any ER_read(DOMString name, any value);
     any ER_write(DOMString name, any value);
+    any ER_writeFunc(DOMString name, any value, long id);
     any ER_readProp(any obj, DOMString name, any value);
     any ER_writeProp(any obj, DOMString name, any value);
+    any ER_writePropFunc(any obj, DOMString name, any value, long id);
     void ER_delete(DOMString name);
     void ER_deleteProp(any obj, DOMString name);
     any ER_readArray(any obj);

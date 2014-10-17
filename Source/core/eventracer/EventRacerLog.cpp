@@ -193,7 +193,7 @@ StringSet &EventRacerLog::getStrings(enum StringTableKind kind) {
 
 void EventRacerLog::logFieldAccess(Operation::Type op, const ScriptValue &obj,
                                    const V8StringResource<> &name,
-                                   const ScriptValue *val) {
+                                   const ScriptValue *val, int fnid) {
     // Check that we in fact have an object.
     v8::Handle<v8::Value> v = obj.v8Value();
     if (!v->IsObject())
@@ -213,7 +213,7 @@ void EventRacerLog::logFieldAccess(Operation::Type op, const ScriptValue &obj,
                          m_strings[VAR_STRINGS].putf("DOMNode[0x%x].%s", elt->getSerial(),
                                                      attr.utf8().data()));
             if (val)
-                logMemoryValue(*val);
+                logMemoryValue(*val, fnid);
             return;
         }
     }
@@ -222,10 +222,15 @@ void EventRacerLog::logFieldAccess(Operation::Type op, const ScriptValue &obj,
                  m_strings[VAR_STRINGS].putf("JSObject[%d].%s", object->GetIdentityHash(),
                                              attr.utf8().data()));
     if (val)
-        logMemoryValue(*val);
+        logMemoryValue(*val, fnid);
 }
 
-void EventRacerLog::logMemoryValue(const ScriptValue &val) {
+void EventRacerLog::logMemoryValue(const ScriptValue &val, int fnid) {
+    if (fnid > 0) {
+        logOperation(getCurrentAction(), Operation::MEMORY_VALUE,
+                     m_strings[VALUE_STRINGS].putf("Function[%d]", fnid));
+        return;
+    }
     v8::Handle<v8::Value> v = val.v8Value();
     if (v->IsUndefined())
         logOperation(getCurrentAction(), Operation::MEMORY_VALUE, "undefined");
@@ -298,6 +303,16 @@ ScriptValue EventRacerLog::ER_write(LocalDOMWindow &, const V8StringResource<> &
     return val;
 }
 
+ScriptValue EventRacerLog::ER_writeFunc(LocalDOMWindow &, const V8StringResource<> &name,
+                                        const ScriptValue &val, int id) {
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction()) {
+        log->logOperation(log->getCurrentAction(), Operation::WRITE_MEMORY, WTF::String(name));
+        log->logMemoryValue(val, id);
+    }
+    return val;
+}
+
 ScriptValue EventRacerLog::ER_readProp(LocalDOMWindow &, const ScriptValue &obj,
                                        const V8StringResource<> &name, const ScriptValue &val) {
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
@@ -311,6 +326,15 @@ ScriptValue EventRacerLog::ER_writeProp(LocalDOMWindow &, const ScriptValue &obj
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
     if (log && log->hasAction())
         log->logFieldAccess(Operation::WRITE_MEMORY, obj, name, &val);
+    return val;
+}
+
+ScriptValue EventRacerLog::ER_writePropFunc(LocalDOMWindow &, const ScriptValue &obj,
+                                            const V8StringResource<> &name, const ScriptValue &val,
+                                            int id) {
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction())
+        log->logFieldAccess(Operation::WRITE_MEMORY, obj, name, &val, id);
     return val;
 }
 
