@@ -157,13 +157,20 @@ void EventRacerLog::join(unsigned int id, EventAction *succ) {
 }
 
 // Records an operation, performed by the event action |act|.
-void EventRacerLog::logOperation(EventAction *act, Operation::Type type, size_t loc) {
+void EventRacerLog::logOperation(EventAction *act, Operation::Type type, size_t loc, bool ignoreEmpty) {
     ASSERT(act->getState() == EventAction::ACTIVE);
+    if (ignoreEmpty && type == Operation::EXIT_SCOPE) {
+        EventAction::OpsType &ops = act->getOps();
+        if (ops.size() && ops.last().getType() == Operation::ENTER_SCOPE) {
+            ops.shrink(ops.size() - 1);
+            return;
+        }
+    }
     act->getOps().append(Operation(type, loc));
 }
 
 void EventRacerLog::logOperation(EventAction *act, Operation::Type type,
-                                  const WTF::String &loc) {
+                                 const WTF::String &loc, bool ignoreEmpty) {
     ASSERT(act->getState() == EventAction::ACTIVE);
     enum StringTableKind k;
     switch(type) {
@@ -182,7 +189,7 @@ void EventRacerLog::logOperation(EventAction *act, Operation::Type type,
     case Operation::TRIGGER_ARC:
         ASSERT_NOT_REACHED();
     }
-    act->getOps().append(Operation(type, m_strings[k].put(loc)));
+    logOperation(act, type, m_strings[k].put(loc), ignoreEmpty);
 }
 
 // Returns the |StringSet| of the given |kind|.
@@ -353,12 +360,66 @@ void EventRacerLog::ER_deleteProp(LocalDOMWindow &, const ScriptValue &obj,
         log->logFieldAccess(Operation::WRITE_MEMORY, obj, name, NULL);
 }
 
+void EventRacerLog::ER_enterFunction(LocalDOMWindow &, const V8StringResource<> &, int scriptId, int fnId) {
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction()) {
+        // Find the script source code and url.
+        Script scr = {0,};
+        log->findScript(scriptId, scr);
+
+        // Get the line number from the stack trace.
+        int line = 0;
+        v8::Local<v8::StackTrace> trace = v8::StackTrace::CurrentStackTrace(
+            v8::Isolate::GetCurrent(), 2,
+            v8::StackTrace::kLineNumber);
+        if (trace->GetFrameCount() > 1)
+            line = trace->GetFrame(1)->GetLineNumber() - scr.line;
+        log->logOperation(log->getCurrentAction(), Operation::ENTER_SCOPE,
+                          log->m_strings[SCOPE_STRINGS].putf("Call (fn=%d #%d) line %d-%d %s [[function:%p]]",
+                                                             fnId,
+                                                             scr.srcId,
+                                                             line,
+                                                             0,
+                                                             log->m_strings[VALUE_STRINGS].peek(scr.urlId),
+                                                             0xbadc0de));
+    }
+}
+
+ScriptValue EventRacerLog::ER_exitFunction(LocalDOMWindow &, const ScriptValue &val) {
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction())
+        log->logOperation(log->getCurrentAction(), Operation::EXIT_SCOPE, 0, true);
+
+    return val;
+}
+
 ScriptValue EventRacerLog::ER_readArray(LocalDOMWindow &, const ScriptValue &arr) {
     return arr;
 }
 
 ScriptValue EventRacerLog::ER_writeArray(LocalDOMWindow &, const ScriptValue &arr) {
     return arr;
+}
+
+bool EventRacerLog::findScript(int id, Script &out) const {
+    WTF::HashMap<int, Script>::const_iterator p = m_scriptMap.find(id);
+    if (p == m_scriptMap.end())
+        return false;
+    else {
+        out = p->value;
+        return true;
+    }
+}
+
+// Registers a JS source with its V8 id.
+void EventRacerLog::registerScript(int line, int column, const char *src, size_t srcLen, const char *url, size_t urlLen, int id) {
+    if (!m_scriptMap.contains(id)) {
+        Script e = {line,
+                    column,
+                    m_strings[SOURCE_STRINGS].put(src, srcLen),
+                    m_strings[VALUE_STRINGS].put(url, urlLen)};
+        m_scriptMap.add(id, e);
+    }
 }
 
 } // end namespace blink

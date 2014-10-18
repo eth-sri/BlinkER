@@ -11,6 +11,8 @@
     any ER_writePropFunc(any obj, DOMString name, any value, long id);
     void ER_delete(DOMString name);
     void ER_deleteProp(any obj, DOMString name);
+    void ER_enterFunction(DOMString name, long scriptId, long fnId);
+    any ER_exitFunction(any val);
     any ER_readArray(any obj);
     any ER_writeArray(any obj);
 };

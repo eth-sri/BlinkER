@@ -10,6 +10,7 @@
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/ThreadSpecific.h"
+#include "v8.h"
 
 #include <vector>
 #include <utility>
@@ -74,8 +75,8 @@ public:
     void join(unsigned int id, EventAction *succ);
 
     // Records an operation, performed by the event action |act|.
-    void logOperation(EventAction *act, Operation::Type, size_t = 0);
-    void logOperation(EventAction *act, Operation::Type, const WTF::String &);
+    void logOperation(EventAction *act, Operation::Type, size_t = 0, bool =  false);
+    void logOperation(EventAction *act, Operation::Type, const WTF::String &, bool = false);
 
     // Returns the |StringSet| of the given |kind|.
     StringSet &getStrings(enum StringTableKind kind);
@@ -86,6 +87,12 @@ public:
     // Returns the current event-action.
     EventAction *getCurrentAction() const { return m_currentAction; }
 
+    // Pops the old and pushes the new stack frames for each JS read/write
+    // operation.
+    void pushPopJSFrames();
+
+    // Registers a JS source with its V8 id.
+    void registerScript(int line, int column, const char *src, size_t len, const char *url, size_t ulen, int id);
 
     // JS instrumentation calls
     static ScriptValue ER_read(LocalDOMWindow &, const V8StringResource<> &,
@@ -106,6 +113,9 @@ public:
     static void ER_delete(LocalDOMWindow &, const V8StringResource<> &);
     static void ER_deleteProp(LocalDOMWindow &, const ScriptValue &,
                               const V8StringResource<> &);
+    static void ER_enterFunction(LocalDOMWindow &, const V8StringResource<> &, int, int);
+    static ScriptValue ER_exitFunction(LocalDOMWindow &, const ScriptValue &);
+
     static ScriptValue ER_readArray(LocalDOMWindow &, const ScriptValue &);
     static ScriptValue ER_writeArray(LocalDOMWindow &, const ScriptValue &);
 
@@ -136,6 +146,16 @@ private:
 
     bool m_needFlushAll;
     OwnPtr<EventRacerLogClient> m_client;
+
+    // Map from V8 script identifiers to ER script identifiers.
+    struct Script {
+        int line;
+        int column;
+        size_t srcId;
+        size_t urlId;
+    };
+    WTF::HashMap<int, Script> m_scriptMap;
+    bool findScript(int, Script &) const;
 
     static unsigned int m_nextLogId;
 };

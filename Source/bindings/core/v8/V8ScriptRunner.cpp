@@ -32,6 +32,8 @@
 #include "bindings/core/v8/V8RecursionScope.h"
 #include "bindings/core/v8/V8ThrowException.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/eventracer/EventRacerContext.h"
+#include "core/eventracer/EventRacerLog.h"
 #include "core/fetch/CachedMetadata.h"
 #include "core/fetch/ScriptResource.h"
 #include "platform/TraceEvent.h"
@@ -152,6 +154,17 @@ v8::Local<v8::Script> V8ScriptRunner::compileScript(v8::Handle<v8::String> code,
         script = v8::ScriptCompiler::Compile(
             isolate, &source, v8::ScriptCompiler::kNoCompileOptions);
     }
+
+    if (RefPtr<EventRacerLog> log = EventRacerContext::getLog()) {
+        ASSERT(log->hasAction());
+        int id = script->GetUnboundScript()->GetId();
+        if (id != -1) {
+            v8::String::Utf8Value src(code);
+            CString url= fileName.utf8();
+            log->registerScript(line->Value(), column->Value(), *src, src.length(), url.data(), url.length(), id);
+        }
+    }
+
     return script;
 }
 
