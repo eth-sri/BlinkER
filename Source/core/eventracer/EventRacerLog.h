@@ -116,8 +116,8 @@ public:
     static void ER_enterFunction(LocalDOMWindow &, const V8StringResource<> &, int, int);
     static ScriptValue ER_exitFunction(LocalDOMWindow &, const ScriptValue &);
 
-    static ScriptValue ER_readArray(LocalDOMWindow &, const ScriptValue &);
-    static ScriptValue ER_writeArray(LocalDOMWindow &, const ScriptValue &);
+    static void ER_readArray(LocalDOMWindow &, const ScriptValue &);
+    static void ER_writeArray(LocalDOMWindow &, const ScriptValue &);
 
 private:
     EventRacerLog();

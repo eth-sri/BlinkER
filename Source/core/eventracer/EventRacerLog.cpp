@@ -225,9 +225,19 @@ void EventRacerLog::logFieldAccess(Operation::Type op, const ScriptValue &obj,
         }
     }
 
-    logOperation(getCurrentAction(), op,
-                 m_strings[VAR_STRINGS].putf("JSObject[%d].%s", object->GetIdentityHash(),
-                                             attr.utf8().data()));
+    size_t loc;
+    if (v->IsArray()) {
+        if (attr == "length")
+            loc = m_strings[VAR_STRINGS].putf("Array[%d]$LEN", object->GetIdentityHash());
+        else
+            loc = m_strings[VAR_STRINGS].putf("Array[%d]$[%s]", object->GetIdentityHash(),
+                                              attr.utf8().data());
+    } else {
+        loc = m_strings[VAR_STRINGS].putf("JSObject[%d].%s", object->GetIdentityHash(),
+                                          attr.utf8().data());
+    }
+    logOperation(getCurrentAction(), op, loc);
+
     if (val)
         logMemoryValue(*val, fnid);
 }
@@ -360,28 +370,36 @@ void EventRacerLog::ER_deleteProp(LocalDOMWindow &, const ScriptValue &obj,
         log->logFieldAccess(Operation::WRITE_MEMORY, obj, name, NULL);
 }
 
-void EventRacerLog::ER_enterFunction(LocalDOMWindow &, const V8StringResource<> &, int scriptId, int fnId) {
+void EventRacerLog::ER_enterFunction(LocalDOMWindow &, const V8StringResource<> &name, int scriptId, int fnId) {
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
     if (log && log->hasAction()) {
-        // Find the script source code and url.
-        Script scr = {0,};
-        log->findScript(scriptId, scr);
+        // If there's no script or function id, just use the |name| for the
+        // scope.
+        if (scriptId == -1 && fnId == -1) {
+            log->logOperation(log->getCurrentAction(), Operation::ENTER_SCOPE, String(name));
+        } else {
+            // Find the script source code and url.
+            Script scr = {0,};
+            log->findScript(scriptId, scr);
 
-        // Get the line number from the stack trace.
-        int line = 0;
-        v8::Local<v8::StackTrace> trace = v8::StackTrace::CurrentStackTrace(
-            v8::Isolate::GetCurrent(), 2,
-            v8::StackTrace::kLineNumber);
-        if (trace->GetFrameCount() > 1)
-            line = trace->GetFrame(1)->GetLineNumber() - scr.line;
-        log->logOperation(log->getCurrentAction(), Operation::ENTER_SCOPE,
-                          log->m_strings[SCOPE_STRINGS].putf("Call (fn=%d #%d) line %d-%d %s [[function:%p]]",
-                                                             fnId,
-                                                             scr.srcId,
-                                                             line,
-                                                             0,
-                                                             log->m_strings[VALUE_STRINGS].peek(scr.urlId),
-                                                             0xbadc0de));
+            // Get the line number from the stack trace.
+            int line = 0;
+            v8::Local<v8::StackTrace> trace = v8::StackTrace::CurrentStackTrace(
+                v8::Isolate::GetCurrent(), 2,
+                v8::StackTrace::kLineNumber);
+            if (trace->GetFrameCount() > 1)
+                line = trace->GetFrame(1)->GetLineNumber() - scr.line;
+            log->logOperation(
+                log->getCurrentAction(),
+                Operation::ENTER_SCOPE,
+                log->m_strings[SCOPE_STRINGS].putf("Call (fn=%d #%d) line %d-%d %s [[function:%p]]",
+                                                   fnId,
+                                                   scr.srcId,
+                                                   line,
+                                                   0,
+                                                   log->m_strings[VALUE_STRINGS].peek(scr.urlId),
+                                                   0xbadc0de));
+        }
     }
 }
 
@@ -393,12 +411,28 @@ ScriptValue EventRacerLog::ER_exitFunction(LocalDOMWindow &, const ScriptValue &
     return val;
 }
 
-ScriptValue EventRacerLog::ER_readArray(LocalDOMWindow &, const ScriptValue &arr) {
-    return arr;
+void EventRacerLog::ER_readArray(LocalDOMWindow &, const ScriptValue &arr) {
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction()) {
+        v8::Handle<v8::Value> v = arr.v8Value();
+        if (!v->IsArray())
+            return;
+        v8::Local<v8::Object> object = v->ToObject();
+        log->logOperation(log->getCurrentAction(), Operation::READ_MEMORY,
+                          log->m_strings[VAR_STRINGS].putf("Array[%d]$LEN", object->GetIdentityHash()));
+    }
 }
 
-ScriptValue EventRacerLog::ER_writeArray(LocalDOMWindow &, const ScriptValue &arr) {
-    return arr;
+void EventRacerLog::ER_writeArray(LocalDOMWindow &, const ScriptValue &arr) {
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    if (log && log->hasAction()) {
+        v8::Handle<v8::Value> v = arr.v8Value();
+        if (!v->IsArray())
+            return;
+        v8::Local<v8::Object> object = v->ToObject();
+        log->logOperation(log->getCurrentAction(), Operation::WRITE_MEMORY,
+                          log->m_strings[VAR_STRINGS].putf("Array[%d]$LEN", object->GetIdentityHash()));
+    }
 }
 
 bool EventRacerLog::findScript(int id, Script &out) const {

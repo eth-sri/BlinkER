@@ -13,6 +13,6 @@
     void ER_deleteProp(any obj, DOMString name);
     void ER_enterFunction(DOMString name, long scriptId, long fnId);
     any ER_exitFunction(any val);
-    any ER_readArray(any obj);
-    any ER_writeArray(any obj);
+    void ER_readArray(any obj);
+    void ER_writeArray(any obj);
 };
