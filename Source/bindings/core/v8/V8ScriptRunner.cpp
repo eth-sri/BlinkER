@@ -157,11 +157,14 @@ v8::Local<v8::Script> V8ScriptRunner::compileScript(v8::Handle<v8::String> code,
 
     if (RefPtr<EventRacerLog> log = EventRacerContext::getLog()) {
         ASSERT(log->hasAction());
-        int id = script->GetUnboundScript()->GetId();
-        if (id != -1) {
-            v8::String::Utf8Value src(code);
-            CString url= fileName.utf8();
-            log->registerScript(line->Value(), column->Value(), *src, src.length(), url.data(), url.length(), id);
+        if (!script.IsEmpty()) {
+            int id = script->GetUnboundScript()->GetId();
+            if (id != -1) {
+                v8::String::Utf8Value src(code);
+                CString url= fileName.utf8();
+                log->registerScript(line->Value(), column->Value(), *src, src.length(), url.data(),
+                                    url.length(), id);
+            }
         }
     }
 
