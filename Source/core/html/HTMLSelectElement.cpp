@@ -36,6 +36,7 @@
 #include "core/dom/Attribute.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/NodeListsNodeData.h"
+#include "core/dom/NodeRenderStyle.h"
 #include "core/dom/NodeTraversal.h"
 #include "core/events/GestureEvent.h"
 #include "core/events/KeyboardEvent.h"
@@ -176,6 +177,18 @@ bool HTMLSelectElement::valueMissing() const
     return firstSelectionIndex < 0 || (!firstSelectionIndex && hasPlaceholderLabelOption());
 }
 
+void HTMLSelectElement::listBoxSelectItem(int listIndex, bool allowMultiplySelections, bool shift, bool fireOnChangeNow)
+{
+    if (!multiple())
+        optionSelectedByUser(listToOptionIndex(listIndex), fireOnChangeNow, false);
+    else {
+        updateSelectedState(listIndex, allowMultiplySelections, shift);
+        setNeedsValidityCheck();
+        if (fireOnChangeNow)
+            listBoxOnChange();
+    }
+}
+
 bool HTMLSelectElement::usesMenuList() const
 {
     if (RenderTheme::theme().delegatesMenuListRendering())
@@ -212,7 +225,7 @@ void HTMLSelectElement::add(HTMLElement* element, HTMLElement* before, Exception
 
 void HTMLSelectElement::addBeforeOptionAtIndex(HTMLElement* element, int beforeIndex, ExceptionState& exceptionState)
 {
-    HTMLElement* beforeElement = toHTMLElement(options()->item(beforeIndex));
+    HTMLOptionElement* beforeElement = options()->item(beforeIndex);
     add(element, beforeElement, exceptionState);
 }
 
@@ -439,7 +452,7 @@ Element* HTMLSelectElement::namedItem(const AtomicString& name)
     return options()->namedItem(name);
 }
 
-Element* HTMLSelectElement::item(unsigned index)
+HTMLOptionElement* HTMLSelectElement::item(unsigned index)
 {
     return options()->item(index);
 }
@@ -449,13 +462,13 @@ void HTMLSelectElement::setOption(unsigned index, HTMLOptionElement* option, Exc
     if (index > maxSelectItems - 1)
         index = maxSelectItems - 1;
     int diff = index - length();
-    RefPtrWillBeRawPtr<HTMLElement> before = nullptr;
+    RefPtrWillBeRawPtr<HTMLOptionElement> before = nullptr;
     // Out of array bounds? First insert empty dummies.
     if (diff > 0) {
         setLength(index, exceptionState);
         // Replace an existing entry?
     } else if (diff < 0) {
-        before = toHTMLElement(options()->item(index+1));
+        before = options()->item(index + 1);
         remove(index);
     }
     // Finally add the new element.
@@ -523,6 +536,8 @@ int HTMLSelectElement::nextValidIndex(int listIndex, SkipDirection direction, in
         --skip;
         HTMLElement* element = listItems[listIndex];
         if (!isHTMLOptionElement(*element))
+            continue;
+        if (toHTMLOptionElement(*element).isDisplayNone())
             continue;
         if (element->isDisabledFormControl())
             continue;
@@ -1392,8 +1407,10 @@ void HTMLSelectElement::listBoxDefaultEventHandler(Event* event)
         GestureEvent& gestureEvent = toGestureEvent(*event);
         int listIndex = listIndexForEventTargetOption(gestureEvent);
         if (listIndex >= 0) {
-            if (!isDisabledFormControl())
+            if (!isDisabledFormControl()) {
                 updateSelectedState(listIndex, true, gestureEvent.shiftKey());
+                listBoxOnChange();
+            }
             event->setDefaultHandled();
         }
     } else if (event->type() == EventTypeNames::mousedown && event->isMouseEvent() && toMouseEvent(event)->button() == LeftButton) {

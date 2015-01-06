@@ -63,9 +63,9 @@ void VisitedLinkState::invalidateStyleForAllLinks()
 {
     if (m_linksCheckedForVisitedState.isEmpty())
         return;
-    for (Element* element = ElementTraversal::firstWithin(document()); element; element = ElementTraversal::next(*element)) {
-        if (element->isLink())
-            element->setNeedsStyleRecalc(SubtreeStyleChange);
+    for (Node* node = document().firstChild(); node; node = NodeTraversal::next(*node)) {
+        if (node->isLink())
+            node->setNeedsStyleRecalc(SubtreeStyleChange);
     }
 }
 
@@ -73,9 +73,9 @@ void VisitedLinkState::invalidateStyleForLink(LinkHash linkHash)
 {
     if (!m_linksCheckedForVisitedState.contains(linkHash))
         return;
-    for (Element* element = ElementTraversal::firstWithin(document()); element; element = ElementTraversal::next(*element)) {
-        if (element->isLink() && linkHashForElement(*element) == linkHash)
-            element->setNeedsStyleRecalc(SubtreeStyleChange);
+    for (Node* node = document().firstChild(); node; node = NodeTraversal::next(*node)) {
+        if (node->isLink() && linkHashForElement(toElement(*node)) == linkHash)
+            node->setNeedsStyleRecalc(SubtreeStyleChange);
     }
 }
 
@@ -99,7 +99,7 @@ EInsideLink VisitedLinkState::determineLinkStateSlowCase(const Element& element)
 
     if (LinkHash hash = linkHashForElement(element, attribute)) {
         m_linksCheckedForVisitedState.add(hash);
-        if (blink::Platform::current()->isLinkVisited(hash))
+        if (Platform::current()->isLinkVisited(hash))
             return InsideVisitedLink;
     }
 
@@ -111,4 +111,4 @@ void VisitedLinkState::trace(Visitor* visitor)
     visitor->trace(m_document);
 }
 
-}
+} // namespace blink

@@ -67,7 +67,7 @@ public:
     virtual bool getHotSpot(IntPoint&) const OVERRIDE;
 
     virtual bool dataChanged(bool allDataReceived) OVERRIDE;
-    bool isAllDataReceived() const;
+    bool isAllDataReceived() const { return m_allDataReceived; }
     bool hasColorProfile() const;
     virtual String filenameExtension() const OVERRIDE;
 
@@ -91,6 +91,7 @@ public:
 private:
     friend class BitmapImageTest;
 
+    void resetDecoder();
     void updateSize() const;
 
 protected:
@@ -103,9 +104,11 @@ protected:
     BitmapImage(PassRefPtr<NativeImageSkia>, ImageObserver* = 0);
     BitmapImage(ImageObserver* = 0);
 
-    virtual void draw(GraphicsContext*, const FloatRect& dstRect, const FloatRect& srcRect, CompositeOperator, blink::WebBlendMode) OVERRIDE;
-    virtual void draw(GraphicsContext*, const FloatRect& dstRect, const FloatRect& srcRect, CompositeOperator, blink::WebBlendMode, RespectImageOrientationEnum) OVERRIDE;
+    virtual void draw(GraphicsContext*, const FloatRect& dstRect, const FloatRect& srcRect, CompositeOperator, WebBlendMode) OVERRIDE;
+    virtual void draw(GraphicsContext*, const FloatRect& dstRect, const FloatRect& srcRect, CompositeOperator, WebBlendMode, RespectImageOrientationEnum) OVERRIDE;
 
+    // True if the image is animated (contains multiple frames)
+    bool isAnimated();
     size_t currentFrame() const { return m_currentFrame; }
     size_t frameCount();
     PassRefPtr<NativeImageSkia> frameAtIndex(size_t);
@@ -191,6 +194,6 @@ protected:
 
 DEFINE_IMAGE_TYPE_CASTS(BitmapImage);
 
-}
+} // namespace blink
 
 #endif

@@ -657,7 +657,7 @@ void InspectorDOMAgent::querySelectorAll(ErrorString* errorString, int nodeId, c
         return;
 
     TrackExceptionState exceptionState;
-    RefPtrWillBeRawPtr<StaticNodeList> nodes = toContainerNode(node)->querySelectorAll(AtomicString(selectors), exceptionState);
+    RefPtrWillBeRawPtr<StaticElementList> elements = toContainerNode(node)->querySelectorAll(AtomicString(selectors), exceptionState);
     if (exceptionState.hadException()) {
         *errorString = "DOM Error while querying";
         return;
@@ -665,8 +665,8 @@ void InspectorDOMAgent::querySelectorAll(ErrorString* errorString, int nodeId, c
 
     result = TypeBuilder::Array<int>::create();
 
-    for (unsigned i = 0; i < nodes->length(); ++i)
-        result->addItem(pushNodePathToFrontend(nodes->item(i)));
+    for (unsigned i = 0; i < elements->length(); ++i)
+        result->addItem(pushNodePathToFrontend(elements->item(i)));
 }
 
 int InspectorDOMAgent::pushNodePathToFrontend(Node* nodeToPush)
@@ -760,8 +760,8 @@ void InspectorDOMAgent::setAttributesAsText(ErrorString* errorString, int elemen
     }
 
     bool foundOriginalAttribute = false;
-    AttributeCollection::const_iterator end = attributes.end();
-    for (AttributeCollection::const_iterator it = attributes.begin(); it != end; ++it) {
+    AttributeCollection::iterator end = attributes.end();
+    for (AttributeCollection::iterator it = attributes.begin(); it != end; ++it) {
         // Add attribute pair
         String attributeName = it->name().toString();
         if (shouldIgnoreCase)
@@ -1054,8 +1054,8 @@ void InspectorDOMAgent::performSearch(ErrorString*, const String& whitespaceTrim
                 // Go through all attributes and serialize them.
                 const Element* element = toElement(node);
                 AttributeCollection attributes = element->attributes();
-                AttributeCollection::const_iterator end = attributes.end();
-                for (AttributeCollection::const_iterator it = attributes.begin(); it != end; ++it) {
+                AttributeCollection::iterator end = attributes.end();
+                for (AttributeCollection::iterator it = attributes.begin(); it != end; ++it) {
                     // Add attribute pair
                     if (it->localName().find(whitespaceTrimmedQuery, 0, false) != kNotFound) {
                         resultCollector.add(node);
@@ -1101,13 +1101,13 @@ void InspectorDOMAgent::performSearch(ErrorString*, const String& whitespaceTrim
         for (WillBeHeapVector<RawPtrWillBeMember<Document> >::iterator it = docs.begin(); it != docs.end(); ++it) {
             Document* document = *it;
             TrackExceptionState exceptionState;
-            RefPtrWillBeRawPtr<StaticNodeList> nodeList = document->querySelectorAll(AtomicString(whitespaceTrimmedQuery), exceptionState);
-            if (exceptionState.hadException() || !nodeList)
+            RefPtrWillBeRawPtr<StaticElementList> elementList = document->querySelectorAll(AtomicString(whitespaceTrimmedQuery), exceptionState);
+            if (exceptionState.hadException() || !elementList)
                 continue;
 
-            unsigned size = nodeList->length();
+            unsigned size = elementList->length();
             for (unsigned i = 0; i < size; ++i)
-                resultCollector.add(nodeList->item(i));
+                resultCollector.add(elementList->item(i));
         }
     }
 
@@ -1679,8 +1679,8 @@ PassRefPtr<TypeBuilder::Array<String> > InspectorDOMAgent::buildArrayForElementA
     RefPtr<TypeBuilder::Array<String> > attributesValue = TypeBuilder::Array<String>::create();
     // Go through all attributes and serialize them.
     AttributeCollection attributes = element->attributes();
-    AttributeCollection::const_iterator end = attributes.end();
-    for (AttributeCollection::const_iterator it = attributes.begin(); it != end; ++it) {
+    AttributeCollection::iterator end = attributes.end();
+    for (AttributeCollection::iterator it = attributes.begin(); it != end; ++it) {
         // Add attribute pair
         attributesValue->addItem(it->name().toString());
         attributesValue->addItem(it->value());
@@ -1831,7 +1831,7 @@ void InspectorDOMAgent::domContentLoadedEventFired(LocalFrame* frame)
 
 void InspectorDOMAgent::invalidateFrameOwnerElement(LocalFrame* frame)
 {
-    Element* frameOwner = frame->document()->ownerElement();
+    HTMLFrameOwnerElement* frameOwner = frame->document()->ownerElement();
     if (!frameOwner)
         return;
 

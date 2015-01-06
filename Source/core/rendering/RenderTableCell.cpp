@@ -319,7 +319,7 @@ LayoutRect RenderTableCell::clippedOverflowRectForPaintInvalidation(const Render
 {
     // If the table grid is dirty, we cannot get reliable information about adjoining cells,
     // so we ignore outside borders. This should not be a problem because it means that
-    // the table is going to recalculate the grid, relayout and repaint its current rect, which
+    // the table is going to recalculate the grid, relayout and issue a paint invalidation of its current rect, which
     // includes any outside borders of this cell.
     if (!table()->collapseBorders() || table()->needsSectionRecalc())
         return RenderBlockFlow::clippedOverflowRectForPaintInvalidation(paintInvalidationContainer, paintInvalidationState);
@@ -357,18 +357,18 @@ LayoutRect RenderTableCell::clippedOverflowRectForPaintInvalidation(const Render
     LayoutPoint location(std::max<LayoutUnit>(left, -visualOverflowRect().x()), std::max<LayoutUnit>(top, -visualOverflowRect().y()));
     LayoutRect r(-location.x(), -location.y(), location.x() + std::max(width() + right, visualOverflowRect().maxX()), location.y() + std::max(height() + bottom, visualOverflowRect().maxY()));
 
-    mapRectToPaintInvalidationBacking(paintInvalidationContainer, r, false /* fixed */, paintInvalidationState);
+    mapRectToPaintInvalidationBacking(paintInvalidationContainer, r, paintInvalidationState);
     return r;
 }
 
-void RenderTableCell::mapRectToPaintInvalidationBacking(const RenderLayerModelObject* paintInvalidationContainer, LayoutRect& r, bool fixed, const PaintInvalidationState* paintInvalidationState) const
+void RenderTableCell::mapRectToPaintInvalidationBacking(const RenderLayerModelObject* paintInvalidationContainer, LayoutRect& r, const PaintInvalidationState* paintInvalidationState) const
 {
     if (paintInvalidationContainer == this)
         return;
     r.setY(r.y());
     if ((!paintInvalidationState || !paintInvalidationState->canMapToContainer(paintInvalidationContainer)) && parent())
         r.moveBy(-parentBox()->location()); // Rows are in the same coordinate space, so don't add their offset in.
-    RenderBlockFlow::mapRectToPaintInvalidationBacking(paintInvalidationContainer, r, fixed, paintInvalidationState);
+    RenderBlockFlow::mapRectToPaintInvalidationBacking(paintInvalidationContainer, r, paintInvalidationState);
 }
 
 LayoutUnit RenderTableCell::cellBaselinePosition() const
@@ -1103,8 +1103,7 @@ void RenderTableCell::paintCollapsedBorders(PaintInfo& paintInfo, const LayoutPo
     if (paintRect.maxY() + table()->outerBorderBottom() <= paintInfo.rect.y())
         return;
 
-    GraphicsContext* graphicsContext = paintInfo.context;
-    if (!table()->currentBorderValue() || graphicsContext->paintingDisabled())
+    if (!table()->currentBorderValue())
         return;
 
     const RenderStyle* styleForCellFlow = this->styleForCellFlow();
@@ -1142,6 +1141,7 @@ void RenderTableCell::paintCollapsedBorders(PaintInfo& paintInfo, const LayoutPo
     borders.addBorder(leftVal, BSLeft, renderLeft, borderRect.x(), borderRect.y(), borderRect.x() + leftWidth, borderRect.maxY(), leftStyle);
     borders.addBorder(rightVal, BSRight, renderRight, borderRect.maxX() - rightWidth, borderRect.y(), borderRect.maxX(), borderRect.maxY(), rightStyle);
 
+    GraphicsContext* graphicsContext = paintInfo.context;
     bool antialias = shouldAntialiasLines(graphicsContext);
 
     for (CollapsedBorder* border = borders.nextBorder(); border; border = borders.nextBorder()) {

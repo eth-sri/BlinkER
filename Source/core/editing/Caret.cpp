@@ -70,10 +70,12 @@ void DragCaretController::setCaretPosition(const VisiblePosition& position)
         invalidateCaretRect(node);
         document = &node->document();
     }
-    if (m_position.isNull() || m_position.isOrphan())
+    if (m_position.isNull() || m_position.isOrphan()) {
         clearCaretRect();
-    else
+    } else {
+        document->updateRenderTreeIfNeeded();
         updateCaretRect(document, m_position);
+    }
 }
 
 static bool removingNodeRemovesPosition(Node& node, const Position& position)
@@ -134,7 +136,6 @@ RenderBlock* CaretBase::caretRenderer(Node* node)
 
 bool CaretBase::updateCaretRect(Document* document, const PositionWithAffinity& caretPosition)
 {
-    document->updateRenderTreeIfNeeded();
     m_caretLocalRect = LayoutRect();
 
     m_caretRectNeedsUpdate = false;
@@ -191,7 +192,7 @@ IntRect CaretBase::absoluteBoundsForLocalRect(Node* node, const LayoutRect& rect
     return caretPainter->localToAbsoluteQuad(FloatRect(localRect)).enclosingBoundingBox();
 }
 
-void CaretBase::repaintCaretForLocalRect(Node* node, const LayoutRect& rect)
+void CaretBase::invalidateLocalCaretRect(Node* node, const LayoutRect& rect)
 {
     RenderBlock* caretPainter = caretRenderer(node);
     if (!caretPainter)
@@ -236,7 +237,7 @@ void CaretBase::invalidateCaretRect(Node* node, bool caretRectChanged)
 
     if (RenderView* view = node->document().renderView()) {
         if (shouldRepaintCaret(view, node->isContentEditable(Node::UserSelectAllIsAlwaysNonEditable)))
-            repaintCaretForLocalRect(node, localCaretRectWithoutUpdate());
+            invalidateLocalCaretRect(node, localCaretRectWithoutUpdate());
     }
 }
 

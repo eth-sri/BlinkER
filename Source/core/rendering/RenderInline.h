@@ -33,6 +33,7 @@ namespace blink {
 class RenderInline : public RenderBoxModelObject {
 public:
     explicit RenderInline(Element*);
+    virtual void trace(Visitor*) OVERRIDE;
 
     static RenderInline* createAnonymous(Document*);
 
@@ -88,7 +89,7 @@ public:
     void paintOutline(PaintInfo&, const LayoutPoint&);
 
     using RenderBoxModelObject::continuation;
-    using RenderBoxModelObject::setContinuation;
+    virtual void setContinuation(RenderBoxModelObject*) OVERRIDE FINAL;
 
     bool alwaysCreateLineBoxes() const { return alwaysCreateLineBoxesForRenderInline(); }
     void setAlwaysCreateLineBoxes(bool alwaysCreateLineBoxes = true) { setAlwaysCreateLineBoxesForRenderInline(alwaysCreateLineBoxes); }
@@ -147,9 +148,9 @@ private:
 
     virtual LayoutRect clippedOverflowRectForPaintInvalidation(const RenderLayerModelObject* paintInvalidationContainer, const PaintInvalidationState* = 0) const OVERRIDE;
     virtual LayoutRect rectWithOutlineForPaintInvalidation(const RenderLayerModelObject* paintInvalidationContainer, LayoutUnit outlineWidth, const PaintInvalidationState* = 0) const OVERRIDE FINAL;
-    virtual void mapRectToPaintInvalidationBacking(const RenderLayerModelObject* paintInvalidationContainer, LayoutRect&, bool fixed, const PaintInvalidationState* = 0) const OVERRIDE FINAL;
+    virtual void mapRectToPaintInvalidationBacking(const RenderLayerModelObject* paintInvalidationContainer, LayoutRect&, const PaintInvalidationState*) const OVERRIDE FINAL;
 
-    virtual void mapLocalToContainer(const RenderLayerModelObject* repaintContainer, TransformState&, MapCoordinatesFlags = ApplyContainerFlip, bool* wasFixed = 0, const PaintInvalidationState* = 0) const OVERRIDE;
+    virtual void mapLocalToContainer(const RenderLayerModelObject* paintInvalidationContainer, TransformState&, MapCoordinatesFlags = ApplyContainerFlip, bool* wasFixed = 0, const PaintInvalidationState* = 0) const OVERRIDE;
 
     virtual PositionWithAffinity positionForPoint(const LayoutPoint&) OVERRIDE FINAL;
 

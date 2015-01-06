@@ -119,22 +119,14 @@ ScriptPromise ServiceWorkerContainer::registerServiceWorker(ScriptState* scriptS
         return promise;
     }
 
-#ifdef DISABLE_SERVICE_WORKER_REGISTRATION
-    m_provider->registerServiceWorker(patternURL, scriptURL, new CallbackPromiseAdapter<ServiceWorker, ServiceWorkerError>(resolver));
-#else
     m_provider->registerServiceWorker(patternURL, scriptURL, new CallbackPromiseAdapter<ServiceWorkerRegistration, ServiceWorkerError>(resolver));
-#endif
 
     return promise;
 }
 
 class UndefinedValue {
 public:
-#ifdef DISABLE_SERVICE_WORKER_REGISTRATION
-    typedef WebServiceWorker WebType;
-#else
     typedef WebServiceWorkerRegistration WebType;
-#endif
     static V8UndefinedType take(ScriptPromiseResolver* resolver, WebType* registration)
     {
         ASSERT(!registration); // Anything passed here will be leaked.
@@ -202,13 +194,13 @@ ScriptPromise ServiceWorkerContainer::ready(ScriptState* callerState)
 // If the WebServiceWorker is up for adoption (does not have a
 // WebServiceWorkerProxy owner), rejects the adoption by deleting the
 // WebServiceWorker.
-static void deleteIfNoExistingOwner(blink::WebServiceWorker* serviceWorker)
+static void deleteIfNoExistingOwner(WebServiceWorker* serviceWorker)
 {
     if (serviceWorker && !serviceWorker->proxy())
         delete serviceWorker;
 }
 
-void ServiceWorkerContainer::setActive(blink::WebServiceWorker* serviceWorker)
+void ServiceWorkerContainer::setActive(WebServiceWorker* serviceWorker)
 {
     if (!executionContext()) {
         deleteIfNoExistingOwner(serviceWorker);
@@ -236,7 +228,7 @@ void ServiceWorkerContainer::checkReadyChanged(PassRefPtrWillBeRawPtr<ServiceWor
         m_ready->resolve(currentReadyWorker);
 }
 
-void ServiceWorkerContainer::setController(blink::WebServiceWorker* serviceWorker)
+void ServiceWorkerContainer::setController(WebServiceWorker* serviceWorker)
 {
     if (!executionContext()) {
         deleteIfNoExistingOwner(serviceWorker);
@@ -245,7 +237,7 @@ void ServiceWorkerContainer::setController(blink::WebServiceWorker* serviceWorke
     m_controller = ServiceWorker::from(executionContext(), serviceWorker);
 }
 
-void ServiceWorkerContainer::setInstalling(blink::WebServiceWorker* serviceWorker)
+void ServiceWorkerContainer::setInstalling(WebServiceWorker* serviceWorker)
 {
     if (!executionContext()) {
         deleteIfNoExistingOwner(serviceWorker);
@@ -254,7 +246,7 @@ void ServiceWorkerContainer::setInstalling(blink::WebServiceWorker* serviceWorke
     m_installing = ServiceWorker::from(executionContext(), serviceWorker);
 }
 
-void ServiceWorkerContainer::setWaiting(blink::WebServiceWorker* serviceWorker)
+void ServiceWorkerContainer::setWaiting(WebServiceWorker* serviceWorker)
 {
     if (!executionContext()) {
         deleteIfNoExistingOwner(serviceWorker);
@@ -263,7 +255,7 @@ void ServiceWorkerContainer::setWaiting(blink::WebServiceWorker* serviceWorker)
     m_waiting = ServiceWorker::from(executionContext(), serviceWorker);
 }
 
-void ServiceWorkerContainer::dispatchMessageEvent(const blink::WebString& message, const blink::WebMessagePortChannelArray& webChannels)
+void ServiceWorkerContainer::dispatchMessageEvent(const WebString& message, const WebMessagePortChannelArray& webChannels)
 {
     if (!executionContext() || !executionContext()->executingWindow())
         return;

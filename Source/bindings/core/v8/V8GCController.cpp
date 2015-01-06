@@ -146,8 +146,10 @@ public:
             // See https://code.google.com/p/chromium/issues/detail?id=164882
             if (isHTMLImageElement(*node) && toHTMLImageElement(*node).hasPendingActivity())
                 return;
-            // FIXME: Remove the special handling for SVG context elements.
-            if (node->isSVGElement() && toSVGElement(node)->isContextElement())
+            // FIXME: Remove the special handling for SVG elements.
+            // We currently can't collect SVG Elements from minor gc, as we have
+            // strong references from SVG property tear-offs keeping context SVG element alive.
+            if (node->isSVGElement())
                 return;
 
             m_nodesInNewSpace.append(node);
@@ -265,7 +267,6 @@ public:
             return;
 
         const WrapperTypeInfo* type = toWrapperTypeInfo(*wrapper);
-        void* object = toNative(*wrapper);
 
         ActiveDOMObject* activeDOMObject = type->toActiveDOMObject(*wrapper);
         if (activeDOMObject && activeDOMObject->hasPendingActivity())
@@ -273,7 +274,7 @@ public:
 
         if (classId == v8DOMNodeClassId) {
             ASSERT(V8Node::hasInstance(*wrapper, m_isolate));
-            Node* node = static_cast<Node*>(object);
+            Node* node = V8Node::toNative(*wrapper);
             if (node->hasEventListeners())
                 addReferencesForNodeWithEventListeners(m_isolate, node, v8::Persistent<v8::Object>::Cast(*value));
             Node* root = V8GCController::opaqueRootForGC(node, m_isolate);
@@ -281,7 +282,7 @@ public:
             if (m_constructRetainedObjectInfos)
                 m_groupsWhichNeedRetainerInfo.append(root);
         } else if (classId == v8DOMObjectClassId) {
-            type->visitDOMWrapper(object, v8::Persistent<v8::Object>::Cast(*value), m_isolate);
+            type->visitDOMWrapper(toInternalPointer(*wrapper), v8::Persistent<v8::Object>::Cast(*value), m_isolate);
         } else {
             ASSERT_NOT_REACHED();
         }

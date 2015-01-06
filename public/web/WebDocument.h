@@ -40,10 +40,6 @@
 #include "WebSecurityOrigin.h"
 
 #if BLINK_IMPLEMENTATION
-namespace blink {
-class Document;
-class DocumentType;
-}
 namespace WTF { template <typename T> class PassRefPtr; }
 #endif
 
@@ -53,6 +49,9 @@ template <class T> class Handle;
 }
 
 namespace blink {
+
+class Document;
+class DocumentType;
 class WebAXObject;
 class WebDocumentType;
 class WebElement;
@@ -114,6 +113,12 @@ public:
     BLINK_EXPORT WebDOMEvent createEvent(const WebString& eventType);
     BLINK_EXPORT WebReferrerPolicy referrerPolicy() const;
     BLINK_EXPORT WebElement createElement(const WebString& tagName);
+    // Shorthand of frame()->scrollOffset().
+    BLINK_EXPORT WebSize scrollOffset() const;
+    // Shorthand of frame()->minimumScrollOffset().
+    BLINK_EXPORT WebSize minimumScrollOffset() const;
+    // Shorthand of frame()->maximumScrollOffset().
+    BLINK_EXPORT WebSize maximumScrollOffset() const;
     BLINK_EXPORT void setIsTransitionDocument();
     BLINK_EXPORT void beginExitTransition(const WebString& cssSelector);
 
@@ -139,9 +144,9 @@ public:
     BLINK_EXPORT v8::Handle<v8::Value> registerEmbedderCustomElement(const WebString& name, v8::Handle<v8::Value> options, WebExceptionCode&);
 
 #if BLINK_IMPLEMENTATION
-    WebDocument(const PassRefPtrWillBeRawPtr<blink::Document>&);
-    WebDocument& operator=(const PassRefPtrWillBeRawPtr<blink::Document>&);
-    operator PassRefPtrWillBeRawPtr<blink::Document>() const;
+    WebDocument(const PassRefPtrWillBeRawPtr<Document>&);
+    WebDocument& operator=(const PassRefPtrWillBeRawPtr<Document>&);
+    operator PassRefPtrWillBeRawPtr<Document>() const;
 #endif
 };
 

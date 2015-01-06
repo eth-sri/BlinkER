@@ -34,6 +34,7 @@
 #include "bindings/modules/v8/IDBBindingUtilities.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/events/EventQueue.h"
+#include "modules/IndexedDBNames.h"
 #include "modules/indexeddb/IDBCursorWithValue.h"
 #include "modules/indexeddb/IDBDatabase.h"
 #include "modules/indexeddb/IDBEventDispatcher.h"
@@ -65,7 +66,7 @@ IDBRequest::IDBRequest(ScriptState* scriptState, IDBAny* source, IDBTransaction*
     , m_source(source)
     , m_hasPendingActivity(true)
     , m_cursorType(IndexedDB::CursorKeyAndValue)
-    , m_cursorDirection(blink::WebIDBCursorDirectionNext)
+    , m_cursorDirection(WebIDBCursorDirectionNext)
     , m_pendingCursor(nullptr)
     , m_didFireUpgradeNeededEvent(false)
     , m_preventPropagation(false)
@@ -129,13 +130,11 @@ ScriptValue IDBRequest::source() const
 const String& IDBRequest::readyState() const
 {
     ASSERT(m_readyState == PENDING || m_readyState == DONE);
-    DEFINE_STATIC_LOCAL(AtomicString, pending, ("pending", AtomicString::ConstructFromLiteral));
-    DEFINE_STATIC_LOCAL(AtomicString, done, ("done", AtomicString::ConstructFromLiteral));
 
     if (m_readyState == PENDING)
-        return pending;
+        return IndexedDBNames::pending;
 
-    return done;
+    return IndexedDBNames::done;
 }
 
 void IDBRequest::abort()
@@ -160,7 +159,7 @@ void IDBRequest::abort()
     m_requestAborted = true;
 }
 
-void IDBRequest::setCursorDetails(IndexedDB::CursorType cursorType, blink::WebIDBCursorDirection direction)
+void IDBRequest::setCursorDetails(IndexedDB::CursorType cursorType, WebIDBCursorDirection direction)
 {
     ASSERT(m_readyState == PENDING);
     ASSERT(!m_pendingCursor);
@@ -195,7 +194,7 @@ IDBCursor* IDBRequest::getResultCursor() const
     return 0;
 }
 
-void IDBRequest::setResultCursor(IDBCursor* cursor, IDBKey* key, IDBKey* primaryKey, PassRefPtr<SharedBuffer> value, PassOwnPtr<Vector<blink::WebBlobInfo> > blobInfo)
+void IDBRequest::setResultCursor(IDBCursor* cursor, IDBKey* key, IDBKey* primaryKey, PassRefPtr<SharedBuffer> value, PassOwnPtr<Vector<WebBlobInfo> > blobInfo)
 {
     ASSERT(m_readyState == PENDING);
     m_cursorKey = key;
@@ -251,7 +250,7 @@ void IDBRequest::onSuccess(const Vector<String>& stringList)
     onSuccessInternal(IDBAny::create(domStringList.release()));
 }
 
-void IDBRequest::onSuccess(PassOwnPtr<blink::WebIDBCursor> backend, IDBKey* key, IDBKey* primaryKey, PassRefPtr<SharedBuffer> value, PassOwnPtr<Vector<blink::WebBlobInfo> > blobInfo)
+void IDBRequest::onSuccess(PassOwnPtr<WebIDBCursor> backend, IDBKey* key, IDBKey* primaryKey, PassRefPtr<SharedBuffer> value, PassOwnPtr<Vector<WebBlobInfo> > blobInfo)
 {
     IDB_TRACE("IDBRequest::onSuccess(IDBCursor)");
     if (!shouldEnqueueEvent())
@@ -284,7 +283,7 @@ void IDBRequest::onSuccess(IDBKey* idbKey)
         onSuccessInternal(IDBAny::createUndefined());
 }
 
-void IDBRequest::onSuccess(PassRefPtr<SharedBuffer> valueBuffer, PassOwnPtr<Vector<blink::WebBlobInfo> > blobInfo)
+void IDBRequest::onSuccess(PassRefPtr<SharedBuffer> valueBuffer, PassOwnPtr<Vector<WebBlobInfo> > blobInfo)
 {
     IDB_TRACE("IDBRequest::onSuccess(SharedBuffer)");
     if (!shouldEnqueueEvent())
@@ -316,7 +315,7 @@ static IDBObjectStore* effectiveObjectStore(IDBAny* source)
 }
 #endif
 
-void IDBRequest::onSuccess(PassRefPtr<SharedBuffer> prpValueBuffer, PassOwnPtr<Vector<blink::WebBlobInfo> > blobInfo, IDBKey* prpPrimaryKey, const IDBKeyPath& keyPath)
+void IDBRequest::onSuccess(PassRefPtr<SharedBuffer> prpValueBuffer, PassOwnPtr<Vector<WebBlobInfo> > blobInfo, IDBKey* prpPrimaryKey, const IDBKeyPath& keyPath)
 {
     IDB_TRACE("IDBRequest::onSuccess(SharedBuffer, IDBKey, IDBKeyPath)");
     if (!shouldEnqueueEvent())
@@ -366,7 +365,7 @@ void IDBRequest::setResult(IDBAny* result)
     m_resultDirty = true;
 }
 
-void IDBRequest::onSuccess(IDBKey* key, IDBKey* primaryKey, PassRefPtr<SharedBuffer> value, PassOwnPtr<Vector<blink::WebBlobInfo> > blobInfo)
+void IDBRequest::onSuccess(IDBKey* key, IDBKey* primaryKey, PassRefPtr<SharedBuffer> value, PassOwnPtr<Vector<WebBlobInfo> > blobInfo)
 {
     IDB_TRACE("IDBRequest::onSuccess(key, primaryKey, value)");
     if (!shouldEnqueueEvent())

@@ -115,6 +115,7 @@ public:
     static bool isCommonPseudoClassSelector(const CSSSelector&);
     static bool matchesFocusPseudoClass(const Element&);
     static bool matchesSpatialNavigationFocusPseudoClass(const Element&);
+    static bool matchesListBoxPseudoClass(const Element&);
     static bool checkExactAttribute(const Element&, const QualifiedName& selectorAttributeName, const StringImpl* value);
 
     enum LinkMatchMask { MatchLink = 1, MatchVisited = 2, MatchAll = MatchLink | MatchVisited };
@@ -166,8 +167,8 @@ inline bool SelectorChecker::tagMatches(const Element& element, const QualifiedN
 inline bool SelectorChecker::checkExactAttribute(const Element& element, const QualifiedName& selectorAttributeName, const StringImpl* value)
 {
     AttributeCollection attributes = element.attributesWithoutUpdate();
-    AttributeCollection::const_iterator end = attributes.end();
-    for (AttributeCollection::const_iterator it = attributes.begin(); it != end; ++it) {
+    AttributeCollection::iterator end = attributes.end();
+    for (AttributeCollection::iterator it = attributes.begin(); it != end; ++it) {
         if (it->matches(selectorAttributeName) && (!value || it->value().impl() == value))
             return true;
     }

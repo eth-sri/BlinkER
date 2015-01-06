@@ -9,7 +9,7 @@
  * @extends {Protocol.Agents}
  * @param {string} name
  * @param {!InspectorBackendClass.Connection} connection
- * @param {function(!WebInspector.Target)=} callback
+ * @param {function(?WebInspector.Target)=} callback
  */
 WebInspector.Target = function(name, connection, callback)
 {
@@ -27,12 +27,12 @@ WebInspector.Target = function(name, connection, callback)
     /** @type {!Object.<string, boolean>} */
     this._capabilities = {};
     this.pageAgent().canScreencast(this._initializeCapability.bind(this, WebInspector.Target.Capabilities.CanScreencast, null));
+    this.pageAgent().canEmulate(this._initializeCapability.bind(this, WebInspector.Target.Capabilities.CanEmulate, null));
     if (WebInspector.experimentsSettings.timelinePowerProfiler.isEnabled())
         this.powerAgent().canProfilePower(this._initializeCapability.bind(this, WebInspector.Target.Capabilities.CanProfilePower, null));
     this.workerAgent().canInspectWorkers(this._initializeCapability.bind(this, WebInspector.Target.Capabilities.CanInspectWorkers, this._loadedWithCapabilities.bind(this, callback)));
-
-    /** @type {!WebInspector.Lock} */
-    this.profilingLock = new WebInspector.Lock();
+    if (WebInspector.experimentsSettings.timelineOnTraceEvents.isEnabled())
+        this.consoleAgent().setTracingBasedTimeline(true);
 }
 
 /**
@@ -42,7 +42,8 @@ WebInspector.Target.Capabilities = {
     CanScreencast: "CanScreencast",
     HasTouchInputs: "HasTouchInputs",
     CanProfilePower: "CanProfilePower",
-    CanInspectWorkers: "CanInspectWorkers"
+    CanInspectWorkers: "CanInspectWorkers",
+    CanEmulate: "CanEmulate"
 }
 
 WebInspector.Target._nextId = 1;
@@ -97,10 +98,15 @@ WebInspector.Target.prototype = {
     },
 
     /**
-     * @param {function(!WebInspector.Target)=} callback
+     * @param {function(?WebInspector.Target)=} callback
      */
     _loadedWithCapabilities: function(callback)
     {
+        if (this._connection.isClosed()) {
+            callback(null);
+            return;
+        }
+
         /** @type {!WebInspector.ConsoleModel} */
         this.consoleModel = new WebInspector.ConsoleModel(this);
 
@@ -164,6 +170,12 @@ WebInspector.Target.prototype = {
         /** @type {!WebInspector.HeapProfilerModel} */
         this.heapProfilerModel = new WebInspector.HeapProfilerModel(this);
 
+        /** @type {!WebInspector.IndexedDBModel} */
+        this.indexedDBModel = new WebInspector.IndexedDBModel(this);
+
+        /** @type {!WebInspector.LayerTreeModel} */
+        this.layerTreeModel = new WebInspector.LayerTreeModel(this);
+
         if (callback)
             callback(this);
     },
@@ -189,10 +201,9 @@ WebInspector.Target.prototype = {
     /**
      * @return {boolean}
      */
-    isMobile: function()
+    canEmulate: function()
     {
-        // FIXME: either add a separate capability or rename CanScreencast to IsMobile.
-        return this.hasCapability(WebInspector.Target.Capabilities.CanScreencast);
+        return this.hasCapability(WebInspector.Target.Capabilities.CanEmulate);
     },
 
     _onDisconnect: function()
@@ -252,7 +263,7 @@ WebInspector.SDKObject.prototype = {
 WebInspector.SDKModel = function(modelClass, target)
 {
     WebInspector.SDKObject.call(this, target);
-    target._modelByConstructor.put(modelClass, this);
+    target._modelByConstructor.set(modelClass, this);
 }
 
 WebInspector.SDKModel.prototype = {
@@ -261,18 +272,66 @@ WebInspector.SDKModel.prototype = {
 
 /**
  * @constructor
+ * @extends {WebInspector.Object}
  */
 WebInspector.TargetManager = function()
 {
+    WebInspector.Object.call(this);
     /** @type {!Array.<!WebInspector.Target>} */
     this._targets = [];
     /** @type {!Array.<!WebInspector.TargetManager.Observer>} */
     this._observers = [];
     /** @type {!Object.<string, !Array.<{modelClass: !Function, thisObject: (!Object|undefined), listener: function(!WebInspector.Event)}>>} */
-    this._listeners = {};
+    this._modelListeners = {};
+}
+
+WebInspector.TargetManager.Events = {
+    InspectedURLChanged: "InspectedURLChanged",
+    MainFrameNavigated: "MainFrameNavigated",
+    Load: "Load",
+    WillReloadPage: "WillReloadPage"
 }
 
 WebInspector.TargetManager.prototype = {
+    /**
+     * @return {string}
+     */
+    inspectedPageURL: function()
+    {
+        if (!this._targets.length)
+            return "";
+
+        return this._targets[0].resourceTreeModel.inspectedPageURL();
+    },
+
+    /**
+     * @return {string}
+     */
+    inspectedPageDomain: function()
+    {
+        if (!this._targets.length)
+            return "";
+
+        return this._targets[0].resourceTreeModel.inspectedPageDomain();
+    },
+
+    /**
+     * @param {!WebInspector.Event} event
+     */
+    _redispatchEvent: function(event)
+    {
+        this.dispatchEventToListeners(event.type, event.data);
+    },
+
+    /**
+     * @param {boolean=} ignoreCache
+     */
+    reloadPage: function(ignoreCache)
+    {
+        if (this._targets.length)
+            this._targets[0].resourceTreeModel.reloadPage(ignoreCache);
+    },
+
     /**
      * @param {!Function} modelClass
      * @param {string} eventType
@@ -285,9 +344,9 @@ WebInspector.TargetManager.prototype = {
             var model = this._targets[i]._modelByConstructor.get(modelClass);
             model.addEventListener(eventType, listener, thisObject);
         }
-        if (!this._listeners[eventType])
-            this._listeners[eventType] = [];
-        this._listeners[eventType].push({ modelClass: modelClass, thisObject: thisObject, listener: listener });
+        if (!this._modelListeners[eventType])
+            this._modelListeners[eventType] = [];
+        this._modelListeners[eventType].push({ modelClass: modelClass, thisObject: thisObject, listener: listener });
     },
 
     /**
@@ -298,7 +357,7 @@ WebInspector.TargetManager.prototype = {
      */
     removeModelListener: function(modelClass, eventType, listener, thisObject)
     {
-        if (!this._listeners[eventType])
+        if (!this._modelListeners[eventType])
             return;
 
         for (var i = 0; i < this._targets.length; ++i) {
@@ -306,13 +365,13 @@ WebInspector.TargetManager.prototype = {
             model.removeEventListener(eventType, listener, thisObject);
         }
 
-        var listeners = this._listeners[eventType];
+        var listeners = this._modelListeners[eventType];
         for (var i = 0; i < listeners.length; ++i) {
             if (listeners[i].modelClass === modelClass && listeners[i].listener === listener && listeners[i].thisObject === thisObject)
                 listeners.splice(i--, 1);
         }
         if (!listeners.length)
-            delete this._listeners[eventType];
+            delete this._modelListeners[eventType];
     },
 
     /**
@@ -335,7 +394,7 @@ WebInspector.TargetManager.prototype = {
     /**
      * @param {string} name
      * @param {!InspectorBackendClass.Connection} connection
-     * @param {function(!WebInspector.Target)=} callback
+     * @param {function(?WebInspector.Target)=} callback
      */
     createTarget: function(name, connection, callback)
     {
@@ -343,11 +402,12 @@ WebInspector.TargetManager.prototype = {
 
         /**
          * @this {WebInspector.TargetManager}
-         * @param {!WebInspector.Target} newTarget
+         * @param {?WebInspector.Target} newTarget
          */
         function callbackWrapper(newTarget)
         {
-            this.addTarget(newTarget);
+            if (newTarget)
+                this.addTarget(newTarget);
             if (callback)
                 callback(newTarget);
         }
@@ -359,12 +419,18 @@ WebInspector.TargetManager.prototype = {
     addTarget: function(target)
     {
         this._targets.push(target);
+        if (this._targets.length === 1) {
+            target.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.InspectedURLChanged, this._redispatchEvent, this);
+            target.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, this._redispatchEvent, this);
+            target.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.Load, this._redispatchEvent, this);
+            target.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.WillReloadPage, this._redispatchEvent, this);
+        }
         var copy = this._observers.slice();
         for (var i = 0; i < copy.length; ++i)
             copy[i].targetAdded(target);
 
-        for (var eventType in this._listeners) {
-            var listeners = this._listeners[eventType];
+        for (var eventType in this._modelListeners) {
+            var listeners = this._modelListeners[eventType];
             for (var i = 0; i < listeners.length; ++i) {
                 var model = target._modelByConstructor.get(listeners[i].modelClass);
                 model.addEventListener(eventType, listeners[i].listener, listeners[i].thisObject);
@@ -378,17 +444,31 @@ WebInspector.TargetManager.prototype = {
     removeTarget: function(target)
     {
         this._targets.remove(target);
+        if (this._targets.length === 0) {
+            target.resourceTreeModel.removeEventListener(WebInspector.ResourceTreeModel.EventTypes.InspectedURLChanged, this._redispatchEvent, this);
+            target.resourceTreeModel.removeEventListener(WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, this._redispatchEvent, this);
+            target.resourceTreeModel.removeEventListener(WebInspector.ResourceTreeModel.EventTypes.Load, this._redispatchEvent, this);
+            target.resourceTreeModel.removeEventListener(WebInspector.ResourceTreeModel.EventTypes.WillReloadPage, this._redispatchEvent, this);
+        }
         var copy = this._observers.slice();
         for (var i = 0; i < copy.length; ++i)
             copy[i].targetRemoved(target);
 
-        for (var eventType in this._listeners) {
-            var listeners = this._listeners[eventType];
+        for (var eventType in this._modelListeners) {
+            var listeners = this._modelListeners[eventType];
             for (var i = 0; i < listeners.length; ++i) {
                 var model = target._modelByConstructor.get(listeners[i].modelClass);
                 model.removeEventListener(eventType, listeners[i].listener, listeners[i].thisObject);
             }
         }
+    },
+
+    /**
+     * @return {boolean}
+     */
+    hasTargets: function()
+    {
+        return !!this._targets.length;
     },
 
     /**
@@ -405,7 +485,9 @@ WebInspector.TargetManager.prototype = {
     mainTarget: function()
     {
         return this._targets[0];
-    }
+    },
+
+    __proto__: WebInspector.Object.prototype
 }
 
 /**

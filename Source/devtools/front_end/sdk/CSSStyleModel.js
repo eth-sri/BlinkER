@@ -51,7 +51,7 @@ WebInspector.CSSStyleModel = function(target)
     this._styleSheetIdsForURL = new StringMap();
 
     if (WebInspector.experimentsSettings.disableAgentsWhenProfile.isEnabled())
-        target.profilingLock.addEventListener(WebInspector.Lock.Events.StateChanged, this._profilingStateChanged, this);
+        WebInspector.profilingLock().addEventListener(WebInspector.Lock.Events.StateChanged, this._profilingStateChanged, this);
 }
 
 WebInspector.CSSStyleModel.PseudoStatePropertyName = "pseudoState";
@@ -85,7 +85,7 @@ WebInspector.CSSStyleModel.MediaTypes = ["all", "braille", "embossed", "handheld
 WebInspector.CSSStyleModel.prototype = {
     _profilingStateChanged: function()
     {
-        if (this.target().profilingLock.isAcquired()) {
+        if (WebInspector.profilingLock().isAcquired()) {
             this._agent.disable();
             this._isEnabled = false;
             this._resetStyleSheets();
@@ -361,14 +361,15 @@ WebInspector.CSSStyleModel.prototype = {
     /**
      * @param {!CSSAgent.StyleSheetId} styleSheetId
      * @param {!WebInspector.DOMNode} node
-     * @param {string} selector
+     * @param {string} ruleText
+     * @param {!WebInspector.TextRange} ruleLocation
      * @param {function(!WebInspector.CSSRule)} successCallback
      * @param {function()} failureCallback
      */
-    addRule: function(styleSheetId, node, selector, successCallback, failureCallback)
+    addRule: function(styleSheetId, node, ruleText, ruleLocation, successCallback, failureCallback)
     {
         this._pendingCommandsMajorState.push(true);
-        this._agent.addRule(styleSheetId, selector, callback.bind(this));
+        this._agent.addRule(styleSheetId, ruleText, ruleLocation, callback.bind(this));
 
         /**
          * @param {?Protocol.Error} error
@@ -479,10 +480,10 @@ WebInspector.CSSStyleModel.prototype = {
     {
         console.assert(!this._styleSheetIdToHeader.get(header.styleSheetId));
         var styleSheetHeader = new WebInspector.CSSStyleSheetHeader(this, header);
-        this._styleSheetIdToHeader.put(header.styleSheetId, styleSheetHeader);
+        this._styleSheetIdToHeader.set(header.styleSheetId, styleSheetHeader);
         var url = styleSheetHeader.resourceURL();
         if (!this._styleSheetIdsForURL.get(url))
-            this._styleSheetIdsForURL.put(url, {});
+            this._styleSheetIdsForURL.set(url, {});
         var frameIdToStyleSheetIds = this._styleSheetIdsForURL.get(url);
         var styleSheetIds = frameIdToStyleSheetIds[styleSheetHeader.frameId];
         if (!styleSheetIds) {
@@ -600,7 +601,6 @@ WebInspector.CSSStyleModel.prototype = {
 
 /**
  * @constructor
- * @implements {WebInspector.RawLocation}
  * @extends {WebInspector.SDKObject}
  * @param {!WebInspector.Target} target
  * @param {?CSSAgent.StyleSheetId} styleSheetId
@@ -891,6 +891,39 @@ WebInspector.CSSStyleDeclaration.prototype = {
 
 /**
  * @constructor
+ * @param {!CSSAgent.Selector} payload
+ */
+WebInspector.CSSRuleSelector = function(payload)
+{
+    this.value = payload.value;
+    if (payload.range)
+        this.range = WebInspector.TextRange.fromObject(payload.range);
+}
+
+/**
+ * @param {!CSSAgent.Selector} payload
+ * @return {!WebInspector.CSSRuleSelector}
+ */
+WebInspector.CSSRuleSelector.parsePayload = function(payload)
+{
+    return new WebInspector.CSSRuleSelector(payload)
+}
+
+WebInspector.CSSRuleSelector.prototype = {
+    /**
+     * @param {!WebInspector.TextRange} oldRange
+     * @param {!WebInspector.TextRange} newRange
+     */
+    sourceStyleRuleEdited: function(oldRange, newRange)
+    {
+        if (!this.range)
+            return;
+        this.range = this.range.rebaseAfterTextEdit(oldRange, newRange);
+    }
+}
+
+/**
+ * @constructor
  * @param {!WebInspector.CSSStyleModel} cssModel
  * @param {!CSSAgent.CSSRule} payload
  * @param {!Array.<number>=} matchingSelectors
@@ -901,11 +934,12 @@ WebInspector.CSSRule = function(cssModel, payload, matchingSelectors)
     this.styleSheetId = payload.styleSheetId;
     if (matchingSelectors)
         this.matchingSelectors = matchingSelectors;
-    this.selectors = payload.selectorList.selectors;
-    for (var i = 0; i < this.selectors.length; ++i) {
-        var selector = this.selectors[i];
-        if (selector.range)
-            selector.range = WebInspector.TextRange.fromObject(selector.range);
+
+    /** @type {!Array.<!WebInspector.CSSRuleSelector>} */
+    this.selectors = [];
+    for (var i = 0; i < payload.selectorList.selectors.length; ++i) {
+        var selectorPayload = payload.selectorList.selectors[i];
+        this.selectors.push(WebInspector.CSSRuleSelector.parsePayload(selectorPayload));
     }
     this.selectorText = this.selectors.select("value").join(", ");
 
@@ -948,11 +982,8 @@ WebInspector.CSSRule.prototype = {
         if (this.styleSheetId === styleSheetId) {
             if (this.selectorRange)
                 this.selectorRange = this.selectorRange.rebaseAfterTextEdit(oldRange, newRange);
-            for (var i = 0; i < this.selectors.length; ++i) {
-                var selector = this.selectors[i];
-                if (selector.range)
-                    selector.range = selector.range.rebaseAfterTextEdit(oldRange, newRange);
-            }
+            for (var i = 0; i < this.selectors.length; ++i)
+                this.selectors[i].sourceStyleRuleEdited(oldRange, newRange);
         }
         if (this.media) {
             for (var i = 0; i < this.media.length; ++i)
@@ -1226,6 +1257,45 @@ WebInspector.CSSProperty.prototype = {
 
 /**
  * @constructor
+ * @param {!CSSAgent.MediaQuery} payload
+ */
+WebInspector.CSSMediaQuery = function(payload)
+{
+    this._active = payload.active;
+    this._expressions = [];
+    for (var j = 0; j < payload.expressions.length; ++j)
+        this._expressions.push(WebInspector.CSSMediaQueryExpression.parsePayload(payload.expressions[j]));
+}
+
+/**
+ * @param {!CSSAgent.MediaQuery} payload
+ * @return {!WebInspector.CSSMediaQuery}
+ */
+WebInspector.CSSMediaQuery.parsePayload = function(payload)
+{
+    return new WebInspector.CSSMediaQuery(payload);
+}
+
+WebInspector.CSSMediaQuery.prototype = {
+    /**
+     * @return {boolean}
+     */
+    active: function()
+    {
+        return this._active;
+    },
+
+    /**
+     * @return {!Array.<!WebInspector.CSSMediaQueryExpression>}
+     */
+    expressions: function()
+    {
+        return this._expressions;
+    }
+}
+
+/**
+ * @constructor
  * @param {!CSSAgent.MediaQueryExpression} payload
  */
 WebInspector.CSSMediaQueryExpression = function(payload)
@@ -1296,13 +1366,8 @@ WebInspector.CSSMedia = function(cssModel, payload)
     this.mediaList = null;
     if (payload.mediaList) {
         this.mediaList = [];
-        for (var i = 0; i < payload.mediaList.length; ++i) {
-            var mediaQueryPayload = payload.mediaList[i];
-            var mediaQueryExpressions = [];
-            for (var j = 0; j < mediaQueryPayload.length; ++j)
-                mediaQueryExpressions.push(WebInspector.CSSMediaQueryExpression.parsePayload(mediaQueryPayload[j]));
-            this.mediaList.push(mediaQueryExpressions);
-        }
+        for (var i = 0; i < payload.mediaList.length; ++i)
+            this.mediaList.push(WebInspector.CSSMediaQuery.parsePayload(payload.mediaList[i]));
     }
 }
 
@@ -1499,7 +1564,7 @@ WebInspector.CSSStyleSheetHeader.prototype = {
 
     /**
      * @override
-     * @param {function(?string)} callback
+     * @param {function(string)} callback
      */
     requestContent: function(callback)
     {

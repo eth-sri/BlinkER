@@ -665,17 +665,11 @@ static void clearSelectionIfNeeded(LocalFrame* oldFocusedFrame, LocalFrame* newF
     if (selectionStartNode == newFocusedNode || selectionStartNode->isDescendantOf(newFocusedNode))
         return;
 
-    if (selectionStartNode->isInShadowTree() && selectionStartNode->shadowHost() == newFocusedNode)
+    if (!enclosingTextFormControl(selectionStartNode))
         return;
 
-    if (Node* mousePressNode = newFocusedFrame->eventHandler().mousePressNode()) {
-        if (mousePressNode->renderer() && !mousePressNode->canStartSelection()) {
-            // Don't clear the selection for contentEditable elements, but do
-            // clear it for input and textarea. See bug 38696.
-            if (!enclosingTextFormControl(selection.start()))
-                return;
-        }
-    }
+    if (selectionStartNode->isInShadowTree() && selectionStartNode->shadowHost() == newFocusedNode)
+        return;
 
     selection.clear();
 }
@@ -732,11 +726,6 @@ void FocusController::setActive(bool active)
         return;
 
     m_isActive = active;
-
-    if (m_page->mainFrame()->isLocalFrame()) {
-        if (FrameView* view = m_page->deprecatedLocalMainFrame()->view())
-            view->updateControlTints();
-    }
 
     Frame* frame = focusedOrMainFrame();
     if (frame->isLocalFrame())

@@ -40,6 +40,8 @@
 #include "core/dom/MessagePort.h"
 #include "core/events/ErrorEvent.h"
 #include "core/events/Event.h"
+#include "core/inspector/ConsoleMessage.h"
+#include "core/inspector/ConsoleMessageStorage.h"
 #include "core/inspector/InspectorConsoleInstrumentation.h"
 #include "core/inspector/ScriptCallStack.h"
 #include "core/inspector/WorkerInspectorController.h"
@@ -88,6 +90,7 @@ WorkerGlobalScope::WorkerGlobalScope(const KURL& url, const String& userAgent, W
     , m_workerClients(workerClients)
     , m_timeOrigin(timeOrigin)
     , m_terminationObserver(0)
+    , m_messageStorage(ConsoleMessageStorage::createForWorker(this))
 {
     ScriptWrappable::init(this);
     setClient(this);
@@ -281,7 +284,7 @@ EventTarget* WorkerGlobalScope::errorEventTarget()
     return this;
 }
 
-void WorkerGlobalScope::logExceptionToConsole(const String& errorMessage, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtrWillBeRawPtr<ScriptCallStack>)
+void WorkerGlobalScope::logExceptionToConsole(const String& errorMessage, int, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtrWillBeRawPtr<ScriptCallStack>)
 {
     thread()->workerReportingProxy().reportException(errorMessage, lineNumber, columnNumber, sourceURL);
 }
@@ -291,23 +294,21 @@ void WorkerGlobalScope::reportBlockedScriptExecutionToInspector(const String& di
     InspectorInstrumentation::scriptExecutionBlockedByCSP(this, directiveText);
 }
 
-void WorkerGlobalScope::addMessage(MessageSource source, MessageLevel level, const String& message, const String& sourceURL, unsigned lineNumber, ScriptState* scriptState)
+void WorkerGlobalScope::addMessage(PassRefPtrWillBeRawPtr<ConsoleMessage> prpConsoleMessage)
 {
+    RefPtrWillBeRawPtr<ConsoleMessage> consoleMessage = prpConsoleMessage;
     if (!isContextThread()) {
-        postTask(AddConsoleMessageTask::create(source, level, message));
+        postTask(AddConsoleMessageTask::create(consoleMessage->source(), consoleMessage->level(), consoleMessage->message()));
         return;
     }
-    thread()->workerReportingProxy().reportConsoleMessage(source, level, message, lineNumber, sourceURL);
-    addMessageToWorkerConsole(source, level, message, sourceURL, lineNumber, nullptr, scriptState);
+    thread()->workerReportingProxy().reportConsoleMessage(consoleMessage);
+    addMessageToWorkerConsole(consoleMessage.release());
 }
 
-void WorkerGlobalScope::addMessageToWorkerConsole(MessageSource source, MessageLevel level, const String& message, const String& sourceURL, unsigned lineNumber, PassRefPtrWillBeRawPtr<ScriptCallStack> callStack, ScriptState* scriptState)
+void WorkerGlobalScope::addMessageToWorkerConsole(PassRefPtrWillBeRawPtr<ConsoleMessage> consoleMessage)
 {
     ASSERT(isContextThread());
-    if (callStack)
-        InspectorInstrumentation::addMessageToConsole(this, source, LogMessageType, level, message, callStack);
-    else
-        InspectorInstrumentation::addMessageToConsole(this, source, LogMessageType, level, message, sourceURL, lineNumber, 0, scriptState);
+    m_messageStorage->reportMessage(consoleMessage);
 }
 
 bool WorkerGlobalScope::isContextThread() const
@@ -340,6 +341,11 @@ void WorkerGlobalScope::countDeprecation(UseCounter::Feature) const
     // FIXME: How should we count features for shared/service workers?
 }
 
+ConsoleMessageStorage* WorkerGlobalScope::messageStorage()
+{
+    return m_messageStorage.get();
+}
+
 void WorkerGlobalScope::trace(Visitor* visitor)
 {
     visitor->trace(m_console);
@@ -348,6 +354,7 @@ void WorkerGlobalScope::trace(Visitor* visitor)
     visitor->trace(m_workerInspectorController);
     visitor->trace(m_eventQueue);
     visitor->trace(m_workerClients);
+    visitor->trace(m_messageStorage);
     WillBeHeapSupplementable<WorkerGlobalScope>::trace(visitor);
     ExecutionContext::trace(visitor);
     EventTargetWithInlineData::trace(visitor);

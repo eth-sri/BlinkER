@@ -41,7 +41,7 @@
 namespace blink {
 
 AsyncAudioDecoder::AsyncAudioDecoder()
-    : m_thread(adoptPtr(blink::Platform::current()->createThread("Audio Decoder")))
+    : m_thread(adoptPtr(Platform::current()->createThread("Audio Decoder")))
 {
 }
 
@@ -80,11 +80,11 @@ void AsyncAudioDecoder::notifyComplete(ArrayBuffer* audioData, AudioBufferCallba
     OwnPtr<AudioBufferCallback> errorCallbackPtr = adoptPtr(errorCallback);
     RefPtr<AudioBus> audioBusRef = adoptRef(audioBus);
 
-    RefPtrWillBeRawPtr<AudioBuffer> audioBuffer = AudioBuffer::createFromAudioBus(audioBus);
-    if (audioBuffer.get() && successCallback)
-        successCallback->handleEvent(audioBuffer.get());
+    AudioBuffer* audioBuffer = AudioBuffer::createFromAudioBus(audioBus);
+    if (audioBuffer && successCallback)
+        successCallback->handleEvent(audioBuffer);
     else if (errorCallback)
-        errorCallback->handleEvent(audioBuffer.get());
+        errorCallback->handleEvent(audioBuffer);
 }
 
 } // namespace blink

@@ -7,6 +7,7 @@
 
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ScriptWrappable.h"
+#include "modules/serviceworkers/FetchBodyStream.h"
 #include "modules/serviceworkers/FetchRequestData.h"
 #include "modules/serviceworkers/Headers.h"
 #include "platform/heap/Handle.h"
@@ -15,14 +16,13 @@
 #include "wtf/RefPtr.h"
 #include "wtf/text/WTFString.h"
 
-namespace blink { class WebServiceWorkerRequest; }
-
 namespace blink {
 
 class RequestInit;
-class ResourceRequest;
 struct ResourceLoaderOptions;
+class ResourceRequest;
 struct ThreadableLoaderOptions;
+class WebServiceWorkerRequest;
 
 class Request FINAL : public RefCountedWillBeGarbageCollected<Request>, public ScriptWrappable {
     DECLARE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(Request);
@@ -34,14 +34,14 @@ public:
 
     static PassRefPtrWillBeRawPtr<Request> create(PassRefPtrWillBeRawPtr<FetchRequestData>);
 
-    static PassRefPtrWillBeRawPtr<Request> create(const blink::WebServiceWorkerRequest&);
+    static PassRefPtrWillBeRawPtr<Request> create(const WebServiceWorkerRequest&);
 
     PassRefPtrWillBeRawPtr<FetchRequestData> request() { return m_request; }
 
     String method() const;
     String url() const;
     PassRefPtrWillBeRawPtr<Headers> headers() const { return m_headers; }
-    // FIXME: Support body.
+    PassRefPtrWillBeRawPtr<FetchBodyStream> body(ExecutionContext*);
     String referrer() const;
     String mode() const;
     String credentials() const;
@@ -50,10 +50,11 @@ public:
 
 private:
     explicit Request(PassRefPtrWillBeRawPtr<FetchRequestData>);
-    explicit Request(const blink::WebServiceWorkerRequest&);
+    explicit Request(const WebServiceWorkerRequest&);
 
     RefPtrWillBeMember<FetchRequestData> m_request;
     RefPtrWillBeMember<Headers> m_headers;
+    RefPtrWillBeMember<FetchBodyStream> m_fetchBodyStream;
 };
 
 } // namespace blink

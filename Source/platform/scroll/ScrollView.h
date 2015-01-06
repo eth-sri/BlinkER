@@ -39,7 +39,6 @@
 
 namespace blink {
 
-class HostWindow;
 class Scrollbar;
 
 class PLATFORM_EXPORT ScrollView : public Widget, public ScrollableArea {
@@ -59,7 +58,7 @@ public:
     // NOTE: This should only be called by the overriden setScrollOffset from ScrollableArea.
     virtual void scrollTo(const IntSize& newOffset);
 
-    // The window thats hosts the ScrollView. The ScrollView will communicate scrolls and repaints to the
+    // The window that hosts the ScrollView. The ScrollView will communicate scrolls and repaints to the
     // host window in the window's coordinate space.
     virtual HostWindow* hostWindow() const = 0;
 
@@ -273,8 +272,8 @@ protected:
     virtual void invalidateScrollCornerRect(const IntRect&) OVERRIDE;
 
     virtual void scrollContentsIfNeeded();
-    // Scroll the content by blitting the pixels.
-    virtual bool scrollContentsFastPath(const IntSize& scrollDelta, const IntRect& rectToScroll, const IntRect& clipRect);
+    // Scroll the content by via the compositor.
+    virtual bool scrollContentsFastPath(const IntSize& scrollDelta) { return true; }
     // Scroll the content by invalidating everything.
     virtual void scrollContentsSlowPath(const IntRect& updateRect);
 

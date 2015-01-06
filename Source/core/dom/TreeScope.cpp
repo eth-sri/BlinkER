@@ -40,6 +40,7 @@
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/eventracer/EventRacerContext.h"
 #include "core/eventracer/EventRacerLog.h"
+#include "core/editing/DOMSelection.h"
 #include "core/events/EventPath.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
@@ -47,7 +48,6 @@
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/html/HTMLLabelElement.h"
 #include "core/html/HTMLMapElement.h"
-#include "core/page/DOMSelection.h"
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
 #include "core/rendering/HitTestResult.h"
@@ -168,7 +168,7 @@ Element* TreeScope::getElementById(const AtomicString& elementId) const
 
     Element *elt;
     if (m_elementsById)
-        elt = m_elementsById->getElementById(elementId.impl(), this);
+        elt = m_elementsById->getElementById(elementId, this);
     else
         elt = 0;
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
@@ -202,15 +202,15 @@ const WillBeHeapVector<RawPtrWillBeMember<Element> >& TreeScope::getAllElementsB
 
     if (!m_elementsById)
         return *emptyVector;
-    else
-        return m_elementsById->getAllElementsById(elementId.impl(), this);
+
+    return m_elementsById->getAllElementsById(elementId, this);
 }
 
 void TreeScope::addElementById(const AtomicString& elementId, Element* element)
 {
     if (!m_elementsById)
         m_elementsById = DocumentOrderedMap::create();
-    m_elementsById->add(elementId.impl(), element);
+    m_elementsById->add(elementId, element);
     m_idTargetObserverRegistry->notifyObservers(elementId);
 
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
@@ -244,7 +244,7 @@ void TreeScope::removeElementById(const AtomicString& elementId, Element* elemen
 
     if (!m_elementsById)
         return;
-    m_elementsById->remove(elementId.impl(), element);
+    m_elementsById->remove(elementId, element);
     m_idTargetObserverRegistry->notifyObservers(elementId);
 }
 
@@ -264,7 +264,7 @@ Node* TreeScope::ancestorInThisScope(Node* node) const
 
 void TreeScope::addImageMap(HTMLMapElement* imageMap)
 {
-    StringImpl* name = imageMap->getName().impl();
+    const AtomicString& name = imageMap->getName();
     if (!name)
         return;
     if (!m_imageMapsByName)
@@ -276,7 +276,7 @@ void TreeScope::removeImageMap(HTMLMapElement* imageMap)
 {
     if (!m_imageMapsByName)
         return;
-    StringImpl* name = imageMap->getName().impl();
+    const AtomicString& name = imageMap->getName();
     if (!name)
         return;
     m_imageMapsByName->remove(name, imageMap);
@@ -289,10 +289,10 @@ HTMLMapElement* TreeScope::getImageMap(const String& url) const
     if (!m_imageMapsByName)
         return 0;
     size_t hashPos = url.find('#');
-    String name = (hashPos == kNotFound ? url : url.substring(hashPos + 1)).impl();
+    String name = hashPos == kNotFound ? url : url.substring(hashPos + 1);
     if (rootNode().document().isHTMLDocument())
-        return toHTMLMapElement(m_imageMapsByName->getElementByLowercasedMapName(AtomicString(name.lower()).impl(), this));
-    return toHTMLMapElement(m_imageMapsByName->getElementByMapName(AtomicString(name).impl(), this));
+        return toHTMLMapElement(m_imageMapsByName->getElementByLowercasedMapName(AtomicString(name.lower()), this));
+    return toHTMLMapElement(m_imageMapsByName->getElementByMapName(AtomicString(name), this));
 }
 
 HitTestResult hitTestInDocument(const Document* document, int x, int y)
@@ -335,13 +335,13 @@ Element* TreeScope::elementFromPoint(int x, int y) const
 void TreeScope::addLabel(const AtomicString& forAttributeValue, HTMLLabelElement* element)
 {
     ASSERT(m_labelsByForAttribute);
-    m_labelsByForAttribute->add(forAttributeValue.impl(), element);
+    m_labelsByForAttribute->add(forAttributeValue, element);
 }
 
 void TreeScope::removeLabel(const AtomicString& forAttributeValue, HTMLLabelElement* element)
 {
     ASSERT(m_labelsByForAttribute);
-    m_labelsByForAttribute->remove(forAttributeValue.impl(), element);
+    m_labelsByForAttribute->remove(forAttributeValue, element);
 }
 
 HTMLLabelElement* TreeScope::labelElementForId(const AtomicString& forAttributeValue)
@@ -359,7 +359,7 @@ HTMLLabelElement* TreeScope::labelElementForId(const AtomicString& forAttributeV
         }
     }
 
-    return toHTMLLabelElement(m_labelsByForAttribute->getElementByLabelForAttribute(forAttributeValue.impl(), this));
+    return toHTMLLabelElement(m_labelsByForAttribute->getElementByLabelForAttribute(forAttributeValue, this));
 }
 
 DOMSelection* TreeScope::getSelection() const

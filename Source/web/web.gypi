@@ -47,8 +47,6 @@
       'IndexedDBClientImpl.h',
       'InspectorClientImpl.cpp',
       'InspectorClientImpl.h',
-      'InspectorFrontendClientImpl.cpp',
-      'InspectorFrontendClientImpl.h',
       'LinkHighlight.cpp',
       'LinkHighlight.h',
       'LocalFileSystemClient.cpp',
@@ -263,6 +261,9 @@
       'win/WebFontRendering.cpp',
     ],
     'web_unittest_files': [
+      'ExternalPopupMenuTest.cpp',
+      'PopupContainerTest.cpp',
+      'PopupMenuTest.cpp',
       'WebNodeTest.cpp',
       # FIXME: Move the tests from web/tests/ to appropriate places.
       # crbug.com/353585
@@ -285,8 +286,6 @@
       'tests/PageSerializerTest.cpp',
       'tests/PaintAggregatorTest.cpp',
       'tests/PinchViewportTest.cpp',
-      'tests/PopupContainerTest.cpp',
-      'tests/PopupMenuTest.cpp',
       'tests/PrerenderingTest.cpp',
       'tests/ProgrammaticScrollTest.cpp',
       'tests/RenderGeometryMapTest.cpp',
@@ -294,8 +293,6 @@
       'tests/SpinLockTest.cpp',
       'tests/TextFinderTest.cpp',
       'tests/TouchActionTest.cpp',
-      'tests/URLTestHelpers.cpp',
-      'tests/URLTestHelpers.h',
       'tests/ViewportTest.cpp',
       'tests/WebDocumentTest.cpp',
       'tests/WebFrameTest.cpp',

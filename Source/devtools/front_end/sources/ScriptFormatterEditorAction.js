@@ -4,7 +4,7 @@
 
 /**
  * @constructor
- * @implements {WebInspector.SourceMapping}
+ * @implements {WebInspector.DebuggerSourceMapping}
  * @param {!WebInspector.Target} target
  * @param {!WebInspector.ScriptFormatterEditorAction} editorAction
  */
@@ -16,7 +16,7 @@ WebInspector.FormatterScriptMapping = function(target, editorAction)
 
 WebInspector.FormatterScriptMapping.prototype = {
     /**
-     * @param {!WebInspector.RawLocation} rawLocation
+     * @param {!WebInspector.DebuggerModel.Location} rawLocation
      * @return {?WebInspector.UILocation}
      */
     rawLocationToUILocation: function(rawLocation)
@@ -167,7 +167,7 @@ WebInspector.ScriptFormatterEditorAction.prototype = {
      */
     targetAdded: function(target)
     {
-        this._scriptMappingByTarget.put(target, new WebInspector.FormatterScriptMapping(target, this));
+        this._scriptMappingByTarget.set(target, new WebInspector.FormatterScriptMapping(target, this));
         target.debuggerModel.addEventListener(WebInspector.DebuggerModel.Events.GlobalObjectCleared, this._debuggerReset, this);
     },
 
@@ -312,7 +312,7 @@ WebInspector.ScriptFormatterEditorAction.prototype = {
     {
         var uiSourceCodes = this._formatData.keys();
         for (var i = 0; i < uiSourceCodes.length; ++i) {
-            uiSourceCodes[i].setSourceMappingForTarget(target, null);
+            WebInspector.debuggerWorkspaceBinding.setSourceMapping(target, uiSourceCodes[i], null);
             var formatData = this._formatData.get(uiSourceCodes[i]);
             var scripts = [];
             for (var j = 0; j < formatData.scripts.length; ++j) {
@@ -364,7 +364,7 @@ WebInspector.ScriptFormatterEditorAction.prototype = {
             return scripts.filter(isInlineScript);
         }
         if (uiSourceCode.contentType() === WebInspector.resourceTypes.Script) {
-            var rawLocations = (uiSourceCode.uiLocationToRawLocations(0, 0));
+            var rawLocations = WebInspector.debuggerWorkspaceBinding.uiLocationToRawLocations(uiSourceCode, 0, 0);
             return rawLocations.map(function(rawLocation) { return rawLocation.script()});
         }
         return [];
@@ -414,12 +414,12 @@ WebInspector.ScriptFormatterEditorAction.prototype = {
             formattedPath = this._projectDelegate._addFormatted(name, uiSourceCode.url, uiSourceCode.contentType(), formattedContent);
             var formattedUISourceCode = /** @type {!WebInspector.UISourceCode} */ (this._workspace.uiSourceCode(this._projectId, formattedPath));
             var formatData = new WebInspector.FormatterScriptMapping.FormatData(uiSourceCode.project().id(), uiSourceCode.path(), formatterMapping, scripts);
-            this._formatData.put(formattedUISourceCode, formatData);
+            this._formatData.set(formattedUISourceCode, formatData);
             var path = uiSourceCode.project().id() + ":" + uiSourceCode.path();
-            this._formattedPaths.put(path, formattedPath);
+            this._formattedPaths.set(path, formattedPath);
             this._pathsToFormatOnLoad.add(path);
             for (var i = 0; i < scripts.length; ++i) {
-                this._uiSourceCodes.put(scripts[i], formattedUISourceCode);
+                this._uiSourceCodes.set(scripts[i], formattedUISourceCode);
                 var scriptMapping = /** @type {!WebInspector.FormatterScriptMapping} */(this._scriptMappingByTarget.get(scripts[i].target()));
                 WebInspector.debuggerWorkspaceBinding.pushSourceMapping(scripts[i], scriptMapping);
             }
@@ -427,7 +427,7 @@ WebInspector.ScriptFormatterEditorAction.prototype = {
             var targets = WebInspector.targetManager.targets();
             for (var i = 0; i < targets.length; ++i) {
                 var scriptMapping = /** @type {!WebInspector.FormatterScriptMapping} */(this._scriptMappingByTarget.get(targets[i]));
-                formattedUISourceCode.setSourceMappingForTarget(targets[i], scriptMapping);
+                WebInspector.debuggerWorkspaceBinding.setSourceMapping(targets[i], formattedUISourceCode, scriptMapping);
             }
             this._showIfNeeded(uiSourceCode, formattedUISourceCode, formatterMapping);
         }

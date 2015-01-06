@@ -48,6 +48,7 @@
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLFrameElementBase.h"
+#include "core/inspector/ConsoleMessageStorage.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/loader/FrameLoaderClient.h"
 #include "core/page/Chrome.h"
@@ -233,9 +234,12 @@ FloatSize LocalFrame::resizePageRectsKeepingRatio(const FloatSize& originalSize,
 
 void LocalFrame::setDOMWindow(PassRefPtrWillBeRawPtr<LocalDOMWindow> domWindow)
 {
-    InspectorInstrumentation::frameWindowDiscarded(this, m_domWindow.get());
+    if (m_domWindow) {
+        console().messageStorage()->frameWindowDiscarded(m_domWindow.get());
+        InspectorInstrumentation::frameWindowDiscarded(this, m_domWindow.get());
+    }
     if (domWindow)
-        script().clearWindowShell();
+        script().clearWindowProxy();
     Frame::setDOMWindow(domWindow);
 }
 
@@ -546,6 +550,16 @@ bool LocalFrame::isURLAllowed(const KURL& url) const
     return true;
 }
 
+bool LocalFrame::shouldReuseDefaultView(const KURL& url) const
+{
+    return loader().stateMachine()->isDisplayingInitialEmptyDocument() && document()->isSecureTransitionTo(url);
+}
+
+void LocalFrame::removeSpellingMarkersUnderWords(const Vector<String>& words)
+{
+    spellChecker().removeSpellingMarkersUnderWords(words);
+}
+
 struct ScopedFramePaintingState {
     ScopedFramePaintingState(LocalFrame* frame, Node* node)
         : frame(frame)
@@ -616,7 +630,7 @@ PassOwnPtr<DragImage> LocalFrame::dragImageForSelection()
 
     const ScopedFramePaintingState state(this, 0);
     m_view->setPaintBehavior(PaintBehaviorSelectionOnly | PaintBehaviorFlattenCompositingLayers);
-    document()->updateLayout();
+    m_view->updateLayoutAndStyleForPainting();
 
     IntRect paintingRect = enclosingIntRect(selection().bounds());
 
@@ -664,6 +678,11 @@ LocalFrame* LocalFrame::localFrameRoot()
         curFrame = toLocalFrame(curFrame->tree().parent());
 
     return curFrame;
+}
+
+void LocalFrame::setPagePopupOwner(Element& owner)
+{
+    m_pagePopupOwner = &owner;
 }
 
 } // namespace blink

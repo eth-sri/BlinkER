@@ -15,20 +15,20 @@ namespace blink {
 class ExecutionContext;
 
 class NetworkInformation FINAL
-    : public RefCountedWillBeRefCountedGarbageCollected<NetworkInformation>
+    : public RefCountedGarbageCollectedWillBeGarbageCollectedFinalized<NetworkInformation>
     , public ActiveDOMObject
     , public EventTargetWithInlineData
     , public NetworkStateNotifier::NetworkStateObserver {
-    REFCOUNTED_EVENT_TARGET(NetworkInformation);
+    DEFINE_EVENT_TARGET_REFCOUNTING_WILL_BE_REMOVED(RefCountedGarbageCollected<NetworkInformation>);
     WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(NetworkInformation);
 
 public:
-    static PassRefPtrWillBeRawPtr<NetworkInformation> create(ExecutionContext*);
+    static NetworkInformation* create(ExecutionContext*);
     virtual ~NetworkInformation();
 
     String type() const;
 
-    virtual void connectionTypeChange(blink::WebConnectionType) OVERRIDE;
+    virtual void connectionTypeChange(WebConnectionType) OVERRIDE;
 
     // EventTarget overrides.
     virtual const AtomicString& interfaceName() const OVERRIDE;
@@ -49,7 +49,7 @@ private:
     void stopObserving();
 
     // Touched only on context thread.
-    blink::WebConnectionType m_type;
+    WebConnectionType m_type;
 
     // Whether this object is listening for events from NetworkStateNotifier.
     bool m_observing;

@@ -44,7 +44,7 @@ namespace blink {
 
 PassRefPtrWillBeRawPtr<MediaController> MediaController::create(ExecutionContext* context)
 {
-    return adoptRefWillBeRefCountedGarbageCollected(new MediaController(context));
+    return adoptRefWillBeNoop(new MediaController(context));
 }
 
 MediaController::MediaController(ExecutionContext* context)
@@ -485,6 +485,9 @@ void MediaController::bringElementUpToSpeed(HTMLMediaElement* element)
     // it must seek that media element to the MediaController's media controller position relative
     // to the media element's timeline.
     element->seek(currentTime(), IGNORE_EXCEPTION);
+
+    // Update volume to take controller volume and mute into account.
+    element->updateVolume();
 }
 
 bool MediaController::isRestrained() const

@@ -51,8 +51,7 @@ bool RenderSVGForeignObject::isChildAllowed(RenderObject* child, RenderStyle* st
 
 void RenderSVGForeignObject::paint(PaintInfo& paintInfo, const LayoutPoint&)
 {
-    if (paintInfo.context->paintingDisabled()
-        || (paintInfo.phase != PaintPhaseForeground && paintInfo.phase != PaintPhaseSelection))
+    if (paintInfo.phase != PaintPhaseForeground && paintInfo.phase != PaintPhaseSelection)
         return;
 
     PaintInfo childPaintInfo(paintInfo);
@@ -154,11 +153,10 @@ void RenderSVGForeignObject::layout()
         SVGResourcesCache::clientLayoutChanged(this);
 }
 
-void RenderSVGForeignObject::mapRectToPaintInvalidationBacking(const RenderLayerModelObject* paintInvalidationContainer,
-    LayoutRect& rect, bool fixed, const PaintInvalidationState* paintInvalidationState) const
+void RenderSVGForeignObject::mapRectToPaintInvalidationBacking(const RenderLayerModelObject* paintInvalidationContainer, LayoutRect& rect, const PaintInvalidationState* paintInvalidationState) const
 {
     FloatRect r(rect);
-    SVGRenderSupport::computeFloatRectForRepaint(this, paintInvalidationContainer, r, fixed, paintInvalidationState);
+    SVGRenderSupport::computeFloatRectForPaintInvalidation(this, paintInvalidationContainer, r, paintInvalidationState);
     rect = enclosingLayoutRect(r);
 }
 

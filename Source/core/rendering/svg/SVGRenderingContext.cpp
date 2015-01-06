@@ -118,8 +118,8 @@ void SVGRenderingContext::prepareToRenderSVGContent(RenderObject* object, PaintI
     bool hasBlendMode = style->hasBlendMode() && !isRenderingMask;
 
     if (opacity < 1 || hasBlendMode || style->hasIsolation()) {
-        FloatRect repaintRect = m_object->paintInvalidationRectInLocalCoordinates();
-        m_paintInfo->context->clip(repaintRect);
+        FloatRect paintInvalidationRect = m_object->paintInvalidationRectInLocalCoordinates();
+        m_paintInfo->context->clip(paintInvalidationRect);
 
         if (hasBlendMode) {
             if (!(m_renderingFlags & RestoreGraphicsContext)) {
@@ -132,7 +132,7 @@ void SVGRenderingContext::prepareToRenderSVGContent(RenderObject* object, PaintI
         m_paintInfo->context->beginTransparencyLayer(opacity);
 
         if (hasBlendMode)
-            m_paintInfo->context->setCompositeOperation(CompositeSourceOver, blink::WebBlendModeNormal);
+            m_paintInfo->context->setCompositeOperation(CompositeSourceOver, WebBlendModeNormal);
 
         m_renderingFlags |= EndOpacityLayer;
     }
@@ -180,7 +180,7 @@ void SVGRenderingContext::prepareToRenderSVGContent(RenderObject* object, PaintI
             if (!m_filter->applyResource(m_object, style, m_paintInfo->context, ApplyToDefaultMode))
                 return;
 
-            // Since we're caching the resulting bitmap and do not invalidate it on repaint rect
+            // Since we're caching the resulting bitmap and do not invalidate it on paint invalidation rect
             // changes, we need to paint the whole filter region. Otherwise, elements not visible
             // at the time of the initial paint (due to scrolling, window size, etc.) will never
             // be drawn.
@@ -308,4 +308,4 @@ bool SVGRenderingContext::bufferForeground(OwnPtr<ImageBuffer>& imageBuffer)
     return true;
 }
 
-}
+} // namespace blink

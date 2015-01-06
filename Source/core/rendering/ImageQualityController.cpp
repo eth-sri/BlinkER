@@ -60,6 +60,11 @@ void ImageQualityController::remove(RenderObject* renderer)
     }
 }
 
+bool ImageQualityController::has(RenderObject* renderer)
+{
+    return gImageQualityController && gImageQualityController->m_objectLayerSizeMap.contains(renderer);
+}
+
 InterpolationQuality ImageQualityController::chooseInterpolationQuality(GraphicsContext* context, RenderObject* object, Image* image, const void* layer, const LayoutSize& layoutSize)
 {
     if (object->style()->imageRendering() == ImageRenderingPixelated
@@ -137,7 +142,7 @@ void ImageQualityController::highQualityRepaintTimerFired(Timer<ImageQualityCont
                 return;
             }
         }
-        it->key->paintInvalidationForWholeRenderer();
+        it->key->setShouldDoFullPaintInvalidation(true);
     }
 
     m_liveResizeOptimizationIsActive = false;
@@ -152,7 +157,7 @@ bool ImageQualityController::shouldPaintAtLowQuality(GraphicsContext* context, R
 {
     // If the image is not a bitmap image, then none of this is relevant and we just paint at high
     // quality.
-    if (!image || !image->isBitmapImage() || context->paintingDisabled())
+    if (!image || !image->isBitmapImage())
         return false;
 
     if (object->style()->imageRendering() == ImageRenderingOptimizeContrast)

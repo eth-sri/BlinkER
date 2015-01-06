@@ -535,6 +535,13 @@ void Page::settingsChanged(SettingsDelegate::ChangeType changeType)
     case SettingsDelegate::AcceleratedCompositingChange:
         updateAcceleratedCompositingSettings();
         break;
+    case SettingsDelegate::MediaQueryChange:
+        for (Frame* frame = mainFrame(); frame; frame = frame->tree().traverseNext()) {
+            if (frame->isLocalFrame())
+                toLocalFrame(frame)->document()->mediaQueryAffectingValueChanged();
+        }
+        setNeedsRecalcStyleInAllFrames();
+        break;
     }
 }
 
@@ -596,6 +603,7 @@ void Page::trace(Visitor* visitor)
     visitor->trace(m_frameHost);
 #endif
     WillBeHeapSupplementable<Page>::trace(visitor);
+    LifecycleContext<Page>::trace(visitor);
 }
 
 void Page::willBeDestroyed()
@@ -629,7 +637,6 @@ void Page::willBeDestroyed()
     m_mainFrame = 0;
     if (m_validationMessageClient)
         m_validationMessageClient->willBeDestroyed();
-    WillBeHeapSupplementable<Page>::willBeDestroyed();
 }
 
 Page::PageClients::PageClients()

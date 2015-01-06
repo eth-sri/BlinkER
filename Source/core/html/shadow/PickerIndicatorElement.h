@@ -33,8 +33,8 @@
 
 #if ENABLE(INPUT_MULTIPLE_FIELDS_UI)
 #include "core/html/HTMLDivElement.h"
-#include "platform/DateTimeChooser.h"
-#include "platform/DateTimeChooserClient.h"
+#include "core/html/forms/DateTimeChooser.h"
+#include "core/html/forms/DateTimeChooserClient.h"
 
 namespace blink {
 
@@ -42,7 +42,6 @@ class HTMLInputElement;
 class PagePopup;
 
 class PickerIndicatorElement FINAL : public HTMLDivElement, public DateTimeChooserClient {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(PickerIndicatorElement);
 public:
     // PickerIndicatorOwner implementer must call removePickerIndicatorOwner when
     // it doesn't handle event, e.g. at destruction.
@@ -53,6 +52,7 @@ public:
         // FIXME: Remove. Deprecated in favor of double version.
         virtual void pickerIndicatorChooseValue(const String&) = 0;
         virtual void pickerIndicatorChooseValue(double) = 0;
+        virtual Element& pickerOwnerElement() const = 0;
         virtual bool setupDateTimeChooserParameters(DateTimeChooserParameters&) = 0;
     };
 
@@ -64,8 +64,10 @@ public:
     void closePopup();
     virtual bool willRespondToMouseClickEvents() OVERRIDE;
     void removePickerIndicatorOwner() { m_pickerIndicatorOwner = nullptr; }
+    AXObject* popupRootAXObject() const;
 
     // DateTimeChooserClient implementation.
+    virtual Element& ownerElement() const OVERRIDE;
     virtual void didChooseValue(const String&) OVERRIDE;
     virtual void didChooseValue(double) OVERRIDE;
     virtual void didEndChooser() OVERRIDE;
@@ -80,7 +82,7 @@ private:
     HTMLInputElement* hostInput();
 
     RawPtrWillBeMember<PickerIndicatorOwner> m_pickerIndicatorOwner;
-    RefPtrWillBeMember<DateTimeChooser> m_chooser;
+    RefPtr<DateTimeChooser> m_chooser;
     bool m_isInOpenPopup;
 };
 

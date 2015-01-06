@@ -35,6 +35,7 @@
 #include "core/dom/CrossThreadTask.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "core/workers/WorkerMessagingProxy.h"
 #include "platform/NotImplemented.h"
 #include "wtf/Functional.h"
@@ -71,9 +72,9 @@ void WorkerObjectProxy::reportException(const String& errorMessage, int lineNumb
     m_executionContext->postTask(createCrossThreadTask(&WorkerMessagingProxy::reportException, m_messagingProxy, errorMessage, lineNumber, columnNumber, sourceURL));
 }
 
-void WorkerObjectProxy::reportConsoleMessage(MessageSource source, MessageLevel level, const String& message, int lineNumber, const String& sourceURL)
+void WorkerObjectProxy::reportConsoleMessage(PassRefPtrWillBeRawPtr<ConsoleMessage> consoleMessage)
 {
-    m_executionContext->postTask(createCrossThreadTask(&WorkerMessagingProxy::reportConsoleMessage, m_messagingProxy, source, level, message, lineNumber, sourceURL));
+    m_executionContext->postTask(createCrossThreadTask(&WorkerMessagingProxy::reportConsoleMessage, m_messagingProxy, consoleMessage->source(), consoleMessage->level(), consoleMessage->message(), consoleMessage->lineNumber(), consoleMessage->url()));
 }
 
 void WorkerObjectProxy::postMessageToPageInspector(const String& message)
@@ -92,10 +93,10 @@ void WorkerObjectProxy::workerGlobalScopeClosed()
     m_executionContext->postTask(createCrossThreadTask(&WorkerMessagingProxy::terminateWorkerGlobalScope, m_messagingProxy));
 }
 
-void WorkerObjectProxy::workerGlobalScopeDestroyed()
+void WorkerObjectProxy::workerThreadTerminated()
 {
     // This will terminate the MessagingProxy.
-    m_executionContext->postTask(createCrossThreadTask(&WorkerMessagingProxy::workerGlobalScopeDestroyed, m_messagingProxy));
+    m_executionContext->postTask(createCrossThreadTask(&WorkerMessagingProxy::workerThreadTerminated, m_messagingProxy));
 }
 
 WorkerObjectProxy::WorkerObjectProxy(ExecutionContext* executionContext, WorkerMessagingProxy* messagingProxy)

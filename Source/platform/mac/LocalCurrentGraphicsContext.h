@@ -18,6 +18,7 @@
  */
 
 #include "platform/PlatformExport.h"
+#include "platform/geometry/IntRect.h"
 #include "skia/ext/skia_utils_mac.h"
 #include "wtf/Noncopyable.h"
 
@@ -32,10 +33,11 @@ class GraphicsContext;
 class PLATFORM_EXPORT LocalCurrentGraphicsContext {
     WTF_MAKE_NONCOPYABLE(LocalCurrentGraphicsContext);
 public:
-    LocalCurrentGraphicsContext(GraphicsContext* graphicsContext);
+    LocalCurrentGraphicsContext(GraphicsContext*, IntRect clipRect);
     ~LocalCurrentGraphicsContext();
     CGContextRef cgContext();
 private:
+
     GraphicsContext* m_savedGraphicsContext;
     NSGraphicsContext* m_savedNSGraphicsContext;
     bool m_didSetGraphicsContext;

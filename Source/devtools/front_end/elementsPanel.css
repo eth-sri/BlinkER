@@ -49,6 +49,10 @@
     -webkit-transform: translateZ(0);
 }
 
+.elements-tree-outline.pick-node-mode {
+    cursor: pointer;
+}
+
 #elements-content .editing {
     margin-left: 8px;
 }
@@ -191,6 +195,7 @@
     background-clip: padding;
     -webkit-user-select: text;
     border-bottom: 1px solid rgb(191, 191, 191);
+    position: relative;
 }
 
 .styles-pane .sidebar-separator {
@@ -598,6 +603,7 @@
 }
 
 .sidebar-pane .style-panes-wrapper {
+    transform: translateZ(0);
     flex: 1;
     overflow-y: auto;
     position: relative;
@@ -643,10 +649,6 @@
 
 .sidebar-pane.composite .platform-fonts .stats-section {
     margin-bottom: 5px;
-}
-
-.sidebar-pane.composite .platform-fonts .css-font-value {
-    margin-left: 1ex;
 }
 
 .sidebar-pane.composite .platform-fonts .font-stats-item {
@@ -756,4 +758,26 @@ li.child-editing .styles-clipboard-only {
 
 .crumbs .crumb:hover {
     background-color: rgb(216, 216, 216);
+}
+
+.elements-tree-element-pick-node-1 {
+    border-radius: 3px;
+    padding: 1px 0 1px 0;
+    -webkit-animation: elements-tree-element-pick-node-animation-1 0.5s 1;
+}
+
+.elements-tree-element-pick-node-2 {
+    border-radius: 3px;
+    padding: 1px 0 1px 0;
+    -webkit-animation: elements-tree-element-pick-node-animation-2 0.5s 1;
+}
+
+@-webkit-keyframes elements-tree-element-pick-node-animation-1 {
+    from { background-color: rgb(255, 210, 126); }
+    to { background-color: inherit; }
+}
+
+@-webkit-keyframes elements-tree-element-pick-node-animation-2 {
+    from { background-color: rgb(255, 210, 126); }
+    to { background-color: inherit; }
 }

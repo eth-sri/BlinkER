@@ -45,8 +45,8 @@ public:
     void invalidateCacheForAttribute(const QualifiedName*) const;
 
     // DOM API
-    unsigned length() const { return m_collectionIndexCache.nodeCount(*this); }
-    Element* item(unsigned offset) const { return m_collectionIndexCache.nodeAt(*this, offset); }
+    unsigned length() const;
+    Element* item(unsigned offset) const;
     virtual Element* namedItem(const AtomicString& name) const;
     bool namedPropertyQuery(const AtomicString&, ExceptionState&);
     void namedPropertyEnumerator(Vector<String>& names, ExceptionState&);
@@ -55,11 +55,12 @@ public:
     void namedItems(const AtomicString& name, WillBeHeapVector<RefPtrWillBeMember<Element> >&) const;
     bool isEmpty() const { return m_collectionIndexCache.isEmpty(*this); }
     bool hasExactlyOneItem() const { return m_collectionIndexCache.hasExactlyOneNode(*this); }
+    bool elementMatches(const Element&) const;
 
     // CollectionIndexCache API.
     bool canTraverseBackward() const { return !overridesItemAfter(); }
-    Element* traverseToFirstElement() const;
-    Element* traverseToLastElement() const;
+    Element* traverseToFirst() const;
+    Element* traverseToLast() const;
     Element* traverseForwardToOffset(unsigned offset, Element& currentElement, unsigned& currentOffset) const;
     Element* traverseBackwardToOffset(unsigned offset, Element& currentElement, unsigned& currentOffset) const;
 

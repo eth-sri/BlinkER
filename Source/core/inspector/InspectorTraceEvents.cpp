@@ -35,7 +35,7 @@ class JSCallStack : public TraceEvent::ConvertableToTraceFormat  {
 public:
     explicit JSCallStack(PassRefPtrWillBeRawPtr<ScriptCallStack> callstack)
     {
-        m_serialized = callstack ? callstack->buildInspectorArray()->toJSONString() : "null";
+        m_serialized = callstack ? callstack->buildInspectorArray()->toJSONString() : "[]";
         ASSERT(m_serialized.isSafeToSendToAnotherThread());
     }
     virtual String asTraceFormat() const
@@ -273,7 +273,7 @@ PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorMarkLoadEvent::data(Lo
 {
     RefPtr<TracedValue> value = TracedValue::create();
     value->setString("frame", toHexString(frame));
-    bool isMainFrame = frame && frame->page()->mainFrame() == frame;
+    bool isMainFrame = frame && frame->isMainFrame();
     value->setBoolean("isMainFrame", isMainFrame);
     return value;
 }

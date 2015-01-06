@@ -83,6 +83,7 @@
     background-clip: padding;
     margin-top: -1px;
     white-space: nowrap;
+    overflow: hidden;
 }
 
 .sidebar-pane-title:active {
@@ -193,4 +194,23 @@
     padding: 4px;
     color: #888;
     background-color: #FFFFC2;
+}
+
+.sidebar-pane-button-new-rule {
+    background-image: url(Images/paneAddButtons.png);
+    background-position: 0 0;
+    position: absolute;
+    height: 16px;
+    width: 23px;
+    right: 10px;
+    bottom: 1px;
+    visibility: hidden;
+}
+
+.styles-section.matched-styles:not(.read-only):hover .sidebar-pane-button-new-rule {
+    visibility: visible;
+}
+
+.sidebar-pane-button-new-rule:hover {
+    background-position: -23px 0;
 }

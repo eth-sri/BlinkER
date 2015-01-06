@@ -460,7 +460,7 @@ void FEConvolveMatrix::applySoftware()
 
         int optimalThreadNumber = (absolutePaintRect().width() * absolutePaintRect().height()) / s_minimalRectDimension;
         if (optimalThreadNumber > 1) {
-            ParallelJobs<InteriorPixelParameters> parallelJobs(&blink::FEConvolveMatrix::setInteriorPixelsWorker, optimalThreadNumber);
+            ParallelJobs<InteriorPixelParameters> parallelJobs(&FEConvolveMatrix::setInteriorPixelsWorker, optimalThreadNumber);
             const int numOfThreads = parallelJobs.numberOfJobs();
 
             // Split the job into "heightPerThread" jobs but there a few jobs that need to be slightly larger since
@@ -502,23 +502,19 @@ void FEConvolveMatrix::applySoftware()
     }
 }
 
-SkMatrixConvolutionImageFilter::TileMode toSkiaTileMode(blink::EdgeModeType edgeMode)
+SkMatrixConvolutionImageFilter::TileMode toSkiaTileMode(EdgeModeType edgeMode)
 {
     switch (edgeMode) {
-    case blink::EDGEMODE_DUPLICATE:
+    case EDGEMODE_DUPLICATE:
         return SkMatrixConvolutionImageFilter::kClamp_TileMode;
-    case blink::EDGEMODE_WRAP:
+    case EDGEMODE_WRAP:
         return SkMatrixConvolutionImageFilter::kRepeat_TileMode;
-    case blink::EDGEMODE_NONE:
+    case EDGEMODE_NONE:
         return SkMatrixConvolutionImageFilter::kClampToBlack_TileMode;
     default:
         return SkMatrixConvolutionImageFilter::kClamp_TileMode;
     }
 }
-
-}; // unnamed namespace
-
-namespace blink {
 
 PassRefPtr<SkImageFilter> FEConvolveMatrix::createImageFilter(SkiaImageFilterBuilder* builder)
 {
@@ -527,7 +523,7 @@ PassRefPtr<SkImageFilter> FEConvolveMatrix::createImageFilter(SkiaImageFilterBui
     SkISize kernelSize(SkISize::Make(m_kernelSize.width(), m_kernelSize.height()));
     int numElements = kernelSize.width() * kernelSize.height();
     SkScalar gain = SkFloatToScalar(1.0f / m_divisor);
-    SkScalar bias = SkFloatToScalar(m_bias);
+    SkScalar bias = SkFloatToScalar(m_bias * 255);
     SkIPoint target = SkIPoint::Make(m_targetOffset.x(), m_targetOffset.y());
     SkMatrixConvolutionImageFilter::TileMode tileMode = toSkiaTileMode(m_edgeMode);
     bool convolveAlpha = !m_preserveAlpha;

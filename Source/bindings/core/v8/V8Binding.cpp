@@ -39,9 +39,9 @@
 #include "bindings/core/v8/V8NodeFilterCondition.h"
 #include "bindings/core/v8/V8ObjectConstructor.h"
 #include "bindings/core/v8/V8Window.h"
-#include "bindings/core/v8/V8WindowShell.h"
 #include "bindings/core/v8/V8WorkerGlobalScope.h"
 #include "bindings/core/v8/V8XPathNSResolver.h"
+#include "bindings/core/v8/WindowProxy.h"
 #include "bindings/core/v8/WorkerScriptController.h"
 #include "bindings/core/v8/custom/V8CustomXPathNSResolver.h"
 #include "core/dom/Document.h"
@@ -73,36 +73,24 @@
 
 namespace blink {
 
-void throwArityTypeErrorForMethod(const char* method, const char* type, const char* valid, unsigned provided, v8::Isolate* isolate)
-{
-    V8ThrowException::throwTypeError(ExceptionMessages::failedToExecute(method, type, ExceptionMessages::invalidArity(valid, provided)), isolate);
-}
-
-void throwArityTypeErrorForConstructor(const char* type, const char* valid, unsigned provided, v8::Isolate* isolate)
-{
-    V8ThrowException::throwTypeError(ExceptionMessages::failedToConstruct(type, ExceptionMessages::invalidArity(valid, provided)), isolate);
-}
-
-void throwArityTypeError(ExceptionState& exceptionState, const char* valid, unsigned provided)
+void setArityTypeError(ExceptionState& exceptionState, const char* valid, unsigned provided)
 {
     exceptionState.throwTypeError(ExceptionMessages::invalidArity(valid, provided));
-    exceptionState.throwIfNeeded();
 }
 
-void throwMinimumArityTypeErrorForMethod(const char* method, const char* type, unsigned expected, unsigned providedLeastNumMandatoryParams, v8::Isolate* isolate)
+v8::Local<v8::Value> createMinimumArityTypeErrorForMethod(const char* method, const char* type, unsigned expected, unsigned provided, v8::Isolate* isolate)
 {
-    V8ThrowException::throwTypeError(ExceptionMessages::failedToExecute(method, type, ExceptionMessages::notEnoughArguments(expected, providedLeastNumMandatoryParams)), isolate);
+    return V8ThrowException::createTypeError(ExceptionMessages::failedToExecute(method, type, ExceptionMessages::notEnoughArguments(expected, provided)), isolate);
 }
 
-void throwMinimumArityTypeErrorForConstructor(const char* type, unsigned expected, unsigned providedLeastNumMandatoryParams, v8::Isolate* isolate)
+v8::Local<v8::Value> createMinimumArityTypeErrorForConstructor(const char* type, unsigned expected, unsigned provided, v8::Isolate* isolate)
 {
-    V8ThrowException::throwTypeError(ExceptionMessages::failedToConstruct(type, ExceptionMessages::notEnoughArguments(expected, providedLeastNumMandatoryParams)), isolate);
+    return V8ThrowException::createTypeError(ExceptionMessages::failedToConstruct(type, ExceptionMessages::notEnoughArguments(expected, provided)), isolate);
 }
 
-void throwMinimumArityTypeError(ExceptionState& exceptionState, unsigned expected, unsigned providedLeastNumMandatoryParams)
+void setMinimumArityTypeError(ExceptionState& exceptionState, unsigned expected, unsigned provided)
 {
-    exceptionState.throwTypeError(ExceptionMessages::notEnoughArguments(expected, providedLeastNumMandatoryParams));
-    exceptionState.throwIfNeeded();
+    exceptionState.throwTypeError(ExceptionMessages::notEnoughArguments(expected, provided));
 }
 
 class ArrayBufferAllocator : public v8::ArrayBuffer::Allocator {
@@ -732,7 +720,7 @@ v8::Local<v8::Context> toV8Context(ExecutionContext* context, DOMWrapperWorld& w
     ASSERT(context);
     if (context->isDocument()) {
         if (LocalFrame* frame = toDocument(context)->frame())
-            return frame->script().windowShell(world)->context();
+            return frame->script().windowProxy(world)->context();
     } else if (context->isWorkerGlobalScope()) {
         if (WorkerScriptController* script = toWorkerGlobalScope(context)->script())
             return script->context();
@@ -744,7 +732,7 @@ v8::Local<v8::Context> toV8Context(LocalFrame* frame, DOMWrapperWorld& world)
 {
     if (!frame)
         return v8::Local<v8::Context>();
-    v8::Local<v8::Context> context = frame->script().windowShell(world)->context();
+    v8::Local<v8::Context> context = frame->script().windowProxy(world)->context();
     if (context.IsEmpty())
         return v8::Local<v8::Context>();
     LocalFrame* attachedFrame= toFrameIfNotDetached(context);

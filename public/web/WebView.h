@@ -44,6 +44,7 @@ namespace blink {
 
 class WebAXObject;
 class WebAutofillClient;
+class WebCredentialManagerClient;
 class WebDevToolsAgent;
 class WebDevToolsAgentClient;
 class WebDragData;
@@ -95,6 +96,7 @@ public:
 
     // Initializes the various client interfaces.
     virtual void setAutofillClient(WebAutofillClient*) = 0;
+    virtual void setCredentialManagerClient(WebCredentialManagerClient*) = 0;
     virtual void setDevToolsAgentClient(WebDevToolsAgentClient*) = 0;
     virtual void setPrerendererClient(WebPrerendererClient*) = 0;
     virtual void setSpellCheckClient(WebSpellCheckClient*) = 0;
@@ -355,7 +357,7 @@ public:
 
     // Retrieves a list of spelling markers.
     virtual void spellingMarkers(WebVector<uint32_t>* markers) = 0;
-
+    virtual void removeSpellingMarkersUnderWords(const WebVector<WebString>& words) = 0;
 
     // Support for resource loading initiated by plugins -------------------
 
@@ -370,12 +372,6 @@ public:
     // special case, meaning inspect the current page and not a specific
     // point.
     virtual void inspectElementAt(const WebPoint&) = 0;
-
-    // FIXME: These are deprecated. Remove them.
-    virtual WebString inspectorSettingsDeprecated() const { return WebString(); };
-    virtual void setInspectorSettings(const WebString&) { };
-    virtual bool inspectorSettingDeprecated(const WebString& key, WebString* value) const { return false; };
-    virtual void setInspectorSetting(const WebString& key, const WebString& value) { };
 
     // Set an override of device scale factor passed from WebView to
     // compositor. Pass zero to cancel override. This is used to implement
@@ -406,8 +402,6 @@ public:
 
 
     // SmartClip support ---------------------------------------------------
-    // TODO(changwan): remove this
-    virtual void getSmartClipData(WebRect, WebString&, WebRect& resultRect) = 0;
     virtual void extractSmartClipData(WebRect initRect, WebString& text, WebString& html, WebRect& resultRect) = 0;
 
 

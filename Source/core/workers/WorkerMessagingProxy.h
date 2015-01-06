@@ -44,6 +44,7 @@ class DedicatedWorkerThread;
 class ExecutionContext;
 class Worker;
 class WorkerClients;
+class WorkerInspectorProxy;
 
 class WorkerMessagingProxy FINAL : public WorkerGlobalScopeProxy, public WorkerLoaderProxy {
     WTF_MAKE_NONCOPYABLE(WorkerMessagingProxy); WTF_MAKE_FAST_ALLOCATED;
@@ -57,9 +58,6 @@ public:
     virtual void postMessageToWorkerGlobalScope(PassRefPtr<SerializedScriptValue>, PassOwnPtr<MessagePortChannelArray>) OVERRIDE;
     virtual bool hasPendingActivity() const OVERRIDE;
     virtual void workerObjectDestroyed() OVERRIDE;
-    virtual void connectToInspector(WorkerGlobalScopeProxy::PageInspector*) OVERRIDE;
-    virtual void disconnectFromInspector() OVERRIDE;
-    virtual void sendMessageToInspector(const String&) OVERRIDE;
 
     // These methods come from worker context thread via WorkerObjectProxy
     // and are called on the worker object thread (e.g. main thread).
@@ -67,10 +65,11 @@ public:
     void reportException(const String& errorMessage, int lineNumber, int columnNumber, const String& sourceURL);
     void reportConsoleMessage(MessageSource, MessageLevel, const String& message, int lineNumber, const String& sourceURL);
     void postMessageToPageInspector(const String&);
+    WorkerInspectorProxy* workerInspectorProxy();
     void confirmMessageFromWorkerObject(bool hasPendingActivity);
     void reportPendingActivity(bool hasPendingActivity);
     void workerGlobalScopeClosed();
-    void workerGlobalScopeDestroyed();
+    void workerThreadTerminated();
 
     // Implementation of WorkerLoaderProxy.
     // These methods are called on different threads to schedule loading
@@ -85,6 +84,7 @@ protected:
 
 private:
     static void workerObjectDestroyedInternal(ExecutionContext*, WorkerMessagingProxy*);
+    void terminateInternally();
 
     RefPtrWillBePersistent<ExecutionContext> m_executionContext;
     OwnPtr<WorkerObjectProxy> m_workerObjectProxy;
@@ -98,7 +98,7 @@ private:
     bool m_askedToTerminate;
 
     Vector<OwnPtr<ExecutionContextTask> > m_queuedEarlyTasks; // Tasks are queued here until there's a thread object created.
-    WorkerGlobalScopeProxy::PageInspector* m_pageInspector;
+    OwnPtr<WorkerInspectorProxy> m_workerInspectorProxy;
 
     OwnPtrWillBePersistent<WorkerClients> m_workerClients;
 };

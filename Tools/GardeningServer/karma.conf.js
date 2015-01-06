@@ -14,27 +14,39 @@ module.exports = function(config) {
     // mocha setup
     client: {
       mocha: {
-        ui: 'bdd'
-      }
+        ui: 'bdd',
+        checkLeaks: true,
+        globals: ['net']
+      },
+      captureConsole: true
     },
 
     // list of files / patterns to load in the browser
     files: [
-      {pattern: 'bower_components/chai/chai.js', watched: true, included: true, served: true},
-      {pattern: 'bower_components/sugar/release/sugar-full.development.js', watched: true, included: true, served: true},
-      {pattern: 'bower_components/platform/platform.js', watched: true, included: true, served: true},
-      {pattern: 'bower_components/polymer/polymer.html', watched: true, included: true, served: true},
-      {pattern: 'bower_components/**/*.{js,html,css,map}', watched: true, included: false, served: true},
-      {pattern: 'node_modules/mocha/mocha.js', watched: true, included: true, served: true},
-      {pattern: 'polymer-load-warning.html', watched: true, included: false, served: true},
-      {pattern: 'model/**/*[^tests].html', watched: true, included: false, served: true},
-      {pattern: 'ui/**/*[^tests].{js,html,css}', watched: true, included: false, served: true},
+      // dependencies
+      'bower_components/platform/platform.js',
+      'test/karma-loader.html',
+      'bower_components/chai/chai.js',
+      'bower_components/sugar/release/sugar-full.development.js',
+      {pattern: 'bower_components/**/*.{js,html,css,map}', included: false},
+      'node_modules/mocha/mocha.js',
+      // sources
+      'polymer-load-warning.html',
+      {pattern: 'base/*.html', included: false},
+      {pattern: 'lib/*.html', included: false},
+      {pattern: 'model/*.html', included: false},
+      'scripts/*.js',
+      {pattern: 'ui/*.html', included: false},
+      // tests
+      'lib/test/*.html',
+      'model/test/*.html',
+      'scripts/test/*.html',
       'ui/test/*',
+      'bower_components/polymer/polymer.html'
     ],
 
     // list of files to exclude
     exclude: [
-      'scripts/*tests.js',
     ],
 
     // preprocess matching files before serving them to the browser

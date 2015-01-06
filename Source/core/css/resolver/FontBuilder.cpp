@@ -24,13 +24,13 @@
 #include "core/css/resolver/FontBuilder.h"
 
 #include "core/css/CSSCalculationValue.h"
-#include "core/css/CSSFontFeatureValue.h"
 #include "core/css/CSSToLengthConversionData.h"
 #include "core/css/FontSize.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/rendering/RenderTheme.h"
 #include "core/rendering/RenderView.h"
+#include "core/rendering/TextAutosizer.h"
 #include "platform/fonts/FontDescription.h"
 #include "platform/text/LocaleToScriptMapping.h"
 
@@ -360,20 +360,6 @@ void FontBuilder::setWeight(FontWeight fontWeight)
     scope.fontDescription().setWeight(fontWeight);
 }
 
-void FontBuilder::setWeightBolder()
-{
-    FontDescriptionChangeScope scope(this);
-
-    scope.fontDescription().setWeight(scope.fontDescription().bolderWeight());
-}
-
-void FontBuilder::setWeightLighter()
-{
-    FontDescriptionChangeScope scope(this);
-
-    scope.fontDescription().setWeight(scope.fontDescription().lighterWeight());
-}
-
 void FontBuilder::setStretch(FontStretch fontStretch)
 {
     FontDescriptionChangeScope scope(this);
@@ -431,29 +417,11 @@ void FontBuilder::setFontSmoothing(FontSmoothingMode foontSmoothingMode)
     scope.fontDescription().setFontSmoothing(foontSmoothingMode);
 }
 
-void FontBuilder::setFeatureSettingsNormal()
+void FontBuilder::setFeatureSettings(PassRefPtr<FontFeatureSettings> settings)
 {
     FontDescriptionChangeScope scope(this);
 
-    // FIXME: Eliminate FontDescription::makeNormalFeatureSettings. It's useless.
-    scope.set(scope.fontDescription().makeNormalFeatureSettings());
-}
-
-void FontBuilder::setFeatureSettingsValue(CSSValue* value)
-{
-    FontDescriptionChangeScope scope(this);
-
-    CSSValueList* list = toCSSValueList(value);
-    RefPtr<FontFeatureSettings> settings = FontFeatureSettings::create();
-    int len = list->length();
-    for (int i = 0; i < len; ++i) {
-        CSSValue* item = list->item(i);
-        if (!item->isFontFeatureValue())
-            continue;
-        CSSFontFeatureValue* feature = toCSSFontFeatureValue(item);
-        settings->append(FontFeature(feature->tag(), feature->value()));
-    }
-    scope.fontDescription().setFeatureSettings(settings.release());
+    scope.fontDescription().setFeatureSettings(settings);
 }
 
 void FontBuilder::setSize(FontDescription& fontDescription, float effectiveZoom, float size)
@@ -566,7 +534,12 @@ void FontBuilder::updateComputedSize(RenderStyle* style, const RenderStyle* pare
 {
     FontDescriptionChangeScope scope(this);
 
-    scope.fontDescription().setComputedSize(getComputedSizeFromSpecifiedSize(scope.fontDescription(), style->effectiveZoom(), scope.fontDescription().specifiedSize()));
+    float computedSize = getComputedSizeFromSpecifiedSize(scope.fontDescription(), style->effectiveZoom(), scope.fontDescription().specifiedSize());
+    float multiplier = style->textAutosizingMultiplier();
+    if (multiplier > 1)
+        computedSize = TextAutosizer::computeAutosizedFontSize(computedSize, multiplier);
+
+    scope.fontDescription().setComputedSize(computedSize);
 }
 
 // FIXME: style param should come first

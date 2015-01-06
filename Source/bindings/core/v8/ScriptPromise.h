@@ -33,14 +33,18 @@
 
 #include "bindings/core/v8/ScriptFunction.h"
 #include "bindings/core/v8/ScriptValue.h"
+#include "bindings/core/v8/V8ThrowException.h"
+#include "core/dom/ExceptionCode.h"
 #include "platform/heap/Handle.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/PassRefPtr.h"
+#include "wtf/text/WTFString.h"
 #include <v8.h>
 
 namespace blink {
 
 class DOMException;
+class ExceptionState;
 
 // ScriptPromise is the class for representing Promise values in C++ world.
 // ScriptPromise holds a Promise.
@@ -114,6 +118,8 @@ public:
     static ScriptPromise reject(ScriptState*, v8::Handle<v8::Value>);
 
     static ScriptPromise rejectWithDOMException(ScriptState*, PassRefPtrWillBeRawPtr<DOMException>);
+
+    static v8::Local<v8::Promise> rejectRaw(v8::Isolate*, v8::Handle<v8::Value>);
 
     // This is a utility class intended to be used internally.
     // ScriptPromiseResolver is for general purpose.

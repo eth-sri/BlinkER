@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2009 Google Inc. All rights reserved.
+ * Copyright (C) 2014 Opera Software ASA. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -32,6 +33,8 @@
 #include "web/WebPluginContainerImpl.h"
 
 #include "bindings/core/v8/ScriptController.h"
+#include "bindings/core/v8/V8Element.h"
+#include "bindings/core/v8/V8NPObject.h"
 #include "core/HTMLNames.h"
 #include "core/clipboard/DataObject.h"
 #include "core/clipboard/DataTransfer.h"
@@ -40,6 +43,7 @@
 #include "core/events/MouseEvent.h"
 #include "core/events/TouchEvent.h"
 #include "core/events/WheelEvent.h"
+#include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLFormElement.h"
@@ -88,9 +92,7 @@
 #include "web/WebDataSourceImpl.h"
 #include "web/WebInputEventConversion.h"
 #include "web/WebViewImpl.h"
-
-
-using namespace blink;
+#include "wtf/Assertions.h"
 
 namespace blink {
 
@@ -104,17 +106,6 @@ void WebPluginContainerImpl::setFrameRect(const IntRect& frameRect)
 
 void WebPluginContainerImpl::paint(GraphicsContext* gc, const IntRect& damageRect)
 {
-    if (gc->updatingControlTints() && m_scrollbarGroup) {
-        // See comment in FrameView::updateControlTints().
-        if (m_scrollbarGroup->horizontalScrollbar())
-            m_scrollbarGroup->horizontalScrollbar()->invalidate();
-        if (m_scrollbarGroup->verticalScrollbar())
-            m_scrollbarGroup->verticalScrollbar()->invalidate();
-    }
-
-    if (gc->paintingDisabled())
-        return;
-
     if (!parent())
         return;
 
@@ -338,11 +329,8 @@ int WebPluginContainerImpl::printBegin(const WebPrintParams& printParams) const
     return m_webPlugin->printBegin(printParams);
 }
 
-bool WebPluginContainerImpl::printPage(int pageNumber,
-                                       blink::GraphicsContext* gc)
+bool WebPluginContainerImpl::printPage(int pageNumber, GraphicsContext* gc)
 {
-    if (gc->paintingDisabled())
-        return true;
     gc->save();
     WebCanvas* canvas = gc->canvas();
     bool ret = m_webPlugin->printPage(pageNumber, canvas);
@@ -360,7 +348,7 @@ void WebPluginContainerImpl::copy()
     if (!m_webPlugin->hasSelection())
         return;
 
-    blink::Platform::current()->clipboard()->writeHTML(m_webPlugin->selectionAsMarkup(), WebURL(), m_webPlugin->selectionAsText(), false);
+    Platform::current()->clipboard()->writeHTML(m_webPlugin->selectionAsMarkup(), WebURL(), m_webPlugin->selectionAsText(), false);
 }
 
 bool WebPluginContainerImpl::executeEditCommand(const WebString& name)
@@ -432,6 +420,25 @@ void WebPluginContainerImpl::clearScriptObjects()
 NPObject* WebPluginContainerImpl::scriptableObjectForElement()
 {
     return m_element->getNPObject();
+}
+
+v8::Local<v8::Object> WebPluginContainerImpl::v8ObjectForElement()
+{
+    LocalFrame* frame = m_element->document().frame();
+    if (!frame)
+        return v8::Local<v8::Object>();
+
+    if (!frame->script().canExecuteScripts(NotAboutToExecuteScript))
+        return v8::Local<v8::Object>();
+
+    ScriptState* scriptState = ScriptState::forMainWorld(frame);
+    if (scriptState->contextIsEmpty())
+        return v8::Local<v8::Object>();
+
+    v8::Handle<v8::Value> v8value = toV8(m_element, scriptState->context()->Global(), scriptState->isolate());
+    ASSERT(v8value->IsObject());
+
+    return v8::Handle<v8::Object>::Cast(v8value);
 }
 
 WebString WebPluginContainerImpl::executeScriptURL(const WebURL& url, bool popupsAllowed)
@@ -507,10 +514,13 @@ void WebPluginContainerImpl::requestTouchEventType(TouchEventRequestType request
     if (m_touchEventRequestType == requestType)
         return;
 
-    if (requestType != TouchEventRequestTypeNone && m_touchEventRequestType == TouchEventRequestTypeNone)
-        m_element->document().didAddTouchEventHandler(m_element);
-    else if (requestType == TouchEventRequestTypeNone && m_touchEventRequestType != TouchEventRequestTypeNone)
-        m_element->document().didRemoveTouchEventHandler(m_element);
+    if (m_element->document().frameHost()) {
+        EventHandlerRegistry& registry = m_element->document().frameHost()->eventHandlerRegistry();
+        if (requestType != TouchEventRequestTypeNone && m_touchEventRequestType == TouchEventRequestTypeNone)
+            registry.didAddEventHandler(*m_element, EventHandlerRegistry::TouchEvent);
+        else if (requestType == TouchEventRequestTypeNone && m_touchEventRequestType != TouchEventRequestTypeNone)
+            registry.didRemoveEventHandler(*m_element, EventHandlerRegistry::TouchEvent);
+    }
     m_touchEventRequestType = requestType;
 }
 
@@ -575,9 +585,19 @@ WebLayer* WebPluginContainerImpl::platformLayer() const
     return m_webLayer;
 }
 
-NPObject* WebPluginContainerImpl::scriptableObject()
+v8::Local<v8::Object> WebPluginContainerImpl::scriptableObject(v8::Isolate* isolate)
 {
-    return m_webPlugin->scriptableObject();
+    v8::Local<v8::Object> object = m_webPlugin->v8ScriptableObject(isolate);
+    if (!object.IsEmpty()) {
+        // WebPlugin implementation can't provide the obsolete NPObject at the same time:
+        ASSERT(!m_webPlugin->scriptableObject());
+        return object;
+    }
+
+    NPObject* npObject = m_webPlugin->scriptableObject();
+    if (npObject)
+        return createV8ObjectForNPObject(npObject, 0, isolate);
+    return v8::Local<v8::Object>();
 }
 
 bool WebPluginContainerImpl::getFormValue(String& value)
@@ -649,8 +669,8 @@ bool WebPluginContainerImpl::paintCustomOverhangArea(GraphicsContext* context, c
 
 // Private methods -------------------------------------------------------------
 
-WebPluginContainerImpl::WebPluginContainerImpl(blink::HTMLPlugInElement* element, WebPlugin* webPlugin)
-    : blink::FrameDestructionObserver(element->document().frame())
+WebPluginContainerImpl::WebPluginContainerImpl(HTMLPlugInElement* element, WebPlugin* webPlugin)
+    : FrameDestructionObserver(element->document().frame())
     , m_element(element)
     , m_webPlugin(webPlugin)
     , m_webLayer(0)
@@ -673,8 +693,8 @@ WebPluginContainerImpl::~WebPluginContainerImpl()
     //
     m_element = 0;
 #else
-    if (m_touchEventRequestType != TouchEventRequestTypeNone)
-        m_element->document().didRemoveTouchEventHandler(m_element);
+    if (m_touchEventRequestType != TouchEventRequestTypeNone && m_element->document().frameHost())
+        m_element->document().frameHost()->eventHandlerRegistry().didRemoveEventHandler(*m_element, EventHandlerRegistry::TouchEvent);
 #endif
 
     ScriptForbiddenScope::AllowSuperUnsafeScript thisShouldBeRemoved;
@@ -689,8 +709,8 @@ WebPluginContainerImpl::~WebPluginContainerImpl()
 #if ENABLE(OILPAN)
 void WebPluginContainerImpl::detach()
 {
-    if (m_touchEventRequestType != TouchEventRequestTypeNone)
-        m_element->document().didRemoveTouchEventHandler(m_element);
+    if (m_touchEventRequestType != TouchEventRequestTypeNone && m_element->document().frameHost())
+        m_element->document().frameHost()->eventHandlerRegistry().didRemoveEventHandler(*m_element, EventHandlerRegistry::TouchEvent);
 
     setWebLayer(0);
 }
@@ -916,7 +936,7 @@ void WebPluginContainerImpl::calculateGeometry(const IntRect& frameRect,
         cutOutRects[i].move(-frameRect.x(), -frameRect.y());
 }
 
-blink::IntRect WebPluginContainerImpl::windowClipRect() const
+IntRect WebPluginContainerImpl::windowClipRect() const
 {
     // Start by clipping to our bounds.
     IntRect clipRect =

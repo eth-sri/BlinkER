@@ -83,6 +83,7 @@ public:
     // Settings overrides.
     void setTextAutosizingEnabled(bool);
     void setDeviceScaleAdjustment(float);
+    void setPreferCompositingToLCDTextEnabled(bool);
 
     static Vector<Document*> importsForFrame(LocalFrame*);
     static bool cachedResourceContent(Resource*, String* result, bool* base64Encoded);
@@ -110,6 +111,7 @@ public:
     virtual void setDeviceMetricsOverride(ErrorString*, int width, int height, double deviceScaleFactor, bool mobile, bool fitWindow, const double* optionalScale, const double* optionalOffsetX, const double* optionalOffsetY) OVERRIDE;
     virtual void clearDeviceMetricsOverride(ErrorString*) OVERRIDE;
     virtual void resetScrollAndPageScaleFactor(ErrorString*) OVERRIDE;
+    virtual void setPageScaleFactor(ErrorString*, double pageScaleFactor) OVERRIDE;
     virtual void setShowPaintRects(ErrorString*, bool show) OVERRIDE;
     virtual void setShowDebugBorders(ErrorString*, bool show) OVERRIDE;
     virtual void setShowFPSCounter(ErrorString*, bool show) OVERRIDE;
@@ -211,9 +213,11 @@ private:
     bool m_originalTouchEnabled;
     bool m_originalDeviceSupportsMouse;
     bool m_originalDeviceSupportsTouch;
+    int m_originalMaxTouchPoints;
 
     bool m_embedderTextAutosizingEnabled;
     double m_embedderFontScaleFactor;
+    bool m_embedderPreferCompositingToLCDTextEnabled;
 
     OwnPtr<InspectorResourceContentLoader> m_inspectorResourceContentLoader;
     HashMap<String, String> m_editedResourceContent;

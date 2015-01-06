@@ -940,7 +940,7 @@ void InlineFlowBox::computeOverflow(LayoutUnit lineTop, LayoutUnit lineBottom, G
     if (m_overflow)
         m_overflow.clear();
 
-    // Visual overflow just includes overflow for stuff we need to repaint ourselves.  Self-painting layers are ignored.
+    // Visual overflow just includes overflow for stuff we need to issues paint invalidations for ourselves. Self-painting layers are ignored.
     // Layout overflow is used to determine scrolling extent, so it still includes child layers and also factors in
     // transforms, relative positioning, etc.
     LayoutRect logicalLayoutOverflow(enclosingLayoutRect(logicalFrameRectIncludingLineHeight(lineTop, lineBottom)));
@@ -1100,7 +1100,7 @@ void InlineFlowBox::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset, 
     if (paintInfo.phase == PaintPhaseOutline || paintInfo.phase == PaintPhaseSelfOutline) {
         // Add ourselves to the paint info struct's list of inlines that need to paint their
         // outlines.
-        if (renderer().style()->visibility() == VISIBLE && renderer().hasOutline() && !isRootInlineBox()) {
+        if (renderer().style()->visibility() == VISIBLE && renderer().style()->hasOutline() && !isRootInlineBox()) {
             RenderInline& inlineFlow = toRenderInline(renderer());
 
             RenderBlock* cb = 0;

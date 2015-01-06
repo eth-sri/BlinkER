@@ -825,6 +825,7 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
 
         test_prefix_list, lines_to_remove = self.get_test_prefix_list(tests)
 
+        did_finish = False
         try:
             old_branch_name = tool.scm().current_branch()
             tool.scm().delete_branch(self.AUTO_REBASELINE_BRANCH_NAME)
@@ -850,8 +851,11 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
                 tool.executive.run_command(['git', 'pull'])
 
                 self._run_git_cl_command(options, ['dcommit', '-f'])
+        except Exception as e:
+            _log.error(e)
         finally:
-            self._run_git_cl_command(options, ['set_close'])
+            if did_finish:
+                self._run_git_cl_command(options, ['set_close'])
             tool.scm().ensure_cleanly_tracking_remote_master()
             tool.scm().checkout_branch(old_branch_name)
             tool.scm().delete_branch(self.AUTO_REBASELINE_BRANCH_NAME)
@@ -922,10 +926,12 @@ class RebaselineOMatic(AbstractDeclarativeCommand):
                 rebaseline_command.append('--verbose')
             self._run_logged_command(rebaseline_command)
         except:
+            self._log_queue.put(self.QUIT_LOG)
             traceback.print_exc(file=sys.stderr)
             # Sometimes git crashes and leaves us on a detached head.
             self._tool.scm().checkout_branch(old_branch_name)
-        self._log_queue.put(self.QUIT_LOG)
+        else:
+            self._log_queue.put(self.QUIT_LOG)
         log_thread.join()
 
     def execute(self, options, args, tool):

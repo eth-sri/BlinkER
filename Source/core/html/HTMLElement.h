@@ -30,6 +30,7 @@ namespace blink {
 class DocumentFragment;
 class HTMLCollection;
 class HTMLFormElement;
+class HTMLMenuElement;
 class ExceptionState;
 
 enum TranslateAttributeMode {
@@ -95,6 +96,9 @@ public:
 
     static const AtomicString& eventParameterName();
 
+    HTMLMenuElement* contextMenu() const;
+    void setContextMenu(HTMLMenuElement*);
+
 protected:
     HTMLElement(const QualifiedName& tagName, Document&, ConstructionType);
 
@@ -148,6 +152,15 @@ inline bool Node::hasTagName(const HTMLQualifiedName& name) const
 {
     return isHTMLElement() && toHTMLElement(*this).hasTagName(name);
 }
+
+// Functor used to match HTMLElements with a specific HTML tag when using the ElementTraversal API.
+class HasHTMLTagName {
+public:
+    explicit HasHTMLTagName(const HTMLQualifiedName& tagName): m_tagName(tagName) { }
+    bool operator() (const HTMLElement& element) const { return element.hasTagName(m_tagName); }
+private:
+    const HTMLQualifiedName& m_tagName;
+};
 
 // This requires isHTML*Element(const Element&) and isHTML*Element(const HTMLElement&).
 // When the input element is an HTMLElement, we don't need to check the namespace URI, just the local name.

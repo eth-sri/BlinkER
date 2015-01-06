@@ -38,6 +38,8 @@ public:
     static RenderListMarker* createAnonymous(RenderListItem*);
 
     virtual ~RenderListMarker();
+    virtual void destroy() OVERRIDE;
+    virtual void trace(Visitor*) OVERRIDE;
 
     const String& text() const { return m_text; }
 
@@ -82,7 +84,7 @@ private:
 
     String m_text;
     RefPtr<StyleImage> m_image;
-    RenderListItem* m_listItem;
+    RawPtrWillBeMember<RenderListItem> m_listItem;
 };
 
 DEFINE_RENDER_OBJECT_TYPE_CASTS(RenderListMarker, isListMarker());

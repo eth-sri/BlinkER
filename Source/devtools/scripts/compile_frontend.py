@@ -36,9 +36,9 @@ import subprocess
 import sys
 import tempfile
 try:
-    import json
-except ImportError:
     import simplejson as json
+except ImportError:
+    import json
 
 scripts_path = path.dirname(path.abspath(__file__))
 devtools_path = path.dirname(scripts_path)
@@ -57,8 +57,13 @@ java_exec = "java -Xms1024m -server -XX:+TieredCompilation"
 generate_protocol_externs.generate_protocol_externs(protocol_externs_file, path.join(devtools_path, "protocol.json"))
 
 jsmodule_name_prefix = "jsmodule_"
-js_modules_name = "frontend_modules.json"
+frontend_modules_name = "frontend_modules.json"
 runtime_module_name = "_runtime"
+module_initializer_name = "_module.js"
+
+
+def log_error(message):
+    print "ERROR: " + message
 
 
 def error_excepthook(exctype, value, traceback):
@@ -67,29 +72,11 @@ def error_excepthook(exctype, value, traceback):
 sys.excepthook = error_excepthook
 
 try:
-    with open(path.join(scripts_path, js_modules_name), "rt") as js_modules_file:
+    with open(path.join(scripts_path, frontend_modules_name), "rt") as js_modules_file:
         modules = json.loads(js_modules_file.read())
 except:
-    print "ERROR: Failed to read %s" % js_modules_name
+    log_error("Failed to read %s" % frontend_modules_name)
     raise
-
-# `importScript` function must not be used in any files
-# except module headers. Refer to devtools.gyp file for
-# the module header list.
-allowed_import_statements_files = [
-    "console/ConsolePanel.js",
-    "elements/ElementsPanel.js",
-    "resources/ResourcesPanel.js",
-    "network/NetworkPanel.js",
-    "settings/SettingsScreen.js",
-    "sources/SourcesPanel.js",
-    "timeline/TimelinePanel.js",
-    "profiler/ProfilesPanel.js",
-    "audits/AuditsPanel.js",
-    "layers/LayersPanel.js",
-    "extensions/ExtensionServer.js",
-    "source_frame/SourceFrame.js",
-]
 
 type_checked_jsdoc_tags_list = ["param", "return", "type", "enum"]
 
@@ -100,7 +87,6 @@ invalid_type_regex = re.compile(r"@(?:" + type_checked_jsdoc_tags_or + r")\s*\{.
 
 invalid_type_designator_regex = re.compile(r"@(?:" + type_checked_jsdoc_tags_or + r")\s*.*(?<![{: ])([?!])=?\}")
 
-importscript_regex = re.compile(r"importScript\(\s*[\"']")
 error_warning_regex = re.compile(r"(?:WARNING|ERROR)")
 
 errors_found = False
@@ -112,24 +98,6 @@ def run_in_shell(command_line):
 
 def hasErrors(output):
     return re.search(error_warning_regex, output) != None
-
-
-def verify_importScript_usage():
-    errors_found = False
-    for module in modules:
-        for file_name in module['sources']:
-            if file_name in allowed_import_statements_files:
-                continue
-            try:
-                with open(path.join(devtools_frontend_path, file_name), "r") as sourceFile:
-                    source = sourceFile.read()
-                    if re.search(importscript_regex, source):
-                        print "ERROR: importScript function call is allowed in module header files only (found in %s)" % file_name
-                        errors_found = True
-            except:
-                print "ERROR: Failed to access %s" % file_name
-                raise
-    return errors_found
 
 
 def dump_all_checked_files():
@@ -196,9 +164,6 @@ def check_java_path():
 
 check_java_path()
 
-print "Verifying 'importScript' function usage..."
-errors_found |= verify_importScript_usage()
-
 modules_dir = tempfile.mkdtemp()
 common_closure_args = " --summary_detail_level 3 --jscomp_error visibility --compilation_level SIMPLE_OPTIMIZATIONS --warning_level VERBOSE --language_in ECMASCRIPT5 --accept_const_keyword --module_output_path_prefix %s/" % modules_dir
 
@@ -225,7 +190,7 @@ def verify_standalone_modules():
     for module in modules:
         for dependency in module["dependencies"]:
             if dependency in standalone_modules_by_name:
-                print "ERROR: Standalone module %s may not be present among the dependencies of %s" % (dependency, module["name"])
+                log_error("Standalone module '%s' may not be present among the dependencies of '%s'" % (dependency, module["name"]))
                 errors_found = True
 
 verify_standalone_modules()
@@ -242,7 +207,7 @@ def check_duplicate_files():
         for source in module["sources"]:
             referencing_module = seen_files.get(source)
             if referencing_module:
-                print "ERROR: Duplicate use of %s in '%s' (previously seen in '%s')" % (source, name, referencing_module)
+                log_error("Duplicate use of %s in '%s' (previously seen in '%s')" % (source, name, referencing_module))
             seen_files[source] = name
 
     for module_name in standalone_modules_by_name:

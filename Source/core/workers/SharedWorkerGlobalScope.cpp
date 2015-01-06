@@ -33,6 +33,7 @@
 #include "core/workers/SharedWorkerGlobalScope.h"
 
 #include "core/events/MessageEvent.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/ScriptCallStack.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/workers/SharedWorkerThread.h"
@@ -52,7 +53,7 @@ PassRefPtrWillBeRawPtr<MessageEvent> createConnectEvent(PassRefPtrWillBeRawPtr<M
 // static
 PassRefPtrWillBeRawPtr<SharedWorkerGlobalScope> SharedWorkerGlobalScope::create(const String& name, SharedWorkerThread* thread, PassOwnPtrWillBeRawPtr<WorkerThreadStartupData> startupData)
 {
-    RefPtrWillBeRawPtr<SharedWorkerGlobalScope> context = adoptRefWillBeRefCountedGarbageCollected(new SharedWorkerGlobalScope(name, startupData->m_scriptURL, startupData->m_userAgent, thread, startupData->m_workerClients.release()));
+    RefPtrWillBeRawPtr<SharedWorkerGlobalScope> context = adoptRefWillBeNoop(new SharedWorkerGlobalScope(name, startupData->m_scriptURL, startupData->m_userAgent, thread, startupData->m_workerClients.release()));
     context->applyContentSecurityPolicyFromString(startupData->m_contentSecurityPolicy, startupData->m_contentSecurityPolicyType);
     return context.release();
 }
@@ -78,10 +79,13 @@ SharedWorkerThread* SharedWorkerGlobalScope::thread()
     return static_cast<SharedWorkerThread*>(Base::thread());
 }
 
-void SharedWorkerGlobalScope::logExceptionToConsole(const String& errorMessage, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtrWillBeRawPtr<ScriptCallStack> callStack)
+void SharedWorkerGlobalScope::logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtrWillBeRawPtr<ScriptCallStack> callStack)
 {
-    WorkerGlobalScope::logExceptionToConsole(errorMessage, sourceURL, lineNumber, columnNumber, callStack);
-    addMessageToWorkerConsole(JSMessageSource, ErrorMessageLevel, errorMessage, sourceURL, lineNumber, callStack, 0);
+    WorkerGlobalScope::logExceptionToConsole(errorMessage, scriptId, sourceURL, lineNumber, columnNumber, callStack);
+    RefPtrWillBeRawPtr<ConsoleMessage> consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, errorMessage, sourceURL, lineNumber);
+    consoleMessage->setScriptId(scriptId);
+    consoleMessage->setCallStack(callStack);
+    addMessageToWorkerConsole(consoleMessage.release());
 }
 
 void SharedWorkerGlobalScope::trace(Visitor* visitor)

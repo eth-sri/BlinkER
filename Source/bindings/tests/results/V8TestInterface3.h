@@ -7,6 +7,7 @@
 #ifndef V8TestInterface3_h
 #define V8TestInterface3_h
 
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8DOMWrapper.h"
 #include "bindings/core/v8/WrapperTypeInfo.h"
@@ -22,12 +23,14 @@ public:
     static v8::Handle<v8::FunctionTemplate> domTemplate(v8::Isolate*);
     static TestInterface3* toNative(v8::Handle<v8::Object> object)
     {
-        return fromInternalPointer(object->GetAlignedPointerFromInternalField(v8DOMWrapperObjectIndex));
+        return fromInternalPointer(blink::toInternalPointer(object));
     }
     static TestInterface3* toNativeWithTypeCheck(v8::Isolate*, v8::Handle<v8::Value>);
     static const WrapperTypeInfo wrapperTypeInfo;
-    static void derefObject(void*);
-    static void visitDOMWrapper(void*, const v8::Persistent<v8::Object>&, v8::Isolate*);
+    static void refObject(ScriptWrappableBase* internalPointer);
+    static void derefObject(ScriptWrappableBase* internalPointer);
+    static PersistentNode* createPersistentHandle(ScriptWrappableBase* internalPointer);
+    static void visitDOMWrapper(ScriptWrappableBase* internalPointer, const v8::Persistent<v8::Object>&, v8::Isolate*);
     static void indexedPropertyGetterCustom(uint32_t, const v8::PropertyCallbackInfo<v8::Value>&);
     static void indexedPropertySetterCustom(uint32_t, v8::Local<v8::Value>, const v8::PropertyCallbackInfo<v8::Value>&);
     static void indexedPropertyDeleterCustom(uint32_t, const v8::PropertyCallbackInfo<v8::Boolean>&);
@@ -37,17 +40,17 @@ public:
     static void namedPropertyDeleterCustom(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Boolean>&);
     static void namedPropertyEnumeratorCustom(const v8::PropertyCallbackInfo<v8::Array>&);
     static const int internalFieldCount = v8DefaultWrapperInternalFieldCount + 0;
-    static inline void* toInternalPointer(TestInterface3* impl)
+    static inline ScriptWrappableBase* toInternalPointer(TestInterface3* impl)
     {
-        return impl;
+        return impl->toInternalPointer();
     }
 
-    static inline TestInterface3* fromInternalPointer(void* object)
+    static inline TestInterface3* fromInternalPointer(ScriptWrappableBase* internalPointer)
     {
-        return static_cast<TestInterface3*>(object);
+        return ScriptWrappableBase::fromInternalPointer<TestInterface3>(internalPointer);
     }
-    static void installPerContextEnabledProperties(v8::Handle<v8::Object>, TestInterface3*, v8::Isolate*) { }
-    static void installPerContextEnabledMethods(v8::Handle<v8::Object>, v8::Isolate*) { }
+    static void installConditionallyEnabledProperties(v8::Handle<v8::Object>, v8::Isolate*) { }
+    static void installConditionallyEnabledMethods(v8::Handle<v8::Object>, v8::Isolate*) { }
 
 private:
     friend v8::Handle<v8::Object> wrap(TestInterface3*, v8::Handle<v8::Object> creationContext, v8::Isolate*);
@@ -129,5 +132,5 @@ inline void v8SetReturnValueFast(const CallbackInfo& callbackInfo, PassRefPtr<Te
     v8SetReturnValueFast(callbackInfo, impl.get(), wrappable);
 }
 
-}
+} // namespace blink
 #endif // V8TestInterface3_h

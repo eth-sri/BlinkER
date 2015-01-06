@@ -83,7 +83,7 @@ GraphicsLayerUpdater::~GraphicsLayerUpdater()
 
 void GraphicsLayerUpdater::update(RenderLayer& layer, Vector<RenderLayer*>& layersNeedingPaintInvalidation)
 {
-    TRACE_EVENT0("blink_rendering", "GraphicsLayerUpdater::update");
+    TRACE_EVENT0("blink", "GraphicsLayerUpdater::update");
     updateRecursive(layer, DoNotForceUpdate, UpdateContext(), layersNeedingPaintInvalidation);
     layer.compositor()->updateRootLayerPosition();
 }
@@ -91,7 +91,7 @@ void GraphicsLayerUpdater::update(RenderLayer& layer, Vector<RenderLayer*>& laye
 void GraphicsLayerUpdater::updateRecursive(RenderLayer& layer, UpdateType updateType, const UpdateContext& context, Vector<RenderLayer*>& layersNeedingPaintInvalidation)
 {
     if (layer.hasCompositedLayerMapping()) {
-        CompositedLayerMappingPtr mapping = layer.compositedLayerMapping();
+        CompositedLayerMapping* mapping = layer.compositedLayerMapping();
 
         if (updateType == ForceUpdate || mapping->needsGraphicsLayerUpdate()) {
             const RenderLayer* compositingContainer = context.compositingContainer(layer);

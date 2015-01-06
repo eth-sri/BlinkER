@@ -20,12 +20,9 @@
 
 namespace blink {
 
-static void initializeScriptWrappableForInterface(TestSpecialOperationsNotEnumerable* object)
+static void initializeScriptWrappableForInterface(TestSpecialOperationsNotEnumerable* impl)
 {
-    if (ScriptWrappable::wrapperCanBeStoredInObject(object))
-        ScriptWrappable::fromObject(object)->setTypeInfo(&V8TestSpecialOperationsNotEnumerable::wrapperTypeInfo);
-    else
-        ASSERT_NOT_REACHED();
+    impl->setTypeInfo(&V8TestSpecialOperationsNotEnumerable::wrapperTypeInfo);
 }
 
 } // namespace blink
@@ -36,7 +33,8 @@ void webCoreInitializeScriptWrappableForInterface(blink::TestSpecialOperationsNo
 }
 
 namespace blink {
-const WrapperTypeInfo V8TestSpecialOperationsNotEnumerable::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestSpecialOperationsNotEnumerable::domTemplate, V8TestSpecialOperationsNotEnumerable::derefObject, 0, 0, 0, V8TestSpecialOperationsNotEnumerable::installPerContextEnabledMethods, 0, WrapperTypeObjectPrototype, RefCountedObject };
+
+const WrapperTypeInfo V8TestSpecialOperationsNotEnumerable::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestSpecialOperationsNotEnumerable::domTemplate, V8TestSpecialOperationsNotEnumerable::refObject, V8TestSpecialOperationsNotEnumerable::derefObject, V8TestSpecialOperationsNotEnumerable::createPersistentHandle, 0, 0, 0, V8TestSpecialOperationsNotEnumerable::installConditionallyEnabledMethods, V8TestSpecialOperationsNotEnumerable::installConditionallyEnabledProperties, 0, WrapperTypeObjectPrototype, RefCountedObject };
 
 namespace TestSpecialOperationsNotEnumerableV8Internal {
 
@@ -118,7 +116,7 @@ v8::Handle<v8::Object> V8TestSpecialOperationsNotEnumerable::findInstanceInProto
 
 TestSpecialOperationsNotEnumerable* V8TestSpecialOperationsNotEnumerable::toNativeWithTypeCheck(v8::Isolate* isolate, v8::Handle<v8::Value> value)
 {
-    return hasInstance(value, isolate) ? fromInternalPointer(v8::Handle<v8::Object>::Cast(value)->GetAlignedPointerFromInternalField(v8DOMWrapperObjectIndex)) : 0;
+    return hasInstance(value, isolate) ? fromInternalPointer(blink::toInternalPointer(v8::Handle<v8::Object>::Cast(value))) : 0;
 }
 
 v8::Handle<v8::Object> wrap(TestSpecialOperationsNotEnumerable* impl, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
@@ -132,25 +130,35 @@ v8::Handle<v8::Object> V8TestSpecialOperationsNotEnumerable::createWrapper(PassR
 {
     ASSERT(impl);
     ASSERT(!DOMDataStore::containsWrapper<V8TestSpecialOperationsNotEnumerable>(impl.get(), isolate));
-    if (ScriptWrappable::wrapperCanBeStoredInObject(impl.get())) {
-        const WrapperTypeInfo* actualInfo = ScriptWrappable::fromObject(impl.get())->typeInfo();
-        // Might be a XXXConstructor::wrapperTypeInfo instead of an XXX::wrapperTypeInfo. These will both have
-        // the same object de-ref functions, though, so use that as the basis of the check.
-        RELEASE_ASSERT_WITH_SECURITY_IMPLICATION(actualInfo->derefObjectFunction == wrapperTypeInfo.derefObjectFunction);
-    }
+    const WrapperTypeInfo* actualInfo = impl->typeInfo();
+    // Might be a XXXConstructor::wrapperTypeInfo instead of an XXX::wrapperTypeInfo. These will both have
+    // the same object de-ref functions, though, so use that as the basis of the check.
+    RELEASE_ASSERT_WITH_SECURITY_IMPLICATION(actualInfo->derefObjectFunction == wrapperTypeInfo.derefObjectFunction);
 
     v8::Handle<v8::Object> wrapper = V8DOMWrapper::createWrapper(creationContext, &wrapperTypeInfo, toInternalPointer(impl.get()), isolate);
     if (UNLIKELY(wrapper.IsEmpty()))
         return wrapper;
 
-    installPerContextEnabledProperties(wrapper, impl.get(), isolate);
+    installConditionallyEnabledProperties(wrapper, isolate);
     V8DOMWrapper::associateObjectWithWrapper<V8TestSpecialOperationsNotEnumerable>(impl, &wrapperTypeInfo, wrapper, isolate, WrapperConfiguration::Independent);
     return wrapper;
 }
 
-void V8TestSpecialOperationsNotEnumerable::derefObject(void* object)
+
+void V8TestSpecialOperationsNotEnumerable::refObject(ScriptWrappableBase* internalPointer)
 {
-    fromInternalPointer(object)->deref();
+    fromInternalPointer(internalPointer)->ref();
+}
+
+void V8TestSpecialOperationsNotEnumerable::derefObject(ScriptWrappableBase* internalPointer)
+{
+    fromInternalPointer(internalPointer)->deref();
+}
+
+PersistentNode* V8TestSpecialOperationsNotEnumerable::createPersistentHandle(ScriptWrappableBase* internalPointer)
+{
+    ASSERT_NOT_REACHED();
+    return 0;
 }
 
 template<>

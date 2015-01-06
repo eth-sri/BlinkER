@@ -56,7 +56,7 @@ public:
     void getNamedElements(const AtomicString&, WillBeHeapVector<RefPtrWillBeMember<Element> >&);
 
     unsigned length() const;
-    Element* item(unsigned index);
+    HTMLElement* item(unsigned index);
 
     String enctype() const { return m_attributes.encodingType(); }
     void setEnctype(const AtomicString&);
@@ -117,7 +117,7 @@ public:
     const FormAssociatedElement::List& associatedElements() const;
     const WillBeHeapVector<RawPtrWillBeMember<HTMLImageElement> >& imageElements();
 
-    void anonymousNamedGetter(const AtomicString& name, bool&, RefPtrWillBeRawPtr<RadioNodeList>&, bool&, RefPtrWillBeRawPtr<Element>&);
+    void anonymousNamedGetter(const AtomicString& name, RefPtrWillBeRawPtr<RadioNodeList>&, RefPtrWillBeRawPtr<Element>&);
 
 private:
     explicit HTMLFormElement(Document&);
@@ -178,6 +178,8 @@ private:
     bool m_didFinishParsingChildren;
 
     bool m_wasUserSubmitted;
+    bool m_isSubmittingOrInUserJSSubmitEvent;
+    bool m_shouldSubmit;
 
     bool m_isInResetFunction;
 

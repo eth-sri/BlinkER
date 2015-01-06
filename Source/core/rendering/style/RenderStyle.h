@@ -542,7 +542,7 @@ public:
     const Length& clipTop() const { return visual->clip.top(); }
     const Length& clipBottom() const { return visual->clip.bottom(); }
     const LengthBox& clip() const { return visual->clip; }
-    bool hasClip() const { return visual->hasClip; }
+    bool hasAutoClip() const { return visual->hasAutoClip; }
 
     EUnicodeBidi unicodeBidi() const { return static_cast<EUnicodeBidi>(noninherited_flags.unicodeBidi); }
 
@@ -948,8 +948,8 @@ public:
     const FilterOperations& filter() const { return rareNonInheritedData->m_filter->m_operations; }
     bool hasFilter() const { return !rareNonInheritedData->m_filter->m_operations.operations().isEmpty(); }
 
-    blink::WebBlendMode blendMode() const;
-    void setBlendMode(blink::WebBlendMode v);
+    WebBlendMode blendMode() const;
+    void setBlendMode(WebBlendMode v);
     bool hasBlendMode() const;
 
     EIsolation isolation() const;
@@ -1085,6 +1085,18 @@ public:
     void setOutlineStyleIsAuto(OutlineIsAuto isAuto) { SET_VAR(m_background, m_outline.m_isAuto, isAuto); }
     void setOutlineStyle(EBorderStyle v) { SET_VAR(m_background, m_outline.m_style, v); }
     void setOutlineColor(const StyleColor& v) { SET_BORDERVALUE_COLOR(m_background, m_outline, v); }
+    bool isOutlineEquivalent(const RenderStyle* otherStyle) const
+    {
+        // No other style, so we don't have an outline then we consider them to be the same.
+        if (!otherStyle)
+            return !hasOutline();
+        return m_background->outline().visuallyEqual(otherStyle->m_background->outline());
+    }
+    void setOutlineFromStyle(const RenderStyle& o)
+    {
+        ASSERT(!isOutlineEquivalent(&o));
+        m_background.access()->m_outline = o.m_background->m_outline;
+    }
 
     void setOverflowX(EOverflow v) { noninherited_flags.overflowX = v; }
     void setOverflowY(EOverflow v) { noninherited_flags.overflowY = v; }
@@ -1092,13 +1104,8 @@ public:
     void setVerticalAlign(EVerticalAlign v) { noninherited_flags.verticalAlign = v; }
     void setVerticalAlignLength(const Length& length) { setVerticalAlign(LENGTH); SET_VAR(m_box, m_verticalAlign, length); }
 
-    void setHasClip(bool b = true) { SET_VAR(visual, hasClip, b); }
-    void setClipLeft(const Length& v) { SET_VAR(visual, clip.m_left, v); }
-    void setClipRight(const Length& v) { SET_VAR(visual, clip.m_right, v); }
-    void setClipTop(const Length& v) { SET_VAR(visual, clip.m_top, v); }
-    void setClipBottom(const Length& v) { SET_VAR(visual, clip.m_bottom, v); }
-    void setClip(const Length& top, const Length& right, const Length& bottom, const Length& left);
-    void setClip(const LengthBox& box) { SET_VAR(visual, clip, box); }
+    void setHasAutoClip() { SET_VAR(visual, hasAutoClip, true); SET_VAR(visual, clip, RenderStyle::initialClip()); }
+    void setClip(const LengthBox& box) { SET_VAR(visual, hasAutoClip, false); SET_VAR(visual, clip, box); }
 
     void setUnicodeBidi(EUnicodeBidi b) { noninherited_flags.unicodeBidi = b; }
 
@@ -1543,6 +1550,7 @@ public:
     static LengthSize initialBorderRadius() { return LengthSize(Length(0, Fixed), Length(0, Fixed)); }
     static ECaptionSide initialCaptionSide() { return CAPTOP; }
     static EClear initialClear() { return CNONE; }
+    static LengthBox initialClip() { return LengthBox(); }
     static TextDirection initialDirection() { return LTR; }
     static WritingMode initialWritingMode() { return TopToBottomWritingMode; }
     static TextCombine initialTextCombine() { return TextCombineNone; }
@@ -1574,7 +1582,7 @@ public:
     static float initialLetterWordSpacing() { return 0.0f; }
     static Length initialSize() { return Length(); }
     static Length initialMinSize() { return Length(Fixed); }
-    static Length initialMaxSize() { return Length(Undefined); }
+    static Length initialMaxSize() { return Length(MaxSizeNone); }
     static Length initialOffset() { return Length(); }
     static Length initialMargin() { return Length(Fixed); }
     static Length initialPadding() { return Length(Fixed); }
@@ -1719,7 +1727,7 @@ public:
     static ETextSecurity initialTextSecurity() { return TSNONE; }
     static Color initialTapHighlightColor();
     static const FilterOperations& initialFilter() { DEFINE_STATIC_LOCAL(FilterOperations, ops, ()); return ops; }
-    static blink::WebBlendMode initialBlendMode() { return blink::WebBlendModeNormal; }
+    static WebBlendMode initialBlendMode() { return WebBlendModeNormal; }
     static EIsolation initialIsolation() { return IsolationAuto; }
 private:
     void setVisitedLinkColor(const Color&);
@@ -1805,10 +1813,10 @@ private:
     void appendContent(PassOwnPtr<ContentData>);
     void addAppliedTextDecoration(const AppliedTextDecoration&);
 
-    bool diffNeedsFullLayoutAndRepaint(const RenderStyle& other) const;
+    bool diffNeedsFullLayoutAndPaintInvalidation(const RenderStyle& other) const;
     bool diffNeedsFullLayout(const RenderStyle& other) const;
-    bool diffNeedsRepaintLayer(const RenderStyle& other) const;
-    bool diffNeedsRepaintObject(const RenderStyle& other) const;
+    bool diffNeedsPaintInvalidationLayer(const RenderStyle& other) const;
+    bool diffNeedsPaintInvalidationObject(const RenderStyle& other) const;
     bool diffNeedsRecompositeLayer(const RenderStyle& other) const;
     void updatePropertySpecificDifferences(const RenderStyle& other, StyleDifference&) const;
 };

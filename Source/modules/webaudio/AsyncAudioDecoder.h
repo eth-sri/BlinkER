@@ -49,11 +49,11 @@ public:
     void decodeAsync(ArrayBuffer* audioData, float sampleRate, PassOwnPtr<AudioBufferCallback> successCallback, PassOwnPtr<AudioBufferCallback> errorCallback);
 
 private:
-    PassRefPtrWillBeRawPtr<AudioBuffer> createAudioBufferFromAudioBus(AudioBus*);
+    AudioBuffer* createAudioBufferFromAudioBus(AudioBus*);
     static void decode(ArrayBuffer* audioData, float sampleRate, AudioBufferCallback* successCallback, AudioBufferCallback* errorCallback);
     static void notifyComplete(ArrayBuffer* audioData, AudioBufferCallback* successCallback, AudioBufferCallback* errorCallback, AudioBus*);
 
-    OwnPtr<blink::WebThread> m_thread;
+    OwnPtr<WebThread> m_thread;
 };
 
 } // namespace blink

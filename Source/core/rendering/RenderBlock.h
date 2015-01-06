@@ -55,6 +55,8 @@ enum ContainingBlockState { NewContainingBlock, SameContainingBlock };
 
 class RenderBlock : public RenderBox {
 public:
+    virtual void destroy() OVERRIDE;
+    virtual void trace(Visitor*) OVERRIDE;
     friend class LineLayoutState;
 
 protected:
@@ -154,7 +156,7 @@ public:
     LayoutUnit inlineDirectionOffset(const LayoutSize& offsetFromBlock) const;
 
     virtual bool shouldPaintSelectionGaps() const OVERRIDE FINAL;
-    GapRects selectionGapRectsForRepaint(const RenderLayerModelObject* repaintContainer);
+    GapRects selectionGapRectsForPaintInvalidation(const RenderLayerModelObject* paintInvalidationContainer);
     LayoutRect logicalLeftSelectionGap(RenderBlock* rootBlock, const LayoutPoint& rootBlockPhysicalPosition, const LayoutSize& offsetFromRootBlock,
                                        RenderObject* selObj, LayoutUnit logicalLeft, LayoutUnit logicalTop, LayoutUnit logicalHeight, const PaintInfo*);
     LayoutRect logicalRightSelectionGap(RenderBlock* rootBlock, const LayoutPoint& rootBlockPhysicalPosition, const LayoutSize& offsetFromRootBlock,
@@ -291,10 +293,10 @@ protected:
 
     virtual void updateHitTestResult(HitTestResult&, const LayoutPoint&) OVERRIDE;
 
-    // Delay update scrollbar until finishDelayRepaint() will be
+    // Delay update scrollbar until finishDelayUpdateScrollInfo() will be
     // called. This function is used when a flexbox is laying out its
-    // descendant. If multiple calls are made to startDelayRepaint(),
-    // finishDelayRepaint() will do nothing until finishDelayRepaint()
+    // descendant. If multiple calls are made to startDelayUpdateScrollInfo(),
+    // finishDelayUpdateScrollInfo() will do nothing until finishDelayUpdateScrollInfo()
     // is called the same number of times.
     static void startDelayUpdateScrollInfo();
     static void finishDelayUpdateScrollInfo();
@@ -388,7 +390,6 @@ private:
     virtual RenderBlock* firstLineBlock() const OVERRIDE;
 
     virtual LayoutRect rectWithOutlineForPaintInvalidation(const RenderLayerModelObject* paintInvalidationContainer, LayoutUnit outlineWidth, const PaintInvalidationState* = 0) const OVERRIDE FINAL;
-    virtual RenderStyle* outlineStyle() const OVERRIDE FINAL;
 
     virtual RenderObject* hoverAncestor() const OVERRIDE FINAL;
     virtual void updateDragState(bool dragOn) OVERRIDE FINAL;
@@ -396,7 +397,7 @@ private:
 
     virtual LayoutRect selectionRectForPaintInvalidation(const RenderLayerModelObject* paintInvalidationContainer, bool /*clipToVisibleContent*/) OVERRIDE FINAL
     {
-        return selectionGapRectsForRepaint(paintInvalidationContainer);
+        return selectionGapRectsForPaintInvalidation(paintInvalidationContainer);
     }
     bool isSelectionRoot() const;
     GapRects selectionGaps(RenderBlock* rootBlock, const LayoutPoint& rootBlockPhysicalPosition, const LayoutSize& offsetFromRootBlock,
@@ -442,6 +443,7 @@ private:
     // End helper functions and structs used by layoutBlockChildren.
 
     bool widthAvailableToChildrenHasChanged();
+    void removeFromGlobalMaps();
 
 protected:
     // Returns the logicalOffset at the top of the next page. If the offset passed in is already at the top of the current page,

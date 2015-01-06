@@ -33,9 +33,11 @@
 
 #include "bindings/core/v8/WorkerScriptController.h"
 #include "core/dom/CrossThreadTask.h"
+#include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/MessagePort.h"
 #include "core/events/MessageEvent.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "modules/push_messaging/PushEvent.h"
 #include "modules/serviceworkers/FetchEvent.h"
@@ -50,13 +52,11 @@
 #include "wtf/Functional.h"
 #include "wtf/PassOwnPtr.h"
 
-using namespace blink;
-
 namespace blink {
 
-PassOwnPtr<ServiceWorkerGlobalScopeProxy> ServiceWorkerGlobalScopeProxy::create(WebEmbeddedWorkerImpl& embeddedWorker, ExecutionContext& executionContext, WebServiceWorkerContextClient& client)
+PassOwnPtr<ServiceWorkerGlobalScopeProxy> ServiceWorkerGlobalScopeProxy::create(WebEmbeddedWorkerImpl& embeddedWorker, Document& document, WebServiceWorkerContextClient& client)
 {
-    return adoptPtr(new ServiceWorkerGlobalScopeProxy(embeddedWorker, executionContext, client));
+    return adoptPtr(new ServiceWorkerGlobalScopeProxy(embeddedWorker, document, client));
 }
 
 ServiceWorkerGlobalScopeProxy::~ServiceWorkerGlobalScopeProxy()
@@ -119,14 +119,15 @@ void ServiceWorkerGlobalScopeProxy::reportException(const String& errorMessage, 
     m_client.reportException(errorMessage, lineNumber, columnNumber, sourceURL);
 }
 
-void ServiceWorkerGlobalScopeProxy::reportConsoleMessage(MessageSource source, MessageLevel level, const String& message, int lineNumber, const String& sourceURL)
+void ServiceWorkerGlobalScopeProxy::reportConsoleMessage(PassRefPtrWillBeRawPtr<ConsoleMessage> consoleMessage)
 {
-    m_client.reportConsoleMessage(source, level, message, lineNumber, sourceURL);
+    m_client.reportConsoleMessage(consoleMessage->source(), consoleMessage->level(), consoleMessage->message(), consoleMessage->lineNumber(), consoleMessage->url());
 }
 
 void ServiceWorkerGlobalScopeProxy::postMessageToPageInspector(const String& message)
 {
     m_client.dispatchDevToolsMessage(message);
+    m_document.postInspectorTask(createCrossThreadTask(&WebEmbeddedWorkerImpl::postMessageToPageInspector, &m_embeddedWorker, message));
 }
 
 void ServiceWorkerGlobalScopeProxy::updateInspectorStateCookie(const String& message)
@@ -139,11 +140,12 @@ void ServiceWorkerGlobalScopeProxy::workerGlobalScopeStarted(WorkerGlobalScope* 
     ASSERT(!m_workerGlobalScope);
     m_workerGlobalScope = workerGlobalScope;
     m_client.workerContextStarted(this);
+    m_client.workerReadyForInspection();
 }
 
 void ServiceWorkerGlobalScopeProxy::workerGlobalScopeClosed()
 {
-    m_executionContext.postTask(createCrossThreadTask(&WebEmbeddedWorkerImpl::terminateWorkerContext, &m_embeddedWorker));
+    m_document.postTask(createCrossThreadTask(&WebEmbeddedWorkerImpl::terminateWorkerContext, &m_embeddedWorker));
 }
 
 void ServiceWorkerGlobalScopeProxy::willDestroyWorkerGlobalScope()
@@ -152,14 +154,14 @@ void ServiceWorkerGlobalScopeProxy::willDestroyWorkerGlobalScope()
     m_client.willDestroyWorkerContext();
 }
 
-void ServiceWorkerGlobalScopeProxy::workerGlobalScopeDestroyed()
+void ServiceWorkerGlobalScopeProxy::workerThreadTerminated()
 {
     m_client.workerContextDestroyed();
 }
 
-ServiceWorkerGlobalScopeProxy::ServiceWorkerGlobalScopeProxy(WebEmbeddedWorkerImpl& embeddedWorker, ExecutionContext& executionContext, WebServiceWorkerContextClient& client)
+ServiceWorkerGlobalScopeProxy::ServiceWorkerGlobalScopeProxy(WebEmbeddedWorkerImpl& embeddedWorker, Document& document, WebServiceWorkerContextClient& client)
     : m_embeddedWorker(embeddedWorker)
-    , m_executionContext(executionContext)
+    , m_document(document)
     , m_client(client)
     , m_workerGlobalScope(0)
 {

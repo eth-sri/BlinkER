@@ -59,8 +59,6 @@
 #include "wtf/text/Base64.h"
 #include "wtf/text/WTFString.h"
 
-using namespace std;
-
 namespace blink {
 
 PassOwnPtr<ImageBuffer> ImageBuffer::create(PassOwnPtr<ImageBufferSurface> surface)
@@ -123,9 +121,9 @@ void ImageBuffer::didFinalizeFrame()
         m_client->didFinalizeFrame();
 }
 
-void ImageBuffer::finalizeFrame()
+void ImageBuffer::finalizeFrame(const FloatRect &dirtyRect)
 {
-    m_surface->finalizeFrame();
+    m_surface->finalizeFrame(dirtyRect);
     didFinalizeFrame();
 }
 
@@ -163,12 +161,12 @@ BackingStoreCopy ImageBuffer::fastCopyImageMode()
     return DontCopyBackingStore;
 }
 
-blink::WebLayer* ImageBuffer::platformLayer() const
+WebLayer* ImageBuffer::platformLayer() const
 {
     return m_surface->layer();
 }
 
-bool ImageBuffer::copyToPlatformTexture(blink::WebGraphicsContext3D* context, Platform3DObject texture, GLenum internalFormat, GLenum destType, GLint level, bool premultiplyAlpha, bool flipY)
+bool ImageBuffer::copyToPlatformTexture(WebGraphicsContext3D* context, Platform3DObject texture, GLenum internalFormat, GLenum destType, GLint level, bool premultiplyAlpha, bool flipY)
 {
     if (!m_surface->isAccelerated() || !platformLayer() || !isSurfaceValid())
         return false;
@@ -176,14 +174,14 @@ bool ImageBuffer::copyToPlatformTexture(blink::WebGraphicsContext3D* context, Pl
     if (!Extensions3DUtil::canUseCopyTextureCHROMIUM(internalFormat, destType, level))
         return false;
 
-    OwnPtr<blink::WebGraphicsContext3DProvider> provider = adoptPtr(blink::Platform::current()->createSharedOffscreenGraphicsContext3DProvider());
+    OwnPtr<WebGraphicsContext3DProvider> provider = adoptPtr(Platform::current()->createSharedOffscreenGraphicsContext3DProvider());
     if (!provider)
         return false;
-    blink::WebGraphicsContext3D* sharedContext = provider->context3d();
-    if (!sharedContext || !sharedContext->makeContextCurrent())
+    WebGraphicsContext3D* sharedContext = provider->context3d();
+    if (!sharedContext)
         return false;
 
-    OwnPtr<blink::WebExternalTextureMailbox> mailbox = adoptPtr(new blink::WebExternalTextureMailbox);
+    OwnPtr<WebExternalTextureMailbox> mailbox = adoptPtr(new WebExternalTextureMailbox);
 
     // Contexts may be in a different share group. We must transfer the texture through a mailbox first
     sharedContext->genMailboxCHROMIUM(mailbox->name);
@@ -191,9 +189,6 @@ bool ImageBuffer::copyToPlatformTexture(blink::WebGraphicsContext3D* context, Pl
     sharedContext->flush();
 
     mailbox->syncPoint = sharedContext->insertSyncPoint();
-
-    if (!context->makeContextCurrent())
-        return false;
 
     context->waitSyncPoint(mailbox->syncPoint);
     Platform3DObject sourceTexture = context->createAndConsumeTextureCHROMIUM(GL_TEXTURE_2D, mailbox->name);
@@ -234,10 +229,10 @@ bool ImageBuffer::copyRenderingResultsFromDrawingBuffer(DrawingBuffer* drawingBu
 {
     if (!drawingBuffer)
         return false;
-    OwnPtr<blink::WebGraphicsContext3DProvider> provider = adoptPtr(blink::Platform::current()->createSharedOffscreenGraphicsContext3DProvider());
+    OwnPtr<WebGraphicsContext3DProvider> provider = adoptPtr(Platform::current()->createSharedOffscreenGraphicsContext3DProvider());
     if (!provider)
         return false;
-    blink::WebGraphicsContext3D* context3D = provider->context3d();
+    WebGraphicsContext3D* context3D = provider->context3d();
     Platform3DObject tex = m_surface->getBackingTexture();
     if (!context3D || !tex)
         return false;
@@ -280,7 +275,7 @@ void ImageBuffer::flush()
 }
 
 void ImageBuffer::drawPattern(GraphicsContext* context, const FloatRect& srcRect, const FloatSize& scale,
-    const FloatPoint& phase, CompositeOperator op, const FloatRect& destRect, blink::WebBlendMode blendMode, const IntSize& repeatSpacing)
+    const FloatPoint& phase, CompositeOperator op, const FloatRect& destRect, WebBlendMode blendMode, const IntSize& repeatSpacing)
 {
     if (!isSurfaceValid())
         return;
@@ -350,7 +345,7 @@ PassRefPtr<Uint8ClampedArray> ImageBuffer::getImageData(Multiply multiplied, con
     SkAlphaType alphaType = (multiplied == Premultiplied) ? kPremul_SkAlphaType : kUnpremul_SkAlphaType;
     SkImageInfo info = SkImageInfo::Make(rect.width(), rect.height(), kRGBA_8888_SkColorType, alphaType);
 
-    m_surface->willReadback();
+    m_surface->willAccessPixels();
     context()->readPixels(info, result->data(), 4 * rect.width(), rect.x(), rect.y());
     return result.release();
 }
@@ -381,6 +376,8 @@ void ImageBuffer::putByteArray(Multiply multiplied, Uint8ClampedArray* source, c
     const void* srcAddr = source->data() + originY * srcBytesPerRow + originX * 4;
     SkAlphaType alphaType = (multiplied == Premultiplied) ? kPremul_SkAlphaType : kUnpremul_SkAlphaType;
     SkImageInfo info = SkImageInfo::Make(sourceRect.width(), sourceRect.height(), kRGBA_8888_SkColorType, alphaType);
+
+    m_surface->willAccessPixels();
 
     context()->writePixels(info, srcAddr, srcBytesPerRow, destX, destY);
 }

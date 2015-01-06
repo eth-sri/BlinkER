@@ -35,14 +35,14 @@
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
 
-namespace blink { class WebFileWriter; }
-
 namespace blink {
+
+class WebFileWriter;
 
 class FileWriterBase : public RefCountedGarbageCollectedWillBeGarbageCollectedFinalized<FileWriterBase> {
 public:
     virtual ~FileWriterBase();
-    void initialize(PassOwnPtr<blink::WebFileWriter>, long long length);
+    void initialize(PassOwnPtr<WebFileWriter>, long long length);
 
     long long position() const
     {
@@ -58,7 +58,7 @@ public:
 protected:
     FileWriterBase();
 
-    blink::WebFileWriter* writer()
+    WebFileWriter* writer()
     {
         return m_writer.get();
     }
@@ -76,9 +76,7 @@ protected:
     void seekInternal(long long position);
 
 private:
-    friend class WTF::RefCounted<FileWriterBase>;
-
-    OwnPtr<blink::WebFileWriter> m_writer;
+    OwnPtr<WebFileWriter> m_writer;
     long long m_position;
     long long m_length;
 };

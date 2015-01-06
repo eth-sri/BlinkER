@@ -34,28 +34,27 @@
 #include "public/web/WebSettings.h"
 
 namespace blink {
+
 class InspectorController;
 class Settings;
-}
-
-namespace blink {
 
 class WebSettingsImpl FINAL : public WebSettings {
 public:
-    explicit WebSettingsImpl(blink::Settings*, blink::InspectorController*);
+    explicit WebSettingsImpl(Settings*, InspectorController*);
     virtual ~WebSettingsImpl() { }
 
     virtual bool mainFrameResizesAreOrientationChanges() const OVERRIDE;
     virtual bool shrinksViewportContentToFit() const OVERRIDE;
+    virtual int availablePointerTypes() const OVERRIDE;
+    virtual PointerType primaryPointerType() const OVERRIDE;
+    virtual int availableHoverTypes() const OVERRIDE;
+    virtual HoverType primaryHoverType() const OVERRIDE;
     virtual bool viewportEnabled() const OVERRIDE;
     virtual void setAccelerated2dCanvasEnabled(bool) OVERRIDE;
     virtual void setAccelerated2dCanvasMSAASampleCount(int) OVERRIDE;
     virtual void setAcceleratedCompositingEnabled(bool) OVERRIDE;
-    virtual void setAcceleratedCompositingForCanvasEnabled(bool) OVERRIDE;
-    virtual void setAcceleratedCompositingForFixedPositionEnabled(bool) OVERRIDE;
-    virtual void setAcceleratedCompositingForOverflowScrollEnabled(bool) OVERRIDE;
-    virtual void setCompositorDrivenAcceleratedScrollingEnabled(bool) OVERRIDE;
-    virtual void setAcceleratedCompositingForFixedRootBackgroundEnabled(bool) OVERRIDE;
+    virtual void setPreferCompositingToLCDTextEnabled(bool) OVERRIDE;
+    virtual void setAccessibilityEnabled(bool) OVERRIDE;
     virtual void setAllowDisplayOfInsecureContent(bool) OVERRIDE;
     virtual void setAllowFileAccessFromFileURLs(bool) OVERRIDE;
     virtual void setAllowCustomScrollbarInMainFrame(bool) OVERRIDE;
@@ -68,7 +67,6 @@ public:
     virtual void setAutoZoomFocusedNodeToLegibleScale(bool) OVERRIDE;
     virtual void setCaretBrowsingEnabled(bool) OVERRIDE;
     virtual void setClobberUserAgentInitialScaleQuirk(bool) OVERRIDE;
-    virtual void setCompositedScrollingForFramesEnabled(bool) OVERRIDE;
     virtual void setContainerCullingEnabled(bool) OVERRIDE;
     virtual void setCookieEnabled(bool) OVERRIDE;
     virtual void setNavigateOnDragDrop(bool) OVERRIDE;
@@ -83,7 +81,11 @@ public:
     virtual void setDeferredImageDecodingEnabled(bool) OVERRIDE;
     virtual void setDeviceScaleAdjustment(float) OVERRIDE;
     virtual void setDeviceSupportsMouse(bool) OVERRIDE;
+
+    // FIXME: Remove once the pointer/hover features are converted to use the
+    // new APIs (e.g. setPrimaryPointerType) on the chromium side
     virtual void setDeviceSupportsTouch(bool) OVERRIDE;
+
     virtual void setDisallowFullscreenForNonMediaElements(bool) OVERRIDE;
     virtual void setDoubleTapToZoomEnabled(bool) OVERRIDE;
     virtual void setDownloadableBinaryFontsEnabled(bool) OVERRIDE;
@@ -94,10 +96,12 @@ public:
     virtual void setExperimentalWebGLEnabled(bool) OVERRIDE;
     virtual void setFantasyFontFamily(const WebString&, UScriptCode = USCRIPT_COMMON) OVERRIDE;
     virtual void setFixedFontFamily(const WebString&, UScriptCode = USCRIPT_COMMON) OVERRIDE;
+    virtual void setForceZeroLayoutHeight(bool) OVERRIDE;
     virtual void setFullscreenSupported(bool) OVERRIDE;
     virtual void setHyperlinkAuditingEnabled(bool) OVERRIDE;
     virtual void setIgnoreMainFrameOverflowHiddenQuirk(bool) OVERRIDE;
     virtual void setImagesEnabled(bool) OVERRIDE;
+    virtual void setInlineTextBoxAccessibilityEnabled(bool) OVERRIDE;
     virtual void setJavaEnabled(bool) OVERRIDE;
     virtual void setJavaScriptCanAccessClipboard(bool) OVERRIDE;
     virtual void setJavaScriptCanOpenWindowsAutomatically(bool) OVERRIDE;
@@ -115,7 +119,6 @@ public:
     virtual void setMinimumFontSize(int) OVERRIDE;
     virtual void setMinimumLogicalFontSize(int) OVERRIDE;
     virtual void setMockScrollbarsEnabled(bool) OVERRIDE;
-    virtual void setNeedsSiteSpecificQuirks(bool) OVERRIDE;
     virtual void setOfflineWebApplicationCacheEnabled(bool) OVERRIDE;
     virtual void setOpenGLMultisamplingEnabled(bool) OVERRIDE;
     virtual void setPasswordEchoDurationInSeconds(double) OVERRIDE;
@@ -125,6 +128,10 @@ public:
     virtual void setPinchOverlayScrollbarThickness(int) OVERRIDE;
     virtual void setPinchVirtualViewportEnabled(bool) OVERRIDE;
     virtual void setPluginsEnabled(bool) OVERRIDE;
+    virtual void setAvailablePointerTypes(int) OVERRIDE;
+    virtual void setPrimaryPointerType(PointerType) OVERRIDE;
+    virtual void setAvailableHoverTypes(int) OVERRIDE;
+    virtual void setPrimaryHoverType(HoverType) OVERRIDE;
     virtual void setRenderVSyncNotificationEnabled(bool) OVERRIDE;
     virtual void setReportScreenSizeInPhysicalPixelsQuirk(bool) OVERRIDE;
     virtual void setSansSerifFontFamily(const WebString&, UScriptCode = USCRIPT_COMMON) OVERRIDE;
@@ -152,7 +159,6 @@ public:
     virtual void setUnifiedTextCheckerEnabled(bool) OVERRIDE;
     virtual void setUnsafePluginPastingEnabled(bool) OVERRIDE;
     virtual void setUsesEncodingDetector(bool) OVERRIDE;
-    virtual void setUseExpandedHeuristicsForGpuRasterization(bool) OVERRIDE;
     virtual void setUseLegacyBackgroundSizeShorthandBehavior(bool) OVERRIDE;
     virtual void setUseSolidColorScrollbars(bool) OVERRIDE;
     virtual void setUseWideViewport(bool) OVERRIDE;
@@ -177,7 +183,6 @@ public:
     bool doubleTapToZoomEnabled() const { return m_doubleTapToZoomEnabled; }
     bool perTilePaintingEnabled() const { return m_perTilePaintingEnabled; }
     bool supportDeprecatedTargetDensityDPI() const { return m_supportDeprecatedTargetDensityDPI; }
-    bool useExpandedHeuristicsForGpuRasterization() const { return m_useExpandedHeuristicsForGpuRasterization; }
     bool viewportMetaLayoutSizeQuirk() const { return m_viewportMetaLayoutSizeQuirk; }
     bool viewportMetaNonUserScalableQuirk() const { return m_viewportMetaNonUserScalableQuirk; }
     bool clobberUserAgentInitialScaleQuirk() const { return m_clobberUserAgentInitialScaleQuirk; }
@@ -186,8 +191,8 @@ public:
     bool mockGestureTapHighlightsEnabled() const;
 
 private:
-    blink::Settings* m_settings;
-    blink::InspectorController* m_inspectorController;
+    Settings* m_settings;
+    InspectorController* m_inspectorController;
     bool m_showFPSCounter;
     bool m_showPaintRects;
     bool m_renderVSyncNotificationEnabled;
@@ -197,7 +202,6 @@ private:
     bool m_perTilePaintingEnabled;
     bool m_supportDeprecatedTargetDensityDPI;
     bool m_shrinksViewportContentToFit;
-    bool m_useExpandedHeuristicsForGpuRasterization;
     // This quirk is to maintain compatibility with Android apps built on
     // the Android SDK prior to and including version 18. Presumably, this
     // can be removed any time after 2015. See http://crbug.com/277369.

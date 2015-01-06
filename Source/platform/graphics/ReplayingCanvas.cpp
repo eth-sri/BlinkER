@@ -253,10 +253,10 @@ void ReplayingCanvas::onClipRegion(const SkRegion& region, SkRegion::Op op)
     this->SkCanvas::onClipRegion(region, op);
 }
 
-void ReplayingCanvas::onDrawPicture(const SkPicture* picture)
+void ReplayingCanvas::onDrawPicture(const SkPicture* picture, const SkMatrix* matrix, const SkPaint* paint)
 {
     AutoReplayer replayer(this);
-    this->SkCanvas::onDrawPicture(picture);
+    this->SkCanvas::onDrawPicture(picture, matrix, paint);
 }
 
 void ReplayingCanvas::didSetMatrix(const SkMatrix& matrix)
@@ -294,4 +294,4 @@ void ReplayingCanvas::willRestore()
     this->SkCanvas::willRestore();
 }
 
-}
+} // namespace blink

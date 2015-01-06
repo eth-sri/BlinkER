@@ -148,9 +148,6 @@ public:
 
     void invalidateRelativeLengthClients(SubtreeLayoutScope* = 0);
 
-    bool isContextElement() const { return m_isContextElement; }
-    void setContextElement() { m_isContextElement = true; }
-
     void addToPropertyMap(PassRefPtr<SVGAnimatedPropertyBase>);
 
     SVGAnimatedString* className() { return m_className.get(); }
@@ -251,7 +248,6 @@ private:
 #if ENABLE(ASSERT)
     bool m_inRelativeLengthClientsInvalidation;
 #endif
-    unsigned m_isContextElement : 1;
 
     OwnPtrWillBeMember<SVGElementRareData> m_SVGRareData;
     RefPtr<SVGAnimatedString> m_className;

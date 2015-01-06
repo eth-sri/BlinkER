@@ -351,12 +351,7 @@ HTMLLabelElement* AXNodeObject::labelForElement(Element* element) const
             return label;
     }
 
-    for (Element* parent = element->parentElement(); parent; parent = parent->parentElement()) {
-        if (isHTMLLabelElement(*parent))
-            return toHTMLLabelElement(parent);
-    }
-
-    return 0;
+    return Traversal<HTMLLabelElement>::firstAncestor(*element);
 }
 
 AXObject* AXNodeObject::menuButtonForMenu() const
@@ -402,8 +397,8 @@ Element* AXNodeObject::mouseButtonListener() const
         return 0;
 
     // check if our parent is a mouse button listener
-    while (node && !node->isElementNode())
-        node = node->parentNode();
+    if (!node->isElementNode())
+        node = node->parentElement();
 
     if (!node)
         return 0;
@@ -1396,7 +1391,7 @@ bool AXNodeObject::canHaveChildren() const
     case ScrollBarRole:
         return false;
     case StaticTextRole:
-        if (!axObjectCache()->inlineTextBoxAccessibility())
+        if (!axObjectCache()->inlineTextBoxAccessibilityEnabled())
             return false;
     default:
         return true;
@@ -1637,25 +1632,21 @@ String AXNodeObject::alternativeTextForWebArea() const
             return ariaLabel;
     }
 
-    Node* owner = document->ownerElement();
-    if (owner) {
+    if (HTMLFrameOwnerElement* owner = document->ownerElement()) {
         if (isHTMLFrameElementBase(*owner)) {
-            const AtomicString& title = toElement(owner)->getAttribute(titleAttr);
+            const AtomicString& title = owner->getAttribute(titleAttr);
             if (!title.isEmpty())
                 return title;
-            return toElement(owner)->getNameAttribute();
         }
-        if (owner->isHTMLElement())
-            return toHTMLElement(owner)->getNameAttribute();
+        return owner->getNameAttribute();
     }
 
     String documentTitle = document->title();
     if (!documentTitle.isEmpty())
         return documentTitle;
 
-    owner = document->body();
-    if (owner && owner->isHTMLElement())
-        return toHTMLElement(owner)->getNameAttribute();
+    if (HTMLElement* body = document->body())
+        return body->getNameAttribute();
 
     return String();
 }

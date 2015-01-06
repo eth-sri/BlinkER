@@ -33,7 +33,7 @@
 #include "platform/PODIntervalTree.h"
 #include "platform/geometry/FloatPoint.h"
 #include "platform/geometry/FloatRect.h"
-#include "platform/graphics/WindRule.h"
+#include "platform/graphics/GraphicsTypes.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/Vector.h"
@@ -92,7 +92,6 @@ public:
     float maxX() const { return std::max(vertex1().x(), vertex2().x()); }
     float maxY() const { return std::max(vertex1().y(), vertex2().y()); }
 
-    bool overlapsRect(const FloatRect&) const;
     bool intersection(const VertexPair&, FloatPoint&) const;
 };
 

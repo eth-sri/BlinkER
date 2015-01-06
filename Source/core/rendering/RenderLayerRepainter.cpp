@@ -56,7 +56,7 @@ RenderLayerRepainter::RenderLayerRepainter(RenderLayerModelObject& renderer)
 {
 }
 
-void RenderLayerRepainter::computeRepaintRectsIncludingNonCompositingDescendants()
+void RenderLayerRepainter::computePaintInvalidationRectsIncludingNonCompositingDescendants()
 {
     // FIXME: boundsRectForPaintInvalidation() has to walk up the parent chain
     // for every layer to compute the rects. We should make this more efficient.
@@ -68,101 +68,82 @@ void RenderLayerRepainter::computeRepaintRectsIncludingNonCompositingDescendants
 
     for (RenderLayer* layer = m_renderer.layer()->firstChild(); layer; layer = layer->nextSibling()) {
         if (layer->compositingState() != PaintsIntoOwnBacking && layer->compositingState() != PaintsIntoGroupedBacking)
-            layer->repainter().computeRepaintRectsIncludingNonCompositingDescendants();
+            layer->paintInvalidator().computePaintInvalidationRectsIncludingNonCompositingDescendants();
     }
 }
 
-// Since we're only painting non-composited layers, we know that they all share the same repaintContainer.
-void RenderLayerRepainter::repaintIncludingNonCompositingDescendants()
+// Since we're only painting non-composited layers, we know that they all share the same paintInvalidationContainer.
+void RenderLayerRepainter::paintInvalidationIncludingNonCompositingDescendants()
 {
-    repaintIncludingNonCompositingDescendantsInternal(m_renderer.containerForPaintInvalidation());
+    paintInvalidationIncludingNonCompositingDescendantsInternal(m_renderer.containerForPaintInvalidation());
 }
 
-void RenderLayerRepainter::repaintIncludingNonCompositingDescendantsInternal(const RenderLayerModelObject* repaintContainer)
+void RenderLayerRepainter::paintInvalidationIncludingNonCompositingDescendantsInternal(const RenderLayerModelObject* paintInvalidationContainer)
 {
-    m_renderer.invalidatePaintUsingContainer(repaintContainer, m_renderer.previousPaintInvalidationRect(), InvalidationLayer);
+    m_renderer.invalidatePaintUsingContainer(paintInvalidationContainer, m_renderer.previousPaintInvalidationRect(), InvalidationLayer);
 
     // Disable for reading compositingState() below.
     DisableCompositingQueryAsserts disabler;
 
     for (RenderLayer* curr = m_renderer.layer()->firstChild(); curr; curr = curr->nextSibling()) {
         if (curr->compositingState() != PaintsIntoOwnBacking && curr->compositingState() != PaintsIntoGroupedBacking)
-            curr->repainter().repaintIncludingNonCompositingDescendantsInternal(repaintContainer);
+            curr->paintInvalidator().paintInvalidationIncludingNonCompositingDescendantsInternal(paintInvalidationContainer);
     }
 }
 
-LayoutRect RenderLayerRepainter::repaintRectIncludingNonCompositingDescendants() const
+LayoutRect RenderLayerRepainter::paintInvalidationRectIncludingNonCompositingDescendants() const
 {
-    LayoutRect repaintRect = m_renderer.previousPaintInvalidationRect();
+    LayoutRect paintInvalidationRect = m_renderer.previousPaintInvalidationRect();
 
     for (RenderLayer* child = m_renderer.layer()->firstChild(); child; child = child->nextSibling()) {
-        // Don't include repaint rects for composited child layers; they will paint themselves and have a different origin.
+        // Don't include paint invalidation rects for composited child layers; they will paint themselves and have a different origin.
         if (child->compositingState() == PaintsIntoOwnBacking || child->compositingState() == PaintsIntoGroupedBacking)
             continue;
 
-        repaintRect.unite(child->repainter().repaintRectIncludingNonCompositingDescendants());
+        paintInvalidationRect.unite(child->paintInvalidator().paintInvalidationRectIncludingNonCompositingDescendants());
     }
-    return repaintRect;
+    return paintInvalidationRect;
 }
 
-void RenderLayerRepainter::setBackingNeedsRepaintInRect(const LayoutRect& r)
+void RenderLayerRepainter::setBackingNeedsPaintInvalidationInRect(const LayoutRect& r)
 {
     // https://bugs.webkit.org/show_bug.cgi?id=61159 describes an unreproducible crash here,
     // so assert but check that the layer is composited.
     ASSERT(m_renderer.compositingState() != NotComposited);
-    if (m_renderer.compositingState() == NotComposited) {
-        // If we're trying to repaint the placeholder document layer, propagate the
-        // repaint to the native view system.
-        LayoutRect absRect(r);
-        LayoutPoint delta;
-        m_renderer.layer()->convertToLayerCoords(m_renderer.layer()->root(), delta);
-        absRect.moveBy(delta);
-
-        if (absRect.isEmpty())
-            return;
-
-        RenderView* view = m_renderer.view();
-        if (view)
-            view->invalidatePaintForRectangle(absRect);
-        return;
-    }
-    // FIXME: generalize accessors to backing GraphicsLayers so that this code is squasphing-agnostic.
+    // FIXME: generalize accessors to backing GraphicsLayers so that this code is squashing-agnostic.
     if (m_renderer.layer()->groupedMapping()) {
-        LayoutRect repaintRect = r;
-        repaintRect.move(m_renderer.layer()->subpixelAccumulation());
+        LayoutRect paintInvalidationRect = r;
+        paintInvalidationRect.move(m_renderer.layer()->subpixelAccumulation());
         if (GraphicsLayer* squashingLayer = m_renderer.layer()->groupedMapping()->squashingLayer())
-            squashingLayer->setNeedsDisplayInRect(pixelSnappedIntRect(repaintRect));
+            squashingLayer->setNeedsDisplayInRect(pixelSnappedIntRect(paintInvalidationRect));
     } else {
         m_renderer.layer()->compositedLayerMapping()->setContentsNeedDisplayInRect(r);
     }
 }
 
-void RenderLayerRepainter::setFilterBackendNeedsRepaintingInRect(const LayoutRect& rect)
+void RenderLayerRepainter::setFilterBackendNeedsPaintInvalidationInRect(const LayoutRect& rect)
 {
     if (rect.isEmpty())
         return;
-    LayoutRect rectForRepaint = rect;
-    m_renderer.style()->filterOutsets().expandRect(rectForRepaint);
+    LayoutRect rectForPaintInvalidation = rect;
 
-    RenderLayerFilterInfo* filterInfo = m_renderer.layer()->filterInfo();
-    ASSERT(filterInfo);
-    filterInfo->expandDirtySourceRect(rectForRepaint);
+    ASSERT(m_renderer.layer()->filterInfo());
 
-    RenderLayer* parentLayer = enclosingFilterRepaintLayer();
+    RenderLayer* parentLayer = enclosingFilterPaintInvalidationLayer();
     ASSERT(parentLayer);
-    FloatQuad repaintQuad(rectForRepaint);
-    LayoutRect parentLayerRect = m_renderer.localToContainerQuad(repaintQuad, parentLayer->renderer()).enclosingBoundingBox();
+    FloatQuad paintInvalidationQuad(rectForPaintInvalidation);
+    LayoutRect parentLayerRect = m_renderer.localToContainerQuad(paintInvalidationQuad, parentLayer->renderer()).enclosingBoundingBox();
 
     if (parentLayerRect.isEmpty())
         return;
 
     if (parentLayer->hasCompositedLayerMapping()) {
-        parentLayer->repainter().setBackingNeedsRepaintInRect(parentLayerRect);
+        parentLayer->paintInvalidator().setBackingNeedsPaintInvalidationInRect(parentLayerRect);
         return;
     }
 
     if (parentLayer->paintsWithFilters()) {
-        parentLayer->repainter().setFilterBackendNeedsRepaintingInRect(parentLayerRect);
+        parentLayer->paintInvalidator().setFilterBackendNeedsPaintInvalidationInRect(parentLayerRect);
         return;
     }
 
@@ -175,7 +156,7 @@ void RenderLayerRepainter::setFilterBackendNeedsRepaintingInRect(const LayoutRec
     ASSERT_NOT_REACHED();
 }
 
-RenderLayer* RenderLayerRepainter::enclosingFilterRepaintLayer() const
+RenderLayer* RenderLayerRepainter::enclosingFilterPaintInvalidationLayer() const
 {
     for (const RenderLayer* curr = m_renderer.layer(); curr; curr = curr->parent()) {
         if ((curr != m_renderer.layer() && curr->requiresFullLayerImageForFilters()) || curr->compositingState() == PaintsIntoOwnBacking || curr->isRootLayer())

@@ -34,6 +34,7 @@
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/Settings.h"
 #include "core/html/HTMLOptGroupElement.h"
 #include "core/html/HTMLOptionElement.h"
 #include "core/html/HTMLSelectElement.h"
@@ -53,8 +54,8 @@ using namespace HTMLNames;
 
 RenderMenuList::RenderMenuList(Element* element)
     : RenderFlexibleBox(element)
-    , m_buttonText(0)
-    , m_innerBlock(0)
+    , m_buttonText(nullptr)
+    , m_innerBlock(nullptr)
     , m_optionsChanged(true)
     , m_optionsWidth(0)
     , m_lastActiveIndex(-1)
@@ -65,9 +66,22 @@ RenderMenuList::RenderMenuList(Element* element)
 
 RenderMenuList::~RenderMenuList()
 {
+    ASSERT(!m_popup);
+}
+
+void RenderMenuList::destroy()
+{
     if (m_popup)
         m_popup->disconnectClient();
     m_popup = nullptr;
+    RenderFlexibleBox::destroy();
+}
+
+void RenderMenuList::trace(Visitor* visitor)
+{
+    visitor->trace(m_buttonText);
+    visitor->trace(m_innerBlock);
+    RenderFlexibleBox::trace(visitor);
 }
 
 // FIXME: Instead of this hack we should add a ShadowRoot to <select> with no insertion point
@@ -139,7 +153,7 @@ void RenderMenuList::removeChild(RenderObject* oldChild)
 {
     if (oldChild == m_innerBlock || !m_innerBlock) {
         RenderFlexibleBox::removeChild(oldChild);
-        m_innerBlock = 0;
+        m_innerBlock = nullptr;
     } else
         m_innerBlock->removeChild(oldChild);
 }
@@ -244,7 +258,7 @@ void RenderMenuList::setTextFromOption(int optionIndex)
         } else {
             Locale& locale = select->locale();
             String localizedNumberString = locale.convertToLocalizedNumber(String::number(selectedCount));
-            text = locale.queryString(blink::WebLocalizedString::SelectMenuListText, localizedNumberString);
+            text = locale.queryString(WebLocalizedString::SelectMenuListText, localizedNumberString);
             ASSERT(!m_optionStyle);
         }
     } else {
@@ -395,6 +409,11 @@ void RenderMenuList::valueChanged(unsigned listIndex, bool fireOnChange)
     select->optionSelectedByUser(select->listToOptionIndex(listIndex), fireOnChange);
 }
 
+void RenderMenuList::listBoxSelectItem(int listIndex, bool allowMultiplySelections, bool shift, bool fireOnChangeNow)
+{
+    selectElement()->listBoxSelectItem(listIndex, allowMultiplySelections, shift, fireOnChangeNow);
+}
+
 bool RenderMenuList::multiple() const
 {
     return selectElement()->multiple();
@@ -407,7 +426,7 @@ void RenderMenuList::didSetSelectedIndex(int listIndex)
 
 void RenderMenuList::didUpdateActiveOption(int optionIndex)
 {
-    if (!AXObjectCache::accessibilityEnabled() || !document().existingAXObjectCache())
+    if (!document().existingAXObjectCache())
         return;
 
     if (m_lastActiveIndex == optionIndex)
@@ -498,7 +517,8 @@ PopupMenuStyle RenderMenuList::itemStyle(unsigned listIndex) const
 
     RenderStyle* style = element->renderStyle() ? element->renderStyle() : element->computedStyle();
     return style ? PopupMenuStyle(resolveColor(style, CSSPropertyColor), itemBackgroundColor, style->font(), style->visibility() == VISIBLE,
-        style->display() == NONE, style->textIndent(), style->direction(), isOverride(style->unicodeBidi()),
+        isHTMLOptionElement(*element) ? toHTMLOptionElement(*element).isDisplayNone() : style->display() == NONE,
+        style->textIndent(), style->direction(), isOverride(style->unicodeBidi()),
         itemHasCustomBackgroundColor ? PopupMenuStyle::CustomBackgroundColor : PopupMenuStyle::DefaultBackgroundColor) : menuStyle();
 }
 
@@ -535,7 +555,7 @@ void RenderMenuList::getItemBackgroundColor(unsigned listIndex, Color& itemBackg
 
 PopupMenuStyle RenderMenuList::menuStyle() const
 {
-    const RenderObject* o = m_innerBlock ? m_innerBlock : this;
+    const RenderObject* o = m_innerBlock ? m_innerBlock.get() : this;
     const RenderStyle* s = o->style();
     return PopupMenuStyle(o->resolveColor(CSSPropertyColor), o->resolveColor(CSSPropertyBackgroundColor), s->font(), s->visibility() == VISIBLE,
         s->display() == NONE, s->textIndent(), style()->direction(), isOverride(style()->unicodeBidi()));
@@ -604,4 +624,4 @@ void RenderMenuList::setTextFromItem(unsigned listIndex)
     setTextFromOption(selectElement()->listToOptionIndex(listIndex));
 }
 
-}
+} // namespace blink

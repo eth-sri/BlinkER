@@ -536,12 +536,9 @@ void ScrollView::scrollContents(const IntSize& scrollDelta)
     if (!window)
         return;
 
-    // Since scrolling is double buffered, we will be blitting the scroll view's intersection
-    // with the clip rect every time to keep it smooth.
     IntRect clipRect = windowClipRect();
-    IntRect scrollViewRect = rectToCopyOnScroll();
     IntRect updateRect = clipRect;
-    updateRect.intersect(scrollViewRect);
+    updateRect.intersect(rectToCopyOnScroll());
 
     if (m_drawPanScrollIcon) {
         // FIXME: the pan icon is broken when accelerated compositing is on, since it will draw under the compositing layers.
@@ -553,7 +550,7 @@ void ScrollView::scrollContents(const IntSize& scrollDelta)
         window->invalidateContentsAndRootView(panScrollIconDirtyRect);
     }
 
-    if (!scrollContentsFastPath(-scrollDelta, scrollViewRect, clipRect))
+    if (!scrollContentsFastPath(-scrollDelta))
         scrollContentsSlowPath(updateRect);
 
     // Invalidate the overhang areas if they are visible.
@@ -561,12 +558,6 @@ void ScrollView::scrollContents(const IntSize& scrollDelta)
 
     // This call will move children with native widgets (plugins) and invalidate them as well.
     frameRectsChanged();
-}
-
-bool ScrollView::scrollContentsFastPath(const IntSize& scrollDelta, const IntRect& rectToScroll, const IntRect& clipRect)
-{
-    hostWindow()->scroll(clipRect);
-    return true;
 }
 
 void ScrollView::scrollContentsSlowPath(const IntRect& updateRect)
@@ -868,9 +859,6 @@ void ScrollView::paintPanScrollIcon(GraphicsContext* context)
 
 void ScrollView::paint(GraphicsContext* context, const IntRect& rect)
 {
-    if (context->paintingDisabled() && !context->updatingControlTints())
-        return;
-
     notifyPageThatContentAreaWillPaint();
 
     IntRect documentDirtyRect = rect;

@@ -232,7 +232,7 @@ String HitTestResult::title(TextDirection& dir) const
     for (Node* titleNode = m_innerNode.get(); titleNode; titleNode = titleNode->parentNode()) {
         if (titleNode->isElementNode()) {
             String title = toElement(titleNode)->title();
-            if (!title.isEmpty()) {
+            if (!title.isNull()) {
                 if (RenderObject* renderer = titleNode->renderer())
                     dir = renderer->style()->direction();
                 return title;
@@ -284,6 +284,16 @@ IntRect HitTestResult::imageRect() const
 
 KURL HitTestResult::absoluteImageURL() const
 {
+    return absoluteImageURLInternal(false);
+}
+
+KURL HitTestResult::absoluteImageURLIncludingCanvasDataURL() const
+{
+    return absoluteImageURLInternal(true);
+}
+
+KURL HitTestResult::absoluteImageURLInternal(bool allowCanvas) const
+{
     if (!m_innerNonSharedNode)
         return KURL();
 
@@ -292,7 +302,7 @@ KURL HitTestResult::absoluteImageURL() const
         return KURL();
 
     AtomicString urlString;
-    if (isHTMLCanvasElement(*m_innerNonSharedNode)
+    if ((allowCanvas && isHTMLCanvasElement(*m_innerNonSharedNode))
         || isHTMLEmbedElement(*m_innerNonSharedNode)
         || isHTMLImageElement(*m_innerNonSharedNode)
         || isHTMLInputElement(*m_innerNonSharedNode)
@@ -454,9 +464,12 @@ HitTestResult::NodeSet& HitTestResult::mutableRectBasedTestResult()
 
 void HitTestResult::resolveRectBasedTest(Node* resolvedInnerNode, const LayoutPoint& resolvedPointInMainFrame)
 {
+    // FIXME: For maximum fidelity with point-based hit tests we should probably make use
+    // of RenderObject::updateHitTestResult here. See http://crbug.com/398914.
     ASSERT(isRectBasedTest());
     ASSERT(m_hitTestLocation.containsPoint(resolvedPointInMainFrame));
-    m_innerNode = resolvedInnerNode;
+    setInnerNode(resolvedInnerNode);
+    setInnerNonSharedNode(resolvedInnerNode);
     m_hitTestLocation = HitTestLocation(resolvedPointInMainFrame);
     m_pointInInnerNodeFrame = resolvedPointInMainFrame;
     m_rectBasedTestResult = nullptr;

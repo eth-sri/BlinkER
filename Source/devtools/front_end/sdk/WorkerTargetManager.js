@@ -13,14 +13,16 @@ WebInspector.WorkerTargetManager = function(mainTarget, targetManager)
     this._mainTarget = mainTarget;
     this._targetManager = targetManager;
     mainTarget.workerManager.addEventListener(WebInspector.WorkerManager.Events.WorkerAdded, this._onWorkerAdded, this);
-    mainTarget.profilingLock.addEventListener(WebInspector.Lock.Events.StateChanged, this._onProfilingStateChanged, this);
+    mainTarget.workerManager.addEventListener(WebInspector.WorkerManager.Events.WorkersCleared, this._onWorkersCleared, this);
+    WebInspector.profilingLock().addEventListener(WebInspector.Lock.Events.StateChanged, this._onProfilingStateChanged, this);
     this._onProfilingStateChanged();
+    this._lastAnonymousTargetId = 0;
 }
 
 WebInspector.WorkerTargetManager.prototype = {
     _onProfilingStateChanged: function()
     {
-        var acquired = this._mainTarget.profilingLock.isAcquired();
+        var acquired = WebInspector.profilingLock().isAcquired();
         this._mainTarget.workerAgent().setAutoconnectToWorkers(!acquired);
     },
 
@@ -38,17 +40,24 @@ WebInspector.WorkerTargetManager.prototype = {
          */
         function onConnectionReady(connection)
         {
-            this._targetManager.createTarget(data.url, connection, targetCreated)
+            var parsedURL = data.url.asParsedURL();
+            var workerId = parsedURL ? parsedURL.lastPathComponent : "#" + (++this._lastAnonymousTargetId);
+            this._targetManager.createTarget(WebInspector.UIString("Worker %s", workerId), connection, targetCreated);
         }
 
         /**
-         * @param {!WebInspector.Target} target
+         * @param {?WebInspector.Target} target
          */
         function targetCreated(target)
         {
-            if (data.inspectorConnected)
+            if (target && data.inspectorConnected)
                 target.runtimeAgent().run();
         }
+    },
+
+    _onWorkersCleared: function()
+    {
+        this._lastAnonymousTargetId = 0;
     }
 }
 
@@ -63,6 +72,8 @@ WebInspector.WorkerTargetManager.prototype = {
 WebInspector.WorkerConnection = function(target, workerId, inspectorConnected, onConnectionReady)
 {
     InspectorBackendClass.Connection.call(this);
+    //FIXME: remove resourceTreeModel and others from worker targets
+    this.suppressErrorsForDomains(["Worker", "Page", "CSS", "DOM", "DOMStorage", "Database", "Network", "IndexedDB"]);
     this._target = target;
     this._workerId = workerId;
     this._workerAgent = target.workerAgent();

@@ -70,7 +70,7 @@ public:
 
     void set(KeyType* key, v8::Handle<v8::Object> wrapper, const WrapperConfiguration& configuration)
     {
-        ASSERT(static_cast<KeyType*>(toNative(wrapper)) == key);
+        ASSERT(reinterpret_cast<KeyType*>(toInternalPointer(wrapper)) == key);
         RELEASE_ASSERT(!containsKey(key)); // See crbug.com/368095
         v8::UniquePersistent<v8::Object> unique(m_isolate, wrapper);
         configuration.configureWrapper(&unique);
@@ -142,7 +142,7 @@ private:
         static KeyType* KeyFromWeakCallbackData(
             const v8::WeakCallbackData<v8::Object, WeakCallbackDataType>& data)
         {
-            return static_cast<KeyType*>(toNative(data.GetValue()));
+            return reinterpret_cast<KeyType*>(toInternalPointer(data.GetValue()));
         }
 
         // Dispose traits:
@@ -154,16 +154,6 @@ private:
     v8::Isolate* m_isolate;
     typename PersistentValueMapTraits::MapType m_map;
 };
-
-template <>
-inline void DOMWrapperMap<void>::PersistentValueMapTraits::Dispose(
-    v8::Isolate* isolate,
-    v8::UniquePersistent<v8::Object> value,
-    void* key)
-{
-    RELEASE_ASSERT(!value.IsEmpty()); // See crbug.com/368095.
-    releaseObject(v8::Local<v8::Object>::New(isolate, value));
-}
 
 } // namespace blink
 

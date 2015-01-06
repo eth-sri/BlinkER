@@ -85,6 +85,7 @@ private:
     virtual bool isPickerIndicatorOwnerDisabledOrReadOnly() const OVERRIDE FINAL;
     virtual void pickerIndicatorChooseValue(const String&) OVERRIDE FINAL;
     virtual void pickerIndicatorChooseValue(double) OVERRIDE FINAL;
+    virtual Element& pickerOwnerElement() const OVERRIDE FINAL;
     virtual bool setupDateTimeChooserParameters(DateTimeChooserParameters&) OVERRIDE FINAL;
 
     // ClearButtonElement::ClearButtonOwner functions.
@@ -116,6 +117,7 @@ private:
     virtual void listAttributeTargetChanged() OVERRIDE FINAL;
     virtual void updateClearButtonVisibility() OVERRIDE FINAL;
     virtual TextDirection computedTextDirection() OVERRIDE FINAL;
+    virtual AXObject* popupRootAXObject() OVERRIDE FINAL;
 
     DateTimeEditElement* dateTimeEditElement() const;
     SpinButtonElement* spinButtonElement() const;

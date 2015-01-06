@@ -40,7 +40,7 @@
 #include "core/css/resolver/StyleResolver.h"
 #include "core/css/resolver/ViewportStyleResolver.h"
 #include "core/dom/DocumentMarkerController.h"
-#include "core/dom/FullscreenElementStack.h"
+#include "core/dom/Fullscreen.h"
 #include "core/dom/NodeRenderStyle.h"
 #include "core/dom/Range.h"
 #include "core/editing/Editor.h"
@@ -48,6 +48,7 @@
 #include "core/editing/SpellChecker.h"
 #include "core/editing/VisiblePosition.h"
 #include "core/events/MouseEvent.h"
+#include "core/fetch/MemoryCache.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
@@ -62,6 +63,7 @@
 #include "core/rendering/HitTestResult.h"
 #include "core/rendering/RenderView.h"
 #include "core/rendering/compositing/RenderLayerCompositor.h"
+#include "core/testing/URLTestHelpers.h"
 #include "platform/DragImage.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/UserGestureIndicator.h"
@@ -76,12 +78,14 @@
 #include "public/platform/WebURL.h"
 #include "public/platform/WebURLResponse.h"
 #include "public/platform/WebUnitTestSupport.h"
+#include "public/web/WebCache.h"
 #include "public/web/WebDataSource.h"
 #include "public/web/WebDocument.h"
 #include "public/web/WebFindOptions.h"
 #include "public/web/WebFormElement.h"
 #include "public/web/WebFrameClient.h"
 #include "public/web/WebHistoryItem.h"
+#include "public/web/WebPrintParams.h"
 #include "public/web/WebRange.h"
 #include "public/web/WebRemoteFrame.h"
 #include "public/web/WebScriptSource.h"
@@ -96,7 +100,6 @@
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebViewImpl.h"
 #include "web/tests/FrameTestHelpers.h"
-#include "web/tests/URLTestHelpers.h"
 #include "wtf/Forward.h"
 #include "wtf/dtoa/utils.h"
 #include <gmock/gmock.h>
@@ -167,9 +170,12 @@ protected:
     static void configueCompositingWebView(WebSettings* settings)
     {
         settings->setAcceleratedCompositingEnabled(true);
-        settings->setAcceleratedCompositingForFixedPositionEnabled(true);
-        settings->setAcceleratedCompositingForOverflowScrollEnabled(true);
-        settings->setCompositedScrollingForFramesEnabled(true);
+        settings->setPreferCompositingToLCDTextEnabled(true);
+    }
+
+    static void configureLoadsImagesAutomatically(WebSettings* settings)
+    {
+        settings->setLoadsImagesAutomatically(true);
     }
 
     void initializeTextSelectionWebView(const std::string& url, FrameTestHelpers::WebViewHelper* webViewHelper)
@@ -1375,6 +1381,86 @@ TEST_F(WebFrameTest, WideViewportInitialScaleDoesNotExpandFixedLayoutWidth)
     webViewHelper.webView()->layout();
     EXPECT_EQ(2000, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().width());
     EXPECT_EQ(0.5f, webViewHelper.webView()->pageScaleFactor());
+}
+
+TEST_F(WebFrameTest, SetForceZeroLayoutHeight)
+{
+    UseMockScrollbarSettings mockScrollbarSettings;
+    registerMockedHttpURLLoad("200-by-300.html");
+
+    FixedLayoutTestWebViewClient client;
+    client.m_screenInfo.deviceScaleFactor = 1;
+    int viewportWidth = 640;
+    int viewportHeight = 480;
+
+    FrameTestHelpers::WebViewHelper webViewHelper;
+
+    webViewHelper.initializeAndLoad(m_baseURL + "200-by-300.html", true, 0, &client, enableViewportSettings);
+    webViewHelper.webView()->resize(WebSize(viewportWidth, viewportHeight));
+    webViewHelper.webView()->layout();
+
+    EXPECT_LE(viewportHeight, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height());
+    webViewHelper.webView()->settings()->setForceZeroLayoutHeight(true);
+    EXPECT_TRUE(webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->needsLayout());
+
+    EXPECT_EQ(0, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height());
+
+    webViewHelper.webView()->resize(WebSize(viewportWidth, viewportHeight * 2));
+    EXPECT_FALSE(webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->needsLayout());
+    EXPECT_EQ(0, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height());
+
+    webViewHelper.webView()->resize(WebSize(viewportWidth * 2, viewportHeight));
+    webViewHelper.webView()->layout();
+    EXPECT_EQ(0, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height());
+
+    webViewHelper.webView()->settings()->setForceZeroLayoutHeight(false);
+    EXPECT_LE(viewportHeight, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height());
+}
+
+TEST_F(WebFrameTest, SetForceZeroLayoutHeightWorksAcrossNavigations)
+{
+    UseMockScrollbarSettings mockScrollbarSettings;
+    registerMockedHttpURLLoad("200-by-300.html");
+    registerMockedHttpURLLoad("large-div.html");
+
+    FixedLayoutTestWebViewClient client;
+    client.m_screenInfo.deviceScaleFactor = 1;
+    int viewportWidth = 640;
+    int viewportHeight = 480;
+
+    FrameTestHelpers::WebViewHelper webViewHelper;
+
+    webViewHelper.initializeAndLoad(m_baseURL + "200-by-300.html", true, 0, &client, enableViewportSettings);
+    webViewHelper.webView()->settings()->setForceZeroLayoutHeight(true);
+    webViewHelper.webView()->resize(WebSize(viewportWidth, viewportHeight));
+    webViewHelper.webView()->layout();
+
+    FrameTestHelpers::loadFrame(webViewHelper.webView()->mainFrame(), m_baseURL + "large-div.html");
+    webViewHelper.webView()->layout();
+
+    EXPECT_EQ(0, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height());
+}
+
+TEST_F(WebFrameTest, SetForceZeroLayoutHeightWithWideViewportQuirk)
+{
+    UseMockScrollbarSettings mockScrollbarSettings;
+    registerMockedHttpURLLoad("200-by-300.html");
+
+    FixedLayoutTestWebViewClient client;
+    client.m_screenInfo.deviceScaleFactor = 1;
+    int viewportWidth = 640;
+    int viewportHeight = 480;
+
+    FrameTestHelpers::WebViewHelper webViewHelper;
+
+    webViewHelper.initializeAndLoad(m_baseURL + "200-by-300.html", true, 0, &client, enableViewportSettings);
+    webViewHelper.webView()->settings()->setWideViewportQuirkEnabled(true);
+    webViewHelper.webView()->settings()->setUseWideViewport(true);
+    webViewHelper.webView()->settings()->setForceZeroLayoutHeight(true);
+    webViewHelper.webView()->resize(WebSize(viewportWidth, viewportHeight));
+    webViewHelper.webView()->layout();
+
+    EXPECT_EQ(0, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height());
 }
 
 TEST_F(WebFrameTest, WideViewportAndWideContentWithInitialScale)
@@ -4439,6 +4525,38 @@ TEST_F(WebFrameTest, RemoveSpellingMarkers)
     EXPECT_EQ(0U, document->markers().markersInRange(selectionRange.get(), DocumentMarker::Spelling).size());
 }
 
+TEST_F(WebFrameTest, RemoveSpellingMarkersUnderWords)
+{
+    registerMockedHttpURLLoad("spell.html");
+    FrameTestHelpers::WebViewHelper webViewHelper;
+    webViewHelper.initializeAndLoad(m_baseURL + "spell.html");
+    SpellCheckClient spellcheck;
+    webViewHelper.webView()->setSpellCheckClient(&spellcheck);
+
+    LocalFrame* frame = toWebLocalFrameImpl(webViewHelper.webView()->mainFrame())->frame();
+    Document* document = frame->document();
+    Element* element = document->getElementById("data");
+
+    webViewHelper.webView()->settings()->setAsynchronousSpellCheckingEnabled(true);
+    webViewHelper.webView()->settings()->setUnifiedTextCheckerEnabled(true);
+    webViewHelper.webView()->settings()->setEditingBehavior(WebSettings::EditingBehaviorWin);
+
+    element->focus();
+    document->execCommand("InsertText", false, " wellcome ");
+
+    WebVector<uint32_t> documentMarkers1;
+    webViewHelper.webView()->spellingMarkers(&documentMarkers1);
+    EXPECT_EQ(1U, documentMarkers1.size());
+
+    Vector<String> words;
+    words.append("wellcome");
+    frame->removeSpellingMarkersUnderWords(words);
+
+    WebVector<uint32_t> documentMarkers2;
+    webViewHelper.webView()->spellingMarkers(&documentMarkers2);
+    EXPECT_EQ(0U, documentMarkers2.size());
+}
+
 TEST_F(WebFrameTest, MarkerHashIdentifiers) {
     registerMockedHttpURLLoad("spell.html");
     FrameTestHelpers::WebViewHelper webViewHelper;
@@ -5223,6 +5341,41 @@ TEST_F(WebFrameTest, NavigateToSame)
     EXPECT_TRUE(client.frameLoadTypeSameSeen());
 }
 
+class TestSameDocumentWithImageWebFrameClient : public FrameTestHelpers::TestWebFrameClient {
+public:
+    TestSameDocumentWithImageWebFrameClient()
+        : m_numOfImageRequests(0)
+    {
+    }
+
+    virtual void willSendRequest(WebLocalFrame* frame, unsigned, WebURLRequest& request, const WebURLResponse&)
+    {
+        if (request.requestContext() == WebURLRequest::RequestContextImage) {
+            m_numOfImageRequests++;
+            EXPECT_EQ(WebURLRequest::UseProtocolCachePolicy, request.cachePolicy());
+        }
+    }
+
+    int numOfImageRequests() const { return m_numOfImageRequests; }
+
+private:
+    int m_numOfImageRequests;
+};
+
+TEST_F(WebFrameTest, NavigateToSameNoConditionalRequestForSubresource)
+{
+    registerMockedHttpURLLoad("foo_with_image.html");
+    registerMockedHttpURLLoad("white-1x1.png");
+    TestSameDocumentWithImageWebFrameClient client;
+    FrameTestHelpers::WebViewHelper webViewHelper;
+    webViewHelper.initializeAndLoad(m_baseURL + "foo_with_image.html", true, &client, 0, &configureLoadsImagesAutomatically);
+
+    WebCache::clear();
+    FrameTestHelpers::loadFrame(webViewHelper.webView()->mainFrame(), m_baseURL + "foo_with_image.html");
+
+    EXPECT_EQ(client.numOfImageRequests(), 2);
+}
+
 TEST_F(WebFrameTest, WebNodeImageContents)
 {
     FrameTestHelpers::WebViewHelper webViewHelper;
@@ -5541,13 +5694,13 @@ TEST_F(WebFrameTest, FullscreenLayerNonScrollable)
     Document* document = toWebLocalFrameImpl(webViewImpl->mainFrame())->frame()->document();
     blink::UserGestureIndicator gesture(blink::DefinitelyProcessingUserGesture);
     Element* divFullscreen = document->getElementById("div1");
-    divFullscreen->webkitRequestFullscreen();
+    Fullscreen::from(*document).requestFullscreen(*divFullscreen, Fullscreen::PrefixedRequest);
     webViewImpl->willEnterFullScreen();
     webViewImpl->didEnterFullScreen();
     webViewImpl->layout();
 
     // Verify that the main frame is not scrollable.
-    ASSERT_TRUE(blink::FullscreenElementStack::isFullScreen(*document));
+    ASSERT_TRUE(blink::Fullscreen::isFullScreen(*document));
     WebLayer* webScrollLayer = webViewImpl->compositor()->scrollLayer()->platformLayer();
     ASSERT_FALSE(webScrollLayer->scrollable());
 
@@ -5555,7 +5708,7 @@ TEST_F(WebFrameTest, FullscreenLayerNonScrollable)
     webViewImpl->willExitFullScreen();
     webViewImpl->didExitFullScreen();
     webViewImpl->layout();
-    ASSERT_FALSE(blink::FullscreenElementStack::isFullScreen(*document));
+    ASSERT_FALSE(blink::Fullscreen::isFullScreen(*document));
     webScrollLayer = webViewImpl->compositor()->scrollLayer()->platformLayer();
     ASSERT_TRUE(webScrollLayer->scrollable());
 }
@@ -5573,13 +5726,13 @@ TEST_F(WebFrameTest, FullscreenMainFrameScrollable)
 
     Document* document = toWebLocalFrameImpl(webViewImpl->mainFrame())->frame()->document();
     blink::UserGestureIndicator gesture(blink::DefinitelyProcessingUserGesture);
-    document->documentElement()->webkitRequestFullscreen();
+    Fullscreen::from(*document).requestFullscreen(*document->documentElement(), Fullscreen::PrefixedRequest);
     webViewImpl->willEnterFullScreen();
     webViewImpl->didEnterFullScreen();
     webViewImpl->layout();
 
     // Verify that the main frame is still scrollable.
-    ASSERT_TRUE(blink::FullscreenElementStack::isFullScreen(*document));
+    ASSERT_TRUE(blink::Fullscreen::isFullScreen(*document));
     WebLayer* webScrollLayer = webViewImpl->compositor()->scrollLayer()->platformLayer();
     ASSERT_TRUE(webScrollLayer->scrollable());
 }
@@ -5719,6 +5872,27 @@ TEST_F(WebFrameTest, NodeImageTestFloatLeft)
     EXPECT_TRUE(dragImage);
 
     nodeImageTestValidation(blink::IntSize(40, 40), dragImage.get());
+}
+
+// Crashes on Android: http://crbug.com/403804
+#if OS(ANDROID)
+TEST_F(WebFrameTest, DISABLED_PrintingBasic)
+#else
+TEST_F(WebFrameTest, PrintingBasic)
+#endif
+{
+    FrameTestHelpers::WebViewHelper webViewHelper;
+    webViewHelper.initializeAndLoad("data:text/html,Hello, world.");
+
+    WebFrame* frame = webViewHelper.webView()->mainFrame();
+
+    WebPrintParams printParams;
+    printParams.printContentArea.width = 500;
+    printParams.printContentArea.height = 500;
+
+    int pageCount = frame->printBegin(printParams);
+    EXPECT_EQ(1, pageCount);
+    frame->printEnd();
 }
 
 class ThemeColorTestWebFrameClient : public FrameTestHelpers::TestWebFrameClient {
@@ -5947,6 +6121,71 @@ TEST_F(WebFrameTest, LoaderOriginAccess)
     blink::DocumentThreadableLoader::loadResourceSynchronously(
         *frame->document(), blink::ResourceRequest(resourceUrl), client, options, resourceLoaderOptions);
     EXPECT_FALSE(client.failed());
+}
+
+class NavigationTransitionCallbackWebFrameClient : public FrameTestHelpers::TestWebFrameClient {
+public:
+    NavigationTransitionCallbackWebFrameClient()
+        : m_navigationalDataReceivedCount(0)
+        , m_provisionalLoadCount(0)
+        , m_wasLastProvisionalLoadATransition(false) { }
+
+    virtual void addNavigationTransitionData(const WebString& allowedDestinationOrigin, const WebString& selector, const WebString& markup) OVERRIDE
+    {
+        m_navigationalDataReceivedCount++;
+    }
+
+    virtual void didStartProvisionalLoad(WebLocalFrame* localFrame, bool isTransitionNavigation) OVERRIDE
+    {
+        m_provisionalLoadCount++;
+        m_wasLastProvisionalLoadATransition = isTransitionNavigation;
+    }
+
+    unsigned navigationalDataReceivedCount() const { return m_navigationalDataReceivedCount; }
+    unsigned provisionalLoadCount() const { return m_provisionalLoadCount; }
+    bool wasLastProvisionalLoadATransition() const { return m_wasLastProvisionalLoadATransition; }
+
+private:
+    unsigned m_navigationalDataReceivedCount;
+    unsigned m_provisionalLoadCount;
+    bool m_wasLastProvisionalLoadATransition;
+};
+
+TEST_F(WebFrameTest, NavigationTransitionCallbacks)
+{
+    blink::RuntimeEnabledFeatures::setNavigationTransitionsEnabled(true);
+    FrameTestHelpers::WebViewHelper viewHelper;
+    NavigationTransitionCallbackWebFrameClient frameClient;
+    WebLocalFrame* localFrame = viewHelper.initialize(true, &frameClient)->mainFrame()->toWebLocalFrame();
+
+    const char* transitionHTMLString =
+        "<!DOCTYPE html>"
+        "<meta name='transition-elements' content='#foo;*'>"
+        "<div id='foo'>";
+
+    // Initial document load should not be a transition.
+    FrameTestHelpers::loadHTMLString(localFrame, transitionHTMLString, toKURL("http://www.test.com"));
+    EXPECT_EQ(1u, frameClient.provisionalLoadCount());
+    EXPECT_FALSE(frameClient.wasLastProvisionalLoadATransition());
+    EXPECT_EQ(0u, frameClient.navigationalDataReceivedCount());
+
+    // Going from www.test.com containing transition elements to about:blank, should be a transition.
+    FrameTestHelpers::loadHTMLString(localFrame, transitionHTMLString, toKURL("about:blank"));
+    EXPECT_EQ(2u, frameClient.provisionalLoadCount());
+    EXPECT_TRUE(frameClient.wasLastProvisionalLoadATransition());
+    EXPECT_EQ(1u, frameClient.navigationalDataReceivedCount());
+
+    // Navigating to the URL of the current page shouldn't be a transition.
+    FrameTestHelpers::loadHTMLString(localFrame, transitionHTMLString, toKURL("about:blank"));
+    EXPECT_EQ(3u, frameClient.provisionalLoadCount());
+    EXPECT_FALSE(frameClient.wasLastProvisionalLoadATransition());
+    EXPECT_EQ(1u, frameClient.navigationalDataReceivedCount());
+
+    // Neither should a page reload.
+    localFrame->reload();
+    EXPECT_EQ(4u, frameClient.provisionalLoadCount());
+    EXPECT_FALSE(frameClient.wasLastProvisionalLoadATransition());
+    EXPECT_EQ(1u, frameClient.navigationalDataReceivedCount());
 }
 
 } // namespace

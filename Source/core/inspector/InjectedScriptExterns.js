@@ -39,11 +39,22 @@ InjectedScriptHostClass.prototype.getInternalProperties = function(object) { }
  */
 InjectedScriptHostClass.prototype.functionDetails = function(func) { }
 /**
- * @param {!Object} receiver
- * @param {!Function} func
- * @param {...*} args
+ * @param {!Object} obj
+ * @return {!Array.<!Object>|undefined}
  */
-InjectedScriptHostClass.prototype.suppressWarningsAndCall = function(receiver, func, args) { }
+InjectedScriptHostClass.prototype.collectionEntries = function(obj) { }
+/**
+ * @param {!Function} func
+ * @param {*} receiver
+ * @param {!Array.<*>=} args
+ */
+InjectedScriptHostClass.prototype.callFunction = function(func, receiver, args) { }
+/**
+ * @param {!Function} func
+ * @param {*} receiver
+ * @param {!Array.<*>=} args
+ */
+InjectedScriptHostClass.prototype.suppressWarningsAndCallFunction = function(func, receiver, args) { }
 /**
  * @param {*} object
  */
@@ -79,7 +90,7 @@ InjectedScriptHostClass.prototype.inspect = function(object, hints) { }
 /**
  * @param {*} object
  */
-InjectedScriptHostClass.prototype.type = function(object) { }
+InjectedScriptHostClass.prototype.subtype = function(object) { }
 /**
  * @param {*} object
  */

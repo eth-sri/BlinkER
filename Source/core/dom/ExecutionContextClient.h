@@ -28,6 +28,7 @@
 #define ExecutionContextClient_h
 
 #include "core/frame/ConsoleTypes.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "platform/LifecycleNotifier.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
@@ -49,22 +50,24 @@ public:
 
     virtual bool isDocument() const { return false; }
     virtual bool isWorkerGlobalScope() const { return false; }
+    virtual bool isDedicatedWorkerGlobalScope() const { return false; }
+    virtual bool isSharedWorkerGlobalScope() const { return false; }
+    virtual bool isServiceWorkerGlobalScope() const { return false; }
     virtual bool isJSExecutionForbidden() const = 0;
     virtual LocalDOMWindow* executingWindow() { return 0; }
     virtual String userAgent(const KURL&) const = 0;
     virtual void disableEval(const String& errorMessage) = 0;
     virtual SecurityContext& securityContext() = 0;
-    virtual void addMessage(MessageSource, MessageLevel, const String& message, const String& sourceURL, unsigned lineNumber, ScriptState*) = 0;
+    virtual void addMessage(PassRefPtrWillBeRawPtr<ConsoleMessage>) = 0;
     virtual EventTarget* errorEventTarget() = 0;
-    virtual void logExceptionToConsole(const String& errorMessage, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtrWillBeRawPtr<ScriptCallStack>) = 0;
+    virtual void logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtrWillBeRawPtr<ScriptCallStack>) = 0;
     virtual double timerAlignmentInterval() const = 0;
     virtual void didUpdateSecurityOrigin() = 0;
 
     virtual void tasksWereSuspended() { }
     virtual void tasksWereResumed() { }
 
-    void addConsoleMessage(MessageSource source, MessageLevel level, const String& message, const String& sourceURL, unsigned lineNumber) { addMessage(source, level, message, sourceURL, lineNumber, 0); }
-    void addConsoleMessage(MessageSource source, MessageLevel level, const String& message, ScriptState* state = 0) { addMessage(source, level, message, String(), 0, state); }
+    void addConsoleMessage(PassRefPtrWillBeRawPtr<ConsoleMessage> consoleMessage) { addMessage(consoleMessage); }
 
 protected:
     virtual ~ExecutionContextClient() { }
@@ -72,6 +75,6 @@ protected:
 };
 
 
-} // namespace
+} // namespace blink
 
 #endif

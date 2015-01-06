@@ -29,6 +29,7 @@
 #include "platform/PlatformExport.h"
 #include "public/platform/WebBlendMode.h"
 #include "third_party/skia/include/core/SkPaint.h"
+#include "third_party/skia/include/core/SkPath.h"
 #include "wtf/Forward.h"
 
 namespace blink {
@@ -108,8 +109,13 @@ enum ColorFilter {
     ColorFilterLinearRGBToSRGB
 };
 
-PLATFORM_EXPORT String compositeOperatorName(CompositeOperator, blink::WebBlendMode);
-PLATFORM_EXPORT bool parseCompositeAndBlendOperator(const String&, CompositeOperator&, blink::WebBlendMode&);
+enum WindRule {
+    RULE_NONZERO = SkPath::kWinding_FillType,
+    RULE_EVENODD = SkPath::kEvenOdd_FillType
+};
+
+PLATFORM_EXPORT String compositeOperatorName(CompositeOperator, WebBlendMode);
+PLATFORM_EXPORT bool parseCompositeAndBlendOperator(const String&, CompositeOperator&, WebBlendMode&);
 
 PLATFORM_EXPORT String lineCapName(LineCap);
 PLATFORM_EXPORT bool parseLineCap(const String&, LineCap&);

@@ -50,16 +50,20 @@
 #include "core/events/ScopedEventQueue.h"
 #include "core/events/TouchEvent.h"
 #include "core/fileapi/FileList.h"
+#include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLCollection.h"
 #include "core/html/HTMLDataListElement.h"
+#include "core/html/HTMLDataListOptionsCollection.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLImageLoader.h"
 #include "core/html/HTMLOptionElement.h"
+#include "core/html/forms/ColorChooser.h"
 #include "core/html/forms/ColorInputType.h"
+#include "core/html/forms/DateTimeChooser.h"
 #include "core/html/forms/FileInputType.h"
 #include "core/html/forms/FormController.h"
 #include "core/html/forms/InputType.h"
@@ -70,8 +74,6 @@
 #include "core/page/ChromeClient.h"
 #include "core/rendering/RenderTextControlSingleLine.h"
 #include "core/rendering/RenderTheme.h"
-#include "platform/ColorChooser.h"
-#include "platform/DateTimeChooser.h"
 #include "platform/Language.h"
 #include "platform/PlatformMouseEvent.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -175,8 +177,8 @@ HTMLInputElement::~HTMLInputElement()
     // We should unregister it to avoid accessing a deleted object.
     if (isRadioButton())
         document().formController().radioButtonGroupScope().removeButton(this);
-    if (m_hasTouchEventHandler)
-        document().didRemoveTouchEventHandler(this);
+    if (m_hasTouchEventHandler && document().frameHost())
+        document().frameHost()->eventHandlerRegistry().didRemoveEventHandler(*this, EventHandlerRegistry::TouchEvent);
 #endif
 }
 
@@ -422,10 +424,14 @@ void HTMLInputElement::updateType()
 
     bool hasTouchEventHandler = m_inputTypeView->hasTouchEventHandler();
     if (hasTouchEventHandler != m_hasTouchEventHandler) {
-        if (hasTouchEventHandler)
-            document().didAddTouchEventHandler(this);
-        else
-            document().didRemoveTouchEventHandler(this);
+        // If the Document is being or has been stopped, don't register any handlers.
+        if (document().frameHost() && document().lifecycle().state() < DocumentLifecycle::Stopping) {
+            EventHandlerRegistry& registry = document().frameHost()->eventHandlerRegistry();
+            if (hasTouchEventHandler)
+                registry.didAddEventHandler(*this, EventHandlerRegistry::TouchEvent);
+            else
+                registry.didRemoveEventHandler(*this, EventHandlerRegistry::TouchEvent);
+        }
         m_hasTouchEventHandler = hasTouchEventHandler;
     }
 
@@ -439,9 +445,13 @@ void HTMLInputElement::updateType()
     }
     if (!didStoreValue && willStoreValue) {
         AtomicString valueString = fastGetAttribute(valueAttr);
+        m_inputType->warnIfValueIsInvalid(valueString);
         m_valueIfDirty = sanitizeValue(valueString);
-    } else
+    } else {
+        if (!hasDirtyValue())
+            m_inputType->warnIfValueIsInvalid(fastGetAttribute(valueAttr).string());
         updateValueIfNeeded();
+    }
 
     m_needsToUpdateViewValue = true;
     m_inputTypeView->updateView();
@@ -655,6 +665,7 @@ void HTMLInputElement::parseAttribute(const QualifiedName& name, const AtomicStr
         m_needsToUpdateViewValue = true;
         setNeedsValidityCheck();
         m_valueAttributeWasUpdatedAfterParsing = !m_parsingInProgress;
+        m_inputType->warnIfValueIsInvalidAndElementIsVisible(value);
         m_inputTypeView->valueAttributeChanged();
     } else if (name == checkedAttr) {
         // Another radio button in the same group might be checked by state
@@ -996,6 +1007,7 @@ void HTMLInputElement::setValue(const String& value, ExceptionState& exceptionSt
 
 void HTMLInputElement::setValue(const String& value, TextFieldEventBehavior eventBehavior)
 {
+    m_inputType->warnIfValueIsInvalidAndElementIsVisible(value);
     if (!m_inputType->canSetValue(value))
         return;
 
@@ -1452,11 +1464,6 @@ void HTMLInputElement::didMoveToNewDocument(Document& oldDocument)
 
     if (isRadioButton())
         oldDocument.formController().radioButtonGroupScope().removeButton(this);
-    if (m_hasTouchEventHandler)
-        oldDocument.didRemoveTouchEventHandler(this);
-
-    if (m_hasTouchEventHandler)
-        document().didAddTouchEventHandler(this);
 
     HTMLTextFormControlElement::didMoveToNewDocument(oldDocument);
 }
@@ -1514,8 +1521,8 @@ bool HTMLInputElement::hasValidDataListOptions() const
     HTMLDataListElement* dataList = this->dataList();
     if (!dataList)
         return false;
-    RefPtrWillBeRawPtr<HTMLCollection> options = dataList->options();
-    for (unsigned i = 0; HTMLOptionElement* option = toHTMLOptionElement(options->item(i)); ++i) {
+    RefPtrWillBeRawPtr<HTMLDataListOptionsCollection> options = dataList->options();
+    for (unsigned i = 0; HTMLOptionElement* option = options->item(i); ++i) {
         if (isValidValue(option->value()))
             return true;
     }
@@ -1830,8 +1837,8 @@ bool HTMLInputElement::setupDateTimeChooserParameters(DateTimeChooserParameters&
     parameters.doubleValue = m_inputType->valueAsDouble();
     parameters.isAnchorElementRTL = m_inputType->computedTextDirection() == RTL;
     if (HTMLDataListElement* dataList = this->dataList()) {
-        RefPtrWillBeRawPtr<HTMLCollection> options = dataList->options();
-        for (unsigned i = 0; HTMLOptionElement* option = toHTMLOptionElement(options->item(i)); ++i) {
+        RefPtrWillBeRawPtr<HTMLDataListOptionsCollection> options = dataList->options();
+        for (unsigned i = 0; HTMLOptionElement* option = options->item(i); ++i) {
             if (!isValidValue(option->value()))
                 continue;
             DateTimeSuggestion suggestion;
@@ -1884,6 +1891,11 @@ bool HTMLInputElement::shouldDispatchFormControlChangeEvent(String& oldValue, St
 void HTMLInputElement::didNotifySubtreeInsertionsToDocument()
 {
     listAttributeTargetChanged();
+}
+
+AXObject* HTMLInputElement::popupRootAXObject()
+{
+    return m_inputTypeView->popupRootAXObject();
 }
 
 } // namespace

@@ -113,8 +113,8 @@ public:
     bool isAbsoluteSize() const { return m_isAbsoluteSize; }
     FontWeight weight() const { return static_cast<FontWeight>(m_weight); }
     FontStretch stretch() const { return static_cast<FontStretch>(m_stretch); }
-    FontWeight lighterWeight() const;
-    FontWeight bolderWeight() const;
+    static FontWeight lighterWeight(FontWeight);
+    static FontWeight bolderWeight(FontWeight);
     GenericFamilyType genericFamily() const { return static_cast<GenericFamilyType>(m_genericFamily); }
 
     // only use fixed default size when there is only one font family, and that family is "monospace"
@@ -146,7 +146,6 @@ public:
     NonCJKGlyphOrientation nonCJKGlyphOrientation() const { return static_cast<NonCJKGlyphOrientation>(m_nonCJKGlyphOrientation); }
     FontWidthVariant widthVariant() const { return static_cast<FontWidthVariant>(m_widthVariant); }
     FontFeatureSettings* featureSettings() const { return m_featureSettings.get(); }
-    FontDescription makeNormalFeatureSettings() const;
 
     float effectiveFontSize() const; // Returns either the computedSize or the computedPixelSize
     FontCacheKey cacheKey(const FontFaceCreationParams&, FontTraits desiredTraits = FontTraits(0)) const;
@@ -268,6 +267,6 @@ inline bool FontDescription::operator==(const FontDescription& other) const
         && m_subpixelTextPosition == other.m_subpixelTextPosition;
 }
 
-}
+} // namespace blink
 
 #endif

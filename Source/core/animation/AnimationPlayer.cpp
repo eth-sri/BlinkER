@@ -51,7 +51,7 @@ static unsigned nextSequenceNumber()
 
 PassRefPtrWillBeRawPtr<AnimationPlayer> AnimationPlayer::create(ExecutionContext* executionContext, AnimationTimeline& timeline, AnimationNode* content)
 {
-    RefPtrWillBeRawPtr<AnimationPlayer> player = adoptRefWillBeRefCountedGarbageCollected(new AnimationPlayer(executionContext, timeline, content));
+    RefPtrWillBeRawPtr<AnimationPlayer> player = adoptRefWillBeNoop(new AnimationPlayer(executionContext, timeline, content));
     player->suspendIfNeeded();
     return player.release();
 }
@@ -61,7 +61,7 @@ AnimationPlayer::AnimationPlayer(ExecutionContext* executionContext, AnimationTi
     , m_playbackRate(1)
     , m_startTime(nullValue())
     , m_holdTime(nullValue())
-    , m_sortInfo(nextSequenceNumber())
+    , m_sequenceNumber(nextSequenceNumber())
     , m_content(content)
     , m_timeline(&timeline)
     , m_paused(false)

@@ -40,8 +40,8 @@
 namespace blink {
 
 static const struct CompositOpToXfermodeMode {
-    uint8_t mCompositOp;
-    uint8_t m_xfermodeMode;
+    CompositeOperator mCompositOp;
+    SkXfermode::Mode m_xfermodeMode;
 } gMapCompositOpsToXfermodeModes[] = {
     { CompositeClear,           SkXfermode::kClear_Mode },
     { CompositeCopy,            SkXfermode::kSrc_Mode },
@@ -58,46 +58,43 @@ static const struct CompositOpToXfermodeMode {
     { CompositePlusLighter,     SkXfermode::kPlus_Mode }
 };
 
-// keep this array in sync with blink::WebBlendMode enum in public/platform/WebBlendMode.h
-static const uint8_t gMapBlendOpsToXfermodeModes[] = {
-    SkXfermode::kClear_Mode, // blink::WebBlendModeNormal
-    SkXfermode::kMultiply_Mode, // blink::WebBlendModeMultiply
-    SkXfermode::kScreen_Mode, // blink::WebBlendModeScreen
-    SkXfermode::kOverlay_Mode, // blink::WebBlendModeOverlay
-    SkXfermode::kDarken_Mode, // blink::WebBlendModeDarken
-    SkXfermode::kLighten_Mode, // blink::WebBlendModeLighten
-    SkXfermode::kColorDodge_Mode, // blink::WebBlendModeColorDodge
-    SkXfermode::kColorBurn_Mode, // blink::WebBlendModeColorBurn
-    SkXfermode::kHardLight_Mode, // blink::WebBlendModeHardLight
-    SkXfermode::kSoftLight_Mode, // blink::WebBlendModeSoftLight
-    SkXfermode::kDifference_Mode, // blink::WebBlendModeDifference
-    SkXfermode::kExclusion_Mode, // blink::WebBlendModeExclusion
-    SkXfermode::kHue_Mode, // blink::WebBlendModeHue
-    SkXfermode::kSaturation_Mode, // blink::WebBlendModeSaturation
-    SkXfermode::kColor_Mode, // blink::WebBlendModeColor
-    SkXfermode::kLuminosity_Mode // blink::WebBlendModeLuminosity
+// keep this array in sync with WebBlendMode enum in public/platform/WebBlendMode.h
+static const SkXfermode::Mode gMapBlendOpsToXfermodeModes[] = {
+    SkXfermode::kClear_Mode, // WebBlendModeNormal
+    SkXfermode::kMultiply_Mode, // WebBlendModeMultiply
+    SkXfermode::kScreen_Mode, // WebBlendModeScreen
+    SkXfermode::kOverlay_Mode, // WebBlendModeOverlay
+    SkXfermode::kDarken_Mode, // WebBlendModeDarken
+    SkXfermode::kLighten_Mode, // WebBlendModeLighten
+    SkXfermode::kColorDodge_Mode, // WebBlendModeColorDodge
+    SkXfermode::kColorBurn_Mode, // WebBlendModeColorBurn
+    SkXfermode::kHardLight_Mode, // WebBlendModeHardLight
+    SkXfermode::kSoftLight_Mode, // WebBlendModeSoftLight
+    SkXfermode::kDifference_Mode, // WebBlendModeDifference
+    SkXfermode::kExclusion_Mode, // WebBlendModeExclusion
+    SkXfermode::kHue_Mode, // WebBlendModeHue
+    SkXfermode::kSaturation_Mode, // WebBlendModeSaturation
+    SkXfermode::kColor_Mode, // WebBlendModeColor
+    SkXfermode::kLuminosity_Mode // WebBlendModeLuminosity
 };
 
-PassRefPtr<SkXfermode> WebCoreCompositeToSkiaComposite(CompositeOperator op, blink::WebBlendMode blendMode)
+SkXfermode::Mode WebCoreCompositeToSkiaComposite(CompositeOperator op, WebBlendMode blendMode)
 {
-    if (blendMode != blink::WebBlendModeNormal) {
-        if ((uint8_t)blendMode >= SK_ARRAY_COUNT(gMapBlendOpsToXfermodeModes)) {
-            SkDEBUGF(("GraphicsContext::setPlatformCompositeOperation unknown blink::WebBlendMode %d\n", blendMode));
-            return adoptRef(SkXfermode::Create(SkXfermode::kSrcOver_Mode));
+    if (blendMode != WebBlendModeNormal) {
+        if (static_cast<uint8_t>(blendMode) >= SK_ARRAY_COUNT(gMapBlendOpsToXfermodeModes)) {
+            SkDEBUGF(("GraphicsContext::setPlatformCompositeOperation unknown WebBlendMode %d\n", blendMode));
+            return SkXfermode::kSrcOver_Mode;
         }
-        SkXfermode::Mode mode = (SkXfermode::Mode)gMapBlendOpsToXfermodeModes[(uint8_t)blendMode];
-        return adoptRef(SkXfermode::Create(mode));
+        return gMapBlendOpsToXfermodeModes[static_cast<uint8_t>(blendMode)];
     }
 
     const CompositOpToXfermodeMode* table = gMapCompositOpsToXfermodeModes;
-
-    for (unsigned i = 0; i < SK_ARRAY_COUNT(gMapCompositOpsToXfermodeModes); i++) {
-        if (table[i].mCompositOp == op)
-            return adoptRef(SkXfermode::Create((SkXfermode::Mode)table[i].m_xfermodeMode));
+    if (static_cast<uint8_t>(op) >= SK_ARRAY_COUNT(gMapCompositOpsToXfermodeModes)) {
+        SkDEBUGF(("GraphicsContext::setPlatformCompositeOperation unknown CompositeOperator %d\n", op));
+        return SkXfermode::kSrcOver_Mode;
     }
-
-    SkDEBUGF(("GraphicsContext::setPlatformCompositeOperation unknown CompositeOperator %d\n", op));
-    return adoptRef(SkXfermode::Create(SkXfermode::kSrcOver_Mode)); // fall-back
+    SkASSERT(table[static_cast<uint8_t>(op)].mCompositOp == op);
+    return table[static_cast<uint8_t>(op)].m_xfermodeMode;
 }
 
 static U8CPU InvScaleByte(U8CPU component, uint32_t scale)

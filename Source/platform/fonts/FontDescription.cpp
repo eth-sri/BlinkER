@@ -52,9 +52,9 @@ TypesettingFeatures FontDescription::s_defaultTypesettingFeatures = 0;
 
 bool FontDescription::s_useSubpixelTextPositioning = false;
 
-FontWeight FontDescription::lighterWeight(void) const
+FontWeight FontDescription::lighterWeight(FontWeight weight)
 {
-    switch (m_weight) {
+    switch (weight) {
         case FontWeight100:
         case FontWeight200:
         case FontWeight300:
@@ -74,9 +74,9 @@ FontWeight FontDescription::lighterWeight(void) const
     return FontWeightNormal;
 }
 
-FontWeight FontDescription::bolderWeight(void) const
+FontWeight FontDescription::bolderWeight(FontWeight weight)
 {
-    switch (m_weight) {
+    switch (weight) {
         case FontWeight100:
         case FontWeight200:
         case FontWeight300:
@@ -129,13 +129,6 @@ void FontDescription::setVariantLigatures(const VariantLigatures& ligatures)
     m_contextualLigaturesState = ligatures.contextual;
 
     updateTypesettingFeatures();
-}
-
-FontDescription FontDescription::makeNormalFeatureSettings() const
-{
-    FontDescription normalDescription(*this);
-    normalDescription.setFeatureSettings(nullptr);
-    return normalDescription;
 }
 
 float FontDescription::effectiveFontSize() const

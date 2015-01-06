@@ -95,6 +95,7 @@ public:
 #endif
     virtual void dispose();
     virtual void trace(Visitor*);
+    static unsigned instanceCount() { return s_instanceCount; }
 
     virtual void load(ResourceFetcher*, const ResourceLoaderOptions&);
 
@@ -412,6 +413,8 @@ private:
     // EventRacer log id and event-action for the callback invocation.
     RefPtr<EventRacerLog> m_eventRacerLog;
     EventAction *m_callbackEventAction;
+
+    static unsigned s_instanceCount;
 };
 
 #if !LOG_DISABLED

@@ -38,12 +38,13 @@
 #include "core/events/MouseEvent.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/html/HTMLDataListElement.h"
+#include "core/html/HTMLDataListOptionsCollection.h"
 #include "core/html/HTMLDivElement.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLOptionElement.h"
+#include "core/html/forms/ColorChooser.h"
 #include "core/page/Chrome.h"
 #include "core/rendering/RenderView.h"
-#include "platform/ColorChooser.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/graphics/Color.h"
@@ -216,6 +217,11 @@ HTMLElement* ColorInputType::shadowColorSwatch() const
     return shadow ? toHTMLElement(shadow->firstChild()->firstChild()) : 0;
 }
 
+Element& ColorInputType::ownerElement() const
+{
+    return element();
+}
+
 IntRect ColorInputType::elementRectRelativeToRootView() const
 {
     return element().document().view()->contentsToRootView(element().pixelSnappedBoundingBox());
@@ -236,8 +242,8 @@ Vector<ColorSuggestion> ColorInputType::suggestions() const
     Vector<ColorSuggestion> suggestions;
     HTMLDataListElement* dataList = element().dataList();
     if (dataList) {
-        RefPtrWillBeRawPtr<HTMLCollection> options = dataList->options();
-        for (unsigned i = 0; HTMLOptionElement* option = toHTMLOptionElement(options->item(i)); i++) {
+        RefPtrWillBeRawPtr<HTMLDataListOptionsCollection> options = dataList->options();
+        for (unsigned i = 0; HTMLOptionElement* option = options->item(i); i++) {
             if (!element().isValidValue(option->value()))
                 continue;
             Color color;
@@ -250,6 +256,11 @@ Vector<ColorSuggestion> ColorInputType::suggestions() const
         }
     }
     return suggestions;
+}
+
+AXObject* ColorInputType::popupRootAXObject()
+{
+    return m_chooser ? m_chooser->rootAXObject() : 0;
 }
 
 } // namespace blink

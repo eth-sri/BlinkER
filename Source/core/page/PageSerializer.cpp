@@ -77,8 +77,8 @@ static bool isCharsetSpecifyingNode(const Node& node)
     const HTMLMetaElement& element = toHTMLMetaElement(node);
     HTMLAttributeList attributeList;
     AttributeCollection attributes = element.attributes();
-    AttributeCollection::const_iterator end = attributes.end();
-    for (AttributeCollection::const_iterator it = attributes.begin(); it != end; ++it) {
+    AttributeCollection::iterator end = attributes.end();
+    for (AttributeCollection::iterator it = attributes.begin(); it != end; ++it) {
         // FIXME: We should deal appropriately with the attribute if they have a namespace.
         attributeList.append(std::make_pair(it->name().localName(), it->value().string()));
     }
@@ -137,9 +137,9 @@ void SerializerMarkupAccumulator::appendElement(StringBuilder& out, Element& ele
         MarkupAccumulator::appendElement(out, element, namespaces);
 
     if (isHTMLHeadElement(element)) {
-        out.append("<meta charset=\"");
+        out.appendLiteral("<meta charset=\"");
         out.append(m_document.charset());
-        out.append("\">");
+        out.appendLiteral("\">");
     }
 
     // FIXME: For object (plugins) tags and video tag we could replace them by an image of their current contents.
@@ -265,7 +265,7 @@ void PageSerializer::serializeCSSStyleSheet(CSSStyleSheet& styleSheet, const KUR
         if (!itemText.isEmpty()) {
             cssText.append(itemText);
             if (i < styleSheet.length() - 1)
-                cssText.append("\n\n");
+                cssText.appendLiteral("\n\n");
         }
         ASSERT(styleSheet.ownerDocument());
         Document& document = *styleSheet.ownerDocument();

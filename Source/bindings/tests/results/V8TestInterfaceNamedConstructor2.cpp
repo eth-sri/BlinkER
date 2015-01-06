@@ -21,12 +21,9 @@
 
 namespace blink {
 
-static void initializeScriptWrappableForInterface(TestInterfaceNamedConstructor2* object)
+static void initializeScriptWrappableForInterface(TestInterfaceNamedConstructor2* impl)
 {
-    if (ScriptWrappable::wrapperCanBeStoredInObject(object))
-        ScriptWrappable::fromObject(object)->setTypeInfo(&V8TestInterfaceNamedConstructor2::wrapperTypeInfo);
-    else
-        ASSERT_NOT_REACHED();
+    impl->setTypeInfo(&V8TestInterfaceNamedConstructor2::wrapperTypeInfo);
 }
 
 } // namespace blink
@@ -37,7 +34,8 @@ void webCoreInitializeScriptWrappableForInterface(blink::TestInterfaceNamedConst
 }
 
 namespace blink {
-const WrapperTypeInfo V8TestInterfaceNamedConstructor2::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceNamedConstructor2::domTemplate, V8TestInterfaceNamedConstructor2::derefObject, 0, 0, 0, V8TestInterfaceNamedConstructor2::installPerContextEnabledMethods, 0, WrapperTypeObjectPrototype, RefCountedObject };
+
+const WrapperTypeInfo V8TestInterfaceNamedConstructor2::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceNamedConstructor2::domTemplate, V8TestInterfaceNamedConstructor2::refObject, V8TestInterfaceNamedConstructor2::derefObject, V8TestInterfaceNamedConstructor2::createPersistentHandle, 0, 0, 0, V8TestInterfaceNamedConstructor2::installConditionallyEnabledMethods, V8TestInterfaceNamedConstructor2::installConditionallyEnabledProperties, 0, WrapperTypeObjectPrototype, RefCountedObject };
 
 namespace TestInterfaceNamedConstructor2V8Internal {
 
@@ -45,7 +43,7 @@ template <typename T> void V8_USE(T) { }
 
 } // namespace TestInterfaceNamedConstructor2V8Internal
 
-const WrapperTypeInfo V8TestInterfaceNamedConstructor2Constructor::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceNamedConstructor2Constructor::domTemplate, V8TestInterfaceNamedConstructor2::derefObject, 0, 0, 0, V8TestInterfaceNamedConstructor2::installPerContextEnabledMethods, 0, WrapperTypeObjectPrototype, RefCountedObject };
+const WrapperTypeInfo V8TestInterfaceNamedConstructor2Constructor::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceNamedConstructor2Constructor::domTemplate, V8TestInterfaceNamedConstructor2::refObject, V8TestInterfaceNamedConstructor2::derefObject, V8TestInterfaceNamedConstructor2::createPersistentHandle, 0, 0, 0, V8TestInterfaceNamedConstructor2::installConditionallyEnabledMethods, V8TestInterfaceNamedConstructor2::installConditionallyEnabledProperties, 0, WrapperTypeObjectPrototype, RefCountedObject };
 
 static void V8TestInterfaceNamedConstructor2ConstructorCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
@@ -59,7 +57,7 @@ static void V8TestInterfaceNamedConstructor2ConstructorCallback(const v8::Functi
         return;
     }
     if (UNLIKELY(info.Length() < 1)) {
-        throwMinimumArityTypeErrorForConstructor("TestInterfaceNamedConstructor2", 1, info.Length(), info.GetIsolate());
+        V8ThrowException::throwException(createMinimumArityTypeErrorForConstructor("TestInterfaceNamedConstructor2", 1, info.Length(), info.GetIsolate()), info.GetIsolate());
         return;
     }
     V8StringResource<> stringArg;
@@ -124,7 +122,7 @@ v8::Handle<v8::Object> V8TestInterfaceNamedConstructor2::findInstanceInPrototype
 
 TestInterfaceNamedConstructor2* V8TestInterfaceNamedConstructor2::toNativeWithTypeCheck(v8::Isolate* isolate, v8::Handle<v8::Value> value)
 {
-    return hasInstance(value, isolate) ? fromInternalPointer(v8::Handle<v8::Object>::Cast(value)->GetAlignedPointerFromInternalField(v8DOMWrapperObjectIndex)) : 0;
+    return hasInstance(value, isolate) ? fromInternalPointer(blink::toInternalPointer(v8::Handle<v8::Object>::Cast(value))) : 0;
 }
 
 v8::Handle<v8::Object> wrap(TestInterfaceNamedConstructor2* impl, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
@@ -138,25 +136,35 @@ v8::Handle<v8::Object> V8TestInterfaceNamedConstructor2::createWrapper(PassRefPt
 {
     ASSERT(impl);
     ASSERT(!DOMDataStore::containsWrapper<V8TestInterfaceNamedConstructor2>(impl.get(), isolate));
-    if (ScriptWrappable::wrapperCanBeStoredInObject(impl.get())) {
-        const WrapperTypeInfo* actualInfo = ScriptWrappable::fromObject(impl.get())->typeInfo();
-        // Might be a XXXConstructor::wrapperTypeInfo instead of an XXX::wrapperTypeInfo. These will both have
-        // the same object de-ref functions, though, so use that as the basis of the check.
-        RELEASE_ASSERT_WITH_SECURITY_IMPLICATION(actualInfo->derefObjectFunction == wrapperTypeInfo.derefObjectFunction);
-    }
+    const WrapperTypeInfo* actualInfo = impl->typeInfo();
+    // Might be a XXXConstructor::wrapperTypeInfo instead of an XXX::wrapperTypeInfo. These will both have
+    // the same object de-ref functions, though, so use that as the basis of the check.
+    RELEASE_ASSERT_WITH_SECURITY_IMPLICATION(actualInfo->derefObjectFunction == wrapperTypeInfo.derefObjectFunction);
 
     v8::Handle<v8::Object> wrapper = V8DOMWrapper::createWrapper(creationContext, &wrapperTypeInfo, toInternalPointer(impl.get()), isolate);
     if (UNLIKELY(wrapper.IsEmpty()))
         return wrapper;
 
-    installPerContextEnabledProperties(wrapper, impl.get(), isolate);
+    installConditionallyEnabledProperties(wrapper, isolate);
     V8DOMWrapper::associateObjectWithWrapper<V8TestInterfaceNamedConstructor2>(impl, &wrapperTypeInfo, wrapper, isolate, WrapperConfiguration::Independent);
     return wrapper;
 }
 
-void V8TestInterfaceNamedConstructor2::derefObject(void* object)
+
+void V8TestInterfaceNamedConstructor2::refObject(ScriptWrappableBase* internalPointer)
 {
-    fromInternalPointer(object)->deref();
+    fromInternalPointer(internalPointer)->ref();
+}
+
+void V8TestInterfaceNamedConstructor2::derefObject(ScriptWrappableBase* internalPointer)
+{
+    fromInternalPointer(internalPointer)->deref();
+}
+
+PersistentNode* V8TestInterfaceNamedConstructor2::createPersistentHandle(ScriptWrappableBase* internalPointer)
+{
+    ASSERT_NOT_REACHED();
+    return 0;
 }
 
 template<>

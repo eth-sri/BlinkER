@@ -39,11 +39,11 @@ String connectionTypeToString(blink::WebConnectionType type)
 
 namespace blink {
 
-PassRefPtrWillBeRawPtr<NetworkInformation> NetworkInformation::create(ExecutionContext* context)
+NetworkInformation* NetworkInformation::create(ExecutionContext* context)
 {
-    RefPtrWillBeRawPtr<NetworkInformation> connection(adoptRefWillBeRefCountedGarbageCollected(new NetworkInformation(context)));
+    NetworkInformation* connection = adoptRefCountedGarbageCollectedWillBeNoop(new NetworkInformation(context));
     connection->suspendIfNeeded();
-    return connection.release();
+    return connection;
 }
 
 NetworkInformation::~NetworkInformation()
@@ -62,7 +62,7 @@ String NetworkInformation::type() const
     return connectionTypeToString(m_type);
 }
 
-void NetworkInformation::connectionTypeChange(blink::WebConnectionType type)
+void NetworkInformation::connectionTypeChange(WebConnectionType type)
 {
     ASSERT(executionContext()->isContextThread());
 

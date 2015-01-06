@@ -22,6 +22,7 @@
 #define PrintContext_h
 
 #include "platform/heap/Handle.h"
+#include "platform/weborigin/KURLHash.h"
 #include "wtf/Forward.h"
 #include "wtf/HashMap.h"
 #include "wtf/Vector.h"
@@ -40,7 +41,7 @@ class Node;
 class PrintContext : public NoBaseWillBeGarbageCollectedFinalized<PrintContext> {
 public:
     explicit PrintContext(LocalFrame*);
-    ~PrintContext();
+    virtual ~PrintContext();
 
     LocalFrame* frame() const { return m_frame; }
 
@@ -48,10 +49,11 @@ public:
     // FIXME: This means that CSS page breaks won't be on page boundary if the size is different than what was passed to begin(). That's probably not always desirable.
     // FIXME: Header and footer height should be applied before layout, not after.
     // FIXME: The printRect argument is only used to determine page aspect ratio, it would be better to pass a FloatSize with page dimensions instead.
-    void computePageRects(const FloatRect& printRect, float headerHeight, float footerHeight, float userScaleFactor, float& outPageHeight, bool allowHorizontalTiling = false);
+    virtual void computePageRects(const FloatRect& printRect, float headerHeight, float footerHeight, float userScaleFactor, float& outPageHeight);
 
     // Deprecated. Page size computation is already in this class, clients shouldn't be copying it.
-    void computePageRectsWithPageSize(const FloatSize& pageSizeInPixels, bool allowHorizontalTiling);
+    // FIXME: Everyone passes |false| for the second paramer. We should remove the second parameter.
+    virtual void computePageRectsWithPageSize(const FloatSize& pageSizeInPixels, bool allowHorizontalTiling);
 
     // These are only valid after page rects are computed.
     size_t pageCount() const { return m_pageRects.size(); }
@@ -60,13 +62,10 @@ public:
 
     // Enter print mode, updating layout for new page size.
     // This function can be called multiple times to apply new print options without going back to screen mode.
-    void begin(float width, float height = 0);
-
-    // FIXME: eliminate width argument.
-    void spoolPage(GraphicsContext& ctx, int pageNumber, float width);
+    virtual void begin(float width, float height = 0);
 
     // Return to screen mode.
-    void end();
+    virtual void end();
 
     // Used by layout tests.
     static int pageNumberForElement(Element*, const FloatSize& pageSizeInPixels); // Returns -1 if page isn't found.
@@ -74,28 +73,25 @@ public:
     static bool isPageBoxVisible(LocalFrame* frame, int pageNumber);
     static String pageSizeAndMarginsInPixels(LocalFrame* frame, int pageNumber, int width, int height, int marginTop, int marginRight, int marginBottom, int marginLeft);
     static int numberOfPages(LocalFrame*, const FloatSize& pageSizeInPixels);
-    // Draw all pages into a graphics context with lines which mean page boundaries.
-    // The height of the graphics context should be
-    // (pageSizeInPixels.height() + 1) * number-of-pages - 1
-    static void spoolAllPagesWithBoundaries(LocalFrame*, GraphicsContext&, const FloatSize& pageSizeInPixels);
 
     virtual void trace(Visitor*);
 
 protected:
-    void outputLinkedDestinations(GraphicsContext&, Node*, const IntRect& pageRect);
+    void outputLinkAndLinkedDestinations(GraphicsContext&, Node*, const IntRect& pageRect);
 
     LocalFrame* m_frame;
     Vector<IntRect> m_pageRects;
 
 private:
     void computePageRectsWithPageSizeInternal(const FloatSize& pageSizeInPixels, bool allowHorizontalTiling);
-    void collectLinkedDestinations(Node*);
+    void collectLinkAndLinkedDestinations(Node*);
 
     // Used to prevent misuses of begin() and end() (e.g., call end without begin).
     bool m_isPrinting;
 
+    WillBeHeapHashMap<RawPtrWillBeMember<Element>, KURL> m_linkDestinations;
     WillBeHeapHashMap<String, RawPtrWillBeMember<Element> > m_linkedDestinations;
-    bool m_linkedDestinationsValid;
+    bool m_linkAndLinkedDestinationsValid;
 };
 
 }

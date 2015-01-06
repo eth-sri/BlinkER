@@ -4,74 +4,88 @@
 <script src="resources/test-helpers.js"></script>
 <body>
 <script>
+// Temporary measure to diagnose timeouts on Win XP. Let the W3C harness
+// timeout before run-webkit-tests does, so it can report the particular
+// test that timed out.
+// FIXME: Remove after the cause of timeout is fixed.
+var properties = {timeout: 5500};
+
 var worker = 'resources/fetch-event-test-worker.js';
 
-(function() {
-    var t = async_test('Service Worker responds to fetch event with string');
+async_test(function(t) {
     var scope = 'resources/simple.html?string';
     service_worker_unregister_and_register(t, worker, scope)
+      .then(function(registration) {
+          return wait_for_update(t, registration);
+        })
       .then(t.step_func(function(sw) {
           return wait_for_state(t, sw, 'activated');
         }))
       .then(t.step_func(function() { return with_iframe(scope); }))
       .then(t.step_func(function(frame) {
           assert_equals(
-              frame.contentDocument.body.textContent,
-              'Test string',
-              'Service Worker should respond to fetch with a test string');
+            frame.contentDocument.body.textContent,
+            'Test string',
+            'Service Worker should respond to fetch with a test string');
           assert_equals(
-              frame.contentDocument.contentType,
-              'text/plain',
-              'The content type of the response created with a string should be text/plain');
+            frame.contentDocument.contentType,
+            'text/plain',
+            'The content type of the response created with a string should be text/plain');
           assert_equals(
-              frame.contentDocument.characterSet,
-              'UTF-8',
-              'The character set of the response created with a string should be UTF-8');
+            frame.contentDocument.characterSet,
+            'UTF-8',
+            'The character set of the response created with a string should be UTF-8');
           return service_worker_unregister_and_done(t, scope);
         }))
       .catch(unreached_rejection(t));
-}());
+  }, 'Service Worker responds to fetch event with string', properties);
 
-(function() {
-    var t = async_test('Service Worker responds to fetch event with blob body');
+async_test(function(t) {
     var scope = 'resources/simple.html?blob';
     service_worker_unregister_and_register(t, worker, scope)
+      .then(function(registration) {
+          return wait_for_update(t, registration);
+        })
       .then(t.step_func(function(sw) {
           return wait_for_state(t, sw, 'activated');
         }))
       .then(t.step_func(function() { return with_iframe(scope); }))
       .then(t.step_func(function(frame) {
           assert_equals(
-              frame.contentDocument.body.textContent,
-              'Test blob',
-              'Service Worker should respond to fetch with a test string');
+            frame.contentDocument.body.textContent,
+            'Test blob',
+            'Service Worker should respond to fetch with a test string');
           return service_worker_unregister_and_done(t, scope);
         }))
       .catch(unreached_rejection(t));
-}());
+  }, 'Service Worker responds to fetch event with blob body', properties);
 
-(function() {
-    var t = async_test('Service Worker responds to fetch event with the referrer URL');
+async_test(function(t) {
     var scope = 'resources/simple.html?referrer';
     service_worker_unregister_and_register(t, worker, scope)
+      .then(function(registration) {
+          return wait_for_update(t, registration);
+        })
       .then(t.step_func(function(sw) {
           return wait_for_state(t, sw, 'activated');
         }))
       .then(t.step_func(function() { return with_iframe(scope); }))
       .then(t.step_func(function(frame) {
           assert_equals(
-              frame.contentDocument.body.textContent,
-              'Referrer: ' + document.location.href,
-              'Service Worker should respond to fetch with the referrer URL');
+            frame.contentDocument.body.textContent,
+            'Referrer: ' + document.location.href,
+            'Service Worker should respond to fetch with the referrer URL');
           return service_worker_unregister_and_done(t, scope);
         }))
       .catch(unreached_rejection(t));
-}());
+  }, 'Service Worker responds to fetch event with the referrer URL', properties);
 
-(function() {
-    var t = async_test('Service Worker does not respond to fetch event');
+async_test(function(t) {
     var scope = 'resources/simple.html?ignore';
     service_worker_unregister_and_register(t, worker, scope)
+      .then(function(registration) {
+          return wait_for_update(t, registration);
+        })
       .then(t.step_func(function(sw) {
           return wait_for_state(t, sw, 'activated');
         }))
@@ -83,13 +97,14 @@ var worker = 'resources/fetch-event-test-worker.js';
           return service_worker_unregister_and_done(t, scope);
         }))
       .catch(unreached_rejection(t));
-}());
+  }, 'Service Worker does not respond to fetch event', properties);
 
-(function() {
-    var t = async_test(
-        'Service Worker responds to fetch event with null response body');
+async_test(function(t) {
     var scope = 'resources/simple.html?null';
     service_worker_unregister_and_register(t, worker, scope)
+      .then(function(registration) {
+          return wait_for_update(t, registration);
+        })
       .then(t.step_func(function(sw) {
           return wait_for_state(t, sw, 'activated');
         }))
@@ -101,12 +116,14 @@ var worker = 'resources/fetch-event-test-worker.js';
           return service_worker_unregister_and_done(t, scope);
         }))
       .catch(unreached_rejection(t));
-}());
+  }, 'Service Worker responds to fetch event with null response body', properties);
 
-(function() {
-    var t = async_test('Service Worker rejects fetch event');
+async_test(function(t) {
     var scope = 'resources/simple.html?reject';
     service_worker_unregister_and_register(t, worker, scope)
+      .then(function(registration) {
+          return wait_for_update(t, registration);
+        })
       .then(t.step_func(function(sw) {
           return wait_for_state(t, sw, 'activated');
         }))
@@ -118,30 +135,14 @@ var worker = 'resources/fetch-event-test-worker.js';
           return service_worker_unregister_and_done(t, scope);
         }))
       .catch(unreached_rejection(t));
-}());
+  }, 'Service Worker rejects fetch event', properties);
 
-(function() {
-    var t = async_test(
-        'Service Worker responds to fetch event with unresolved promise');
-    var scope = 'resources/simple.html?unresolved';
-    service_worker_unregister_and_register(t, worker, scope)
-      .then(t.step_func(function(sw) {
-          return wait_for_state(t, sw, 'activated');
-        }))
-      .then(t.step_func(function() { return with_iframe(scope); }))
-      .then(t.step_func(function(frame) {
-          assert_equals(frame.contentDocument.body.textContent,
-                        'Here\'s a simple html file.\n',
-                        'Response should come from fallback to native fetch');
-          return service_worker_unregister_and_done(t, scope);
-        }))
-      .catch(unreached_rejection(t));
-}());
-
-(function() {
-    var t = async_test('Service Worker fetches other file in fetch event');
+async_test(function(t) {
     var scope = 'resources/simple.html?fetch';
     service_worker_unregister_and_register(t, worker, scope)
+      .then(function(registration) {
+          return wait_for_update(t, registration);
+        })
       .then(t.step_func(function(sw) {
           return wait_for_state(t, sw, 'activated');
         }))
@@ -153,6 +154,52 @@ var worker = 'resources/fetch-event-test-worker.js';
           return service_worker_unregister_and_done(t, scope);
         }))
       .catch(unreached_rejection(t));
-}());
+  }, 'Service Worker fetches other file in fetch event', properties);
+
+async_test(function(t) {
+    var scope = 'resources/simple.html?form-post';
+    var frame_name = 'xhr-post-frame';
+    service_worker_unregister_and_register(t, worker, scope)
+      .then(function(registration) {
+          return wait_for_update(t, registration);
+        })
+      .then(t.step_func(function(sw) {
+          return wait_for_state(t, sw, 'activated');
+        }))
+      .then(t.step_func(function(sw) {
+         return new Promise(function(resolve) {
+            var frame = document.createElement('iframe');
+            frame.name = frame_name;
+            document.body.appendChild(frame);
+            var form = document.createElement('form');
+            form.target = frame_name;
+            form.action = scope;
+            form.method = 'post';
+            var input1 = document.createElement('input');
+            input1.type = 'text';
+            input1.value = 'testValue1';
+            input1.name = 'testName1'
+            form.appendChild(input1);
+            var input2 = document.createElement('input');
+            input2.type = 'text';
+            input2.value = 'testValue2';
+            input2.name = 'testName2'
+            form.appendChild(input2);
+            document.body.appendChild(form);
+            frame.onload = function() {
+              document.body.removeChild(form);
+              resolve(frame);
+            };
+            form.submit();
+          });
+        }))
+      .then(t.step_func(function(frame) {
+          assert_equals(frame.contentDocument.body.textContent,
+                        'POST:testName1=testValue1&testName2=testValue2');
+          document.body.removeChild(frame);
+          return service_worker_unregister_and_done(t, scope);
+        }))
+      .catch(unreached_rejection(t));
+  }, 'Service Worker responds to fetch event with POST form', properties);
 </script>
 </body>

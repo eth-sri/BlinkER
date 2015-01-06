@@ -258,7 +258,7 @@ void RenderFlexibleBox::layoutBlock(bool relayoutChildren)
 
         computeRegionRangeForBlock(flowThreadContainingBlock());
 
-        // FIXME: css3/flexbox/repaint-rtl-column.html seems to repaint more overflow than it needs to.
+        // FIXME: css3/flexbox/repaint-rtl-column.html seems to issue paint invalidations for more overflow than it needs to.
         computeOverflow(clientLogicalBottomAfterRepositioning());
     }
 
@@ -404,8 +404,7 @@ LayoutUnit RenderFlexibleBox::mainAxisContentExtent(LayoutUnit contentLogicalHei
     if (isColumnFlow()) {
         LogicalExtentComputedValues computedValues;
         LayoutUnit borderPaddingAndScrollbar = borderAndPaddingLogicalHeight() + scrollbarLogicalHeight();
-        // FIXME: Remove this std:max once we enable saturated layout arithmetic. It's just here to handle overflow.
-        LayoutUnit borderBoxLogicalHeight = std::max(contentLogicalHeight, contentLogicalHeight + borderPaddingAndScrollbar);
+        LayoutUnit borderBoxLogicalHeight = contentLogicalHeight + borderPaddingAndScrollbar;
         computeLogicalHeight(borderBoxLogicalHeight, logicalTop(), computedValues);
         if (computedValues.m_extent == LayoutUnit::max())
             return computedValues.m_extent;
@@ -577,6 +576,11 @@ LayoutUnit RenderFlexibleBox::crossAxisScrollbarExtent() const
     return isHorizontalFlow() ? horizontalScrollbarHeight() : verticalScrollbarWidth();
 }
 
+LayoutUnit RenderFlexibleBox::crossAxisScrollbarExtentForChild(RenderBox* child) const
+{
+    return isHorizontalFlow() ? child->horizontalScrollbarHeight() : child->verticalScrollbarWidth();
+}
+
 LayoutPoint RenderFlexibleBox::flowAwareLocationForChild(RenderBox* child) const
 {
     return isHorizontalFlow() ? child->location() : child->location().transposedPoint();
@@ -597,7 +601,7 @@ LayoutUnit RenderFlexibleBox::mainAxisBorderAndPaddingExtentForChild(RenderBox* 
 
 static inline bool preferredMainAxisExtentDependsOnLayout(const Length& flexBasis, bool hasInfiniteLineLength)
 {
-    return flexBasis.isAuto() || (flexBasis.isFixed() && !flexBasis.value() && hasInfiniteLineLength);
+    return flexBasis.isAuto() || (flexBasis.isPercent() && hasInfiniteLineLength);
 }
 
 bool RenderFlexibleBox::childPreferredMainAxisContentExtentRequiresLayout(RenderBox* child, bool hasInfiniteLineLength) const
@@ -1113,7 +1117,7 @@ void RenderFlexibleBox::layoutAndPlaceChildren(LayoutUnit& crossAxisOffset, cons
 
             childCrossAxisMarginBoxExtent = maxAscent + maxDescent;
         } else {
-            childCrossAxisMarginBoxExtent = crossAxisIntrinsicExtentForChild(child) + crossAxisMarginExtentForChild(child);
+            childCrossAxisMarginBoxExtent = crossAxisIntrinsicExtentForChild(child) + crossAxisMarginExtentForChild(child) + crossAxisScrollbarExtentForChild(child);
         }
         if (!isColumnFlow())
             setLogicalHeight(std::max(logicalHeight(), crossAxisOffset + flowAwareBorderAfter() + flowAwarePaddingAfter() + childCrossAxisMarginBoxExtent + crossAxisScrollbarExtent()));

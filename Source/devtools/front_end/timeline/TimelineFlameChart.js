@@ -125,7 +125,7 @@ WebInspector.TimelineFlameChartDataProvider.prototype = {
     markerColor: function(index)
     {
         var event = this._markerEvents[index];
-        return WebInspector.TracingTimelineUIUtils.markerEventColor(event.name);
+        return WebInspector.TracingTimelineUIUtils.markerEventColor(event);
     },
 
     /**
@@ -165,9 +165,9 @@ WebInspector.TimelineFlameChartDataProvider.prototype = {
         this._appendFrameBars(this._frameModel.frames());
         this._appendThreadTimelineData(WebInspector.UIString("Main Thread"), this._model.mainThreadEvents());
         var threads = this._model.virtualThreads();
-        for (var threadName in threads) {
-            if (threadName !== WebInspector.TimelineModel.MainThreadName)
-                this._appendThreadTimelineData(threadName, threads[threadName]);
+        for (var i = 0; i < threads.length; i++) {
+            var thread = threads[i];
+            this._appendThreadTimelineData(thread.name, thread.events);
         }
         return this._timelineData;
     },
@@ -188,13 +188,12 @@ WebInspector.TimelineFlameChartDataProvider.prototype = {
         }
         for (var i = 0; i < events.length; ++i) {
             var e = events[i];
-            // FIXME: clean up once phase name is unified between Blink and Chromium.
-            if (!e.endTime && e.phase !== WebInspector.TracingModel.Phase.Instant && e.phase !== "I")
-                continue;
             if (WebInspector.TracingTimelineUIUtils.isMarkerEvent(e)) {
                 this._markerEvents.push(e);
                 this._timelineData.markerTimestamps.push(e.startTime);
             }
+            if (!e.endTime && e.phase !== WebInspector.TracingModel.Phase.Instant)
+                continue;
             if (!this._isVisible(e))
                 continue;
             while (openEvents.length && openEvents.peekLast().endTime <= e.startTime)
@@ -237,39 +236,49 @@ WebInspector.TimelineFlameChartDataProvider.prototype = {
         {
             return e.endTime || e.startTime + WebInspector.TimelineFlameChartDataProvider.InstantEventVisibleDurationMs;
         }
+        function isJSInvocationEvent(e)
+        {
+            switch (e.name) {
+            case WebInspector.TracingTimelineModel.RecordType.FunctionCall:
+            case WebInspector.TracingTimelineModel.RecordType.EvaluateScript:
+                return true;
+            }
+            return false;
+        }
         var jsFrameEvents = [];
         var stackTraceOpenEvents = [];
+        var currentJSInvocationEndTime = 0;
         var coalesceThresholdMs = WebInspector.TimelineFlameChartDataProvider.JSFrameCoalsceThresholdMs;
         for (var i = 0; i < events.length; ++i) {
             var e = events[i];
-            if (!e.stackTrace || !this._isVisible(e))
+            if (e.startTime >= currentJSInvocationEndTime) {
+                stackTraceOpenEvents.length = 0;
+                currentJSInvocationEndTime = 0;
+            }
+            if (isJSInvocationEvent(e))
+                currentJSInvocationEndTime = e.endTime;
+            if (!currentJSInvocationEndTime)
+                continue;
+            if (!e.stackTrace)
                 continue;
             while (stackTraceOpenEvents.length && eventEndTime(stackTraceOpenEvents.peekLast()) + coalesceThresholdMs <= e.startTime)
                 stackTraceOpenEvents.pop();
             var numFrames = e.stackTrace.length;
             for (var j = 0; j < numFrames && j < stackTraceOpenEvents.length; ++j) {
                 var frame = e.stackTrace[numFrames - 1 - j];
-                if (!equalFrames(frame, stackTraceOpenEvents[j].args.data))
+                if (!equalFrames(frame, stackTraceOpenEvents[j].args["data"]))
                     break;
                 stackTraceOpenEvents[j].endTime = Math.max(stackTraceOpenEvents[j].endTime, eventEndTime(e));
                 stackTraceOpenEvents[j].duration = stackTraceOpenEvents[j].endTime - stackTraceOpenEvents[j].startTime;
             }
             stackTraceOpenEvents.length = j;
-            var timestampUs = e.startTime * 1000;
-            var durationUs = (e.duration || WebInspector.TimelineFlameChartDataProvider.InstantEventVisibleDurationMs) * 1000;
+            var duration = (e.duration || WebInspector.TimelineFlameChartDataProvider.InstantEventVisibleDurationMs);
             for (; j < numFrames; ++j) {
                 var frame = e.stackTrace[numFrames - 1 - j];
-                var payload = /** @type {!WebInspector.TracingModel.EventPayload} */ ({
-                    ph: e.phase,
-                    cat: WebInspector.TracingModel.DevToolsMetadataEventCategory,
-                    name: WebInspector.TracingTimelineModel.RecordType.JSFrame,
-                    ts: timestampUs,
-                    dur: durationUs,
-                    args: {
-                        data: frame
-                    }
-                });
-                var jsFrameEvent = new WebInspector.TracingModel.Event(payload, 0, e.thread);
+                var jsFrameEvent = new WebInspector.TracingModel.Event(WebInspector.TracingModel.DevToolsMetadataEventCategory, WebInspector.TracingTimelineModel.RecordType.JSFrame,
+                    e.phase, e.startTime, e.thread);
+                jsFrameEvent.addArgs({data: frame});
+                jsFrameEvent.setEndTime(e.startTime + duration);
                 stackTraceOpenEvents.push(jsFrameEvent);
                 jsFrameEvents.push(jsFrameEvent);
             }
@@ -346,7 +355,7 @@ WebInspector.TimelineFlameChartDataProvider.prototype = {
         if (!event)
             return this._entryIndexToFrame[entryIndex] ? "white" : "#555";
         if (event.name === WebInspector.TracingTimelineModel.RecordType.JSFrame)
-            return WebInspector.TimelineFlameChartDataProvider.jsFrameColorGenerator().colorForID(event.args.data["functionName"]);
+            return WebInspector.TimelineFlameChartDataProvider.jsFrameColorGenerator().colorForID(event.args["data"]["functionName"]);
         var style = WebInspector.TracingTimelineUIUtils.styleForTraceEvent(event.name);
         return style.category.fillColorStop1;
     },
@@ -367,13 +376,17 @@ WebInspector.TimelineFlameChartDataProvider.prototype = {
         var frame = this._entryIndexToFrame[entryIndex];
         if (frame) {
             context.save();
+
             context.translate(0.5, 0.5);
 
             context.beginPath();
             context.moveTo(barX, barY);
             context.lineTo(barX, context.canvas.height);
-            context.strokeStyle = "rgba(100, 100, 100, 0.6)";
+            context.strokeStyle = "rgba(100, 100, 100, 0.4)";
+            context.setLineDash([5]);
             context.stroke();
+            context.setLineDash([]);
+
 
             var padding = 4 * window.devicePixelRatio;
             barX += padding;
@@ -655,7 +668,6 @@ WebInspector.TimelineFlameChart.prototype = {
     {
         this._mainView.scheduleUpdate();
     },
-
 
     /**
      * @return {!WebInspector.View}

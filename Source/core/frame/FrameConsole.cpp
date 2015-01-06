@@ -29,12 +29,17 @@
 #include "config.h"
 #include "core/frame/FrameConsole.h"
 
+#include "bindings/core/v8/ScriptCallStackFactory.h"
 #include "core/frame/FrameHost.h"
 #include "core/inspector/ConsoleAPITypes.h"
+#include "core/inspector/ConsoleMessage.h"
+#include "core/inspector/ConsoleMessageStorage.h"
 #include "core/inspector/InspectorConsoleInstrumentation.h"
+#include "core/inspector/ScriptCallStack.h"
 #include "core/page/Chrome.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
+#include "core/workers/WorkerGlobalScopeProxy.h"
 #include "wtf/text/StringBuilder.h"
 
 namespace blink {
@@ -50,19 +55,12 @@ FrameConsole::FrameConsole(LocalFrame& frame)
 {
 }
 
-void FrameConsole::addMessage(MessageSource source, MessageLevel level, const String& message)
-{
-    addMessage(source, level, message, String(), 0, 0, nullptr, 0, 0);
-}
+DEFINE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(FrameConsole);
 
-void FrameConsole::addMessage(MessageSource source, MessageLevel level, const String& message, PassRefPtrWillBeRawPtr<ScriptCallStack> callStack)
+void FrameConsole::addMessage(PassRefPtrWillBeRawPtr<ConsoleMessage> prpConsoleMessage)
 {
-    addMessage(source, level, message, String(), 0, 0, callStack, 0);
-}
-
-void FrameConsole::addMessage(MessageSource source, MessageLevel level, const String& message, const String& url, unsigned lineNumber, unsigned columnNumber, PassRefPtrWillBeRawPtr<ScriptCallStack> callStack, ScriptState* scriptState, unsigned long requestIdentifier)
-{
-    if (muteCount)
+    RefPtrWillBeRawPtr<ConsoleMessage> consoleMessage = prpConsoleMessage;
+    if (muteCount && consoleMessage->source() != ConsoleAPIMessageSource)
         return;
 
     // FIXME: This should not need to reach for the main-frame.
@@ -72,22 +70,40 @@ void FrameConsole::addMessage(MessageSource source, MessageLevel level, const St
         return;
 
     String messageURL;
-    if (callStack) {
-        messageURL = callStack->at(0).sourceURL();
-        InspectorInstrumentation::addMessageToConsole(context, source, LogMessageType, level, message, callStack, requestIdentifier);
+    unsigned lineNumber = 0;
+    if (consoleMessage->callStack() && consoleMessage->callStack()->size()) {
+        lineNumber = consoleMessage->callStack()->at(0).lineNumber();
+        messageURL = consoleMessage->callStack()->at(0).sourceURL();
     } else {
-        messageURL = url;
-        InspectorInstrumentation::addMessageToConsole(context, source, LogMessageType, level, message, url, lineNumber, columnNumber, scriptState, requestIdentifier);
+        lineNumber = consoleMessage->lineNumber();
+        messageURL = consoleMessage->url();
     }
 
-    if (source == CSSMessageSource)
+    messageStorage()->reportMessage(consoleMessage);
+
+    if (consoleMessage->source() == CSSMessageSource)
         return;
 
-    String stackTrace;
-    if (callStack && m_frame.chromeClient().shouldReportDetailedMessageForSource(messageURL))
-        stackTrace = FrameConsole::formatStackTraceString(message, callStack);
+    RefPtrWillBeRawPtr<ScriptCallStack> reportedCallStack = nullptr;
+    if (consoleMessage->source() != ConsoleAPIMessageSource) {
+        if (consoleMessage->callStack() && m_frame.chromeClient().shouldReportDetailedMessageForSource(messageURL))
+            reportedCallStack = consoleMessage->callStack();
+    } else {
+        if (!m_frame.host() || (consoleMessage->scriptArguments() && consoleMessage->scriptArguments()->argumentCount() == 0))
+            return;
 
-    m_frame.chromeClient().addMessageToConsole(&m_frame, source, level, message, lineNumber, messageURL, stackTrace);
+        MessageType type = consoleMessage->type();
+        if (type == StartGroupMessageType || type == EndGroupMessageType || type == StartGroupCollapsedMessageType)
+            return;
+
+        if (m_frame.chromeClient().shouldReportDetailedMessageForSource(messageURL))
+            reportedCallStack = createScriptCallStack(ScriptCallStack::maxCallStackSizeToCapture);
+    }
+
+    String stackTrace;
+    if (reportedCallStack)
+        stackTrace = FrameConsole::formatStackTraceString(consoleMessage->message(), reportedCallStack);
+    m_frame.chromeClient().addMessageToConsole(&m_frame, consoleMessage->source(), consoleMessage->level(), consoleMessage->message(), lineNumber, messageURL, stackTrace);
 }
 
 String FrameConsole::formatStackTraceString(const String& originalMessage, PassRefPtrWillBeRawPtr<ScriptCallStack> callStack)
@@ -96,7 +112,7 @@ String FrameConsole::formatStackTraceString(const String& originalMessage, PassR
     for (size_t i = 0; i < callStack->size(); ++i) {
         const ScriptCallFrame& frame = callStack->at(i);
         stackTrace.append("\n    at " + (frame.functionName().length() ? frame.functionName() : "(anonymous function)"));
-        stackTrace.append(" (");
+        stackTrace.appendLiteral(" (");
         stackTrace.append(frame.sourceURL());
         stackTrace.append(':');
         stackTrace.append(String::number(frame.lineNumber()));
@@ -117,6 +133,34 @@ void FrameConsole::unmute()
 {
     ASSERT(muteCount > 0);
     muteCount--;
+}
+
+ConsoleMessageStorage* FrameConsole::messageStorage()
+{
+    LocalFrame* curFrame = &m_frame;
+    Frame* topFrame = curFrame->tree().top();
+    ASSERT(topFrame->isLocalFrame());
+    LocalFrame* localTopFrame = toLocalFrame(topFrame);
+    if (localTopFrame != curFrame)
+        return localTopFrame->console().messageStorage();
+    if (!m_consoleMessageStorage)
+        m_consoleMessageStorage = ConsoleMessageStorage::createForFrame(&m_frame);
+    return m_consoleMessageStorage.get();
+}
+
+void FrameConsole::adoptWorkerMessagesAfterTermination(WorkerGlobalScopeProxy* proxy)
+{
+    ConsoleMessageStorage* storage = messageStorage();
+    size_t messageCount = storage->size();
+    for (size_t i = 0; i < messageCount; ++i) {
+        if (storage->at(i)->workerGlobalScopeProxy() == proxy)
+            storage->at(i)->setWorkerGlobalScopeProxy(nullptr);
+    }
+}
+
+void FrameConsole::trace(Visitor* visitor)
+{
+    visitor->trace(m_consoleMessageStorage);
 }
 
 } // namespace blink

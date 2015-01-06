@@ -22,15 +22,10 @@
     background-image: none;
 }
 
-.websocket-frame-view td {
+.websocket-frame-view-td {
     padding-top: 3px;
     padding-bottom: 3px;
     border-bottom: 1px solid #aaa;
-}
-
-.websocket-frame-view .top-filler-td,
-.websocket-frame-view .bottom-filler-td {
-    border-bottom: none;
 }
 
 .websocket-frame-view-row-outcoming {

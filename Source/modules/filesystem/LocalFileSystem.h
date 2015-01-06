@@ -44,6 +44,7 @@ class FileSystemClient;
 class ExecutionContext;
 class KURL;
 class LocalFrame;
+class WebFileSystem;
 
 class LocalFileSystem FINAL : public NoBaseWillBeGarbageCollectedFinalized<LocalFileSystem>, public WillBeHeapSupplement<LocalFrame>, public WillBeHeapSupplement<WorkerClients> {
     WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(LocalFileSystem);
@@ -71,11 +72,13 @@ protected:
     explicit LocalFileSystem(PassOwnPtr<FileSystemClient>);
 
 private:
+    WebFileSystem* fileSystem() const;
     void requestFileSystemAccessInternal(ExecutionContext*, const Closure& allowed, const Closure& denied);
-    void fileSystemNotAllowedInternal(PassRefPtrWillBeRawPtr<ExecutionContext>, PassRefPtr<CallbackWrapper>);
-    void fileSystemAllowedInternal(PassRefPtrWillBeRawPtr<ExecutionContext>, FileSystemType, PassRefPtr<CallbackWrapper>);
-    void resolveURLInternal(const KURL&, PassRefPtr<CallbackWrapper>);
-    void deleteFileSystemInternal(PassRefPtrWillBeRawPtr<ExecutionContext>, FileSystemType, PassRefPtr<CallbackWrapper>);
+    void fileSystemNotAvailable(PassRefPtrWillBeRawPtr<ExecutionContext>, CallbackWrapper*);
+    void fileSystemNotAllowedInternal(PassRefPtrWillBeRawPtr<ExecutionContext>, CallbackWrapper*);
+    void fileSystemAllowedInternal(PassRefPtrWillBeRawPtr<ExecutionContext>, FileSystemType, CallbackWrapper*);
+    void resolveURLInternal(PassRefPtrWillBeRawPtr<ExecutionContext>, const KURL&, CallbackWrapper*);
+    void deleteFileSystemInternal(PassRefPtrWillBeRawPtr<ExecutionContext>, FileSystemType, CallbackWrapper*);
     OwnPtr<FileSystemClient> m_client;
 };
 

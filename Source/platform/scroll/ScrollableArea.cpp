@@ -32,6 +32,8 @@
 #include "config.h"
 #include "platform/scroll/ScrollableArea.h"
 
+#include "platform/HostWindow.h"
+#include "platform/Logging.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/geometry/FloatPoint.h"
 #include "platform/scroll/ProgrammaticScrollAnimator.h"
@@ -413,6 +415,17 @@ bool ScrollableArea::hasLayerForVerticalScrollbar() const
 bool ScrollableArea::hasLayerForScrollCorner() const
 {
     return layerForScrollCorner();
+}
+
+bool ScrollableArea::scheduleAnimation()
+{
+    WTF_LOG(ScriptedAnimationController, "ScrollableArea::scheduleAnimation: window = %d",
+        hostWindow() ? 1 : 0);
+    if (HostWindow* window = hostWindow()) {
+        window->scheduleAnimation();
+        return true;
+    }
+    return false;
 }
 
 void ScrollableArea::serviceScrollAnimations(double monotonicTime)

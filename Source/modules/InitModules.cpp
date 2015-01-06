@@ -11,30 +11,24 @@
 #include "modules/EventModulesFactory.h"
 #include "modules/EventModulesNames.h"
 #include "modules/EventTargetModulesNames.h"
+#include "modules/IndexedDBNames.h"
 
 namespace blink {
 
-void ModulesInitializer::initEventNames()
+void ModulesInitializer::init()
 {
-    EventNames::init();
+    ASSERT(!isInitialized());
+
+    // Strings must be initialized before calling CoreInitializer::init().
     EventNames::initModules();
-}
-
-void ModulesInitializer::initEventTargetNames()
-{
-    EventTargetNames::init();
     EventTargetNames::initModules();
-}
-
-void ModulesInitializer::registerEventFactory()
-{
-    CoreInitializer::registerEventFactory();
     Document::registerEventFactory(EventModulesFactory::create());
-}
-
-void ModulesInitializer::initBindings()
-{
     ModuleBindingsInitializer::init();
+    IndexedDBNames::init();
+
+    CoreInitializer::init();
+
+    ASSERT(isInitialized());
 }
 
 } // namespace blink

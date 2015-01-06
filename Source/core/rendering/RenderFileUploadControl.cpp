@@ -73,7 +73,7 @@ void RenderFileUploadControl::updateFromElement()
     FileList* files = input->files();
     ASSERT(files);
     if (files && files->isEmpty())
-        paintInvalidationForWholeRenderer();
+        setShouldDoFullPaintInvalidation(true);
 }
 
 static int nodeWidth(Node* node)
@@ -155,7 +155,7 @@ void RenderFileUploadControl::computeIntrinsicLogicalWidths(LayoutUnit& minLogic
     RenderFileUploadControl* renderer = const_cast<RenderFileUploadControl*>(this);
     float minDefaultLabelWidth = defaultWidthNumChars * font.width(constructTextRun(renderer, font, characterAsString, style(), TextRun::AllowTrailingExpansion));
 
-    const String label = toHTMLInputElement(node())->locale().queryString(blink::WebLocalizedString::FileButtonNoFileSelectedLabel);
+    const String label = toHTMLInputElement(node())->locale().queryString(WebLocalizedString::FileButtonNoFileSelectedLabel);
     float defaultLabelWidth = font.width(constructTextRun(renderer, font, label, style(), TextRun::AllowTrailingExpansion));
     if (HTMLInputElement* button = uploadButton())
         if (RenderObject* buttonRenderer = button->renderer())

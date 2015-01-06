@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2004, 2006 Apple Computer, Inc.  All rights reserved.
  * Copyright (C) 2007, 2008, 2009 Google, Inc.  All rights reserved.
+ * Copyright (C) 2014 Opera Software ASA. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -47,11 +48,21 @@
 
 using namespace blink;
 
+namespace {
+
+PersistentNode* createPersistentHandle(ScriptWrappableBase* internalPointer)
+{
+    ASSERT_NOT_REACHED();
+    return 0;
+}
+
+} // namespace
+
 namespace blink {
 
 const WrapperTypeInfo* npObjectTypeInfo()
 {
-    static const WrapperTypeInfo typeInfo = { gin::kEmbedderBlink, 0, 0, 0, 0, 0, 0, 0, WrapperTypeObjectPrototype, RefCountedObject };
+    static const WrapperTypeInfo typeInfo = { gin::kEmbedderBlink, 0, 0, 0, createPersistentHandle, 0, 0, 0, 0, 0, 0, WrapperTypeObjectPrototype, RefCountedObject };
     return &typeInfo;
 }
 
@@ -111,19 +122,25 @@ static v8::Local<v8::String> npIdentifierToV8Identifier(NPIdentifier name, v8::I
 
 NPObject* v8ObjectToNPObject(v8::Handle<v8::Object> object)
 {
-    return reinterpret_cast<NPObject*>(object->GetAlignedPointerFromInternalField(v8DOMWrapperObjectIndex));
+    return reinterpret_cast<NPObject*>(toInternalPointer(object));
+}
+
+bool isWrappedNPObject(v8::Handle<v8::Object> object)
+{
+    if (object->InternalFieldCount() == npObjectInternalFieldCount) {
+        const WrapperTypeInfo* typeInfo = static_cast<const WrapperTypeInfo*>(object->GetAlignedPointerFromInternalField(v8DOMWrapperTypeIndex));
+        return typeInfo == npObjectTypeInfo();
+    }
+    return false;
 }
 
 NPObject* npCreateV8ScriptObject(NPP npp, v8::Handle<v8::Object> object, LocalDOMWindow* root, v8::Isolate* isolate)
 {
     // Check to see if this object is already wrapped.
-    if (object->InternalFieldCount() == npObjectInternalFieldCount) {
-        const WrapperTypeInfo* typeInfo = static_cast<const WrapperTypeInfo*>(object->GetAlignedPointerFromInternalField(v8DOMWrapperTypeIndex));
-        if (typeInfo == npObjectTypeInfo()) {
-            NPObject* returnValue = v8ObjectToNPObject(object);
-            _NPN_RetainObject(returnValue);
-            return returnValue;
-        }
+    if (isWrappedNPObject(object)) {
+        NPObject* returnValue = v8ObjectToNPObject(object);
+        _NPN_RetainObject(returnValue);
+        return returnValue;
     }
 
     V8NPObjectVector* objectVector = 0;
@@ -168,6 +185,11 @@ V8NPObject* npObjectToV8NPObject(NPObject* npObject)
     if (v8NpObject->v8Object.IsEmpty())
         return 0;
     return v8NpObject;
+}
+
+ScriptWrappableBase* npObjectToInternalPointer(NPObject* npObject)
+{
+    return reinterpret_cast<ScriptWrappableBase*>(npObject);
 }
 
 void disposeUnderlyingV8Object(NPObject* npObject, v8::Isolate* isolate)

@@ -64,6 +64,7 @@ MediaControls::MediaControls(HTMLMediaElement& mediaElement)
     , m_hideMediaControlsTimer(this, &MediaControls::hideMediaControlsTimerFired)
     , m_isMouseOverControls(false)
     , m_isPausedForScrubbing(false)
+    , m_wasLastEventTouch(false)
 {
 }
 
@@ -229,9 +230,13 @@ bool MediaControls::shouldHideMediaControls(unsigned behaviorFlags) const
     // Never hide for a media element without visual representation.
     if (!mediaElement().hasVideo())
         return false;
-    // Don't hide if the controls are hovered or the mouse is over the video area.
+    // Don't hide if the mouse is over the controls.
+    const bool ignoreControlsHover = behaviorFlags & IgnoreControlsHover;
+    if (!ignoreControlsHover && m_panel->hovered())
+        return false;
+    // Don't hide if the mouse is over the video area.
     const bool ignoreVideoHover = behaviorFlags & IgnoreVideoHover;
-    if (m_panel->hovered() || (!ignoreVideoHover && m_isMouseOverControls))
+    if (!ignoreVideoHover && m_isMouseOverControls)
         return false;
     // Don't hide if focus is on the HTMLMediaElement or within the
     // controls/shadow tree. (Perform the checks separately to avoid going
@@ -320,7 +325,7 @@ void MediaControls::updateVolume()
 {
     m_muteButton->updateDisplayType();
     if (m_muteButton->renderer())
-        m_muteButton->renderer()->paintInvalidationForWholeRenderer();
+        m_muteButton->renderer()->setShouldDoFullPaintInvalidation(true);
 
     if (mediaElement().muted())
         m_volumeSlider->setVolume(0);
@@ -363,6 +368,8 @@ void MediaControls::exitedFullscreen()
 void MediaControls::defaultEventHandler(Event* event)
 {
     HTMLDivElement::defaultEventHandler(event);
+    m_wasLastEventTouch = event->isTouchEvent() || event->isGestureEvent()
+        || (event->isMouseEvent() && toMouseEvent(event)->fromTouch());
 
     if (event->type() == EventTypeNames::mouseover) {
         if (!containsRelatedTarget(event)) {
@@ -399,7 +406,11 @@ void MediaControls::hideMediaControlsTimerFired(Timer<MediaControls>*)
     if (mediaElement().togglePlayStateWillPlay())
         return;
 
-    if (!shouldHideMediaControls(IgnoreFocus | IgnoreVideoHover))
+    unsigned behaviorFlags = IgnoreFocus | IgnoreVideoHover;
+    if (m_wasLastEventTouch) {
+        behaviorFlags |= IgnoreControlsHover;
+    }
+    if (!shouldHideMediaControls(behaviorFlags))
         return;
 
     makeTransparent();

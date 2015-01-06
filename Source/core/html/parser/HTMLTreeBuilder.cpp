@@ -800,7 +800,8 @@ void HTMLTreeBuilder::processStartTagForInBody(AtomicHTMLToken* token)
             m_framesetOk = false;
         return;
     }
-    if (token->name() == paramTag
+    if ((RuntimeEnabledFeatures::contextMenuEnabled() && token->name() == menuitemTag)
+        || token->name() == paramTag
         || token->name() == sourceTag
         || token->name() == trackTag) {
         m_tree.insertSelfClosingHTMLElement(token);
@@ -866,10 +867,19 @@ void HTMLTreeBuilder::processStartTagForInBody(AtomicHTMLToken* token)
         m_tree.insertHTMLElement(token);
         return;
     }
-    if (token->name() == rpTag || token->name() == rtTag) {
+    if (token->name() == rbTag || token->name() == rtcTag) {
         if (m_tree.openElements()->inScope(rubyTag.localName())) {
             m_tree.generateImpliedEndTags();
             if (!m_tree.currentStackItem()->hasTagName(rubyTag))
+                parseError(token);
+        }
+        m_tree.insertHTMLElement(token);
+        return;
+    }
+    if (token->name() == rtTag || token->name() == rpTag) {
+        if (m_tree.openElements()->inScope(rubyTag.localName())) {
+            m_tree.generateImpliedEndTagsWithExclusion(rtcTag.localName());
+            if (!m_tree.currentStackItem()->hasTagName(rubyTag) && !m_tree.currentStackItem()->hasTagName(rtcTag))
                 parseError(token);
         }
         m_tree.insertHTMLElement(token);

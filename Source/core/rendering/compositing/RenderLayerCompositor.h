@@ -83,7 +83,7 @@ public:
     bool hasAcceleratedCompositing() const { return m_hasAcceleratedCompositing; }
     bool layerSquashingEnabled() const;
 
-    bool acceleratedCompositingForOverflowScrollEnabled() const;
+    bool preferCompositingToLCDTextEnabled() const;
 
     bool rootShouldAlwaysComposite() const;
 
@@ -106,8 +106,8 @@ public:
     GraphicsLayer* fixedRootBackgroundLayer() const;
     void setNeedsUpdateFixedBackground() { m_needsUpdateFixedBackground = true; }
 
-    // Repaint the appropriate layers when the given RenderLayer starts or stops being composited.
-    void repaintOnCompositingChange(RenderLayer*);
+    // Issue paint invalidations of the appropriate layers when the given RenderLayer starts or stops being composited.
+    void paintInvalidationOnCompositingChange(RenderLayer*);
 
     void fullyInvalidatePaint();
 
@@ -151,8 +151,8 @@ public:
     GraphicsLayer* layerForVerticalScrollbar() const { return m_layerForVerticalScrollbar.get(); }
     GraphicsLayer* layerForScrollCorner() const { return m_layerForScrollCorner.get(); }
 
-    void resetTrackedRepaintRects();
-    void setTracksRepaints(bool);
+    void resetTrackedPaintInvalidationRects();
+    void setTracksPaintInvalidations(bool);
 
     virtual String debugName(const GraphicsLayer*) OVERRIDE;
     DocumentLifecycle& lifecycle() const;
@@ -179,19 +179,16 @@ private:
     void assertNoUnresolvedDirtyBits();
 #endif
 
-    // Make updates to the layer based on viewport-constrained properties such as position:fixed. This can in turn affect
-    // compositing.
-    bool updateLayerIfViewportConstrained(RenderLayer*);
-
     // GraphicsLayerClient implementation
     virtual void notifyAnimationStarted(const GraphicsLayer*, double) OVERRIDE { }
     virtual void paintContents(const GraphicsLayer*, GraphicsContext&, GraphicsLayerPaintingPhase, const IntRect&) OVERRIDE;
 
-    virtual bool isTrackingRepaints() const OVERRIDE;
+    virtual bool isTrackingPaintInvalidations() const OVERRIDE;
 
     // Whether the given RL needs to paint into its own separate backing (and hence would need its own CompositedLayerMapping).
     bool needsOwnBacking(const RenderLayer*) const;
 
+    void updateWithoutAcceleratedCompositing(CompositingUpdateType);
     void updateIfNeeded();
 
     void computeCompositingRequirements(RenderLayer* ancestorLayer, RenderLayer*, OverlapMap&, struct CompositingRecursionData&, bool& descendantHas3DTransform, Vector<RenderLayer*>& unclippedDescendants, IntRect& absoluteDecendantBoundingBox);
@@ -239,7 +236,7 @@ private:
     // m_compositingDirty.
     bool m_rootShouldAlwaysCompositeDirty;
     bool m_needsUpdateFixedBackground;
-    bool m_isTrackingRepaints; // Used for testing.
+    bool m_isTrackingPaintInvalidations; // Used for testing.
 
     RootLayerAttachment m_rootLayerAttachment;
 

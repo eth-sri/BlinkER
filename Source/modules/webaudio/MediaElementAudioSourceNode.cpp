@@ -41,9 +41,9 @@ const unsigned maxSampleRate = 192000;
 
 namespace blink {
 
-PassRefPtrWillBeRawPtr<MediaElementAudioSourceNode> MediaElementAudioSourceNode::create(AudioContext* context, HTMLMediaElement* mediaElement)
+MediaElementAudioSourceNode* MediaElementAudioSourceNode::create(AudioContext* context, HTMLMediaElement* mediaElement)
 {
-    return adoptRefWillBeNoop(new MediaElementAudioSourceNode(context, mediaElement));
+    return adoptRefCountedGarbageCollectedWillBeNoop(new MediaElementAudioSourceNode(context, mediaElement));
 }
 
 MediaElementAudioSourceNode::MediaElementAudioSourceNode(AudioContext* context, HTMLMediaElement* mediaElement)
@@ -69,9 +69,7 @@ MediaElementAudioSourceNode::~MediaElementAudioSourceNode()
 
 void MediaElementAudioSourceNode::dispose()
 {
-#if !ENABLE(OILPAN)
     m_mediaElement->setAudioSourceNode(0);
-#endif
     uninitialize();
     AudioSourceNode::dispose();
 }
@@ -147,18 +145,12 @@ void MediaElementAudioSourceNode::process(size_t numberOfFrames)
 
 void MediaElementAudioSourceNode::lock()
 {
-#if !ENABLE(OILPAN)
-    ref();
-#endif
     m_processLock.lock();
 }
 
 void MediaElementAudioSourceNode::unlock()
 {
     m_processLock.unlock();
-#if !ENABLE(OILPAN)
-    deref();
-#endif
 }
 
 void MediaElementAudioSourceNode::trace(Visitor* visitor)

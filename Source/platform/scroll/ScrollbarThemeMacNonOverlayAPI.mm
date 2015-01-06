@@ -33,6 +33,7 @@
 
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/ImageBuffer.h"
+#include "platform/mac/ThemeMac.h"
 #include "platform/scroll/ScrollbarThemeClient.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebRect.h"
@@ -88,8 +89,6 @@ static blink::WebThemeEngine::State scrollbarStateToThemeState(ScrollbarThemeCli
 //     - Skia specific changes
 bool ScrollbarThemeMacNonOverlayAPI::paint(ScrollbarThemeClient* scrollbar, GraphicsContext* context, const IntRect& damageRect)
 {
-    if (context->paintingDisabled())
-        return true;
     // Get the tickmarks for the frameview.
     Vector<IntRect> tickmarks;
     scrollbar->getTickmarks(tickmarks);
@@ -137,7 +136,7 @@ bool ScrollbarThemeMacNonOverlayAPI::paint(ScrollbarThemeClient* scrollbar, Grap
     }
 
     // Draw thumbless.
-    gfx::SkiaBitLocker bitLocker(drawingContext->canvas());
+    gfx::SkiaBitLocker bitLocker(drawingContext->canvas(), ThemeMac::inflateRectForAA(scrollbar->frameRect()));
     CGContextRef cgContext = bitLocker.cgContext();
     HIThemeDrawTrack(&trackInfo, 0, cgContext, kHIThemeOrientationNormal);
 

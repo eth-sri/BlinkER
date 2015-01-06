@@ -55,15 +55,6 @@ namespace blink {
         virtual bool hasPendingActivity() const = 0;
 
         virtual void workerObjectDestroyed() = 0;
-
-        class PageInspector {
-        public:
-            virtual ~PageInspector() { }
-            virtual void dispatchMessageFromWorker(const String&) = 0;
-        };
-        virtual void connectToInspector(PageInspector*) { }
-        virtual void disconnectFromInspector() { }
-        virtual void sendMessageToInspector(const String&) { }
     };
 
 } // namespace blink

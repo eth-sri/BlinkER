@@ -34,12 +34,13 @@
 [
     ActiveDOMObject,
     Conditional=CONDITION,
-    Custom=LegacyCallAsFunction|ToV8,
+    Custom=(LegacyCallAsFunction,ToV8),
     DoNotCheckConstants,
     ImplementedAs=TestInterfaceImplementation,
     RuntimeEnabled=FeatureName,
     SetWrapperReferenceTo(TestInterface referencedName),
-    TypeChecking=Interface|Unrestricted,
+    TypeChecking=(Interface,Unrestricted),
+    Exposed=(Worker,Window),
 ] interface TestInterface : TestInterfaceEmpty {
     // members needed to test [ImplementedAs], as this affect attribute
     // configuration and method configuration, and [TypeChecking]
@@ -71,6 +72,21 @@
     deleter boolean (DOMString name);
 
     [NotEnumerable] stringifier;
+
+    // Per-method [Exposed] annotation support.
+    void alwaysExposedMethod();
+    [Exposed=Worker] void workerExposedMethod();
+    [Exposed=Window] void windowExposedMethod();
+
+    static void alwaysExposedStaticMethod();
+    [Exposed=Worker] static void workerExposedStaticMethod();
+    [Exposed=Window] static void windowExposedStaticMethod();
+
+    attribute long alwaysExposedAttribute;
+    [Exposed=Worker] attribute long workerExposedAttribute;
+    [Exposed=Window] attribute long windowExposedAttribute;
+
+    [Exposed=(Window,ServiceWorker)] void windowAndServiceWorkerExposedMethod();
 };
 
 TestInterface implements TestImplements;

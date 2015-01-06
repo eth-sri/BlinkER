@@ -39,8 +39,9 @@ class RenderMenuList FINAL : public RenderFlexibleBox, private PopupMenuClient {
 public:
     RenderMenuList(Element*);
     virtual ~RenderMenuList();
+    virtual void destroy() OVERRIDE;
+    virtual void trace(Visitor*) OVERRIDE;
 
-public:
     bool popupIsVisible() const { return m_popupIsVisible; }
     void showPopup();
     void hidePopup();
@@ -94,6 +95,7 @@ private:
     virtual bool itemIsLabel(unsigned listIndex) const OVERRIDE;
     virtual bool itemIsSelected(unsigned listIndex) const OVERRIDE;
     virtual void setTextFromItem(unsigned listIndex) OVERRIDE;
+    virtual void listBoxSelectItem(int listIndex, bool allowMultiplySelections, bool shift, bool fireOnChangeNow = true) OVERRIDE;
     virtual bool multiple() const OVERRIDE;
 
     virtual bool hasLineIfEmpty() const OVERRIDE { return true; }
@@ -117,8 +119,8 @@ private:
 
     void didUpdateActiveOption(int optionIndex);
 
-    RenderText* m_buttonText;
-    RenderBlock* m_innerBlock;
+    RawPtrWillBeMember<RenderText> m_buttonText;
+    RawPtrWillBeMember<RenderBlock> m_innerBlock;
 
     bool m_optionsChanged;
     int m_optionsWidth;

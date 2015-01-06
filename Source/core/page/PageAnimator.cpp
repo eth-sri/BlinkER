@@ -12,6 +12,7 @@
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "core/svg/SVGDocumentExtensions.h"
+#include "platform/Logging.h"
 
 namespace blink {
 
@@ -28,20 +29,28 @@ void PageAnimator::serviceScriptedAnimations(double monotonicAnimationStartTime)
     m_animationFramePending = false;
     TemporaryChange<bool> servicing(m_servicingAnimations, true);
 
-    for (RefPtr<Frame> frame = m_page->mainFrame(); frame; frame = frame->tree().traverseNext()) {
-        if (frame->isLocalFrame()) {
-            RefPtr<LocalFrame> localFrame = toLocalFrame(frame.get());
-            localFrame->view()->serviceScrollAnimations(monotonicAnimationStartTime);
-
-            DocumentAnimations::updateAnimationTimingForAnimationFrame(*localFrame->document(), monotonicAnimationStartTime);
-            SVGDocumentExtensions::serviceOnAnimationFrame(*localFrame->document(), monotonicAnimationStartTime);
-        }
-    }
-
     WillBeHeapVector<RefPtrWillBeMember<Document> > documents;
     for (Frame* frame = m_page->mainFrame(); frame; frame = frame->tree().traverseNext()) {
         if (frame->isLocalFrame())
             documents.append(toLocalFrame(frame)->document());
+    }
+
+    WTF_LOG(ScriptedAnimationController, "PageAnimator::serviceScriptedAnimations: #documents = %d",
+        static_cast<int>(documents.size()));
+    for (size_t i = 0; i < documents.size(); ++i) {
+        if (documents[i]->frame()) {
+            documents[i]->view()->serviceScrollAnimations(monotonicAnimationStartTime);
+
+            if (const FrameView::ScrollableAreaSet* scrollableAreas = documents[i]->view()->scrollableAreas()) {
+                for (FrameView::ScrollableAreaSet::iterator it = scrollableAreas->begin(); it != scrollableAreas->end(); ++it)
+                    (*it)->serviceScrollAnimations(monotonicAnimationStartTime);
+            }
+        }
+    }
+
+    for (size_t i = 0; i < documents.size(); ++i) {
+        DocumentAnimations::updateAnimationTimingForAnimationFrame(*documents[i], monotonicAnimationStartTime);
+        SVGDocumentExtensions::serviceOnAnimationFrame(*documents[i], monotonicAnimationStartTime);
     }
 
     for (size_t i = 0; i < documents.size(); ++i)

@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2006, 2007, 2008, 2009 Google Inc. All rights reserved.
+ * Copyright (C) 2014 Opera Software ASA. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -40,6 +41,7 @@
 namespace blink {
 
 class LocalDOMWindow;
+class ScriptWrappableBase;
 
 static const int npObjectInternalFieldCount = v8DefaultWrapperInternalFieldCount + 0;
 
@@ -68,7 +70,11 @@ NPObject* npCreateV8ScriptObject(NPP, v8::Handle<v8::Object>, LocalDOMWindow*, v
 
 NPObject* v8ObjectToNPObject(v8::Handle<v8::Object>);
 
+bool isWrappedNPObject(v8::Handle<v8::Object>);
+
 V8NPObject* npObjectToV8NPObject(NPObject*);
+
+ScriptWrappableBase* npObjectToInternalPointer(NPObject*);
 
 void disposeUnderlyingV8Object(NPObject*, v8::Isolate*);
 

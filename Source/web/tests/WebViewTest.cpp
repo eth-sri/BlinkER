@@ -47,6 +47,7 @@
 #include "core/page/Page.h"
 #include "core/rendering/RenderLayer.h"
 #include "core/rendering/RenderView.h"
+#include "core/testing/URLTestHelpers.h"
 #include "platform/KeyboardCodes.h"
 #include "platform/geometry/IntSize.h"
 #include "platform/graphics/Color.h"
@@ -66,6 +67,7 @@
 #include "public/web/WebFrameClient.h"
 #include "public/web/WebHitTestResult.h"
 #include "public/web/WebInputEvent.h"
+#include "public/web/WebScriptSource.h"
 #include "public/web/WebSettings.h"
 #include "public/web/WebViewClient.h"
 #include "public/web/WebWidget.h"
@@ -77,7 +79,6 @@
 #include "web/WebSettingsImpl.h"
 #include "web/WebViewImpl.h"
 #include "web/tests/FrameTestHelpers.h"
-#include "web/tests/URLTestHelpers.h"
 #include <gtest/gtest.h>
 
 using namespace blink;
@@ -420,7 +421,7 @@ void WebViewTest::testAutoResize(const WebSize& minAutoResize, const WebSize& ma
     m_webViewHelper.reset(); // Explicitly reset to break dependency on locally scoped client.
 }
 
-TEST_F(WebViewTest, DISABLED_AutoResizeMinimumSize)
+TEST_F(WebViewTest, AutoResizeMinimumSize)
 {
     WebSize minAutoResize(91, 56);
     WebSize maxAutoResize(403, 302);
@@ -458,7 +459,7 @@ TEST_F(WebViewTest, AutoResizeFixedHeightAndWidthOverflow)
 
 // Next three tests disabled for https://bugs.webkit.org/show_bug.cgi?id=92318 .
 // It seems we can run three AutoResize tests, then the next one breaks.
-TEST_F(WebViewTest, DISABLED_AutoResizeInBetweenSizes)
+TEST_F(WebViewTest, AutoResizeInBetweenSizes)
 {
     WebSize minAutoResize(90, 95);
     WebSize maxAutoResize(200, 300);
@@ -470,7 +471,7 @@ TEST_F(WebViewTest, DISABLED_AutoResizeInBetweenSizes)
                    expectedWidth, expectedHeight, NoHorizontalScrollbar, NoVerticalScrollbar);
 }
 
-TEST_F(WebViewTest, DISABLED_AutoResizeOverflowSizes)
+TEST_F(WebViewTest, AutoResizeOverflowSizes)
 {
     WebSize minAutoResize(90, 95);
     WebSize maxAutoResize(200, 300);
@@ -482,7 +483,7 @@ TEST_F(WebViewTest, DISABLED_AutoResizeOverflowSizes)
                    expectedWidth, expectedHeight, VisibleHorizontalScrollbar, VisibleVerticalScrollbar);
 }
 
-TEST_F(WebViewTest, DISABLED_AutoResizeMaxSize)
+TEST_F(WebViewTest, AutoResizeMaxSize)
 {
     WebSize minAutoResize(90, 95);
     WebSize maxAutoResize(200, 300);
@@ -1238,9 +1239,7 @@ TEST_F(WebViewTest, SelectionOnReadOnlyInput)
 static void configueCompositingWebView(WebSettings* settings)
 {
     settings->setAcceleratedCompositingEnabled(true);
-    settings->setAcceleratedCompositingForFixedPositionEnabled(true);
-    settings->setAcceleratedCompositingForOverflowScrollEnabled(true);
-    settings->setCompositedScrollingForFramesEnabled(true);
+    settings->setPreferCompositingToLCDTextEnabled(true);
 }
 
 TEST_F(WebViewTest, ShowPressOnTransformedLink)
@@ -1623,6 +1622,23 @@ TEST_F(WebViewTest, SmartClipData)
     EXPECT_STREQ(kExpectedClipHtml, clipHtml.utf8().c_str());
 }
 
+TEST_F(WebViewTest, SmartClipReturnsEmptyStringsWhenUserSelectIsNone)
+{
+    WebString clipText;
+    WebString clipHtml;
+    WebRect clipRect;
+    URLTestHelpers::registerMockedURLFromBaseURL(WebString::fromUTF8(m_baseURL.c_str()), WebString::fromUTF8("Ahem.ttf"));
+    URLTestHelpers::registerMockedURLFromBaseURL(WebString::fromUTF8(m_baseURL.c_str()), WebString::fromUTF8("smartclip_user_select_none.html"));
+    WebView* webView = m_webViewHelper.initializeAndLoad(m_baseURL + "smartclip_user_select_none.html");
+    webView->setPageScaleFactorLimits(1, 1);
+    webView->resize(WebSize(500, 500));
+    webView->layout();
+    WebRect cropRect(0, 0, 100, 100);
+    webView->extractSmartClipData(cropRect, clipText, clipHtml, clipRect);
+    EXPECT_STREQ("", clipText.utf8().c_str());
+    EXPECT_STREQ("", clipHtml.utf8().c_str());
+}
+
 class CreateChildCounterFrameClient : public FrameTestHelpers::TestWebFrameClient {
 public:
     CreateChildCounterFrameClient() : m_count(0) { }
@@ -1704,15 +1720,17 @@ private:
     int m_hasTouchEventHandlerCount[2];
 };
 
-// This test verifies that WebWidgetClient::hasTouchEventHandlers is called accordingly for various
-// calls to Document::did{Add|Remove|Clear}TouchEventHandler. Verifying that those calls are made
-// correctly is the job of LayoutTests/fast/events/touch/touch-handler-count.html.
+// This test verifies that WebWidgetClient::hasTouchEventHandlers is called
+// accordingly for various calls to EventHandlerRegistry::did{Add|Remove|
+// RemoveAll}EventHandler(..., TouchEvent). Verifying that those calls are made
+// correctly is the job of LayoutTests/fast/events/event-handler-count.html.
 TEST_F(WebViewTest, HasTouchEventHandlers)
 {
     TouchEventHandlerWebViewClient client;
     std::string url = m_baseURL + "has_touch_event_handlers.html";
     URLTestHelpers::registerMockedURLLoad(toKURL(url), "has_touch_event_handlers.html");
     WebViewImpl* webViewImpl = m_webViewHelper.initializeAndLoad(url, true, 0, &client);
+    const blink::EventHandlerRegistry::EventHandlerClass touchEvent = blink::EventHandlerRegistry::TouchEvent;
 
     // The page is initialized with at least one no-handlers call.
     // In practice we get two such calls because WebViewHelper::initializeAndLoad first
@@ -1723,55 +1741,56 @@ TEST_F(WebViewTest, HasTouchEventHandlers)
 
     // Adding the first document handler results in a has-handlers call.
     blink::Document* document = webViewImpl->mainFrameImpl()->frame()->document();
-    document->didAddTouchEventHandler(document);
+    blink::EventHandlerRegistry* registry = &document->frameHost()->eventHandlerRegistry();
+    registry->didAddEventHandler(*document, touchEvent);
     EXPECT_EQ(0, client.getAndResetHasTouchEventHandlerCallCount(false));
     EXPECT_EQ(1, client.getAndResetHasTouchEventHandlerCallCount(true));
 
     // Adding another handler has no effect.
-    document->didAddTouchEventHandler(document);
+    registry->didAddEventHandler(*document, touchEvent);
     EXPECT_EQ(0, client.getAndResetHasTouchEventHandlerCallCount(false));
     EXPECT_EQ(0, client.getAndResetHasTouchEventHandlerCallCount(true));
 
     // Removing the duplicate handler has no effect.
-    document->didRemoveTouchEventHandler(document);
+    registry->didRemoveEventHandler(*document, touchEvent);
     EXPECT_EQ(0, client.getAndResetHasTouchEventHandlerCallCount(false));
     EXPECT_EQ(0, client.getAndResetHasTouchEventHandlerCallCount(true));
 
     // Removing the final handler results in a no-handlers call.
-    document->didRemoveTouchEventHandler(document);
+    registry->didRemoveEventHandler(*document, touchEvent);
     EXPECT_EQ(1, client.getAndResetHasTouchEventHandlerCallCount(false));
     EXPECT_EQ(0, client.getAndResetHasTouchEventHandlerCallCount(true));
 
     // Adding a handler on a div results in a has-handlers call.
     blink::Element* parentDiv = document->getElementById("parentdiv");
     ASSERT(parentDiv);
-    document->didAddTouchEventHandler(parentDiv);
+    registry->didAddEventHandler(*parentDiv, touchEvent);
     EXPECT_EQ(0, client.getAndResetHasTouchEventHandlerCallCount(false));
     EXPECT_EQ(1, client.getAndResetHasTouchEventHandlerCallCount(true));
 
     // Adding a duplicate handler on the div, clearing all document handlers
     // (of which there are none) and removing the extra handler on the div
     // all have no effect.
-    document->didAddTouchEventHandler(parentDiv);
-    document->didClearTouchEventHandlers(document);
-    document->didRemoveTouchEventHandler(parentDiv);
+    registry->didAddEventHandler(*parentDiv, touchEvent);
+    registry->didRemoveAllEventHandlers(*document);
+    registry->didRemoveEventHandler(*parentDiv, touchEvent);
     EXPECT_EQ(0, client.getAndResetHasTouchEventHandlerCallCount(false));
     EXPECT_EQ(0, client.getAndResetHasTouchEventHandlerCallCount(true));
 
     // Removing the final handler on the div results in a no-handlers call.
-    document->didRemoveTouchEventHandler(parentDiv);
+    registry->didRemoveEventHandler(*parentDiv, touchEvent);
     EXPECT_EQ(1, client.getAndResetHasTouchEventHandlerCallCount(false));
     EXPECT_EQ(0, client.getAndResetHasTouchEventHandlerCallCount(true));
 
     // Adding two handlers then clearing them in a single call results in a
     // has-handlers then no-handlers call.
-    document->didAddTouchEventHandler(parentDiv);
+    registry->didAddEventHandler(*parentDiv, touchEvent);
     EXPECT_EQ(0, client.getAndResetHasTouchEventHandlerCallCount(false));
     EXPECT_EQ(1, client.getAndResetHasTouchEventHandlerCallCount(true));
-    document->didAddTouchEventHandler(parentDiv);
+    registry->didAddEventHandler(*parentDiv, touchEvent);
     EXPECT_EQ(0, client.getAndResetHasTouchEventHandlerCallCount(false));
     EXPECT_EQ(0, client.getAndResetHasTouchEventHandlerCallCount(true));
-    document->didClearTouchEventHandlers(parentDiv);
+    registry->didRemoveAllEventHandlers(*parentDiv);
     EXPECT_EQ(1, client.getAndResetHasTouchEventHandlerCallCount(false));
     EXPECT_EQ(0, client.getAndResetHasTouchEventHandlerCallCount(true));
 
@@ -1781,42 +1800,42 @@ TEST_F(WebViewTest, HasTouchEventHandlers)
     blink::Document* childDocument = toHTMLIFrameElement(childFrame)->contentDocument();
     blink::Element* childDiv = childDocument->getElementById("childdiv");
     ASSERT(childDiv);
-    childDocument->didAddTouchEventHandler(childDiv);
+    registry->didAddEventHandler(*childDiv, touchEvent);
     EXPECT_EQ(0, client.getAndResetHasTouchEventHandlerCallCount(false));
     EXPECT_EQ(1, client.getAndResetHasTouchEventHandlerCallCount(true));
 
     // Adding and clearing handlers in the parent doc or elsewhere in the child doc
     // has no impact.
-    document->didAddTouchEventHandler(document);
-    document->didAddTouchEventHandler(childFrame);
-    childDocument->didAddTouchEventHandler(childDocument);
-    document->didClearTouchEventHandlers(document);
-    document->didClearTouchEventHandlers(childFrame);
-    childDocument->didClearTouchEventHandlers(childDocument);
+    registry->didAddEventHandler(*document, touchEvent);
+    registry->didAddEventHandler(*childFrame, touchEvent);
+    registry->didAddEventHandler(*childDocument, touchEvent);
+    registry->didRemoveAllEventHandlers(*document);
+    registry->didRemoveAllEventHandlers(*childFrame);
+    registry->didRemoveAllEventHandlers(*childDocument);
     EXPECT_EQ(0, client.getAndResetHasTouchEventHandlerCallCount(false));
     EXPECT_EQ(0, client.getAndResetHasTouchEventHandlerCallCount(true));
 
     // Removing the final handler inside the child frame results in a no-handlers call.
-    childDocument->didRemoveTouchEventHandler(childDiv);
+    registry->didRemoveAllEventHandlers(*childDiv);
     EXPECT_EQ(1, client.getAndResetHasTouchEventHandlerCallCount(false));
     EXPECT_EQ(0, client.getAndResetHasTouchEventHandlerCallCount(true));
 
     // Adding a handler inside the child frame results in a has-handlers call.
-    childDocument->didAddTouchEventHandler(childDocument);
+    registry->didAddEventHandler(*childDocument, touchEvent);
     EXPECT_EQ(0, client.getAndResetHasTouchEventHandlerCallCount(false));
     EXPECT_EQ(1, client.getAndResetHasTouchEventHandlerCallCount(true));
 
     // Adding a handler in the parent document and removing the one in the frame
     // has no effect.
-    document->didAddTouchEventHandler(childFrame);
-    childDocument->didRemoveTouchEventHandler(childDocument);
-    childDocument->didClearTouchEventHandlers(childDocument);
-    document->didClearTouchEventHandlers(document);
+    registry->didAddEventHandler(*childFrame, touchEvent);
+    registry->didRemoveEventHandler(*childDocument, touchEvent);
+    registry->didRemoveAllEventHandlers(*childDocument);
+    registry->didRemoveAllEventHandlers(*document);
     EXPECT_EQ(0, client.getAndResetHasTouchEventHandlerCallCount(false));
     EXPECT_EQ(0, client.getAndResetHasTouchEventHandlerCallCount(true));
 
     // Now removing the handler in the parent document results in a no-handlers call.
-    document->didRemoveTouchEventHandler(childFrame);
+    registry->didRemoveEventHandler(*childFrame, touchEvent);
     EXPECT_EQ(1, client.getAndResetHasTouchEventHandlerCallCount(false));
     EXPECT_EQ(0, client.getAndResetHasTouchEventHandlerCallCount(true));
 
@@ -2135,6 +2154,20 @@ TEST_F(WebViewTest, FirstUserGestureObservedGestureTap)
 
     EXPECT_EQ(1, client.getUserGestureNotificationsCount());
     webView->setAutofillClient(0);
+}
+
+TEST_F(WebViewTest, CompareSelectAllToContentAsText)
+{
+    URLTestHelpers::registerMockedURLFromBaseURL(WebString::fromUTF8(m_baseURL.c_str()), WebString::fromUTF8("longpress_selection.html"));
+    WebView* webView = m_webViewHelper.initializeAndLoad(m_baseURL + "longpress_selection.html", true);
+
+    WebLocalFrameImpl* frame = toWebLocalFrameImpl(webView->mainFrame());
+    frame->executeScript(WebScriptSource(WebString::fromUTF8("document.execCommand('SelectAll', false, null)")));
+    std::string actual = frame->selectionAsText().utf8();
+
+    const int kMaxOutputCharacters = 1024;
+    std::string expected = frame->contentAsText(kMaxOutputCharacters).utf8();
+    EXPECT_EQ(expected, actual);
 }
 
 } // namespace

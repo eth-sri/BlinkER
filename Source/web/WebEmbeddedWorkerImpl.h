@@ -37,15 +37,13 @@
 #include "public/web/WebFrameClient.h"
 
 namespace blink {
-class WorkerScriptLoader;
-class WorkerThread;
-}
-
-namespace blink {
 
 class ServiceWorkerGlobalScopeProxy;
 class WebServiceWorkerNetworkProvider;
 class WebView;
+class WorkerInspectorProxy;
+class WorkerScriptLoader;
+class WorkerThread;
 
 class WebEmbeddedWorkerImpl FINAL
     : public WebEmbeddedWorker
@@ -67,10 +65,12 @@ public:
     virtual void resumeAfterDownload() OVERRIDE;
     virtual void terminateWorkerContext() OVERRIDE;
     virtual void resumeWorkerContext() OVERRIDE;
-    virtual void attachDevTools() OVERRIDE;
-    virtual void reattachDevTools(const WebString& savedState) OVERRIDE;
+    virtual void attachDevTools(const WebString& hostId) OVERRIDE;
+    virtual void reattachDevTools(const WebString& hostId, const WebString& savedState) OVERRIDE;
     virtual void detachDevTools() OVERRIDE;
     virtual void dispatchDevToolsMessage(const WebString&) OVERRIDE;
+
+    void postMessageToPageInspector(const WTF::String&);
 
 private:
     class Loader;
@@ -102,9 +102,10 @@ private:
     // Kept around only while main script loading is ongoing.
     OwnPtr<Loader> m_mainScriptLoader;
 
-    RefPtr<blink::WorkerThread> m_workerThread;
+    RefPtr<WorkerThread> m_workerThread;
     OwnPtr<LoaderProxy> m_loaderProxy;
     OwnPtr<ServiceWorkerGlobalScopeProxy> m_workerGlobalScopeProxy;
+    OwnPtr<WorkerInspectorProxy> m_workerInspectorProxy;
 
     // 'shadow page' - created to proxy loading requests from the worker.
     // Both WebView and WebFrame objects are close()'ed (where they're

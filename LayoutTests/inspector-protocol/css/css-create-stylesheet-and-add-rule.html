@@ -8,8 +8,15 @@ function test()
 {
     var frameId;
     var styleSheetHeader;
+    var documentNodeId;
 
-    InspectorTest.requestMainFrameId(step2);
+    InspectorTest.requestDocumentNodeId(onDocumentNodeId);
+
+    function onDocumentNodeId(nodeId)
+    {
+        documentNodeId = nodeId;
+        InspectorTest.requestMainFrameId(step2);
+    }
 
     function step2(mainFrameId)
     {
@@ -27,18 +34,21 @@ function test()
             return;
 
         styleSheetHeader = header;
-        InspectorTest.loadAndDumpMatchingRules("#inspected", step3);
+        InspectorTest.loadAndDumpMatchingRules(documentNodeId, "#inspected", step3);
     }
 
     function step3()
     {
         InspectorTest.log("Adding a rule to the existing stylesheet.");
-        InspectorTest.sendCommandOrDie("CSS.addRule", { styleSheetId: styleSheetHeader.styleSheetId, selector: "#inspected" }, step4);
+        InspectorTest.addRule(styleSheetHeader.styleSheetId, false, {
+            location: { startLine: 0, startColumn: 0, endLine: 0, endColumn: 0 },
+            ruleText: "#inspected {}",
+        }, step4);
     }
 
     function step4()
     {
-        InspectorTest.loadAndDumpMatchingRules("#inspected", step5);
+        InspectorTest.loadAndDumpMatchingRules(documentNodeId, "#inspected", step5);
     }
 
     function step5()
@@ -50,12 +60,15 @@ function test()
     function step6(result)
     {
         InspectorTest.log("Adding a rule to the inspector stylesheet.");
-        InspectorTest.sendCommandOrDie("CSS.addRule", { styleSheetId: result.styleSheetId, selector: "#inspected" }, step7);
+        InspectorTest.addRule(result.styleSheetId, false, {
+            location: { startLine: 0, startColumn: 0, endLine: 0, endColumn: 0 },
+            ruleText: "#inspected {}",
+        }, step7);
     }
 
     function step7()
     {
-        InspectorTest.loadAndDumpMatchingRules("#inspected", step8);
+        InspectorTest.loadAndDumpMatchingRules(documentNodeId, "#inspected", step8);
     }
 
     function step8()

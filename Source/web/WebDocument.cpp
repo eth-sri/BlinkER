@@ -36,13 +36,12 @@
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "core/accessibility/AXObjectCache.h"
-#include "core/css/CSSParserMode.h"
 #include "core/css/StyleSheetContents.h"
 #include "core/dom/CSSSelectorWatch.h"
 #include "core/dom/Document.h"
 #include "core/dom/DocumentType.h"
 #include "core/dom/Element.h"
-#include "core/dom/FullscreenElementStack.h"
+#include "core/dom/Fullscreen.h"
 #include "core/dom/StyleEngine.h"
 #include "core/html/HTMLAllCollection.h"
 #include "core/html/HTMLBodyElement.h"
@@ -65,8 +64,6 @@
 #include "web/WebLocalFrameImpl.h"
 #include "wtf/PassRefPtr.h"
 #include <v8.h>
-
-using namespace blink;
 
 namespace blink {
 
@@ -230,14 +227,13 @@ void WebDocument::watchCSSSelectors(const WebVector<WebString>& webSelectors)
 
 void WebDocument::cancelFullScreen()
 {
-    if (FullscreenElementStack* fullscreen = FullscreenElementStack::fromIfExists(*unwrap<Document>()))
-        fullscreen->fullyExitFullscreen();
+    Fullscreen::fullyExitFullscreen(*unwrap<Document>());
 }
 
 WebElement WebDocument::fullScreenElement() const
 {
     Element* fullScreenElement = 0;
-    if (FullscreenElementStack* fullscreen = FullscreenElementStack::fromIfExists(*const_cast<WebDocument*>(this)->unwrap<Document>()))
+    if (Fullscreen* fullscreen = Fullscreen::fromIfExists(*const_cast<WebDocument*>(this)->unwrap<Document>()))
         fullScreenElement = fullscreen->webkitCurrentFullScreenElement();
     return WebElement(fullScreenElement);
 }
@@ -263,6 +259,27 @@ WebElement WebDocument::createElement(const WebString& tagName)
     if (exceptionState.hadException())
         return WebElement();
     return element;
+}
+
+WebSize WebDocument::scrollOffset() const
+{
+    if (FrameView* view = constUnwrap<Document>()->view())
+        return view->scrollOffset();
+    return WebSize();
+}
+
+WebSize WebDocument::minimumScrollOffset() const
+{
+    if (FrameView* view = constUnwrap<Document>()->view())
+        return toIntSize(view->minimumScrollPosition());
+    return WebSize();
+}
+
+WebSize WebDocument::maximumScrollOffset() const
+{
+    if (FrameView* view = constUnwrap<Document>()->view())
+        return toIntSize(view->maximumScrollPosition());
+    return WebSize();
 }
 
 void WebDocument::setIsTransitionDocument()
@@ -300,7 +317,7 @@ WebVector<WebDraggableRegion> WebDocument::draggableRegions() const
         for (size_t i = 0; i < regions.size(); i++) {
             const AnnotatedRegionValue& value = regions[i];
             draggableRegions[i].draggable = value.draggable;
-            draggableRegions[i].bounds = blink::IntRect(value.bounds);
+            draggableRegions[i].bounds = IntRect(value.bounds);
         }
     }
     return draggableRegions;

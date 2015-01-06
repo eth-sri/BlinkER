@@ -80,8 +80,6 @@
 #include "web/WebViewImpl.h"
 #include "wtf/text/WTFString.h"
 
-using namespace blink;
-
 namespace blink {
 
 // Figure out the URL of a page or subframe. Returns |page_type| as the type,
@@ -179,7 +177,7 @@ static String selectMisspellingAsync(LocalFrame* selectedFrame, String& descript
     return markerRange->text();
 }
 
-void ContextMenuClientImpl::showContextMenu(const blink::ContextMenu* defaultMenu)
+void ContextMenuClientImpl::showContextMenu(const ContextMenu* defaultMenu)
 {
     // Displaying the context menu in this function is a big hack as we don't
     // have context, i.e. whether this is being invoked via a script or in
@@ -207,17 +205,17 @@ void ContextMenuClientImpl::showContextMenu(const blink::ContextMenu* defaultMen
 
     // Compute edit flags.
     data.editFlags = WebContextMenuData::CanDoNone;
-    if (toLocalFrame(m_webView->focusedWebCoreFrame())->editor().canUndo())
+    if (toLocalFrame(m_webView->focusedCoreFrame())->editor().canUndo())
         data.editFlags |= WebContextMenuData::CanUndo;
-    if (toLocalFrame(m_webView->focusedWebCoreFrame())->editor().canRedo())
+    if (toLocalFrame(m_webView->focusedCoreFrame())->editor().canRedo())
         data.editFlags |= WebContextMenuData::CanRedo;
-    if (toLocalFrame(m_webView->focusedWebCoreFrame())->editor().canCut())
+    if (toLocalFrame(m_webView->focusedCoreFrame())->editor().canCut())
         data.editFlags |= WebContextMenuData::CanCut;
-    if (toLocalFrame(m_webView->focusedWebCoreFrame())->editor().canCopy())
+    if (toLocalFrame(m_webView->focusedCoreFrame())->editor().canCopy())
         data.editFlags |= WebContextMenuData::CanCopy;
-    if (toLocalFrame(m_webView->focusedWebCoreFrame())->editor().canPaste())
+    if (toLocalFrame(m_webView->focusedCoreFrame())->editor().canPaste())
         data.editFlags |= WebContextMenuData::CanPaste;
-    if (toLocalFrame(m_webView->focusedWebCoreFrame())->editor().canDelete())
+    if (toLocalFrame(m_webView->focusedCoreFrame())->editor().canDelete())
         data.editFlags |= WebContextMenuData::CanDelete;
     if (isHTMLTextFormControlElement(r.innerNonSharedNode())) {
         if (!toHTMLTextFormControlElement(r.innerNonSharedNode())->value().isEmpty())
@@ -339,9 +337,9 @@ void ContextMenuClientImpl::showContextMenu(const blink::ContextMenu* defaultMen
             }
         } else {
             data.isSpellCheckingEnabled =
-                toLocalFrame(m_webView->focusedWebCoreFrame())->spellChecker().isContinuousSpellCheckingEnabled();
+                toLocalFrame(m_webView->focusedCoreFrame())->spellChecker().isContinuousSpellCheckingEnabled();
             // Spellchecking might be enabled for the field, but could be disabled on the node.
-            if (toLocalFrame(m_webView->focusedWebCoreFrame())->spellChecker().isSpellCheckingEnabledInFocusedNode()) {
+            if (toLocalFrame(m_webView->focusedCoreFrame())->spellChecker().isSpellCheckingEnabledInFocusedNode()) {
                 data.misspelledWord = selectMisspelledWord(selectedFrame);
                 if (m_webView->spellCheckClient()) {
                     int misspelledOffset, misspelledLength;
@@ -440,7 +438,7 @@ static void populateSubMenuItems(const Vector<ContextMenuItem>& inputMenu, WebVe
     subMenuItems.swap(outputItems);
 }
 
-void ContextMenuClientImpl::populateCustomMenuItems(const blink::ContextMenu* defaultMenu, WebContextMenuData* data)
+void ContextMenuClientImpl::populateCustomMenuItems(const ContextMenu* defaultMenu, WebContextMenuData* data)
 {
     populateSubMenuItems(defaultMenu->items(), data->customItems);
 }

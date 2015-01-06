@@ -26,6 +26,8 @@
 #ifndef DocumentFullscreen_h
 #define DocumentFullscreen_h
 
+#include "core/events/EventTarget.h"
+
 namespace blink {
 
 class Document;
@@ -33,13 +35,19 @@ class Element;
 
 class DocumentFullscreen {
 public:
-    static bool webkitIsFullScreen(Document&);
+    static bool fullscreenEnabled(Document&);
+    static Element* fullscreenElement(Document&);
+    static void exitFullscreen(Document&);
+
+    DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(fullscreenchange);
+    DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(fullscreenerror);
+
+    // Mozilla version
     static bool webkitFullScreenKeyboardInputAllowed(Document&);
     static Element* webkitCurrentFullScreenElement(Document&);
 
-    static bool webkitFullscreenEnabled(Document&);
-    static Element* webkitFullscreenElement(Document&);
-    static void webkitExitFullscreen(Document&);
+    DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(webkitfullscreenchange);
+    DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(webkitfullscreenerror);
 };
 
 } // namespace blink

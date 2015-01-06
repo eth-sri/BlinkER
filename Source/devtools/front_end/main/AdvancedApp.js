@@ -44,7 +44,7 @@ WebInspector.AdvancedApp.prototype = {
         this._toggleEmulationButton.element.classList.toggle("warning", !!message);
     },
 
-    createRootView: function()
+    presentUI: function()
     {
         var rootView = new WebInspector.RootView();
 
@@ -63,18 +63,12 @@ WebInspector.AdvancedApp.prototype = {
         WebInspector.dockController.addEventListener(WebInspector.DockController.Events.AfterDockSideChanged, this._onAfterDockSideChange, this);
         this._onDockSideChange();
 
+        this._overridesWarningUpdated();
+
+        WebInspector.inspectorView.showInitialPanel();
         console.timeStamp("AdvancedApp.attachToBody");
         rootView.attachToBody();
         this._inspectedPagePlaceholder.update();
-    },
-
-    /**
-     * @param {!WebInspector.Target} mainTarget
-     */
-    presentUI: function(mainTarget)
-    {
-        WebInspector.App.prototype.presentUI.call(this, mainTarget);
-        this._overridesWarningUpdated();
     },
 
     /**
@@ -95,11 +89,13 @@ WebInspector.AdvancedApp.prototype = {
     },
 
     /**
-     * @param {!WebInspector.Toolbox} toolbox
+     * @param {!WebInspector.ResponsiveDesignView} responsiveDesignView
+     * @param {!WebInspector.InspectedPagePlaceholder} placeholder
      */
-    _toolboxLoaded: function(toolbox)
+    toolboxLoaded: function(responsiveDesignView, placeholder)
     {
-        this._toolbox = toolbox;
+        this._toolboxResponsiveDesignView = responsiveDesignView;
+        placeholder.addEventListener(WebInspector.InspectedPagePlaceholder.Events.Update, this._onSetInspectedPageBounds.bind(this, true));
         this._updatePageResizer();
     },
 
@@ -107,8 +103,8 @@ WebInspector.AdvancedApp.prototype = {
     {
         if (this._isDocked())
             this._responsiveDesignView.updatePageResizer();
-        else if (this._toolbox)
-            this._toolbox._responsiveDesignView.updatePageResizer();
+        else if (this._toolboxResponsiveDesignView)
+            this._toolboxResponsiveDesignView.updatePageResizer();
     },
 
     /**
@@ -116,7 +112,7 @@ WebInspector.AdvancedApp.prototype = {
      */
     _onBeforeDockSideChange: function(event)
     {
-        if (/** @type {string} */ (event.data.to) === WebInspector.DockController.State.Undocked && this._toolbox) {
+        if (/** @type {string} */ (event.data.to) === WebInspector.DockController.State.Undocked && this._toolboxResponsiveDesignView) {
             // Hide inspectorView and force layout to mimic the undocked state.
             this._rootSplitView.hideSidebar();
             this._inspectedPagePlaceholder.update();
@@ -135,7 +131,7 @@ WebInspector.AdvancedApp.prototype = {
         var toDockSide = event ? /** @type {string} */ (event.data.to) : WebInspector.dockController.dockSide();
         if (toDockSide === WebInspector.DockController.State.Undocked) {
             this._updateForUndocked();
-        } else if (this._toolbox && event && /** @type {string} */ (event.data.from) === WebInspector.DockController.State.Undocked) {
+        } else if (this._toolboxResponsiveDesignView && event && /** @type {string} */ (event.data.from) === WebInspector.DockController.State.Undocked) {
             // Don't update yet for smooth transition.
             this._rootSplitView.hideSidebar();
         } else {
@@ -242,35 +238,6 @@ WebInspector.AdvancedApp.DeviceCounter.prototype = {
     {
         return this._counter;
     }
-}
-
-/**
- * @constructor
- */
-WebInspector.Toolbox = function()
-{
-    if (!window.opener)
-        return;
-
-    WebInspector.zoomManager = new WebInspector.ZoomManager(window.opener.InspectorFrontendHost);
-    WebInspector.overridesSupport = window.opener.WebInspector.overridesSupport;
-    WebInspector.settings = window.opener.WebInspector.settings;
-    WebInspector.experimentsSettings = window.opener.WebInspector.experimentsSettings;
-    WebInspector.targetManager = window.opener.WebInspector.targetManager;
-    WebInspector.workspace = window.opener.WebInspector.workspace;
-    WebInspector.cssWorkspaceBinding = window.opener.WebInspector.cssWorkspaceBinding;
-    WebInspector.Revealer = window.opener.WebInspector.Revealer;
-    WebInspector.ContextMenu = window.opener.WebInspector.ContextMenu;
-    WebInspector.installPortStyles();
-
-    var advancedApp = /** @type {!WebInspector.AdvancedApp} */ (window.opener.WebInspector.app);
-    var rootView = new WebInspector.RootView();
-    this._inspectedPagePlaceholder = new WebInspector.InspectedPagePlaceholder();
-    this._inspectedPagePlaceholder.addEventListener(WebInspector.InspectedPagePlaceholder.Events.Update, advancedApp._onSetInspectedPageBounds.bind(advancedApp, true));
-    this._responsiveDesignView = new WebInspector.ResponsiveDesignView(this._inspectedPagePlaceholder);
-    this._responsiveDesignView.show(rootView.element);
-    rootView.attachToBody();
-    advancedApp._toolboxLoaded(this);
 }
 
 /**

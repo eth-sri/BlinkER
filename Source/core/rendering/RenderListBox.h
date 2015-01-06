@@ -44,7 +44,7 @@ public:
 
     int size() const;
 
-    void repaintScrollbarIfNeeded();
+    void paintInvalidationOfScrollbarIfNeeded();
 
 private:
     HTMLSelectElement* selectElement() const;
@@ -67,6 +67,6 @@ private:
 
 DEFINE_RENDER_OBJECT_TYPE_CASTS(RenderListBox, isListBox());
 
-} // namepace WebCore
+} // namepace blink
 
 #endif // RenderListBox_h

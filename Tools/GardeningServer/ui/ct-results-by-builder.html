@@ -15,10 +15,21 @@ found in the LICENSE file.
       :host {
         display: block;
       }
+      paper-tabs::shadow #selectionBar {
+        background-color: #212121;
+        height: 4px;
+      }
+      paper-tab {
+        border: 1px solid #212121;
+        border-radius: 5px 5px 0 0;
+      }
+      paper-tab::shadow #ink {
+        color: #212121;
+      }
     </style>
     <paper-tabs selected="{{ selected }}">
       <template repeat="{{ builder in builders }}">
-        <paper-tab>{{ builder | displayName }}</paper-tab>
+        <paper-tab>{{ builder }}</paper-tab>
       </template>
     </paper-tabs>
     <ct-results-detail failure="{{ failure }}" builder="{{ builders[selected] }}"></ct-results-detail>
@@ -32,10 +43,6 @@ found in the LICENSE file.
       failureChanged: function() {
         this.builders = Object.getOwnPropertyNames(this.failure.resultNodesByBuilder).sort();
         this.selected = 0;
-      },
-
-      displayName: function(builder) {
-        return ui.displayNameForBuilder(builder);
       },
     });
   </script>

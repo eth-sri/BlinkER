@@ -14,7 +14,7 @@ function consoleWrite(text)
 
 function getInitDataType()
 {
-    return (MediaKeys.isTypeSupported('org.w3.clearkey', 'video/webm')) ? 'video/webm' : 'video/mp4';
+    return (MediaKeys.isTypeSupported('org.w3.clearkey', 'video/webm')) ? 'webm' : 'cenc';
 }
 
 function getInitData(initDataType)
@@ -122,4 +122,25 @@ function forceTestFailureFromPromise(test, error, message)
 
     test.force_timeout();
     test.done();
+}
+
+function extractSingleKeyIdFromMessage(message)
+{
+    try {
+        var json = JSON.parse(String.fromCharCode.apply(null, new Uint8Array(message)));
+        // Decode the first element of 'kids'.
+        // FIXME: Switch to base64url. See
+        // https://dvcs.w3.org/hg/html-media/raw-file/default/encrypted-media/encrypted-media.html#using-base64url
+        assert_equals(1, json.kids.length);
+        var decoded_key = atob(json.kids[0]);
+        // Convert to an Uint8Array and return it.
+        return stringToUint8Array(decoded_key);
+    }
+    catch (o) {
+        // Not valid JSON, so return message untouched as Uint8Array.
+        // This is for backwards compatibility.
+        // FIXME: Remove this once the code is switched to return JSON all
+        // the time.
+        return new Uint8Array(message);
+    }
 }

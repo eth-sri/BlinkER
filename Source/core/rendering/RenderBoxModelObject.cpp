@@ -38,6 +38,7 @@
 #include "core/rendering/RenderLayer.h"
 #include "core/rendering/RenderObjectInlines.h"
 #include "core/rendering/RenderRegion.h"
+#include "core/rendering/RenderTextFragment.h"
 #include "core/rendering/RenderView.h"
 #include "core/rendering/compositing/CompositedLayerMapping.h"
 #include "core/rendering/compositing/RenderLayerCompositor.h"
@@ -60,13 +61,13 @@ using namespace HTMLNames;
 // an anonymous block (that houses other blocks) or it will be an inline flow.
 // <b><i><p>Hello</p></i></b>. In this example the <i> will have a block as
 // its continuation but the <b> will just have an inline as its continuation.
-typedef HashMap<const RenderBoxModelObject*, RenderBoxModelObject*> ContinuationMap;
-static ContinuationMap* continuationMap = 0;
+typedef WillBeHeapHashMap<RawPtrWillBeMember<const RenderBoxModelObject>, RawPtrWillBeMember<RenderBoxModelObject> > ContinuationMap;
+static OwnPtrWillBePersistent<ContinuationMap>* continuationMap = 0;
 
 // This HashMap is similar to the continuation map, but connects first-letter
 // renderers to their remaining text fragments.
-typedef HashMap<const RenderBoxModelObject*, RenderTextFragment*> FirstLetterRemainingTextMap;
-static FirstLetterRemainingTextMap* firstLetterRemainingTextMap = 0;
+typedef WillBeHeapHashMap<RawPtrWillBeMember<const RenderBoxModelObject>, RawPtrWillBeMember<RenderTextFragment> > FirstLetterRemainingTextMap;
+static OwnPtrWillBePersistent<FirstLetterRemainingTextMap>* firstLetterRemainingTextMap = 0;
 
 void RenderBoxModelObject::setSelectionState(SelectionState state)
 {
@@ -112,11 +113,12 @@ RenderBoxModelObject::RenderBoxModelObject(ContainerNode* node)
 
 RenderBoxModelObject::~RenderBoxModelObject()
 {
-    ImageQualityController::remove(this);
 }
 
 void RenderBoxModelObject::willBeDestroyed()
 {
+    ImageQualityController::remove(this);
+
     // A continuation of this RenderObject should be destroyed at subclasses.
     ASSERT(!continuation());
 
@@ -410,7 +412,7 @@ void RenderBoxModelObject::paintFillLayerExtended(const PaintInfo& paintInfo, co
     BackgroundBleedAvoidance bleedAvoidance, InlineFlowBox* box, const LayoutSize& boxSize, CompositeOperator op, RenderObject* backgroundObject)
 {
     GraphicsContext* context = paintInfo.context;
-    if (context->paintingDisabled() || rect.isEmpty())
+    if (rect.isEmpty())
         return;
 
     bool includeLeftEdge = box ? box->includeLogicalLeftEdge() : true;
@@ -560,8 +562,7 @@ void RenderBoxModelObject::paintFillLayerExtended(const PaintInfo& paintInfo, co
     if (isRoot) {
         isOpaqueRoot = true;
         if (!bgLayer.next() && bgColor.hasAlpha() && view()->frameView()) {
-            Element* ownerElement = document().ownerElement();
-            if (ownerElement) {
+            if (HTMLFrameOwnerElement* ownerElement = document().ownerElement()) {
                 if (!isHTMLFrameElement(*ownerElement)) {
                     // Locate the <body> element using the DOM.  This is easier than trying
                     // to crawl around a render tree with potential :before/:after content and
@@ -1627,9 +1628,6 @@ void RenderBoxModelObject::paintBorder(const PaintInfo& info, const LayoutRect& 
     if (paintNinePieceImage(graphicsContext, rect, style, style->borderImage()))
         return;
 
-    if (graphicsContext->paintingDisabled())
-        return;
-
     BorderEdge edges[4];
     getBorderEdgeInfo(edges, style, includeLogicalLeftEdge, includeLogicalRightEdge);
     RoundedRect outerBorder = style->getRoundedBorderFor(rect, includeLogicalLeftEdge, includeLogicalRightEdge);
@@ -2377,7 +2375,7 @@ void RenderBoxModelObject::paintBoxShadow(const PaintInfo& info, const LayoutRec
 {
     // FIXME: Deal with border-image.  Would be great to use border-image as a mask.
     GraphicsContext* context = info.context;
-    if (context->paintingDisabled() || !s->boxShadow())
+    if (!s->boxShadow())
         return;
 
     RoundedRect border = (shadowStyle == Inset) ? s->getRoundedInnerBorderFor(paintRect, includeLogicalLeftEdge, includeLogicalRightEdge)
@@ -2509,18 +2507,18 @@ RenderBoxModelObject* RenderBoxModelObject::continuation() const
 {
     if (!continuationMap)
         return 0;
-    return continuationMap->get(this);
+    return (*continuationMap)->get(this);
 }
 
 void RenderBoxModelObject::setContinuation(RenderBoxModelObject* continuation)
 {
     if (continuation) {
         if (!continuationMap)
-            continuationMap = new ContinuationMap;
-        continuationMap->set(this, continuation);
+            continuationMap = new OwnPtrWillBePersistent<ContinuationMap>(adoptPtrWillBeNoop(new ContinuationMap));
+        (*continuationMap)->set(this, continuation);
     } else {
         if (continuationMap)
-            continuationMap->remove(this);
+            (*continuationMap)->remove(this);
     }
 }
 
@@ -2540,17 +2538,18 @@ RenderTextFragment* RenderBoxModelObject::firstLetterRemainingText() const
 {
     if (!firstLetterRemainingTextMap)
         return 0;
-    return firstLetterRemainingTextMap->get(this);
+    return (*firstLetterRemainingTextMap)->get(this);
 }
 
 void RenderBoxModelObject::setFirstLetterRemainingText(RenderTextFragment* remainingText)
 {
     if (remainingText) {
         if (!firstLetterRemainingTextMap)
-            firstLetterRemainingTextMap = new FirstLetterRemainingTextMap;
-        firstLetterRemainingTextMap->set(this, remainingText);
-    } else if (firstLetterRemainingTextMap)
-        firstLetterRemainingTextMap->remove(this);
+            firstLetterRemainingTextMap = new OwnPtrWillBePersistent<FirstLetterRemainingTextMap>(adoptPtrWillBeNoop(new FirstLetterRemainingTextMap));
+        (*firstLetterRemainingTextMap)->set(this, remainingText);
+    } else if (firstLetterRemainingTextMap) {
+        (*firstLetterRemainingTextMap)->remove(this);
+    }
 }
 
 LayoutRect RenderBoxModelObject::localCaretRectForEmptyElement(LayoutUnit width, LayoutUnit textIndentOffset)
@@ -2562,7 +2561,6 @@ LayoutRect RenderBoxModelObject::localCaretRectForEmptyElement(LayoutUnit width,
     // constructed and this kludge is not called any more. So only the caret size
     // of an empty :first-line'd block is wrong. I think we can live with that.
     RenderStyle* currentStyle = firstLineStyle();
-    LayoutUnit height = style()->fontMetrics().height();
 
     enum CaretAlignment { alignLeft, alignRight, alignCenter };
 
@@ -2614,8 +2612,9 @@ LayoutRect RenderBoxModelObject::localCaretRectForEmptyElement(LayoutUnit width,
     }
     x = std::min(x, std::max<LayoutUnit>(maxX - caretWidth, 0));
 
-    LayoutUnit y = paddingTop() + borderTop();
-
+    LayoutUnit height = style()->fontMetrics().height();
+    LayoutUnit verticalSpace = lineHeight(true, currentStyle->isHorizontalWritingMode() ? HorizontalLine : VerticalLine,  PositionOfInteriorLineBoxes) - height;
+    LayoutUnit y = paddingTop() + borderTop() + (verticalSpace / 2);
     return currentStyle->isHorizontalWritingMode() ? LayoutRect(x, y, caretWidth, height) : LayoutRect(y, x, height, caretWidth);
 }
 
@@ -2672,7 +2671,7 @@ const RenderObject* RenderBoxModelObject::pushMappingToContainer(const RenderLay
 
     LayoutSize adjustmentForSkippedAncestor;
     if (ancestorSkipped) {
-        // There can't be a transform between repaintContainer and o, because transforms create containers, so it should be safe
+        // There can't be a transform between paintInvalidationContainer and o, because transforms create containers, so it should be safe
         // to just subtract the delta between the ancestor and o.
         adjustmentForSkippedAncestor = -ancestorToStopAt->offsetFromAncestorContainer(container);
     }

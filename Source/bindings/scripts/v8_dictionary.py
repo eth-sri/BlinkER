@@ -6,7 +6,6 @@
 implementation classes that are used by blink's core/modules.
 """
 
-import copy
 import operator
 from v8_globals import includes
 import v8_types
@@ -52,12 +51,9 @@ def member_context(member):
     idl_type.add_includes_for_type()
 
     def idl_type_for_default_value():
-        copied_type = copy.copy(idl_type)
-        # IdlType for default values shouldn't be nullable. Otherwise,
-        # it will generate meaningless expression like
-        # 'String("default value").isNull() ? ...'.
-        copied_type.is_nullable = False
-        return copied_type
+        if idl_type.is_nullable:
+            return idl_type.inner_type
+        return idl_type
 
     def default_values():
         if not member.default_value:
@@ -83,7 +79,6 @@ def member_context(member):
         'name': member.name,
         'setter_name': setter_name_for_dictionary_member(member),
         'v8_default_value': v8_default_value,
-        'v8_type': v8_types.v8_type(idl_type.base_type),
     }
 
 
@@ -122,8 +117,13 @@ def member_impl_context(member, interfaces_info, header_includes):
             return v8_types.cpp_template_type('Nullable', member_cpp_type)
         return member_cpp_type
 
+    cpp_default_value = None
+    if member.default_value and not member.default_value.is_null:
+        cpp_default_value = str(member.default_value)
+
     header_includes.update(idl_type.impl_includes_for_type(interfaces_info))
     return {
+        'cpp_default_value': cpp_default_value,
         'getter_expression': getter_expression(),
         'has_method_expression': has_method_expression(),
         'has_method_name': has_method_name_for_dictionary_member(member),

@@ -235,7 +235,7 @@ static inline unsigned countGraphemesInCluster(const UChar* normalizedBuffer, un
     return numGraphemes < 0 ? 0 : numGraphemes;
 }
 
-inline HarfBuzzShaper::HarfBuzzRun::HarfBuzzRun(const SimpleFontData* fontData, unsigned startIndex, unsigned numCharacters, TextDirection direction, hb_script_t script)
+inline HarfBuzzShaper::HarfBuzzRun::HarfBuzzRun(const SimpleFontData* fontData, unsigned startIndex, unsigned numCharacters, hb_direction_t direction, hb_script_t script)
     : m_fontData(fontData)
     , m_startIndex(startIndex)
     , m_numCharacters(numCharacters)
@@ -272,16 +272,6 @@ inline void HarfBuzzShaper::HarfBuzzRun::applyShapeResult(hb_buffer_t* harfBuzzB
     m_advances.resize(m_numGlyphs);
     m_glyphToCharacterIndexes.resize(m_numGlyphs);
     m_offsets.resize(m_numGlyphs);
-}
-
-inline void HarfBuzzShaper::HarfBuzzRun::copyShapeResultAndGlyphPositions(const HarfBuzzRun& run)
-{
-    m_numGlyphs = run.m_numGlyphs;
-    m_glyphs = run.m_glyphs;
-    m_advances = run.m_advances;
-    m_glyphToCharacterIndexes = run.m_glyphToCharacterIndexes;
-    m_offsets = run.m_offsets;
-    m_width = run.m_width;
 }
 
 inline void HarfBuzzShaper::HarfBuzzRun::setGlyphAndPositions(unsigned index, uint16_t glyphId, float advance, float offsetX, float offsetY)
@@ -396,10 +386,16 @@ HarfBuzzShaper::HarfBuzzShaper(const Font* font, const TextRun& run, ForTextEmph
     setFontFeatures();
 }
 
-bool HarfBuzzShaper::isWordEnd(unsigned index)
+// In complex text word-spacing affects each line-break, space (U+0020) and non-breaking space (U+00A0).
+static inline bool isCodepointSpace(UChar c)
+{
+    return c == ' ' || c == noBreakSpace || c == '\n';
+}
+
+static inline bool isWordEnd(const UChar* normalizedBuffer, unsigned index)
 {
     // This could refer a high-surrogate, but should work.
-    return index && isCodepointSpace(m_normalizedBuffer[index]);
+    return index && isCodepointSpace(normalizedBuffer[index]);
 }
 
 int HarfBuzzShaper::determineWordBreakSpacing()
@@ -433,7 +429,7 @@ void HarfBuzzShaper::setPadding(int padding)
     unsigned numWordEnds = 0;
 
     for (unsigned i = 0; i < m_normalizedBufferLength; i++) {
-        if (isWordEnd(i))
+        if (isWordEnd(m_normalizedBuffer.get(), i))
             numWordEnds++;
     }
 
@@ -519,6 +515,23 @@ void HarfBuzzShaper::setFontFeatures()
         // calt is on by default
         break;
     case FontDescription::NormalLigaturesState:
+        break;
+    }
+
+    static hb_feature_t hwid = { HB_TAG('h', 'w', 'i', 'd'), 1, 0, static_cast<unsigned>(-1) };
+    static hb_feature_t twid = { HB_TAG('t', 'w', 'i', 'd'), 1, 0, static_cast<unsigned>(-1) };
+    static hb_feature_t qwid = { HB_TAG('d', 'w', 'i', 'd'), 1, 0, static_cast<unsigned>(-1) };
+    switch (description.widthVariant()) {
+    case HalfWidth:
+        m_features.append(hwid);
+        break;
+    case ThirdWidth:
+        m_features.append(twid);
+        break;
+    case QuarterWidth:
+        m_features.append(qwid);
+        break;
+    case RegularWidth:
         break;
     }
 
@@ -770,6 +783,11 @@ static inline hb_script_t ICUScriptToHBScript(UScriptCode script)
     return hb_script_from_string(uscript_getShortName(script), -1);
 }
 
+static inline hb_direction_t TextDirectionToHBDirection(TextDirection dir)
+{
+    return dir == RTL ? HB_DIRECTION_RTL : HB_DIRECTION_LTR;
+}
+
 
 void HarfBuzzShaper::addHarfBuzzRun(unsigned startCharacter,
     unsigned endCharacter, const SimpleFontData* fontData,
@@ -779,7 +797,8 @@ void HarfBuzzShaper::addHarfBuzzRun(unsigned startCharacter,
     ASSERT(script != USCRIPT_INVALID_CODE);
     return m_harfBuzzRuns.append(HarfBuzzRun::create(fontData,
         startCharacter, endCharacter - startCharacter,
-        m_run.direction(), ICUScriptToHBScript(script)));
+        TextDirectionToHBDirection(m_run.direction()),
+        ICUScriptToHBScript(script)));
 }
 
 static const uint16_t* toUint16(const UChar* src)
@@ -814,17 +833,14 @@ bool HarfBuzzShaper::shapeHarfBuzzRuns()
 
         hb_buffer_set_language(harfBuzzBuffer.get(), hb_language_from_string(locale.data(), locale.length()));
         hb_buffer_set_script(harfBuzzBuffer.get(), currentRun->script());
-        hb_buffer_set_direction(harfBuzzBuffer.get(), currentRun->rtl() ? HB_DIRECTION_RTL : HB_DIRECTION_LTR);
-
-        hb_segment_properties_t props;
-        hb_buffer_get_segment_properties(harfBuzzBuffer.get(), &props);
+        hb_buffer_set_direction(harfBuzzBuffer.get(), currentRun->direction());
 
         const UChar* src = m_normalizedBuffer.get() + currentRun->startIndex();
         std::wstring key(src, src + currentRun->numCharacters());
 
         CachedShapingResults* cachedResults = runCache.find(key);
         if (cachedResults) {
-            if (cachedResults->dir == props.direction && cachedResults->font == *m_font && cachedResults->locale == localeString) {
+            if (cachedResults->dir == currentRun->direction() && cachedResults->font == *m_font && cachedResults->locale == localeString) {
                 currentRun->applyShapeResult(cachedResults->buffer);
                 setGlyphPositionsForHarfBuzzRun(currentRun, cachedResults->buffer);
 
@@ -860,7 +876,7 @@ bool HarfBuzzShaper::shapeHarfBuzzRuns()
         currentRun->applyShapeResult(harfBuzzBuffer.get());
         setGlyphPositionsForHarfBuzzRun(currentRun, harfBuzzBuffer.get());
 
-        runCache.insert(key, new CachedShapingResults(harfBuzzBuffer.get(), m_font, props.direction, localeString));
+        runCache.insert(key, new CachedShapingResults(harfBuzzBuffer.get(), m_font, currentRun->direction(), localeString));
 
         harfBuzzBuffer.set(hb_buffer_create());
     }
@@ -902,7 +918,7 @@ void HarfBuzzShaper::setGlyphPositionsForHarfBuzzRun(HarfBuzzRun* currentRun, hb
         if (isClusterEnd && !Character::treatAsZeroWidthSpace(m_normalizedBuffer[currentCharacterIndex]))
             spacing += m_letterSpacing;
 
-        if (isClusterEnd && isWordEnd(currentCharacterIndex))
+        if (isClusterEnd && isWordEnd(m_normalizedBuffer.get(), currentCharacterIndex))
             spacing += determineWordBreakSpacing();
 
         if (currentFontData->isZeroWidthSpaceGlyph(glyph)) {

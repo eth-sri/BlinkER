@@ -106,8 +106,6 @@ public:
     DEFINE_ATTRIBUTE_EVENT_LISTENER(touchend);
     DEFINE_ATTRIBUTE_EVENT_LISTENER(touchmove);
     DEFINE_ATTRIBUTE_EVENT_LISTENER(touchstart);
-    DEFINE_ATTRIBUTE_EVENT_LISTENER(webkitfullscreenchange);
-    DEFINE_ATTRIBUTE_EVENT_LISTENER(webkitfullscreenerror);
     DEFINE_ATTRIBUTE_EVENT_LISTENER(wheel);
 
     bool hasAttribute(const QualifiedName&) const;
@@ -298,10 +296,7 @@ public:
     // Remove attributes that might introduce scripting from the vector leaving the element unchanged.
     void stripScriptingAttributes(Vector<Attribute>&) const;
 
-    const ElementData* elementData() const { return m_elementData.get(); }
-    UniqueElementData& ensureUniqueElementData();
-
-    void synchronizeAllAttributes() const;
+    bool sharesSameElementData(const Element& other) const { return elementData() == other.elementData(); }
 
     // Clones attributes only.
     void cloneAttributesFromElement(const Element&);
@@ -380,6 +375,7 @@ public:
     bool isFocusable() const;
     virtual bool isKeyboardFocusable() const;
     virtual bool isMouseFocusable() const;
+    virtual void willCallDefaultEventHandler(const Event&) OVERRIDE FINAL;
     virtual void dispatchFocusEvent(Element* oldFocusedElement, FocusType);
     virtual void dispatchBlurEvent(Element* newFocusedElement);
     void dispatchFocusInEvent(const AtomicString& eventType, Element* oldFocusedElement);
@@ -463,13 +459,6 @@ public:
     void setCustomElementDefinition(PassRefPtr<CustomElementDefinition>);
     CustomElementDefinition* customElementDefinition() const;
 
-    // Mozilla version
-    static const unsigned short ALLOW_KEYBOARD_INPUT = 1;
-    void webkitRequestFullScreen(unsigned short flags);
-
-    // W3C version
-    void webkitRequestFullscreen();
-
     bool containsFullScreenElement() const { return hasElementFlag(ContainsFullScreenElement); }
     void setContainsFullScreenElement(bool);
     void setContainsFullScreenElementOnAncestorsCrossingFrameBoundaries(bool);
@@ -513,6 +502,9 @@ public:
 protected:
     Element(const QualifiedName& tagName, Document*, ConstructionType);
 
+    const ElementData* elementData() const { return m_elementData.get(); }
+    UniqueElementData& ensureUniqueElementData();
+
     void addPropertyToPresentationAttributeStyle(MutableStylePropertySet*, CSSPropertyID, CSSValueID identifier);
     void addPropertyToPresentationAttributeStyle(MutableStylePropertySet*, CSSPropertyID, double value, CSSPrimitiveValue::UnitType);
     void addPropertyToPresentationAttributeStyle(MutableStylePropertySet*, CSSPropertyID, const String& value);
@@ -538,6 +530,10 @@ protected:
     // moved to RenderObject because some focusable nodes don't have renderers,
     // e.g., HTMLOptionElement.
     virtual bool rendererIsFocusable() const;
+
+    // These methods are overridden by subclasses whose default focus appearance should not remain hidden on mouse focus.
+    virtual bool wasFocusedByMouse() const { return false; }
+    virtual void setWasFocusedByMouse(bool) { }
 
     // classAttributeChanged() exists to share code between
     // parseAttribute (called via setAttribute()) and
@@ -590,6 +586,7 @@ private:
     void didModifyAttribute(const QualifiedName&, const AtomicString&);
     void didRemoveAttribute(const QualifiedName&);
 
+    void synchronizeAllAttributes() const;
     void synchronizeAttribute(const QualifiedName&) const;
 
     void updateId(const AtomicString& oldId, const AtomicString& newId);

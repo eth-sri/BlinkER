@@ -50,6 +50,7 @@
 #include "core/html/HTMLObjectElement.h"
 #include "core/html/RadioNodeList.h"
 #include "core/html/forms/FormController.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/FrameLoaderClient.h"
 #include "core/loader/MixedContentChecker.h"
@@ -72,6 +73,8 @@ HTMLFormElement::HTMLFormElement(Document& document)
     , m_hasElementsAssociatedByParser(false)
     , m_didFinishParsingChildren(false)
     , m_wasUserSubmitted(false)
+    , m_isSubmittingOrInUserJSSubmitEvent(false)
+    , m_shouldSubmit(false)
     , m_isInResetFunction(false)
     , m_wasDemoted(false)
     , m_pendingAutocompleteEventsQueue(GenericEventQueue::create(this))
@@ -218,7 +221,7 @@ unsigned HTMLFormElement::length() const
     return len;
 }
 
-Element* HTMLFormElement::item(unsigned index)
+HTMLElement* HTMLFormElement::item(unsigned index)
 {
     return elements()->item(index);
 }
@@ -309,7 +312,7 @@ bool HTMLFormElement::validateInteractively(Event* event)
                 continue;
             String message("An invalid form control with name='%name' is not focusable.");
             message.replace("%name", unhandledAssociatedElement->name());
-            document().addConsoleMessage(RenderingMessageSource, ErrorMessageLevel, message);
+            document().addConsoleMessage(ConsoleMessage::create(RenderingMessageSource, ErrorMessageLevel, message));
         }
     }
     return false;
@@ -319,16 +322,24 @@ void HTMLFormElement::prepareForSubmission(Event* event)
 {
     RefPtrWillBeRawPtr<HTMLFormElement> protector(this);
     LocalFrame* frame = document().frame();
-    if (!frame)
+    if (!frame || m_isSubmittingOrInUserJSSubmitEvent)
         return;
 
     // Interactive validation must be done before dispatching the submit event.
     if (!validateInteractively(event))
         return;
 
+    m_isSubmittingOrInUserJSSubmitEvent = true;
+    m_shouldSubmit = false;
+
     frame->loader().client()->dispatchWillSendSubmitEvent(this);
 
     if (dispatchEvent(Event::createCancelableBubble(EventTypeNames::submit)))
+        m_shouldSubmit = true;
+
+    m_isSubmittingOrInUserJSSubmitEvent = false;
+
+    if (m_shouldSubmit)
         submit(event, true, true, NotSubmittedByJavaScript);
 }
 
@@ -359,6 +370,12 @@ void HTMLFormElement::submit(Event* event, bool activateSubmitButton, bool proce
     if (!view || !frame || !frame->page())
         return;
 
+    if (m_isSubmittingOrInUserJSSubmitEvent) {
+        m_shouldSubmit = true;
+        return;
+    }
+
+    m_isSubmittingOrInUserJSSubmitEvent = true;
     m_wasUserSubmitted = processingUserGesture;
 
     RefPtrWillBeRawPtr<HTMLFormControlElement> firstSuccessfulSubmitButton = nullptr;
@@ -390,6 +407,9 @@ void HTMLFormElement::submit(Event* event, bool activateSubmitButton, bool proce
 
     if (needButtonActivation && firstSuccessfulSubmitButton)
         firstSuccessfulSubmitButton->setActivatedSubmit(false);
+
+    m_shouldSubmit = false;
+    m_isSubmittingOrInUserJSSubmitEvent = false;
 }
 
 void HTMLFormElement::scheduleFormSubmission(PassRefPtrWillBeRawPtr<FormSubmission> submission)
@@ -401,7 +421,7 @@ void HTMLFormElement::scheduleFormSubmission(PassRefPtrWillBeRawPtr<FormSubmissi
         return;
     if (document().isSandboxed(SandboxForms)) {
         // FIXME: This message should be moved off the console once a solution to https://bugs.webkit.org/show_bug.cgi?id=103274 exists.
-        document().addConsoleMessage(SecurityMessageSource, ErrorMessageLevel, "Blocked form submission to '" + submission->action().elidedString() + "' because the form's frame is sandboxed and the 'allow-forms' permission is not set.");
+        document().addConsoleMessage(ConsoleMessage::create(SecurityMessageSource, ErrorMessageLevel, "Blocked form submission to '" + submission->action().elidedString() + "' because the form's frame is sandboxed and the 'allow-forms' permission is not set."));
         return;
     }
 
@@ -471,7 +491,7 @@ void HTMLFormElement::requestAutocomplete()
         errorMessage = "requestAutocomplete: must be called in response to a user gesture.";
 
     if (!errorMessage.isEmpty()) {
-        document().addConsoleMessage(RenderingMessageSource, LogMessageLevel, errorMessage);
+        document().addConsoleMessage(ConsoleMessage::create(RenderingMessageSource, LogMessageLevel, errorMessage));
         finishRequestAutocomplete(AutocompleteResultErrorDisabled);
     } else {
         document().frame()->loader().client()->didRequestAutocomplete(this);
@@ -797,7 +817,7 @@ void HTMLFormElement::copyNonAttributePropertiesFromElement(const Element& sourc
     HTMLElement::copyNonAttributePropertiesFromElement(source);
 }
 
-void HTMLFormElement::anonymousNamedGetter(const AtomicString& name, bool& returnValue0Enabled, RefPtrWillBeRawPtr<RadioNodeList>& returnValue0, bool& returnValue1Enabled, RefPtrWillBeRawPtr<Element>& returnValue1)
+void HTMLFormElement::anonymousNamedGetter(const AtomicString& name, RefPtrWillBeRawPtr<RadioNodeList>& returnValue0, RefPtrWillBeRawPtr<Element>& returnValue1)
 {
     // Call getNamedElements twice, first time check if it has a value
     // and let HTMLFormElement update its cache.
@@ -816,13 +836,11 @@ void HTMLFormElement::anonymousNamedGetter(const AtomicString& name, bool& retur
     ASSERT(!elements.isEmpty());
 
     if (elements.size() == 1) {
-        returnValue1Enabled = true;
         returnValue1 = elements.at(0);
         return;
     }
 
     bool onlyMatchImg = !elements.isEmpty() && isHTMLImageElement(*elements.first());
-    returnValue0Enabled = true;
     returnValue0 = radioNodeList(name, onlyMatchImg);
 }
 

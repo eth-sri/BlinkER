@@ -25,6 +25,7 @@
 #include "platform/fonts/Font.h"
 
 #include "platform/LayoutUnit.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/fonts/Character.h"
 #include "platform/fonts/FontCache.h"
 #include "platform/fonts/FontFallbackList.h"
@@ -34,6 +35,7 @@
 #include "platform/fonts/SimpleFontData.h"
 #include "platform/fonts/WidthIterator.h"
 #include "platform/geometry/FloatRect.h"
+#include "platform/graphics/GraphicsContext.h"
 #include "platform/text/TextRun.h"
 #include "wtf/MainThread.h"
 #include "wtf/StdLibExtras.h"
@@ -42,7 +44,6 @@
 
 using namespace WTF;
 using namespace Unicode;
-using namespace std;
 
 namespace blink {
 
@@ -141,9 +142,9 @@ void Font::drawEmphasisMarks(GraphicsContext* context, const TextRunPaintInfo& r
 static inline void updateGlyphOverflowFromBounds(const IntRectExtent& glyphBounds,
     const FontMetrics& fontMetrics, GlyphOverflow* glyphOverflow)
 {
-    glyphOverflow->top = max<int>(glyphOverflow->top,
+    glyphOverflow->top = std::max<int>(glyphOverflow->top,
         glyphBounds.top() - (glyphOverflow->computeBounds ? 0 : fontMetrics.ascent()));
-    glyphOverflow->bottom = max<int>(glyphOverflow->bottom,
+    glyphOverflow->bottom = std::max<int>(glyphOverflow->bottom,
         glyphBounds.bottom() - (glyphOverflow->computeBounds ? 0 : fontMetrics.descent()));
     glyphOverflow->left = glyphBounds.left();
     glyphOverflow->right = glyphBounds.right();
@@ -251,6 +252,9 @@ CodePath Font::codePath(const TextRun& run) const
 #endif
 
     if (m_fontDescription.featureSettings() && m_fontDescription.featureSettings()->size() > 0 && m_fontDescription.letterSpacing() == 0)
+        return ComplexPath;
+
+    if (m_fontDescription.widthVariant() != RegularWidth)
         return ComplexPath;
 
     if (run.length() > 1 && fontDescription().typesettingFeatures())
@@ -367,11 +371,11 @@ static inline std::pair<GlyphData, GlyphPage*> glyphDataAndPageForNonCJKCharacte
             GlyphData uprightData = uprightPage->glyphDataForCharacter(character);
             // If the glyphs are the same, then we know we can just use the horizontal glyph rotated vertically to be upright.
             if (data.glyph == uprightData.glyph)
-                return make_pair(data, page);
+                return std::make_pair(data, page);
             // The glyphs are distinct, meaning that the font has a vertical-right glyph baked into it. We can't use that
             // glyph, so we fall back to the upright data and use the horizontal glyph.
             if (uprightData.fontData)
-                return make_pair(uprightData, uprightPage);
+                return std::make_pair(uprightData, uprightPage);
         }
     } else if (orientation == NonCJKGlyphOrientationVerticalRight) {
         RefPtr<SimpleFontData> verticalRightFontData = data.fontData->verticalRightOrientationFontData();
@@ -382,13 +386,13 @@ static inline std::pair<GlyphData, GlyphPage*> glyphDataAndPageForNonCJKCharacte
             // If the glyphs are distinct, we will make the assumption that the font has a vertical-right glyph baked
             // into it.
             if (data.glyph != verticalRightData.glyph)
-                return make_pair(data, page);
+                return std::make_pair(data, page);
             // The glyphs are identical, meaning that we should just use the horizontal glyph.
             if (verticalRightData.fontData)
-                return make_pair(verticalRightData, verticalRightPage);
+                return std::make_pair(verticalRightData, verticalRightPage);
         }
     }
-    return make_pair(data, page);
+    return std::make_pair(data, page);
 }
 
 std::pair<GlyphData, GlyphPage*> Font::glyphDataAndPageForCharacter(UChar32 c, bool mirror, FontDataVariant variant) const
@@ -428,7 +432,7 @@ std::pair<GlyphData, GlyphPage*> Font::glyphDataAndPageForCharacter(UChar32 c, b
             if (page) {
                 GlyphData data = page->glyphDataForCharacter(c);
                 if (data.fontData && (data.fontData->platformData().orientation() == Horizontal || data.fontData->isTextOrientationFallback()))
-                    return make_pair(data, page);
+                    return std::make_pair(data, page);
 
                 if (data.fontData) {
                     if (Character::isCJKIdeographOrSymbol(c)) {
@@ -442,7 +446,7 @@ std::pair<GlyphData, GlyphPage*> Font::glyphDataAndPageForCharacter(UChar32 c, b
                         return glyphDataAndPageForNonCJKCharacterWithGlyphOrientation(c, m_fontDescription.nonCJKGlyphOrientation(), data, page, pageNumber);
                     }
 
-                    return make_pair(data, page);
+                    return std::make_pair(data, page);
                 }
 
                 if (node->isSystemFallback())
@@ -464,19 +468,19 @@ std::pair<GlyphData, GlyphPage*> Font::glyphDataAndPageForCharacter(UChar32 c, b
                     // But if it does, we will just render the capital letter big.
                     RefPtr<SimpleFontData> variantFontData = data.fontData->variantFontData(m_fontDescription, variant);
                     if (!variantFontData)
-                        return make_pair(data, page);
+                        return std::make_pair(data, page);
 
                     GlyphPageTreeNode* variantNode = GlyphPageTreeNode::getRootChild(variantFontData.get(), pageNumber);
                     GlyphPage* variantPage = variantNode->page();
                     if (variantPage) {
                         GlyphData data = variantPage->glyphDataForCharacter(c);
                         if (data.fontData)
-                            return make_pair(data, variantPage);
+                            return std::make_pair(data, variantPage);
                     }
 
                     // Do not attempt system fallback off the variantFontData. This is the very unlikely case that
                     // a font has the lowercase character but the small caps font does not have its uppercase version.
-                    return make_pair(variantFontData->missingGlyphData(), page);
+                    return std::make_pair(variantFontData->missingGlyphData(), page);
                 }
 
                 if (node->isSystemFallback())
@@ -516,11 +520,11 @@ std::pair<GlyphData, GlyphPage*> Font::glyphDataAndPageForCharacter(UChar32 c, b
         // Cache it so we don't have to do system fallback again next time.
         if (variant == NormalVariant) {
             page->setGlyphDataForCharacter(c, data.glyph, data.fontData);
-            data.fontData->setMaxGlyphPageTreeLevel(max(data.fontData->maxGlyphPageTreeLevel(), node->level()));
+            data.fontData->setMaxGlyphPageTreeLevel(std::max(data.fontData->maxGlyphPageTreeLevel(), node->level()));
             if (!Character::isCJKIdeographOrSymbol(c) && data.fontData->platformData().orientation() != Horizontal && !data.fontData->isTextOrientationFallback())
                 return glyphDataAndPageForNonCJKCharacterWithGlyphOrientation(c, m_fontDescription.nonCJKGlyphOrientation(), data, page, pageNumber);
         }
-        return make_pair(data, page);
+        return std::make_pair(data, page);
     }
 
     // Even system fallback can fail; use the missing glyph in that case.
@@ -528,9 +532,9 @@ std::pair<GlyphData, GlyphPage*> Font::glyphDataAndPageForCharacter(UChar32 c, b
     GlyphData data = primaryFont()->missingGlyphData();
     if (variant == NormalVariant) {
         page->setGlyphDataForCharacter(c, data.glyph, data.fontData);
-        data.fontData->setMaxGlyphPageTreeLevel(max(data.fontData->maxGlyphPageTreeLevel(), node->level()));
+        data.fontData->setMaxGlyphPageTreeLevel(std::max(data.fontData->maxGlyphPageTreeLevel(), node->level()));
     }
-    return make_pair(data, page);
+    return std::make_pair(data, page);
 }
 
 bool Font::primaryFontHasGlyphForCharacter(UChar32 character) const
@@ -647,14 +651,30 @@ void Font::drawSimpleText(GraphicsContext* context, const TextRunPaintInfo& runI
 {
     // This glyph buffer holds our glyphs+advances+font data for each glyph.
     GlyphBuffer glyphBuffer;
-
-    float startX = point.x() + getGlyphsAndAdvancesForSimpleText(runInfo, glyphBuffer);
+    float initialAdvance = getGlyphsAndAdvancesForSimpleText(runInfo, glyphBuffer);
+    ASSERT(!glyphBuffer.hasVerticalAdvances());
 
     if (glyphBuffer.isEmpty())
         return;
 
-    FloatPoint startPoint(startX, point.y());
-    drawGlyphBuffer(context, runInfo, glyphBuffer, startPoint);
+    TextBlobPtr textBlob;
+    if (RuntimeEnabledFeatures::textBlobEnabled()) {
+        // Using text blob causes a small difference in how gradients and
+        // patterns are rendered.
+        // FIXME: Fix this, most likely in Skia.
+        if (!context->strokeGradient() && !context->strokePattern() && !context->fillGradient() && !context->fillPattern()) {
+            FloatRect blobBounds = runInfo.bounds;
+            blobBounds.moveBy(-point);
+            textBlob = buildTextBlob(glyphBuffer, initialAdvance, blobBounds);
+        }
+    }
+
+    if (textBlob) {
+        drawTextBlob(context, textBlob.get(), point.data());
+    } else {
+        FloatPoint startPoint(point.x() + initialAdvance, point.y());
+        drawGlyphBuffer(context, runInfo, glyphBuffer, startPoint);
+    }
 }
 
 void Font::drawEmphasisMarksForSimpleText(GraphicsContext* context, const TextRunPaintInfo& runInfo, const AtomicString& mark, const FloatPoint& point) const
@@ -839,4 +859,4 @@ int Font::offsetForPositionForSimpleText(const TextRun& run, float x, bool inclu
     return offset;
 }
 
-}
+} // namespace blink

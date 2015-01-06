@@ -491,16 +491,18 @@ InspectorTest.checkArrayIsSorted = function(contents, sortType, sortOrder)
         name: function (data) { return data; },
         id: function (data) { return parseInt(data, 10); }
     }[sortType];
-    var acceptableComparisonResult = {
-        ascending: -1,
-        descending: 1
-    }[sortOrder];
 
     if (!extractor) {
         InspectorTest.addResult("Invalid sort type: " + sortType);
         return;
     }
-    if (!acceptableComparisonResult) {
+
+    var acceptableComparisonResult;
+    if (sortOrder === WebInspector.DataGrid.Order.Ascending) {
+        acceptableComparisonResult = -1;
+    } else if (sortOrder === WebInspector.DataGrid.Order.Descending) {
+        acceptableComparisonResult = 1;
+    } else {
         InspectorTest.addResult("Invalid sort order: " + sortOrder);
         return;
     }
@@ -582,7 +584,7 @@ InspectorTest.columnContents = function(column, row)
     for (var node = parent.children[0]; node; node = node.traverseNextNode(true, parent, true)) {
         if (!node.selectable)
             continue;
-        var content = node.element.children[columnOrdinal];
+        var content = node.element().children[columnOrdinal];
         // Do not inlcude percents
         if (content.firstElementChild)
             content = content.firstElementChild;

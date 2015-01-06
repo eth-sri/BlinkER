@@ -29,10 +29,10 @@
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "bindings/core/v8/ScriptState.h"
-#include "core/css/CSSFontFaceLoadEvent.h"
 #include "core/css/CSSFontSelector.h"
 #include "core/css/CSSSegmentedFontFace.h"
 #include "core/css/FontFaceCache.h"
+#include "core/css/FontFaceSetLoadEvent.h"
 #include "core/css/StylePropertySet.h"
 #include "core/css/parser/BisonCSSParser.h"
 #include "core/css/resolver/StyleResolver.h"
@@ -41,7 +41,6 @@
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/rendering/style/StyleInheritedData.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "public/platform/Platform.h"
 
 namespace blink {
@@ -194,8 +193,6 @@ void FontFaceSet::didLayout()
 {
     if (document()->frame()->isMainFrame() && m_loadingFonts.isEmpty())
         m_histogram.record();
-    if (!RuntimeEnabledFeatures::fontLoadEventsEnabled())
-        return;
     if (!m_loadingFonts.isEmpty() || (!hasLoadedFonts() && m_readyResolvers.isEmpty()))
         return;
     handlePendingEventsAndPromisesSoon();
@@ -211,7 +208,7 @@ void FontFaceSet::fireLoadingEvent()
 {
     if (m_shouldFireLoadingEvent) {
         m_shouldFireLoadingEvent = false;
-        dispatchEvent(CSSFontFaceLoadEvent::createForFontFaces(EventTypeNames::loading));
+        dispatchEvent(FontFaceSetLoadEvent::createForFontFaces(EventTypeNames::loading));
     }
 }
 
@@ -239,22 +236,20 @@ void FontFaceSet::beginFontLoading(FontFace* fontFace)
 void FontFaceSet::fontLoaded(FontFace* fontFace)
 {
     m_histogram.updateStatus(fontFace);
-    if (RuntimeEnabledFeatures::fontLoadEventsEnabled())
-        m_loadedFonts.append(fontFace);
+    m_loadedFonts.append(fontFace);
     removeFromLoadingFonts(fontFace);
 }
 
 void FontFaceSet::loadError(FontFace* fontFace)
 {
     m_histogram.updateStatus(fontFace);
-    if (RuntimeEnabledFeatures::fontLoadEventsEnabled())
-        m_failedFonts.append(fontFace);
+    m_failedFonts.append(fontFace);
     removeFromLoadingFonts(fontFace);
 }
 
 void FontFaceSet::addToLoadingFonts(PassRefPtrWillBeRawPtr<FontFace> fontFace)
 {
-    if (RuntimeEnabledFeatures::fontLoadEventsEnabled() && m_loadingFonts.isEmpty() && !hasLoadedFonts()) {
+    if (m_loadingFonts.isEmpty() && !hasLoadedFonts()) {
         m_shouldFireLoadingEvent = true;
         handlePendingEventsAndPromisesSoon();
     }
@@ -264,7 +259,7 @@ void FontFaceSet::addToLoadingFonts(PassRefPtrWillBeRawPtr<FontFace> fontFace)
 void FontFaceSet::removeFromLoadingFonts(PassRefPtrWillBeRawPtr<FontFace> fontFace)
 {
     m_loadingFonts.remove(fontFace);
-    if (RuntimeEnabledFeatures::fontLoadEventsEnabled() && m_loadingFonts.isEmpty())
+    if (m_loadingFonts.isEmpty())
         handlePendingEventsAndPromisesSoon();
 }
 
@@ -362,7 +357,7 @@ bool FontFaceSet::isCSSConnectedFontFace(FontFace* fontFace) const
     return cssConnectedFontFaceList().contains(fontFace);
 }
 
-void FontFaceSet::forEach(PassOwnPtr<FontFaceSetForEachCallback> callback, ScriptValue& thisArg) const
+void FontFaceSet::forEach(PassOwnPtr<FontFaceSetForEachCallback> callback, const ScriptValue& thisArg) const
 {
     forEachInternal(callback, &thisArg);
 }
@@ -372,7 +367,7 @@ void FontFaceSet::forEach(PassOwnPtr<FontFaceSetForEachCallback> callback) const
     forEachInternal(callback, 0);
 }
 
-void FontFaceSet::forEachInternal(PassOwnPtr<FontFaceSetForEachCallback> callback, ScriptValue* thisArg) const
+void FontFaceSet::forEachInternal(PassOwnPtr<FontFaceSetForEachCallback> callback, const ScriptValue* thisArg) const
 {
     if (!inActiveDocumentContext())
         return;
@@ -415,12 +410,12 @@ void FontFaceSet::fireDoneEventIfPossible()
         return;
 
     if (hasLoadedFonts()) {
-        RefPtrWillBeRawPtr<CSSFontFaceLoadEvent> doneEvent = nullptr;
-        RefPtrWillBeRawPtr<CSSFontFaceLoadEvent> errorEvent = nullptr;
-        doneEvent = CSSFontFaceLoadEvent::createForFontFaces(EventTypeNames::loadingdone, m_loadedFonts);
+        RefPtrWillBeRawPtr<FontFaceSetLoadEvent> doneEvent = nullptr;
+        RefPtrWillBeRawPtr<FontFaceSetLoadEvent> errorEvent = nullptr;
+        doneEvent = FontFaceSetLoadEvent::createForFontFaces(EventTypeNames::loadingdone, m_loadedFonts);
         m_loadedFonts.clear();
         if (!m_failedFonts.isEmpty()) {
-            errorEvent = CSSFontFaceLoadEvent::createForFontFaces(EventTypeNames::loadingerror, m_failedFonts);
+            errorEvent = FontFaceSetLoadEvent::createForFontFaces(EventTypeNames::loadingerror, m_failedFonts);
             m_failedFonts.clear();
         }
         dispatchEvent(doneEvent);

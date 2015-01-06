@@ -211,6 +211,9 @@ public:
     String textBaseline() const;
     void setTextBaseline(const String&);
 
+    String direction() const;
+    void setDirection(const String&);
+
     void fillText(const String& text, float x, float y);
     void fillText(const String& text, float x, float y, float maxWidth);
     void strokeText(const String& text, float x, float y);
@@ -241,6 +244,12 @@ public:
     virtual void trace(Visitor*) OVERRIDE;
 
 private:
+    enum Direction {
+        DirectionInherit,
+        DirectionRTL,
+        DirectionLTR
+    };
+
     class State FINAL : public CSSFontSelectorClient {
     public:
         State();
@@ -279,6 +288,7 @@ private:
         // Text state.
         TextAlign m_textAlign;
         TextBaseline m_textBaseline;
+        Direction m_direction;
 
         String m_unparsedFont;
         Font m_font;
@@ -308,12 +318,12 @@ private:
     GraphicsContext* drawingContext() const;
 
     void unwindStateStack();
-    void realizeSaves();
+    void realizeSaves(GraphicsContext*);
 
     void applyStrokePattern();
     void applyFillPattern();
 
-    void drawImageInternal(CanvasImageSource*, float sx, float sy, float sw, float sh, float dx, float dy, float dw, float dh, ExceptionState&, CompositeOperator, blink::WebBlendMode);
+    void drawImageInternal(CanvasImageSource*, float sx, float sy, float sw, float sh, float dx, float dy, float dw, float dh, ExceptionState&, CompositeOperator, blink::WebBlendMode, GraphicsContext* = 0);
     void drawVideo(HTMLVideoElement*, FloatRect srcRect, FloatRect dstRect);
 
     void fillInternal(const Path&, const String& windingRuleString);
@@ -351,10 +361,12 @@ private:
     virtual bool is2d() const OVERRIDE { return true; }
     virtual bool isAccelerated() const OVERRIDE;
     virtual bool hasAlpha() const OVERRIDE { return m_hasAlpha; }
+    virtual void setIsHidden(bool) OVERRIDE;
 
     virtual bool isTransformInvertible() const OVERRIDE { return state().m_invertibleCTM; }
 
     virtual blink::WebLayer* platformLayer() const OVERRIDE;
+    TextDirection toTextDirection(Direction, RenderStyle** computedStyle = nullptr) const;
 
     WillBeHeapVector<OwnPtrWillBeMember<State> > m_stateStack;
     OwnPtrWillBeMember<HitRegionManager> m_hitRegionManager;

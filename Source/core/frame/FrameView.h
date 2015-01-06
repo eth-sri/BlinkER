@@ -25,6 +25,7 @@
 #ifndef FrameView_h
 #define FrameView_h
 
+#include "core/frame/FrameViewAutoSizeInfo.h"
 #include "core/rendering/PaintPhase.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/geometry/LayoutRect.h"
@@ -71,8 +72,6 @@ public:
     virtual void invalidateRect(const IntRect&) OVERRIDE;
     virtual void setFrameRect(const IntRect&) OVERRIDE;
 
-    virtual bool scheduleAnimation() OVERRIDE;
-
     LocalFrame& frame() const { return *m_frame; }
     Page* page() const;
 
@@ -102,6 +101,8 @@ public:
     bool needsLayout() const;
     void setNeedsLayout();
 
+    void setNeedsUpdateWidgetPositions() { m_needsUpdateWidgetPositions = true; }
+
     // Methods for getting/setting the size Blink should use to layout the contents.
     IntSize layoutSize(IncludeScrollbarsInRect = ExcludeScrollbars) const;
     void setLayoutSize(const IntSize&);
@@ -117,7 +118,6 @@ public:
 
     void recalcOverflowAfterStyleChange();
 
-    bool hasCompositedContent() const;
     bool isEnclosedInCompositingLayer() const;
 
     void resetScrollbars();
@@ -178,7 +178,6 @@ public:
     void handleLoadCompleted();
 
     void updateAnnotatedRegions();
-    void updateControlTints();
 
     void restoreScrollbar();
 
@@ -219,7 +218,8 @@ public:
     void incrementVisuallyNonEmptyCharacterCount(unsigned);
     void incrementVisuallyNonEmptyPixelCount(const IntSize&);
     void setIsVisuallyNonEmpty() { m_isVisuallyNonEmpty = true; }
-    void enableAutoSizeMode(bool enable, const IntSize& minSize, const IntSize& maxSize);
+    void enableAutoSizeMode(const IntSize& minSize, const IntSize& maxSize);
+    void disableAutoSizeMode() { m_autoSizeInfo = 0; }
 
     void forceLayout(bool allowSubtree = false);
     void forceLayoutForPagination(const FloatSize& pageSize, const FloatSize& originalPageSize, float maximumShrinkFactor);
@@ -324,7 +324,7 @@ public:
 
 protected:
     virtual void scrollContentsIfNeeded();
-    virtual bool scrollContentsFastPath(const IntSize& scrollDelta, const IntRect& rectToScroll, const IntRect& clipRect) OVERRIDE;
+    virtual bool scrollContentsFastPath(const IntSize& scrollDelta) OVERRIDE;
     virtual void scrollContentsSlowPath(const IntRect& updateRect) OVERRIDE;
 
     virtual bool isVerticalDocument() const OVERRIDE;
@@ -347,7 +347,6 @@ private:
     void updateOverflowStatus(bool horizontalOverflow, bool verticalOverflow);
 
     void updateCounters();
-    void autoSizeIfEnabled();
     void forceLayoutParentViewIfNeeded();
     void performPreLayoutTasks();
     void performLayout(RenderObject* rootForThisLayout, bool inSubtreeLayout);
@@ -370,6 +369,8 @@ private:
     virtual IntRect convertFromContainingView(const IntRect&) const OVERRIDE;
     virtual IntPoint convertToContainingView(const IntPoint&) const OVERRIDE;
     virtual IntPoint convertFromContainingView(const IntPoint&) const OVERRIDE;
+
+    void updateWidgetPositionsIfNeeded();
 
     void sendResizeEventIfNeeded();
 
@@ -411,11 +412,11 @@ private:
 
     LayoutSize m_size;
 
-    typedef HashSet<RefPtr<RenderEmbeddedObject> > EmbeddedObjectSet;
-    EmbeddedObjectSet m_widgetUpdateSet;
+    typedef WillBeHeapHashSet<RefPtrWillBeMember<RenderEmbeddedObject> > EmbeddedObjectSet;
+    WillBePersistentHeapHashSet<RefPtrWillBeMember<RenderEmbeddedObject> > m_widgetUpdateSet;
 
     // FIXME: These are just "children" of the FrameView and should be RefPtr<Widget> instead.
-    HashSet<RefPtr<RenderWidget> > m_widgets;
+    WillBePersistentHeapHashSet<RefPtrWillBeMember<RenderWidget> > m_widgets;
 
     RefPtr<LocalFrame> m_frame;
 
@@ -472,21 +473,12 @@ private:
     RefPtrWillBePersistent<Node> m_maintainScrollPositionAnchor;
 
     // Renderer to hold our custom scroll corner.
-    RenderScrollbarPart* m_scrollCorner;
-
-    // If true, automatically resize the frame view around its content.
-    bool m_shouldAutoSize;
-    bool m_inAutoSize;
-    // True if autosize has been run since m_shouldAutoSize was set.
-    bool m_didRunAutosize;
-    // The lower bound on the size when autosizing.
-    IntSize m_minAutoSize;
-    // The upper bound on the size when autosizing.
-    IntSize m_maxAutoSize;
+    RawPtrWillBePersistent<RenderScrollbarPart> m_scrollCorner;
 
     OwnPtr<ScrollableAreaSet> m_scrollableAreas;
     OwnPtr<ResizerAreaSet> m_resizerAreas;
     OwnPtr<ViewportConstrainedObjectSet> m_viewportConstrainedObjects;
+    OwnPtr<FrameViewAutoSizeInfo> m_autoSizeInfo;
 
     bool m_hasSoftwareFilters;
 
@@ -500,6 +492,8 @@ private:
     Timer<FrameView> m_didScrollTimer;
 
     Vector<IntRect> m_tickmarks;
+
+    bool m_needsUpdateWidgetPositions;
 };
 
 inline void FrameView::incrementVisuallyNonEmptyCharacterCount(unsigned count)

@@ -37,8 +37,6 @@ source_set("modules") {
 
   deps = [
     ":make_modules_generated",
-    ":modules_cache_polyfill",
-    ":modules_cache_storage_polyfill",
     "//third_party/WebKit/Source/core",
     "//third_party/sqlite",
     "//third_party/zlib",
@@ -50,24 +48,6 @@ source_set("modules") {
       "/wd4334",  # Result of 32-bit shift implicitly converted to 64 bits.
     ]
   }
-}
-
-# GYP version: WebKit/Source/modules/modules.gyp:modules (CachePolyfill action)
-make_file_arrays("modules_cache_polyfill") {
-  filename = "modules/CachePolyfill"
-  resources = [
-    "serviceworkers/polyfills/cachePolyfill.js",
-  ]
-  namespace = "blink"
-}
-
-# GYP version: WebKit/Source/modules/modules.gyp:modules (CacheStoragePolyfill action)
-make_file_arrays("modules_cache_storage_polyfill") {
-  filename = "modules/CacheStoragePolyfill"
-  resources = [
-    "serviceworkers/polyfills/cacheStoragePolyfill.js",
-  ]
-  namespace = "blink"
 }
 
 # GYP version: WebKit/Source/modules/modules.gyp:modules_testing
@@ -84,10 +64,29 @@ source_set("modules_testing") {
   ]
 }
 
-# GYP version: WebKit/Source/modules/modules.gyp:make_modules_generated
+action("module_names") {
+  script = "../build/scripts/make_names.py"
+
+  module_names_in = "indexeddb/IndexedDBNames.in"
+  inputs = make_names_files + [ module_names_in ]
+
+  outputs = [
+    "$blink_modules_output_dir/IndexedDBNames.cpp",
+    "$blink_modules_output_dir/IndexedDBNames.h",
+  ]
+
+  args = [
+    rebase_path(module_names_in, root_build_dir),
+    "--output_dir",
+    rebase_path(blink_modules_output_dir, root_build_dir),
+  ]
+}
+
+# GYP version: WebKit/Source/modules/modules_generated.gyp:make_modules_generated
 group("make_modules_generated") {
   deps = [
     "//third_party/WebKit/Source/core:core_event_interfaces",
     "//third_party/WebKit/Source/bindings/modules:bindings_modules_generated",
+    ":module_names",
   ]
 }

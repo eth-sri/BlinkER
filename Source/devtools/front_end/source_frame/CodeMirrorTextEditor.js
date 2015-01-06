@@ -147,6 +147,7 @@ WebInspector.CodeMirrorTextEditor = function(url, delegate)
     this._codeMirror.on("beforeSelectionChange", this._beforeSelectionChange.bind(this));
     this._codeMirror.on("scroll", this._scroll.bind(this));
     this._codeMirror.on("focus", this._focus.bind(this));
+    this._codeMirror.on("keyHandled", this._onKeyHandled.bind(this));
     this.element.addEventListener("contextmenu", this._contextMenu.bind(this), false);
     /**
      * @this {WebInspector.CodeMirrorTextEditor}
@@ -326,6 +327,11 @@ WebInspector.CodeMirrorTextEditor.MaximumNumberOfWhitespacesPerSingleSpan = 16;
 WebInspector.CodeMirrorTextEditor.MaxEditableTextSize = 1024 * 1024 * 10;
 
 WebInspector.CodeMirrorTextEditor.prototype = {
+    _onKeyHandled: function()
+    {
+        WebInspector.shortcutRegistry.dismissPendingShortcutAction();
+    },
+
     _onAutoAppendedSpaces: function()
     {
         this._autoAppendedSpaces = this._autoAppendedSpaces || [];
@@ -734,7 +740,7 @@ WebInspector.CodeMirrorTextEditor.prototype = {
             return null;
         return {
             startColumn: token.start,
-            endColumn: token.end - 1,
+            endColumn: token.end,
             type: token.type
         };
     },
@@ -955,6 +961,7 @@ WebInspector.CodeMirrorTextEditor.prototype = {
             this._delegate.populateLineGutterContextMenu(contextMenu, parseInt(target.textContent, 10) - 1);
         else
             this._delegate.populateTextAreaContextMenu(contextMenu, 0);
+        contextMenu.appendApplicableItems(this);
         contextMenu.show();
     },
 
@@ -1031,7 +1038,7 @@ WebInspector.CodeMirrorTextEditor.prototype = {
     addDecoration: function(lineNumber, element)
     {
         var widget = this._codeMirror.addLineWidget(lineNumber, element);
-        this._elementToWidget.put(element, widget);
+        this._elementToWidget.set(element, widget);
     },
 
     /**
@@ -2348,7 +2355,7 @@ WebInspector.CodeMirrorTextEditor.SelectNextOccurrenceController.prototype = {
         var regexSource = textToFind.escapeForRegExp();
         if (fullWord)
             regexSource = "\\b" + regexSource + "\\b";
-        var wordRegex = new RegExp(regexSource, "gi");
+        var wordRegex = new RegExp(regexSource, "g");
         var currentLineText = this._codeMirror.getLine(range.startLine);
 
         findWordInLine(wordRegex, range.startLine, currentLineText, range.endColumn, currentLineText.length);

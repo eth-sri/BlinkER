@@ -112,15 +112,13 @@ FrameView::FrameView(LocalFrame* frame)
     , m_inProgrammaticScroll(false)
     , m_safeToPropagateScrollToParent(true)
     , m_isTrackingPaintInvalidations(false)
-    , m_scrollCorner(0)
-    , m_shouldAutoSize(false)
-    , m_inAutoSize(false)
-    , m_didRunAutosize(false)
+    , m_scrollCorner(nullptr)
     , m_hasSoftwareFilters(false)
     , m_visibleContentScaleFactor(1)
     , m_inputEventsScaleFactorForEmulation(1)
     , m_layoutSizeFixedToFrameSize(true)
     , m_didScrollTimer(this, &FrameView::didScrollTimerFired)
+    , m_needsUpdateWidgetPositions(false)
 {
     ASSERT(m_frame);
     init();
@@ -158,7 +156,6 @@ FrameView::~FrameView()
         m_didScrollTimer.stop();
 
     removeFromAXObjectCache();
-    resetScrollbars();
 
     // Custom scrollbars should already be destroyed at this point
     ASSERT(!horizontalScrollbar() || !horizontalScrollbar()->isCustomScrollbar());
@@ -215,18 +212,6 @@ void FrameView::removeFromAXObjectCache()
         cache->remove(this);
 }
 
-void FrameView::resetScrollbars()
-{
-    // Reset the document's scrollbars back to our defaults before we yield the floor.
-    m_firstLayout = true;
-    setScrollbarsSuppressed(true);
-    if (m_canHaveScrollbars)
-        setScrollbarModes(ScrollbarAuto, ScrollbarAuto);
-    else
-        setScrollbarModes(ScrollbarAlwaysOff, ScrollbarAlwaysOff);
-    setScrollbarsSuppressed(false);
-}
-
 void FrameView::init()
 {
     reset();
@@ -274,7 +259,7 @@ void FrameView::detachCustomScrollbars()
 
     if (m_scrollCorner) {
         m_scrollCorner->destroy();
-        m_scrollCorner = 0;
+        m_scrollCorner = nullptr;
     }
 }
 
@@ -357,15 +342,6 @@ void FrameView::setFrameRect(const IntRect& newRect)
         && m_frame->isMainFrame()
         && m_frame->settings()->pinchVirtualViewportEnabled())
         page()->frameHost().pinchViewport().mainFrameDidChangeSize();
-}
-
-bool FrameView::scheduleAnimation()
-{
-    if (HostWindow* window = hostWindow()) {
-        window->scheduleAnimation();
-        return true;
-    }
-    return false;
 }
 
 Page* FrameView::page() const
@@ -620,7 +596,7 @@ bool FrameView::usesCompositedScrolling() const
     RenderView* renderView = this->renderView();
     if (!renderView)
         return false;
-    if (m_frame->settings() && m_frame->settings()->compositedScrollingForFramesEnabled())
+    if (m_frame->settings() && m_frame->settings()->preferCompositingToLCDTextEnabled())
         return renderView->compositor()->inCompositingMode();
     return false;
 }
@@ -655,14 +631,6 @@ GraphicsLayer* FrameView::layerForScrollCorner() const
     if (!renderView)
         return 0;
     return renderView->compositor()->layerForScrollCorner();
-}
-
-bool FrameView::hasCompositedContent() const
-{
-    // FIXME: change to inCompositingMode. Fails fast/repaint/iframe-scroll-repaint.html.
-    if (RenderView* renderView = this->renderView())
-        return renderView->compositor()->staleInCompositingMode();
-    return false;
 }
 
 bool FrameView::isEnclosedInCompositingLayer() const
@@ -866,7 +834,8 @@ void FrameView::layout(bool allowSubtree)
             }
         }
         updateCounters();
-        autoSizeIfEnabled();
+        if (m_autoSizeInfo)
+            m_autoSizeInfo->autoSizeIfNeeded();
 
         ScrollbarMode hMode;
         ScrollbarMode vMode;
@@ -983,14 +952,14 @@ void FrameView::layout(bool allowSubtree)
 // See http://crbug.com/306706
 void FrameView::invalidateTreeIfNeeded()
 {
-    RenderObject* rootForPaintInvalidation = renderView();
-    ASSERT(!rootForPaintInvalidation->needsLayout());
+    RenderView& rootForPaintInvalidation = *renderView();
+    ASSERT(!rootForPaintInvalidation.needsLayout());
 
-    TRACE_EVENT1("blink", "FrameView::invalidateTree", "root", rootForPaintInvalidation->debugName().ascii());
+    TRACE_EVENT1("blink", "FrameView::invalidateTree", "root", rootForPaintInvalidation.debugName().ascii());
 
-    PaintInvalidationState rootPaintInvalidationState(*rootForPaintInvalidation);
+    PaintInvalidationState rootPaintInvalidationState(rootForPaintInvalidation);
 
-    rootForPaintInvalidation->invalidateTreeIfNeeded(rootPaintInvalidationState);
+    rootForPaintInvalidation.invalidateTreeIfNeeded(rootPaintInvalidationState);
 
     // Invalidate the paint of the frameviews scrollbars if needed
     if (hasVerticalBarDamage())
@@ -1003,6 +972,9 @@ void FrameView::invalidateTreeIfNeeded()
 #ifndef NDEBUG
     renderView()->assertSubtreeClearedPaintInvalidationState();
 #endif
+
+    if (m_frame->selection().isCaretBoundsDirty())
+        m_frame->selection().invalidateCaretRect();
 }
 
 DocumentLifecycle& FrameView::lifecycle() const
@@ -1067,7 +1039,7 @@ void FrameView::removeWidget(RenderWidget* object)
 
 void FrameView::updateWidgetPositions()
 {
-    Vector<RefPtr<RenderWidget> > widgets;
+    WillBeHeapVector<RefPtrWillBeMember<RenderWidget> > widgets;
     copyToVector(m_widgets, widgets);
 
     // Script or plugins could detach the frame so abort processing if that happens.
@@ -1260,77 +1232,58 @@ void FrameView::scrollContentsIfNeeded()
         updateFixedElementPaintInvalidationRectsAfterScroll();
 }
 
-bool FrameView::scrollContentsFastPath(const IntSize& scrollDelta, const IntRect& rectToScroll, const IntRect& unusedClipRect)
+bool FrameView::scrollContentsFastPath(const IntSize& scrollDelta)
 {
-    // FIXME: once we can switch plugins to a unified scrolling scheme, then
-    // we can do away with this parameter. Leaving as an empty rect for now to
-    // document the uselessness of the parameter to hostWindow.
-    static const IntRect dummyScrollRect;
+    if (!contentsInCompositedLayer() || hasSlowRepaintObjects())
+        return false;
 
     if (!m_viewportConstrainedObjects || m_viewportConstrainedObjects->isEmpty()) {
-        hostWindow()->scroll(dummyScrollRect);
+        InspectorInstrumentation::didScroll(page());
         return true;
     }
 
-    const bool isCompositedContentLayer = contentsInCompositedLayer();
-
-    // Get the rects of the fixed objects visible in the rectToScroll
     Region regionToUpdate;
     ViewportConstrainedObjectSet::const_iterator end = m_viewportConstrainedObjects->end();
     for (ViewportConstrainedObjectSet::const_iterator it = m_viewportConstrainedObjects->begin(); it != end; ++it) {
         RenderObject* renderer = *it;
-        // m_viewportConstrainedObjects should not contain non-viewport constrained objects.
         ASSERT(renderer->style()->hasViewportConstrainedPosition());
-
-        // Fixed items should always have layers.
         ASSERT(renderer->hasLayer());
         RenderLayer* layer = toRenderBoxModelObject(renderer)->layer();
 
-        // Layers that paint into their ancestor or into a grouped backing will still need
-        // to apply a paint invalidation. If the layer paints into its own backing, then
-        // it does not need paint invalidation just to scroll.
-        if (layer->compositingState() == PaintsIntoOwnBacking)
+        CompositingState state = layer->compositingState();
+        if (state == PaintsIntoOwnBacking || state == PaintsIntoGroupedBacking)
             continue;
 
-        if (layer->viewportConstrainedNotCompositedReason() == RenderLayer::NotCompositedForBoundsOutOfView
-            || layer->viewportConstrainedNotCompositedReason() == RenderLayer::NotCompositedForNoVisibleContent) {
-            // Don't invalidate for invisible fixed layers.
+        if (layer->subtreeIsInvisible())
             continue;
-        }
 
-        if (layer->hasAncestorWithFilterOutsets()) {
-            // If the fixed layer has a blur/drop-shadow filter applied on at least one of its parents, we cannot
-            // scroll using the fast path, otherwise the outsets of the filter will be moved around the page.
+        // If the fixed layer has a blur/drop-shadow filter applied on at least one of its parents, we cannot
+        // scroll using the fast path, otherwise the outsets of the filter will be moved around the page.
+        if (layer->hasAncestorWithFilterOutsets())
             return false;
-        }
 
-        IntRect updateRect = pixelSnappedIntRect(layer->repainter().repaintRectIncludingNonCompositingDescendants());
+        IntRect updateRect = pixelSnappedIntRect(layer->paintInvalidator().paintInvalidationRectIncludingNonCompositingDescendants());
 
         const RenderLayerModelObject* repaintContainer = layer->renderer()->containerForPaintInvalidation();
         if (repaintContainer && !repaintContainer->isRenderView()) {
-            // If the fixed-position layer is contained by a composited layer that is not its containing block,
-            // then we have to invalidate that enclosing layer, not the RenderView.
-            // FIXME: Why do we need to issue this invalidation? Won't the fixed position element just scroll
-            //        with the enclosing layer.
+            // Invalidate the old and new locations of fixed position elements that are not drawn into the RenderView.
             updateRect.moveBy(scrollPosition());
             IntRect previousRect = updateRect;
             previousRect.move(scrollDelta);
+            // FIXME: Rather than uniting the rects, we should just issue both invalidations.
             updateRect.unite(previousRect);
             layer->renderer()->invalidatePaintUsingContainer(repaintContainer, updateRect, InvalidationScroll);
         } else {
             // Coalesce the paint invalidations that will be issued to the renderView.
             updateRect = contentsToRootView(updateRect);
-            if (!isCompositedContentLayer && clipsPaintInvalidations())
-                updateRect.intersect(rectToScroll);
             if (!updateRect.isEmpty())
                 regionToUpdate.unite(updateRect);
         }
     }
 
-    // 1) scroll
-    hostWindow()->scroll(dummyScrollRect);
+    InspectorInstrumentation::didScroll(page());
 
-    // 2) update the area of fixed objects that has been invalidated
+    // Invalidate the old and new locations of fixed position elements that are drawn into the RenderView.
     Vector<IntRect> subRectsToUpdate = regionToUpdate.rects();
     size_t viewportConstrainedObjectsCount = subRectsToUpdate.size();
     for (size_t i = 0; i < viewportConstrainedObjectsCount; ++i) {
@@ -1338,15 +1291,8 @@ bool FrameView::scrollContentsFastPath(const IntSize& scrollDelta, const IntRect
         IntRect scrolledRect = updateRect;
         scrolledRect.move(-scrollDelta);
         updateRect.unite(scrolledRect);
-        if (isCompositedContentLayer) {
-            updateRect = rootViewToContents(updateRect);
-            ASSERT(renderView());
-            renderView()->layer()->repainter().setBackingNeedsRepaintInRect(updateRect);
-            continue;
-        }
-        if (clipsPaintInvalidations())
-            updateRect.intersect(rectToScroll);
-        hostWindow()->invalidateContentsAndRootView(updateRect);
+        // FIXME: We should be able to issue these invalidations separately and before we actually scroll.
+        renderView()->layer()->paintInvalidator().setBackingNeedsPaintInvalidationInRect(rootViewToContents(updateRect));
     }
 
     return true;
@@ -1357,7 +1303,7 @@ void FrameView::scrollContentsSlowPath(const IntRect& updateRect)
     if (contentsInCompositedLayer()) {
         IntRect updateRect = visibleContentRect();
         ASSERT(renderView());
-        renderView()->layer()->repainter().setBackingNeedsRepaintInRect(updateRect);
+        renderView()->layer()->paintInvalidator().setBackingNeedsPaintInvalidationInRect(updateRect);
     }
     if (RenderPart* frameRenderer = m_frame->ownerRenderer()) {
         if (isEnclosedInCompositingLayer()) {
@@ -1600,12 +1546,7 @@ void FrameView::updateFixedElementPaintInvalidationRectsAfterScroll()
         if (layer->compositingState() == PaintsIntoOwnBacking)
             continue;
 
-        // Also don't need to do this for invisible items.
-        if (layer->viewportConstrainedNotCompositedReason() == RenderLayer::NotCompositedForBoundsOutOfView
-            || layer->viewportConstrainedNotCompositedReason() == RenderLayer::NotCompositedForNoVisibleContent)
-            continue;
-
-        layer->repainter().computeRepaintRectsIncludingNonCompositingDescendants();
+        layer->paintInvalidator().computePaintInvalidationRectsIncludingNonCompositingDescendants();
     }
 }
 
@@ -1650,7 +1591,7 @@ HostWindow* FrameView::hostWindow() const
 void FrameView::contentRectangleForPaintInvalidation(const IntRect& r)
 {
     ASSERT(paintInvalidationIsAllowed());
-    ASSERT(!m_frame->owner());
+    ASSERT(!m_frame->ownerRenderer());
 
     if (m_isTrackingPaintInvalidations) {
         IntRect paintInvalidationRect = r;
@@ -1707,7 +1648,8 @@ void FrameView::handleLoadCompleted()
 {
     // Once loading has completed, allow autoSize one last opportunity to
     // reduce the size of the frame.
-    autoSizeIfEnabled();
+    if (m_autoSizeInfo)
+        m_autoSizeInfo->autoSizeIfNeeded();
 }
 
 void FrameView::scheduleRelayout()
@@ -1852,7 +1794,7 @@ void FrameView::setBaseBackgroundColor(const Color& backgroundColor)
     m_baseBackgroundColor = backgroundColor;
 
     if (renderView() && renderView()->layer()->hasCompositedLayerMapping()) {
-        CompositedLayerMappingPtr compositedLayerMapping = renderView()->layer()->compositedLayerMapping();
+        CompositedLayerMapping* compositedLayerMapping = renderView()->layer()->compositedLayerMapping();
         compositedLayerMapping->updateContentsOpaque();
         if (compositedLayerMapping->mainGraphicsLayer())
             compositedLayerMapping->mainGraphicsLayer()->setNeedsDisplay();
@@ -2062,108 +2004,6 @@ void FrameView::updateCounters()
 
         toRenderCounter(renderer)->updateCounter();
     }
-}
-
-void FrameView::autoSizeIfEnabled()
-{
-    if (!m_shouldAutoSize)
-        return;
-
-    if (m_inAutoSize)
-        return;
-
-    TemporaryChange<bool> changeInAutoSize(m_inAutoSize, true);
-
-    Document* document = frame().document();
-    if (!document || !document->isActive())
-        return;
-
-    Element* documentElement = document->documentElement();
-    if (!documentElement)
-        return;
-
-    // If this is the first time we run autosize, start from small height and
-    // allow it to grow.
-    if (!m_didRunAutosize)
-        resize(frameRect().width(), m_minAutoSize.height());
-
-    IntSize size = frameRect().size();
-
-    // Do the resizing twice. The first time is basically a rough calculation using the preferred width
-    // which may result in a height change during the second iteration.
-    for (int i = 0; i < 2; i++) {
-        // Update various sizes including contentsSize, scrollHeight, etc.
-        document->updateLayoutIgnorePendingStylesheets();
-
-        RenderView* renderView = document->renderView();
-        if (!renderView)
-            return;
-
-        int width = renderView->minPreferredLogicalWidth();
-
-        RenderBox* documentRenderBox = documentElement->renderBox();
-        if (!documentRenderBox)
-            return;
-
-        int height = documentRenderBox->scrollHeight();
-        IntSize newSize(width, height);
-
-        // Check to see if a scrollbar is needed for a given dimension and
-        // if so, increase the other dimension to account for the scrollbar.
-        // Since the dimensions are only for the view rectangle, once a
-        // dimension exceeds the maximum, there is no need to increase it further.
-        if (newSize.width() > m_maxAutoSize.width()) {
-            RefPtr<Scrollbar> localHorizontalScrollbar = horizontalScrollbar();
-            if (!localHorizontalScrollbar)
-                localHorizontalScrollbar = createScrollbar(HorizontalScrollbar);
-            if (!localHorizontalScrollbar->isOverlayScrollbar())
-                newSize.setHeight(newSize.height() + localHorizontalScrollbar->height());
-
-            // Don't bother checking for a vertical scrollbar because the width is at
-            // already greater the maximum.
-        } else if (newSize.height() > m_maxAutoSize.height()) {
-            RefPtr<Scrollbar> localVerticalScrollbar = verticalScrollbar();
-            if (!localVerticalScrollbar)
-                localVerticalScrollbar = createScrollbar(VerticalScrollbar);
-            if (!localVerticalScrollbar->isOverlayScrollbar())
-                newSize.setWidth(newSize.width() + localVerticalScrollbar->width());
-
-            // Don't bother checking for a horizontal scrollbar because the height is
-            // already greater the maximum.
-        }
-
-        // Ensure the size is at least the min bounds.
-        newSize = newSize.expandedTo(m_minAutoSize);
-
-        // Bound the dimensions by the max bounds and determine what scrollbars to show.
-        ScrollbarMode horizonalScrollbarMode = ScrollbarAlwaysOff;
-        if (newSize.width() > m_maxAutoSize.width()) {
-            newSize.setWidth(m_maxAutoSize.width());
-            horizonalScrollbarMode = ScrollbarAlwaysOn;
-        }
-        ScrollbarMode verticalScrollbarMode = ScrollbarAlwaysOff;
-        if (newSize.height() > m_maxAutoSize.height()) {
-            newSize.setHeight(m_maxAutoSize.height());
-            verticalScrollbarMode = ScrollbarAlwaysOn;
-        }
-
-        if (newSize == size)
-            continue;
-
-        // While loading only allow the size to increase (to avoid twitching during intermediate smaller states)
-        // unless autoresize has just been turned on or the maximum size is smaller than the current size.
-        if (m_didRunAutosize && size.height() <= m_maxAutoSize.height() && size.width() <= m_maxAutoSize.width()
-            && !m_frame->document()->loadEventFinished() && (newSize.height() < size.height() || newSize.width() < size.width()))
-            break;
-
-        resize(newSize.width(), newSize.height());
-        // Force the scrollbar state to avoid the scrollbar code adding them and causing them to be needed. For example,
-        // a vertical scrollbar may cause text to wrap and thus increase the height (which is the only reason the scollbar is needed).
-        setVerticalScrollbarLock(false);
-        setHorizontalScrollbarLock(false);
-        setScrollbarModes(horizonalScrollbarMode, verticalScrollbarMode, true, true);
-    }
-    m_didRunAutosize = true;
 }
 
 void FrameView::updateOverflowStatus(bool horizontalOverflow, bool verticalOverflow)
@@ -2457,7 +2297,7 @@ void FrameView::updateScrollCorner()
         invalidateScrollCorner(cornerRect);
     } else if (m_scrollCorner) {
         m_scrollCorner->destroy();
-        m_scrollCorner = 0;
+        m_scrollCorner = nullptr;
     }
 
     ScrollView::updateScrollCorner();
@@ -2465,11 +2305,6 @@ void FrameView::updateScrollCorner()
 
 void FrameView::paintScrollCorner(GraphicsContext* context, const IntRect& cornerRect)
 {
-    if (context->updatingControlTints()) {
-        updateScrollCorner();
-        return;
-    }
-
     if (m_scrollCorner) {
         bool needsBackgorund = m_frame->isMainFrame();
         if (needsBackgorund)
@@ -2552,31 +2387,6 @@ FrameView* FrameView::parentFrameView() const
     return 0;
 }
 
-void FrameView::updateControlTints()
-{
-    // This is called when control tints are changed from aqua/graphite to clear and vice versa.
-    // We do a "fake" paint, and when the theme gets a paint call, it can then do an invalidate.
-    // This is only done if the theme supports control tinting. It's up to the theme and platform
-    // to define when controls get the tint and to call this function when that changes.
-
-    // Optimize the common case where we bring a window to the front while it's still empty.
-    if (m_frame->document()->url().isEmpty())
-        return;
-
-    // FIXME: We shouldn't rely on the paint code to implement :window-inactive on custom scrollbars.
-    if (!RenderTheme::theme().supportsControlTints() && !hasCustomScrollbars())
-        return;
-
-    // Updating layout can run script, which can tear down the FrameView.
-    RefPtr<FrameView> protector(this);
-    updateLayoutAndStyleForPainting();
-
-    // FIXME: The use of paint seems like overkill: crbug.com/236892
-    GraphicsContext context(0); // NULL canvas to get a non-painting context.
-    context.setUpdatingControlTints(true);
-    paint(&context, frameRect());
-}
-
 bool FrameView::wasScrolledByUser() const
 {
     return m_wasScrolledByUser;
@@ -2619,9 +2429,8 @@ void FrameView::paintContents(GraphicsContext* p, const IntRect& rect)
         return;
     }
 
-    ASSERT(!needsLayout());
-    if (needsLayout())
-        return;
+    RELEASE_ASSERT(!needsLayout());
+    ASSERT(document->lifecycle().state() >= DocumentLifecycle::CompositingClean);
 
     TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "Paint", "data", InspectorPaintEvent::data(renderView, rect, 0));
     TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline.stack"), "CallStack", "stack", InspectorCallStackEvent::currentCallStack());
@@ -2704,9 +2513,6 @@ void FrameView::setNodeToDraw(Node* node)
 
 void FrameView::paintOverhangAreas(GraphicsContext* context, const IntRect& horizontalOverhangArea, const IntRect& verticalOverhangArea, const IntRect& dirtyRect)
 {
-    if (context->paintingDisabled())
-        return;
-
     if (m_frame->document()->printing())
         return;
 
@@ -2718,12 +2524,24 @@ void FrameView::paintOverhangAreas(GraphicsContext* context, const IntRect& hori
     ScrollView::paintOverhangAreas(context, horizontalOverhangArea, verticalOverhangArea, dirtyRect);
 }
 
+void FrameView::updateWidgetPositionsIfNeeded()
+{
+    if (!m_needsUpdateWidgetPositions)
+        return;
+
+    m_needsUpdateWidgetPositions = false;
+
+    updateWidgetPositions();
+}
+
 void FrameView::updateLayoutAndStyleForPainting()
 {
     // Updating layout can run script, which can tear down the FrameView.
     RefPtr<FrameView> protector(this);
 
     updateLayoutAndStyleIfNeededRecursive();
+
+    updateWidgetPositionsIfNeeded();
 
     if (RenderView* view = renderView()) {
         TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "UpdateLayerTree", "frame", m_frame.get());
@@ -2811,31 +2629,12 @@ void FrameView::invalidateTreeIfNeededRecursive()
     }
 }
 
-void FrameView::enableAutoSizeMode(bool enable, const IntSize& minSize, const IntSize& maxSize)
+void FrameView::enableAutoSizeMode(const IntSize& minSize, const IntSize& maxSize)
 {
-    ASSERT(!enable || !minSize.isEmpty());
-    ASSERT(minSize.width() <= maxSize.width());
-    ASSERT(minSize.height() <= maxSize.height());
+    if (!m_autoSizeInfo)
+        m_autoSizeInfo = adoptPtr(new FrameViewAutoSizeInfo(this));
 
-    if (m_shouldAutoSize == enable && m_minAutoSize == minSize && m_maxAutoSize == maxSize)
-        return;
-
-
-    m_shouldAutoSize = enable;
-    m_minAutoSize = minSize;
-    m_maxAutoSize = maxSize;
-    m_didRunAutosize = false;
-
-    setLayoutSizeFixedToFrameSize(enable);
-    setNeedsLayout();
-    scheduleRelayout();
-    if (m_shouldAutoSize)
-        return;
-
-    // Since autosize mode forces the scrollbar mode, change them to being auto.
-    setVerticalScrollbarLock(false);
-    setHorizontalScrollbarLock(false);
-    setScrollbarModes(ScrollbarAuto, ScrollbarAuto);
+    m_autoSizeInfo->configureAutoSizeMode(minSize, maxSize);
 }
 
 void FrameView::forceLayout(bool allowSubtree)
@@ -3044,7 +2843,7 @@ void FrameView::setTracksPaintInvalidations(bool trackPaintInvalidations)
         if (!frame->isLocalFrame())
             continue;
         if (RenderView* renderView = toLocalFrame(frame)->contentRenderer())
-            renderView->compositor()->setTracksRepaints(trackPaintInvalidations);
+            renderView->compositor()->setTracksPaintInvalidations(trackPaintInvalidations);
     }
 
     TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("blink.invalidation"),
@@ -3058,7 +2857,7 @@ void FrameView::resetTrackedPaintInvalidations()
 {
     m_trackedPaintInvalidationRects.clear();
     if (RenderView* renderView = this->renderView())
-        renderView->compositor()->resetTrackedRepaintRects();
+        renderView->compositor()->resetTrackedPaintInvalidationRects();
 }
 
 String FrameView::trackedPaintInvalidationRectsAsText() const

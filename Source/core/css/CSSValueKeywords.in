@@ -458,7 +458,6 @@ portrait
 pre
 pre-line
 pre-wrap
--internal-presence
 relative
 scroll
 separate
@@ -547,11 +546,6 @@ ahead
 up
 down
 // auto
-
-// -internal-marquee-speed
-slow
-// normal
-fast
 
 // -internal-marquee-repetition
 infinite
@@ -895,6 +889,11 @@ alphabetic
 // none
 coarse
 fine
+
+// (hover:) media feature
+//  none
+on-demand
+hover
 
 // blend modes
 // normal

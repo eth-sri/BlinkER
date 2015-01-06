@@ -33,7 +33,7 @@
 #include "core/css/SiblingTraversalStrategies.h"
 #include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
-#include "core/dom/FullscreenElementStack.h"
+#include "core/dom/Fullscreen.h"
 #include "core/dom/NodeRenderStyle.h"
 #include "core/dom/StyleEngine.h"
 #include "core/dom/Text.h"
@@ -45,6 +45,7 @@
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLOptionElement.h"
+#include "core/html/HTMLSelectElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/html/track/vtt/VTTElement.h"
 #include "core/inspector/InspectorInstrumentation.h"
@@ -467,8 +468,8 @@ static bool anyAttributeMatches(Element& element, CSSSelector::Match match, cons
     bool caseInsensitive = selector.attributeMatchType() == CSSSelector::CaseInsensitive;
 
     AttributeCollection attributes = element.attributesWithoutUpdate();
-    AttributeCollection::const_iterator end = attributes.end();
-    for (AttributeCollection::const_iterator it = attributes.begin(); it != end; ++it) {
+    AttributeCollection::iterator end = attributes.end();
+    for (AttributeCollection::iterator it = attributes.begin(); it != end; ++it) {
         const Attribute& attributeItem = *it;
 
         if (!attributeItem.matches(selectorAttr))
@@ -506,10 +507,11 @@ bool SelectorChecker::checkOne(const SelectorCheckingContext& context, const Sib
 
     bool elementIsHostInItsShadowTree = isHostInItsShadowTree(element, context.scope);
 
-    // Only :host and :ancestor should match the host: http://drafts.csswg.org/css-scoping/#host-element
-    if (elementIsHostInItsShadowTree && !selector.isHostPseudoClass()
-        && !(context.contextFlags & TreatShadowHostAsNormalScope))
-        return false;
+    // Only :host and :host-context() should match the host: http://drafts.csswg.org/css-scoping/#host-element
+    if (elementIsHostInItsShadowTree && (!selector.isHostPseudoClass()
+        && !(context.contextFlags & TreatShadowHostAsNormalScope)
+        && selector.match() != CSSSelector::PseudoElement))
+            return false;
 
     if (selector.match() == CSSSelector::Tag)
         return SelectorChecker::tagMatches(element, selector.tagQName());
@@ -854,18 +856,13 @@ bool SelectorChecker::checkOne(const SelectorCheckingContext& context, const Sib
             // context's Document is in the fullscreen state has the 'full-screen' pseudoclass applied.
             if (isHTMLFrameElementBase(element) && element.containsFullScreenElement())
                 return true;
-            if (FullscreenElementStack* fullscreen = FullscreenElementStack::fromIfExists(element.document())) {
-                if (!fullscreen->webkitIsFullScreen())
-                    return false;
-                return element == fullscreen->webkitCurrentFullScreenElement();
-            }
-            return false;
+            return Fullscreen::isActiveFullScreenElement(element);
         case CSSSelector::PseudoFullScreenAncestor:
             return element.containsFullScreenElement();
         case CSSSelector::PseudoFullScreenDocument:
             // While a Document is in the fullscreen state, the 'full-screen-document' pseudoclass applies
             // to all elements of that Document.
-            if (!FullscreenElementStack::isFullScreen(element.document()))
+            if (!Fullscreen::isFullScreen(element.document()))
                 return false;
             return true;
         case CSSSelector::PseudoInRange:
@@ -952,6 +949,8 @@ bool SelectorChecker::checkOne(const SelectorCheckingContext& context, const Sib
             break;
         case CSSSelector::PseudoSpatialNavigationFocus:
             return context.isUARule && matchesSpatialNavigationFocusPseudoClass(element);
+        case CSSSelector::PseudoListBox:
+            return context.isUARule && matchesListBoxPseudoClass(element);
 
         case CSSSelector::PseudoHorizontal:
         case CSSSelector::PseudoVertical:
@@ -1127,6 +1126,11 @@ bool SelectorChecker::matchesFocusPseudoClass(const Element& element)
 bool SelectorChecker::matchesSpatialNavigationFocusPseudoClass(const Element& element)
 {
     return isHTMLOptionElement(element) && toHTMLOptionElement(element).spatialNavigationFocused() && isFrameFocused(element);
+}
+
+bool SelectorChecker::matchesListBoxPseudoClass(const Element& element)
+{
+    return isHTMLSelectElement(element) && !toHTMLSelectElement(element).usesMenuList();
 }
 
 template

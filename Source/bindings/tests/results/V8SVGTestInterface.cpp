@@ -22,12 +22,9 @@
 
 namespace blink {
 
-static void initializeScriptWrappableForInterface(SVGTestInterface* object)
+static void initializeScriptWrappableForInterface(SVGTestInterface* impl)
 {
-    if (ScriptWrappable::wrapperCanBeStoredInObject(object))
-        ScriptWrappable::fromObject(object)->setTypeInfo(&V8SVGTestInterface::wrapperTypeInfo);
-    else
-        ASSERT_NOT_REACHED();
+    impl->setTypeInfo(&V8SVGTestInterface::wrapperTypeInfo);
 }
 
 } // namespace blink
@@ -38,7 +35,8 @@ void webCoreInitializeScriptWrappableForInterface(blink::SVGTestInterface* objec
 }
 
 namespace blink {
-const WrapperTypeInfo V8SVGTestInterface::wrapperTypeInfo = { gin::kEmbedderBlink, V8SVGTestInterface::domTemplate, V8SVGTestInterface::derefObject, 0, 0, 0, V8SVGTestInterface::installPerContextEnabledMethods, 0, WrapperTypeObjectPrototype, RefCountedObject };
+
+const WrapperTypeInfo V8SVGTestInterface::wrapperTypeInfo = { gin::kEmbedderBlink, V8SVGTestInterface::domTemplate, V8SVGTestInterface::refObject, V8SVGTestInterface::derefObject, V8SVGTestInterface::createPersistentHandle, 0, 0, 0, V8SVGTestInterface::installConditionallyEnabledMethods, V8SVGTestInterface::installConditionallyEnabledProperties, 0, WrapperTypeObjectPrototype, RefCountedObject };
 
 namespace SVGTestInterfaceV8Internal {
 
@@ -115,7 +113,7 @@ v8::Handle<v8::Object> V8SVGTestInterface::findInstanceInPrototypeChain(v8::Hand
 
 SVGTestInterface* V8SVGTestInterface::toNativeWithTypeCheck(v8::Isolate* isolate, v8::Handle<v8::Value> value)
 {
-    return hasInstance(value, isolate) ? fromInternalPointer(v8::Handle<v8::Object>::Cast(value)->GetAlignedPointerFromInternalField(v8DOMWrapperObjectIndex)) : 0;
+    return hasInstance(value, isolate) ? fromInternalPointer(blink::toInternalPointer(v8::Handle<v8::Object>::Cast(value))) : 0;
 }
 
 v8::Handle<v8::Object> wrap(SVGTestInterface* impl, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
@@ -129,25 +127,35 @@ v8::Handle<v8::Object> V8SVGTestInterface::createWrapper(PassRefPtr<SVGTestInter
 {
     ASSERT(impl);
     ASSERT(!DOMDataStore::containsWrapper<V8SVGTestInterface>(impl.get(), isolate));
-    if (ScriptWrappable::wrapperCanBeStoredInObject(impl.get())) {
-        const WrapperTypeInfo* actualInfo = ScriptWrappable::fromObject(impl.get())->typeInfo();
-        // Might be a XXXConstructor::wrapperTypeInfo instead of an XXX::wrapperTypeInfo. These will both have
-        // the same object de-ref functions, though, so use that as the basis of the check.
-        RELEASE_ASSERT_WITH_SECURITY_IMPLICATION(actualInfo->derefObjectFunction == wrapperTypeInfo.derefObjectFunction);
-    }
+    const WrapperTypeInfo* actualInfo = impl->typeInfo();
+    // Might be a XXXConstructor::wrapperTypeInfo instead of an XXX::wrapperTypeInfo. These will both have
+    // the same object de-ref functions, though, so use that as the basis of the check.
+    RELEASE_ASSERT_WITH_SECURITY_IMPLICATION(actualInfo->derefObjectFunction == wrapperTypeInfo.derefObjectFunction);
 
     v8::Handle<v8::Object> wrapper = V8DOMWrapper::createWrapper(creationContext, &wrapperTypeInfo, toInternalPointer(impl.get()), isolate);
     if (UNLIKELY(wrapper.IsEmpty()))
         return wrapper;
 
-    installPerContextEnabledProperties(wrapper, impl.get(), isolate);
+    installConditionallyEnabledProperties(wrapper, isolate);
     V8DOMWrapper::associateObjectWithWrapper<V8SVGTestInterface>(impl, &wrapperTypeInfo, wrapper, isolate, WrapperConfiguration::Dependent);
     return wrapper;
 }
 
-void V8SVGTestInterface::derefObject(void* object)
+
+void V8SVGTestInterface::refObject(ScriptWrappableBase* internalPointer)
 {
-    fromInternalPointer(object)->deref();
+    fromInternalPointer(internalPointer)->ref();
+}
+
+void V8SVGTestInterface::derefObject(ScriptWrappableBase* internalPointer)
+{
+    fromInternalPointer(internalPointer)->deref();
+}
+
+PersistentNode* V8SVGTestInterface::createPersistentHandle(ScriptWrappableBase* internalPointer)
+{
+    ASSERT_NOT_REACHED();
+    return 0;
 }
 
 template<>

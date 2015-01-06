@@ -41,6 +41,8 @@ ${includes}
 
 namespace blink {
 
+${forward_declarations}
+
 namespace InspectorInstrumentation {
 
 $methods
@@ -202,6 +204,7 @@ class File:
         self.name = name
         self.header_name = self.name + "Inl"
         self.includes = [include_inspector_header("InspectorInstrumentation")]
+        self.forward_declarations = []
         self.declarations = []
         for line in map(str.strip, source.split("\n")):
             line = re.sub("\s{2,}", " ", line).strip()  # Collapse whitespace
@@ -209,9 +212,12 @@ class File:
                 continue
             if line[0] == "#":
                 self.includes.append(line)
+            elif line.startswith("class "):
+                self.forward_declarations.append(line)
             else:
                 self.declarations.append(Method(line))
         self.includes.sort()
+        self.forward_declarations.sort()
 
     def generate(self, cpp_lines, used_agents):
         header_lines = []
@@ -224,6 +230,7 @@ class File:
         return template_h.substitute(None,
                                      file_name=self.header_name,
                                      includes="\n".join(self.includes),
+                                     forward_declarations="\n".join(self.forward_declarations),
                                      methods="\n".join(header_lines))
 
 
@@ -317,7 +324,8 @@ class Method:
         if len(self.agents) == 0:
             return
 
-        body_lines = map(self.generate_agent_call, self.agents)
+        body_lines = map(self.generate_ref_ptr, self.params)
+        body_lines += map(self.generate_agent_call, self.agents)
 
         if self.returns_cookie:
             if "Timeline" in self.agents:
@@ -364,6 +372,11 @@ class Method:
             maybe_return=maybe_return,
             params_agent=", ".join(map(Parameter.to_str_value, self.params_impl)[1:]))
 
+    def generate_ref_ptr(self, param):
+        if param.is_prp:
+            return "\n    RefPtr<%s> %s = %s;" % (param.inner_type, param.value, param.name)
+        else:
+            return ""
 
 class Parameter:
     def __init__(self, source):
@@ -394,8 +407,12 @@ class Parameter:
             self.name = generate_param_name(self.type)
 
         if re.match("PassRefPtr<", param_decl):
-            self.value = "%s.get()" % self.name
+            self.is_prp = True
+            self.value = self.name
+            self.name = "prp" + self.name[0].upper() + self.name[1:]
+            self.inner_type = re.match("PassRefPtr<(.+)>", param_decl).group(1)
         else:
+            self.is_prp = False
             self.value = self.name
 
 

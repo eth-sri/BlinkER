@@ -38,11 +38,13 @@
 #include "bindings/core/v8/V8Document.h"
 #include "bindings/core/v8/V8FormData.h"
 #include "bindings/core/v8/V8HTMLDocument.h"
+#include "bindings/core/v8/V8ReadableStream.h"
 #include "bindings/core/v8/V8Stream.h"
 #include "bindings/core/v8/custom/V8ArrayBufferCustom.h"
 #include "bindings/core/v8/custom/V8ArrayBufferViewCustom.h"
 #include "core/dom/Document.h"
 #include "core/inspector/InspectorInstrumentation.h"
+#include "core/streams/ReadableStream.h"
 #include "core/streams/Stream.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/xml/XMLHttpRequest.h"
@@ -130,9 +132,16 @@ void V8XMLHttpRequest::responseAttributeGetterCustom(const v8::PropertyCallbackI
             return;
         }
 
+    case XMLHttpRequest::ResponseTypeLegacyStream:
+        {
+            Stream* stream = xmlHttpRequest->responseLegacyStream();
+            v8SetReturnValueFast(info, stream, xmlHttpRequest);
+            return;
+        }
+
     case XMLHttpRequest::ResponseTypeStream:
         {
-            Stream* stream = xmlHttpRequest->responseStream();
+            ReadableStream* stream = xmlHttpRequest->responseStream();
             v8SetReturnValueFast(info, stream, xmlHttpRequest);
             return;
         }

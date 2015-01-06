@@ -27,7 +27,6 @@
 #include "platform/graphics/filters/FEComposite.h"
 
 #include "SkArithmeticMode.h"
-#include "SkFlattenableBuffers.h"
 #include "SkXfermodeImageFilter.h"
 
 #include "platform/graphics/GraphicsContext.h"
@@ -357,18 +356,18 @@ void FEComposite::applySoftware()
     }
 }
 
-SkXfermode::Mode toXfermode(blink::CompositeOperationType mode)
+SkXfermode::Mode toXfermode(CompositeOperationType mode)
 {
     switch (mode) {
-    case blink::FECOMPOSITE_OPERATOR_OVER:
+    case FECOMPOSITE_OPERATOR_OVER:
         return SkXfermode::kSrcOver_Mode;
-    case blink::FECOMPOSITE_OPERATOR_IN:
+    case FECOMPOSITE_OPERATOR_IN:
         return SkXfermode::kSrcIn_Mode;
-    case blink::FECOMPOSITE_OPERATOR_OUT:
+    case FECOMPOSITE_OPERATOR_OUT:
         return SkXfermode::kSrcOut_Mode;
-    case blink::FECOMPOSITE_OPERATOR_ATOP:
+    case FECOMPOSITE_OPERATOR_ATOP:
         return SkXfermode::kSrcATop_Mode;
-    case blink::FECOMPOSITE_OPERATOR_XOR:
+    case FECOMPOSITE_OPERATOR_XOR:
         return SkXfermode::kXor_Mode;
     default:
         ASSERT_NOT_REACHED();

@@ -43,7 +43,6 @@
 #include "platform/graphics/GraphicsTypes.h"
 #include "platform/transforms/AffineTransform.h"
 #include "wtf/MathExtras.h"
-#include "wtf/PassRefPtr.h"
 
 class SkCanvas;
 class SkRegion;
@@ -52,7 +51,7 @@ namespace blink {
 
 class GraphicsContext;
 
-PassRefPtr<SkXfermode> WebCoreCompositeToSkiaComposite(CompositeOperator, blink::WebBlendMode = blink::WebBlendModeNormal);
+SkXfermode::Mode WebCoreCompositeToSkiaComposite(CompositeOperator, WebBlendMode = WebBlendModeNormal);
 
 // move this guy into SkColor.h
 SkColor SkPMColorToColor(SkPMColor);
@@ -86,6 +85,11 @@ inline bool WebCoreFloatNearlyEqual(float a, float b)
     return SkScalarNearlyEqual(WebCoreFloatToSkScalar(a), WebCoreFloatToSkScalar(b));
 }
 
+inline SkPath::FillType WebCoreWindRuleToSkFillType(WindRule rule)
+{
+    return static_cast<SkPath::FillType>(rule);
+}
+
 // Determine if a given WebKit point is contained in a path
 bool PLATFORM_EXPORT SkPathContainsPoint(const SkPath&, const FloatPoint&, SkPath::FillType);
 
@@ -105,6 +109,6 @@ InterpolationQuality computeInterpolationQuality(
 
 bool shouldDrawAntiAliased(const GraphicsContext*, const SkRect& destRect);
 
-}  // namespace blink
+} // namespace blink
 
 #endif  // SkiaUtils_h

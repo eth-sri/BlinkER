@@ -62,6 +62,8 @@ PassRefPtrWillBeRawPtr<PickerIndicatorElement> PickerIndicatorElement::create(Do
 
 PickerIndicatorElement::~PickerIndicatorElement()
 {
+    closePopup();
+    ASSERT(!m_chooser);
 }
 
 RenderObject* PickerIndicatorElement::createRenderer(RenderStyle*)
@@ -131,6 +133,12 @@ void PickerIndicatorElement::openPopup()
     m_chooser = document().page()->chrome().openDateTimeChooser(this, parameters);
 }
 
+Element& PickerIndicatorElement::ownerElement() const
+{
+    ASSERT(m_pickerIndicatorOwner);
+    return m_pickerIndicatorOwner->pickerOwnerElement();
+}
+
 void PickerIndicatorElement::closePopup()
 {
     if (!m_chooser)
@@ -144,6 +152,11 @@ void PickerIndicatorElement::detach(const AttachContext& context)
     HTMLDivElement::detach(context);
 }
 
+AXObject* PickerIndicatorElement::popupRootAXObject() const
+{
+    return m_chooser ? m_chooser->rootAXObject() : 0;
+}
+
 bool PickerIndicatorElement::isPickerIndicatorElement() const
 {
     return true;
@@ -152,9 +165,7 @@ bool PickerIndicatorElement::isPickerIndicatorElement() const
 void PickerIndicatorElement::trace(Visitor* visitor)
 {
     visitor->trace(m_pickerIndicatorOwner);
-    visitor->trace(m_chooser);
     HTMLDivElement::trace(visitor);
-    DateTimeChooserClient::trace(visitor);
 }
 
 }

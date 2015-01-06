@@ -33,6 +33,7 @@ class RenderSVGContainer : public RenderSVGModelObject {
 public:
     explicit RenderSVGContainer(SVGElement*);
     virtual ~RenderSVGContainer();
+    virtual void trace(Visitor*) OVERRIDE;
 
     RenderObject* firstChild() const { ASSERT(children() == virtualChildren()); return children()->firstChild(); }
     RenderObject* lastChild() const { ASSERT(children() == virtualChildren()); return children()->lastChild(); }
@@ -64,7 +65,7 @@ protected:
 
     virtual FloatRect objectBoundingBox() const OVERRIDE FINAL { return m_objectBoundingBox; }
     virtual FloatRect strokeBoundingBox() const OVERRIDE FINAL { return m_strokeBoundingBox; }
-    virtual FloatRect paintInvalidationRectInLocalCoordinates() const OVERRIDE FINAL { return m_repaintBoundingBox; }
+    virtual FloatRect paintInvalidationRectInLocalCoordinates() const OVERRIDE FINAL { return m_paintInvalidationBoundingBox; }
 
     virtual bool nodeAtFloatPoint(const HitTestRequest&, HitTestResult&, const FloatPoint& pointInParent, HitTestAction) OVERRIDE;
 
@@ -86,7 +87,7 @@ private:
     FloatRect m_objectBoundingBox;
     bool m_objectBoundingBoxValid;
     FloatRect m_strokeBoundingBox;
-    FloatRect m_repaintBoundingBox;
+    FloatRect m_paintInvalidationBoundingBox;
     bool m_needsBoundariesUpdate : 1;
 };
 

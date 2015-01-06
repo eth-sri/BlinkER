@@ -35,7 +35,7 @@
 #include "core/dom/Attribute.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/ExceptionCode.h"
-#include "core/dom/FullscreenElementStack.h"
+#include "core/dom/Fullscreen.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/events/Event.h"
 #include "core/frame/LocalFrame.h"
@@ -186,7 +186,7 @@ public:
     }
 
 private:
-    RawPtrWillBeMember<AudioSourceProviderClient> m_client;
+    Member<AudioSourceProviderClient> m_client;
 #else
     explicit AudioSourceProviderClientLockScope(HTMLMediaElement&) { }
     ~AudioSourceProviderClientLockScope() { }
@@ -459,9 +459,11 @@ HTMLMediaElement::~HTMLMediaElement()
     m_isFinalizing = true;
 #endif
 
-    // The m_audioSourceNode is either dead already or it is dying together with
-    // this HTMLMediaElement which it strongly keeps alive.
-#if ENABLE(WEB_AUDIO) && !ENABLE(OILPAN)
+    // m_audioSourceNode is explicitly cleared by AudioNode::dispose().
+    // Since AudioNode::dispose() is guaranteed to be always called before
+    // the AudioNode is destructed, m_audioSourceNode is explicitly cleared
+    // even if the AudioNode and the HTMLMediaElement die together.
+#if ENABLE(WEB_AUDIO)
     ASSERT(!m_audioSourceNode);
 #endif
     clearMediaPlayerAndAudioSourceProviderClientWithoutLocking();
@@ -1817,7 +1819,7 @@ void HTMLMediaElement::setReadyState(ReadyState state)
         m_duration = duration();
         scheduleEvent(EventTypeNames::durationchange);
 
-        if (isHTMLVideoElement(*this))
+        if (isHTMLVideoElement())
             scheduleEvent(EventTypeNames::resize);
         scheduleEvent(EventTypeNames::loadedmetadata);
         if (hasMediaControls())
@@ -2352,6 +2354,31 @@ void HTMLMediaElement::setMuted(bool muted)
     updateVolume();
 
     scheduleEvent(EventTypeNames::volumechange);
+}
+
+void HTMLMediaElement::updateVolume()
+{
+    if (webMediaPlayer())
+        webMediaPlayer()->setVolume(effectiveMediaVolume());
+
+    if (hasMediaControls())
+        mediaControls()->updateVolume();
+}
+
+double HTMLMediaElement::effectiveMediaVolume() const
+{
+    if (m_muted)
+        return 0;
+
+    if (m_mediaController && m_mediaController->muted())
+        return 0;
+
+    double volume = m_volume;
+
+    if (m_mediaController)
+        volume *= m_mediaController->volume();
+
+    return volume;
 }
 
 // The spec says to fire periodic timeupdate events (those sent while playing) every
@@ -3175,7 +3202,7 @@ void HTMLMediaElement::mediaPlayerRepaint()
 
     updateDisplayState();
     if (renderer())
-        renderer()->paintInvalidationForWholeRenderer();
+        renderer()->setShouldDoFullPaintInvalidation(true);
 }
 
 void HTMLMediaElement::mediaPlayerSizeChanged()
@@ -3183,7 +3210,7 @@ void HTMLMediaElement::mediaPlayerSizeChanged()
     WTF_LOG(Media, "HTMLMediaElement::mediaPlayerSizeChanged");
 
     ASSERT(hasVideo()); // "resize" makes no sense absent video.
-    if (m_readyState > HAVE_NOTHING && isHTMLVideoElement(*this))
+    if (m_readyState > HAVE_NOTHING && isHTMLVideoElement())
         scheduleEvent(EventTypeNames::resize);
 
     if (renderer())
@@ -3274,28 +3301,6 @@ bool HTMLMediaElement::stoppedDueToErrors() const
     }
 
     return false;
-}
-
-void HTMLMediaElement::updateVolume()
-{
-    if (webMediaPlayer())
-        webMediaPlayer()->setVolume(playerVolume());
-
-    if (hasMediaControls())
-        mediaControls()->updateVolume();
-}
-
-double HTMLMediaElement::playerVolume() const
-{
-    double volumeMultiplier = 1;
-    bool shouldMute = m_muted;
-
-    if (m_mediaController) {
-        volumeMultiplier *= m_mediaController->volume();
-        shouldMute = m_mediaController->muted();
-    }
-
-    return shouldMute ? 0 : m_volume * volumeMultiplier;
 }
 
 void HTMLMediaElement::updatePlayState()
@@ -3485,28 +3490,28 @@ void HTMLMediaElement::contextDestroyed()
 
 bool HTMLMediaElement::isFullscreen() const
 {
-    return FullscreenElementStack::isActiveFullScreenElement(*this);
+    return Fullscreen::isActiveFullScreenElement(*this);
 }
 
 void HTMLMediaElement::enterFullscreen()
 {
     WTF_LOG(Media, "HTMLMediaElement::enterFullscreen");
 
-    FullscreenElementStack::from(document()).requestFullScreenForElement(*this, FullscreenElementStack::PrefixedVideoRequest);
+    Fullscreen::from(document()).requestFullscreen(*this, Fullscreen::PrefixedVideoRequest);
 }
 
 void HTMLMediaElement::exitFullscreen()
 {
     WTF_LOG(Media, "HTMLMediaElement::exitFullscreen");
 
-    FullscreenElementStack::from(document()).exitFullscreen();
+    Fullscreen::from(document()).exitFullscreen();
 }
 
 void HTMLMediaElement::didBecomeFullscreenElement()
 {
     if (hasMediaControls())
         mediaControls()->enteredFullscreen();
-    if (RuntimeEnabledFeatures::overlayFullscreenVideoEnabled() && isHTMLVideoElement(*this))
+    if (RuntimeEnabledFeatures::overlayFullscreenVideoEnabled() && isHTMLVideoElement())
         document().renderView()->compositor()->setNeedsCompositingUpdate(CompositingUpdateRebuildTree);
 }
 
@@ -3514,7 +3519,7 @@ void HTMLMediaElement::willStopBeingFullscreenElement()
 {
     if (hasMediaControls())
         mediaControls()->exitedFullscreen();
-    if (RuntimeEnabledFeatures::overlayFullscreenVideoEnabled() && isHTMLVideoElement(*this))
+    if (RuntimeEnabledFeatures::overlayFullscreenVideoEnabled() && isHTMLVideoElement())
         document().renderView()->compositor()->setNeedsCompositingUpdate(CompositingUpdateRebuildTree);
 }
 

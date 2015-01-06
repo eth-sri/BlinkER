@@ -21,6 +21,7 @@
 
 namespace blink {
 
+class BlobDataHandle;
 class WebServiceWorkerRequestPrivate;
 
 // Represents a request of a fetch operation. FetchEvent dispatched by the
@@ -47,14 +48,17 @@ public:
 
     void setHeader(const WebString& key, const WebString& value);
 
+    void setBlob(const WebString& uuid, long long size);
+
     void setReferrer(const WebString&, WebReferrerPolicy);
 
     void setIsReload(bool);
     bool isReload() const;
 
 #if INSIDE_BLINK
-    const blink::HTTPHeaderMap& headers() const;
-    const blink::Referrer& referrer() const;
+    const HTTPHeaderMap& headers() const;
+    PassRefPtr<BlobDataHandle> blobDataHandle() const;
+    const Referrer& referrer() const;
 #endif
 
 private:

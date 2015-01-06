@@ -125,7 +125,7 @@ static bool isValidPropertyName(const String& name)
 static AtomicString convertPropertyNameToAttributeName(const String& name)
 {
     StringBuilder builder;
-    builder.append("data-");
+    builder.appendLiteral("data-");
 
     unsigned length = name.length();
     for (unsigned i = 0; i < length; ++i) {
@@ -155,8 +155,8 @@ void DatasetDOMStringMap::deref()
 void DatasetDOMStringMap::getNames(Vector<String>& names)
 {
     AttributeCollection attributes = m_element->attributes();
-    AttributeCollection::const_iterator end = attributes.end();
-    for (AttributeCollection::const_iterator it = attributes.begin(); it != end; ++it) {
+    AttributeCollection::iterator end = attributes.end();
+    for (AttributeCollection::iterator it = attributes.begin(); it != end; ++it) {
         if (isValidAttributeName(it->localName()))
             names.append(convertAttributeNameToPropertyName(it->localName()));
     }
@@ -165,8 +165,8 @@ void DatasetDOMStringMap::getNames(Vector<String>& names)
 String DatasetDOMStringMap::item(const String& name)
 {
     AttributeCollection attributes = m_element->attributes();
-    AttributeCollection::const_iterator end = attributes.end();
-    for (AttributeCollection::const_iterator it = attributes.begin(); it != end; ++it) {
+    AttributeCollection::iterator end = attributes.end();
+    for (AttributeCollection::iterator it = attributes.begin(); it != end; ++it) {
         if (propertyNameMatchesAttributeName(name, it->localName()))
             return it->value();
     }
@@ -177,8 +177,8 @@ String DatasetDOMStringMap::item(const String& name)
 bool DatasetDOMStringMap::contains(const String& name)
 {
     AttributeCollection attributes = m_element->attributes();
-    AttributeCollection::const_iterator end = attributes.end();
-    for (AttributeCollection::const_iterator it = attributes.begin(); it != end; ++it) {
+    AttributeCollection::iterator end = attributes.end();
+    for (AttributeCollection::iterator it = attributes.begin(); it != end; ++it) {
         if (propertyNameMatchesAttributeName(name, it->localName()))
             return true;
     }

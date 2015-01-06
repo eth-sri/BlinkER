@@ -47,8 +47,9 @@ V8ArrayBufferDeallocationObserver* V8ArrayBufferDeallocationObserver::instanceTe
 
 const WrapperTypeInfo V8ArrayBuffer::wrapperTypeInfo = {
     gin::kEmbedderBlink,
-    0, V8ArrayBuffer::derefObject,
-    0, 0, 0, 0, 0, WrapperTypeObjectPrototype, RefCountedObject
+    0, V8ArrayBuffer::refObject, V8ArrayBuffer::derefObject,
+    V8ArrayBuffer::createPersistentHandle,
+    0, 0, 0, 0, 0, 0, WrapperTypeObjectPrototype, RefCountedObject
 };
 
 bool V8ArrayBuffer::hasInstance(v8::Handle<v8::Value> value, v8::Isolate*)
@@ -56,9 +57,20 @@ bool V8ArrayBuffer::hasInstance(v8::Handle<v8::Value> value, v8::Isolate*)
     return value->IsArrayBuffer();
 }
 
-void V8ArrayBuffer::derefObject(void* object)
+void V8ArrayBuffer::refObject(ScriptWrappableBase* internalPointer)
 {
-    static_cast<ArrayBuffer*>(object)->deref();
+    fromInternalPointer(internalPointer)->ref();
+}
+
+void V8ArrayBuffer::derefObject(ScriptWrappableBase* internalPointer)
+{
+    fromInternalPointer(internalPointer)->deref();
+}
+
+PersistentNode* V8ArrayBuffer::createPersistentHandle(ScriptWrappableBase* internalPointer)
+{
+    ASSERT_NOT_REACHED();
+    return 0;
 }
 
 v8::Handle<v8::Object> V8ArrayBuffer::createWrapper(PassRefPtr<ArrayBuffer> impl, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
@@ -79,7 +91,7 @@ ArrayBuffer* V8ArrayBuffer::toNative(v8::Handle<v8::Object> object)
     v8::Local<v8::ArrayBuffer> v8buffer = object.As<v8::ArrayBuffer>();
     if (v8buffer->IsExternal()) {
         RELEASE_ASSERT(toWrapperTypeInfo(object)->ginEmbedder == gin::kEmbedderBlink);
-        return reinterpret_cast<ArrayBuffer*>(blink::toNative(object));
+        return reinterpret_cast<ArrayBuffer*>(blink::toInternalPointer(object));
     }
 
     v8::ArrayBuffer::Contents v8Contents = v8buffer->Externalize();
@@ -88,7 +100,7 @@ ArrayBuffer* V8ArrayBuffer::toNative(v8::Handle<v8::Object> object)
     RefPtr<ArrayBuffer> buffer = ArrayBuffer::create(contents);
     V8DOMWrapper::associateObjectWithWrapper<V8ArrayBuffer>(buffer.release(), &wrapperTypeInfo, object, v8::Isolate::GetCurrent(), WrapperConfiguration::Dependent);
 
-    return reinterpret_cast<ArrayBuffer*>(blink::toNative(object));
+    return reinterpret_cast<ArrayBuffer*>(blink::toInternalPointer(object));
 }
 
 ArrayBuffer* V8ArrayBuffer::toNativeWithTypeCheck(v8::Isolate* isolate, v8::Handle<v8::Value> value)

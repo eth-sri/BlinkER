@@ -1063,8 +1063,19 @@ RenderListMarker::RenderListMarker(RenderListItem* item)
 
 RenderListMarker::~RenderListMarker()
 {
+}
+
+void RenderListMarker::destroy()
+{
     if (m_image)
         m_image->removeClient(this);
+    RenderBox::destroy();
+}
+
+void RenderListMarker::trace(Visitor* visitor)
+{
+    visitor->trace(m_listItem);
+    RenderBox::trace(visitor);
 }
 
 RenderListMarker* RenderListMarker::createAnonymous(RenderListItem* item)
@@ -1350,7 +1361,7 @@ void RenderListMarker::imageChanged(WrappedImagePtr o, const IntRect*)
     if (width() != m_image->imageSize(this, style()->effectiveZoom()).width() || height() != m_image->imageSize(this, style()->effectiveZoom()).height() || m_image->errorOccurred())
         setNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation();
     else
-        paintInvalidationForWholeRenderer();
+        setShouldDoFullPaintInvalidation(true);
 }
 
 void RenderListMarker::updateMarginsAndContent()
@@ -1815,7 +1826,7 @@ LayoutRect RenderListMarker::selectionRectForPaintInvalidation(const RenderLayer
     LayoutRect rect(0, root.selectionTop() - y(), width(), root.selectionHeight());
 
     if (clipToVisibleContent)
-        mapRectToPaintInvalidationBacking(paintInvalidationContainer, rect);
+        mapRectToPaintInvalidationBacking(paintInvalidationContainer, rect, 0);
     else
         rect = localToContainerQuad(FloatRect(rect), paintInvalidationContainer).enclosingBoundingBox();
 

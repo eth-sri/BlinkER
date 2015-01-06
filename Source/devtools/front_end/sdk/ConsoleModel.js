@@ -144,6 +144,7 @@ WebInspector.ConsoleModel.evaluateCommandInConsole = function(executionContext, 
     var target = executionContext.target();
 
     var commandMessage = new WebInspector.ConsoleMessage(target, WebInspector.ConsoleMessage.MessageSource.JS, null, text, WebInspector.ConsoleMessage.MessageType.Command);
+    commandMessage.setExecutionContextId(executionContext.id);
     target.consoleModel.addMessage(commandMessage);
 
     /**
@@ -185,8 +186,9 @@ WebInspector.ConsoleModel.evaluateCommandInConsole = function(executionContext, 
  * @param {boolean=} isOutdated
  * @param {!RuntimeAgent.ExecutionContextId=} executionContextId
  * @param {!ConsoleAgent.AsyncStackTrace=} asyncStackTrace
+ * @param {?string=} scriptId
  */
-WebInspector.ConsoleMessage = function(target, source, level, messageText, type, url, line, column, requestId, parameters, stackTrace, timestamp, isOutdated, executionContextId, asyncStackTrace)
+WebInspector.ConsoleMessage = function(target, source, level, messageText, type, url, line, column, requestId, parameters, stackTrace, timestamp, isOutdated, executionContextId, asyncStackTrace, scriptId)
 {
     this._target = target;
     this.source = source;
@@ -202,6 +204,7 @@ WebInspector.ConsoleMessage = function(target, source, level, messageText, type,
     this.isOutdated = isOutdated;
     this.executionContextId = executionContextId || 0;
     this.asyncStackTrace = asyncStackTrace;
+    this.scriptId = scriptId || null;
 
     this.request = requestId ? target.networkLog.requestForId(requestId) : null;
 
@@ -230,6 +233,15 @@ WebInspector.ConsoleMessage.prototype = {
     setOriginatingMessage: function(originatingMessage)
     {
         this._originatingConsoleMessage = originatingMessage;
+        this.executionContextId = originatingMessage.executionContextId;
+    },
+
+    /**
+     * @param {!RuntimeAgent.ExecutionContextId} executionContextId
+     */
+    setExecutionContextId: function(executionContextId)
+    {
+        this.executionContextId = executionContextId;
     },
 
     /**
@@ -287,7 +299,8 @@ WebInspector.ConsoleMessage.prototype = {
             this.timestamp,
             this.isOutdated,
             this.executionContextId,
-            this.asyncStackTrace);
+            this.asyncStackTrace,
+            this.scriptId);
     },
 
     /**
@@ -334,7 +347,8 @@ WebInspector.ConsoleMessage.prototype = {
             && (this.url === msg.url)
             && (this.messageText === msg.messageText)
             && (this.request === msg.request)
-            && (this.executionContextId === msg.executionContextId);
+            && (this.executionContextId === msg.executionContextId)
+            && (this.scriptId === msg.scriptId);
     },
 
     /**
@@ -467,7 +481,8 @@ WebInspector.ConsoleDispatcher.prototype = {
             payload.timestamp * 1000, // Convert to ms.
             this._console._enablingConsole,
             payload.executionContextId,
-            payload.asyncStackTrace);
+            payload.asyncStackTrace,
+            payload.scriptId);
         this._console.addMessage(consoleMessage);
     },
 

@@ -71,7 +71,13 @@ static bool isKeySystemSupportedWithInitDataType(const String& keySystem, const 
 {
     // FIXME: initDataType != contentType. Implement this properly.
     // http://crbug.com/385874.
-    return isKeySystemSupportedWithContentType(keySystem, initDataType);
+    String contentType = initDataType;
+    if (initDataType == "webm") {
+        contentType = "video/webm";
+    } else if (initDataType == "cenc") {
+        contentType = "video/mp4";
+    }
+    return isKeySystemSupportedWithContentType(keySystem, contentType);
 }
 
 static ScriptPromise createRejectedPromise(ScriptState* scriptState, ExceptionCode error, const String& errorMessage)
@@ -129,7 +135,7 @@ void MediaKeysInitializer::timerFired(Timer<MediaKeysInitializer>*)
     Document* document = toDocument(executionContext());
     MediaKeysController* controller = MediaKeysController::from(document->page());
     // FIXME: make createContentDecryptionModule() asynchronous.
-    OwnPtr<blink::WebContentDecryptionModule> cdm = controller->createContentDecryptionModule(executionContext(), m_keySystem);
+    OwnPtr<WebContentDecryptionModule> cdm = controller->createContentDecryptionModule(executionContext(), m_keySystem);
 
     // 4.3 If cdm fails to load or initialize, reject promise with a new
     //     DOMException whose name is the appropriate error name and that
@@ -180,7 +186,7 @@ ScriptPromise MediaKeys::create(ScriptState* scriptState, const String& keySyste
     return MediaKeysInitializer::create(scriptState, keySystem);
 }
 
-MediaKeys::MediaKeys(ExecutionContext* context, const String& keySystem, PassOwnPtr<blink::WebContentDecryptionModule> cdm)
+MediaKeys::MediaKeys(ExecutionContext* context, const String& keySystem, PassOwnPtr<WebContentDecryptionModule> cdm)
     : ContextLifecycleObserver(context)
     , m_keySystem(keySystem)
     , m_cdm(cdm)
@@ -275,7 +281,7 @@ bool MediaKeys::isTypeSupported(const String& keySystem, const String& contentTy
     return isKeySystemSupportedWithContentType(keySystem, contentType);
 }
 
-blink::WebContentDecryptionModule* MediaKeys::contentDecryptionModule()
+WebContentDecryptionModule* MediaKeys::contentDecryptionModule()
 {
     return m_cdm.get();
 }
@@ -292,4 +298,4 @@ void MediaKeys::contextDestroyed()
     m_cdm.clear();
 }
 
-}
+} // namespace blink

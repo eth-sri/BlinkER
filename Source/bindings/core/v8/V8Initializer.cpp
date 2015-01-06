@@ -41,12 +41,12 @@
 #include "bindings/core/v8/V8Window.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
-#include "core/dom/NoEventDispatchAssertion.h"
 #include "core/frame/ConsoleTypes.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/inspector/ScriptCallStack.h"
+#include "platform/EventDispatchForbiddenScope.h"
 #include "platform/TraceEvent.h"
 #include "public/platform/Platform.h"
 #include "wtf/RefPtr.h"
@@ -103,9 +103,18 @@ static void messageHandlerInMainThread(v8::Handle<v8::Message> message, v8::Hand
 
     v8::Handle<v8::StackTrace> stackTrace = message->GetStackTrace();
     RefPtrWillBeRawPtr<ScriptCallStack> callStack = nullptr;
+    int scriptId = message->GetScriptOrigin().ScriptID()->Value();
     // Currently stack trace is only collected when inspector is open.
-    if (!stackTrace.IsEmpty() && stackTrace->GetFrameCount() > 0)
+    if (!stackTrace.IsEmpty() && stackTrace->GetFrameCount() > 0) {
         callStack = createScriptCallStack(stackTrace, ScriptCallStack::maxCallStackSizeToCapture, isolate);
+        bool success = false;
+        int topScriptId = callStack->at(0).scriptId().toInt(&success);
+        if (success && topScriptId == scriptId)
+            scriptId = 0;
+    } else {
+        Vector<ScriptCallFrame> callFrames;
+        callStack = ScriptCallStack::create(callFrames);
+    }
 
     v8::Handle<v8::Value> resourceName = message->GetScriptOrigin().ResourceName();
     bool shouldUseDocumentURL = resourceName.IsEmpty() || !resourceName->IsString();
@@ -128,21 +137,21 @@ static void messageHandlerInMainThread(v8::Handle<v8::Message> message, v8::Hand
     // avoid storing the exception object, as we can't create a wrapper during context creation.
     // FIXME: Can we even get here during initialization now that we bail out when GetEntered returns an empty handle?
     LocalFrame* frame = enteredWindow->document()->frame();
-    if (frame && frame->script().existingWindowShell(scriptState->world())) {
+    if (frame && frame->script().existingWindowProxy(scriptState->world())) {
         V8ErrorHandler::storeExceptionOnErrorEventWrapper(event.get(), data, scriptState->context()->Global(), isolate);
     }
 
     if (scriptState->world().isPrivateScriptIsolatedWorld()) {
-        // We allow a private script to dispatch error events even in a NoEventDispatchAssertion scope.
+        // We allow a private script to dispatch error events even in a EventDispatchForbiddenScope scope.
         // Without having this ability, it's hard to debug the private script because syntax errors
         // in the private script are not reported to console (the private script just crashes silently).
         // Allowing error events in private scripts is safe because error events don't propagate to
         // other isolated worlds (which means that the error events won't fire any event listeners
         // in user's scripts).
-        NoEventDispatchAssertion::AllowUserAgentEvents allowUserAgentEvents;
-        enteredWindow->document()->reportException(event.release(), callStack, corsStatus);
+        EventDispatchForbiddenScope::AllowUserAgentEvents allowUserAgentEvents;
+        enteredWindow->document()->reportException(event.release(), scriptId, callStack, corsStatus);
     } else {
-        enteredWindow->document()->reportException(event.release(), callStack, corsStatus);
+        enteredWindow->document()->reportException(event.release(), scriptId, callStack, corsStatus);
     }
 }
 
@@ -235,6 +244,7 @@ static void messageHandlerInWorker(v8::Handle<v8::Message> message, v8::Handle<v
     if (ExecutionContext* context = scriptState->executionContext()) {
         String errorMessage = toCoreString(message->Get());
         TOSTRING_VOID(V8StringResource<>, sourceURL, message->GetScriptOrigin().ResourceName());
+        int scriptId = message->GetScriptOrigin().ScriptID()->Value();
 
         RefPtrWillBeRawPtr<ErrorEvent> event = ErrorEvent::create(errorMessage, sourceURL, message->GetLineNumber(), message->GetStartColumn() + 1, &DOMWrapperWorld::current(isolate));
         AccessControlStatus corsStatus = message->IsSharedCrossOrigin() ? SharableCrossOrigin : NotSharableCrossOrigin;
@@ -243,7 +253,7 @@ static void messageHandlerInWorker(v8::Handle<v8::Message> message, v8::Handle<v
         // the error event from the v8::Message, quietly leave.
         if (!v8::V8::IsExecutionTerminating(isolate)) {
             V8ErrorHandler::storeExceptionOnErrorEventWrapper(event.get(), data, scriptState->context()->Global(), isolate);
-            context->reportException(event.release(), nullptr, corsStatus);
+            context->reportException(event.release(), scriptId, nullptr, corsStatus);
         }
     }
 

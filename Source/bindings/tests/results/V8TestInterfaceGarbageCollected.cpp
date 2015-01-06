@@ -22,12 +22,9 @@
 
 namespace blink {
 
-static void initializeScriptWrappableForInterface(TestInterfaceGarbageCollected* object)
+static void initializeScriptWrappableForInterface(TestInterfaceGarbageCollected* impl)
 {
-    if (ScriptWrappable::wrapperCanBeStoredInObject(object))
-        ScriptWrappable::fromObject(object)->setTypeInfo(&V8TestInterfaceGarbageCollected::wrapperTypeInfo);
-    else
-        ASSERT_NOT_REACHED();
+    impl->setTypeInfo(&V8TestInterfaceGarbageCollected::wrapperTypeInfo);
 }
 
 } // namespace blink
@@ -38,7 +35,8 @@ void webCoreInitializeScriptWrappableForInterface(blink::TestInterfaceGarbageCol
 }
 
 namespace blink {
-const WrapperTypeInfo V8TestInterfaceGarbageCollected::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceGarbageCollected::domTemplate, V8TestInterfaceGarbageCollected::derefObject, 0, V8TestInterfaceGarbageCollected::toEventTarget, 0, V8TestInterfaceGarbageCollected::installPerContextEnabledMethods, &V8EventTarget::wrapperTypeInfo, WrapperTypeObjectPrototype, GarbageCollectedObject };
+
+const WrapperTypeInfo V8TestInterfaceGarbageCollected::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceGarbageCollected::domTemplate, V8TestInterfaceGarbageCollected::refObject, V8TestInterfaceGarbageCollected::derefObject, V8TestInterfaceGarbageCollected::createPersistentHandle, 0, V8TestInterfaceGarbageCollected::toEventTarget, 0, V8TestInterfaceGarbageCollected::installConditionallyEnabledMethods, V8TestInterfaceGarbageCollected::installConditionallyEnabledProperties, &V8EventTarget::wrapperTypeInfo, WrapperTypeObjectPrototype, GarbageCollectedObject };
 
 namespace TestInterfaceGarbageCollectedV8Internal {
 
@@ -76,7 +74,7 @@ static void attr1AttributeSetterCallback(v8::Local<v8::String>, v8::Local<v8::Va
 static void funcMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     if (UNLIKELY(info.Length() < 1)) {
-        throwMinimumArityTypeErrorForMethod("func", "TestInterfaceGarbageCollected", 1, info.Length(), info.GetIsolate());
+        V8ThrowException::throwException(createMinimumArityTypeErrorForMethod("func", "TestInterfaceGarbageCollected", 1, info.Length(), info.GetIsolate()), info.GetIsolate());
         return;
     }
     TestInterfaceGarbageCollected* impl = V8TestInterfaceGarbageCollected::toNative(info.Holder());
@@ -99,7 +97,7 @@ static void funcMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 static void constructor(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     if (UNLIKELY(info.Length() < 1)) {
-        throwMinimumArityTypeErrorForConstructor("TestInterfaceGarbageCollected", 1, info.Length(), info.GetIsolate());
+        V8ThrowException::throwException(createMinimumArityTypeErrorForConstructor("TestInterfaceGarbageCollected", 1, info.Length(), info.GetIsolate()), info.GetIsolate());
         return;
     }
     V8StringResource<> str;
@@ -174,7 +172,7 @@ v8::Handle<v8::Object> V8TestInterfaceGarbageCollected::findInstanceInPrototypeC
 
 TestInterfaceGarbageCollected* V8TestInterfaceGarbageCollected::toNativeWithTypeCheck(v8::Isolate* isolate, v8::Handle<v8::Value> value)
 {
-    return hasInstance(value, isolate) ? fromInternalPointer(v8::Handle<v8::Object>::Cast(value)->GetAlignedPointerFromInternalField(v8DOMWrapperObjectIndex)) : 0;
+    return hasInstance(value, isolate) ? fromInternalPointer(blink::toInternalPointer(v8::Handle<v8::Object>::Cast(value))) : 0;
 }
 
 EventTarget* V8TestInterfaceGarbageCollected::toEventTarget(v8::Handle<v8::Object> object)
@@ -193,24 +191,32 @@ v8::Handle<v8::Object> V8TestInterfaceGarbageCollected::createWrapper(RawPtr<Tes
 {
     ASSERT(impl);
     ASSERT(!DOMDataStore::containsWrapper<V8TestInterfaceGarbageCollected>(impl.get(), isolate));
-    if (ScriptWrappable::wrapperCanBeStoredInObject(impl.get())) {
-        const WrapperTypeInfo* actualInfo = ScriptWrappable::fromObject(impl.get())->typeInfo();
-        // Might be a XXXConstructor::wrapperTypeInfo instead of an XXX::wrapperTypeInfo. These will both have
-        // the same object de-ref functions, though, so use that as the basis of the check.
-        RELEASE_ASSERT_WITH_SECURITY_IMPLICATION(actualInfo->derefObjectFunction == wrapperTypeInfo.derefObjectFunction);
-    }
+    const WrapperTypeInfo* actualInfo = impl->typeInfo();
+    // Might be a XXXConstructor::wrapperTypeInfo instead of an XXX::wrapperTypeInfo. These will both have
+    // the same object de-ref functions, though, so use that as the basis of the check.
+    RELEASE_ASSERT_WITH_SECURITY_IMPLICATION(actualInfo->derefObjectFunction == wrapperTypeInfo.derefObjectFunction);
 
     v8::Handle<v8::Object> wrapper = V8DOMWrapper::createWrapper(creationContext, &wrapperTypeInfo, toInternalPointer(impl.get()), isolate);
     if (UNLIKELY(wrapper.IsEmpty()))
         return wrapper;
 
-    installPerContextEnabledProperties(wrapper, impl.get(), isolate);
+    installConditionallyEnabledProperties(wrapper, isolate);
     V8DOMWrapper::associateObjectWithWrapper<V8TestInterfaceGarbageCollected>(impl, &wrapperTypeInfo, wrapper, isolate, WrapperConfiguration::Independent);
     return wrapper;
 }
 
-void V8TestInterfaceGarbageCollected::derefObject(void* object)
+
+void V8TestInterfaceGarbageCollected::refObject(ScriptWrappableBase* internalPointer)
 {
+}
+
+void V8TestInterfaceGarbageCollected::derefObject(ScriptWrappableBase* internalPointer)
+{
+}
+
+PersistentNode* V8TestInterfaceGarbageCollected::createPersistentHandle(ScriptWrappableBase* internalPointer)
+{
+    return new Persistent<TestInterfaceGarbageCollected>(fromInternalPointer(internalPointer));
 }
 
 template<>

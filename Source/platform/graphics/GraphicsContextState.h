@@ -35,7 +35,6 @@
 #include "platform/graphics/Path.h"
 #include "platform/graphics/Pattern.h"
 #include "platform/graphics/StrokeData.h"
-#include "platform/graphics/skia/SkiaUtils.h"
 #include "third_party/skia/include/core/SkColorFilter.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "wtf/PassOwnPtr.h"
@@ -126,10 +125,9 @@ public:
     void setColorFilter(PassRefPtr<SkColorFilter>);
 
     // Compositing control, for the CSS and Canvas compositing spec.
-    void setCompositeOperation(CompositeOperator, blink::WebBlendMode);
+    void setCompositeOperation(CompositeOperator, WebBlendMode);
     CompositeOperator compositeOperator() const { return m_compositeOperator; }
-    blink::WebBlendMode blendMode() const { return m_blendMode; }
-    SkXfermode* xferMode() const { return m_xferMode.get(); }
+    WebBlendMode blendMode() const { return m_blendMode; }
 
     // Image interpolation control.
     InterpolationQuality interpolationQuality() const { return m_interpolationQuality; }
@@ -137,9 +135,6 @@ public:
 
     bool shouldAntialias() const { return m_shouldAntialias; }
     void setShouldAntialias(bool);
-
-    bool shouldSmoothFonts() const { return m_shouldSmoothFonts; }
-    void setShouldSmoothFonts(bool shouldSmoothFonts) { m_shouldSmoothFonts = shouldSmoothFonts; }
 
     bool shouldClampToSourceRect() const { return m_shouldClampToSourceRect; }
     void setShouldClampToSourceRect(bool shouldClampToSourceRect) { m_shouldClampToSourceRect = shouldClampToSourceRect; }
@@ -173,18 +168,16 @@ private:
     TextDrawingModeFlags m_textDrawingMode;
 
     int m_alpha;
-    RefPtr<SkXfermode> m_xferMode;
     RefPtr<SkColorFilter> m_colorFilter;
 
     CompositeOperator m_compositeOperator;
-    blink::WebBlendMode m_blendMode;
+    WebBlendMode m_blendMode;
 
     InterpolationQuality m_interpolationQuality;
 
     uint16_t m_saveCount;
 
     bool m_shouldAntialias : 1;
-    bool m_shouldSmoothFonts : 1;
     bool m_shouldClampToSourceRect : 1;
 };
 

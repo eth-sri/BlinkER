@@ -1,5 +1,15 @@
- (repaint rects
-  (rect 58 25 200 250)
-  (rect 58 25 200 250)
-)
+{
+  "bounds": [800, 600],
+  "children": [
+    {
+      "bounds": [800, 600],
+      "contentsOpaque": true,
+      "drawsContent": true,
+      "repaintRects": [
+        [58, 25, 200, 250],
+        [58, 25, 200, 250]
+      ]
+    }
+  ]
+}
 

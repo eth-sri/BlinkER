@@ -42,7 +42,6 @@
 #include <gtest/gtest.h>
 
 using namespace blink;
-using namespace blink;
 
 namespace {
 
@@ -58,7 +57,7 @@ public:
     explicit GraphicsLayerForTesting(GraphicsLayerClient* client)
         : GraphicsLayer(client) { };
 
-    virtual blink::WebLayer* contentsLayer() const { return GraphicsLayer::contentsLayer(); }
+    virtual WebLayer* contentsLayer() const { return GraphicsLayer::contentsLayer(); }
 };
 
 class GraphicsLayerTest : public testing::Test {
@@ -101,7 +100,7 @@ TEST_F(GraphicsLayerTest, updateLayerShouldFlattenTransformWithAnimations)
 
     OwnPtr<WebFloatAnimationCurve> curve = adoptPtr(Platform::current()->compositorSupport()->createFloatAnimationCurve());
     curve->add(WebFloatKeyframe(0.0, 0.0));
-    OwnPtr<WebAnimation> floatAnimation(adoptPtr(Platform::current()->compositorSupport()->createAnimation(*curve, WebAnimation::TargetPropertyOpacity)));
+    OwnPtr<WebCompositorAnimation> floatAnimation(adoptPtr(Platform::current()->compositorSupport()->createAnimation(*curve, WebCompositorAnimation::TargetPropertyOpacity)));
     int animationId = floatAnimation->id();
     ASSERT_TRUE(m_platformLayer->addAnimation(floatAnimation.leakPtr()));
 

@@ -69,8 +69,8 @@ public:
     IDBRequest* openCursor(ScriptState*, const ScriptValue& range, const String& direction, ExceptionState&);
     IDBRequest* openKeyCursor(ScriptState*, const ScriptValue& range, const String& direction, ExceptionState&);
     IDBRequest* get(ScriptState*, const ScriptValue& key, ExceptionState&);
-    IDBRequest* add(ScriptState*, ScriptValue&, const ScriptValue& key, ExceptionState&);
-    IDBRequest* put(ScriptState*, ScriptValue&, const ScriptValue& key, ExceptionState&);
+    IDBRequest* add(ScriptState*, const ScriptValue&, const ScriptValue& key, ExceptionState&);
+    IDBRequest* put(ScriptState*, const ScriptValue&, const ScriptValue& key, ExceptionState&);
     IDBRequest* deleteFunction(ScriptState*, const ScriptValue& key, ExceptionState&);
     IDBRequest* clear(ScriptState*, ExceptionState&);
 
@@ -88,10 +88,10 @@ public:
     IDBRequest* count(ScriptState*, const ScriptValue& range, ExceptionState&);
 
     // Used by IDBCursor::update():
-    IDBRequest* put(ScriptState*, blink::WebIDBPutMode, IDBAny* source, ScriptValue&, IDBKey*, ExceptionState&);
+    IDBRequest* put(ScriptState*, WebIDBPutMode, IDBAny* source, const ScriptValue&, IDBKey*, ExceptionState&);
 
     // Used internally and by InspectorIndexedDBAgent:
-    IDBRequest* openCursor(ScriptState*, IDBKeyRange*, blink::WebIDBCursorDirection, blink::WebIDBTaskType = blink::WebIDBTaskTypeNormal);
+    IDBRequest* openCursor(ScriptState*, IDBKeyRange*, WebIDBCursorDirection, WebIDBTaskType = WebIDBTaskTypeNormal);
 
     void markDeleted() { m_deleted = true; }
     bool isDeleted() const { return m_deleted; }
@@ -102,14 +102,14 @@ public:
 
     typedef HeapVector<Member<IDBKey> > IndexKeys;
 
-    blink::WebIDBDatabase* backendDB() const;
+    WebIDBDatabase* backendDB() const;
 
 private:
     IDBObjectStore(const IDBObjectStoreMetadata&, IDBTransaction*);
 
     IDBIndex* createIndex(ScriptState*, const String& name, const IDBKeyPath&, const Dictionary&, ExceptionState&);
     IDBIndex* createIndex(ScriptState*, const String& name, const IDBKeyPath&, bool unique, bool multiEntry, ExceptionState&);
-    IDBRequest* put(ScriptState*, blink::WebIDBPutMode, IDBAny* source, ScriptValue&, const ScriptValue& key, ExceptionState&);
+    IDBRequest* put(ScriptState*, WebIDBPutMode, IDBAny* source, const ScriptValue&, const ScriptValue& key, ExceptionState&);
 
     int64_t findIndexId(const String& name) const;
     bool containsIndex(const String& name) const

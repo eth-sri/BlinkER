@@ -366,7 +366,7 @@ public:
     void trace(Visitor* visitor)
     {
         COMPILE_ASSERT_IS_GARBAGE_COLLECTED(T, NonGarbageCollectedObjectInPersistent);
-#if ENABLE(GC_TRACING)
+#if ENABLE(GC_PROFILE_MARKING)
         visitor->setHostInfo(this, m_tracingName.isEmpty() ? "Persistent" : m_tracingName);
 #endif
         visitor->mark(m_raw);
@@ -422,7 +422,7 @@ public:
     T* get() const { return m_raw; }
 
 private:
-#if ENABLE(GC_TRACING)
+#if ENABLE(GC_PROFILE_MARKING)
     void recordBacktrace()
     {
         if (m_raw)
@@ -467,7 +467,7 @@ public:
 
     void trace(Visitor* visitor)
     {
-#if ENABLE(GC_TRACING)
+#if ENABLE(GC_PROFILE_MARKING)
         visitor->setHostInfo(this, "PersistentHeapCollectionBase");
 #endif
         visitor->trace(*static_cast<Collection*>(this));
@@ -826,6 +826,7 @@ template<typename T, typename U> inline bool operator!=(const Persistent<T>& a, 
 #define RefPtrWillBeWeakMember blink::WeakMember
 #define RefPtrWillBeCrossThreadPersistent blink::CrossThreadPersistent
 #define RawPtrWillBeMember blink::Member
+#define RawPtrWillBePersistent blink::Persistent
 #define RawPtrWillBeWeakMember blink::WeakMember
 #define OwnPtrWillBeMember blink::Member
 #define OwnPtrWillBePersistent blink::Persistent
@@ -928,10 +929,6 @@ public:
     ~DummyBase() { }
 };
 
-// Export this instance to support WillBeGarbageCollectedMixin
-// uses by code residing in non-webcore components.
-template class PLATFORM_EXPORT DummyBase<void>;
-
 #define PassRefPtrWillBeRawPtr WTF::PassRefPtr
 #define RefCountedWillBeGarbageCollected WTF::RefCounted
 #define RefCountedWillBeGarbageCollectedFinalized WTF::RefCounted
@@ -947,6 +944,7 @@ template class PLATFORM_EXPORT DummyBase<void>;
 #define RefPtrWillBeWeakMember WTF::RefPtr
 #define RefPtrWillBeCrossThreadPersistent WTF::RefPtr
 #define RawPtrWillBeMember WTF::RawPtr
+#define RawPtrWillBePersistent WTF::RawPtr
 #define RawPtrWillBeWeakMember WTF::RawPtr
 #define OwnPtrWillBeMember WTF::OwnPtr
 #define OwnPtrWillBePersistent WTF::OwnPtr

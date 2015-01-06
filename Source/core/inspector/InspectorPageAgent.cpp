@@ -407,8 +407,10 @@ InspectorPageAgent::InspectorPageAgent(Page* page, InjectedScriptManager* inject
     , m_originalTouchEnabled(false)
     , m_originalDeviceSupportsMouse(false)
     , m_originalDeviceSupportsTouch(false)
+    , m_originalMaxTouchPoints(0)
     , m_embedderTextAutosizingEnabled(m_page->settings().textAutosizingEnabled())
     , m_embedderFontScaleFactor(m_page->settings().deviceScaleAdjustment())
+    , m_embedderPreferCompositingToLCDTextEnabled(m_page->settings().preferCompositingToLCDTextEnabled())
 {
 }
 
@@ -426,6 +428,14 @@ void InspectorPageAgent::setDeviceScaleAdjustment(float deviceScaleAdjustment)
     bool emulateMobileEnabled = m_enabled && m_deviceMetricsOverridden && m_emulateMobileEnabled;
     if (!emulateMobileEnabled)
         m_page->settings().setDeviceScaleAdjustment(deviceScaleAdjustment);
+}
+
+void InspectorPageAgent::setPreferCompositingToLCDTextEnabled(bool enabled)
+{
+    m_embedderPreferCompositingToLCDTextEnabled = enabled;
+    bool emulateMobileEnabled = m_enabled && m_deviceMetricsOverridden && m_emulateMobileEnabled;
+    if (!emulateMobileEnabled)
+        m_page->settings().setPreferCompositingToLCDTextEnabled(enabled);
 }
 
 void InspectorPageAgent::setFrontend(InspectorFrontend* frontend)
@@ -832,6 +842,11 @@ void InspectorPageAgent::resetScrollAndPageScaleFactor(ErrorString*)
     m_client->resetScrollAndPageScaleFactor();
 }
 
+void InspectorPageAgent::setPageScaleFactor(ErrorString*, double pageScaleFactor)
+{
+    m_client->setPageScaleFactor(static_cast<float>(pageScaleFactor));
+}
+
 bool InspectorPageAgent::deviceMetricsChanged(bool enabled, int width, int height, double deviceScaleFactor, bool mobile, bool fitWindow, double scale, double offsetX, double offsetY)
 {
     bool currentEnabled = m_state->getBoolean(PageAgentState::deviceMetricsOverrideEnabled);
@@ -1177,7 +1192,9 @@ void InspectorPageAgent::viewportChanged()
         .setScrollY(viewRect.y())
         .setContentsWidth(contentsSize.width())
         .setContentsHeight(contentsSize.height())
-        .setPageScaleFactor(m_page->pageScaleFactor());
+        .setPageScaleFactor(m_page->pageScaleFactor())
+        .setMinimumPageScaleFactor(m_client->minimumPageScaleFactor())
+        .setMaximumPageScaleFactor(m_client->maximumPageScaleFactor());
     m_frontend->viewportChanged(viewport);
 }
 
@@ -1315,9 +1332,11 @@ void InspectorPageAgent::updateViewMetrics(bool enabled, int width, int height, 
 
     if (m_deviceMetricsOverridden) {
         m_page->settings().setTextAutosizingEnabled(mobile);
+        m_page->settings().setPreferCompositingToLCDTextEnabled(mobile);
         m_page->settings().setDeviceScaleAdjustment(calculateFontScaleFactor(width, height, static_cast<float>(deviceScaleFactor)));
     } else {
         m_page->settings().setTextAutosizingEnabled(m_embedderTextAutosizingEnabled);
+        m_page->settings().setPreferCompositingToLCDTextEnabled(m_embedderPreferCompositingToLCDTextEnabled);
         m_page->settings().setDeviceScaleAdjustment(m_embedderFontScaleFactor);
     }
 
@@ -1332,11 +1351,14 @@ void InspectorPageAgent::updateTouchEventEmulationInPage(bool enabled)
         m_originalTouchEnabled = RuntimeEnabledFeatures::touchEnabled();
         m_originalDeviceSupportsMouse = m_page->settings().deviceSupportsMouse();
         m_originalDeviceSupportsTouch = m_page->settings().deviceSupportsTouch();
+        m_originalMaxTouchPoints = m_page->settings().maxTouchPoints();
     }
     RuntimeEnabledFeatures::setTouchEnabled(enabled ? true : m_originalTouchEnabled);
     if (!m_originalDeviceSupportsTouch) {
         m_page->settings().setDeviceSupportsMouse(enabled ? false : m_originalDeviceSupportsMouse);
         m_page->settings().setDeviceSupportsTouch(enabled ? true : m_originalDeviceSupportsTouch);
+        // Currently emulation does not provide multiple touch points.
+        m_page->settings().setMaxTouchPoints(enabled ? 1 : m_originalMaxTouchPoints);
     }
     m_touchEmulationEnabled = enabled;
     m_client->setTouchEventEmulationEnabled(enabled);

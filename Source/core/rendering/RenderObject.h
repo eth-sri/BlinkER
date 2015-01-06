@@ -145,7 +145,7 @@ const int showTreeCharacterOffset = 39;
 #endif
 
 // Base class for all rendering tree objects.
-class RenderObject : public ImageResourceClient {
+class RenderObject : public NoBaseWillBeGarbageCollectedFinalized<RenderObject>, public ImageResourceClient {
     friend class RenderBlock;
     friend class RenderBlockFlow;
     friend class RenderLayerReflectionInfo; // For setParent
@@ -157,6 +157,7 @@ public:
     // marked as anonymous in the constructor.
     explicit RenderObject(Node*);
     virtual ~RenderObject();
+    virtual void trace(Visitor*);
 
     virtual const char* renderName() const = 0;
 
@@ -343,9 +344,11 @@ public:
     static RenderObject* createObject(Element*, RenderStyle*);
     static unsigned instanceCount() { return s_instanceCount; }
 
+#if !ENABLE(OILPAN)
     // RenderObjects are allocated out of the rendering partition.
     void* operator new(size_t);
     void operator delete(void*);
+#endif
 
 public:
     bool isPseudoElement() const { return node() && node()->isPseudoElement(); }
@@ -596,7 +599,7 @@ public:
 
     bool isSelectionBorder() const;
 
-    bool hasClip() const { return isOutOfFlowPositioned() && style()->hasClip(); }
+    bool hasClip() const { return isOutOfFlowPositioned() && !style()->hasAutoClip(); }
     bool hasOverflowClip() const { return m_bitfields.hasOverflowClip(); }
     bool hasClipOrOverflowClip() const { return hasClip() || hasOverflowClip(); }
 
@@ -627,7 +630,7 @@ public:
 
     Node* node() const
     {
-        return isAnonymous() ? 0 : m_node;
+        return isAnonymous() ? 0 : m_node.get();
     }
 
     Node* nonPseudoNode() const
@@ -636,7 +639,7 @@ public:
     }
 
     // FIXME: Why does RenderWidget need this?
-    void clearNode() { m_node = 0; }
+    void clearNode() { m_node = nullptr; }
 
     // Returns the styled node that caused the generation of this renderer.
     // This is the same as node() except for renderers of :before and :after
@@ -646,13 +649,11 @@ public:
     Document& document() const { return m_node->document(); }
     LocalFrame* frame() const { return document().frame(); }
 
-    bool hasOutlineAnnotation() const;
-    bool hasOutline() const { return outlineStyle()->hasOutline() || hasOutlineAnnotation(); }
-
     // Returns the object containing this one. Can be different from parent for positioned elements.
     // If paintInvalidationContainer and paintInvalidationContainerSkipped are not null, on return *paintInvalidationContainerSkipped
     // is true if the renderer returned is an ancestor of paintInvalidationContainer.
     RenderObject* container(const RenderLayerModelObject* paintInvalidationContainer = 0, bool* paintInvalidationContainerSkipped = 0) const;
+    RenderBlock* containerForFixedPosition(const RenderLayerModelObject* paintInvalidationContainer = 0, bool* paintInvalidationContainerSkipped = 0) const;
 
     virtual RenderObject* hoverAncestor() const { return parent(); }
 
@@ -708,7 +709,8 @@ public:
     void updateImage(StyleImage*, StyleImage*);
     void updateShapeImage(const ShapeValue*, const ShapeValue*);
 
-    virtual void paint(PaintInfo&, const LayoutPoint&);
+    // paintOffset is the offset from the origin of the GraphicsContext at which to paint the current object.
+    virtual void paint(PaintInfo&, const LayoutPoint& paintOffset);
 
     // Subclasses must reimplement this method to compute the size and position
     // of this object and all its descendants.
@@ -731,7 +733,7 @@ public:
     void collectAnnotatedRegions(Vector<AnnotatedRegionValue>&);
 
     CompositingState compositingState() const;
-    virtual CompositingReasons additionalCompositingReasons(CompositingTriggerFlags) const;
+    virtual CompositingReasons additionalCompositingReasons() const;
 
     bool hitTest(const HitTestRequest&, HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestFilter = HitTestAll);
     virtual void updateHitTestResult(HitTestResult&, const LayoutPoint&);
@@ -786,7 +788,7 @@ public:
 
     virtual void absoluteRects(Vector<IntRect>&, const LayoutPoint&) const { }
 
-    // Computes the position of the given render object in the space of |repaintContainer|.
+    // Computes the position of the given render object in the space of |paintInvalidationContainer|.
     LayoutPoint positionFromPaintInvalidationContainer(const RenderLayerModelObject* paintInvalidationContainer, const PaintInvalidationState* = 0) const;
 
     IntRect absoluteBoundingBoxRect() const;
@@ -826,9 +828,6 @@ public:
     // given new style, without accessing the cache.
     PassRefPtr<RenderStyle> uncachedFirstLineStyle(RenderStyle*) const;
 
-    // Anonymous blocks that are part of of a continuation chain will return their inline continuation's outline style instead.
-    virtual RenderStyle* outlineStyle() const { return style(); }
-
     virtual CursorDirective getCursor(const LayoutPoint&, Cursor&) const;
 
     struct AppliedTextDecoration {
@@ -864,10 +863,6 @@ public:
     // FIXME: |paintInvalidationContainer| should never be 0. See crbug.com/363699.
     void invalidatePaintUsingContainer(const RenderLayerModelObject* paintInvalidationContainer, const LayoutRect&, InvalidationReason) const;
 
-    // Invalidate the paint of the entire object. Called when, e.g., the color of a border changes, or when a border
-    // style changes.
-    void paintInvalidationForWholeRenderer() const;
-
     // Invalidate the paint of a specific subrectangle within a given object. The rect |r| is in the object's coordinate space.
     void invalidatePaintRectangle(const LayoutRect&) const;
 
@@ -884,18 +879,17 @@ public:
 
     // Returns the rect that should have paint invalidated whenever this object changes. The rect is in the view's
     // coordinate space. This method deals with outlines and overflow.
-    LayoutRect absoluteClippedOverflowRect() const
-    {
-        return clippedOverflowRectForPaintInvalidation(0);
-    }
+    LayoutRect absoluteClippedOverflowRect() const;
     IntRect pixelSnappedAbsoluteClippedOverflowRect() const;
     virtual LayoutRect clippedOverflowRectForPaintInvalidation(const RenderLayerModelObject* paintInvalidationContainer, const PaintInvalidationState* = 0) const;
     virtual LayoutRect rectWithOutlineForPaintInvalidation(const RenderLayerModelObject* paintInvalidationContainer, LayoutUnit outlineWidth, const PaintInvalidationState* = 0) const;
 
     // Given a rect in the object's coordinate space, compute a rect suitable for invalidating paints of
     // that rect in the coordinate space of paintInvalidationContainer.
-    virtual void mapRectToPaintInvalidationBacking(const RenderLayerModelObject* paintInvalidationContainer, LayoutRect&, bool fixed = false, const PaintInvalidationState* = 0) const;
-    virtual void computeFloatRectForPaintInvalidation(const RenderLayerModelObject* paintInvalidationContainer, FloatRect& paintInvalidationRect, bool fixed = false, const PaintInvalidationState* = 0) const;
+    // The ViewportConstrainedPosition parameter is only meaningful when this object is RenderView.
+    // For other objects, the caller can just pass |ViewportConstraintDoesNotMatter|.
+    virtual void mapRectToPaintInvalidationBacking(const RenderLayerModelObject* paintInvalidationContainer, LayoutRect&, const PaintInvalidationState*) const;
+    virtual void computeFloatRectForPaintInvalidation(const RenderLayerModelObject* paintInvalidationContainer, FloatRect& paintInvalidationRect, const PaintInvalidationState*) const;
 
     // Return the offset to the column in which the specified point (in flow-thread coordinates)
     // lives. This is used to convert a flow-thread point to a visual point.
@@ -926,8 +920,7 @@ public:
     bool canUpdateSelectionOnRootLineBoxes();
 
     // A single rectangle that encompasses all of the selected objects within this object.  Used to determine the tightest
-    // possible bounding box for the selection.
-    LayoutRect selectionRect(bool clipToVisibleContent = true) { return selectionRectForPaintInvalidation(0, clipToVisibleContent); }
+    // possible bounding box for the selection. The rect returned is in the coordinate space of the paint invalidation container's backing.
     virtual LayoutRect selectionRectForPaintInvalidation(const RenderLayerModelObject* /*paintInvalidationContainer*/, bool /*clipToVisibleContent*/ = true) { return LayoutRect(); }
 
     virtual bool canBeSelectionLeaf() const { return false; }
@@ -1026,13 +1019,7 @@ public:
     void setPreviousPositionFromPaintInvalidationContainer(const LayoutPoint& location) { m_previousPositionFromPaintInvalidationContainer = location; }
 
     bool shouldDoFullPaintInvalidation() const { return m_bitfields.shouldDoFullPaintInvalidation(); }
-    void setShouldDoFullPaintInvalidation(bool b, MarkingBehavior markBehavior = MarkContainingBlockChain)
-    {
-        m_bitfields.setShouldDoFullPaintInvalidation(b);
-
-        if (markBehavior == MarkContainingBlockChain && b)
-            markContainingBlockChainForPaintInvalidation();
-    }
+    void setShouldDoFullPaintInvalidation(bool, MarkingBehavior = MarkContainingBlockChain);
 
     bool shouldInvalidateOverflowForPaint() const { return m_bitfields.shouldInvalidateOverflowForPaint(); }
 
@@ -1053,7 +1040,13 @@ public:
     // layoutDidGetCalled indicates whether this render object was re-laid-out
     // since the last call to setLayoutDidGetCalled(false) on this object.
     bool layoutDidGetCalled() const { return m_bitfields.layoutDidGetCalled(); }
-    void setLayoutDidGetCalled(bool b) { m_bitfields.setLayoutDidGetCalled(b); }
+    void setLayoutDidGetCalled(bool b)
+    {
+        m_bitfields.setLayoutDidGetCalled(b);
+
+        if (b)
+            markContainingBlockChainForPaintInvalidation();
+    }
 
     bool mayNeedPaintInvalidation() const { return m_bitfields.mayNeedPaintInvalidation(); }
     void setMayNeedPaintInvalidation(bool b)
@@ -1083,6 +1076,9 @@ public:
     void setNeedsOverflowRecalcAfterStyleChange();
     void markContainingBlocksForOverflowRecalc();
 
+    // FIXME: This is temporary for cases that setShouldDoFullPaintInvalidation(true) doesn't work yet.
+    void doNotUseInvalidatePaintForWholeRendererSynchronously() const { invalidatePaintForWholeRenderer(); }
+
 protected:
     inline bool layerCreationAllowedForSubtree() const;
 
@@ -1093,6 +1089,7 @@ protected:
     // time this function is called.
     virtual void styleDidChange(StyleDifference, const RenderStyle* oldStyle);
     void propagateStyleToAnonymousChildren(bool blockChildrenOnly = false);
+    virtual void updateAnonymousChildStyle(const RenderObject* child, RenderStyle* style) const { }
 
     void drawLineForBoxSide(GraphicsContext*, int x1, int y1, int x2, int y2, BoxSide,
                             Color, EBorderStyle, int adjbw1, int adjbw2, bool antialias = false);
@@ -1107,7 +1104,6 @@ protected:
 
     void paintFocusRing(PaintInfo&, const LayoutPoint&, RenderStyle*);
     void paintOutline(PaintInfo&, const LayoutRect&);
-    void addPDFURLRect(GraphicsContext*, const LayoutRect&);
     void addChildFocusRingRects(Vector<IntRect>&, const LayoutPoint& additionalOffset, const RenderLayerModelObject* paintContainer) const;
 
     virtual LayoutRect viewRect() const;
@@ -1138,7 +1134,7 @@ protected:
     virtual InvalidationReason getPaintInvalidationReason(const RenderLayerModelObject& paintInvalidationContainer,
         const LayoutRect& oldBounds, const LayoutPoint& oldPositionFromPaintInvalidationContainer,
         const LayoutRect& newBounds, const LayoutPoint& newPositionFromPaintInvalidationContainer);
-    void incrementallyInvalidatePaint(const RenderLayerModelObject& paintInvalidationContainer, const LayoutRect& oldBounds, const LayoutRect& newBounds);
+    virtual void incrementallyInvalidatePaint(const RenderLayerModelObject& paintInvalidationContainer, const LayoutRect& oldBounds, const LayoutRect& newBounds, const LayoutPoint& positionFromPaintInvalidationContainer);
     void fullyInvalidatePaint(const RenderLayerModelObject& paintInvalidationContainer, InvalidationReason, const LayoutRect& oldBounds, const LayoutRect& newBounds);
 
 #if ENABLE(ASSERT)
@@ -1150,9 +1146,11 @@ protected:
 #endif
 
 private:
-    const RenderLayerModelObject* enclosingCompositedContainer() const;
+    // Invalidate the paint of the entire object. This is only used when a renderer is to be removed.
+    // For other cases, the caller should call setShouldDoFullPaintInvalidation() instead.
+    void invalidatePaintForWholeRenderer() const;
 
-    RenderBlock* containerForFixedPosition(const RenderLayerModelObject* paintInvalidationContainer = 0, bool* paintInvalidationContainerSkipped = 0) const;
+    const RenderLayerModelObject* enclosingCompositedContainer() const;
 
     RenderFlowThread* locateFlowThreadContainingBlock() const;
     void removeFromRenderFlowThread();
@@ -1182,15 +1180,20 @@ private:
 
     RefPtr<RenderStyle> m_style;
 
-    Node* m_node;
+    RawPtrWillBeMember<Node> m_node;
 
-    RenderObject* m_parent;
-    RenderObject* m_previous;
-    RenderObject* m_next;
+    RawPtrWillBeMember<RenderObject> m_parent;
+    RawPtrWillBeMember<RenderObject> m_previous;
+    RawPtrWillBeMember<RenderObject> m_next;
 
 #if ENABLE(ASSERT)
     unsigned m_hasAXObject             : 1;
     unsigned m_setNeedsLayoutForbidden : 1;
+#if ENABLE(OILPAN)
+protected:
+    unsigned m_didCallDestroy          : 1;
+private:
+#endif
 #endif
 
 #define ADD_BOOLEAN_BITFIELD(name, Name) \

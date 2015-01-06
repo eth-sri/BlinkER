@@ -156,7 +156,7 @@ private:
 
     Node* checkNodeWOffset(Node*, int offset, ExceptionState&) const;
     void checkNodeBA(Node*, ExceptionState&) const;
-    void checkDeleteExtract(ExceptionState&);
+    void checkExtractPrecondition(ExceptionState&);
 
     enum ActionType { DELETE_CONTENTS, EXTRACT_CONTENTS, CLONE_CONTENTS };
     PassRefPtrWillBeRawPtr<DocumentFragment> processContents(ActionType, ExceptionState&);
@@ -174,7 +174,7 @@ PassRefPtrWillBeRawPtr<Range> rangeOfContents(Node*);
 
 bool areRangesEqual(const Range*, const Range*);
 
-} // namespace
+} // namespace blink
 
 #ifndef NDEBUG
 // Outside the WebCore namespace for ease of invocation from gdb.

@@ -97,10 +97,12 @@ public:
     void setLength(unsigned, ExceptionState&);
 
     Element* namedItem(const AtomicString& name);
-    Element* item(unsigned index);
+    HTMLOptionElement* item(unsigned index);
 
     void scrollToSelection();
     void scrollTo(int listIndex);
+
+    void listBoxSelectItem(int listIndex, bool allowMultiplySelections, bool shift, bool fireOnChangeNow = true);
 
     bool canSelectAll() const;
     void selectAll();

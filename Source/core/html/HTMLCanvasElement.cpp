@@ -152,11 +152,10 @@ CanvasRenderingContext* HTMLCanvasElement::getContext(const String& type, Canvas
     // before creating a new 2D context. Vice versa when requesting a WebGL canvas. Requesting a
     // context with any other type string will destroy any existing context.
     enum ContextType {
-        Context2d,
-        ContextWebkit3d,
-        ContextExperimentalWebgl,
-        ContextWebgl,
-        // Only add new items to the end and keep the order of existing items.
+        // Do not change assigned numbers of existing items: add new features to the end of the list.
+        Context2d = 0,
+        ContextExperimentalWebgl = 2,
+        ContextWebgl = 3,
         ContextTypeCount,
     };
 
@@ -236,7 +235,7 @@ void HTMLCanvasElement::didProcessTask()
         didFinalizeFrame();
     } else {
         ASSERT(hasImageBuffer());
-        m_imageBuffer->finalizeFrame();
+        m_imageBuffer->finalizeFrame(m_dirtyRect);
     }
     ASSERT(m_dirtyRect.isEmpty());
 }
@@ -304,7 +303,7 @@ void HTMLCanvasElement::reset()
                     renderBox()->contentChanged(CanvasChanged);
             }
             if (hadImageBuffer)
-                renderer->paintInvalidationForWholeRenderer();
+                renderer->setShouldDoFullPaintInvalidation(true);
         }
     }
 
@@ -329,9 +328,6 @@ bool HTMLCanvasElement::paintsIntoCanvasBuffer() const
 
 void HTMLCanvasElement::paint(GraphicsContext* context, const LayoutRect& r)
 {
-    if (context->paintingDisabled())
-        return;
-
     if (m_context) {
         if (!paintsIntoCanvasBuffer() && !document().printing())
             return;
@@ -693,16 +689,14 @@ AffineTransform HTMLCanvasElement::baseTransform() const
 
 void HTMLCanvasElement::didChangeVisibilityState(PageVisibilityState visibility)
 {
-    if (hasImageBuffer()) {
-        bool hidden = visibility != PageVisibilityStateVisible;
-        if (hidden) {
-            clearCopiedImage();
-            if (is3D()) {
-                discardImageBuffer();
-            }
-        }
-        if (hasImageBuffer()) {
-            m_imageBuffer->setIsHidden(hidden);
+    if (!m_context)
+        return;
+    bool hidden = visibility != PageVisibilityStateVisible;
+    m_context->setIsHidden(hidden);
+    if (hidden) {
+        clearCopiedImage();
+        if (is3D()) {
+            discardImageBuffer();
         }
     }
 }

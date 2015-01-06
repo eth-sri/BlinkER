@@ -37,7 +37,7 @@
 #include "bindings/core/v8/V8DOMActivityLogger.h"
 #include "bindings/core/v8/V8DOMWrapper.h"
 #include "bindings/core/v8/V8Window.h"
-#include "bindings/core/v8/V8WindowShell.h"
+#include "bindings/core/v8/WindowProxy.h"
 #include "bindings/core/v8/WrapperTypeInfo.h"
 #include "core/dom/ExecutionContext.h"
 #include "wtf/HashTraits.h"
@@ -170,6 +170,26 @@ void DOMWrapperWorld::setIsolatedWorldSecurityOrigin(int worldId, PassRefPtr<Sec
         isolatedWorldSecurityOrigins().set(worldId, securityOrigin);
     else
         isolatedWorldSecurityOrigins().remove(worldId);
+}
+
+typedef HashMap<int, String > IsolatedWorldHumanReadableNameMap;
+static IsolatedWorldHumanReadableNameMap& isolatedWorldHumanReadableNames()
+{
+    ASSERT(isMainThread());
+    DEFINE_STATIC_LOCAL(IsolatedWorldHumanReadableNameMap, map, ());
+    return map;
+}
+
+String DOMWrapperWorld::isolatedWorldHumanReadableName()
+{
+    ASSERT(this->isIsolatedWorld());
+    return isolatedWorldHumanReadableNames().get(worldId());
+}
+
+void DOMWrapperWorld::setIsolatedWorldHumanReadableName(int worldId, const String& humanReadableName)
+{
+    ASSERT(isIsolatedWorldId(worldId));
+    isolatedWorldHumanReadableNames().set(worldId, humanReadableName);
 }
 
 typedef HashMap<int, bool> IsolatedWorldContentSecurityPolicyMap;

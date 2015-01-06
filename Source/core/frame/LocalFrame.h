@@ -43,6 +43,7 @@ namespace blink {
     class Document;
     class DragImage;
     class Editor;
+    class Element;
     class EventHandler;
     class FetchContext;
     class FloatSize;
@@ -90,6 +91,8 @@ namespace blink {
         virtual void setDOMWindow(PassRefPtrWillBeRawPtr<LocalDOMWindow>) OVERRIDE;
         FrameView* view() const;
         Document* document() const;
+        void setPagePopupOwner(Element&);
+        Element* pagePopupOwner() const { return m_pagePopupOwner.get(); }
 
         RenderView* contentRenderer() const; // Root of the render tree for the document contained in this frame.
 
@@ -149,6 +152,8 @@ namespace blink {
         PassRefPtrWillBeRawPtr<Range> rangeForPoint(const IntPoint& framePoint);
 
         bool isURLAllowed(const KURL&) const;
+        bool shouldReuseDefaultView(const KURL&) const;
+        void removeSpellingMarkersUnderWords(const Vector<String>& words);
 
     // ========
 
@@ -162,13 +167,15 @@ namespace blink {
         mutable NavigationScheduler m_navigationScheduler;
 
         RefPtr<FrameView> m_view;
+        // Usually 0. Non-null if this is the top frame of PagePopup.
+        RefPtrWillBePersistent<Element> m_pagePopupOwner;
 
         OwnPtr<ScriptController> m_script;
         const OwnPtrWillBePersistent<Editor> m_editor;
         const OwnPtr<SpellChecker> m_spellChecker;
         const OwnPtrWillBePersistent<FrameSelection> m_selection;
         const OwnPtrWillBePersistent<EventHandler> m_eventHandler;
-        const OwnPtr<FrameConsole> m_console;
+        const OwnPtrWillBePersistent<FrameConsole> m_console;
         OwnPtr<InputMethodController> m_inputMethodController;
 
         float m_pageZoomFactor;

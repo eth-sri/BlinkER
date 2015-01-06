@@ -75,7 +75,6 @@ shrinksStandaloneImagesToFit initial=true
 # FIXME: Does this do anything now that we don't support page cache?
 pageCacheSupportsPlugins initial=false
 
-needsSiteSpecificQuirks initial=false
 offlineWebApplicationCacheEnabled initial=false
 usesEncodingDetector initial=false
 allowScriptsToCloseWindows initial=false
@@ -93,11 +92,7 @@ xssAuditorEnabled initial=false
 unsafePluginPastingEnabled initial=true
 treatIPAddressAsDomain initial=false
 
-acceleratedCompositingForCanvasEnabled initial=true, invalidate=AcceleratedCompositing
-acceleratedCompositingForFixedPositionEnabled initial=false, invalidate=AcceleratedCompositing
-acceleratedCompositingForOverflowScrollEnabled initial=false, invalidate=AcceleratedCompositing
-acceleratedCompositingForFixedRootBackgroundEnabled initial=false
-compositedScrollingForFramesEnabled initial=false, invalidate=AcceleratedCompositing
+preferCompositingToLCDTextEnabled initial=false, invalidate=AcceleratedCompositing
 
 # 3D canvas (WebGL) support.
 webGLEnabled initial=false
@@ -202,6 +197,10 @@ viewportMetaMergeContentQuirk initial=false
 # See http://crbug.com/288037.
 wideViewportQuirkEnabled initial=false
 
+# Used by the android_webview to support a horizontal height auto-sizing
+# mode.
+forceZeroLayoutHeight initial=false, invalidate=ViewportDescription
+
 # Touch based text selection and editing on desktop.
 # crbug.com/304873 tracks removal once it's been enabled on all platforms.
 touchEditingEnabled initial=false
@@ -244,11 +243,6 @@ viewportMetaEnabled initial=false
 
 dnsPrefetchingEnabled initial=false, invalidate=DNSPrefetching
 
-
-# FIXME: This is a temporary flag and should be removed once
-# accelerated overflow scroll is ready (crbug.com/254111).
-compositorDrivenAcceleratedScrollingEnabled initial=false, invalidate=AcceleratedCompositing
-
 # FIXME: This is a temporary flag and should be removed
 # when squashing is ready. (crbug.com/261605)
 layerSquashingEnabled initial=false
@@ -289,3 +283,15 @@ disallowFullscreenForNonMediaElements initial=false
 # V8 supports different types of caching. Used by V8 bindings.
 v8CacheOptions type=V8CacheOptions, initial=V8CacheOptionsOff
 
+# These values are bit fields for the properties of available pointing devices
+# and may take on multiple values (e.g. laptop with touchpad and touchscreen
+# has pointerType coarse *and* fine).
+availablePointerTypes type=int, initial=PointerTypeNone, invalidate=MediaQuery
+availableHoverTypes type=int, initial=HoverTypeNone, invalidate=MediaQuery
+
+# These values specify properties of the user's primary pointing device only.
+primaryPointerType type=PointerType, initial=PointerTypeNone, invalidate=MediaQuery
+primaryHoverType type=HoverType, initial=HoverTypeNone, invalidate=MediaQuery
+
+accessibilityEnabled initial=false
+inlineTextBoxAccessibilityEnabled initial=false

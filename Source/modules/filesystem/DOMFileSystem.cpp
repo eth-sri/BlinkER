@@ -67,19 +67,19 @@ DOMFileSystem* DOMFileSystem::createIsolatedFileSystem(ExecutionContext* context
 
     StringBuilder filesystemName;
     filesystemName.append(createDatabaseIdentifierFromSecurityOrigin(context->securityOrigin()));
-    filesystemName.append(":Isolated_");
+    filesystemName.appendLiteral(":Isolated_");
     filesystemName.append(filesystemId);
 
     // The rootURL created here is going to be attached to each filesystem request and
     // is to be validated each time the request is being handled.
     StringBuilder rootURL;
-    rootURL.append("filesystem:");
+    rootURL.appendLiteral("filesystem:");
     rootURL.append(context->securityOrigin()->toString());
-    rootURL.append("/");
+    rootURL.append('/');
     rootURL.append(isolatedPathPrefix);
-    rootURL.append("/");
+    rootURL.append('/');
     rootURL.append(filesystemId);
-    rootURL.append("/");
+    rootURL.append('/');
 
     return DOMFileSystem::create(context, filesystemName.toString(), FileSystemTypeIsolated, KURL(ParsedURLString, rootURL.toString()));
 }
@@ -146,6 +146,11 @@ void DOMFileSystem::createWriter(const FileEntry* fileEntry, PassOwnPtr<FileWrit
 {
     ASSERT(fileEntry);
 
+    if (!fileSystem()) {
+        reportError(errorCallback, FileError::create(FileError::ABORT_ERR));
+        return;
+    }
+
     FileWriter* fileWriter = FileWriter::create(executionContext());
     OwnPtr<FileWriterBaseCallback> conversionCallback = ConvertToFileWriterCallback::create(successCallback);
     OwnPtr<AsyncFileSystemCallbacks> callbacks = FileWriterBaseCallbacks::create(fileWriter, conversionCallback.release(), errorCallback, m_context);
@@ -155,6 +160,11 @@ void DOMFileSystem::createWriter(const FileEntry* fileEntry, PassOwnPtr<FileWrit
 void DOMFileSystem::createFile(const FileEntry* fileEntry, PassOwnPtr<FileCallback> successCallback, PassOwnPtr<ErrorCallback> errorCallback)
 {
     KURL fileSystemURL = createFileSystemURL(fileEntry);
+    if (!fileSystem()) {
+        reportError(errorCallback, FileError::create(FileError::ABORT_ERR));
+        return;
+    }
+
     fileSystem()->createSnapshotFileAndReadMetadata(fileSystemURL, SnapshotFileCallback::create(this, fileEntry->name(), fileSystemURL, successCallback, errorCallback, m_context));
 }
 

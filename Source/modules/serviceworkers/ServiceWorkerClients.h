@@ -12,10 +12,11 @@
 
 namespace blink {
 
-class Client;
+class Dictionary;
 class ExecutionContext;
-class ScriptState;
 class ScriptPromise;
+class ScriptState;
+class ServiceWorkerClient;
 
 class ServiceWorkerClients FINAL : public RefCountedWillBeGarbageCollected<ServiceWorkerClients>, public ScriptWrappable {
     DECLARE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(ServiceWorkerClients);
@@ -23,7 +24,7 @@ public:
     static PassRefPtrWillBeRawPtr<ServiceWorkerClients> create();
 
     // ServiceWorkerClients.idl
-    ScriptPromise getServiced(ScriptState*);
+    ScriptPromise getAll(ScriptState*, const Dictionary&);
 
     void trace(Visitor*) { }
 

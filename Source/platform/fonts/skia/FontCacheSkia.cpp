@@ -164,6 +164,25 @@ PassRefPtr<SimpleFontData> FontCache::getLastResortFallbackFont(const FontDescri
     return fontDataFromFontPlatformData(fontPlatformData, shouldRetain);
 }
 
+#if OS(WIN)
+static inline SkFontStyle fontStyle(const FontDescription& fontDescription)
+{
+    int width = static_cast<int>(fontDescription.stretch());
+    int weight = (fontDescription.weight() - FontWeight100 + 1) * 100;
+    SkFontStyle::Slant slant = fontDescription.style() == FontStyleItalic
+        ? SkFontStyle::kItalic_Slant
+        : SkFontStyle::kUpright_Slant;
+    return SkFontStyle(weight, width, slant);
+}
+
+COMPILE_ASSERT(static_cast<int>(FontStretchUltraCondensed) == static_cast<int>(SkFontStyle::kUltraCondensed_Width),
+    FontStretchUltraCondensedMapsTokUltraCondensed_Width);
+COMPILE_ASSERT(static_cast<int>(FontStretchNormal) == static_cast<int>(SkFontStyle::kNormal_Width),
+    FontStretchNormalMapsTokNormal_Width);
+COMPILE_ASSERT(static_cast<int>(FontStretchUltraExpanded) == static_cast<int>(SkFontStyle::kUltaExpanded_Width),
+    FontStretchUltraExpandedMapsTokUltaExpanded_Width);
+#endif
+
 PassRefPtr<SkTypeface> FontCache::createTypeface(const FontDescription& fontDescription, const FontFaceCreationParams& creationParams, CString& name)
 {
 #if !OS(WIN) && !OS(ANDROID)
@@ -171,13 +190,15 @@ PassRefPtr<SkTypeface> FontCache::createTypeface(const FontDescription& fontDesc
         // TODO(dro): crbug.com/381620 Use creationParams.ttcIndex() after
         // https://code.google.com/p/skia/issues/detail?id=1186 gets fixed.
         SkTypeface* typeface = nullptr;
-        if (blink::Platform::current()->sandboxSupport())
+        if (Platform::current()->sandboxSupport())
             typeface = SkTypeface::CreateFromStream(streamForFontconfigInterfaceId(creationParams.fontconfigInterfaceId()));
         else
             typeface = SkTypeface::CreateFromFile(creationParams.filename().data());
 
         if (typeface)
             return adoptRef(typeface);
+        else
+            return nullptr;
     }
 #endif
 
@@ -199,16 +220,22 @@ PassRefPtr<SkTypeface> FontCache::createTypeface(const FontDescription& fontDesc
 
 #if OS(WIN)
     if (s_sideloadedFonts) {
-        HashMap<String, SkTypeface*>::iterator sideloadedFont = s_sideloadedFonts->find(name.data());
-        if (sideloadedFont != s_sideloadedFonts->end()) {
+        HashMap<String, SkTypeface*>::iterator sideloadedFont =
+            s_sideloadedFonts->find(name.data());
+        if (sideloadedFont != s_sideloadedFonts->end())
             return adoptRef(sideloadedFont->value);
-        }
     }
-    // FIXME: Use SkFontStyle and matchFamilyStyle instead of legacyCreateTypeface.
-    if (m_fontManager)
-        return adoptRef(m_fontManager->legacyCreateTypeface(name.data(), style));
+
+    if (m_fontManager) {
+        return adoptRef(useDirectWrite()
+            ? m_fontManager->matchFamilyStyle(name.data(), fontStyle(fontDescription))
+            : m_fontManager->legacyCreateTypeface(name.data(), style)
+            );
+    }
 #endif
 
+    // FIXME: Use m_fontManager, SkFontStyle and matchFamilyStyle instead of
+    // CreateFromName on all platforms.
     return adoptRef(SkTypeface::CreateFromName(name.data(), static_cast<SkTypeface::Style>(style)));
 }
 

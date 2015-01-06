@@ -150,7 +150,6 @@ PassRefPtrWillBeRawPtr<Request> Request::create(ExecutionContext* context, const
     return createRequestWithRequestData(request.release(), RequestInit(init), FetchRequestData::CORSMode, FetchRequestData::OmitCredentials, exceptionState);
 }
 
-
 PassRefPtrWillBeRawPtr<Request> Request::create(ExecutionContext* context, Request* input, ExceptionState& exceptionState)
 {
     return create(context, input, Dictionary(), exceptionState);
@@ -184,12 +183,12 @@ Request::Request(PassRefPtrWillBeRawPtr<FetchRequestData> request)
     ScriptWrappable::init(this);
 }
 
-PassRefPtrWillBeRawPtr<Request> Request::create(const blink::WebServiceWorkerRequest& webRequest)
+PassRefPtrWillBeRawPtr<Request> Request::create(const WebServiceWorkerRequest& webRequest)
 {
     return adoptRefWillBeNoop(new Request(webRequest));
 }
 
-Request::Request(const blink::WebServiceWorkerRequest& webRequest)
+Request::Request(const WebServiceWorkerRequest& webRequest)
     : m_request(FetchRequestData::create(webRequest))
     , m_headers(Headers::create(m_request->headerList()))
 {
@@ -212,6 +211,16 @@ String Request::url() const
     url.removeFragmentIdentifier();
     return url;
 }
+
+PassRefPtrWillBeRawPtr<FetchBodyStream> Request::body(ExecutionContext* context)
+{
+    if (!m_request->blobDataHandle())
+        return nullptr;
+    if (!m_fetchBodyStream)
+        m_fetchBodyStream = FetchBodyStream::create(context, m_request->blobDataHandle());
+    return m_fetchBodyStream;
+}
+
 
 String Request::referrer() const
 {
@@ -259,6 +268,7 @@ void Request::trace(Visitor* visitor)
 {
     visitor->trace(m_request);
     visitor->trace(m_headers);
+    visitor->trace(m_fetchBodyStream);
 }
 
 } // namespace blink

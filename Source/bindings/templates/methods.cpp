@@ -10,7 +10,7 @@ static void {{method.name}}{{method.overload_index}}Method{{world_suffix}}(const
     {# Overloaded methods have length checked during overload resolution #}
     {% if method.number_of_required_arguments and not method.overload_index %}
     if (UNLIKELY(info.Length() < {{method.number_of_required_arguments}})) {
-        {{throw_minimum_arity_type_error(method, method.number_of_required_arguments)}};
+        {{throw_minimum_arity_type_error(method, method.number_of_required_arguments) | indent(8)}}
         return;
     }
     {% endif %}
@@ -21,8 +21,7 @@ static void {{method.name}}{{method.overload_index}}Method{{world_suffix}}(const
     CustomElementCallbackDispatcher::CallbackDeliveryScope deliveryScope;
     {% endif %}
     {# Security checks #}
-    {# FIXME: change to method.is_check_security_for_window #}
-    {% if interface_name == 'EventTarget' %}
+    {% if method.is_check_security_for_window %}
     if (LocalDOMWindow* window = impl->toDOMWindow()) {
         if (!BindingSecurity::shouldAllowAccessToFrame(info.GetIsolate(), window->frame(), exceptionState)) {
             {{throw_from_exception_state(method)}};
@@ -135,7 +134,7 @@ if (info.Length() > {{argument.index}} && {% if argument.is_nullable %}!isUndefi
 {% if argument.is_callback_interface %}
 {# FIXME: remove EventListener special case #}
 {% if argument.idl_type == 'EventListener' %}
-{% if method.name == 'removeEventListener' %}
+{% if method.name == 'removeEventListener' or method.name == 'removeListener' %}
 {{argument.name}} = V8EventListenerList::getEventListener(ScriptState::current(info.GetIsolate()), info[{{argument.index}}], false, ListenerFindOnly);
 {% else %}{# method.name == 'addEventListener' #}
 {{argument.name}} = V8EventListenerList::getEventListener(ScriptState::current(info.GetIsolate()), info[{{argument.index}}], false, ListenerFindOrCreate);
@@ -166,7 +165,11 @@ if (info.Length() <= {{argument.index}} || !{% if argument.is_nullable %}(info[{
 {% elif argument.is_clamp %}{# argument.is_callback_interface #}
 {# NaN is treated as 0: http://www.w3.org/TR/WebIDL/#es-type-mapping #}
 double {{argument.name}}NativeValue;
+{% if method.idl_type == 'Promise' %}
+TONATIVE_VOID_PROMISE_INTERNAL({{argument.name}}NativeValue, info[{{argument.index}}]->NumberValue(), info);
+{% else %}
 TONATIVE_VOID_INTERNAL({{argument.name}}NativeValue, info[{{argument.index}}]->NumberValue());
+{% endif %}
 if (!std::isnan({{argument.name}}NativeValue))
     {# IDL type is used for clamping, for the right bounds, since different
        IDL integer types have same internal C++ type (int or unsigned) #}
@@ -278,37 +281,41 @@ else
 {% endif %}
 {%- endif %}{# None for void #}
 {# Post-set #}
-{% if interface_name == 'EventTarget' and method.name in ('addEventListener',
-                                                          'removeEventListener') %}
+{% if interface_name in ('EventTarget', 'MediaQueryList')
+    and method.name in ('addEventListener', 'removeEventListener', 'addListener', 'removeListener') %}
 {% set hidden_dependency_action = 'addHiddenValueToArray'
-       if method.name == 'addEventListener' else 'removeHiddenValueFromArray' %}
+       if method.name in ('addEventListener', 'addListener') else 'removeHiddenValueFromArray' %}
+{% set argument_index = '1' if interface_name == 'EventTarget' else '0' %}
 {# Length check needed to skip action on legacy calls without enough arguments.
    http://crbug.com/353484 #}
-if (info.Length() >= 2 && listener && !impl->toNode())
-    {{hidden_dependency_action}}(info.Holder(), info[1], {{v8_class}}::eventListenerCacheIndex, info.GetIsolate());
+if (info.Length() >= {{argument_index}} + 1 && listener && !impl->toNode())
+    {{hidden_dependency_action}}(info.Holder(), info[{{argument_index}}], {{v8_class}}::eventListenerCacheIndex, info.GetIsolate());
 {% endif %}
 {% endmacro %}
 
 
 {######################################}
 {% macro union_type_method_call_and_set_return_value(method) %}
-{% for cpp_type in method.cpp_type %}
-bool result{{loop.index0}}Enabled = false;
-{{cpp_type}} result{{loop.index0}};
+{% for argument in method.union_arguments %}
+{{argument.cpp_type}} {{argument.cpp_value}}{{argument.cpp_type_initializer}};
 {% endfor %}
 {{method.cpp_value}};
 {% if method.is_null_expression %}{# used by getters #}
 if ({{method.is_null_expression}})
     return;
 {% endif %}
-{% for v8_set_return_value in method.v8_set_return_value %}
-if (result{{loop.index0}}Enabled) {
-    {{v8_set_return_value}};
+{% for argument in method.union_arguments %}
+if ({{argument.null_check_value}}) {
+    {{argument.v8_set_return_value}};
     return;
 }
 {% endfor %}
 {# Fall back to null if none of the union members results are returned #}
+{% if method.is_null_expression %}
+ASSERT_NOT_REACHED();
+{% else %}
 v8SetReturnValueNull(info);
+{% endif %}
 {% endmacro %}
 
 
@@ -317,46 +324,61 @@ v8SetReturnValueNull(info);
 {% if method.has_exception_state %}
 exceptionState.throwTypeError({{error_message}});
 {{throw_from_exception_state(method)}};
-{% elif method.is_constructor %}
-V8ThrowException::throwTypeError(ExceptionMessages::failedToConstruct("{{interface_name}}", {{error_message}}), info.GetIsolate());
-{% else %}{# method.has_exception_state #}
-V8ThrowException::throwTypeError(ExceptionMessages::failedToExecute("{{method.name}}", "{{interface_name}}", {{error_message}}), info.GetIsolate());
+{% elif method.idl_type == 'Promise' %}
+v8SetReturnValue(info, ScriptPromise::rejectRaw(info.GetIsolate(), V8ThrowException::createTypeError({{type_error_message(method, error_message)}}, info.GetIsolate())));
+{% else %}
+V8ThrowException::throwTypeError({{type_error_message(method, error_message)}}, info.GetIsolate());
 {% endif %}{# method.has_exception_state #}
 {% endmacro %}
 
 
 {######################################}
-{# FIXME: return a rejected Promise if method.idl_type == 'Promise' #}
-{% macro throw_from_exception_state(method) %}
-exceptionState.throwIfNeeded()
+{% macro type_error_message(method, error_message) %}
+{% if method.is_constructor %}
+ExceptionMessages::failedToConstruct("{{interface_name}}", {{error_message}})
+{%- else %}
+ExceptionMessages::failedToExecute("{{method.name}}", "{{interface_name}}", {{error_message}})
+{%- endif %}
 {%- endmacro %}
 
 
 {######################################}
-{% macro throw_arity_type_error(method, valid_arities) %}
-{% if method.has_exception_state %}
-throwArityTypeError(exceptionState, {{valid_arities}}, info.Length())
-{%- elif method.is_constructor %}
-throwArityTypeErrorForConstructor("{{interface_name}}", {{valid_arities}}, info.Length(), info.GetIsolate())
+{% macro throw_from_exception_state(method) %}
+{% if method.idl_type == 'Promise' %}
+v8SetReturnValue(info, exceptionState.reject(ScriptState::current(info.GetIsolate())).v8Value())
 {%- else %}
-throwArityTypeErrorForMethod("{{method.name}}", "{{interface_name}}", {{valid_arities}}, info.Length(), info.GetIsolate())
+exceptionState.throwIfNeeded()
 {%- endif %}
-{% endmacro %}
+{%- endmacro %}
 
 
 {######################################}
 {% macro throw_minimum_arity_type_error(method, number_of_required_arguments) %}
 {% if method.has_exception_state %}
-throwMinimumArityTypeError(exceptionState, {{number_of_required_arguments}}, info.Length())
-{%- elif method.is_constructor %}
-throwMinimumArityTypeErrorForConstructor("{{interface_name}}", {{number_of_required_arguments}}, info.Length(), info.GetIsolate())
+setMinimumArityTypeError(exceptionState, {{number_of_required_arguments}}, info.Length());
+{{throw_from_exception_state(method)}};
+{%- elif method.idl_type == 'Promise' %}
+v8SetReturnValue(info, ScriptPromise::rejectRaw(info.GetIsolate(), {{create_minimum_arity_type_error_without_exception_state(method, number_of_required_arguments)}}));
 {%- else %}
-throwMinimumArityTypeErrorForMethod("{{method.name}}", "{{interface_name}}", {{number_of_required_arguments}}, info.Length(), info.GetIsolate())
+V8ThrowException::throwException({{create_minimum_arity_type_error_without_exception_state(method, number_of_required_arguments)}}, info.GetIsolate());
 {%- endif %}
-{% endmacro %}
+{%- endmacro %}
+
+
+{######################################}
+{% macro create_minimum_arity_type_error_without_exception_state(method, number_of_required_arguments) %}
+{% if method.is_constructor %}
+createMinimumArityTypeErrorForConstructor("{{interface_name}}", {{number_of_required_arguments}}, info.Length(), info.GetIsolate())
+{%- else %}
+createMinimumArityTypeErrorForMethod("{{method.name}}", "{{interface_name}}", {{number_of_required_arguments}}, info.Length(), info.GetIsolate())
+{%- endif %}
+{%- endmacro %}
 
 
 {##############################################################################}
+{# FIXME: We should return a rejected Promise if an error occurs in this
+function when ALL methods in this overload return Promise. In order to do so,
+we must ensure either ALL or NO methods in this overload return Promise #}
 {% macro overload_resolution_method(overloads, world_suffix) %}
 static void {{overloads.name}}Method{{world_suffix}}(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
@@ -397,7 +419,8 @@ static void {{overloads.name}}Method{{world_suffix}}(const v8::FunctionCallbackI
         {# Report full list of valid arities if gaps and above minimum #}
         {% if overloads.valid_arities %}
         if (info.Length() >= {{overloads.minarg}}) {
-            throwArityTypeError(exceptionState, "{{overloads.valid_arities}}", info.Length());
+            setArityTypeError(exceptionState, "{{overloads.valid_arities}}", info.Length());
+            exceptionState.throwIfNeeded();
             return;
         }
         {% endif %}
@@ -498,7 +521,7 @@ static void {{method.name}}OriginSafeMethodGetterCallback{{world_suffix}}(v8::Lo
 
 {##############################################################################}
 {% macro method_implemented_in_private_script(method) %}
-bool {{v8_class}}::{{method.name}}MethodImplementedInPrivateScript({{method.argument_declarations_for_private_script | join(', ')}})
+bool {{v8_class}}::PrivateScript::{{method.name}}Method({{method.argument_declarations_for_private_script | join(', ')}})
 {
     if (!frame)
         return false;
@@ -525,20 +548,24 @@ bool {{v8_class}}::{{method.name}}MethodImplementedInPrivateScript({{method.argu
     {% endif %}
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "{{method.name}}", "{{cpp_class}}", scriptState->context()->Global(), scriptState->isolate());
     v8::TryCatch block;
-    V8RethrowTryCatchScope rethrow(block);
     {% if method.idl_type == 'void' %}
     PrivateScriptRunner::runDOMMethod(scriptState, "{{cpp_class}}", "{{method.name}}", holder, {{method.arguments | length}}, argv);
     if (block.HasCaught()) {
-        PrivateScriptRunner::throwDOMExceptionInPrivateScriptIfNeeded(scriptState->isolate(), exceptionState, block.Exception());
+        if (!PrivateScriptRunner::rethrowExceptionInPrivateScript(scriptState->isolate(), exceptionState, block)) {
+            // FIXME: We should support more exceptions.
+            RELEASE_ASSERT_NOT_REACHED();
+        }
+        block.ReThrow();
         return false;
     }
     {% else %}
     v8::Handle<v8::Value> v8Value = PrivateScriptRunner::runDOMMethod(scriptState, "{{cpp_class}}", "{{method.name}}", holder, {{method.arguments | length}}, argv);
     if (block.HasCaught()) {
-        if (!PrivateScriptRunner::throwDOMExceptionInPrivateScriptIfNeeded(scriptState->isolate(), exceptionState, block.Exception())) {
-            // FIXME: We should support exceptions other than DOM exceptions.
+        if (!PrivateScriptRunner::rethrowExceptionInPrivateScript(scriptState->isolate(), exceptionState, block)) {
+            // FIXME: We should support more exceptions.
             RELEASE_ASSERT_NOT_REACHED();
         }
+        block.ReThrow();
         return false;
     }
     {{method.private_script_v8_value_to_local_cpp_value}};
@@ -574,7 +601,7 @@ static void {{name}}(const v8::FunctionCallbackInfo<v8::Value>& info)
     {# Overloaded constructors have length checked during overload resolution #}
     {% if constructor.number_of_required_arguments and not constructor.overload_index %}
     if (UNLIKELY(info.Length() < {{constructor.number_of_required_arguments}})) {
-        {{throw_minimum_arity_type_error(constructor, constructor.number_of_required_arguments)}};
+        {{throw_minimum_arity_type_error(constructor, constructor.number_of_required_arguments) | indent(8)}}
         return;
     }
     {% endif %}
@@ -599,3 +626,31 @@ V8DOMWrapper::associateObjectWithWrapper<{{v8_class}}>(impl.release(), &{{constr
 {% endif %}
 v8SetReturnValue(info, wrapper);
 {% endmacro %}
+
+
+{##############################################################################}
+{% macro method_configuration(method) %}
+{% set method_callback =
+   '%sV8Internal::%sMethodCallback' % (cpp_class, method.name) %}
+{% set method_callback_for_main_world =
+   '%sV8Internal::%sMethodCallbackForMainWorld' % (cpp_class, method.name)
+   if method.is_per_world_bindings else '0' %}
+{% set only_exposed_to_private_script = 'V8DOMConfiguration::OnlyExposedToPrivateScript' if method.only_exposed_to_private_script else 'V8DOMConfiguration::ExposedToAllScripts' %}
+{"{{method.name}}", {{method_callback}}, {{method_callback_for_main_world}}, {{method.length}}, {{only_exposed_to_private_script}}}
+{%- endmacro %}
+
+
+{######################################}
+{% macro install_custom_signature(method) %}
+{% set method_callback = '%sV8Internal::%sMethodCallback' % (cpp_class, method.name) %}
+{% set method_callback_for_main_world = '%sForMainWorld' % method_callback
+  if method.is_per_world_bindings else '0' %}
+{% set property_attribute =
+  'static_cast<v8::PropertyAttribute>(%s)' % ' | '.join(method.property_attributes)
+  if method.property_attributes else 'v8::None' %}
+{% set only_exposed_to_private_script = 'V8DOMConfiguration::OnlyExposedToPrivateScript' if method.only_exposed_to_private_script else 'V8DOMConfiguration::ExposedToAllScripts' %}
+static const V8DOMConfiguration::MethodConfiguration {{method.name}}MethodConfiguration = {
+    "{{method.name}}", {{method_callback}}, {{method_callback_for_main_world}}, {{method.length}}, {{only_exposed_to_private_script}},
+};
+V8DOMConfiguration::installMethod({{method.function_template}}, {{method.signature}}, {{property_attribute}}, {{method.name}}MethodConfiguration, isolate);
+{%- endmacro %}

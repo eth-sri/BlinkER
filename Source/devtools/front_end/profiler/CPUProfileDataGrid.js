@@ -44,7 +44,7 @@ WebInspector.ProfileDataGridNode = function(profileNode, owningTree, hasChildren
     this.callUID = profileNode.callUID;
     this.selfTime = profileNode.selfTime;
     this.totalTime = profileNode.totalTime;
-    this.functionName = profileNode.functionName;
+    this.functionName = WebInspector.CPUProfileDataModel.beautifyFunctionName(profileNode.functionName);
     this._deoptReason = (!profileNode.deoptReason || profileNode.deoptReason === "no reason") ? "" : profileNode.deoptReason;
     this.url = profileNode.url;
 }
@@ -70,7 +70,7 @@ WebInspector.ProfileDataGridNode.prototype = {
         if (this._deoptReason)
             cell.classList.add("not-optimized");
 
-        if (this.profileNode._searchMatchedFunctionColumn)
+        if (this._searchMatchedFunctionColumn)
             cell.classList.add("highlight");
 
         if (this.profileNode.scriptId !== "0") {

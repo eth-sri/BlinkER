@@ -35,6 +35,7 @@
 #include "core/frame/FrameConsole.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/LocalFrame.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "public/platform/Platform.h"
 
@@ -482,7 +483,7 @@ int UseCounter::mapCSSPropertyIdToCSSSampleIdForHistogram(int id)
     case CSSPropertyMaskSourceType: return 435;
     case CSSPropertyIsolation: return 436;
     case CSSPropertyObjectPosition: return 437;
-    case CSSPropertyInternalCallback: return 438;
+    // case CSSPropertyInternalCallback: return 438;
     case CSSPropertyShapeImageThreshold: return 439;
     case CSSPropertyColumnFill: return 440;
     case CSSPropertyTextJustify: return 441;
@@ -634,7 +635,7 @@ void UseCounter::countDeprecation(const Document& document, Feature feature)
 
     if (host->useCounter().recordMeasurement(feature)) {
         ASSERT(!host->useCounter().deprecationMessage(feature).isEmpty());
-        frame->console().addMessage(DeprecationMessageSource, WarningMessageLevel, host->useCounter().deprecationMessage(feature));
+        frame->console().addMessage(ConsoleMessage::create(DeprecationMessageSource, WarningMessageLevel, host->useCounter().deprecationMessage(feature)));
     }
 }
 
@@ -783,6 +784,15 @@ String UseCounter::deprecationMessage(Feature feature)
 
     case HTMLTableElementHspace:
         return "The 'hspace' attribute on table is deprecated. Please use CSS instead.";
+
+    case PictureSourceSrc:
+        return "<source src> with a <picture> parent is invalid and therefore ignored. Please use <source srcset> instead.";
+
+    case XHRProgressEventPosition:
+        return "The XMLHttpRequest progress event property 'position' is deprecated. Please use 'loaded' instead.";
+
+    case XHRProgressEventTotalSize:
+        return "The XMLHttpRequest progress event property 'totalSize' is deprecated. Please use 'total' instead.";
 
     // Features that aren't deprecated don't have a deprecation message.
     default:

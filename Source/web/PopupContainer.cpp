@@ -55,8 +55,6 @@
 #include "web/WebViewImpl.h"
 #include <limits>
 
-using namespace blink;
-
 namespace blink {
 
 static const int borderSize = 1;
@@ -295,9 +293,9 @@ bool PopupContainer::handleGestureEvent(const PlatformGestureEvent& gestureEvent
 {
     switch (gestureEvent.type()) {
     case PlatformEvent::GestureTap: {
-        PlatformMouseEvent fakeMouseMove(gestureEvent.position(), gestureEvent.globalPosition(), NoButton, PlatformEvent::MouseMoved, /* clickCount */ 1, gestureEvent.shiftKey(), gestureEvent.ctrlKey(), gestureEvent.altKey(), gestureEvent.metaKey(), gestureEvent.timestamp());
-        PlatformMouseEvent fakeMouseDown(gestureEvent.position(), gestureEvent.globalPosition(), LeftButton, PlatformEvent::MousePressed, /* clickCount */ 1, gestureEvent.shiftKey(), gestureEvent.ctrlKey(), gestureEvent.altKey(), gestureEvent.metaKey(), gestureEvent.timestamp());
-        PlatformMouseEvent fakeMouseUp(gestureEvent.position(), gestureEvent.globalPosition(), LeftButton, PlatformEvent::MouseReleased, /* clickCount */ 1, gestureEvent.shiftKey(), gestureEvent.ctrlKey(), gestureEvent.altKey(), gestureEvent.metaKey(), gestureEvent.timestamp());
+        PlatformMouseEvent fakeMouseMove(gestureEvent.position(), gestureEvent.globalPosition(), NoButton, PlatformEvent::MouseMoved, /* clickCount */ 1, gestureEvent.shiftKey(), gestureEvent.ctrlKey(), gestureEvent.altKey(), gestureEvent.metaKey(), PlatformMouseEvent::RealOrIndistinguishable, gestureEvent.timestamp());
+        PlatformMouseEvent fakeMouseDown(gestureEvent.position(), gestureEvent.globalPosition(), LeftButton, PlatformEvent::MousePressed, /* clickCount */ 1, gestureEvent.shiftKey(), gestureEvent.ctrlKey(), gestureEvent.altKey(), gestureEvent.metaKey(), PlatformMouseEvent::RealOrIndistinguishable, gestureEvent.timestamp());
+        PlatformMouseEvent fakeMouseUp(gestureEvent.position(), gestureEvent.globalPosition(), LeftButton, PlatformEvent::MouseReleased, /* clickCount */ 1, gestureEvent.shiftKey(), gestureEvent.ctrlKey(), gestureEvent.altKey(), gestureEvent.metaKey(), PlatformMouseEvent::RealOrIndistinguishable, gestureEvent.timestamp());
         // handleMouseMoveEvent(fakeMouseMove);
         handleMouseDownEvent(fakeMouseDown);
         handleMouseReleaseEvent(fakeMouseUp);
@@ -493,10 +491,7 @@ void PopupContainer::getPopupMenuInfo(WebPopupMenuInfo* info)
 
         outputItem.label = inputItem.label;
         outputItem.enabled = inputItem.enabled;
-        if (inputItem.textDirection == blink::RTL)
-            outputItem.textDirection = WebTextDirectionRightToLeft;
-        else
-            outputItem.textDirection = WebTextDirectionLeftToRight;
+        outputItem.textDirection = toWebTextDirection(inputItem.textDirection);
         outputItem.hasTextDirectionOverride = inputItem.hasTextDirectionOverride;
 
         switch (inputItem.type) {

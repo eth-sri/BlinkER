@@ -441,6 +441,12 @@ void XMLDocumentParser::finish()
     // makes sense to call any methods on DocumentParser once it's been stopped.
     // However, FrameLoader::stop calls DocumentParser::finish unconditionally.
 
+    // flush may ending up executing arbitrary script, and possibly detach the parser.
+    RefPtrWillBeRawPtr<XMLDocumentParser> protect(this);
+    flush();
+    if (isDetached())
+        return;
+
     if (m_parserPaused)
         m_finishCalled = true;
     else
@@ -801,10 +807,10 @@ XMLDocumentParser::XMLDocumentParser(DocumentFragment* fragment, Element* parent
     while (parentElement) {
         elemStack.append(parentElement);
 
-        ContainerNode* n = parentElement->parentNode();
-        if (!n || !n->isElementNode())
+        Element* grandParentElement = parentElement->parentElement();
+        if (!grandParentElement)
             break;
-        parentElement = toElement(n);
+        parentElement = grandParentElement;
     }
 
     if (elemStack.isEmpty())
@@ -813,8 +819,8 @@ XMLDocumentParser::XMLDocumentParser(DocumentFragment* fragment, Element* parent
     for (; !elemStack.isEmpty(); elemStack.removeLast()) {
         Element* element = elemStack.last();
         AttributeCollection attributes = element->attributes();
-        AttributeCollection::const_iterator end = attributes.end();
-        for (AttributeCollection::const_iterator it = attributes.begin(); it != end; ++it) {
+        AttributeCollection::iterator end = attributes.end();
+        for (AttributeCollection::iterator it = attributes.begin(); it != end; ++it) {
             if (it->localName() == xmlnsAtom)
                 m_defaultNamespaceURI = it->value();
             else if (it->prefix() == xmlnsAtom)
@@ -1434,7 +1440,6 @@ void XMLDocumentParser::initializeParserContext(const CString& chunk)
     sax.ignorableWhitespace = ignorableWhitespaceHandler;
     sax.entityDecl = xmlSAX2EntityDecl;
     sax.initialized = XML_SAX2_MAGIC;
-    DocumentParser::startParsing();
     m_sawError = false;
     m_sawCSS = false;
     m_sawXSLTransform = false;

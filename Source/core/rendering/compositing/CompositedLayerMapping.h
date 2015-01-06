@@ -109,8 +109,6 @@ public:
 
     GraphicsLayer* parentForSublayers() const;
     GraphicsLayer* childForSuperlayers() const;
-    // localRootForOwningLayer does not include the m_squashingContainmentLayer, which is technically not associated with this CLM's owning layer.
-    GraphicsLayer* localRootForOwningLayer() const;
 
     GraphicsLayer* childTransformLayer() const { return m_childTransformLayer.get(); }
 
@@ -158,7 +156,7 @@ public:
     // GraphicsLayerClient interface
     virtual void notifyAnimationStarted(const GraphicsLayer*, double monotonicTime) OVERRIDE;
     virtual void paintContents(const GraphicsLayer*, GraphicsContext&, GraphicsLayerPaintingPhase, const IntRect& clip) OVERRIDE;
-    virtual bool isTrackingRepaints() const OVERRIDE;
+    virtual bool isTrackingPaintInvalidations() const OVERRIDE;
 
 #if ENABLE(ASSERT)
     virtual void verifyNotPainting() OVERRIDE;
@@ -184,7 +182,7 @@ public:
 
     void updateFilters(const RenderStyle*);
 
-    void setBlendMode(blink::WebBlendMode);
+    void setBlendMode(WebBlendMode);
 
     bool needsGraphicsLayerUpdate() { return m_pendingUpdateScope > GraphicsLayerUpdateNone; }
     void setNeedsGraphicsLayerUpdate(GraphicsLayerUpdateScope scope) { m_pendingUpdateScope = std::max(static_cast<GraphicsLayerUpdateScope>(m_pendingUpdateScope), scope); }
@@ -377,7 +375,7 @@ private:
     //         + root content layer
     //
     // With the hierarchy set up like this, the root content layer is able to scroll without affecting
-    // the background layer (or repainting).
+    // the background layer (or paint invalidation).
     OwnPtr<GraphicsLayer> m_foregroundLayer; // Only used in cases where we need to draw the foreground separately.
     OwnPtr<GraphicsLayer> m_backgroundLayer; // Only used in cases where we need to draw the background separately.
 

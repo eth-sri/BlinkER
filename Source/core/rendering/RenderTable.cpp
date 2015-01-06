@@ -411,7 +411,7 @@ void RenderTable::layout()
 
     SubtreeLayoutScope layouter(*this);
 
-    // If any table section moved vertically, we will just repaint everything from that
+    // If any table section moved vertically, we will just issue paint invalidations for everything from that
     // section down (it is quite unlikely that any of the following sections
     // did not shift).
     bool sectionMoved = false;
@@ -681,7 +681,7 @@ void RenderTable::paintObject(PaintInfo& paintInfo, const LayoutPoint& paintOffs
     }
 
     // Paint outline.
-    if ((paintPhase == PaintPhaseOutline || paintPhase == PaintPhaseSelfOutline) && hasOutline() && style()->visibility() == VISIBLE)
+    if ((paintPhase == PaintPhaseOutline || paintPhase == PaintPhaseSelfOutline) && style()->hasOutline() && style()->visibility() == VISIBLE)
         paintOutline(paintInfo, LayoutRect(paintOffset, size()));
 }
 

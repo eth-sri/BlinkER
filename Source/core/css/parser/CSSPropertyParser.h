@@ -30,11 +30,11 @@
 #include "core/css/CSSFilterValue.h"
 #include "core/css/CSSGradientValue.h"
 #include "core/css/CSSGridTemplateAreasValue.h"
-#include "core/css/CSSParserMode.h"
-#include "core/css/CSSParserValues.h"
 #include "core/css/CSSProperty.h"
 #include "core/css/CSSPropertySourceData.h"
 #include "core/css/CSSSelector.h"
+#include "core/css/parser/CSSParserMode.h"
+#include "core/css/parser/CSSParserValues.h"
 #include "platform/graphics/Color.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/Vector.h"
@@ -59,7 +59,7 @@ class CSSPropertyParser {
     STACK_ALLOCATED();
 public:
     CSSPropertyParser(OwnPtr<CSSParserValueList>&,
-        const CSSParserContext&, bool inViewport, bool savedImportant,
+        const CSSParserContext&, bool inViewport,
         WillBeHeapVector<CSSProperty, 256>&, CSSRuleSourceData::Type);
     ~CSSPropertyParser();
 
@@ -84,7 +84,6 @@ private:
     void addPropertyWithPrefixingVariant(CSSPropertyID, PassRefPtrWillBeRawPtr<CSSValue>, bool important, bool implicit = false);
     void addProperty(CSSPropertyID, PassRefPtrWillBeRawPtr<CSSValue>, bool important, bool implicit = false);
     void rollbackLastProperties(int num);
-    bool hasProperties() const { return !m_parsedProperties.isEmpty(); }
     void addExpandedPropertyForValue(CSSPropertyID propId, PassRefPtrWillBeRawPtr<CSSValue>, bool);
 
     PassRefPtrWillBeRawPtr<CSSPrimitiveValue> parseValidPrimitive(CSSValueID ident, CSSParserValue*);
@@ -92,7 +91,7 @@ private:
     bool parseShorthand(CSSPropertyID, const StylePropertyShorthand&, bool important);
     bool parse4Values(CSSPropertyID, const CSSPropertyID* properties, bool important);
     bool parseContent(CSSPropertyID, bool important);
-    bool parseQuotes(CSSPropertyID, bool important);
+    PassRefPtrWillBeRawPtr<CSSValue> parseQuotes();
 
     PassRefPtrWillBeRawPtr<CSSValue> parseAttr(CSSParserValueList* args);
 
@@ -119,8 +118,6 @@ private:
 
     void addFillValue(RefPtrWillBeRawPtr<CSSValue>& lval, PassRefPtrWillBeRawPtr<CSSValue> rval);
 
-    void addAnimationValue(RefPtrWillBeRawPtr<CSSValue>& lval, PassRefPtrWillBeRawPtr<CSSValue> rval);
-
     PassRefPtrWillBeRawPtr<CSSValue> parseAnimationDelay();
     PassRefPtrWillBeRawPtr<CSSValue> parseAnimationDirection();
     PassRefPtrWillBeRawPtr<CSSValue> parseAnimationDuration();
@@ -131,7 +128,7 @@ private:
     PassRefPtrWillBeRawPtr<CSSValue> parseAnimationProperty();
     PassRefPtrWillBeRawPtr<CSSValue> parseAnimationTimingFunction();
 
-    bool parseWebkitTransformOriginShorthand(RefPtrWillBeRawPtr<CSSValue>&, RefPtrWillBeRawPtr<CSSValue>&, RefPtrWillBeRawPtr<CSSValue>&);
+    bool parseWebkitTransformOriginShorthand(bool important);
     bool parseCubicBezierTimingFunctionValue(CSSParserValueList*& args, double& result);
     PassRefPtrWillBeRawPtr<CSSValue> parseAnimationProperty(CSSPropertyID);
     PassRefPtrWillBeRawPtr<CSSValueList> parseAnimationPropertyList(CSSPropertyID);
@@ -150,7 +147,7 @@ private:
     bool parseGridShorthand(bool important);
     bool parseGridAreaShorthand(bool important);
     bool parseSingleGridAreaLonghand(RefPtrWillBeRawPtr<CSSValue>&);
-    PassRefPtrWillBeRawPtr<CSSValue> parseGridTrackList(bool important);
+    PassRefPtrWillBeRawPtr<CSSValue> parseGridTrackList();
     bool parseGridTrackRepeatFunction(CSSValueList&);
     PassRefPtrWillBeRawPtr<CSSValue> parseGridTrackSize(CSSParserValueList& inputList);
     PassRefPtrWillBeRawPtr<CSSPrimitiveValue> parseGridBreadth(CSSParserValue*);
@@ -189,9 +186,8 @@ private:
     bool parseFontSize(bool important);
     bool parseFontVariant(bool important);
     bool parseFontWeight(bool important);
-    bool parseFontStretch(bool important);
-    bool parseFontFaceSrc();
-    bool parseFontFaceUnicodeRange();
+    PassRefPtrWillBeRawPtr<CSSValueList> parseFontFaceSrc();
+    PassRefPtrWillBeRawPtr<CSSValueList> parseFontFaceUnicodeRange();
 
     bool parseSVGValue(CSSPropertyID propId, bool important);
     PassRefPtrWillBeRawPtr<CSSValue> parseSVGStrokeDasharray();
@@ -208,13 +204,13 @@ private:
     bool parseBorderImageOutset(RefPtrWillBeRawPtr<CSSPrimitiveValue>&);
     bool parseBorderRadius(CSSPropertyID, bool important);
 
-    bool parseAspectRatio(bool important);
+    PassRefPtrWillBeRawPtr<CSSValue> parseAspectRatio();
 
-    bool parseReflect(CSSPropertyID, bool important);
+    PassRefPtrWillBeRawPtr<CSSValue> parseReflect();
 
     bool parseFlex(CSSParserValueList* args, bool important);
 
-    bool parseObjectPosition(bool important);
+    PassRefPtrWillBeRawPtr<CSSValue> parseObjectPosition();
 
     // Image generators
     bool parseCanvas(CSSParserValueList*, RefPtrWillBeRawPtr<CSSValue>&);
@@ -230,7 +226,7 @@ private:
 
     PassRefPtrWillBeRawPtr<CSSValue> parseImageSet(CSSParserValueList*);
 
-    bool parseWillChange(bool important);
+    PassRefPtrWillBeRawPtr<CSSValue> parseWillChange();
 
     PassRefPtrWillBeRawPtr<CSSValueList> parseFilter();
     PassRefPtrWillBeRawPtr<CSSFilterValue> parseBuiltinFilterArguments(CSSParserValueList*, CSSFilterValue::FilterOperationType);
@@ -238,12 +234,10 @@ private:
     PassRefPtrWillBeRawPtr<CSSValueList> parseTransformOrigin();
     PassRefPtrWillBeRawPtr<CSSValueList> parseTransform(CSSPropertyID);
     PassRefPtrWillBeRawPtr<CSSValue> parseTransformValue(CSSPropertyID, CSSParserValue*);
-    bool parseWebkitTransformOrigin(CSSPropertyID propId, CSSPropertyID& propId1, CSSPropertyID& propId2, CSSPropertyID& propId3, RefPtrWillBeRawPtr<CSSValue>&, RefPtrWillBeRawPtr<CSSValue>&, RefPtrWillBeRawPtr<CSSValue>&);
-    bool parseWebkitPerspectiveOrigin(CSSPropertyID propId, CSSPropertyID& propId1, CSSPropertyID& propId2,  RefPtrWillBeRawPtr<CSSValue>&, RefPtrWillBeRawPtr<CSSValue>&);
 
     bool parseTextEmphasisStyle(bool important);
 
-    bool parseTouchAction(bool important);
+    PassRefPtrWillBeRawPtr<CSSValue> parseTouchAction();
 
     void addTextDecorationProperty(CSSPropertyID, PassRefPtrWillBeRawPtr<CSSValue>, bool important);
     bool parseTextDecoration(CSSPropertyID propId, bool important);
@@ -285,19 +279,14 @@ private:
     bool parseFontFaceSrcURI(CSSValueList*);
     bool parseFontFaceSrcLocal(CSSValueList*);
 
-    enum PropertyType {
-        PropertyExplicit,
-        PropertyImplicit
-    };
-
     class ImplicitScope {
         STACK_ALLOCATED();
         WTF_MAKE_NONCOPYABLE(ImplicitScope);
     public:
-        ImplicitScope(CSSPropertyParser* parser, PropertyType propertyType)
+        ImplicitScope(CSSPropertyParser* parser)
             : m_parser(parser)
         {
-            m_parser->m_implicitShorthand = propertyType == CSSPropertyParser::PropertyImplicit;
+            m_parser->m_implicitShorthand = true;
         }
 
         ~ImplicitScope()
@@ -369,7 +358,6 @@ private:
     const OwnPtr<CSSParserValueList>& m_valueList;
     const CSSParserContext& m_context;
     const bool m_inViewport;
-    const bool m_important; // FIXME: This is only used by font-face-src and unicode-range and undoubtably wrong!
 
     // Outputs:
     WillBeHeapVector<CSSProperty, 256>& m_parsedProperties;

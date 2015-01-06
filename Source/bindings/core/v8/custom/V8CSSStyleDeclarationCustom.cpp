@@ -35,9 +35,9 @@
 #include "bindings/core/v8/V8Binding.h"
 #include "core/CSSPropertyNames.h"
 #include "core/css/CSSPrimitiveValue.h"
+#include "core/css/CSSPropertyMetadata.h"
 #include "core/css/CSSStyleDeclaration.h"
 #include "core/css/CSSValue.h"
-#include "core/css/RuntimeCSSEnabled.h"
 #include "core/css/parser/BisonCSSParser.h"
 #include "core/events/EventTarget.h"
 #include "wtf/ASCIICType.h"
@@ -147,9 +147,10 @@ static CSSPropertyInfo* cssPropertyInfo(v8::Handle<v8::String> v8PropertyName)
         propInfo->propID = cssResolvedPropertyID(propertyName);
         map.add(propertyName, propInfo);
     }
-    if (propInfo->propID && RuntimeCSSEnabled::isCSSPropertyEnabled(propInfo->propID))
-        return propInfo;
-    return 0;
+    if (!propInfo->propID)
+        return 0;
+    ASSERT(CSSPropertyMetadata::isEnabledProperty(propInfo->propID));
+    return propInfo;
 }
 
 void V8CSSStyleDeclaration::namedPropertyEnumeratorCustom(const v8::PropertyCallbackInfo<v8::Array>& info)
@@ -161,7 +162,7 @@ void V8CSSStyleDeclaration::namedPropertyEnumeratorCustom(const v8::PropertyCall
     if (propertyNames.isEmpty()) {
         for (int id = firstCSSProperty; id <= lastCSSProperty; ++id) {
             CSSPropertyID propertyId = static_cast<CSSPropertyID>(id);
-            if (RuntimeCSSEnabled::isCSSPropertyEnabled(propertyId))
+            if (CSSPropertyMetadata::isEnabledProperty(propertyId))
                 propertyNames.append(getJSPropertyName(propertyId));
         }
         std::sort(propertyNames.begin(), propertyNames.end(), codePointCompareLessThan);

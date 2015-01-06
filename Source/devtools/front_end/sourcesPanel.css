@@ -108,10 +108,6 @@
     -webkit-mask-position: 0 -24px;
 }
 
-.dedicated-worker-item {
-    margin: 5px 0 5px 1px;
-}
-
 #shared-workers-list {
     margin: 5px 0 5px 20px;
     font-style:italic;
@@ -177,8 +173,12 @@
     overflow: auto;
 }
 
-.targets-toolbar {
-    padding-left: 10px;
+#targets-toolbar {
+    background: rgb(236, 236, 236);
+    border-bottom: 1px solid rgb(189, 189, 189);
+    border-top: 1px solid rgb(189, 189, 189);
+    margin-right: 0px;
+    padding-right: 6px;
     margin-top: -1px;
 }
 

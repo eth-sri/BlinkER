@@ -28,27 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-importScript("../cm/codemirror.js");
-importScript("../cm/css.js");
-importScript("../cm/javascript.js");
-importScript("../cm/xml.js");
-importScript("../cm/htmlmixed.js");
-
-importScript("../cm/matchbrackets.js");
-importScript("../cm/closebrackets.js");
-importScript("../cm/markselection.js");
-importScript("../cm/comment.js");
-importScript("../cm/overlay.js");
-
-importScript("../cm/htmlembedded.js");
-importScript("../cm/clike.js");
-importScript("../cm/coffeescript.js");
-importScript("../cm/php.js");
-importScript("../cm/python.js");
-importScript("../cm/shell.js");
-importScript("CodeMirrorUtils.js");
-importScript("CodeMirrorTextEditor.js");
-
 /**
  * @extends {WebInspector.VBox}
  * @constructor
@@ -800,7 +779,12 @@ WebInspector.SourceFrame.RowMessage = function(consoleMessage)
     this._icon = this.element.createChild("span", "text-editor-row-message-icon");
     this._icon.classList.add(WebInspector.SourceFrame._iconClassPerLevel[consoleMessage.level]);
     this._repeatCountElement = this.element.createChild("span", "bubble-repeat-count hidden error");
-    this.element.createTextChild(this._consoleMessage.messageText);
+    var linesContainer = this.element.createChild("div", "text-editor-row-message-lines");
+    var lines = this._consoleMessage.messageText.split("\n");
+    for (var i = 0; i < lines.length; ++i) {
+        var messageLine = linesContainer.createChild("div");
+        messageLine.textContent = lines[i];
+    }
 }
 
 WebInspector.SourceFrame.RowMessage.prototype = {
@@ -1042,8 +1026,3 @@ WebInspector.TextEditorDelegateForSourceFrame.prototype = {
         this._sourceFrame.onJumpToPosition(from, to);
     }
 }
-
-importScript("GoToLineDialog.js");
-importScript("ResourceView.js");
-importScript("FontView.js");
-importScript("ImageView.js");

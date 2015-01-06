@@ -41,22 +41,19 @@
 #include "wtf/ThreadingPrimitives.h"
 
 namespace blink {
+
 class AudioSourceProviderClient;
 class HTMLMediaElement;
-}
-
-namespace blink {
-
 class WebAudioSourceProvider;
 class WebContentDecryptionModule;
 class WebMediaPlayer;
 
-// This class serves as a bridge between blink::MediaPlayer and
-// blink::WebMediaPlayer.
-class WebMediaPlayerClientImpl FINAL : public blink::MediaPlayer, public WebMediaPlayerClient {
+// This class serves as a bridge between MediaPlayer and
+// WebMediaPlayer.
+class WebMediaPlayerClientImpl FINAL : public MediaPlayer, public WebMediaPlayerClient {
 
 public:
-    static PassOwnPtr<blink::MediaPlayer> create(blink::MediaPlayerClient*);
+    static PassOwnPtr<MediaPlayer> create(MediaPlayerClient*);
 
     virtual ~WebMediaPlayerClientImpl();
 
@@ -67,9 +64,7 @@ public:
     virtual void repaint() OVERRIDE;
     virtual void durationChanged() OVERRIDE;
     virtual void sizeChanged() OVERRIDE;
-    virtual double volume() const OVERRIDE;
     virtual void playbackStateChanged() OVERRIDE;
-    virtual WebMediaPlayer::Preload preload() const OVERRIDE;
 
     // WebEncryptedMediaPlayerClient methods:
     virtual void keyAdded(const WebString& keySystem, const WebString& sessionId) OVERRIDE;
@@ -91,28 +86,27 @@ public:
     // MediaPlayer methods:
     virtual WebMediaPlayer* webMediaPlayer() const OVERRIDE;
     virtual void load(WebMediaPlayer::LoadType, const WTF::String& url, WebMediaPlayer::CORSMode) OVERRIDE;
-    virtual void setPreload(blink::MediaPlayer::Preload) OVERRIDE;
+    virtual void setPreload(MediaPlayer::Preload) OVERRIDE;
 
 #if ENABLE(WEB_AUDIO)
-    virtual blink::AudioSourceProvider* audioSourceProvider() OVERRIDE;
+    virtual AudioSourceProvider* audioSourceProvider() OVERRIDE;
 #endif
 
 private:
-    explicit WebMediaPlayerClientImpl(blink::MediaPlayerClient*);
+    explicit WebMediaPlayerClientImpl(MediaPlayerClient*);
 
-    blink::HTMLMediaElement& mediaElement() const;
+    HTMLMediaElement& mediaElement() const;
 
-    blink::MediaPlayerClient* m_client;
+    MediaPlayerClient* m_client;
     OwnPtr<WebMediaPlayer> m_webMediaPlayer;
-    blink::MediaPlayer::Preload m_preload;
 
 #if ENABLE(WEB_AUDIO)
     // AudioClientImpl wraps an AudioSourceProviderClient.
     // When the audio format is known, Chromium calls setFormat() which then dispatches into WebCore.
 
-    class AudioClientImpl FINAL : public NoBaseWillBeGarbageCollectedFinalized<AudioClientImpl>, public blink::WebAudioSourceProviderClient {
+    class AudioClientImpl FINAL : public GarbageCollectedFinalized<AudioClientImpl>, public WebAudioSourceProviderClient {
     public:
-        explicit AudioClientImpl(blink::AudioSourceProviderClient* client)
+        explicit AudioClientImpl(AudioSourceProviderClient* client)
             : m_client(client)
         {
         }
@@ -125,13 +119,13 @@ private:
         void trace(Visitor*);
 
     private:
-        RawPtrWillBeMember<blink::AudioSourceProviderClient> m_client;
+        Member<AudioSourceProviderClient> m_client;
     };
 
     // AudioSourceProviderImpl wraps a WebAudioSourceProvider.
     // provideInput() calls into Chromium to get a rendered audio stream.
 
-    class AudioSourceProviderImpl FINAL : public blink::AudioSourceProvider {
+    class AudioSourceProviderImpl FINAL : public AudioSourceProvider {
     public:
         AudioSourceProviderImpl()
             : m_webAudioSourceProvider(0)
@@ -143,13 +137,13 @@ private:
         // Wraps the given WebAudioSourceProvider.
         void wrap(WebAudioSourceProvider*);
 
-        // blink::AudioSourceProvider
-        virtual void setClient(blink::AudioSourceProviderClient*) OVERRIDE;
-        virtual void provideInput(blink::AudioBus*, size_t framesToProcess) OVERRIDE;
+        // AudioSourceProvider
+        virtual void setClient(AudioSourceProviderClient*) OVERRIDE;
+        virtual void provideInput(AudioBus*, size_t framesToProcess) OVERRIDE;
 
     private:
         WebAudioSourceProvider* m_webAudioSourceProvider;
-        OwnPtrWillBePersistent<AudioClientImpl> m_client;
+        Persistent<AudioClientImpl> m_client;
         Mutex provideInputLock;
     };
 

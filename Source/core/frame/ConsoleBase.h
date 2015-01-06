@@ -43,6 +43,7 @@
 
 namespace blink {
 
+class ConsoleMessage;
 class ScriptArguments;
 
 class ConsoleBase : public RefCountedWillBeGarbageCollectedFinalized<ConsoleBase>, public ScriptWrappable {
@@ -60,8 +61,8 @@ public:
     void assertCondition(ScriptState*, PassRefPtrWillBeRawPtr<ScriptArguments>, bool condition);
     void count(ScriptState*, PassRefPtrWillBeRawPtr<ScriptArguments>);
     void markTimeline(const String&);
-    void profile(ScriptState*, const String&);
-    void profileEnd(ScriptState*, const String&);
+    void profile(const String&);
+    void profileEnd(const String&);
     void time(const String&);
     void timeEnd(ScriptState*, const String&);
     void timeStamp(const String&);
@@ -77,7 +78,7 @@ public:
 
 protected:
     virtual ExecutionContext* context() = 0;
-    virtual void reportMessageToClient(MessageLevel, const String& message, PassRefPtrWillBeRawPtr<ScriptCallStack>) = 0;
+    virtual void reportMessageToConsole(PassRefPtrWillBeRawPtr<ConsoleMessage>) = 0;
 
 private:
     void internalAddMessage(MessageType, MessageLevel, ScriptState*, PassRefPtrWillBeRawPtr<ScriptArguments>, bool acceptNoArguments = false, bool printTrace = false);

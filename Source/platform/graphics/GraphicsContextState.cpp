@@ -14,13 +14,11 @@ GraphicsContextState::GraphicsContextState()
     , m_fillRule(RULE_NONZERO)
     , m_textDrawingMode(TextModeFill)
     , m_alpha(256)
-    , m_xferMode(nullptr)
     , m_compositeOperator(CompositeSourceOver)
-    , m_blendMode(blink::WebBlendModeNormal)
+    , m_blendMode(WebBlendModeNormal)
     , m_interpolationQuality(InterpolationDefault)
     , m_saveCount(0)
     , m_shouldAntialias(true)
-    , m_shouldSmoothFonts(true)
     , m_shouldClampToSourceRect(true)
 {
     m_strokePaint.setStyle(SkPaint::kStroke_Style);
@@ -47,14 +45,12 @@ GraphicsContextState::GraphicsContextState(const GraphicsContextState& other)
     , m_looper(other.m_looper)
     , m_textDrawingMode(other.m_textDrawingMode)
     , m_alpha(other.m_alpha)
-    , m_xferMode(other.m_xferMode)
     , m_colorFilter(other.m_colorFilter)
     , m_compositeOperator(other.m_compositeOperator)
     , m_blendMode(other.m_blendMode)
     , m_interpolationQuality(other.m_interpolationQuality)
     , m_saveCount(0)
     , m_shouldAntialias(other.m_shouldAntialias)
-    , m_shouldSmoothFonts(other.m_shouldSmoothFonts)
     , m_shouldClampToSourceRect(other.m_shouldClampToSourceRect) { }
 
 void GraphicsContextState::copy(const GraphicsContextState& source)
@@ -229,13 +225,13 @@ void GraphicsContextState::setColorFilter(PassRefPtr<SkColorFilter> colorFilter)
     m_fillPaint.setColorFilter(m_colorFilter.get());
 }
 
-void GraphicsContextState::setCompositeOperation(CompositeOperator compositeOperation, blink::WebBlendMode blendMode)
+void GraphicsContextState::setCompositeOperation(CompositeOperator compositeOperation, WebBlendMode blendMode)
 {
     m_compositeOperator = compositeOperation;
     m_blendMode = blendMode;
-    m_xferMode = WebCoreCompositeToSkiaComposite(compositeOperation, blendMode);
-    m_strokePaint.setXfermode(m_xferMode.get());
-    m_fillPaint.setXfermode(m_xferMode.get());
+    SkXfermode::Mode xferMode = WebCoreCompositeToSkiaComposite(compositeOperation, blendMode);
+    m_strokePaint.setXfermodeMode(xferMode);
+    m_fillPaint.setXfermodeMode(xferMode);
 }
 
 void GraphicsContextState::setInterpolationQuality(InterpolationQuality quality)

@@ -51,8 +51,7 @@ WebInspector.AuditsPanel = function()
 
     this._constructCategories();
 
-    var target = /** @type {!WebInspector.Target} */ (WebInspector.targetManager.mainTarget());
-    this._auditController = new WebInspector.AuditController(target, this);
+    this._auditController = new WebInspector.AuditController(this);
     this._launcherView = new WebInspector.AuditLauncherView(this._auditController);
     for (var id in this.categoriesById)
         this._launcherView.addCategory(this.categoriesById[id]);
@@ -519,11 +518,3 @@ WebInspector.AuditRules = {};
  * @type {!Object.<string, function(new:WebInspector.AuditCategory)>}
  */
 WebInspector.AuditCategories = {};
-
-importScript("AuditCategory.js");
-importScript("AuditCategories.js");
-importScript("AuditController.js");
-importScript("AuditFormatters.js");
-importScript("AuditLauncherView.js");
-importScript("AuditResultView.js");
-importScript("AuditRules.js");

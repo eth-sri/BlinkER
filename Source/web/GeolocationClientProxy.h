@@ -31,29 +31,34 @@
 #include "public/web/WebGeolocationController.h"
 
 namespace blink {
-class GeolocationPosition;
-}
 
-namespace blink {
+class GeolocationPosition;
 class WebGeolocationClient;
 
-class GeolocationClientProxy FINAL : public blink::GeolocationClient {
+class GeolocationClientProxy FINAL : public GeolocationClient {
 public:
-    GeolocationClientProxy(WebGeolocationClient* client);
+    static PassOwnPtrWillBeRawPtr<GeolocationClientProxy> create(WebGeolocationClient* client)
+    {
+        return adoptPtrWillBeNoop(new GeolocationClientProxy(client));
+    }
+
     virtual ~GeolocationClientProxy();
-    void setController(blink::GeolocationController *controller);
-    virtual void geolocationDestroyed() OVERRIDE;
+    void setController(GeolocationController*);
     virtual void startUpdating() OVERRIDE;
     virtual void stopUpdating() OVERRIDE;
     virtual void setEnableHighAccuracy(bool) OVERRIDE;
-    virtual blink::GeolocationPosition* lastPosition() OVERRIDE;
+    virtual GeolocationPosition* lastPosition() OVERRIDE;
 
-    virtual void requestPermission(blink::Geolocation*) OVERRIDE;
-    virtual void cancelPermissionRequest(blink::Geolocation*) OVERRIDE;
+    virtual void requestPermission(Geolocation*) OVERRIDE;
+    virtual void cancelPermissionRequest(Geolocation*) OVERRIDE;
+
+    virtual void trace(Visitor*) OVERRIDE;
 
 private:
+    explicit GeolocationClientProxy(WebGeolocationClient*);
+
     WebGeolocationClient* m_client;
-    blink::Persistent<blink::GeolocationPosition> m_lastPosition;
+    PersistentWillBeMember<GeolocationPosition> m_lastPosition;
 };
 
 } // namespace blink

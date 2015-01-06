@@ -32,7 +32,7 @@
 #define ColorInputType_h
 
 #include "core/html/forms/BaseClickableWithKeyInputType.h"
-#include "platform/ColorChooserClient.h"
+#include "core/html/forms/ColorChooserClient.h"
 
 namespace blink {
 
@@ -46,6 +46,7 @@ public:
     // ColorChooserClient implementation.
     virtual void didChooseColor(const Color&) OVERRIDE;
     virtual void didEndChooser() OVERRIDE;
+    virtual Element& ownerElement() const OVERRIDE;
     virtual IntRect elementRectRelativeToRootView() const OVERRIDE;
     virtual Color currentColor() OVERRIDE;
     virtual bool shouldShowSuggestions() const OVERRIDE;
@@ -66,6 +67,7 @@ private:
     virtual bool shouldRespectListAttribute() OVERRIDE;
     virtual bool typeMismatchFor(const String&) const OVERRIDE;
     virtual void updateView() OVERRIDE;
+    virtual AXObject* popupRootAXObject() OVERRIDE;
 
     Color valueAsColor() const;
     void endColorChooser();

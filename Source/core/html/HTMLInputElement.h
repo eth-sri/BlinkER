@@ -31,6 +31,7 @@
 
 namespace blink {
 
+class AXObject;
 class DragData;
 class ExceptionState;
 class FileList;
@@ -80,8 +81,6 @@ public:
     // Implementations of HTMLInputElement::stepUp() and stepDown().
     void stepUp(int, ExceptionState&);
     void stepDown(int, ExceptionState&);
-    void stepUp(ExceptionState& exceptionState) { stepUp(1, exceptionState); }
-    void stepDown(ExceptionState& exceptionState) { stepDown(1, exceptionState); }
     // stepUp()/stepDown() for user-interaction.
     bool isSteppable() const;
 
@@ -268,7 +267,7 @@ public:
 
     void setShouldRevealPassword(bool value);
     bool shouldRevealPassword() const { return m_shouldRevealPassword; }
-
+    AXObject* popupRootAXObject();
     virtual void didNotifySubtreeInsertionsToDocument() OVERRIDE;
 
 protected:

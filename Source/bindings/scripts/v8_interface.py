@@ -46,10 +46,13 @@ import v8_methods
 import v8_types
 from v8_types import cpp_ptr_type, cpp_template_type
 import v8_utilities
-from v8_utilities import capitalize, conditional_string, cpp_name, gc_type, has_extended_attribute_value, runtime_enabled_function_name
+from v8_utilities import (capitalize, conditional_string, cpp_name, gc_type,
+                          has_extended_attribute_value, runtime_enabled_function_name,
+                          extended_attribute_value_as_list)
 
 
 INTERFACE_H_INCLUDES = frozenset([
+    'bindings/core/v8/ScriptWrappable.h',
     'bindings/core/v8/V8Binding.h',
     'bindings/core/v8/V8DOMWrapper.h',
     'bindings/core/v8/WrapperTypeInfo.h',
@@ -86,7 +89,7 @@ def interface_context(interface):
     is_document = inherits_interface(interface.name, 'Document')
     if is_document:
         includes.update(['bindings/core/v8/ScriptController.h',
-                         'bindings/core/v8/V8WindowShell.h',
+                         'bindings/core/v8/WindowProxy.h',
                          'core/frame/LocalFrame.h'])
 
     # [ActiveDOMObject]
@@ -125,9 +128,12 @@ def interface_context(interface):
     for set_wrapper_reference_to in set_wrapper_reference_to_list:
         set_wrapper_reference_to['idl_type'].add_includes_for_type()
 
+    # [NotScriptWrappable]
+    is_script_wrappable = 'NotScriptWrappable' not in extended_attributes
+
     # [SpecialWrapFor]
     if 'SpecialWrapFor' in extended_attributes:
-        special_wrap_for = extended_attributes['SpecialWrapFor'].split('|')
+        special_wrap_for = extended_attribute_value_as_list(interface, 'SpecialWrapFor')
     else:
         special_wrap_for = []
     for special_wrap_interface in special_wrap_for:
@@ -145,6 +151,10 @@ def interface_context(interface):
         'conditional_string': conditional_string(interface),  # [Conditional]
         'cpp_class': cpp_name(interface),
         'gc_type': this_gc_type,
+        # FIXME: Remove 'EventTarget' special handling, http://crbug.com/383699
+        'has_access_check_callbacks': (is_check_security and
+                                       interface.name != 'Window' and
+                                       interface.name != 'EventTarget'),
         'has_custom_legacy_call_as_function': has_extended_attribute_value(interface, 'Custom', 'LegacyCallAsFunction'),  # [Custom=LegacyCallAsFunction]
         'has_custom_to_v8': has_extended_attribute_value(interface, 'Custom', 'ToV8'),  # [Custom=ToV8]
         'has_custom_wrap': has_extended_attribute_value(interface, 'Custom', 'Wrap'),  # [Custom=Wrap]
@@ -159,6 +169,7 @@ def interface_context(interface):
         'is_event_target': inherits_interface(interface.name, 'EventTarget'),
         'is_exception': interface.is_exception,
         'is_node': inherits_interface(interface.name, 'Node'),
+        'is_script_wrappable': is_script_wrappable,
         'measure_as': v8_utilities.measure_as(interface),  # [MeasureAs]
         'parent_interface': parent_interface,
         'pass_cpp_type': cpp_template_type(
@@ -220,11 +231,15 @@ def interface_context(interface):
         'named_constructor': named_constructor,
     })
 
+    constants = [constant_context(constant) for constant in interface.constants]
+
     # Constants
     context.update({
-        'constants': [constant_context(constant)
-                      for constant in interface.constants],
+        'constants': constants,
         'do_not_check_constants': 'DoNotCheckConstants' in extended_attributes,
+        'has_constant_configuration': any(
+            not constant['runtime_enabled_function']
+            for constant in constants),
     })
 
     # Attributes
@@ -240,8 +255,8 @@ def interface_context(interface):
                   attribute['per_context_enabled_function'])
              and attribute['should_be_exposed_to_script']
              for attribute in attributes),
+        'has_conditional_attributes': any(attribute['per_context_enabled_function'] or attribute['exposed_test'] for attribute in attributes),
         'has_constructor_attributes': any(attribute['constructor_type'] for attribute in attributes),
-        'has_per_context_enabled_attributes': any(attribute['per_context_enabled_function'] for attribute in attributes),
         'has_replaceable_attributes': any(attribute['is_replaceable'] for attribute in attributes),
     })
 
@@ -254,7 +269,7 @@ def interface_context(interface):
     # Stringifier
     if interface.stringifier:
         stringifier = interface.stringifier
-        method = IdlOperation()
+        method = IdlOperation(interface.idl_name)
         method.name = 'toString'
         method.idl_type = IdlType('DOMString')
         method.extended_attributes.update(stringifier.extended_attributes)
@@ -264,7 +279,7 @@ def interface_context(interface):
             method.extended_attributes['ImplementedAs'] = stringifier.operation.name
         methods.append(v8_methods.method_context(interface, method))
 
-    per_context_enabled_methods = []
+    conditionally_enabled_methods = []
     custom_registration_methods = []
     method_configuration_methods = []
 
@@ -276,15 +291,17 @@ def interface_context(interface):
         if 'overloads' in method:
             overloads = method['overloads']
             per_context_enabled_function = overloads['per_context_enabled_function_all']
+            conditionally_exposed_function = overloads['exposed_test_all']
             runtime_enabled_function = overloads['runtime_enabled_function_all']
             has_custom_registration = overloads['has_custom_registration_all']
         else:
             per_context_enabled_function = method['per_context_enabled_function']
+            conditionally_exposed_function = method['exposed_test']
             runtime_enabled_function = method['runtime_enabled_function']
             has_custom_registration = method['has_custom_registration']
 
-        if per_context_enabled_function:
-            per_context_enabled_methods.append(method)
+        if per_context_enabled_function or conditionally_exposed_function:
+            conditionally_enabled_methods.append(method)
             continue
         if runtime_enabled_function or has_custom_registration:
             custom_registration_methods.append(method)
@@ -308,12 +325,14 @@ def interface_context(interface):
                             method['number_of_required_arguments'])
 
     context.update({
+        'conditionally_enabled_methods': conditionally_enabled_methods,
         'custom_registration_methods': custom_registration_methods,
         'has_origin_safe_method_setter': any(
             method['is_check_security_for_frame'] and not method['is_read_only']
             for method in methods),
+        'has_private_script': any(attribute['is_implemented_in_private_script'] for attribute in attributes) or
+            any(method['is_implemented_in_private_script'] for method in methods),
         'method_configuration_methods': method_configuration_methods,
-        'per_context_enabled_methods': per_context_enabled_methods,
         'methods': methods,
     })
 
@@ -437,13 +456,14 @@ def overloads_context(overloads):
 
     return {
         'deprecate_all_as': common_value(overloads, 'deprecate_as'),  # [DeprecateAs]
+        'exposed_test_all': common_value(overloads, 'exposed_test'),  # [Exposed]
+        'has_custom_registration_all': common_value(overloads, 'has_custom_registration'),
         'length_tests_methods': length_tests_methods(effective_overloads_by_length),
-        'minarg': lengths[0],
         # 1. Let maxarg be the length of the longest type list of the
         # entries in S.
         'maxarg': lengths[-1],
         'measure_all_as': common_value(overloads, 'measure_as'),  # [MeasureAs]
-        'has_custom_registration_all': common_value(overloads, 'has_custom_registration'),
+        'minarg': lengths[0],
         'per_context_enabled_function_all': common_value(overloads, 'per_context_enabled_function'),  # [PerContextEnabled]
         'runtime_enabled_function_all': common_value(overloads, 'runtime_enabled_function'),  # [RuntimeEnabled]
         'valid_arities': lengths
@@ -729,11 +749,10 @@ def resolution_tests_methods(effective_overloads):
     # ...
     # • a dictionary
     try:
-        # FIXME: IDL dictionary not implemented, so use Blink Dictionary
-        # http://crbug.com/321462
         idl_type, method = next((idl_type, method)
                                 for idl_type, method in idl_types_methods
                                 if (idl_type.native_array_element_type or
+                                    idl_type.is_dictionary or
                                     idl_type.name == 'Dictionary'))
         if idl_type.native_array_element_type:
             # (We test for Array instead of generic Object to type-check.)
@@ -850,7 +869,7 @@ def sort_and_groupby(l, key=None):
 
 # [Constructor]
 def constructor_context(interface, constructor):
-    arguments_need_try_catch = any(v8_methods.argument_needs_try_catch(argument)
+    arguments_need_try_catch = any(v8_methods.argument_needs_try_catch(constructor, argument)
                                    for argument in constructor.arguments)
 
     # [RaisesException=Constructor]
@@ -928,8 +947,10 @@ def interface_length(interface, constructors):
 def property_getter(getter, cpp_arguments):
     def is_null_expression(idl_type):
         if idl_type.is_union_type:
-            return ' && '.join('!result%sEnabled' % i
-                               for i, _ in enumerate(idl_type.member_types))
+            notnull = ' || '.join([
+                    member_argument['null_check_value']
+                    for member_argument in idl_type.union_arguments])
+            return '!(%s)' % notnull
         if idl_type.name == 'String':
             return 'result.isNull()'
         if idl_type.is_interface_type:
@@ -947,7 +968,8 @@ def property_getter(getter, cpp_arguments):
         cpp_arguments.append('exceptionState')
     union_arguments = idl_type.union_arguments
     if union_arguments:
-        cpp_arguments.extend(union_arguments)
+        cpp_arguments.extend([member_argument['cpp_value']
+                              for member_argument in union_arguments])
 
     cpp_value = '%s(%s)' % (cpp_method_name, ', '.join(cpp_arguments))
 

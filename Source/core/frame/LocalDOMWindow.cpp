@@ -48,7 +48,6 @@
 #include "core/dom/Element.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/NoEventDispatchAssertion.h"
 #include "core/dom/RequestAnimationFrameCallback.h"
 #include "core/editing/Editor.h"
 #include "core/events/DOMWindowEventQueue.h"
@@ -71,6 +70,8 @@
 #include "core/frame/Screen.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLFrameOwnerElement.h"
+#include "core/inspector/ConsoleMessage.h"
+#include "core/inspector/ConsoleMessageStorage.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InspectorTraceEvents.h"
 #include "core/inspector/ScriptCallStack.h"
@@ -95,6 +96,7 @@
 #include "core/storage/StorageArea.h"
 #include "core/storage/StorageNamespace.h"
 #include "core/timing/Performance.h"
+#include "platform/EventDispatchForbiddenScope.h"
 #include "platform/PlatformScreen.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/UserGestureIndicator.h"
@@ -420,11 +422,6 @@ PassRefPtrWillBeRawPtr<Document> LocalDOMWindow::installNewDocument(const String
     }
 
     m_frame->selection().updateSecureKeyboardEntryIfActive();
-
-    if (m_frame->isMainFrame()) {
-        if (m_document->hasTouchEventHandlers())
-            m_frame->host()->chrome().client().needTouchEvents(true);
-    }
     return m_document;
 }
 
@@ -451,7 +448,7 @@ void LocalDOMWindow::enqueueDocumentEvent(PassRefPtrWillBeRawPtr<Event> event)
 
 void LocalDOMWindow::dispatchWindowLoadEvent()
 {
-    ASSERT(!NoEventDispatchAssertion::isEventDispatchForbidden());
+    ASSERT(!EventDispatchForbiddenScope::isEventDispatchForbidden());
     dispatchLoadEvent();
 }
 
@@ -553,6 +550,7 @@ void LocalDOMWindow::frameDestroyed()
 void LocalDOMWindow::willDetachFrameHost()
 {
     m_frame->host()->eventHandlerRegistry().didRemoveAllEventHandlers(*this);
+    m_frame->console().messageStorage()->frameWindowDiscarded(this);
     InspectorInstrumentation::frameWindowDiscarded(m_frame, this);
 }
 
@@ -904,7 +902,9 @@ void LocalDOMWindow::dispatchMessageEventWithOriginCheck(SecurityOrigin* intende
         // Check target origin now since the target document may have changed since the timer was scheduled.
         if (!intendedTargetOrigin->isSameSchemeHostPort(document()->securityOrigin())) {
             String message = ExceptionMessages::failedToExecute("postMessage", "DOMWindow", "The target origin provided ('" + intendedTargetOrigin->toString() + "') does not match the recipient window's origin ('" + document()->securityOrigin()->toString() + "').");
-            frameConsole()->addMessage(SecurityMessageSource, ErrorMessageLevel, message, stackTrace);
+            RefPtrWillBeRawPtr<ConsoleMessage> consoleMessage = ConsoleMessage::create(SecurityMessageSource, ErrorMessageLevel, message);
+            consoleMessage->setCallStack(stackTrace);
+            frameConsole()->addMessage(consoleMessage.release());
             return;
         }
     }
@@ -984,7 +984,7 @@ void LocalDOMWindow::close(ExecutionContext* context)
     bool allowScriptsToCloseWindows = settings && settings->allowScriptsToCloseWindows();
 
     if (!(page->openedByDOM() || page->backForward().backForwardListCount() <= 1 || allowScriptsToCloseWindows)) {
-        frameConsole()->addMessage(JSMessageSource, WarningMessageLevel, "Scripts may close only the windows that were opened by it.");
+        frameConsole()->addMessage(ConsoleMessage::create(JSMessageSource, WarningMessageLevel, "Scripts may close only the windows that were opened by it."));
         return;
     }
 
@@ -1278,7 +1278,7 @@ LocalDOMWindow* LocalDOMWindow::opener() const
     if (!m_frame)
         return 0;
 
-    LocalFrame* opener = m_frame->loader().opener();
+    Frame* opener = m_frame->loader().opener();
     if (!opener)
         return 0;
 
@@ -1521,9 +1521,7 @@ bool LocalDOMWindow::addEventListener(const AtomicString& eventType, PassRefPtr<
 
     if (Document* document = this->document()) {
         document->addListenerTypeIfNeeded(eventType);
-        if (isTouchEventType(eventType))
-            document->didAddTouchEventHandler(document);
-        else if (eventType == EventTypeNames::storage)
+        if (eventType == EventTypeNames::storage)
             didAddStorageEventListener(this);
     }
 
@@ -1555,11 +1553,6 @@ bool LocalDOMWindow::removeEventListener(const AtomicString& eventType, PassRefP
 
     if (m_frame && m_frame->host())
         m_frame->host()->eventHandlerRegistry().didRemoveEventHandler(*this, eventType);
-
-    if (Document* document = this->document()) {
-        if (isTouchEventType(eventType))
-            document->didRemoveTouchEventHandler(document);
-    }
 
     lifecycleNotifier().notifyRemoveEventListener(this, eventType);
 
@@ -1600,7 +1593,7 @@ void LocalDOMWindow::dispatchLoadEvent()
 
 bool LocalDOMWindow::dispatchEvent(PassRefPtrWillBeRawPtr<Event> prpEvent, PassRefPtrWillBeRawPtr<EventTarget> prpTarget)
 {
-    ASSERT(!NoEventDispatchAssertion::isEventDispatchForbidden());
+    ASSERT(!EventDispatchForbiddenScope::isEventDispatchForbidden());
 
     RefPtrWillBeRawPtr<EventTarget> protect(this);
     RefPtrWillBeRawPtr<Event> event = prpEvent;
@@ -1629,9 +1622,6 @@ void LocalDOMWindow::removeAllEventListenersInternal(BroadcastListenerRemoval mo
     if (mode == DoBroadcastListenerRemoval) {
         if (m_frame && m_frame->host())
             m_frame->host()->eventHandlerRegistry().didRemoveAllEventHandlers(*this);
-
-        if (Document* document = this->document())
-            document->didClearTouchEventHandlers(document);
     }
 
     removeAllUnloadEventListeners(this);
@@ -1700,7 +1690,7 @@ void LocalDOMWindow::printErrorMessage(const String& message)
     if (message.isEmpty())
         return;
 
-    frameConsole()->addMessage(JSMessageSource, ErrorMessageLevel, message);
+    frameConsole()->addMessage(ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, message));
 }
 
 // FIXME: Once we're throwing exceptions for cross-origin access violations, we will always sanitize the target
@@ -1929,6 +1919,7 @@ void LocalDOMWindow::trace(Visitor* visitor)
     visitor->trace(m_eventQueue);
     WillBeHeapSupplementable<LocalDOMWindow>::trace(visitor);
     EventTargetWithInlineData::trace(visitor);
+    LifecycleContext<LocalDOMWindow>::trace(visitor);
 }
 
 } // namespace blink

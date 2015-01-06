@@ -462,9 +462,7 @@ bool Range::boundaryPointsValid() const
 
 void Range::deleteContents(ExceptionState& exceptionState)
 {
-    checkDeleteExtract(exceptionState);
-    if (exceptionState.hadException())
-        return;
+    ASSERT(boundaryPointsValid());
 
     {
         EventQueueScope eventQueueScope;
@@ -800,7 +798,7 @@ PassRefPtrWillBeRawPtr<Node> Range::processAncestorsAndTheirSiblings(ActionType 
 
 PassRefPtrWillBeRawPtr<DocumentFragment> Range::extractContents(ExceptionState& exceptionState)
 {
-    checkDeleteExtract(exceptionState);
+    checkExtractPrecondition(exceptionState);
     if (exceptionState.hadException())
         return nullptr;
 
@@ -894,8 +892,16 @@ void Range::insertNode(PassRefPtrWillBeRawPtr<Node> prpNewNode, ExceptionState& 
         if (exceptionState.hadException())
             return;
 
-        if (collapsed)
+        if (collapsed) {
+            // The load event would be fired regardless of EventQueueScope;
+            // e.g. by ContainerNode::updateTreeAfterInsertion
+            // Given circumstance may mutate the tree so newText->parentNode() may become null
+            if (!newText->parentNode()) {
+                exceptionState.throwDOMException(HierarchyRequestError, "This operation would set range's end to parent with new offset, but there's no parent into which to continue.");
+                return;
+            }
             m_end.setToBeforeChild(*newText);
+        }
     } else {
         RefPtrWillBeRawPtr<Node> lastChild = (newNodeType == Node::DOCUMENT_FRAGMENT_NODE) ? toDocumentFragment(newNode)->lastChild() : newNode.get();
         if (lastChild && lastChild == m_start.childBefore()) {
@@ -1208,6 +1214,18 @@ void Range::surroundContents(PassRefPtrWillBeRawPtr<Node> passNewParent, Excepti
         return;
     }
 
+    // InvalidStateError: Raised if the Range partially selects a non-Text node.
+    Node* startNonTextContainer = m_start.container();
+    if (startNonTextContainer->nodeType() == Node::TEXT_NODE)
+        startNonTextContainer = startNonTextContainer->parentNode();
+    Node* endNonTextContainer = m_end.container();
+    if (endNonTextContainer->nodeType() == Node::TEXT_NODE)
+        endNonTextContainer = endNonTextContainer->parentNode();
+    if (startNonTextContainer != endNonTextContainer) {
+        exceptionState.throwDOMException(InvalidStateError, "The Range has partially selected a non-Text node.");
+        return;
+    }
+
     // InvalidNodeTypeError: Raised if node is an Attr, Entity, DocumentType, Notation,
     // Document, or DocumentFragment node.
     switch (newParent->nodeType()) {
@@ -1252,18 +1270,6 @@ void Range::surroundContents(PassRefPtrWillBeRawPtr<Node> passNewParent, Excepti
     // FIXME: Do we need a check if the node would end up with a child node of a type not
     // allowed by the type of node?
 
-    // BAD_BOUNDARYPOINTS_ERR: Raised if the Range partially selects a non-Text node.
-    Node* startNonTextContainer = m_start.container();
-    if (startNonTextContainer->nodeType() == Node::TEXT_NODE)
-        startNonTextContainer = startNonTextContainer->parentNode();
-    Node* endNonTextContainer = m_end.container();
-    if (endNonTextContainer->nodeType() == Node::TEXT_NODE)
-        endNonTextContainer = endNonTextContainer->parentNode();
-    if (startNonTextContainer != endNonTextContainer) {
-        exceptionState.throwDOMException(InvalidStateError, "The Range has partially selected a non-Text node.");
-        return;
-    }
-
     while (Node* n = newParent->firstChild()) {
         toContainerNode(newParent)->removeChild(n, exceptionState);
         if (exceptionState.hadException())
@@ -1290,7 +1296,7 @@ void Range::setStartBefore(Node* refNode, ExceptionState& exceptionState)
     setStart(refNode->parentNode(), refNode->nodeIndex(), exceptionState);
 }
 
-void Range::checkDeleteExtract(ExceptionState& exceptionState)
+void Range::checkExtractPrecondition(ExceptionState& exceptionState)
 {
     ASSERT(boundaryPointsValid());
 

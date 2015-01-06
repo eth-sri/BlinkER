@@ -453,7 +453,6 @@ public:
         KeyEventNotAllowedInFullScreen = 474,
         DOMWindowOpen = 475,
         DOMWindowOpenFeatures = 476,
-        LegacyFullScreenErrorExemption = 477,
         MediaStreamTrackGetSources = 478,
         AspectRatioFlexItem = 479,
         DetailsElement = 480,
@@ -463,7 +462,6 @@ public:
         ProgressElement = 484,
         VideoFullscreenAllowedExemption = 485,
         WebKitPoint = 488,
-        HTMLPreElementWidth = 489,
         PrefixedHTMLElementDropzone = 490,
         WheelEventWheelDeltaX = 491,
         WheelEventWheelDeltaY = 492,
@@ -489,6 +487,11 @@ public:
         DevToolsConsoleTimeline = 517,
         DevToolsConsoleProfile = 518,
         SVGStyleElementTitle = 519,
+        PictureSourceSrc = 520,
+        Picture = 521,
+        Sizes = 522,
+        SrcsetXDescriptor = 523,
+        SrcsetWDescriptor = 524,
         // Add new features immediately above this line. Don't change assigned
         // numbers of any item, and don't reuse removed slots.
         // Also, run update_use_counter_feature_enum.py in chromium/src/tools/metrics/histograms/

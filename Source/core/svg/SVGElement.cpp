@@ -32,6 +32,7 @@
 #include "core/XMLNames.h"
 #include "core/css/CSSCursorImageValue.h"
 #include "core/css/parser/BisonCSSParser.h"
+#include "core/css/resolver/StyleResolver.h"
 #include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/shadow/ShadowRoot.h"
@@ -60,8 +61,6 @@ SVGElement::SVGElement(const QualifiedName& tagName, Document& document, Constru
 #if ENABLE(ASSERT)
     , m_inRelativeLengthClientsInvalidation(false)
 #endif
-    // |m_isContextElement| must be initialized before |m_className|, as SVGAnimatedString tear-off c-tor currently set this to true.
-    , m_isContextElement(false)
     , m_SVGRareData(nullptr)
     , m_className(SVGAnimatedString::create(this, HTMLNames::classAttr, SVGString::create()))
 {

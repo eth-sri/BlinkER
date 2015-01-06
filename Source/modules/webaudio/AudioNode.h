@@ -49,8 +49,8 @@ class ExceptionState;
 // An AudioDestinationNode has one input and no outputs and represents the final destination to the audio hardware.
 // Most processing nodes such as filters will have one input and one output, although multiple inputs and outputs are possible.
 
-// AudioNode has its own ref-counting mechanism that use RefTypes so we cannot use RefCountedGarbageCollected.
-class AudioNode : public NoBaseWillBeGarbageCollectedFinalized<AudioNode>, public EventTargetWithInlineData {
+class AudioNode : public RefCountedGarbageCollectedWillBeGarbageCollectedFinalized<AudioNode>, public EventTargetWithInlineData {
+    DEFINE_EVENT_TARGET_REFCOUNTING_WILL_BE_REMOVED(RefCountedGarbageCollected<AudioNode>);
     WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(AudioNode);
 public:
     enum { ProcessingSizeInFrames = 128 };
@@ -60,6 +60,7 @@ public:
     // dispose() is called just before the destructor. This must be called in
     // the main thread, and while the graph lock is held.
     virtual void dispose();
+    static unsigned instanceCount() { return s_instanceCount; }
 
     AudioContext* context() { return m_context.get(); }
     const AudioContext* context() const { return m_context.get(); }
@@ -96,12 +97,6 @@ public:
     String nodeTypeName() const;
     void setNodeType(NodeType);
 
-#if !ENABLE(OILPAN)
-    // Can be called from main thread or context's audio thread.
-    void ref();
-    void deref();
-#endif
-
     // This object has been connected to another object. This might have
     // existing connections from others.
     // This function must be called after acquiring a connection reference.
@@ -112,9 +107,6 @@ public:
     void breakConnection();
 
     // Can be called from main thread or context's audio thread.  It must be called while the context's graph lock is held.
-#if !ENABLE(OILPAN)
-    void finishDeref();
-#endif
     void breakConnectionWithLock();
 
     // The AudioNodeInput(s) (if any) will already have their input data available when process() is called.
@@ -157,8 +149,6 @@ public:
     static void printNodeCounts();
 #endif
 
-    bool isMarkedForDeletion() const { return m_isMarkedForDeletion; }
-
     // tailTime() is the length of time (not counting latency time) where non-zero output may occur after continuous silent input.
     virtual double tailTime() const = 0;
     // latencyTime() is the length of time it takes for non-zero output to appear after non-zero input is provided. This only applies to
@@ -197,7 +187,7 @@ public:
 protected:
     // Inputs and outputs must be created before the AudioNode is initialized.
     void addInput();
-    void addOutput(PassOwnPtrWillBeRawPtr<AudioNodeOutput>);
+    void addOutput(AudioNodeOutput*);
 
     // Called by processIfNecessary() to cause all parts of the rendering graph connected to us to process.
     // Each rendering quantum, the audio data for each of the AudioNode's inputs will be available after this method is called.
@@ -210,32 +200,23 @@ protected:
 private:
     volatile bool m_isInitialized;
     NodeType m_nodeType;
-    RefPtrWillBeMember<AudioContext> m_context;
+    Member<AudioContext> m_context;
     float m_sampleRate;
-    WillBeHeapVector<OwnPtrWillBeMember<AudioNodeInput> > m_inputs;
-    WillBeHeapVector<OwnPtrWillBeMember<AudioNodeOutput> > m_outputs;
+    HeapVector<Member<AudioNodeInput> > m_inputs;
+    HeapVector<Member<AudioNodeOutput> > m_outputs;
 
     double m_lastProcessingTime;
     double m_lastNonSilentTime;
 
-#if !ENABLE(OILPAN)
-    // Ref-counting
-    volatile int m_normalRefCount;
-#endif
     volatile int m_connectionRefCount;
 
-    bool m_isMarkedForDeletion;
     bool m_isDisabled;
 
 #if DEBUG_AUDIONODE_REFERENCES
     static bool s_isNodeCountInitialized;
     static int s_nodeCount[NodeTypeEnd];
 #endif
-
-#if !ENABLE(OILPAN)
-    virtual void refEventTarget() OVERRIDE FINAL { ref(); }
-    virtual void derefEventTarget() OVERRIDE FINAL { deref(); }
-#endif
+    static unsigned s_instanceCount;
 
 protected:
     unsigned m_channelCount;

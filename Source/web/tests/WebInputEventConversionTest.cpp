@@ -43,14 +43,13 @@
 #include "core/frame/LocalFrame.h"
 #include "core/page/Page.h"
 #include "core/rendering/RenderView.h"
+#include "core/testing/URLTestHelpers.h"
 #include "public/web/WebFrame.h"
 #include "public/web/WebSettings.h"
 #include "web/WebViewImpl.h"
 #include "web/tests/FrameTestHelpers.h"
-#include "web/tests/URLTestHelpers.h"
 #include <gtest/gtest.h>
 
-using namespace blink;
 using namespace blink;
 
 namespace {
@@ -251,7 +250,7 @@ TEST(WebInputEventConversionTest, InputEventsScaling)
     // Reverse builders should *not* go back to physical pixels, as they are used for plugins
     // which expect CSS pixel coordinates.
     {
-        PlatformMouseEvent platformMouseEvent(IntPoint(10, 10), IntPoint(10, 10), LeftButton, PlatformEvent::MouseMoved, 1, false, false, false, false, 0);
+        PlatformMouseEvent platformMouseEvent(IntPoint(10, 10), IntPoint(10, 10), LeftButton, PlatformEvent::MouseMoved, 1, false, false, false, false, PlatformMouseEvent::RealOrIndistinguishable, 0);
         RefPtrWillBeRawPtr<MouseEvent> mouseEvent = MouseEvent::create(blink::EventTypeNames::mousemove, domWindow, platformMouseEvent, 0, document);
         WebMouseEventBuilder webMouseBuilder(view, documentRenderView, *mouseEvent);
 
@@ -264,7 +263,7 @@ TEST(WebInputEventConversionTest, InputEventsScaling)
     }
 
     {
-        PlatformMouseEvent platformMouseEvent(IntPoint(10, 10), IntPoint(10, 10), NoButton, PlatformEvent::MouseMoved, 1, false, false, false, false, 0);
+        PlatformMouseEvent platformMouseEvent(IntPoint(10, 10), IntPoint(10, 10), NoButton, PlatformEvent::MouseMoved, 1, false, false, false, false, PlatformMouseEvent::RealOrIndistinguishable, 0);
         RefPtrWillBeRawPtr<MouseEvent> mouseEvent = MouseEvent::create(blink::EventTypeNames::mousemove, domWindow, platformMouseEvent, 0, document);
         WebMouseEventBuilder webMouseBuilder(view, documentRenderView, *mouseEvent);
         EXPECT_EQ(WebMouseEvent::ButtonNone, webMouseBuilder.button);

@@ -39,9 +39,6 @@
 #include "public/platform/WebGraphicsContext3DProvider.h"
 #include "wtf/RefCountedLeakCounter.h"
 
-using blink::WebExternalTextureLayer;
-using blink::WebGraphicsContext3D;
-
 namespace {
 enum {
     InvalidMailboxIndex = -1,
@@ -64,7 +61,7 @@ static PassRefPtr<SkSurface> createSkSurface(GrContext* gr, const IntSize& size,
 PassRefPtr<Canvas2DLayerBridge> Canvas2DLayerBridge::create(const IntSize& size, OpacityMode opacityMode, int msaaSampleCount)
 {
     TRACE_EVENT_INSTANT0("test_gpu", "Canvas2DLayerBridgeCreation");
-    OwnPtr<blink::WebGraphicsContext3DProvider> contextProvider = adoptPtr(blink::Platform::current()->createSharedOffscreenGraphicsContext3DProvider());
+    OwnPtr<WebGraphicsContext3DProvider> contextProvider = adoptPtr(Platform::current()->createSharedOffscreenGraphicsContext3DProvider());
     if (!contextProvider)
         return nullptr;
     RefPtr<SkSurface> surface(createSkSurface(contextProvider->grContext(), size, msaaSampleCount));
@@ -76,7 +73,7 @@ PassRefPtr<Canvas2DLayerBridge> Canvas2DLayerBridge::create(const IntSize& size,
     return layerBridge.release();
 }
 
-Canvas2DLayerBridge::Canvas2DLayerBridge(PassOwnPtr<blink::WebGraphicsContext3DProvider> contextProvider, PassOwnPtr<SkDeferredCanvas> canvas, PassRefPtr<SkSurface> surface, int msaaSampleCount, OpacityMode opacityMode)
+Canvas2DLayerBridge::Canvas2DLayerBridge(PassOwnPtr<WebGraphicsContext3DProvider> contextProvider, PassOwnPtr<SkDeferredCanvas> canvas, PassRefPtr<SkSurface> surface, int msaaSampleCount, OpacityMode opacityMode)
     : m_canvas(canvas)
     , m_surface(surface)
     , m_contextProvider(contextProvider)
@@ -100,7 +97,7 @@ Canvas2DLayerBridge::Canvas2DLayerBridge(PassOwnPtr<blink::WebGraphicsContext3DP
     ASSERT(m_contextProvider);
     // Used by browser tests to detect the use of a Canvas2DLayerBridge.
     TRACE_EVENT_INSTANT0("test_gpu", "Canvas2DLayerBridgeCreation");
-    m_layer = adoptPtr(blink::Platform::current()->compositorSupport()->createExternalTextureLayer(this));
+    m_layer = adoptPtr(Platform::current()->compositorSupport()->createExternalTextureLayer(this));
     m_layer->setOpaque(opacityMode == Opaque);
     m_layer->setBlendBackgroundColor(opacityMode != Opaque);
     GraphicsLayer::registerContentsLayer(m_layer->layer());
@@ -166,7 +163,7 @@ void Canvas2DLayerBridge::setIsHidden(bool hidden)
     }
 }
 
-void Canvas2DLayerBridge::willReadback()
+void Canvas2DLayerBridge::willAccessPixels()
 {
     // A readback operation may alter the texture parameters, which may affect
     // the compositor's behavior. Therefore, we must trigger copy-on-write
@@ -178,6 +175,8 @@ void Canvas2DLayerBridge::willReadback()
 void Canvas2DLayerBridge::freeTransientResources()
 {
     ASSERT(!m_destructionInProgress);
+    if (!m_isSurfaceValid)
+        return;
     freeReleasedMailbox();
     flush();
     freeMemoryIfPossible(bytesAllocated());
@@ -225,7 +224,6 @@ void Canvas2DLayerBridge::prepareForDraw()
         }
         return;
     }
-    context()->makeContextCurrent();
 }
 
 void Canvas2DLayerBridge::storageAllocatedForRecordingChanged(size_t bytesAllocated)
@@ -329,7 +327,7 @@ void Canvas2DLayerBridge::freeReleasedMailbox()
     Canvas2DLayerManager::get().layerTransientResourceAllocationChanged(this);
 }
 
-blink::WebGraphicsContext3D* Canvas2DLayerBridge::context()
+WebGraphicsContext3D* Canvas2DLayerBridge::context()
 {
     // Check on m_layer is necessary because context() may be called during
     // the destruction of m_layer
@@ -360,13 +358,13 @@ bool Canvas2DLayerBridge::restoreSurface()
         return false;
     ASSERT(m_layer && !m_isSurfaceValid);
 
-    blink::WebGraphicsContext3D* sharedContext = 0;
+    WebGraphicsContext3D* sharedContext = 0;
     // We must clear the mailboxes before calling m_layer->clearTexture() to prevent
     // re-entry via mailboxReleased from operating on defunct GrContext objects.
     m_mailboxes.clear();
     m_releasedMailboxInfoIndex = InvalidMailboxIndex;
     m_layer->clearTexture();
-    m_contextProvider = adoptPtr(blink::Platform::current()->createSharedOffscreenGraphicsContext3DProvider());
+    m_contextProvider = adoptPtr(Platform::current()->createSharedOffscreenGraphicsContext3DProvider());
     if (m_contextProvider)
         sharedContext = m_contextProvider->context3d();
 
@@ -384,7 +382,7 @@ bool Canvas2DLayerBridge::restoreSurface()
     return m_isSurfaceValid;
 }
 
-bool Canvas2DLayerBridge::prepareMailbox(blink::WebExternalTextureMailbox* outMailbox, blink::WebExternalBitmap* bitmap)
+bool Canvas2DLayerBridge::prepareMailbox(WebExternalTextureMailbox* outMailbox, WebExternalBitmap* bitmap)
 {
     if (m_destructionInProgress) {
         // It can be hit in the following sequence.
@@ -406,12 +404,11 @@ bool Canvas2DLayerBridge::prepareMailbox(blink::WebExternalTextureMailbox* outMa
     if (!checkSurfaceValid())
         return false;
 
-    blink::WebGraphicsContext3D* webContext = context();
+    WebGraphicsContext3D* webContext = context();
 
     // Release to skia textures that were previouosly released by the
     // compositor. We do this before acquiring the next snapshot in
     // order to cap maximum gpu memory consumption.
-    webContext->makeContextCurrent();
     flush();
 
     RefPtr<SkImage> image = adoptRef(m_canvas->newImageSnapshot());
@@ -486,7 +483,7 @@ Canvas2DLayerBridge::MailboxInfo* Canvas2DLayerBridge::createMailboxInfo() {
     return mailboxInfo;
 }
 
-void Canvas2DLayerBridge::mailboxReleased(const blink::WebExternalTextureMailbox& mailbox, bool lostResource)
+void Canvas2DLayerBridge::mailboxReleased(const WebExternalTextureMailbox& mailbox, bool lostResource)
 {
     freeReleasedMailbox(); // Never have more than one mailbox in the released state.
     bool contextLost = !m_isSurfaceValid || m_contextProvider->context3d()->isContextLost();
@@ -516,6 +513,9 @@ void Canvas2DLayerBridge::mailboxReleased(const blink::WebExternalTextureMailbox
                 size_t i = mailboxInfo - m_mailboxes.begin();
                 m_mailboxes.remove(i);
                 Canvas2DLayerManager::get().layerTransientResourceAllocationChanged(this);
+                // Here we need to return early since mailboxInfo removal would
+                // also clear m_parentLayerBridge reference.
+                return;
             } else {
                 mailboxInfo->m_status = MailboxReleased;
                 m_releasedMailboxInfoIndex = mailboxInfo - m_mailboxes.begin();
@@ -536,17 +536,18 @@ void Canvas2DLayerBridge::mailboxReleased(const blink::WebExternalTextureMailbox
     }
 }
 
-blink::WebLayer* Canvas2DLayerBridge::layer() const
+WebLayer* Canvas2DLayerBridge::layer() const
 {
     ASSERT(!m_destructionInProgress);
     ASSERT(m_layer);
     return m_layer->layer();
 }
 
-void Canvas2DLayerBridge::finalizeFrame()
+void Canvas2DLayerBridge::finalizeFrame(const FloatRect &dirtyRect)
 {
     ASSERT(!m_destructionInProgress);
     Canvas2DLayerManager::get().layerDidDraw(this);
+    m_layer->layer()->invalidateRect(dirtyRect);
     m_didRecordDrawCommand = true;
 }
 
@@ -573,4 +574,4 @@ Canvas2DLayerBridge::MailboxInfo::MailboxInfo(const MailboxInfo& other) {
     m_status = other.m_status;
 }
 
-}
+} // namespace blink

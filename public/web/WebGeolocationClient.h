@@ -27,18 +27,19 @@
 #define WebGeolocationClient_h
 
 namespace blink {
+
 class WebGeolocationController;
 class WebGeolocationPermissionRequest;
 class WebGeolocationPosition;
 
 class WebGeolocationClient {
 public:
-    virtual ~WebGeolocationClient() {}
+    virtual ~WebGeolocationClient() { }
 
     virtual void startUpdating() = 0;
     virtual void stopUpdating() = 0;
     virtual void setEnableHighAccuracy(bool) = 0;
-    virtual void geolocationDestroyed() = 0;
+    virtual void geolocationDestroyed() { }
     virtual bool lastPosition(WebGeolocationPosition&) = 0;
 
     virtual void requestPermission(const WebGeolocationPermissionRequest&) = 0;

@@ -41,6 +41,7 @@
 #include "core/html/canvas/CanvasRenderingContext.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/html/parser/HTMLSrcsetParser.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "core/rendering/RenderImage.h"
 #include "platform/MIMETypeRegistry.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -224,8 +225,12 @@ void HTMLImageElement::setBestFitURLAndDPRFromImageCandidate(const ImageCandidat
     float candidateDensity = candidate.density();
     if (candidateDensity >= 0)
         m_imageDevicePixelRatio = 1.0 / candidateDensity;
-    if (candidate.resourceWidth() > 0)
+    if (candidate.resourceWidth() > 0) {
         m_intrinsicSizingViewportDependant = true;
+        UseCounter::count(document(), UseCounter::SrcsetWDescriptor);
+    } else if (!candidate.srcOrigin()) {
+        UseCounter::count(document(), UseCounter::SrcsetXDescriptor);
+    }
     if (renderer() && renderer()->isImage())
         toRenderImage(renderer())->setImageDevicePixelRatio(m_imageDevicePixelRatio);
 }
@@ -264,7 +269,7 @@ const AtomicString& HTMLImageElement::altText() const
 
 static bool supportedImageType(const String& type)
 {
-    return MIMETypeRegistry::isSupportedImageResourceMIMEType(type);
+    return MIMETypeRegistry::isSupportedImagePrefixedMIMEType(type);
 }
 
 // http://picture.responsiveimages.org/#update-source-set
@@ -282,6 +287,8 @@ ImageCandidate HTMLImageElement::findBestFitImageFromPictureParent()
             continue;
 
         HTMLSourceElement* source = toHTMLSourceElement(child);
+        if (!source->fastGetAttribute(srcAttr).isNull())
+            UseCounter::countDeprecation(document(), UseCounter::PictureSourceSrc);
         String srcset = source->fastGetAttribute(srcsetAttr);
         if (srcset.isEmpty())
             continue;
@@ -292,7 +299,10 @@ ImageCandidate HTMLImageElement::findBestFitImageFromPictureParent()
         if (!source->mediaQueryMatches())
             continue;
 
-        SizesAttributeParser parser = SizesAttributeParser(MediaValuesDynamic::create(document()), source->fastGetAttribute(sizesAttr));
+        String sizes = source->fastGetAttribute(sizesAttr);
+        if (!sizes.isNull())
+            UseCounter::count(document(), UseCounter::Sizes);
+        SizesAttributeParser parser = SizesAttributeParser(MediaValuesDynamic::create(document()), sizes);
         unsigned effectiveSize = parser.length();
         m_effectiveSizeViewportDependant = parser.viewportDependant();
         ImageCandidate candidate = bestFitSourceForSrcsetAttribute(document().devicePixelRatio(), effectiveSize, source->fastGetAttribute(srcsetAttr));
@@ -346,6 +356,8 @@ Node::InsertionNotificationRequest HTMLImageElement::insertedInto(ContainerNode*
 {
     if (!m_formWasSetByParser || NodeTraversal::highestAncestorOrSelf(*insertionPoint) != NodeTraversal::highestAncestorOrSelf(*m_form.get()))
         resetFormOwner();
+    if (m_listener)
+        document().mediaQueryMatcher().addViewportListener(m_listener.get());
 
     bool imageWasModified = false;
     if (RuntimeEnabledFeatures::pictureEnabled()) {
@@ -368,6 +380,8 @@ void HTMLImageElement::removedFrom(ContainerNode* insertionPoint)
 {
     if (!m_form || NodeTraversal::highestAncestorOrSelf(*m_form.get()) != NodeTraversal::highestAncestorOrSelf(*this))
         resetFormOwner();
+    if (m_listener)
+        document().mediaQueryMatcher().removeViewportListener(m_listener.get());
     HTMLElement::removedFrom(insertionPoint);
 }
 
@@ -619,7 +633,10 @@ void HTMLImageElement::selectSourceURL(ImageLoader::UpdateFromElementBehavior be
     if (!foundURL) {
         unsigned effectiveSize = 0;
         if (RuntimeEnabledFeatures::pictureSizesEnabled()) {
-            SizesAttributeParser parser = SizesAttributeParser(MediaValuesDynamic::create(document()), fastGetAttribute(sizesAttr));
+            String sizes = fastGetAttribute(sizesAttr);
+            if (!sizes.isNull())
+                UseCounter::count(document(), UseCounter::Sizes);
+            SizesAttributeParser parser = SizesAttributeParser(MediaValuesDynamic::create(document()), sizes);
             effectiveSize = parser.length();
             m_effectiveSizeViewportDependant = parser.viewportDependant();
         }

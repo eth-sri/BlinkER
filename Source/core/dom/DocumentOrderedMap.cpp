@@ -41,24 +41,24 @@ namespace blink {
 
 using namespace HTMLNames;
 
-inline bool keyMatchesId(StringImpl* key, Element& element)
+inline bool keyMatchesId(const AtomicString& key, const Element& element)
 {
-    return element.getIdAttribute().impl() == key;
+    return element.getIdAttribute() == key;
 }
 
-inline bool keyMatchesMapName(StringImpl* key, Element& element)
+inline bool keyMatchesMapName(const AtomicString& key, const Element& element)
 {
-    return isHTMLMapElement(element) && toHTMLMapElement(element).getName().impl() == key;
+    return isHTMLMapElement(element) && toHTMLMapElement(element).getName() == key;
 }
 
-inline bool keyMatchesLowercasedMapName(StringImpl* key, Element& element)
+inline bool keyMatchesLowercasedMapName(const AtomicString& key, const Element& element)
 {
-    return isHTMLMapElement(element) && toHTMLMapElement(element).getName().lower().impl() == key;
+    return isHTMLMapElement(element) && toHTMLMapElement(element).getName().lower() == key;
 }
 
-inline bool keyMatchesLabelForAttribute(StringImpl* key, Element& element)
+inline bool keyMatchesLabelForAttribute(const AtomicString& key, const Element& element)
 {
-    return isHTMLLabelElement(element) && element.getAttribute(forAttr).impl() == key;
+    return isHTMLLabelElement(element) && element.getAttribute(forAttr) == key;
 }
 
 PassOwnPtrWillBeRawPtr<DocumentOrderedMap> DocumentOrderedMap::create()
@@ -66,7 +66,7 @@ PassOwnPtrWillBeRawPtr<DocumentOrderedMap> DocumentOrderedMap::create()
     return adoptPtrWillBeNoop(new DocumentOrderedMap());
 }
 
-void DocumentOrderedMap::add(StringImpl* key, Element* element)
+void DocumentOrderedMap::add(const AtomicString& key, Element* element)
 {
     ASSERT(key);
     ASSERT(element);
@@ -82,7 +82,7 @@ void DocumentOrderedMap::add(StringImpl* key, Element* element)
     entry->orderedList.clear();
 }
 
-void DocumentOrderedMap::remove(StringImpl* key, Element* element)
+void DocumentOrderedMap::remove(const AtomicString& key, Element* element)
 {
     ASSERT(key);
     ASSERT(element);
@@ -106,8 +106,8 @@ void DocumentOrderedMap::remove(StringImpl* key, Element* element)
     }
 }
 
-template<bool keyMatches(StringImpl*, Element&)>
-inline Element* DocumentOrderedMap::get(StringImpl* key, const TreeScope* scope) const
+template<bool keyMatches(const AtomicString&, const Element&)>
+inline Element* DocumentOrderedMap::get(const AtomicString& key, const TreeScope* scope) const
 {
     ASSERT(key);
     ASSERT(scope);
@@ -131,12 +131,12 @@ inline Element* DocumentOrderedMap::get(StringImpl* key, const TreeScope* scope)
     return 0;
 }
 
-Element* DocumentOrderedMap::getElementById(StringImpl* key, const TreeScope* scope) const
+Element* DocumentOrderedMap::getElementById(const AtomicString& key, const TreeScope* scope) const
 {
     return get<keyMatchesId>(key, scope);
 }
 
-const WillBeHeapVector<RawPtrWillBeMember<Element> >& DocumentOrderedMap::getAllElementsById(StringImpl* key, const TreeScope* scope) const
+const WillBeHeapVector<RawPtrWillBeMember<Element> >& DocumentOrderedMap::getAllElementsById(const AtomicString& key, const TreeScope* scope) const
 {
     ASSERT(key);
     ASSERT(scope);
@@ -164,17 +164,17 @@ const WillBeHeapVector<RawPtrWillBeMember<Element> >& DocumentOrderedMap::getAll
     return entry->orderedList;
 }
 
-Element* DocumentOrderedMap::getElementByMapName(StringImpl* key, const TreeScope* scope) const
+Element* DocumentOrderedMap::getElementByMapName(const AtomicString& key, const TreeScope* scope) const
 {
     return get<keyMatchesMapName>(key, scope);
 }
 
-Element* DocumentOrderedMap::getElementByLowercasedMapName(StringImpl* key, const TreeScope* scope) const
+Element* DocumentOrderedMap::getElementByLowercasedMapName(const AtomicString& key, const TreeScope* scope) const
 {
     return get<keyMatchesLowercasedMapName>(key, scope);
 }
 
-Element* DocumentOrderedMap::getElementByLabelForAttribute(StringImpl* key, const TreeScope* scope) const
+Element* DocumentOrderedMap::getElementByLabelForAttribute(const AtomicString& key, const TreeScope* scope) const
 {
     return get<keyMatchesLabelForAttribute>(key, scope);
 }

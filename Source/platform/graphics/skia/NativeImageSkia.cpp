@@ -36,9 +36,9 @@
 #include "platform/geometry/FloatPoint.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/geometry/FloatSize.h"
+#include "platform/graphics/DeferredImageDecoder.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/Image.h"
-#include "platform/graphics/DeferredImageDecoder.h"
 #include "platform/graphics/skia/SkiaUtils.h"
 #include "skia/ext/image_operations.h"
 #include "third_party/skia/include/core/SkMatrix.h"
@@ -159,7 +159,7 @@ void NativeImageSkia::draw(
     const SkRect& srcRect,
     const SkRect& destRect,
     CompositeOperator compositeOp,
-    blink::WebBlendMode blendMode) const
+    WebBlendMode blendMode) const
 {
     TRACE_EVENT0("skia", "NativeImageSkia::draw");
 
@@ -200,7 +200,7 @@ void NativeImageSkia::drawPattern(
     const FloatPoint& phase,
     CompositeOperator compositeOp,
     const FloatRect& destRect,
-    blink::WebBlendMode blendMode,
+    WebBlendMode blendMode,
     const IntSize& repeatSpacing) const
 {
     FloatRect normSrcRect = floatSrcRect;
@@ -295,7 +295,7 @@ void NativeImageSkia::drawPattern(
 
     SkPaint paint;
     paint.setShader(shader.get());
-    paint.setXfermode(WebCoreCompositeToSkiaComposite(compositeOp, blendMode).get());
+    paint.setXfermodeMode(WebCoreCompositeToSkiaComposite(compositeOp, blendMode));
     paint.setColorFilter(context->colorFilter());
     paint.setFilterLevel(filterLevel);
 

@@ -30,13 +30,14 @@ PassRefPtrWillBeRawPtr<FetchRequestData> FetchRequestData::create(ExecutionConte
     return request.release();
 }
 
-PassRefPtrWillBeRawPtr<FetchRequestData> FetchRequestData::create(const blink::WebServiceWorkerRequest& webRequest)
+PassRefPtrWillBeRawPtr<FetchRequestData> FetchRequestData::create(const WebServiceWorkerRequest& webRequest)
 {
     RefPtrWillBeRawPtr<FetchRequestData> request = FetchRequestData::create();
     request->m_url = webRequest.url();
     request->m_method = webRequest.method();
     for (HTTPHeaderMap::const_iterator it = webRequest.headers().begin(); it != webRequest.headers().end(); ++it)
         request->m_headerList->append(it->key, it->value);
+    request->m_blobDataHandle = webRequest.blobDataHandle();
     request->m_referrer.setURL(webRequest.referrer());
     return request.release();
 }

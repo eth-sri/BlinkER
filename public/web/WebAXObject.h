@@ -40,10 +40,9 @@
 namespace WTF { template <typename T> class PassRefPtr; }
 #endif
 
-namespace blink { class AXObject; }
-
 namespace blink {
 
+class AXObject;
 class WebNode;
 class WebDocument;
 class WebString;
@@ -74,9 +73,6 @@ public:
 
     // Static methods for enabling accessibility.
     BLINK_EXPORT static void enableAccessibility();
-    BLINK_EXPORT static bool accessibilityEnabled();
-
-    // Temporary: this flag will only be toggleable until Chromium has it on by default.
     BLINK_EXPORT static void enableInlineTextBoxAccessibility();
 
     BLINK_EXPORT int axID() const;
@@ -217,13 +213,13 @@ public:
     BLINK_EXPORT void scrollToGlobalPoint(const WebPoint&) const;
 
 #if BLINK_IMPLEMENTATION
-    WebAXObject(const WTF::PassRefPtr<blink::AXObject>&);
-    WebAXObject& operator=(const WTF::PassRefPtr<blink::AXObject>&);
-    operator WTF::PassRefPtr<blink::AXObject>() const;
+    WebAXObject(const WTF::PassRefPtr<AXObject>&);
+    WebAXObject& operator=(const WTF::PassRefPtr<AXObject>&);
+    operator WTF::PassRefPtr<AXObject>() const;
 #endif
 
 private:
-    WebPrivatePtr<blink::AXObject> m_private;
+    WebPrivatePtr<AXObject> m_private;
 };
 
 } // namespace blink

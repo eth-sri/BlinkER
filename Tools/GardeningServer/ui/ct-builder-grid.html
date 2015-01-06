@@ -9,6 +9,11 @@ found in the LICENSE file.
 
 <polymer-element name="ct-builder-grid" attributes="failures">
   <template>
+    <style>
+      ct-builder {
+        display: block;
+      }
+    </style>
     <template repeat="{{ builder in _builders }}">
       <ct-builder builder="{{ builder }}"></ct-builder>
     </template>
@@ -27,7 +32,10 @@ found in the LICENSE file.
               builderMap[builder] = {};
             // This assumes that duplicate builder/master pairs all have the same
             // earliestFailingBuild.
-            builderMap[builder][result.masterUrl] = result.earliestFailingBuild;
+            builderMap[builder][result.masterUrl] = {
+              earliestFailingBuild: result.earliestFailingBuild,
+              failingBuildCount: result.failingBuildCount,
+            };
           }).bind(this));
         }, this);
 
@@ -35,8 +43,9 @@ found in the LICENSE file.
 
         Object.keys(builderMap).sort().forEach(function(builder) {
           Object.keys(builderMap[builder]).sort().forEach(function(masterUrl) {
+            var result = builderMap[builder][masterUrl];
             this._builders.push(new CTBuilder(masterUrl, builder,
-                builderMap[builder][masterUrl]));
+                result.earliestFailingBuild, result.failingBuildCount));
           }, this);
         }, this);
       },

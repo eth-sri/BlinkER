@@ -4,14 +4,13 @@
 <script src="../resources/testharness.js"></script>
 <script src="../resources/testharnessreport.js"></script>
 <script type="text/javascript">
-// FIXME: Check loading from Stream after abort once loading API is ready.
-var testInLoadingState = async_test("Test aborting XMLHttpRequest with responseType set to 'stream' in LOADING state.");
+var testInLoadingState = async_test('Test aborting XMLHttpRequest with responseType set to "stream" in LOADING state.');
 
 testInLoadingState.step(function()
 {
     var xhr = new XMLHttpRequest;
 
-    xhr.responseType = "stream";
+    xhr.responseType = 'stream';
 
     var seenStates = [];
 
@@ -30,15 +29,21 @@ testInLoadingState.step(function()
             return;
 
         case xhr.LOADING:
+            var stream = xhr.response;
+            assert_true(stream instanceof ReadableStream, 'xhr.response shoud be ReadableStream');
+            assert_equals(stream.state, 'readable', 'stream state before abort() call');
+            assert_array_equals(seenStates, [xhr.OPENED, xhr.HEADERS_RECEIVED, xhr.LOADING]);
+
             xhr.abort();
 
-            assert_equals(xhr.readyState, xhr.DONE, "xhr.readyState after abort() call");
-            assert_equals(xhr.response, null, "xhr.response after abort() call");
+            assert_equals(stream.state, 'errored', 'stream state after abort() call');
+            assert_equals(xhr.readyState, xhr.UNSENT, 'xhr.readyState after abort() call');
+            assert_equals(xhr.response, null, 'xhr.response after abort() call');
+            assert_array_equals(seenStates, [xhr.OPENED, xhr.HEADERS_RECEIVED, xhr.LOADING, xhr.DONE]);
+            testInLoadingState.done();
             return;
 
         case xhr.DONE:
-            assert_array_equals(seenStates, [xhr.OPENED, xhr.HEADERS_RECEIVED, xhr.LOADING, xhr.DONE]);
-            testInLoadingState.done();
             return;
 
         default:
@@ -51,13 +56,13 @@ testInLoadingState.step(function()
     xhr.send();
 });
 
-var testInDoneState = async_test("Test aborting XMLHttpRequest with responseType set to 'stream' in DONE state.");
+var testInDoneState = async_test('Test aborting XMLHttpRequest with responseType set to "stream" in DONE state.');
 
 testInDoneState.step(function()
 {
     var xhr = new XMLHttpRequest;
 
-    xhr.responseType = "stream";
+    xhr.responseType = 'stream';
 
     var seenStates = [];
 
@@ -74,13 +79,17 @@ testInDoneState.step(function()
             return;
 
         case xhr.DONE:
-            assert_equals(xhr.status, 200, "xhr.status");
-            assert_not_equals(xhr.response, null, "xhr.response during DONE");
+            var stream = xhr.response;
+            assert_true(stream instanceof ReadableStream, 'xhr.response shoud be ReadableStream');
+            assert_equals(stream.state, 'readable', 'stream state before abort() call');
+            assert_equals(xhr.status, 200, 'xhr.status');
+            assert_not_equals(xhr.response, null, 'xhr.response during DONE');
 
             xhr.abort();
 
-            assert_equals(xhr.readyState, xhr.UNSENT, "xhr.readyState after abort() call");
-            assert_equals(xhr.response, null, "xhr.response after abort() call");
+            assert_equals(stream.state, 'errored', 'stream state after abort() call');
+            assert_equals(xhr.readyState, xhr.UNSENT, 'xhr.readyState after abort() call');
+            assert_equals(xhr.response, null, 'xhr.response after abort() call');
 
             assert_array_equals(seenStates, [xhr.OPENED, xhr.HEADERS_RECEIVED, xhr.LOADING, xhr.DONE]);
             testInDoneState.done();

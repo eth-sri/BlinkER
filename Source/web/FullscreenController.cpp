@@ -32,7 +32,7 @@
 #include "web/FullscreenController.h"
 
 #include "core/dom/Document.h"
-#include "core/dom/FullscreenElementStack.h"
+#include "core/dom/Fullscreen.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLMediaElement.h"
 #include "platform/LayoutTestSupport.h"
@@ -41,8 +41,6 @@
 #include "public/web/WebViewClient.h"
 #include "web/WebSettingsImpl.h"
 #include "web/WebViewImpl.h"
-
-using namespace blink;
 
 namespace blink {
 
@@ -66,7 +64,7 @@ void FullscreenController::willEnterFullScreen()
     // Ensure that this element's document is still attached.
     Document& doc = m_provisionalFullScreenElement->document();
     if (doc.frame()) {
-        FullscreenElementStack::from(doc).willEnterFullScreenForElement(m_provisionalFullScreenElement.get());
+        Fullscreen::from(doc).willEnterFullScreenForElement(m_provisionalFullScreenElement.get());
         m_fullScreenFrame = doc.frame();
     }
     m_provisionalFullScreenElement.clear();
@@ -78,7 +76,7 @@ void FullscreenController::didEnterFullScreen()
         return;
 
     if (Document* doc = m_fullScreenFrame->document()) {
-        if (FullscreenElementStack::isFullScreen(*doc)) {
+        if (Fullscreen::isFullScreen(*doc)) {
             if (!m_exitFullscreenPageScaleFactor) {
                 m_exitFullscreenPageScaleFactor = m_webViewImpl->pageScaleFactor();
                 m_exitFullscreenScrollOffset = m_webViewImpl->mainFrame()->scrollOffset();
@@ -88,9 +86,9 @@ void FullscreenController::didEnterFullScreen()
                 m_webViewImpl->setPinchViewportOffset(FloatPoint());
             }
 
-            FullscreenElementStack::from(*doc).didEnterFullScreenForElement(0);
+            Fullscreen::from(*doc).didEnterFullScreenForElement(0);
             if (RuntimeEnabledFeatures::overlayFullscreenVideoEnabled()) {
-                Element* element = FullscreenElementStack::currentFullScreenElementFrom(*doc);
+                Element* element = Fullscreen::currentFullScreenElementFrom(*doc);
                 ASSERT(element);
                 if (isHTMLMediaElement(*element)) {
                     HTMLMediaElement* mediaElement = toHTMLMediaElement(element);
@@ -113,14 +111,14 @@ void FullscreenController::willExitFullScreen()
         return;
 
     if (Document* doc = m_fullScreenFrame->document()) {
-        FullscreenElementStack* fullscreen = FullscreenElementStack::fromIfExists(*doc);
+        Fullscreen* fullscreen = Fullscreen::fromIfExists(*doc);
         if (!fullscreen)
             return;
         if (fullscreen->isFullScreen(*doc)) {
             // When the client exits from full screen we have to call fullyExitFullscreen to notify
             // the document. While doing that, suppress notifications back to the client.
             m_isCancelingFullScreen = true;
-            fullscreen->fullyExitFullscreen();
+            Fullscreen::fullyExitFullscreen(*doc);
             m_isCancelingFullScreen = false;
             fullscreen->willExitFullScreenForElement(0);
             if (RuntimeEnabledFeatures::overlayFullscreenVideoEnabled() && m_webViewImpl->layerTreeView())
@@ -135,8 +133,8 @@ void FullscreenController::didExitFullScreen()
         return;
 
     if (Document* doc = m_fullScreenFrame->document()) {
-        if (FullscreenElementStack* fullscreen = FullscreenElementStack::fromIfExists(*doc)) {
-            if (fullscreen->webkitIsFullScreen()) {
+        if (Fullscreen* fullscreen = Fullscreen::fromIfExists(*doc)) {
+            if (fullscreen->webkitCurrentFullScreenElement()) {
                 if (m_exitFullscreenPageScaleFactor) {
                     m_webViewImpl->setPageScaleFactor(m_exitFullscreenPageScaleFactor);
                     m_webViewImpl->setMainFrameScrollOffset(IntPoint(m_exitFullscreenScrollOffset));
@@ -153,7 +151,7 @@ void FullscreenController::didExitFullScreen()
     m_fullScreenFrame.clear();
 }
 
-void FullscreenController::enterFullScreenForElement(blink::Element* element)
+void FullscreenController::enterFullScreenForElement(Element* element)
 {
     // We are already transitioning to fullscreen for a different element.
     if (m_provisionalFullScreenElement) {
@@ -176,7 +174,7 @@ void FullscreenController::enterFullScreenForElement(blink::Element* element)
     }
 }
 
-void FullscreenController::exitFullScreenForElement(blink::Element* element)
+void FullscreenController::exitFullScreenForElement(Element* element)
 {
     // The client is exiting full screen, so don't send a notification.
     if (m_isCancelingFullScreen)
@@ -185,5 +183,5 @@ void FullscreenController::exitFullScreenForElement(blink::Element* element)
         client->exitFullScreen();
 }
 
-}
+} // namespace blink
 

@@ -10,6 +10,7 @@
 #include "core/animation/LegacyStyleInterpolation.h"
 #include "core/animation/LengthStyleInterpolation.h"
 #include "core/animation/css/CSSAnimations.h"
+#include "core/css/CSSPropertyMetadata.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/rendering/style/RenderStyle.h"
 
@@ -44,7 +45,7 @@ PassRefPtrWillBeRawPtr<Keyframe> StringKeyframe::clone() const
 }
 PassOwnPtrWillBeRawPtr<Keyframe::PropertySpecificKeyframe> StringKeyframe::createPropertySpecificKeyframe(CSSPropertyID property) const
 {
-    return adoptPtrWillBeNoop(new PropertySpecificKeyframe(offset(), easing(), propertyValue(property), composite()));
+    return adoptPtrWillBeNoop(new PropertySpecificKeyframe(offset(), &easing(), propertyValue(property), composite()));
 }
 
 void StringKeyframe::trace(Visitor* visitor)
@@ -71,7 +72,7 @@ PassRefPtrWillBeRawPtr<Interpolation> StringKeyframe::PropertySpecificKeyframe::
     CSSValue* toCSSValue = toStringPropertySpecificKeyframe(end)->value();
     ValueRange range = ValueRangeAll;
 
-    if (!CSSAnimations::isAnimatableProperty(property))
+    if (!CSSPropertyMetadata::isAnimatableProperty(property))
         return DefaultStyleInterpolation::create(fromCSSValue, toCSSValue, property);
 
     switch (property) {

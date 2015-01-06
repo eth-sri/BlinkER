@@ -173,8 +173,10 @@ static inline bool paintIsOpaque(const SkPaint& paint, RegionTracker::DrawType d
 static inline bool getDeviceClipAsRect(const GraphicsContext* context, SkRect& deviceClipRect)
 {
     // Get the current clip in device coordinate space.
-    if (!context->canvas()->isClipRect())
+    if (!context->canvas()->isClipRect()) {
+        deviceClipRect.setEmpty();
         return false;
+    }
 
     SkIRect deviceClipIRect;
     if (context->canvas()->getClipDeviceBounds(&deviceClipIRect))
@@ -195,7 +197,6 @@ void RegionTracker::pushCanvasLayer(const SkPaint* paint)
 
 void RegionTracker::popCanvasLayer(const GraphicsContext* context)
 {
-    ASSERT(!context->paintingDisabled());
     ASSERT(!m_canvasLayerStack.isEmpty());
     if (m_canvasLayerStack.isEmpty())
         return;
@@ -222,7 +223,6 @@ void RegionTracker::setImageMask(const SkRect& imageOpaqueRect)
 
 void RegionTracker::didDrawRect(const GraphicsContext* context, const SkRect& fillRect, const SkPaint& paint, const SkBitmap* sourceBitmap)
 {
-    ASSERT(!context->paintingDisabled());
     // Any stroking may put alpha in pixels even if the filling part does not.
     if (paint.getStyle() != SkPaint::kFill_Style) {
         bool fillsBounds = false;
@@ -242,7 +242,6 @@ void RegionTracker::didDrawRect(const GraphicsContext* context, const SkRect& fi
 
 void RegionTracker::didDrawPath(const GraphicsContext* context, const SkPath& path, const SkPaint& paint)
 {
-    ASSERT(!context->paintingDisabled());
     SkRect rect;
     if (path.isRect(&rect)) {
         didDrawRect(context, rect, paint, 0);
@@ -261,7 +260,6 @@ void RegionTracker::didDrawPath(const GraphicsContext* context, const SkPath& pa
 
 void RegionTracker::didDrawPoints(const GraphicsContext* context, SkCanvas::PointMode mode, int numPoints, const SkPoint points[], const SkPaint& paint)
 {
-    ASSERT(!context->paintingDisabled());
     if (!numPoints)
         return;
 
@@ -290,7 +288,6 @@ void RegionTracker::didDrawPoints(const GraphicsContext* context, SkCanvas::Poin
 
 void RegionTracker::didDrawBounded(const GraphicsContext* context, const SkRect& bounds, const SkPaint& paint)
 {
-    ASSERT(!context->paintingDisabled());
     bool fillsBounds = false;
 
     if (!paint.canComputeFastBounds()) {
@@ -304,7 +301,6 @@ void RegionTracker::didDrawBounded(const GraphicsContext* context, const SkRect&
 
 void RegionTracker::didDraw(const GraphicsContext* context, const SkRect& rect, const SkPaint& paint, const SkBitmap* sourceBitmap, bool fillsBounds, DrawType drawType)
 {
-    ASSERT(!context->paintingDisabled());
     SkRect targetRect = rect;
 
     // Apply the transform to device coordinate space.
@@ -336,7 +332,6 @@ void RegionTracker::didDraw(const GraphicsContext* context, const SkRect& rect, 
 
 void RegionTracker::didDrawUnbounded(const GraphicsContext* context, const SkPaint& paint, DrawType drawType)
 {
-    ASSERT(!context->paintingDisabled());
     bool drawsOpaque = paintIsOpaque(paint, drawType, 0);
     bool preservesOpaque = xfermodePreservesOpaque(paint, drawsOpaque);
 
@@ -353,7 +348,7 @@ void RegionTracker::applyOpaqueRegionFromLayer(const GraphicsContext* context, c
     SkRect deviceClipRect;
     bool deviceClipIsARect = getDeviceClipAsRect(context, deviceClipRect);
 
-    if (deviceClipRect.isEmpty())
+    if (deviceClipIsARect && deviceClipRect.isEmpty())
         return;
 
     SkRect sourceOpaqueRect = layerOpaqueRect;
@@ -361,8 +356,13 @@ void RegionTracker::applyOpaqueRegionFromLayer(const GraphicsContext* context, c
     SkRect destinationOpaqueRect = currentTrackingOpaqueRect();
 
     bool outsideSourceOpaqueRectPreservesOpaque = xfermodePreservesOpaque(paint, false);
-    if (!outsideSourceOpaqueRectPreservesOpaque)
+    if (!outsideSourceOpaqueRectPreservesOpaque) {
+        if (!deviceClipIsARect) {
+            markAllAsNonOpaque();
+            return;
+        }
         markRectAsNonOpaque(deviceClipRect);
+    }
 
     if (!deviceClipIsARect)
         return;

@@ -53,10 +53,9 @@
 #include "core/css/CSSLineBoxContainValue.h"
 #include "core/css/parser/BisonCSSParser.h"
 #include "core/css/CSSPrimitiveValueMappings.h"
-#include "core/css/CSSProperty.h"
+#include "core/css/CSSPropertyMetadata.h"
 #include "core/css/Counter.h"
 #include "core/css/Pair.h"
-#include "core/css/Rect.h"
 #include "core/css/StylePropertySet.h"
 #include "core/css/StyleRule.h"
 #include "core/css/resolver/ElementStyleResources.h"
@@ -125,49 +124,10 @@ void StyleBuilder::applyProperty(CSSPropertyID id, StyleResolverState& state, CS
     if (primitiveValue && primitiveValue->getValueID() == CSSValueCurrentcolor)
         state.style()->setHasCurrentColor();
 
-    if (isInherit && !state.parentStyle()->hasExplicitlyInheritedProperties() && !CSSProperty::isInheritedProperty(id))
+    if (isInherit && !state.parentStyle()->hasExplicitlyInheritedProperties() && !CSSPropertyMetadata::isInheritedProperty(id))
         state.parentStyle()->setHasExplicitlyInheritedProperties();
 
     StyleBuilder::applyProperty(id, state, value, isInitial, isInherit);
-}
-
-static Length clipConvertToLength(StyleResolverState& state, CSSPrimitiveValue* value)
-{
-    return value->convertToLength<FixedConversion | PercentConversion | AutoConversion>(state.cssToLengthConversionData());
-}
-
-void StyleBuilderFunctions::applyInitialCSSPropertyClip(StyleResolverState& state)
-{
-    state.style()->setClip(Length(), Length(), Length(), Length());
-    state.style()->setHasClip(false);
-}
-
-void StyleBuilderFunctions::applyInheritCSSPropertyClip(StyleResolverState& state)
-{
-    RenderStyle* parentStyle = state.parentStyle();
-    if (!parentStyle->hasClip())
-        return applyInitialCSSPropertyClip(state);
-    state.style()->setClip(parentStyle->clipTop(), parentStyle->clipRight(), parentStyle->clipBottom(), parentStyle->clipLeft());
-    state.style()->setHasClip(true);
-}
-
-void StyleBuilderFunctions::applyValueCSSPropertyClip(StyleResolverState& state, CSSValue* value)
-{
-    CSSPrimitiveValue* primitiveValue = toCSSPrimitiveValue(value);
-
-    if (primitiveValue->getValueID() == CSSValueAuto) {
-        state.style()->setClip(Length(), Length(), Length(), Length());
-        state.style()->setHasClip(false);
-        return;
-    }
-
-    Rect* rect = primitiveValue->getRectValue();
-    Length top = clipConvertToLength(state, rect->top());
-    Length right = clipConvertToLength(state, rect->right());
-    Length bottom = clipConvertToLength(state, rect->bottom());
-    Length left = clipConvertToLength(state, rect->left());
-    state.style()->setClip(top, right, bottom, left);
-    state.style()->setHasClip(true);
 }
 
 void StyleBuilderFunctions::applyInitialCSSPropertyColor(StyleResolverState& state)
@@ -305,36 +265,6 @@ void StyleBuilderFunctions::applyInheritCSSPropertyFontSize(StyleResolverState& 
 void StyleBuilderFunctions::applyValueCSSPropertyFontSize(StyleResolverState& state, CSSValue* value)
 {
     state.fontBuilder().setFontSizeValue(value, state.parentStyle(), state.rootElementStyle());
-}
-
-void StyleBuilderFunctions::applyInitialCSSPropertyFontWeight(StyleResolverState& state)
-{
-    state.fontBuilder().setWeight(FontWeightNormal);
-}
-
-void StyleBuilderFunctions::applyInheritCSSPropertyFontWeight(StyleResolverState& state)
-{
-    state.fontBuilder().setWeight(state.parentFontDescription().weight());
-}
-
-void StyleBuilderFunctions::applyValueCSSPropertyFontWeight(StyleResolverState& state, CSSValue* value)
-{
-    CSSPrimitiveValue* primitiveValue = toCSSPrimitiveValue(value);
-    switch (primitiveValue->getValueID()) {
-    case CSSValueInvalid:
-        ASSERT_NOT_REACHED();
-        break;
-    case CSSValueBolder:
-        state.fontBuilder().setWeight(state.parentStyle()->fontDescription().weight());
-        state.fontBuilder().setWeightBolder();
-        break;
-    case CSSValueLighter:
-        state.fontBuilder().setWeight(state.parentStyle()->fontDescription().weight());
-        state.fontBuilder().setWeightLighter();
-        break;
-    default:
-        state.fontBuilder().setWeight(*primitiveValue);
-    }
 }
 
 void StyleBuilderFunctions::applyValueCSSPropertyGlyphOrientationVertical(StyleResolverState& state, CSSValue* value)
@@ -902,59 +832,6 @@ void StyleBuilderFunctions::applyValueCSSPropertyWebkitFilter(StyleResolverState
         state.style()->setFilter(operations);
 }
 
-void StyleBuilderFunctions::applyValueCSSPropertyInternalMarqueeIncrement(StyleResolverState& state, CSSValue* value)
-{
-    if (!value->isPrimitiveValue())
-        return;
-
-    CSSPrimitiveValue* primitiveValue = toCSSPrimitiveValue(value);
-    if (primitiveValue->getValueID()) {
-        switch (primitiveValue->getValueID()) {
-        case CSSValueSmall:
-            state.style()->setMarqueeIncrement(Length(1, Fixed)); // 1px.
-            break;
-        case CSSValueNormal:
-            state.style()->setMarqueeIncrement(Length(6, Fixed)); // 6px. The WinIE default.
-            break;
-        case CSSValueLarge:
-            state.style()->setMarqueeIncrement(Length(36, Fixed)); // 36px.
-            break;
-        default:
-            break;
-        }
-    } else {
-        Length marqueeLength = primitiveValue->convertToLength<FixedConversion | PercentConversion>(state.cssToLengthConversionData());
-        state.style()->setMarqueeIncrement(marqueeLength);
-    }
-}
-
-void StyleBuilderFunctions::applyValueCSSPropertyInternalMarqueeSpeed(StyleResolverState& state, CSSValue* value)
-{
-    if (!value->isPrimitiveValue())
-        return;
-
-    CSSPrimitiveValue* primitiveValue = toCSSPrimitiveValue(value);
-    if (CSSValueID valueID = primitiveValue->getValueID()) {
-        switch (valueID) {
-        case CSSValueSlow:
-            state.style()->setMarqueeSpeed(500); // 500 msec.
-            break;
-        case CSSValueNormal:
-            state.style()->setMarqueeSpeed(85); // 85msec. The WinIE default.
-            break;
-        case CSSValueFast:
-            state.style()->setMarqueeSpeed(10); // 10msec. Super fast.
-            break;
-        default:
-            break;
-        }
-    } else if (primitiveValue->isTime()) {
-        state.style()->setMarqueeSpeed(static_cast<int>(primitiveValue->computeSeconds()) * 1000);
-    } else if (primitiveValue->isNumber()) { // For scrollamount support.
-        state.style()->setMarqueeSpeed(primitiveValue->getIntValue());
-    }
-}
-
 // FIXME: We should use the same system for this as the rest of the pseudo-shorthands (e.g. background-position)
 void StyleBuilderFunctions::applyInitialCSSPropertyWebkitPerspectiveOrigin(StyleResolverState& state)
 {
@@ -1261,20 +1138,6 @@ void StyleBuilderFunctions::applyValueCSSPropertyPerspective(StyleResolverState&
         state.style()->setPerspective(perspectiveValue);
 }
 
-void StyleBuilderFunctions::applyInitialCSSPropertyInternalCallback(StyleResolverState& state)
-{
-}
-
-void StyleBuilderFunctions::applyInheritCSSPropertyInternalCallback(StyleResolverState& state)
-{
-}
-
-void StyleBuilderFunctions::applyValueCSSPropertyInternalCallback(StyleResolverState& state, CSSValue* value)
-{
-    if (value->isPrimitiveValue() && toCSSPrimitiveValue(value)->getValueID() == CSSValueInternalPresence)
-        state.style()->addCallbackSelector(state.currentRule()->selectorList().selectorsText());
-}
-
 void StyleBuilderFunctions::applyValueCSSPropertyWebkitWritingMode(StyleResolverState& state, CSSValue* value)
 {
     if (value->isPrimitiveValue())
@@ -1291,26 +1154,6 @@ void StyleBuilderFunctions::applyValueCSSPropertyWebkitTextOrientation(StyleReso
         state.setTextOrientation(*toCSSPrimitiveValue(value));
 }
 
-// FIXME: We should handle initial and inherit for font-feature-settings
-void StyleBuilderFunctions::applyInitialCSSPropertyWebkitFontFeatureSettings(StyleResolverState& state)
-{
-}
-
-void StyleBuilderFunctions::applyInheritCSSPropertyWebkitFontFeatureSettings(StyleResolverState& state)
-{
-}
-
-void StyleBuilderFunctions::applyValueCSSPropertyWebkitFontFeatureSettings(StyleResolverState& state, CSSValue* value)
-{
-    if (value->isPrimitiveValue() && toCSSPrimitiveValue(value)->getValueID() == CSSValueNormal) {
-        state.fontBuilder().setFeatureSettingsNormal();
-        return;
-    }
-
-    if (value->isValueList())
-        state.fontBuilder().setFeatureSettingsValue(value);
-}
-
 void StyleBuilderFunctions::applyInheritCSSPropertyBaselineShift(StyleResolverState& state)
 {
     const SVGRenderStyle& parentSvgStyle = state.parentStyle()->svgStyle();
@@ -1323,28 +1166,25 @@ void StyleBuilderFunctions::applyInheritCSSPropertyBaselineShift(StyleResolverSt
 
 void StyleBuilderFunctions::applyValueCSSPropertyBaselineShift(StyleResolverState& state, CSSValue* value)
 {
-    if (!value->isPrimitiveValue())
-        return;
-
     SVGRenderStyle& svgStyle = state.style()->accessSVGStyle();
     CSSPrimitiveValue* primitiveValue = toCSSPrimitiveValue(value);
-    if (primitiveValue->getValueID()) {
-        switch (primitiveValue->getValueID()) {
-        case CSSValueBaseline:
-            svgStyle.setBaselineShift(BS_BASELINE);
-            break;
-        case CSSValueSub:
-            svgStyle.setBaselineShift(BS_SUB);
-            break;
-        case CSSValueSuper:
-            svgStyle.setBaselineShift(BS_SUPER);
-            break;
-        default:
-            break;
-        }
-    } else {
+    if (!primitiveValue->isValueID()) {
         svgStyle.setBaselineShift(BS_LENGTH);
         svgStyle.setBaselineShiftValue(SVGLength::fromCSSPrimitiveValue(primitiveValue));
+        return;
+    }
+    switch (primitiveValue->getValueID()) {
+    case CSSValueBaseline:
+        svgStyle.setBaselineShift(BS_BASELINE);
+        return;
+    case CSSValueSub:
+        svgStyle.setBaselineShift(BS_SUB);
+        return;
+    case CSSValueSuper:
+        svgStyle.setBaselineShift(BS_SUPER);
+        return;
+    default:
+        ASSERT_NOT_REACHED();
     }
 }
 

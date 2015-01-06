@@ -39,6 +39,7 @@ function updateStyleSheetRange(command, styleSheetId, expectError, options, call
 
 InspectorTest.setPropertyText = updateStyleSheetRange.bind(null, "CSS.setPropertyText");
 InspectorTest.setRuleSelector = updateStyleSheetRange.bind(null, "CSS.setRuleSelector");
+InspectorTest.addRule = updateStyleSheetRange.bind(null, "CSS.addRule");
 
 InspectorTest.requestMainFrameId = function(callback)
 {
@@ -65,14 +66,9 @@ InspectorTest.requestDocumentNodeId = function(callback)
     }
 };
 
-InspectorTest.requestNodeId = function(selector, callback)
+InspectorTest.requestNodeId = function(documentNodeId, selector, callback)
 {
-    InspectorTest.requestDocumentNodeId(onGotDocumentNodeId);
-
-    function onGotDocumentNodeId(documentNodeId)
-    {
-        InspectorTest.sendCommandOrDie("DOM.querySelector", { "nodeId": documentNodeId , "selector": selector }, onGotNode);
-    }
+    InspectorTest.sendCommandOrDie("DOM.querySelector", { "nodeId": documentNodeId , "selector": selector }, onGotNode);
 
     function onGotNode(result)
     {
@@ -90,6 +86,15 @@ InspectorTest.dumpRuleMatch = function(ruleMatch)
 
     var rule = ruleMatch.rule;
     var matchingSelectors = ruleMatch.matchingSelectors;
+    var media = rule.media || [];
+    var mediaLine = "";
+    for (var i = 0; i < media.length; ++i)
+        mediaLine += (i > 0 ? " " : "") + media[i].text;
+    var baseIndent = 0;
+    if (mediaLine.length) {
+        log(baseIndent, "@media " + mediaLine);
+        baseIndent += 4;
+    }
     var selectorLine = "";
     var selectors = rule.selectorList.selectors;
     for (var i = 0; i < selectors.length; ++i) {
@@ -104,15 +109,15 @@ InspectorTest.dumpRuleMatch = function(ruleMatch)
     }
     selectorLine += " {";
     selectorLine += "    " + rule.origin;
-    log(0, selectorLine);
+    log(baseIndent, selectorLine);
     var style = rule.style;
     var cssProperties = style.cssProperties;
     for (var i = 0; i < cssProperties.length; ++i) {
         var cssProperty = cssProperties[i];
         var propertyLine = cssProperty.name + ": " + cssProperty.value + ";";
-        log(4, propertyLine);
+        log(baseIndent + 4, propertyLine);
     }
-    log(0, "}");
+    log(baseIndent, "}");
 };
 
 InspectorTest.displayName = function(url)
@@ -139,9 +144,9 @@ InspectorTest.loadAndDumpMatchingRulesForNode = function(nodeId, callback)
     }
 }
 
-InspectorTest.loadAndDumpMatchingRules = function(selector, callback)
+InspectorTest.loadAndDumpMatchingRules = function(documentNodeId, selector, callback)
 {
-    InspectorTest.requestNodeId(selector, nodeIdLoaded);
+    InspectorTest.requestNodeId(documentNodeId, selector, nodeIdLoaded);
 
     function nodeIdLoaded(nodeId)
     {

@@ -266,7 +266,8 @@ static PassRefPtr<TypeBuilder::Network::Response> buildObjectForResourceResponse
         .setEncodedDataLength(encodedDataLength);
 
     responseObject->setFromDiskCache(response.wasCached());
-    if (response.resourceLoadTiming())
+    responseObject->setFromServiceWorker(response.wasFetchedViaServiceWorker());
+    if (loader && response.resourceLoadTiming())
         responseObject->setTiming(buildObjectForTiming(*response.resourceLoadTiming(), loader));
 
     if (response.resourceLoadInfo()) {
@@ -368,9 +369,6 @@ bool isResponseEmpty(PassRefPtr<TypeBuilder::Network::Response> response)
 
 void InspectorResourceAgent::didReceiveResourceResponse(LocalFrame* frame, unsigned long identifier, DocumentLoader* loader, const ResourceResponse& response, ResourceLoader* resourceLoader)
 {
-    if (!loader)
-        return;
-
     String requestId = IdentifiersFactory::requestId(identifier);
     RefPtr<TypeBuilder::Network::Response> resourceResponse = buildObjectForResourceResponse(response, loader);
 
@@ -380,7 +378,7 @@ void InspectorResourceAgent::didReceiveResourceResponse(LocalFrame* frame, unsig
     if (resourceLoader && !isNotModified)
         cachedResource = resourceLoader->cachedResource();
     if (!cachedResource || cachedResource->type() == Resource::MainResource)
-        cachedResource = InspectorPageAgent::cachedResource(loader->frame(), response.url());
+        cachedResource = InspectorPageAgent::cachedResource(frame, response.url());
 
     if (cachedResource) {
         // Use mime type from cached resource in case the one in response is empty.
@@ -394,14 +392,14 @@ void InspectorResourceAgent::didReceiveResourceResponse(LocalFrame* frame, unsig
     if (m_resourcesData->resourceType(requestId) == InspectorPageAgent::ScriptResource)
         type = InspectorPageAgent::ScriptResource;
     // Workaround for background: url() in inline style.
-    if (equalIgnoringFragmentIdentifier(response.url(), loader->url()) && !loader->isCommitted())
+    if (loader && equalIgnoringFragmentIdentifier(response.url(), loader->url()) && !loader->isCommitted())
         type = InspectorPageAgent::DocumentResource;
 
-    m_resourcesData->responseReceived(requestId, m_pageAgent->frameId(loader->frame()), response);
+    m_resourcesData->responseReceived(requestId, m_pageAgent->frameId(frame), response);
     m_resourcesData->setResourceType(requestId, type);
 
     if (!isResponseEmpty(resourceResponse))
-        m_frontend->responseReceived(requestId, m_pageAgent->frameId(loader->frame()), m_pageAgent->loaderId(loader), currentTime(), InspectorPageAgent::resourceTypeJson(type), resourceResponse);
+        m_frontend->responseReceived(requestId, m_pageAgent->frameId(frame), m_pageAgent->loaderId(loader), currentTime(), InspectorPageAgent::resourceTypeJson(type), resourceResponse);
     // If we revalidated the resource and got Not modified, send content length following didReceiveResponse
     // as there will be no calls to didReceiveData from the network stack.
     if (isNotModified && cachedResource && cachedResource->encodedSize())
@@ -479,10 +477,10 @@ void InspectorResourceAgent::documentThreadableLoaderStartedLoadingForClient(uns
     m_resourcesData->setXHRReplayData(requestId, xhrReplayData);
 }
 
-void InspectorResourceAgent::willLoadXHR(XMLHttpRequest* xhr, ThreadableLoaderClient* client, const AtomicString& method, const KURL& url, bool async, FormData* formData, const HTTPHeaderMap& headers, bool includeCredentials)
+void InspectorResourceAgent::willLoadXHR(XMLHttpRequest* xhr, ThreadableLoaderClient* client, const AtomicString& method, const KURL& url, bool async, PassRefPtr<FormData> formData, const HTTPHeaderMap& headers, bool includeCredentials)
 {
     ASSERT(xhr);
-    RefPtrWillBeRawPtr<XHRReplayData> xhrReplayData = XHRReplayData::create(xhr->executionContext(), method, urlWithoutFragment(url), async, formData, includeCredentials);
+    RefPtrWillBeRawPtr<XHRReplayData> xhrReplayData = XHRReplayData::create(xhr->executionContext(), method, urlWithoutFragment(url), async, formData.get(), includeCredentials);
     HTTPHeaderMap::const_iterator end = headers.end();
     for (HTTPHeaderMap::const_iterator it = headers.begin(); it!= end; ++it)
         xhrReplayData->addHeader(it->key, it->value);
@@ -847,11 +845,6 @@ void InspectorResourceAgent::setHostId(const String& hostId)
 
 bool InspectorResourceAgent::fetchResourceContent(Document* document, const KURL& url, String* content, bool* base64Encoded)
 {
-    if (m_pageAgent->getEditedResourceContent(url, content)) {
-        *base64Encoded = false;
-        return true;
-    }
-
     // First try to fetch content from the cached resource.
     Resource* cachedResource = document->fetcher()->cachedResource(url);
     if (!cachedResource)
@@ -884,6 +877,11 @@ InspectorResourceAgent::InspectorResourceAgent(InspectorPageAgent* pageAgent)
     , m_isRecalculatingStyle(false)
     , m_removeFinishedReplayXHRTimer(this, &InspectorResourceAgent::removeFinishedReplayXHRFired)
 {
+}
+
+bool InspectorResourceAgent::shouldForceCORSPreflight()
+{
+    return m_state->getBoolean(ResourceAgentState::cacheDisabled);
 }
 
 } // namespace blink

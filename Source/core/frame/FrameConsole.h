@@ -31,32 +31,46 @@
 
 #include "bindings/core/v8/ScriptState.h"
 #include "core/frame/ConsoleTypes.h"
-#include "core/inspector/ScriptCallStack.h"
+#include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
 #include "wtf/PassOwnPtr.h"
 
 namespace blink {
 
+class ConsoleMessage;
+class ConsoleMessageStorage;
 class FrameHost;
+class ScriptCallStack;
+class WorkerGlobalScopeProxy;
 
 // FrameConsole takes per-frame console messages and routes them up through the FrameHost to the ChromeClient and Inspector.
 // It's meant as an abstraction around ChromeClient calls and the way that Blink core/ can add messages to the console.
-class FrameConsole FINAL {
+class FrameConsole FINAL : public NoBaseWillBeGarbageCollected<FrameConsole> {
+    DECLARE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(FrameConsole);
 public:
-    static PassOwnPtr<FrameConsole> create(LocalFrame& frame) { return adoptPtr(new FrameConsole(frame)); }
+    static PassOwnPtrWillBeRawPtr<FrameConsole> create(LocalFrame& frame)
+    {
+        return adoptPtrWillBeNoop(new FrameConsole(frame));
+    }
 
-    void addMessage(MessageSource, MessageLevel, const String& message);
-    void addMessage(MessageSource, MessageLevel, const String& message, const String& sourceURL, unsigned lineNumber, unsigned columnNumber = 0, PassRefPtrWillBeRawPtr<ScriptCallStack> = nullptr, ScriptState* = 0, unsigned long requestIdentifier = 0);
-    void addMessage(MessageSource, MessageLevel, const String& message, PassRefPtrWillBeRawPtr<ScriptCallStack>);
+    void addMessage(PassRefPtrWillBeRawPtr<ConsoleMessage>);
+    void adoptWorkerMessagesAfterTermination(WorkerGlobalScopeProxy*);
+
     static String formatStackTraceString(const String& originalMessage, PassRefPtrWillBeRawPtr<ScriptCallStack>);
 
     static void mute();
     static void unmute();
 
+    ConsoleMessageStorage* messageStorage();
+
+    void trace(Visitor*);
+
 private:
     explicit FrameConsole(LocalFrame&);
 
     LocalFrame& m_frame;
+
+    OwnPtrWillBeMember<ConsoleMessageStorage> m_consoleMessageStorage;
 };
 
 } // namespace blink

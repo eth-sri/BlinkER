@@ -26,6 +26,7 @@
 #include "core/dom/ActiveDOMObject.h"
 #include "core/events/EventListener.h"
 #include "core/loader/ThreadableLoaderClient.h"
+#include "core/streams/ReadableStreamImpl.h"
 #include "core/xml/XMLHttpRequestEventTarget.h"
 #include "core/xml/XMLHttpRequestProgressEventThrottle.h"
 #include "platform/heap/Handle.h"
@@ -41,6 +42,7 @@ namespace blink {
 class Blob;
 class DOMFormData;
 class Document;
+class DocumentParser;
 class ExceptionState;
 class ResourceRequest;
 class SecurityOrigin;
@@ -48,11 +50,12 @@ class SharedBuffer;
 class Stream;
 class TextResourceDecoder;
 class ThreadableLoader;
+class UnderlyingSource;
 
 typedef int ExceptionCode;
 
 class XMLHttpRequest FINAL
-    : public RefCountedWillBeRefCountedGarbageCollected<XMLHttpRequest>
+    : public RefCountedWillBeGarbageCollectedFinalized<XMLHttpRequest>
     , public XMLHttpRequestEventTarget
     , private ThreadableLoaderClient
     , public ActiveDOMObject {
@@ -79,7 +82,8 @@ public:
         ResponseTypeDocument,
         ResponseTypeBlob,
         ResponseTypeArrayBuffer,
-        ResponseTypeStream
+        ResponseTypeLegacyStream,
+        ResponseTypeStream,
     };
 
     virtual void contextDestroyed() OVERRIDE;
@@ -110,14 +114,15 @@ public:
     void send(ArrayBufferView*, ExceptionState&);
     void abort();
     void setRequestHeader(const AtomicString& name, const AtomicString& value, ExceptionState&);
-    void overrideMimeType(const AtomicString& override);
+    void overrideMimeType(const AtomicString& override, ExceptionState&);
     String getAllResponseHeaders() const;
     const AtomicString& getResponseHeader(const AtomicString&) const;
     ScriptString responseText(ExceptionState&);
     ScriptString responseJSONSource();
     Document* responseXML(ExceptionState&);
     Blob* responseBlob();
-    Stream* responseStream();
+    Stream* responseLegacyStream();
+    ReadableStream* responseStream();
     unsigned long timeout() const { return m_timeoutMilliseconds; }
     void setTimeout(unsigned long timeout, ExceptionState&);
 
@@ -160,8 +165,25 @@ private:
     virtual void didFail(const ResourceError&) OVERRIDE;
     virtual void didFailRedirectCheck() OVERRIDE;
 
-    AtomicString responseMIMEType() const;
+    // Returns the MIME type part of m_mimeTypeOverride if present and
+    // successfully parsed, or returns one of the "Content-Type" header value
+    // of the received response.
+    //
+    // This method is named after the term "final MIME type" defined in the
+    // spec but doesn't convert the result to ASCII lowercase as specified in
+    // the spec. Must be lowered later or compared using case insensitive
+    // comparison functions if required.
+    AtomicString finalResponseMIMEType() const;
+    // The same as finalResponseMIMEType() but fallbacks to "text/xml" if
+    // finalResponseMIMEType() returns an empty string.
+    AtomicString finalResponseMIMETypeWithFallback() const;
     bool responseIsXML() const;
+    bool responseIsHTML() const;
+
+    PassOwnPtr<TextResourceDecoder> createDecoder() const;
+
+    void initResponseDocument();
+    void parseDocumentChunk(const char* data, int dataLength);
 
     bool areMethodAndURLValidForSend();
 
@@ -197,7 +219,9 @@ private:
     void handleDidFailGeneric();
     // Handles didFail() call not caused by cancellation or timeout.
     void handleNetworkError();
-    // Handles didFail() call triggered by m_loader->cancel().
+    // Handles didFail() call for cancellations. For example, the
+    // ResourceLoader handling the load notifies m_loader of an error
+    // cancellation when the frame containing the XHR navigates away.
     void handleDidCancel();
     // Handles didFail() call for timeout.
     void handleDidTimeout();
@@ -209,21 +233,26 @@ private:
     KURL m_url;
     AtomicString m_method;
     HTTPHeaderMap m_requestHeaders;
+    // Not converted to ASCII lowercase. Must be lowered later or compared
+    // using case insensitive comparison functions if needed.
     AtomicString m_mimeTypeOverride;
     unsigned long m_timeoutMilliseconds;
     RefPtrWillBeMember<Blob> m_responseBlob;
-    RefPtrWillBeMember<Stream> m_responseStream;
+    RefPtrWillBeMember<Stream> m_responseLegacyStream;
+    PersistentWillBeMember<ReadableStreamImpl<ReadableStreamChunkTypeTraits<ArrayBuffer> > > m_responseStream;
+    PersistentWillBeMember<UnderlyingSource> m_streamSource;
 
     RefPtr<ThreadableLoader> m_loader;
     State m_state;
 
     ResourceResponse m_response;
-    String m_responseEncoding;
+    String m_finalResponseCharset;
 
     OwnPtr<TextResourceDecoder> m_decoder;
 
     ScriptString m_responseText;
     RefPtrWillBeMember<Document> m_responseDocument;
+    RefPtrWillBeMember<DocumentParser> m_responseDocumentParser;
 
     RefPtr<SharedBuffer> m_binaryResponseBuilder;
     long long m_downloadedBlobLength;
@@ -246,13 +275,11 @@ private:
     ResponseTypeCode m_responseTypeCode;
     RefPtr<SecurityOrigin> m_securityOrigin;
 
-    double m_previousReadyStateChangeFireTime;
-
     bool m_async;
     bool m_includeCredentials;
     // Used to skip m_responseDocument creation if it's done previously. We need
     // this separate flag since m_responseDocument can be 0 for some cases.
-    bool m_createdDocument;
+    bool m_parsedResponse;
     bool m_error;
     bool m_uploadEventsAllowed;
     bool m_uploadComplete;

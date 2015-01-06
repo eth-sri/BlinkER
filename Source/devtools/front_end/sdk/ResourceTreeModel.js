@@ -72,7 +72,8 @@ WebInspector.ResourceTreeModel.EventTypes = {
     SecurityOriginRemoved: "SecurityOriginRemoved",
     ScreencastFrame: "ScreencastFrame",
     ScreencastVisibilityChanged: "ScreencastVisibilityChanged",
-    ViewportChanged: "ViewportChanged"
+    ViewportChanged: "ViewportChanged",
+    ColorPicked: "ColorPicked"
 }
 
 WebInspector.ResourceTreeModel.prototype = {
@@ -87,7 +88,9 @@ WebInspector.ResourceTreeModel.prototype = {
     _processCachedResources: function(error, mainFramePayload)
     {
         if (error) {
-            console.error(JSON.stringify(error));
+            //FIXME: remove resourceTreeModel from worker
+            if (!this.target().isWorkerTarget())
+                console.error(JSON.stringify(error));
             return;
         }
 
@@ -196,7 +199,7 @@ WebInspector.ResourceTreeModel.prototype = {
             if (!frame.isMainFrame())
                 this._removeSecurityOrigin(frame.securityOrigin);
         }
-        removeOriginForFrame.call(this, WebInspector.resourceTreeModel.mainFrame);
+        removeOriginForFrame.call(this, mainFrame);
     },
 
     /**
@@ -738,11 +741,19 @@ WebInspector.PageDispatcher = function(resourceTreeModel)
 }
 
 WebInspector.PageDispatcher.prototype = {
+    /**
+     * @override
+     * @param {number} time
+     */
     domContentEventFired: function(time)
     {
         this._resourceTreeModel.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.DOMContentLoaded, time);
     },
 
+    /**
+     * @override
+     * @param {number} time
+     */
     loadEventFired: function(time)
     {
         this._resourceTreeModel.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.Load, time);
@@ -820,6 +831,24 @@ WebInspector.PageDispatcher.prototype = {
     viewportChanged: function(viewport)
     {
         this._resourceTreeModel.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.ViewportChanged, viewport);
+    },
+
+    /**
+     * @param {!DOMAgent.RGBA} color
+     */
+    colorPicked: function(color)
+    {
+        this._resourceTreeModel.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.ColorPicked, color);
+    },
+
+    interstitialShown: function()
+    {
+        // Frontend is not interested in interstitials.
+    },
+
+    interstitialHidden: function()
+    {
+        // Frontend is not interested in interstitials.
     }
 }
 

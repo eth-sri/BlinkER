@@ -113,7 +113,7 @@ WebInspector.OverridesView.prototype = {
     {
         this._unavailableSplashScreenElement.classList.toggle("hidden", WebInspector.overridesSupport.canEmulate());
         this._tabbedPane.element.classList.toggle("hidden", !WebInspector.overridesSupport.emulationEnabled());
-        this._splashScreenElement.classList.toggle("hidden", WebInspector.overridesSupport.emulationEnabled());
+        this._splashScreenElement.classList.toggle("hidden", WebInspector.overridesSupport.emulationEnabled() || !WebInspector.overridesSupport.canEmulate());
     },
 
     __proto__: WebInspector.VBox.prototype
@@ -158,7 +158,7 @@ WebInspector.OverridesView.Tab.prototype = {
             active = this._settings[i].get();
         for (var i = 0; !active && i < this._predicates.length; ++i)
             active = this._predicates[i]();
-        this._tabbedPane.element.classList.toggle("overrides-activate-" + this._id, active);
+        this._tabbedPane.toggleTabClass(this._id, "overrides-activate", active);
     },
 
     /**
@@ -429,8 +429,10 @@ WebInspector.OverridesView.NetworkTab.prototype = {
     _createUserAgentSection: function()
     {
         var fieldsetElement = this.element.createChild("fieldset");
-        var userAgentInput = WebInspector.SettingsUI.createSettingInputField("Spoof user agent:", WebInspector.overridesSupport.settings.userAgent, false, 0, "", undefined, false, false, WebInspector.UIString("no override"));
-        fieldsetElement.appendChild(userAgentInput);
+        fieldsetElement.createChild("label").textContent = WebInspector.UIString("Spoof user agent:");
+        var selectAndInput = WebInspector.OverridesUI.createUserAgentSelectAndInput(document);
+        fieldsetElement.appendChild(selectAndInput.select);
+        fieldsetElement.appendChild(selectAndInput.input);
 
         WebInspector.overridesSupport.settings.userAgent.addChangeListener(this.updateActiveState, this);
     },

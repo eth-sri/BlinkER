@@ -45,10 +45,6 @@
 
 struct NPObject;
 
-#if BLINK_IMPLEMENTATION
-namespace blink { class Frame; }
-#endif
-
 namespace v8 {
 class Context;
 class Function;
@@ -60,6 +56,7 @@ template <class T> class Local;
 
 namespace blink {
 
+class Frame;
 class OpenedFrameTracker;
 class WebData;
 class WebDataSource;
@@ -150,12 +147,11 @@ public:
     // For a WebFrame with contents being rendered in another process, this
     // sets a layer for use by the in-process compositor. WebLayer should be
     // null if the content is being rendered in the current process.
-    virtual void setRemoteWebLayer(blink::WebLayer*) = 0;
+    virtual void setRemoteWebLayer(WebLayer*) = 0;
 
     // Initializes the various client interfaces.
     virtual void setPermissionClient(WebPermissionClient*) = 0;
     virtual void setSharedWorkerRepositoryClient(WebSharedWorkerRepositoryClient*) = 0;
-
 
     // Geometry -----------------------------------------------------------
 
@@ -184,7 +180,6 @@ public:
 
     virtual bool hasHorizontalScrollbar() const = 0;
     virtual bool hasVerticalScrollbar() const = 0;
-
 
     // Hierarchy ----------------------------------------------------------
 
@@ -290,6 +285,11 @@ public:
     virtual void setIsolatedWorldContentSecurityPolicy(
         int worldID, const WebString&) = 0;
 
+    // Associates an isolated world with human-readable name which is useful for
+    // extension debugging.
+    virtual void setIsolatedWorldHumanReadableName(
+        int worldID, const WebString&) = 0;
+
     // Logs to the console associated with this frame.
     virtual void addMessageToConsole(const WebConsoleMessage&) = 0;
 
@@ -304,6 +304,11 @@ public:
     // that the script evaluated to.
     virtual v8::Handle<v8::Value> executeScriptAndReturnValue(
         const WebScriptSource&) = 0;
+
+    // ONLY FOR TESTS: Same as above but sets a fake UserGestureIndicator before
+    // execution.
+    virtual v8::Handle<v8::Value> executeScriptAndReturnValueForTests(
+        const WebScriptSource&);
 
     // worldID must be > 0 (as 0 represents the main world).
     // worldID must be < EmbedderWorldIdLimit, high number used internally.
@@ -677,7 +682,7 @@ public:
     virtual WebString layerTreeAsText(bool showDebugInfo = false) const = 0;
 
 #if BLINK_IMPLEMENTATION
-    static WebFrame* fromFrame(blink::Frame*);
+    static WebFrame* fromFrame(Frame*);
 #endif
 
 protected:
@@ -698,7 +703,7 @@ private:
 };
 
 #if BLINK_IMPLEMENTATION
-blink::Frame* toWebCoreFrame(const WebFrame*);
+Frame* toCoreFrame(const WebFrame*);
 #endif
 
 } // namespace blink

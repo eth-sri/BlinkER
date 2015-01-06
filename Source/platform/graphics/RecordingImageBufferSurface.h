@@ -28,8 +28,8 @@ public:
     virtual SkCanvas* canvas() const OVERRIDE;
     virtual PassRefPtr<SkPicture> getPicture() OVERRIDE;
     virtual bool isValid() const OVERRIDE { return true; }
-    virtual void willReadback() OVERRIDE;
-    virtual void finalizeFrame() OVERRIDE;
+    virtual void willAccessPixels() OVERRIDE;
+    virtual void finalizeFrame(const FloatRect&) OVERRIDE;
     virtual void didClearCanvas() OVERRIDE;
     virtual void setImageBuffer(ImageBuffer*) OVERRIDE;
 

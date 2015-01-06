@@ -6,13 +6,17 @@ InspectorTest.showConsolePanel = function()
     WebInspector.inspectorView.showPanel("console");
 }
 
-InspectorTest.prepareConsoleMessageText = function(messageElement)
+InspectorTest.prepareConsoleMessageText = function(messageElement, consoleMessage)
 {
     var messageText = messageElement.textContent.replace(/\u200b/g, "");
     // Replace scriptIds with generic scriptId string to avoid flakiness.
     messageText = messageText.replace(/VM\d+/g, "VM");
-    // Strip out InjectedScript from stack traces to avoid rebaselining each time InjectedScriptSource is edited.
-    messageText = messageText.replace(/InjectedScript[\.a-zA-Z_]+ VM:\d+/g, "");
+    // Strip out InjectedScript line numbers from stack traces to avoid rebaselining each time InjectedScriptSource is edited.
+    messageText = messageText.replace(/VM:\d+ InjectedScript\./g, " InjectedScript.");
+    // Strip out InjectedScript line numbers from console message anchor.
+    var functionName = consoleMessage && consoleMessage.stackTrace && consoleMessage.stackTrace[0] && consoleMessage.stackTrace[0].functionName || "";
+    if (functionName.indexOf("InjectedScript") !== -1)
+        messageText = messageText.replace(/\bVM:\d+/, ""); // Only first replace.
     // The message might be extremely long in case of dumping stack overflow message.
     messageText = messageText.substring(0, 1024);
     return messageText;
@@ -56,7 +60,7 @@ InspectorTest.dumpConsoleMessages = function(printOriginatingCommand, dumpClassN
             if (dumpClassNames)
                 InspectorTest.addResult(classNames.join(" > "));
         } else {
-            var messageText = formatter(element);
+            var messageText = formatter(element, message);
             InspectorTest.addResult(messageText + (dumpClassNames ? " " + classNames.join(" > ") : ""));
         }
 
@@ -142,6 +146,28 @@ InspectorTest.expandConsoleMessages = function(callback)
                 node._section.expanded = true;
             }
             node = node.traverseNextNode(element);
+        }
+    }
+    if (callback)
+        InspectorTest.runAfterPendingDispatches(callback);
+}
+
+InspectorTest.expandConsoleTreeElements = function(constructorClass, callback)
+{
+    WebInspector.inspectorView.panel("console");
+    var messageViews = WebInspector.ConsolePanel._view()._visibleViewMessages;
+    for (var i = 0; i < messageViews.length; ++i) {
+        var element = messageViews[i].contentElement();
+        for (var node = element; node; node = node.traverseNextNode(element)) {
+            if (!node._section)
+                continue;
+            var treeElements = node._section.propertiesTreeOutline.children;
+            for (var j = 0; j < treeElements.length; ++j) {
+                for (var treeElement = treeElements[j]; treeElement; treeElement = treeElement.traverseNextTreeElement(false, null, false)) {
+                    if (treeElement instanceof constructorClass)
+                        treeElement.expand();
+                }
+            }
         }
     }
     if (callback)

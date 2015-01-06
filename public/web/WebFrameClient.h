@@ -32,6 +32,7 @@
 #define WebFrameClient_h
 
 #include "../platform/WebColor.h"
+#include "WebAXObject.h"
 #include "WebDOMMessageEvent.h"
 #include "WebDataSource.h"
 #include "WebEventRacer.h"
@@ -63,6 +64,8 @@ class WebContentDecryptionModule;
 class WebCookieJar;
 class WebDataSource;
 class WebDOMEvent;
+class WebExternalPopupMenu;
+class WebExternalPopupMenuClient;
 class WebFormElement;
 class WebGeolocationClient;
 class WebInputEvent;
@@ -91,6 +94,7 @@ struct WebColorSuggestion;
 struct WebConsoleMessage;
 struct WebContextMenuData;
 struct WebPluginParams;
+struct WebPopupMenuInfo;
 struct WebRect;
 struct WebSize;
 struct WebURLError;
@@ -119,6 +123,11 @@ public:
 
     // May return null. But should not.
     virtual WebEventRacerLogClient *createEventRacerLogClient() { return 0; }
+
+    // Create a new WebPopupMenu. In the "createExternalPopupMenu" form, the
+    // client is responsible for rendering the contents of the popup menu.
+    virtual WebExternalPopupMenu* createExternalPopupMenu(
+        const WebPopupMenuInfo&, WebExternalPopupMenuClient*) { return 0; }
 
     // Services ------------------------------------------------------------
 
@@ -244,9 +253,7 @@ public:
     virtual void didCreateDataSource(WebLocalFrame*, WebDataSource*) { }
 
     // A new provisional load has been started.
-    virtual void didStartProvisionalLoad(WebLocalFrame* localFrame, bool isTransitionNavigation) { didStartProvisionalLoad(localFrame); }
-    // DEPRECATED
-    virtual void didStartProvisionalLoad(WebLocalFrame*) { }
+    virtual void didStartProvisionalLoad(WebLocalFrame* localFrame, bool isTransitionNavigation) { }
 
     // The provisional load was redirected via a HTTP 3xx response.
     virtual void didReceiveServerRedirectForProvisionalLoad(WebLocalFrame*) { }
@@ -394,7 +401,7 @@ public:
         WebLocalFrame*, unsigned identifier, const WebURLResponse&) { }
 
     virtual void didChangeResourcePriority(
-        WebLocalFrame* webFrame, unsigned identifier, const blink::WebURLRequest::Priority& priority, int) { }
+        WebLocalFrame* webFrame, unsigned identifier, const WebURLRequest::Priority& priority, int) { }
 
     // The resource request given by identifier succeeded.
     virtual void didFinishResourceLoad(
@@ -556,6 +563,11 @@ public:
 
     // Access the embedder API for (client-based) screen orientation client .
     virtual WebScreenOrientationClient* webScreenOrientationClient() { return 0; }
+
+    // Accessibility -------------------------------------------------------
+
+    // Notifies embedder about an accessibility event.
+    virtual void postAccessibilityEvent(const WebAXObject&, WebAXEvent) { }
 
 protected:
     virtual ~WebFrameClient() { }

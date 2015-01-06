@@ -29,9 +29,11 @@
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/NodeRareData.h"
 #include "core/html/DocumentNameCollection.h"
+#include "core/html/HTMLDataListOptionsCollection.h"
 #include "core/html/HTMLElement.h"
 #include "core/html/HTMLObjectElement.h"
 #include "core/html/HTMLOptionElement.h"
+#include "core/html/HTMLOptionsCollection.h"
 #include "core/html/HTMLTagCollection.h"
 #include "core/html/WindowNameCollection.h"
 #include "wtf/HashSet.h"
@@ -191,6 +193,16 @@ void HTMLCollection::invalidateCache(Document* oldDocument) const
     invalidateIdNameCacheMaps(oldDocument);
 }
 
+unsigned HTMLCollection::length() const
+{
+    return m_collectionIndexCache.nodeCount(*this);
+}
+
+Element* HTMLCollection::item(unsigned offset) const
+{
+    return m_collectionIndexCache.nodeAt(*this, offset);
+}
+
 static inline bool isMatchingHTMLElement(const HTMLCollection& htmlCollection, const HTMLElement& element)
 {
     switch (htmlCollection.type()) {
@@ -200,6 +212,8 @@ static inline bool isMatchingHTMLElement(const HTMLCollection& htmlCollection, c
         return element.hasTagName(scriptTag);
     case DocForms:
         return element.hasTagName(formTag);
+    case DocumentNamedItems:
+        return toDocumentNameCollection(htmlCollection).elementMatches(element);
     case TableTBodies:
         return element.hasTagName(tbodyTag);
     case TRCells:
@@ -207,16 +221,11 @@ static inline bool isMatchingHTMLElement(const HTMLCollection& htmlCollection, c
     case TSectionRows:
         return element.hasTagName(trTag);
     case SelectOptions:
-        return element.hasTagName(optionTag);
+        return toHTMLOptionsCollection(htmlCollection).elementMatches(element);
     case SelectedOptions:
         return isHTMLOptionElement(element) && toHTMLOptionElement(element).selected();
     case DataListOptions:
-        if (isHTMLOptionElement(element)) {
-            const HTMLOptionElement& option = toHTMLOptionElement(element);
-            if (!option.isDisabledFormControl() && !option.value().isEmpty())
-                return true;
-        }
-        return false;
+        return toHTMLDataListOptionsCollection(htmlCollection).elementMatches(element);
     case MapAreas:
         return element.hasTagName(areaTag);
     case DocApplets:
@@ -233,7 +242,6 @@ static inline bool isMatchingHTMLElement(const HTMLCollection& htmlCollection, c
     case DocAll:
     case NodeChildren:
     case FormControls:
-    case DocumentNamedItems:
     case TableRows:
     case WindowNamedItems:
     case NameNodeListType:
@@ -245,43 +253,51 @@ static inline bool isMatchingHTMLElement(const HTMLCollection& htmlCollection, c
     return false;
 }
 
-template <class NodeListType>
-inline bool isMatchingElement(const NodeListType&, const Element&);
-
-template <> inline bool isMatchingElement(const HTMLCollection& htmlCollection, const Element& element)
+inline bool HTMLCollection::elementMatches(const Element& element) const
 {
     // These collections apply to any kind of Elements, not just HTMLElements.
-    switch (htmlCollection.type()) {
+    switch (type()) {
     case DocAll:
     case NodeChildren:
         return true;
     case ClassCollectionType:
-        return toClassCollection(htmlCollection).elementMatches(element);
+        return toClassCollection(*this).elementMatches(element);
     case TagCollectionType:
-        return toTagCollection(htmlCollection).elementMatches(element);
+        return toTagCollection(*this).elementMatches(element);
     case HTMLTagCollectionType:
-        return toHTMLTagCollection(htmlCollection).elementMatches(element);
-    case DocumentNamedItems:
-        return toDocumentNameCollection(htmlCollection).elementMatches(element);
+        return toHTMLTagCollection(*this).elementMatches(element);
     case WindowNamedItems:
-        return toWindowNameCollection(htmlCollection).elementMatches(element);
+        return toWindowNameCollection(*this).elementMatches(element);
     default:
         break;
     }
 
     // The following only applies to HTMLElements.
-    return element.isHTMLElement() && isMatchingHTMLElement(htmlCollection, toHTMLElement(element));
+    return element.isHTMLElement() && isMatchingHTMLElement(*this, toHTMLElement(element));
 }
 
-template <> inline bool isMatchingElement(const ClassCollection& collection, const Element& element)
-{
-    return collection.elementMatches(element);
-}
+namespace {
 
-template <> inline bool isMatchingElement(const HTMLTagCollection& collection, const Element& element)
-{
-    return collection.elementMatches(element);
-}
+template <class HTMLCollectionType>
+class IsMatch {
+public:
+    IsMatch(const HTMLCollectionType& list)
+        : m_list(list)
+    { }
+
+    bool operator() (const Element& element) const
+    {
+        return m_list.elementMatches(element);
+    }
+
+private:
+    const HTMLCollectionType& m_list;
+};
+
+} // namespace
+
+template <class HTMLCollectionType>
+static inline IsMatch<HTMLCollectionType> makeIsMatch(const HTMLCollectionType& list) { return IsMatch<HTMLCollectionType>(list); }
 
 Element* HTMLCollection::virtualItemAfter(Element*) const
 {
@@ -308,62 +324,28 @@ static inline bool nameShouldBeVisibleInDocumentAll(const HTMLElement& element)
         || element.hasTagName(selectTag);
 }
 
-inline Element* firstMatchingChildElement(const HTMLCollection& nodeList)
-{
-    Element* element = ElementTraversal::firstChild(nodeList.rootNode());
-    while (element && !isMatchingElement(nodeList, *element))
-        element = ElementTraversal::nextSibling(*element);
-    return element;
-}
-
-inline Element* lastMatchingChildElement(const HTMLCollection& nodeList)
-{
-    Element* element = ElementTraversal::lastChild(nodeList.rootNode());
-    while (element && !isMatchingElement(nodeList, *element))
-        element = ElementTraversal::previousSibling(*element);
-    return element;
-}
-
-inline Element* nextMatchingChildElement(const HTMLCollection& nodeList, Element& current)
-{
-    Element* next = &current;
-    do {
-        next = ElementTraversal::nextSibling(*next);
-    } while (next && !isMatchingElement(nodeList, *next));
-    return next;
-}
-
-inline Element* previousMatchingChildElement(const HTMLCollection& nodeList, Element& current)
-{
-    Element* previous = &current;
-    do {
-        previous = ElementTraversal::previousSibling(*previous);
-    } while (previous && !isMatchingElement(nodeList, *previous));
-    return previous;
-}
-
-Element* HTMLCollection::traverseToFirstElement() const
+Element* HTMLCollection::traverseToFirst() const
 {
     switch (type()) {
     case HTMLTagCollectionType:
-        return firstMatchingElement(toHTMLTagCollection(*this));
+        return ElementTraversal::firstWithin(rootNode(), makeIsMatch(toHTMLTagCollection(*this)));
     case ClassCollectionType:
-        return firstMatchingElement(toClassCollection(*this));
+        return ElementTraversal::firstWithin(rootNode(), makeIsMatch(toClassCollection(*this)));
     default:
         if (overridesItemAfter())
             return virtualItemAfter(0);
         if (shouldOnlyIncludeDirectChildren())
-            return firstMatchingChildElement(*this);
-        return firstMatchingElement(*this);
+            return ElementTraversal::firstChild(rootNode(), makeIsMatch(*this));
+        return ElementTraversal::firstWithin(rootNode(), makeIsMatch(*this));
     }
 }
 
-Element* HTMLCollection::traverseToLastElement() const
+Element* HTMLCollection::traverseToLast() const
 {
     ASSERT(canTraverseBackward());
     if (shouldOnlyIncludeDirectChildren())
-        return lastMatchingChildElement(*this);
-    return lastMatchingElement(*this);
+        return ElementTraversal::lastChild(rootNode(), makeIsMatch(*this));
+    return ElementTraversal::lastWithin(rootNode(), makeIsMatch(*this));
 }
 
 Element* HTMLCollection::traverseForwardToOffset(unsigned offset, Element& currentElement, unsigned& currentOffset) const
@@ -371,9 +353,9 @@ Element* HTMLCollection::traverseForwardToOffset(unsigned offset, Element& curre
     ASSERT(currentOffset < offset);
     switch (type()) {
     case HTMLTagCollectionType:
-        return traverseMatchingElementsForwardToOffset(toHTMLTagCollection(*this), offset, currentElement, currentOffset);
+        return traverseMatchingElementsForwardToOffset(currentElement, &rootNode(), offset, currentOffset, makeIsMatch(toHTMLTagCollection(*this)));
     case ClassCollectionType:
-        return traverseMatchingElementsForwardToOffset(toClassCollection(*this), offset, currentElement, currentOffset);
+        return traverseMatchingElementsForwardToOffset(currentElement, &rootNode(), offset, currentOffset, makeIsMatch(toClassCollection(*this)));
     default:
         if (overridesItemAfter()) {
             for (Element* next = virtualItemAfter(&currentElement); next; next = virtualItemAfter(next)) {
@@ -383,13 +365,14 @@ Element* HTMLCollection::traverseForwardToOffset(unsigned offset, Element& curre
             return 0;
         }
         if (shouldOnlyIncludeDirectChildren()) {
-            for (Element* next = nextMatchingChildElement(*this, currentElement); next; next = nextMatchingChildElement(*this, *next)) {
+            IsMatch<HTMLCollection> isMatch(*this);
+            for (Element* next = ElementTraversal::nextSibling(currentElement, isMatch); next; next = ElementTraversal::nextSibling(*next, isMatch)) {
                 if (++currentOffset == offset)
                     return next;
             }
             return 0;
         }
-        return traverseMatchingElementsForwardToOffset(*this, offset, currentElement, currentOffset);
+        return traverseMatchingElementsForwardToOffset(currentElement, &rootNode(), offset, currentOffset, makeIsMatch(*this));
     }
 }
 
@@ -398,13 +381,14 @@ Element* HTMLCollection::traverseBackwardToOffset(unsigned offset, Element& curr
     ASSERT(currentOffset > offset);
     ASSERT(canTraverseBackward());
     if (shouldOnlyIncludeDirectChildren()) {
-        for (Element* previous = previousMatchingChildElement(*this, currentElement); previous; previous = previousMatchingChildElement(*this, *previous)) {
+        IsMatch<HTMLCollection> isMatch(*this);
+        for (Element* previous = ElementTraversal::previousSibling(currentElement, isMatch); previous; previous = ElementTraversal::previousSibling(*previous, isMatch)) {
             if (--currentOffset == offset)
                 return previous;
         }
         return 0;
     }
-    return traverseMatchingElementsBackwardToOffset(*this, offset, currentElement, currentOffset);
+    return traverseMatchingElementsBackwardToOffset(currentElement, &rootNode(), offset, currentOffset, makeIsMatch(*this));
 }
 
 Element* HTMLCollection::namedItem(const AtomicString& name) const

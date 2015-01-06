@@ -48,6 +48,8 @@
 namespace blink {
 
     class Blob;
+    class ConsoleMessage;
+    class ConsoleMessageStorage;
     class ExceptionState;
     class ScheduledAction;
     class WorkerClients;
@@ -57,19 +59,19 @@ namespace blink {
     class WorkerNavigator;
     class WorkerThread;
 
-    class WorkerGlobalScope : public RefCountedWillBeRefCountedGarbageCollected<WorkerGlobalScope>, public SecurityContext, public ExecutionContext, public ExecutionContextClient, public WillBeHeapSupplementable<WorkerGlobalScope>, public EventTargetWithInlineData, public DOMWindowBase64 {
+    class WorkerGlobalScope : public RefCountedWillBeGarbageCollectedFinalized<WorkerGlobalScope>, public SecurityContext, public ExecutionContext, public ExecutionContextClient, public WillBeHeapSupplementable<WorkerGlobalScope>, public EventTargetWithInlineData, public DOMWindowBase64 {
         WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(WorkerGlobalScope);
         REFCOUNTED_EVENT_TARGET(WorkerGlobalScope);
     public:
         virtual ~WorkerGlobalScope();
 
         virtual bool isWorkerGlobalScope() const OVERRIDE FINAL { return true; }
+        virtual bool isSharedWorkerGlobalScope() const OVERRIDE { return false; }
+        virtual bool isDedicatedWorkerGlobalScope() const OVERRIDE { return false; }
+        virtual bool isServiceWorkerGlobalScope() const OVERRIDE { return false; }
 
         virtual ExecutionContext* executionContext() const OVERRIDE FINAL;
 
-        virtual bool isSharedWorkerGlobalScope() const { return false; }
-        virtual bool isDedicatedWorkerGlobalScope() const { return false; }
-        virtual bool isServiceWorkerGlobalScope() const { return false; }
         virtual void countFeature(UseCounter::Feature) const;
         virtual void countDeprecation(UseCounter::Feature) const;
 
@@ -136,14 +138,17 @@ namespace blink {
         using SecurityContext::securityOrigin;
         using SecurityContext::contentSecurityPolicy;
 
+        virtual void addMessage(PassRefPtrWillBeRawPtr<ConsoleMessage>) OVERRIDE FINAL;
+        ConsoleMessageStorage* messageStorage();
+
         virtual void trace(Visitor*) OVERRIDE;
 
     protected:
         WorkerGlobalScope(const KURL&, const String& userAgent, WorkerThread*, double timeOrigin, PassOwnPtrWillBeRawPtr<WorkerClients>);
         void applyContentSecurityPolicyFromString(const String& contentSecurityPolicy, ContentSecurityPolicyHeaderType);
 
-        virtual void logExceptionToConsole(const String& errorMessage, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtrWillBeRawPtr<ScriptCallStack>) OVERRIDE;
-        void addMessageToWorkerConsole(MessageSource, MessageLevel, const String& message, const String& sourceURL, unsigned lineNumber, PassRefPtrWillBeRawPtr<ScriptCallStack>, ScriptState*);
+        virtual void logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtrWillBeRawPtr<ScriptCallStack>) OVERRIDE;
+        void addMessageToWorkerConsole(PassRefPtrWillBeRawPtr<ConsoleMessage>);
 
     private:
 #if !ENABLE(OILPAN)
@@ -155,7 +160,6 @@ namespace blink {
         virtual KURL virtualCompleteURL(const String&) const OVERRIDE FINAL;
 
         virtual void reportBlockedScriptExecutionToInspector(const String& directiveText) OVERRIDE FINAL;
-        virtual void addMessage(MessageSource, MessageLevel, const String& message, const String& sourceURL, unsigned lineNumber, ScriptState* = 0) OVERRIDE FINAL;
 
         virtual EventTarget* errorEventTarget() OVERRIDE FINAL;
         virtual void didUpdateSecurityOrigin() OVERRIDE FINAL { }
@@ -179,6 +183,8 @@ namespace blink {
 
         double m_timeOrigin;
         TerminationObserver* m_terminationObserver;
+
+        OwnPtrWillBeMember<ConsoleMessageStorage> m_messageStorage;
     };
 
 DEFINE_TYPE_CASTS(WorkerGlobalScope, ExecutionContext, context, context->isWorkerGlobalScope(), context.isWorkerGlobalScope());

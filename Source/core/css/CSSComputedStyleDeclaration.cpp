@@ -29,7 +29,6 @@
 #include "core/StylePropertyShorthand.h"
 #include "core/animation/DocumentAnimations.h"
 #include "core/css/BasicShapeFunctions.h"
-#include "core/css/CSSArrayFunctionValue.h"
 #include "core/css/CSSAspectRatioValue.h"
 #include "core/css/CSSBorderImage.h"
 #include "core/css/CSSFilterValue.h"
@@ -42,6 +41,7 @@
 #include "core/css/parser/BisonCSSParser.h"
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSPrimitiveValueMappings.h"
+#include "core/css/CSSPropertyMetadata.h"
 #include "core/css/CSSReflectValue.h"
 #include "core/css/CSSSelector.h"
 #include "core/css/CSSShadowValue.h"
@@ -51,7 +51,6 @@
 #include "core/css/CSSValuePool.h"
 #include "core/css/Pair.h"
 #include "core/css/Rect.h"
-#include "core/css/RuntimeCSSEnabled.h"
 #include "core/css/StylePropertySet.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/Document.h"
@@ -377,7 +376,7 @@ static const Vector<CSSPropertyID>& computableProperties()
 {
     DEFINE_STATIC_LOCAL(Vector<CSSPropertyID>, properties, ());
     if (properties.isEmpty())
-        RuntimeCSSEnabled::filterEnabledCSSPropertiesIntoVector(staticComputableProperties, WTF_ARRAY_LENGTH(staticComputableProperties), properties);
+        CSSPropertyMetadata::filterEnabledCSSPropertiesIntoVector(staticComputableProperties, WTF_ARRAY_LENGTH(staticComputableProperties), properties);
     return properties;
 }
 
@@ -1162,7 +1161,7 @@ String CSSComputedStyleDeclaration::cssText() const
         if (i)
             result.append(' ');
         result.append(getPropertyName(properties[i]));
-        result.append(": ", 2);
+        result.appendLiteral(": ");
         result.append(getPropertyValue(properties[i]));
         result.append(';');
     }
@@ -1778,9 +1777,8 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValu
                 return cssValuePool().createIdentifierValue(CSSValueAuto);
             return cssValuePool().createValue(style->columnCount(), CSSPrimitiveValue::CSS_NUMBER);
         case CSSPropertyColumnFill:
-            if (RuntimeEnabledFeatures::regionBasedColumnsEnabled())
-                return cssValuePool().createValue(style->columnFill());
-            return nullptr;
+            ASSERT(RuntimeEnabledFeatures::regionBasedColumnsEnabled());
+            return cssValuePool().createValue(style->columnFill());
         case CSSPropertyWebkitColumnGap:
             if (style->hasNormalColumnGap())
                 return cssValuePool().createIdentifierValue(CSSValueNormal);
@@ -2064,13 +2062,13 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValu
             return cssValuePool().createValue(style->userModify());
         case CSSPropertyMaxHeight: {
             const Length& maxHeight = style->maxHeight();
-            if (maxHeight.isUndefined())
+            if (maxHeight.isMaxSizeNone())
                 return cssValuePool().createIdentifierValue(CSSValueNone);
             return zoomAdjustedPixelValueForLength(maxHeight, *style);
         }
         case CSSPropertyMaxWidth: {
             const Length& maxWidth = style->maxWidth();
-            if (maxWidth.isUndefined())
+            if (maxWidth.isMaxSizeNone())
                 return cssValuePool().createIdentifierValue(CSSValueNone);
             return zoomAdjustedPixelValueForLength(maxWidth, *style);
         }
@@ -2530,7 +2528,7 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValu
         case CSSPropertyBorderTopRightRadius:
             return valueForBorderRadiusCorner(style->borderTopRightRadius(), *style);
         case CSSPropertyClip: {
-            if (!style->hasClip())
+            if (style->hasAutoClip())
                 return cssValuePool().createIdentifierValue(CSSValueAuto);
             RefPtrWillBeRawPtr<Rect> rect = Rect::create();
             rect->setTop(zoomAdjustedPixelValue(style->clip().top().value(), *style));
@@ -2690,9 +2688,6 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValu
         case CSSPropertyBackgroundRepeatX:
         case CSSPropertyBackgroundRepeatY:
             break;
-        case CSSPropertyInternalCallback:
-            // This property is hidden from the web.
-            return nullptr;
 
         /* Unimplemented CSS 3 properties (including CSS3 shorthand properties) */
         case CSSPropertyWebkitTextEmphasis:
@@ -2951,8 +2946,9 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValu
 String CSSComputedStyleDeclaration::getPropertyValue(const String& propertyName)
 {
     CSSPropertyID propertyID = cssPropertyID(propertyName);
-    if (!propertyID || !RuntimeCSSEnabled::isCSSPropertyEnabled(propertyID))
+    if (!propertyID)
         return String();
+    ASSERT(CSSPropertyMetadata::isEnabledProperty(propertyID));
     return getPropertyValue(propertyID);
 }
 

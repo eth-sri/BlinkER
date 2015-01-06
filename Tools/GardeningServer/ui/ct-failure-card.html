@@ -7,8 +7,11 @@ found in the LICENSE file.
 <link rel="import" href="ct-builder-grid.html">
 <link rel="import" href="ct-commit-list.html">
 <link rel="import" href="ct-test-list.html">
+<link rel="import" href="../bower_components/paper-dialog/paper-dialog.html">
+<link rel="import" href="../bower_components/paper-dialog/paper-dialog-transition.html">
+<link rel="import" href="../bower_components/paper-input/paper-input.html">
 
-<polymer-element name="ct-failure-card" attributes="failures commits tree">
+<polymer-element name="ct-failure-card" attributes="group commitLog tree bug">
   <template>
     <style>
       :host {
@@ -24,6 +27,7 @@ found in the LICENSE file.
         border: 1px solid #dcdcdc;
         color: #444;
         padding: 0 16px;
+        margin-bottom: 5px;
         text-align: center;
       }
 
@@ -48,31 +52,86 @@ found in the LICENSE file.
         width: 250px;
       }
 
-      .failure {
+      #failure {
         flex: 1;
       }
 
-      #examine {
-        align-self: flex-start;
+      #buttons {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .snoozed {
+        opacity: 0.5;
       }
     </style>
-    <ct-builder-grid failures="{{ failures }}"></ct-builder-grid>
-    <div class="failure">
-      <ct-test-list tests="{{ failures }}" tree="{{ tree }}"></ct-test-list>
-      <ct-commit-list first="{{ failures[0].lastPassingRevisions }}"
-          last="{{ failures[0].firstFailingRevisions }}"
-          commits="{{ commits }}"></ct-commit-list>
+    <ct-builder-grid failures="{{ group.failures }}"></ct-builder-grid>
+    <div id="failure" class="{{ { snoozed: group.isSnoozed } | tokenList }}">
+      <ct-test-list tests="{{ group.failures }}" tree="{{ tree }}"></ct-test-list>
+      <ct-commit-list commitList="{{ group.commitList }}"></ct-commit-list>
     </div>
-    <paper-button id="examine" on-tap="{{ examine }}">Examine</paper-button>
+    <div id="buttons">
+      <paper-button id="examine" on-tap="{{ examine }}" label="Examine"></paper-button>
+      <template if="{{ !group.isSnoozed }}">
+        <paper-button id="snooze" on-tap="{{ snooze }}" label="Snooze"></paper-button>
+      </template>
+      <template if="{{ group.isSnoozed }}">
+        <paper-button id="snooze" on-tap="{{ unsnooze }}" label="Unsnooze"></paper-button>
+      </template>
+      <paper-button id="link-bug" on-tap="{{ linkBug }}" label="Link Bug"></paper-button>
+      <template if="{{ group.bug !== undefined }}">
+        <div>
+          <a href="{{ group.bug }}">
+            {{ group.bugLabel }}</a>
+        </div>
+      </template>
+    </div>
+
+    <paper-dialog heading="Enter bug number" transition="paper-transition-center" id="bugDialog">
+      <paper-input label="Bug# or URL" floatingLabel autofocus id="bug"></paper-input>
+      <paper-button label="Remove bug link" on-tap="{{ removeBug }}" dismissive id="dialogRemoveBug"></paper-button>
+      <paper-button label="OK" on-tap="{{ saveBug }}" affirmative id="dialogOk"></paper-button>
+    </paper-dialog>
   </template>
   <script>
     Polymer({
-      failures: [],
-      commits: {},
+      group: null,
+      commitLog: null,
       tree: '',
 
+      observe: {
+        group: '_updateCommitList',
+        commitLog: '_updateCommitList'
+      },
+
       examine: function() {
-        this.fire('ct-examine-failures', this.failures);
+        this.fire('ct-examine-failures', this.group);
+      },
+
+      snooze: function() {
+        this.group.snoozeUntil(Date.now() + 60 * 60 * 1000);
+      },
+
+      unsnooze: function() {
+        this.group.unsnooze();
+      },
+
+      _updateCommitList: function() {
+        if (this.group && this.commitLog)
+          this.group.commitList.update(this.commitLog);
+      },
+
+      linkBug: function() {
+        this.$.bug.value = this.group.bug;
+        this.$.bugDialog.toggle();
+      },
+
+      saveBug: function() {
+        this.group.setBug(this.$.bug.value);
+      },
+
+      removeBug: function() {
+        this.group.clearBug();
       },
     });
   </script>

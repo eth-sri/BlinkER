@@ -52,8 +52,13 @@ RenderSVGImage::RenderSVGImage(SVGImageElement* impl)
 
 RenderSVGImage::~RenderSVGImage()
 {
+}
+
+void RenderSVGImage::destroy()
+{
     ImageQualityController::remove(this);
     m_imageResource->shutdown();
+    RenderSVGModelObject::destroy();
 }
 
 bool RenderSVGImage::updateImageViewport()
@@ -100,8 +105,8 @@ void RenderSVGImage::layout()
     }
 
     if (m_needsBoundariesUpdate) {
-        m_repaintBoundingBox = m_objectBoundingBox;
-        SVGRenderSupport::intersectRepaintRectWithResources(this, m_repaintBoundingBox);
+        m_paintInvalidationBoundingBox = m_objectBoundingBox;
+        SVGRenderSupport::intersectPaintInvalidationRectWithResources(this, m_paintInvalidationBoundingBox);
 
         m_needsBoundariesUpdate = false;
     }
@@ -121,14 +126,13 @@ void RenderSVGImage::paint(PaintInfo& paintInfo, const LayoutPoint&)
 {
     ANNOTATE_GRAPHICS_CONTEXT(paintInfo, this);
 
-    if (paintInfo.context->paintingDisabled()
-        || paintInfo.phase != PaintPhaseForeground
+    if (paintInfo.phase != PaintPhaseForeground
         || style()->visibility() == HIDDEN
         || !m_imageResource->hasImage())
         return;
 
     FloatRect boundingBox = paintInvalidationRectInLocalCoordinates();
-    if (!SVGRenderSupport::paintInfoIntersectsRepaintRect(boundingBox, m_localTransform, paintInfo))
+    if (!SVGRenderSupport::paintInfoIntersectsPaintInvalidationRect(boundingBox, m_localTransform, paintInfo))
         return;
 
     PaintInfo childPaintInfo(paintInfo);
@@ -220,7 +224,7 @@ void RenderSVGImage::imageChanged(WrappedImagePtr, const IntRect*)
 
     invalidateBufferedForeground();
 
-    paintInvalidationForWholeRenderer();
+    setShouldDoFullPaintInvalidation(true);
 }
 
 void RenderSVGImage::addFocusRingRects(Vector<IntRect>& rects, const LayoutPoint&, const RenderLayerModelObject*) const

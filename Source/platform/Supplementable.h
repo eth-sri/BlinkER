@@ -119,6 +119,7 @@ template<>
 class SupplementTracing<false> {
 public:
     virtual ~SupplementTracing() { }
+    virtual void trace(Visitor*) { }
 };
 
 template<typename T, bool isGarbageCollected = false>
@@ -143,26 +144,14 @@ public:
         return host ? host->requireSupplement(key) : 0;
     }
 
-    virtual void trace(Visitor*) { }
-    virtual void willBeDestroyed() { }
-
     // FIXME: Oilpan: Remove this callback once PersistentHeapSupplementable is removed again.
     virtual void persistentHostHasBeenDestroyed() { }
 };
 
-template<typename T, bool>
-class SupplementableTracing;
-
-template<typename T>
-class SupplementableTracing<T, true> { };
-
-template<typename T>
-class SupplementableTracing<T, false> { };
-
 // Helper class for implementing Supplementable, HeapSupplementable, and
 // PersistentHeapSupplementable.
 template<typename T, bool isGarbageCollected = false>
-class SupplementableBase : public SupplementableTracing<T, isGarbageCollected> {
+class SupplementableBase {
 public:
     void provideSupplement(const char* key, typename SupplementableTraits<T, isGarbageCollected>::SupplementArgumentType supplement)
     {
@@ -195,13 +184,6 @@ public:
     // m_supplements here, but in the partially specialized template subclasses
     // since we only want to trace it for garbage collected classes.
     virtual void trace(Visitor*) { }
-
-    void willBeDestroyed()
-    {
-        typedef typename SupplementableTraits<T, isGarbageCollected>::SupplementMap::iterator SupplementIterator;
-        for (SupplementIterator it = m_supplements.begin(); it != m_supplements.end(); ++it)
-            it->value->willBeDestroyed();
-    }
 
     // FIXME: Oilpan: Make private and remove this ignore once PersistentHeapSupplementable is removed again.
 protected:
@@ -284,12 +266,12 @@ public:
 };
 
 template<typename T>
-struct ThreadingTrait<blink::SupplementBase<T, true> > {
+struct ThreadingTrait<SupplementBase<T, true> > {
     static const ThreadAffinity Affinity = ThreadingTrait<T>::Affinity;
 };
 
 template<typename T>
-struct ThreadingTrait<blink::SupplementableBase<T, true> > {
+struct ThreadingTrait<SupplementableBase<T, true> > {
     static const ThreadAffinity Affinity = ThreadingTrait<T>::Affinity;
 };
 

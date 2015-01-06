@@ -51,8 +51,6 @@
 #include "web/WebSettingsImpl.h"
 #include "web/WebViewImpl.h"
 
-using namespace blink;
-
 namespace blink {
 
 class PagePopupChromeClient : public EmptyChromeClient {
@@ -127,7 +125,7 @@ private:
         return FloatSize(0, 0);
     }
 
-    virtual void setCursor(const blink::Cursor& cursor) OVERRIDE
+    virtual void setCursor(const Cursor& cursor) OVERRIDE
     {
         if (m_popup->m_webView->client())
             m_popup->m_webView->client()->didChangeCursor(WebCursorInfo(cursor));
@@ -213,6 +211,7 @@ bool WebPagePopupImpl::initializePage()
     provideContextFeaturesTo(*m_page, adoptPtr(new PagePopupFeaturesClient()));
     static FrameLoaderClient* emptyFrameLoaderClient =  new EmptyFrameLoaderClient();
     RefPtr<LocalFrame> frame = LocalFrame::create(emptyFrameLoaderClient, &m_page->frameHost(), 0);
+    // FIXME: Call frame->setPagePopupOwner with m_popupClient->ownerElement().
     frame->setView(FrameView::create(frame.get()));
     frame->init();
     frame->view()->resize(m_popupClient->contentSize());
@@ -234,6 +233,12 @@ void WebPagePopupImpl::destroyPage()
 
     m_page->willBeDestroyed();
     m_page.clear();
+}
+
+AXObject* WebPagePopupImpl::rootAXObject()
+{
+    // FIXME: Implement this.
+    return 0;
 }
 
 void WebPagePopupImpl::setRootGraphicsLayer(GraphicsLayer* layer)

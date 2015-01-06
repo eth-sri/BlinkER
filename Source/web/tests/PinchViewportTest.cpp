@@ -13,6 +13,7 @@
 #include "core/rendering/RenderView.h"
 #include "core/rendering/compositing/CompositedLayerMapping.h"
 #include "core/rendering/compositing/RenderLayerCompositor.h"
+#include "core/testing/URLTestHelpers.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebLayerTreeView.h"
 #include "public/platform/WebUnitTestSupport.h"
@@ -24,7 +25,6 @@
 #include "public/web/WebViewClient.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/tests/FrameTestHelpers.h"
-#include "web/tests/URLTestHelpers.h"
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -67,7 +67,6 @@
     } while (false)
 
 
-using namespace blink;
 using namespace blink;
 
 using ::testing::_;
@@ -144,9 +143,7 @@ public:
     {
         settings->setJavaScriptEnabled(true);
         settings->setAcceleratedCompositingEnabled(true);
-        settings->setAcceleratedCompositingForFixedPositionEnabled(true);
-        settings->setAcceleratedCompositingForOverflowScrollEnabled(true);
-        settings->setCompositedScrollingForFramesEnabled(true);
+        settings->setPreferCompositingToLCDTextEnabled(true);
         settings->setPinchVirtualViewportEnabled(true);
     }
 
@@ -766,7 +763,7 @@ TEST_F(PinchViewportTest, TestContextMenuShownInCorrectLocation)
 
 // Test that the scrollIntoView correctly scrolls the main frame
 // and pinch viewports such that the given rect is centered in the viewport.
-TEST_F(PinchViewportTest, TestScrollingDocumentRegionIntoView)
+TEST_F(PinchViewportTest, DISABLED_TestScrollingDocumentRegionIntoView)
 {
     initializeWithDesktopSettings();
     webViewImpl()->resize(IntSize(100, 150));

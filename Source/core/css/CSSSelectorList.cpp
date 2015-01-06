@@ -27,7 +27,7 @@
 #include "config.h"
 #include "core/css/CSSSelectorList.h"
 
-#include "core/css/CSSParserValues.h"
+#include "core/css/parser/CSSParserValues.h"
 #include "wtf/text/StringBuilder.h"
 
 namespace blink {
@@ -114,7 +114,7 @@ String CSSSelectorList::selectorsText() const
 
     for (const CSSSelector* s = first(); s; s = next(*s)) {
         if (s != first())
-            result.append(", ");
+            result.appendLiteral(", ");
         result.append(s->selectorText());
     }
 

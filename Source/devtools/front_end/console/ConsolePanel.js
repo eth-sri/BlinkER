@@ -26,9 +26,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-importScript("ConsoleViewMessage.js");
-importScript("ConsoleView.js");
-
 /**
  * @constructor
  * @extends {WebInspector.Panel}
@@ -45,7 +42,7 @@ WebInspector.ConsolePanel = function()
 WebInspector.ConsolePanel._view = function()
 {
     if (!WebInspector.ConsolePanel._consoleView)
-        WebInspector.ConsolePanel._consoleView = new WebInspector.ConsoleView(WebInspector.isWorkerFrontend());
+        WebInspector.ConsolePanel._consoleView = new WebInspector.ConsoleView();
 
     return WebInspector.ConsolePanel._consoleView;
 }

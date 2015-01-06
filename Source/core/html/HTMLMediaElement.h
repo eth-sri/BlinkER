@@ -287,9 +287,8 @@ public:
 
     void scheduleEvent(PassRefPtrWillBeRawPtr<Event>);
 
-    // Current volume that should be used by the webMediaPlayer(). This method takes muted state
-    // and m_mediaController multipliers into account.
-    double playerVolume() const;
+    // Returns the "effective media volume" value as specified in the HTML5 spec.
+    double effectiveMediaVolume() const;
 
 #if ENABLE(OILPAN)
     bool isFinalizing() const { return m_isFinalizing; }
@@ -303,6 +302,10 @@ public:
     // doesn't.
     void setCloseMediaSourceWhenFinalizing();
 #endif
+
+    // Predicates also used when dispatching wrapper creation (cf. [SpecialWrapFor] IDL attribute usage.)
+    virtual bool isHTMLAudioElement() const { return false; }
+    virtual bool isHTMLVideoElement() const { return false; }
 
 protected:
     HTMLMediaElement(const QualifiedName&, Document&);
@@ -593,6 +596,7 @@ private:
 #if ENABLE(WEB_AUDIO)
     // This is a weak reference, since m_audioSourceNode holds a reference to us.
     // FIXME: Oilpan: Consider making this a strongly traced pointer with oilpan where strong cycles are not a problem.
+    GC_PLUGIN_IGNORE("http://crbug.com/404577")
     RawPtrWillBeWeakMember<AudioSourceProviderClient> m_audioSourceNode;
 #endif
 

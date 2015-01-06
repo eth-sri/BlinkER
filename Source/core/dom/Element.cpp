@@ -53,11 +53,10 @@
 #include "core/dom/ElementRareData.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/ExceptionCode.h"
-#include "core/dom/FullscreenElementStack.h"
+#include "core/dom/Fullscreen.h"
 #include "core/dom/MutationObserverInterestGroup.h"
 #include "core/dom/MutationRecord.h"
 #include "core/dom/NamedNodeMap.h"
-#include "core/dom/NoEventDispatchAssertion.h"
 #include "core/dom/NodeRenderStyle.h"
 #include "core/dom/PresentationAttributeStyle.h"
 #include "core/dom/PseudoElement.h"
@@ -107,6 +106,7 @@
 #include "core/rendering/compositing/RenderLayerCompositor.h"
 #include "core/svg/SVGDocumentExtensions.h"
 #include "core/svg/SVGElement.h"
+#include "platform/EventDispatchForbiddenScope.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/scroll/ScrollableArea.h"
@@ -1210,8 +1210,8 @@ const AtomicString& Element::locateNamespacePrefix(const AtomicString& namespace
         return prefix();
 
     AttributeCollection attributes = this->attributes();
-    AttributeCollection::const_iterator end = attributes.end();
-    for (AttributeCollection::const_iterator it = attributes.begin(); it != end; ++it) {
+    AttributeCollection::iterator end = attributes.end();
+    for (AttributeCollection::iterator it = attributes.begin(); it != end; ++it) {
         if (it->prefix() == xmlnsAtom && it->value() == namespaceToLocate)
             return it->localName();
     }
@@ -1273,7 +1273,7 @@ Node::InsertionNotificationRequest Element::insertedInto(ContainerNode* insertio
         elementRareData()->clearClassListValueForQuirksMode();
 
     if (isUpgradedCustomElement() && inDocument())
-        CustomElement::didEnterDocument(this, document());
+        CustomElement::didAttach(this, document());
 
     TreeScope& scope = insertionPoint->treeScope();
     if (scope != treeScope())
@@ -1302,6 +1302,9 @@ void Element::removedFrom(ContainerNode* insertionPoint)
     if (containsFullScreenElement())
         setContainsFullScreenElementOnAncestorsCrossingFrameBoundaries(false);
 
+    if (Fullscreen* fullscreen = Fullscreen::fromIfExists(document()))
+        fullscreen->elementRemoved(*this);
+
     if (document().page())
         document().page()->pointerLockController().elementRemoved(this);
 
@@ -1323,7 +1326,7 @@ void Element::removedFrom(ContainerNode* insertionPoint)
             document().accessSVGExtensions().removeElementFromPendingResources(this);
 
         if (isUpgradedCustomElement())
-            CustomElement::didLeaveDocument(this, insertionPoint->document());
+            CustomElement::didDetach(this, insertionPoint->document());
     }
 
     document().removeFromTopLayer(this);
@@ -2125,7 +2128,7 @@ void Element::updateFocusAppearance(bool /*restorePreviousSelection*/)
         VisibleSelection newSelection = VisibleSelection(firstPositionInOrBeforeNode(this), DOWNSTREAM);
         // Passing DoNotSetFocus as this function is called after FocusController::setFocusedElement()
         // and we don't want to change the focus to a new Element.
-        frame->selection().setSelection(newSelection, FrameSelection::DoNotSetFocus);
+        frame->selection().setSelection(newSelection,  FrameSelection::CloseTyping | FrameSelection::ClearTypingStyle | FrameSelection::DoNotSetFocus);
         frame->selection().revealSelection();
     } else if (renderer() && !renderer()->isWidget())
         renderer()->scrollRectToVisible(boundingBox());
@@ -2192,8 +2195,22 @@ bool Element::isMouseFocusable() const
     return isFocusable();
 }
 
-void Element::dispatchFocusEvent(Element* oldFocusedElement, FocusType)
+void Element::willCallDefaultEventHandler(const Event& event)
 {
+    if (!wasFocusedByMouse())
+        return;
+    if (!event.isKeyboardEvent() || event.type() != EventTypeNames::keydown)
+        return;
+    setWasFocusedByMouse(false);
+    if (renderer())
+        renderer()->setShouldDoFullPaintInvalidation(true);
+}
+
+void Element::dispatchFocusEvent(Element* oldFocusedElement, FocusType type)
+{
+    if (type != FocusTypePage)
+        setWasFocusedByMouse(type == FocusTypeMouse);
+
     RefPtrWillBeRawPtr<FocusEvent> event = FocusEvent::create(EventTypeNames::focus, false, false, document().domWindow(), 0, oldFocusedElement);
     EventDispatcher::dispatchEvent(this, FocusEventDispatchMediator::create(event.release()));
 }
@@ -2206,14 +2223,14 @@ void Element::dispatchBlurEvent(Element* newFocusedElement)
 
 void Element::dispatchFocusInEvent(const AtomicString& eventType, Element* oldFocusedElement)
 {
-    ASSERT(!NoEventDispatchAssertion::isEventDispatchForbidden());
+    ASSERT(!EventDispatchForbiddenScope::isEventDispatchForbidden());
     ASSERT(eventType == EventTypeNames::focusin || eventType == EventTypeNames::DOMFocusIn);
     dispatchScopedEventDispatchMediator(FocusInEventDispatchMediator::create(FocusEvent::create(eventType, true, false, document().domWindow(), 0, oldFocusedElement)));
 }
 
 void Element::dispatchFocusOutEvent(const AtomicString& eventType, Element* newFocusedElement)
 {
-    ASSERT(!NoEventDispatchAssertion::isEventDispatchForbidden());
+    ASSERT(!EventDispatchForbiddenScope::isEventDispatchForbidden());
     ASSERT(eventType == EventTypeNames::focusout || eventType == EventTypeNames::DOMFocusOut);
     dispatchScopedEventDispatchMediator(FocusOutEventDispatchMediator::create(FocusEvent::create(eventType, true, false, document().domWindow(), 0, newFocusedElement)));
 }
@@ -2305,12 +2322,12 @@ Node* Element::insertAdjacent(const String& where, Node* newChild, ExceptionStat
 static Element* contextElementForInsertion(const String& where, Element* element, ExceptionState& exceptionState)
 {
     if (equalIgnoringCase(where, "beforeBegin") || equalIgnoringCase(where, "afterEnd")) {
-        ContainerNode* parent = element->parentNode();
-        if (!parent || !parent->isElementNode()) {
+        Element* parent = element->parentElement();
+        if (!parent) {
             exceptionState.throwDOMException(NoModificationAllowedError, "The element has no parent.");
             return 0;
         }
-        return toElement(parent);
+        return parent;
     }
     if (equalIgnoringCase(where, "afterBegin") || equalIgnoringCase(where, "beforeEnd"))
         return element;
@@ -2684,21 +2701,6 @@ void Element::setFloatingPointAttribute(const QualifiedName& attributeName, doub
     setAttribute(attributeName, AtomicString::number(value));
 }
 
-void Element::webkitRequestFullscreen()
-{
-    FullscreenElementStack::from(document()).requestFullScreenForElement(*this, FullscreenElementStack::PrefixedRequest);
-}
-
-void Element::webkitRequestFullScreen(unsigned short flags)
-{
-    FullscreenElementStack::RequestType requestType;
-    if (flags & ALLOW_KEYBOARD_INPUT)
-        requestType = FullscreenElementStack::PrefixedMozillaAllowKeyboardInputRequest;
-    else
-        requestType = FullscreenElementStack::PrefixedMozillaRequest;
-    FullscreenElementStack::from(document()).requestFullScreenForElement(*this, requestType);
-}
-
 void Element::setContainsFullScreenElement(bool flag)
 {
     setElementFlag(ContainsFullScreenElement, flag);
@@ -2993,8 +2995,8 @@ void Element::detachAllAttrNodesFromElement()
     ASSERT(list);
 
     AttributeCollection attributes = elementData()->attributes();
-    AttributeCollection::const_iterator end = attributes.end();
-    for (AttributeCollection::const_iterator it = attributes.begin(); it != end; ++it) {
+    AttributeCollection::iterator end = attributes.end();
+    for (AttributeCollection::iterator it = attributes.begin(); it != end; ++it) {
         if (RefPtrWillBeRawPtr<Attr> attrNode = findAttrNodeInList(*list, it->name()))
             attrNode->detachFromElementWithValue(it->value());
     }
@@ -3061,8 +3063,8 @@ void Element::cloneAttributesFromElement(const Element& other)
         m_elementData = other.m_elementData->makeUniqueCopy();
 
     AttributeCollection attributes = m_elementData->attributes();
-    AttributeCollection::const_iterator end = attributes.end();
-    for (AttributeCollection::const_iterator it = attributes.begin(); it != end; ++it)
+    AttributeCollection::iterator end = attributes.end();
+    for (AttributeCollection::iterator it = attributes.begin(); it != end; ++it)
         attributeChangedFromParserOrByCloning(it->name(), it->value(), ModifiedByCloning);
 }
 
@@ -3282,7 +3284,7 @@ bool Element::supportsStyleSharing() const
     // FIXME: Why does gaining a layer from outside the style system require disabling sharing?
     if (isHTMLFrameElementBase(*this) || isHTMLPlugInElement(*this) || isHTMLCanvasElement(*this))
         return false;
-    if (FullscreenElementStack::isActiveFullScreenElement(*this))
+    if (Fullscreen::isActiveFullScreenElement(*this))
         return false;
     return true;
 }

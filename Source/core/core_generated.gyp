@@ -139,51 +139,52 @@
       ],
       'sources': [
         # bison rule
-        'css/CSSGrammar.y',
+        'css/parser/CSSGrammar.y',
         'xml/XPathGrammar.y',
       ],
       'actions': [
         {
           'action_name': 'generatePrivateScript',
-           # FIXME: The implementation of Blink-in-JS is not yet mature.
-           # You can use Blink-in-JS in your local experiment, but don't ship it.
-           # crbug.com/341031
-           'private_script_files': [
-              '../bindings/core/v8/PrivateScriptRunner.js',
-              '../core/html/HTMLMarqueeElement.js',
-           ],
-           'inputs': [
-              '../build/scripts/make_private_script_source.py',
-              '<@(_private_script_files)',
-            ],
-            'outputs': [
-              '<(blink_core_output_dir)/PrivateScriptSources.h',
-            ],
-            'action': [
-              'python',
-              '../build/scripts/make_private_script_source.py',
-              '<@(_outputs)',
-              '<@(_private_script_files)'
-            ],
+          # FIXME: The implementation of Blink-in-JS is not yet mature.
+          # You can use Blink-in-JS in your local experiment, but don't ship it.
+          # crbug.com/341031
+          'private_script_files': [
+             '../bindings/core/v8/PrivateScriptRunner.js',
+             '../core/html/HTMLMarqueeElement.js',
+          ],
+          'inputs': [
+             '../build/scripts/make_private_script_source.py',
+             '<@(_private_script_files)',
+          ],
+          'outputs': [
+            '<(blink_core_output_dir)/PrivateScriptSources.h',
+          ],
+          'action': [
+            'python',
+            '../build/scripts/make_private_script_source.py',
+            '<@(_outputs)',
+            '<@(_private_script_files)'
+          ],
         },
         {
           'action_name': 'generatePrivateScriptForTesting',
-           'private_script_files': [
-              'testing/PrivateScriptTest.js',
+          'private_script_files': [
+            'testing/PartialPrivateScriptTest.js',
+            'testing/PrivateScriptTest.js',
            ],
-           'inputs': [
-              '../build/scripts/make_private_script_source.py',
-              '<@(_private_script_files)',
-            ],
-            'outputs': [
-              '<(blink_core_output_dir)/PrivateScriptSourcesForTesting.h',
-            ],
-            'action': [
-              'python',
-              '../build/scripts/make_private_script_source.py',
-              '<@(_outputs)',
-              '<@(_private_script_files)'
-            ],
+          'inputs': [
+             '../build/scripts/make_private_script_source.py',
+             '<@(_private_script_files)',
+           ],
+           'outputs': [
+             '<(blink_core_output_dir)/PrivateScriptSourcesForTesting.h',
+           ],
+           'action': [
+             'python',
+             '../build/scripts/make_private_script_source.py',
+             '<@(_outputs)',
+             '<@(_private_script_files)'
+           ],
         },
         {
           'action_name': 'HTMLEntityTable',
@@ -204,16 +205,9 @@
         },
         {
           'action_name': 'CSSPropertyNames',
-          'variables': {
-            'in_files': [
-              'css/CSSPropertyNames.in',
-              'css/SVGCSSPropertyNames.in',
-            ],
-          },
           'inputs': [
-            '<@(scripts_for_in_files)',
+            '<@(css_properties_files)',
             '../build/scripts/make_css_property_names.py',
-            '<@(in_files)'
           ],
           'outputs': [
             '<(blink_core_output_dir)/CSSPropertyNames.cpp',
@@ -222,7 +216,7 @@
           'action': [
             'python',
             '../build/scripts/make_css_property_names.py',
-            '<@(in_files)',
+            'css/CSSProperties.in',
             '--output_dir',
             '<(blink_core_output_dir)',
             '--gperf', '<(gperf_exe)',
@@ -317,11 +311,10 @@
         {
           'action_name': 'StylePropertyShorthand',
           'inputs': [
-            '<@(scripts_for_in_files)',
+            '<@(css_properties_files)',
             '../build/scripts/make_style_shorthands.py',
             '../build/scripts/templates/StylePropertyShorthand.cpp.tmpl',
             '../build/scripts/templates/StylePropertyShorthand.h.tmpl',
-            'css/CSSShorthands.in',
           ],
           'outputs': [
             '<(blink_core_output_dir)/StylePropertyShorthand.cpp',
@@ -330,7 +323,7 @@
           'action': [
             'python',
             '../build/scripts/make_style_shorthands.py',
-            'css/CSSShorthands.in',
+            'css/CSSProperties.in',
             '--output_dir',
             '<(blink_core_output_dir)',
           ],
@@ -338,12 +331,11 @@
         {
           'action_name': 'StyleBuilder',
           'inputs': [
-            '<@(scripts_for_in_files)',
+            '<@(css_properties_files)',
             '../build/scripts/make_style_builder.py',
             '../build/scripts/templates/StyleBuilder.cpp.tmpl',
             '../build/scripts/templates/StyleBuilderFunctions.cpp.tmpl',
             '../build/scripts/templates/StyleBuilderFunctions.h.tmpl',
-            'css/CSSProperties.in',
           ],
           'outputs': [
             '<(blink_core_output_dir)/StyleBuilder.cpp',
@@ -353,6 +345,24 @@
           'action': [
             'python',
             '../build/scripts/make_style_builder.py',
+            'css/CSSProperties.in',
+            '--output_dir',
+            '<(blink_core_output_dir)',
+          ],
+        },
+        {
+          'action_name': 'CSSPropertyMetadata',
+          'inputs': [
+            '<@(css_properties_files)',
+            '../build/scripts/make_css_property_metadata.py',
+            '../build/scripts/templates/CSSPropertyMetadata.cpp.tmpl',
+          ],
+          'outputs': [
+            '<(blink_core_output_dir)/CSSPropertyMetadata.cpp',
+          ],
+          'action': [
+            'python',
+            '../build/scripts/make_css_property_metadata.py',
             'css/CSSProperties.in',
             '--output_dir',
             '<(blink_core_output_dir)',
@@ -738,7 +748,7 @@
           'inputs': [
             '<@(scripts_for_in_files)',
             '../build/scripts/make_token_matcher.py',
-            '../core/css/CSSTokenizer-in.cpp',
+            '../core/css/parser/CSSTokenizer-in.cpp',
           ],
           'outputs': [
             '<(blink_core_output_dir)/CSSTokenizer.cpp',
@@ -746,7 +756,7 @@
           'action': [
             'python',
             '../build/scripts/make_token_matcher.py',
-            '../core/css/CSSTokenizer-in.cpp',
+            '../core/css/parser/CSSTokenizer-in.cpp',
             '<(blink_core_output_dir)/CSSTokenizer.cpp',
           ],
         },

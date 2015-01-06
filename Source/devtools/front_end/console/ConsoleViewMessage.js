@@ -93,7 +93,7 @@ WebInspector.ConsoleViewMessage.prototype = {
     {
         for (var i = 0; this._dataGrids && i < this._dataGrids.length; ++i) {
             var dataGrid = this._dataGrids[i];
-            this._dataGridParents.put(dataGrid, dataGrid.element.parentElement);
+            this._dataGridParents.set(dataGrid, dataGrid.element.parentElement);
             dataGrid.detach();
         }
     },
@@ -196,17 +196,22 @@ WebInspector.ConsoleViewMessage.prototype = {
         }
 
         if (consoleMessage.source !== WebInspector.ConsoleMessage.MessageSource.Network || consoleMessage.request) {
-            var callFrame = this._callFrameAnchorFromStackTrace(consoleMessage.stackTrace);
-            if (callFrame)
-                this._anchorElement = this._linkifyCallFrame(callFrame);
-            else if (consoleMessage.url && consoleMessage.url !== "undefined")
-                this._anchorElement = this._linkifyLocation(consoleMessage.url, consoleMessage.line, consoleMessage.column);
+            if (consoleMessage.scriptId) {
+                this._anchorElement = this._linkifyScriptId(consoleMessage.scriptId, consoleMessage.url, consoleMessage.line, consoleMessage.column);
+            } else {
+                var useBlackboxing = (consoleMessage.source === WebInspector.ConsoleMessage.MessageSource.ConsoleAPI);
+                var callFrame = this._callFrameAnchorFromStackTrace(consoleMessage.stackTrace, useBlackboxing);
+                if (callFrame)
+                    this._anchorElement = this._linkifyCallFrame(callFrame);
+                else if (consoleMessage.url && consoleMessage.url !== "undefined")
+                    this._anchorElement = this._linkifyLocation(consoleMessage.url, consoleMessage.line, consoleMessage.column);
+            }
         }
 
         this._formattedMessage.appendChild(this._messageElement);
         if (this._anchorElement) {
-            this._formattedMessage.appendChild(document.createTextNode(" "));
-            this._formattedMessage.appendChild(this._anchorElement);
+            this._formattedMessage.insertBefore(document.createTextNode(" "), this._formattedMessage.firstChild);
+            this._formattedMessage.insertBefore(this._anchorElement, this._formattedMessage.firstChild);
         }
 
         var dumpStackTrace = !!consoleMessage.stackTrace && consoleMessage.stackTrace.length && (consoleMessage.source === WebInspector.ConsoleMessage.MessageSource.Network || consoleMessage.level === WebInspector.ConsoleMessage.MessageLevel.Error || consoleMessage.type === WebInspector.ConsoleMessage.MessageType.Trace);
@@ -284,22 +289,38 @@ WebInspector.ConsoleViewMessage.prototype = {
     },
 
     /**
+     * @param {string} scriptId
+     * @param {string} url
+     * @param {number} lineNumber
+     * @param {number} columnNumber
+     * @return {?Element}
+     */
+    _linkifyScriptId: function(scriptId, url, lineNumber, columnNumber)
+    {
+        console.assert(this._linkifier);
+        var target = this._target();
+        if (!this._linkifier || !target)
+            return null;
+        // FIXME(62725): stack trace line/column numbers are one-based.
+        lineNumber = lineNumber ? lineNumber - 1 : 0;
+        columnNumber = columnNumber ? columnNumber - 1 : 0;
+        return this._linkifier.linkifyScriptLocation(target, scriptId, url, lineNumber, columnNumber, "console-message-url");
+    },
+
+    /**
      * @param {?Array.<!ConsoleAgent.CallFrame>} stackTrace
+     * @param {boolean} useBlackboxing
      * @return {?ConsoleAgent.CallFrame}
      */
-    _callFrameAnchorFromStackTrace: function(stackTrace)
+    _callFrameAnchorFromStackTrace: function(stackTrace, useBlackboxing)
     {
         if (!stackTrace || !stackTrace.length)
             return null;
         var callFrame = stackTrace[0].scriptId ? stackTrace[0] : null;
-        if (!WebInspector.experimentsSettings.frameworksDebuggingSupport.isEnabled())
-            return callFrame;
-        var regex = WebInspector.settings.skipStackFramesPattern.asRegExp();
-        if (!regex)
+        if (!useBlackboxing)
             return callFrame;
         for (var i = 0; i < stackTrace.length; ++i) {
-            var script = this._target().debuggerModel.scriptForId(stackTrace[i].scriptId);
-            if (!script || !regex.test(script.sourceURL))
+            if (!WebInspector.BlackboxSupport.isBlackboxedURL(stackTrace[i].url))
                 return stackTrace[i].scriptId ? stackTrace[i] : null;
         }
         return callFrame;
@@ -503,8 +524,7 @@ WebInspector.ConsoleViewMessage.prototype = {
      */
     _renderPropertyPreview: function(type, subtype, description)
     {
-        var span = document.createElement("span");
-        span.className = "console-formatted-" + type;
+        var span = document.createElementWithClass("span", "console-formatted-" + (subtype || type));
 
         if (type === "function") {
             span.textContent = "function";
@@ -512,7 +532,6 @@ WebInspector.ConsoleViewMessage.prototype = {
         }
 
         if (type === "object" && subtype === "regexp") {
-            span.classList.add("console-formatted-string");
             span.textContent = description;
             return span;
         }
@@ -647,7 +666,7 @@ WebInspector.ConsoleViewMessage.prototype = {
         var dataGrid = WebInspector.SortableDataGrid.create(columnNames, flatValues);
         dataGrid.renderInline();
         this._dataGrids.push(dataGrid);
-        this._dataGridParents.put(dataGrid, dataGridContainer);
+        this._dataGridParents.set(dataGrid, dataGridContainer);
         return element;
     },
 
@@ -1060,16 +1079,15 @@ WebInspector.ConsoleViewMessage.prototype = {
 
                 var content = document.createElementWithClass("div", "stacktrace-entry");
                 var functionName = frame.functionName || WebInspector.UIString("(anonymous function)");
-                content.createChild("span", "console-message-text source-code").textContent = functionName;
-
                 if (frame.scriptId) {
-                    content.createTextChild(" ");
                     var urlElement = this._linkifyCallFrame(frame);
                     if (!urlElement)
                         continue;
                     content.appendChild(urlElement);
+                    content.createTextChild(" ");
                 }
 
+                content.createChild("span", "console-message-text source-code").textContent = functionName;
                 parentTreeElement.appendChild(new TreeElement(content));
             }
         }

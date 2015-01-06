@@ -110,6 +110,7 @@
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLLinkElement.h"
 #include "core/html/PluginDocument.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorController.h"
 #include "core/inspector/ScriptCallStack.h"
 #include "core/loader/DocumentLoader.h"
@@ -194,8 +195,6 @@
 #include "wtf/HashMap.h"
 #include <algorithm>
 
-using namespace blink;
-
 namespace blink {
 
 static int frameCount = 0;
@@ -273,7 +272,7 @@ WebPluginContainerImpl* WebLocalFrameImpl::pluginContainerFromFrame(LocalFrame* 
     return toWebPluginContainerImpl(pluginDocument->pluginWidget());
 }
 
-WebPluginContainerImpl* WebLocalFrameImpl::pluginContainerFromNode(blink::LocalFrame* frame, const WebNode& node)
+WebPluginContainerImpl* WebLocalFrameImpl::pluginContainerFromNode(LocalFrame* frame, const WebNode& node)
 {
     WebPluginContainerImpl* pluginContainer = pluginContainerFromFrame(frame);
     if (pluginContainer)
@@ -301,38 +300,18 @@ public:
         PrintContext::begin(m_printedPageWidth, height);
     }
 
-    virtual void end()
-    {
-        PrintContext::end();
-    }
-
     virtual float getPageShrink(int pageNumber) const
     {
         IntRect pageRect = m_pageRects[pageNumber];
         return m_printedPageWidth / pageRect.width();
     }
 
-    // Spools the printed page, a subrect of frame(). Skip the scale step.
-    // NativeTheme doesn't play well with scaling. Scaling is done browser side
-    // instead. Returns the scale to be applied.
-    // On Linux, we don't have the problem with NativeTheme, hence we let WebKit
-    // do the scaling and ignore the return value.
-    virtual float spoolPage(GraphicsContext& context, int pageNumber)
+    float spoolSinglePage(GraphicsContext& graphicsContext, int pageNumber)
     {
-        IntRect pageRect = m_pageRects[pageNumber];
-        float scale = m_printedPageWidth / pageRect.width();
-
-        context.save();
-#if OS(POSIX) && !OS(MACOSX)
-        context.scale(scale, scale);
-#endif
-        context.translate(static_cast<float>(-pageRect.x()), static_cast<float>(-pageRect.y()));
-        context.clip(pageRect);
-        frame()->view()->paintContents(&context, pageRect);
-        if (context.supportsURLFragments())
-            outputLinkedDestinations(context, frame()->document(), pageRect);
-        context.restore();
-        return scale;
+        // FIXME: Why is it ok to proceed without all the null checks that
+        // spoolAllPagesWithBoundaries does?
+        frame()->view()->updateLayoutAndStyleForPainting();
+        return spoolPage(graphicsContext, pageNumber);
     }
 
     void spoolAllPagesWithBoundaries(GraphicsContext& graphicsContext, const FloatSize& pageSizeInPixels)
@@ -340,7 +319,7 @@ public:
         if (!frame()->document() || !frame()->view() || !frame()->document()->renderView())
             return;
 
-        frame()->document()->updateLayout();
+        frame()->view()->updateLayoutAndStyleForPainting();
 
         float pageHeight;
         computePageRects(FloatRect(FloatPoint(0, 0), pageSizeInPixels), 0, 0, 1, pageHeight);
@@ -380,14 +359,27 @@ public:
         }
     }
 
-    virtual void computePageRects(const FloatRect& printRect, float headerHeight, float footerHeight, float userScaleFactor, float& outPageHeight)
+protected:
+    // Spools the printed page, a subrect of frame(). Skip the scale step.
+    // NativeTheme doesn't play well with scaling. Scaling is done browser side
+    // instead. Returns the scale to be applied.
+    // On Linux, we don't have the problem with NativeTheme, hence we let WebKit
+    // do the scaling and ignore the return value.
+    virtual float spoolPage(GraphicsContext& context, int pageNumber)
     {
-        PrintContext::computePageRects(printRect, headerHeight, footerHeight, userScaleFactor, outPageHeight);
-    }
+        IntRect pageRect = m_pageRects[pageNumber];
+        float scale = m_printedPageWidth / pageRect.width();
 
-    virtual int pageCount() const
-    {
-        return PrintContext::pageCount();
+        context.save();
+#if OS(POSIX) && !OS(MACOSX)
+        context.scale(scale, scale);
+#endif
+        context.translate(static_cast<float>(-pageRect.x()), static_cast<float>(-pageRect.y()));
+        context.clip(pageRect);
+        frame()->view()->paintContents(&context, pageRect);
+        outputLinkAndLinkedDestinations(context, frame()->document(), pageRect);
+        context.restore();
+        return scale;
     }
 
 private:
@@ -401,42 +393,43 @@ private:
 class ChromePluginPrintContext FINAL : public ChromePrintContext {
 public:
     ChromePluginPrintContext(LocalFrame* frame, WebPluginContainerImpl* plugin, const WebPrintParams& printParams)
-        : ChromePrintContext(frame), m_plugin(plugin), m_pageCount(0), m_printParams(printParams)
+        : ChromePrintContext(frame), m_plugin(plugin), m_printParams(printParams)
     {
     }
 
     virtual ~ChromePluginPrintContext() { }
 
-    virtual void begin(float width, float height)
+    virtual void begin(float width, float height) OVERRIDE
     {
     }
 
-    virtual void end()
+    virtual void end() OVERRIDE
     {
         m_plugin->printEnd();
     }
 
-    virtual float getPageShrink(int pageNumber) const
+    virtual float getPageShrink(int pageNumber) const OVERRIDE
     {
         // We don't shrink the page (maybe we should ask the widget ??)
         return 1.0;
     }
 
-    virtual void computePageRects(const FloatRect& printRect, float headerHeight, float footerHeight, float userScaleFactor, float& outPageHeight)
+    virtual void computePageRects(const FloatRect& printRect, float headerHeight, float footerHeight, float userScaleFactor, float& outPageHeight) OVERRIDE
     {
         m_printParams.printContentArea = IntRect(printRect);
-        m_pageCount = m_plugin->printBegin(m_printParams);
+        m_pageRects.fill(IntRect(printRect), m_plugin->printBegin(m_printParams));
     }
 
-    virtual int pageCount() const
+    virtual void computePageRectsWithPageSize(const FloatSize& pageSizeInPixels, bool allowHorizontalTiling) OVERRIDE
     {
-        return m_pageCount;
+        ASSERT_NOT_REACHED();
     }
 
+protected:
     // Spools the printed page, a subrect of frame(). Skip the scale step.
     // NativeTheme doesn't play well with scaling. Scaling is done browser side
     // instead. Returns the scale to be applied.
-    virtual float spoolPage(GraphicsContext& context, int pageNumber)
+    virtual float spoolPage(GraphicsContext& context, int pageNumber) OVERRIDE
     {
         m_plugin->printPage(pageNumber, &context);
         return 1.0;
@@ -445,9 +438,7 @@ public:
 private:
     // Set when printing.
     WebPluginContainerImpl* m_plugin;
-    int m_pageCount;
     WebPrintParams m_printParams;
-
 };
 
 static WebDataSource* DataSourceForDocLoader(DocumentLoader* loader)
@@ -504,14 +495,6 @@ WebRemoteFrame* WebLocalFrameImpl::toWebRemoteFrame()
 void WebLocalFrameImpl::close()
 {
     m_client = 0;
-
-    // FIXME: Oilpan: Signal to LocalFrame and its supplements that the frame is
-    // being torn down so it can do prompt clean-up. For example, this will
-    // clear the raw back pointer to m_geolocationClientProxy. Once
-    // GeolocationClientProxy is on-heap it looks like we can completely remove
-    // |willBeDestroyed| from supplements since tracing will ensure safety.
-    if (m_frame)
-        m_frame->willBeDestroyed();
 
     deref(); // Balances ref() acquired in WebFrame::create
 }
@@ -725,6 +708,12 @@ void WebLocalFrameImpl::setIsolatedWorldContentSecurityPolicy(int worldID, const
     DOMWrapperWorld::setIsolatedWorldContentSecurityPolicy(worldID, policy);
 }
 
+void WebLocalFrameImpl::setIsolatedWorldHumanReadableName(int worldID, const WebString& humanReadableName)
+{
+    ASSERT(frame());
+    DOMWrapperWorld::setIsolatedWorldHumanReadableName(worldID, humanReadableName);
+}
+
 void WebLocalFrameImpl::addMessageToConsole(const WebConsoleMessage& message)
 {
     ASSERT(frame());
@@ -748,7 +737,7 @@ void WebLocalFrameImpl::addMessageToConsole(const WebConsoleMessage& message)
         return;
     }
 
-    frame()->document()->addConsoleMessage(OtherMessageSource, webCoreMessageLevel, message.text);
+    frame()->document()->addConsoleMessage(ConsoleMessage::create(OtherMessageSource, webCoreMessageLevel, message.text));
 }
 
 void WebLocalFrameImpl::collectGarbage()
@@ -770,10 +759,7 @@ v8::Handle<v8::Value> WebLocalFrameImpl::executeScriptAndReturnValue(const WebSc
 {
     ASSERT(frame());
 
-    // FIXME: This fake user gesture is required to make a bunch of pyauto
-    // tests pass. If this isn't needed in non-test situations, we should
-    // consider removing this code and changing the tests.
-    // http://code.google.com/p/chromium/issues/detail?id=86397
+    // TODO: Remove this after blink has rolled and chromium change landed. (crrev.com/516753002)
     UserGestureIndicator gestureIndicator(DefinitelyProcessingNewUserGesture);
 
     TextPosition position(OrdinalNumber::fromOneBasedInt(source.startLine), OrdinalNumber::first());
@@ -881,7 +867,7 @@ void WebLocalFrameImpl::loadHTMLString(const WebData& data, const WebURL& baseUR
 void WebLocalFrameImpl::sendPings(const WebNode& linkNode, const WebURL& destinationURL)
 {
     ASSERT(frame());
-    const blink::Node* node = linkNode.constUnwrap<Node>();
+    const Node* node = linkNode.constUnwrap<Node>();
     if (isHTMLAnchorElement(node))
         toHTMLAnchorElement(node)->sendPings(destinationURL);
 }
@@ -1171,7 +1157,7 @@ void WebLocalFrameImpl::selectRange(const WebPoint& base, const WebPoint& extent
 void WebLocalFrameImpl::selectRange(const WebRange& webRange)
 {
     if (RefPtrWillBeRawPtr<Range> range = static_cast<PassRefPtrWillBeRawPtr<Range> >(webRange))
-        frame()->selection().setSelectedRange(range.get(), blink::VP_DEFAULT_AFFINITY, FrameSelection::NonDirectional, NotUserTriggered);
+        frame()->selection().setSelectedRange(range.get(), VP_DEFAULT_AFFINITY, FrameSelection::NonDirectional, NotUserTriggered);
 }
 
 void WebLocalFrameImpl::moveRangeSelection(const WebPoint& base, const WebPoint& extent)
@@ -1285,7 +1271,7 @@ int WebLocalFrameImpl::printBegin(const WebPrintParams& printParams, const WebNo
     // browser. pageHeight is actually an output parameter.
     m_printContext->computePageRects(rect, 0, 0, 1.0, pageHeight);
 
-    return m_printContext->pageCount();
+    return static_cast<int>(m_printContext->pageCount());
 }
 
 float WebLocalFrameImpl::getPrintPageShrink(int page)
@@ -1301,7 +1287,7 @@ float WebLocalFrameImpl::printPage(int page, WebCanvas* canvas)
 
     GraphicsContext graphicsContext(canvas);
     graphicsContext.setPrinting(true);
-    return m_printContext->spoolPage(graphicsContext, page);
+    return m_printContext->spoolSinglePage(graphicsContext, page);
 #else
     return 0;
 #endif
@@ -1537,21 +1523,21 @@ WebLocalFrameImpl::WebLocalFrameImpl(WebFrameClient* client)
     , m_permissionClient(0)
     , m_inputEventsScaleFactorForEmulation(1)
     , m_userMediaClientImpl(this)
-    , m_geolocationClientProxy(adoptPtr(new GeolocationClientProxy(client ? client->geolocationClient() : 0)))
+    , m_geolocationClientProxy(GeolocationClientProxy::create(client ? client->geolocationClient() : 0))
 {
-    blink::Platform::current()->incrementStatsCounter(webFrameActiveCount);
+    Platform::current()->incrementStatsCounter(webFrameActiveCount);
     frameCount++;
 }
 
 WebLocalFrameImpl::~WebLocalFrameImpl()
 {
-    blink::Platform::current()->decrementStatsCounter(webFrameActiveCount);
+    Platform::current()->decrementStatsCounter(webFrameActiveCount);
     frameCount--;
 
     cancelPendingScopingEffort();
 }
 
-void WebLocalFrameImpl::setWebCoreFrame(PassRefPtr<blink::LocalFrame> frame)
+void WebLocalFrameImpl::setCoreFrame(PassRefPtr<LocalFrame> frame)
 {
     m_frame = frame;
 
@@ -1562,7 +1548,7 @@ void WebLocalFrameImpl::setWebCoreFrame(PassRefPtr<blink::LocalFrame> frame)
             notificationPresenter->initialize(m_client->notificationPresenter());
 
         provideNotification(*m_frame, notificationPresenter.release());
-        proviceNotificationPermissionClientTo(*m_frame, NotificationPermissionClientImpl::create());
+        provideNotificationPermissionClientTo(*m_frame, NotificationPermissionClientImpl::create());
         provideUserMediaTo(*m_frame, &m_userMediaClientImpl);
         provideGeolocationTo(*m_frame, m_geolocationClientProxy.get());
         m_geolocationClientProxy->setController(GeolocationController::from(m_frame.get()));
@@ -1574,10 +1560,10 @@ void WebLocalFrameImpl::setWebCoreFrame(PassRefPtr<blink::LocalFrame> frame)
     }
 }
 
-PassRefPtr<LocalFrame> WebLocalFrameImpl::initializeWebCoreFrame(FrameHost* host, FrameOwner* owner, const AtomicString& name, const AtomicString& fallbackName)
+PassRefPtr<LocalFrame> WebLocalFrameImpl::initializeCoreFrame(FrameHost* host, FrameOwner* owner, const AtomicString& name, const AtomicString& fallbackName)
 {
     RefPtr<LocalFrame> frame = LocalFrame::create(&m_frameLoaderClientImpl, host, owner);
-    setWebCoreFrame(frame);
+    setCoreFrame(frame);
     frame->tree().setName(name, fallbackName);
     // We must call init() after m_frame is assigned because it is referenced
     // during init(). Note that this may dispatch JS events; the frame may be
@@ -1597,8 +1583,9 @@ PassRefPtr<LocalFrame> WebLocalFrameImpl::createChildFrame(const FrameLoadReques
     // solution. subResourceAttributeName returns just one attribute name. The
     // element might not have the attribute, and there might be other attributes
     // which can identify the element.
-    RefPtr<LocalFrame> child = webframeChild->initializeWebCoreFrame(frame()->host(), ownerElement, request.frameName(), ownerElement->getAttribute(ownerElement->subResourceAttributeName()));
-    // Initializing the WebCore frame may cause the new child to be detached, since it may dispatch a load event in the parent.
+    RefPtr<LocalFrame> child = webframeChild->initializeCoreFrame(frame()->host(), ownerElement, request.frameName(), ownerElement->getAttribute(ownerElement->subResourceAttributeName()));
+    // Initializing the core frame may cause the new child to be detached, since
+    // it may dispatch a load event in the parent.
     if (!child->tree().parent())
         return nullptr;
 
@@ -1643,7 +1630,7 @@ void WebLocalFrameImpl::createFrameView()
 
     frame()->createView(webView->size(), webView->baseBackgroundColor(), webView->isTransparent());
     if (webView->shouldAutoResize() && isLocalRoot)
-        frame()->view()->enableAutoSizeMode(true, webView->minAutoSize(), webView->maxAutoSize());
+        frame()->view()->enableAutoSizeMode(webView->minAutoSize(), webView->maxAutoSize());
 
     frame()->view()->setInputEventsTransformForEmulation(m_inputEventsOffsetForEmulation, m_inputEventsScaleFactorForEmulation);
 
@@ -1810,7 +1797,7 @@ void WebLocalFrameImpl::loadJavaScriptURL(const KURL& url)
         return;
     String scriptResult = toCoreString(v8::Handle<v8::String>::Cast(result));
     if (!frame()->navigationScheduler().locationChangePending())
-        frame()->document()->loader()->replaceDocument(scriptResult, ownerDocument.get());
+        frame()->loader().replaceDocumentWhileExecutingJavaScriptURL(scriptResult, ownerDocument.get());
 }
 
 void WebLocalFrameImpl::addStyleSheetByURL(const WebString& url)
@@ -1847,7 +1834,7 @@ WebLocalFrameImpl* WebLocalFrameImpl::activeMatchFrame() const
     return 0;
 }
 
-blink::Range* WebLocalFrameImpl::activeMatch() const
+Range* WebLocalFrameImpl::activeMatch() const
 {
     if (m_textFinder)
         return m_textFinder->activeMatch();

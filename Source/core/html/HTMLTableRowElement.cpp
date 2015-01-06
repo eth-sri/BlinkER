@@ -81,14 +81,11 @@ int HTMLTableRowElement::rowIndex() const
         }
     }
 
-    for (HTMLElement* child = Traversal<HTMLElement>::firstChild(*table); child; child = Traversal<HTMLElement>::nextSibling(*child)) {
-        if (child->hasTagName(tbodyTag)) {
-            HTMLTableSectionElement* section = toHTMLTableSectionElement(child);
-            for (HTMLTableRowElement* row = Traversal<HTMLTableRowElement>::firstChild(*section); row; row = Traversal<HTMLTableRowElement>::nextSibling(*row)) {
-                if (row == this)
-                    return rIndex;
-                ++rIndex;
-            }
+    for (HTMLElement* tbody = Traversal<HTMLElement>::firstChild(*table, HasHTMLTagName(tbodyTag)); tbody; tbody = Traversal<HTMLElement>::nextSibling(*tbody, HasHTMLTagName(tbodyTag))) {
+        for (HTMLTableRowElement* row = Traversal<HTMLTableRowElement>::firstChild(*tbody); row; row = Traversal<HTMLTableRowElement>::nextSibling(*row)) {
+            if (row == this)
+                return rIndex;
+            ++rIndex;
         }
     }
 
@@ -115,12 +112,6 @@ int HTMLTableRowElement::sectionRowIndex() const
     } while (n);
 
     return rIndex;
-}
-
-PassRefPtrWillBeRawPtr<HTMLElement> HTMLTableRowElement::insertCell(ExceptionState& exceptionState)
-{
-    // The default 'index' argument value is -1.
-    return insertCell(-1, exceptionState);
 }
 
 PassRefPtrWillBeRawPtr<HTMLElement> HTMLTableRowElement::insertCell(int index, ExceptionState& exceptionState)

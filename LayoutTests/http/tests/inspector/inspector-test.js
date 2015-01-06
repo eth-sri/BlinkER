@@ -115,7 +115,7 @@ InspectorTest.didInvokePageFunctionAsync = function(callId, value)
 {
     var callback = pendingEvalRequests[callId];
     if (!callback) {
-        InspectorTest.addResult("Missing callback for ascyn eval " + callId + ", perhaps callback invoked twice?");
+        InspectorTest.addResult("Missing callback for async eval " + callId + ", perhaps callback invoked twice?");
         return;
     }
     delete pendingEvalRequests[callId];
@@ -189,7 +189,7 @@ InspectorTest.addObject = function(object, customFormatters, prefix, firstLinePr
     propertyNames.sort();
     for (var i = 0; i < propertyNames.length; ++i) {
         var prop = propertyNames[i];
-        if (typeof object.hasOwnProperty === "function" && !object.hasOwnProperty(prop))
+        if (!object.hasOwnProperty(prop))
             continue;
         var prefixWithName = "    " + prefix + prop + " : ";
         var propValue = object[prop];
@@ -240,11 +240,18 @@ InspectorTest.assertGreaterOrEqual = function(a, b, message)
         InspectorTest.addResult("FAILED: " + (message ? message + ": " : "") + a + " < " + b);
 }
 
+InspectorTest.registerModule = function(moduleName, loadImmediately)
+{
+    runtime._registerModule(moduleName);
+    if (loadImmediately)
+        runtime.loadModule(moduleName);
+}
+
 InspectorTest.navigate = function(url, callback)
 {
     InspectorTest._pageLoadedCallback = InspectorTest.safeWrap(callback);
 
-    WebInspector.inspectorView.panel("network")._reset();
+    WebInspector.inspectorView.panel("network")._networkLogView._reset();
     InspectorTest.evaluateInConsole("window.location = '" + url + "'");
 }
 
@@ -268,7 +275,7 @@ InspectorTest._innerReloadPage = function(hardReload, callback, scriptToEvaluate
     InspectorTest._pageLoadedCallback = InspectorTest.safeWrap(callback);
 
     if (WebInspector.panels.network)
-        WebInspector.panels.network._reset();
+        WebInspector.panels.network._networkLogView._reset();
     PageAgent.reload(hardReload, scriptToEvaluateOnLoad, scriptPreprocessor);
 }
 

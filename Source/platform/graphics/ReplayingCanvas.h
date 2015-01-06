@@ -73,7 +73,7 @@ public:
     virtual void onClipRRect(const SkRRect&, SkRegion::Op, ClipEdgeStyle) OVERRIDE;
     virtual void onClipPath(const SkPath&, SkRegion::Op, ClipEdgeStyle) OVERRIDE;
     virtual void onClipRegion(const SkRegion&, SkRegion::Op) OVERRIDE;
-    virtual void onDrawPicture(const SkPicture*) OVERRIDE;
+    virtual void onDrawPicture(const SkPicture*, const SkMatrix*, const SkPaint*);
     virtual void didSetMatrix(const SkMatrix&) OVERRIDE;
     virtual void didConcat(const SkMatrix&) OVERRIDE;
     virtual void willSave() OVERRIDE;
@@ -89,6 +89,6 @@ private:
     friend class AutoReplayer;
 };
 
-}
+} // namespace blink
 
 #endif // ReplayingCanvas_h

@@ -85,7 +85,7 @@ const v8::PropertyCallbackInfo<v8::Value>& info
     {% endif %}
     {# v8SetReturnValue #}
     {% if attribute.is_keep_alive_for_gc %}
-    if ({{attribute.cpp_value}} && DOMDataStore::setReturnValueFromWrapper{{world_suffix}}<{{attribute.v8_type}}>(info.GetReturnValue(), {{attribute.cpp_value}}.get()))
+    if ({{attribute.cpp_value}} && DOMDataStore::setReturnValueFromWrapper{{world_suffix}}<V8{{attribute.idl_type}}>(info.GetReturnValue(), {{attribute.cpp_value}}.get()))
         return;
     v8::Handle<v8::Value> wrapper = toV8({{attribute.cpp_value}}.get(), holder, info.GetIsolate());
     if (!wrapper.IsEmpty()) {
@@ -341,7 +341,7 @@ v8::Local<v8::String>, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackI
 
 {##############################################################################}
 {% macro attribute_getter_implemented_in_private_script(attribute) %}
-bool {{v8_class}}::{{attribute.name}}AttributeGetterImplementedInPrivateScript(LocalFrame* frame, {{cpp_class}}* holderImpl, {{attribute.cpp_type}}* result)
+bool {{v8_class}}::PrivateScript::{{attribute.name}}AttributeGetter(LocalFrame* frame, {{cpp_class}}* holderImpl, {{attribute.cpp_type}}* result)
 {
     if (!frame)
         return false;
@@ -359,13 +359,13 @@ bool {{v8_class}}::{{attribute.name}}AttributeGetterImplementedInPrivateScript(L
 
     ExceptionState exceptionState(ExceptionState::GetterContext, "{{attribute.name}}", "{{cpp_class}}", scriptState->context()->Global(), scriptState->isolate());
     v8::TryCatch block;
-    V8RethrowTryCatchScope rethrow(block);
     v8::Handle<v8::Value> v8Value = PrivateScriptRunner::runDOMAttributeGetter(scriptState, "{{cpp_class}}", "{{attribute.name}}", holder);
     if (block.HasCaught()) {
-        if (!PrivateScriptRunner::throwDOMExceptionInPrivateScriptIfNeeded(scriptState->isolate(), exceptionState, block.Exception())) {
-            // FIXME: We should support exceptions other than DOM exceptions.
+        if (!PrivateScriptRunner::rethrowExceptionInPrivateScript(scriptState->isolate(), exceptionState, block)) {
+            // FIXME: We should support more exceptions.
             RELEASE_ASSERT_NOT_REACHED();
         }
+        block.ReThrow();
         return false;
     }
     {{attribute.private_script_v8_value_to_local_cpp_value}};
@@ -377,7 +377,7 @@ bool {{v8_class}}::{{attribute.name}}AttributeGetterImplementedInPrivateScript(L
 
 
 {% macro attribute_setter_implemented_in_private_script(attribute) %}
-bool {{v8_class}}::{{attribute.name}}AttributeSetterImplementedInPrivateScript(LocalFrame* frame, {{cpp_class}}* holderImpl, {{attribute.argument_cpp_type}} cppValue)
+bool {{v8_class}}::PrivateScript::{{attribute.name}}AttributeSetter(LocalFrame* frame, {{cpp_class}}* holderImpl, {{attribute.argument_cpp_type}} cppValue)
 {
     if (!frame)
         return false;
@@ -395,15 +395,66 @@ bool {{v8_class}}::{{attribute.name}}AttributeSetterImplementedInPrivateScript(L
 
     ExceptionState exceptionState(ExceptionState::SetterContext, "{{attribute.name}}", "{{cpp_class}}", scriptState->context()->Global(), scriptState->isolate());
     v8::TryCatch block;
-    V8RethrowTryCatchScope rethrow(block);
     PrivateScriptRunner::runDOMAttributeSetter(scriptState, "{{cpp_class}}", "{{attribute.name}}", holder, {{attribute.private_script_cpp_value_to_v8_value}});
     if (block.HasCaught()) {
-        if (!PrivateScriptRunner::throwDOMExceptionInPrivateScriptIfNeeded(scriptState->isolate(), exceptionState, block.Exception())) {
-            // FIXME: We should support exceptions other than DOM exceptions.
+        if (!PrivateScriptRunner::rethrowExceptionInPrivateScript(scriptState->isolate(), exceptionState, block)) {
+            // FIXME: We should support more exceptions.
             RELEASE_ASSERT_NOT_REACHED();
         }
+        block.ReThrow();
         return false;
     }
     return true;
 }
 {% endmacro %}
+
+
+{##############################################################################}
+{% macro attribute_configuration(attribute) %}
+{% set getter_callback =
+       '%sV8Internal::%sAttributeGetterCallback' %
+            (cpp_class, attribute.name)
+       if not attribute.constructor_type else
+       ('%sV8Internal::%sConstructorGetterCallback' %
+            (cpp_class, attribute.name)
+        if attribute.needs_constructor_getter_callback else
+       '{0}V8Internal::{0}ConstructorGetter'.format(cpp_class)) %}
+{% set getter_callback_for_main_world =
+       '%sV8Internal::%sAttributeGetterCallbackForMainWorld' %
+            (cpp_class, attribute.name)
+       if attribute.is_per_world_bindings else '0' %}
+{% set setter_callback = attribute.setter_callback %}
+{% set setter_callback_for_main_world =
+       '%sV8Internal::%sAttributeSetterCallbackForMainWorld' %
+           (cpp_class, attribute.name)
+       if attribute.is_per_world_bindings and
+          (not attribute.is_read_only or attribute.put_forwards) else '0' %}
+{% set wrapper_type_info =
+       'const_cast<WrapperTypeInfo*>(&V8%s::wrapperTypeInfo)' %
+            attribute.constructor_type
+        if attribute.constructor_type else '0' %}
+{% set access_control = 'static_cast<v8::AccessControl>(%s)' %
+                        ' | '.join(attribute.access_control_list) %}
+{% set property_attribute = 'static_cast<v8::PropertyAttribute>(%s)' %
+                            ' | '.join(attribute.property_attributes) %}
+{% set only_exposed_to_private_script = 'V8DOMConfiguration::OnlyExposedToPrivateScript' if attribute.only_exposed_to_private_script else 'V8DOMConfiguration::ExposedToAllScripts' %}
+{% set on_prototype = 'V8DOMConfiguration::OnPrototype'
+       if interface_name == 'Window' and attribute.idl_type == 'EventHandler'
+       else 'V8DOMConfiguration::OnInstance' %}
+{% set attribute_configuration_list = [
+       '"%s"' % attribute.name,
+       getter_callback,
+       setter_callback,
+       getter_callback_for_main_world,
+       setter_callback_for_main_world,
+       wrapper_type_info,
+       access_control,
+       property_attribute,
+       only_exposed_to_private_script,
+   ] %}
+{% if not attribute.is_expose_js_accessors %}
+{% set attribute_configuration_list = attribute_configuration_list
+                                    + [on_prototype] %}
+{% endif %}
+{{'{'}}{{attribute_configuration_list | join(', ')}}{{'}'}}
+{%- endmacro %}

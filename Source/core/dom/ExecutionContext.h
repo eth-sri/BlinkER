@@ -35,6 +35,7 @@
 #include "core/fetch/CrossOriginAccessControl.h"
 #include "core/frame/ConsoleTypes.h"
 #include "core/frame/DOMTimer.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "platform/LifecycleContext.h"
 #include "platform/Supplementable.h"
 #include "platform/heap/Handle.h"
@@ -64,6 +65,9 @@ public:
     // Delegating to ExecutionContextClient
     bool isDocument() const { return m_client && m_client->isDocument(); }
     bool isWorkerGlobalScope() const { return m_client && m_client->isWorkerGlobalScope(); }
+    bool isDedicatedWorkerGlobalScope() const { return m_client && m_client->isDedicatedWorkerGlobalScope(); }
+    bool isSharedWorkerGlobalScope() const { return m_client && m_client->isSharedWorkerGlobalScope(); }
+    bool isServiceWorkerGlobalScope() const { return m_client && m_client->isServiceWorkerGlobalScope(); }
     bool isJSExecutionForbidden() { return m_client && m_client->isJSExecutionForbidden(); }
     SecurityOrigin* securityOrigin() const;
     ContentSecurityPolicy* contentSecurityPolicy() const;
@@ -82,10 +86,9 @@ public:
     KURL contextCompleteURL(const String& url) const { return virtualCompleteURL(url); }
 
     bool shouldSanitizeScriptError(const String& sourceURL, AccessControlStatus);
-    void reportException(PassRefPtrWillBeRawPtr<ErrorEvent>, PassRefPtrWillBeRawPtr<ScriptCallStack>, AccessControlStatus);
+    void reportException(PassRefPtrWillBeRawPtr<ErrorEvent>, int scriptId, PassRefPtrWillBeRawPtr<ScriptCallStack>, AccessControlStatus);
 
-    void addConsoleMessage(MessageSource, MessageLevel, const String& message, const String& sourceURL, unsigned lineNumber);
-    void addConsoleMessage(MessageSource, MessageLevel, const String& message, ScriptState* = 0);
+    void addConsoleMessage(PassRefPtrWillBeRawPtr<ConsoleMessage>);
 
     PublicURLManager& publicURLManager();
 

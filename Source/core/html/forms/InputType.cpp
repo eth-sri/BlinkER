@@ -42,6 +42,7 @@
 #include "core/html/HTMLShadowElement.h"
 #include "core/html/forms/ButtonInputType.h"
 #include "core/html/forms/CheckboxInputType.h"
+#include "core/html/forms/ColorChooser.h"
 #include "core/html/forms/ColorInputType.h"
 #include "core/html/forms/DateInputType.h"
 #include "core/html/forms/DateTimeLocalInputType.h"
@@ -65,7 +66,6 @@
 #include "core/html/forms/WeekInputType.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/rendering/RenderTheme.h"
-#include "platform/ColorChooser.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/text/PlatformLocale.h"
 #include "platform/text/TextBreakIterator.h"
@@ -584,6 +584,18 @@ String InputType::visibleValue() const
 String InputType::sanitizeValue(const String& proposedValue) const
 {
     return proposedValue;
+}
+
+void InputType::warnIfValueIsInvalidAndElementIsVisible(const String& value) const
+{
+    // Don't warn if the value is set in Modernizr.
+    RenderStyle* style = element().renderStyle();
+    if (style && style->visibility() != HIDDEN)
+        warnIfValueIsInvalid(value);
+}
+
+void InputType::warnIfValueIsInvalid(const String&) const
+{
 }
 
 bool InputType::receiveDroppedFiles(const DragData*)

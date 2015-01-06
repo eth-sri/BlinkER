@@ -5,6 +5,8 @@
 #include "config.h"
 #include "public/platform/WebServiceWorkerRequest.h"
 
+#include "platform/blob/BlobData.h"
+
 namespace blink {
 
 class WebServiceWorkerRequestPrivate : public RefCounted<WebServiceWorkerRequestPrivate> {
@@ -13,8 +15,9 @@ public:
         : m_isReload(false) { }
     WebURL m_url;
     WebString m_method;
-    blink::HTTPHeaderMap m_headers;
-    blink::Referrer m_referrer;
+    HTTPHeaderMap m_headers;
+    RefPtr<BlobDataHandle> blobDataHandle;
+    Referrer m_referrer;
     bool m_isReload;
 };
 
@@ -60,17 +63,27 @@ void WebServiceWorkerRequest::setHeader(const WebString& key, const WebString& v
     m_private->m_headers.add(key, value);
 }
 
-const blink::HTTPHeaderMap& WebServiceWorkerRequest::headers() const
+const HTTPHeaderMap& WebServiceWorkerRequest::headers() const
 {
     return m_private->m_headers;
 }
 
-void WebServiceWorkerRequest::setReferrer(const WebString& referrer, WebReferrerPolicy referrerPolicy)
+void WebServiceWorkerRequest::setBlob(const WebString& uuid, long long size)
 {
-    m_private->m_referrer = blink::Referrer(referrer, static_cast<blink::ReferrerPolicy>(referrerPolicy));
+    m_private->blobDataHandle = BlobDataHandle::create(uuid, String(), size);
 }
 
-const blink::Referrer& WebServiceWorkerRequest::referrer() const
+PassRefPtr<BlobDataHandle> WebServiceWorkerRequest::blobDataHandle() const
+{
+    return m_private->blobDataHandle;
+}
+
+void WebServiceWorkerRequest::setReferrer(const WebString& referrer, WebReferrerPolicy referrerPolicy)
+{
+    m_private->m_referrer = Referrer(referrer, static_cast<ReferrerPolicy>(referrerPolicy));
+}
+
+const Referrer& WebServiceWorkerRequest::referrer() const
 {
     return m_private->m_referrer;
 }

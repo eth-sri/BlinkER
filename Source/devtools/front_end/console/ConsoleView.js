@@ -33,9 +33,8 @@
  * @implements {WebInspector.Searchable}
  * @implements {WebInspector.TargetManager.Observer}
  * @implements {WebInspector.ViewportControl.Provider}
- * @param {boolean} hideContextSelector
  */
-WebInspector.ConsoleView = function(hideContextSelector)
+WebInspector.ConsoleView = function()
 {
     WebInspector.VBox.call(this);
     this.registerRequiredCSS("filter.css");
@@ -63,9 +62,6 @@ WebInspector.ConsoleView = function(hideContextSelector)
     this._filter = new WebInspector.ConsoleViewFilter(this);
     this._filter.addEventListener(WebInspector.ConsoleViewFilter.Events.FilterChanged, this._updateMessageList.bind(this));
 
-    if (hideContextSelector)
-        this._executionContextSelector.element.classList.add("hidden");
-
     this._filterBar = new WebInspector.FilterBar();
 
     this._preserveLogCheckbox = new WebInspector.StatusBarCheckbox(WebInspector.UIString("Preserve log"));
@@ -89,7 +85,6 @@ WebInspector.ConsoleView = function(hideContextSelector)
     this._messagesElement.id = "console-messages";
     this._messagesElement.classList.add("monospace");
     this._messagesElement.addEventListener("click", this._messagesClicked.bind(this), true);
-    this._scrolledToBottom = true;
 
     this._viewportThrottler = new WebInspector.Throttler(50);
 
@@ -282,14 +277,16 @@ WebInspector.ConsoleView.prototype = {
      */
     _titleFor: function(executionContext)
     {
-        var result = executionContext.name;
-        if (executionContext.isMainWorldContext && executionContext.frameId) {
-            var frame = executionContext.target().resourceTreeModel.frameForId(executionContext.frameId);
-            result =  frame ? frame.displayName() : result;
-        }
-
-        if (!executionContext.isMainWorldContext)
-            result = "\u00a0\u00a0\u00a0\u00a0" + result;
+        var result;
+        if (executionContext.isMainWorldContext) {
+            if (executionContext.frameId) {
+                var frame = executionContext.target().resourceTreeModel.frameForId(executionContext.frameId);
+                result =  frame ? frame.displayName() : (executionContext.origin || executionContext.name);
+            } else {
+                result = WebInspector.displayNameForURL(executionContext.origin) || executionContext.name;
+            }
+        } else
+            result = "\u00a0\u00a0\u00a0\u00a0" + (executionContext.name || executionContext.origin);
 
         var maxLength = 50;
         return result.trimMiddle(maxLength);
@@ -312,7 +309,7 @@ WebInspector.ConsoleView.prototype = {
         var newOption = document.createElement("option");
         newOption.__executionContext = executionContext;
         newOption.text = this._titleFor(executionContext);
-        this._optionByExecutionContext.put(executionContext, newOption);
+        this._optionByExecutionContext.set(executionContext, newOption);
         var sameGroupExists = false;
         var options = this._executionContextSelector.selectElement().options;
         var insertBeforeOption = null;
@@ -415,16 +412,10 @@ WebInspector.ConsoleView.prototype = {
         this._prompt.moveCaretToEndOfPrompt();
     },
 
-    storeScrollPositions: function()
-    {
-        WebInspector.View.prototype.storeScrollPositions.call(this);
-        this._scrolledToBottom = this._messagesElement.isScrolledToBottom();
-    },
-
     restoreScrollPositions: function()
     {
-        if (this._scrolledToBottom)
-            this._immediatelyScrollIntoView();
+        if (this._viewport.scrolledToBottom())
+            this._immediatelyScrollToBottom();
         else
             WebInspector.View.prototype.restoreScrollPositions.call(this);
     },
@@ -433,7 +424,8 @@ WebInspector.ConsoleView.prototype = {
     {
         this._scheduleViewportRefresh();
         this._prompt.hideSuggestBox();
-        this.restoreScrollPositions();
+        if (this._viewport.scrolledToBottom())
+            this._immediatelyScrollToBottom();
     },
 
     _scheduleViewportRefresh: function()
@@ -450,7 +442,7 @@ WebInspector.ConsoleView.prototype = {
         this._viewportThrottler.schedule(invalidateViewport.bind(this));
     },
 
-    _immediatelyScrollIntoView: function()
+    _immediatelyScrollToBottom: function()
     {
         // This will scroll viewport and trigger its refresh.
         this._promptElement.scrollIntoView(true);
@@ -568,7 +560,6 @@ WebInspector.ConsoleView.prototype = {
     {
         this._clearCurrentSearchResultHighlight();
         this._consoleMessages = [];
-        this._scrolledToBottom = true;
         this._updateMessageList();
 
         if (this._searchRegex)
@@ -1015,8 +1006,13 @@ WebInspector.ConsoleViewFilter.prototype = {
         if (!message.target())
             return true;
 
-        if (!this._view._showAllMessagesCheckbox.checked() && executionContext && (message.target() !== executionContext.target() || message.executionContextId !== executionContext.id))
-            return false;
+        if (!this._view._showAllMessagesCheckbox.checked() && executionContext) {
+            if (message.target() !== executionContext.target())
+                return false;
+            if (message.executionContextId  && message.executionContextId !== executionContext.id) {
+                return false;
+            }
+        }
 
         if (viewMessage.consoleMessage().isGroupMessage())
             return true;

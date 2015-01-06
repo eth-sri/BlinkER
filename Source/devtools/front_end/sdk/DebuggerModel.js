@@ -55,7 +55,7 @@ WebInspector.DebuggerModel = function(target)
     WebInspector.settings.pauseOnCaughtException.addChangeListener(this._pauseOnExceptionStateChanged, this);
 
     WebInspector.settings.enableAsyncStackTraces.addChangeListener(this._asyncStackTracesStateChanged, this);
-    target.profilingLock.addEventListener(WebInspector.Lock.Events.StateChanged, this._profilingStateChanged, this);
+    WebInspector.profilingLock().addEventListener(WebInspector.Lock.Events.StateChanged, this._profilingStateChanged, this);
 
     this.enableDebugger();
 
@@ -171,7 +171,7 @@ WebInspector.DebuggerModel.prototype = {
     _profilingStateChanged: function()
     {
         if (WebInspector.experimentsSettings.disableAgentsWhenProfile.isEnabled()) {
-            if (this.target().profilingLock.isAcquired())
+            if (WebInspector.profilingLock().isAcquired())
                 this.disableDebugger();
             else
                 this.enableDebugger();
@@ -182,7 +182,7 @@ WebInspector.DebuggerModel.prototype = {
     _asyncStackTracesStateChanged: function()
     {
         const maxAsyncStackChainDepth = 4;
-        var enabled = WebInspector.settings.enableAsyncStackTraces.get() && !this.target().profilingLock.isAcquired();
+        var enabled = WebInspector.settings.enableAsyncStackTraces.get() && !WebInspector.profilingLock().isAcquired();
         this._agent.setAsyncCallStackDepth(enabled ? maxAsyncStackChainDepth : 0);
     },
 
@@ -496,7 +496,7 @@ WebInspector.DebuggerModel.prototype = {
         var scripts = this._scriptsBySourceURL.get(script.sourceURL);
         if (!scripts) {
             scripts = [];
-            this._scriptsBySourceURL.put(script.sourceURL, scripts);
+            this._scriptsBySourceURL.set(script.sourceURL, scripts);
         }
         scripts.push(script);
     },
@@ -666,8 +666,6 @@ WebInspector.DebuggerModel.prototype = {
 
     _applySkipStackFrameSettings: function()
     {
-        if (!WebInspector.experimentsSettings.frameworksDebuggingSupport.isEnabled())
-            return;
         this._agent.skipStackFrames(WebInspector.settings.skipStackFramesPattern.get());
     },
 
@@ -819,7 +817,6 @@ WebInspector.DebuggerDispatcher.prototype = {
 
 /**
  * @constructor
- * @implements {WebInspector.RawLocation}
  * @extends {WebInspector.SDKObject}
  * @param {!WebInspector.Target} target
  * @param {string} scriptId
@@ -832,7 +829,7 @@ WebInspector.DebuggerModel.Location = function(target, scriptId, lineNumber, col
     this._debuggerModel = target.debuggerModel;
     this.scriptId = scriptId;
     this.lineNumber = lineNumber;
-    this.columnNumber = columnNumber;
+    this.columnNumber = columnNumber || 0;
 }
 
 /**

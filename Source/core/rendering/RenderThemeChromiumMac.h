@@ -36,13 +36,7 @@ class RenderThemeChromiumMac FINAL : public RenderTheme {
 public:
     static PassRefPtr<RenderTheme> create();
 
-    // A method asking if the control changes its tint when the window has focus or not.
-    virtual bool controlSupportsTints(const RenderObject*) const OVERRIDE;
-
-    // A general method asking if any control tinting is supported at all.
-    virtual bool supportsControlTints() const OVERRIDE { return true; }
-
-    virtual void adjustRepaintRect(const RenderObject*, IntRect&) OVERRIDE;
+    virtual void adjustPaintInvalidationRect(const RenderObject*, IntRect&) OVERRIDE;
 
     virtual bool isControlStyled(const RenderStyle*, const CachedUAStyle*) const OVERRIDE;
 
@@ -126,8 +120,6 @@ protected:
 
 private:
     virtual String fileListNameForWidth(Locale&, const FileList*, const Font&, int width) const OVERRIDE;
-
-    IntRect inflateRect(const IntRect&, const IntSize&, const int* margins, float zoomLevel = 1.0f) const;
 
     FloatRect convertToPaintingRect(const RenderObject* inputRenderer, const RenderObject* partRenderer, const FloatRect& inputRect, const IntRect&) const;
 

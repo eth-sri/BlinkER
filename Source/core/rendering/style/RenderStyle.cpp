@@ -29,6 +29,7 @@
 #include "core/rendering/TextAutosizer.h"
 #include "core/rendering/style/AppliedTextDecoration.h"
 #include "core/rendering/style/ContentData.h"
+#include "core/rendering/style/DataEquivalency.h"
 #include "core/rendering/style/QuotesData.h"
 #include "core/rendering/style/ShadowList.h"
 #include "core/rendering/style/StyleImage.h"
@@ -376,9 +377,9 @@ StyleDifference RenderStyle::visualInvalidationDiff(const RenderStyle& other) co
     if (m_svgStyle.get() != other.m_svgStyle.get())
         diff = m_svgStyle->diff(other.m_svgStyle.get());
 
-    if ((!diff.needsFullLayout() || !diff.needsRepaint()) && diffNeedsFullLayoutAndRepaint(other)) {
+    if ((!diff.needsFullLayout() || !diff.needsPaintInvalidation()) && diffNeedsFullLayoutAndPaintInvalidation(other)) {
         diff.setNeedsFullLayout();
-        diff.setNeedsRepaintObject();
+        diff.setNeedsPaintInvalidationObject();
     }
 
     if (!diff.needsFullLayout() && diffNeedsFullLayout(other))
@@ -397,15 +398,15 @@ StyleDifference RenderStyle::visualInvalidationDiff(const RenderStyle& other) co
         }
     }
 
-    if (diffNeedsRepaintLayer(other))
-        diff.setNeedsRepaintLayer();
-    else if (diffNeedsRepaintObject(other))
-        diff.setNeedsRepaintObject();
+    if (diffNeedsPaintInvalidationLayer(other))
+        diff.setNeedsPaintInvalidationLayer();
+    else if (diffNeedsPaintInvalidationObject(other))
+        diff.setNeedsPaintInvalidationObject();
 
     updatePropertySpecificDifferences(other, diff);
 
     // Cursors are not checked, since they will be set appropriately in response to mouse events,
-    // so they don't need to cause any repaint or layout.
+    // so they don't need to cause any paint invalidation or layout.
 
     // Animations don't need to be checked either. We always set the new style on the RenderObject, so we will get a chance to fire off
     // the resulting transition properly.
@@ -413,16 +414,16 @@ StyleDifference RenderStyle::visualInvalidationDiff(const RenderStyle& other) co
     return diff;
 }
 
-bool RenderStyle::diffNeedsFullLayoutAndRepaint(const RenderStyle& other) const
+bool RenderStyle::diffNeedsFullLayoutAndPaintInvalidation(const RenderStyle& other) const
 {
-    // FIXME: Not all cases in this method need both full layout and repaint.
+    // FIXME: Not all cases in this method need both full layout and paint invalidation.
     // Should move cases into diffNeedsFullLayout() if
-    // - don't need repaint at all;
-    // - or the renderer knows how to exactly repaint caused by the layout change
-    //   instead of forced full repaint.
+    // - don't need paint invalidation at all;
+    // - or the renderer knows how to exactly invalidate paints caused by the layout change
+    //   instead of forced full paint invalidation.
 
     if (surround.get() != other.surround.get()) {
-        // If our border widths change, then we need to layout. Other changes to borders only necessitate a repaint.
+        // If our border widths change, then we need to layout. Other changes to borders only necessitate a paint invalidation.
         if (borderLeftWidth() != other.borderLeftWidth()
             || borderTopWidth() != other.borderTopWidth()
             || borderBottomWidth() != other.borderBottomWidth()
@@ -620,9 +621,9 @@ bool RenderStyle::diffNeedsFullLayout(const RenderStyle& other) const
     return false;
 }
 
-bool RenderStyle::diffNeedsRepaintLayer(const RenderStyle& other) const
+bool RenderStyle::diffNeedsPaintInvalidationLayer(const RenderStyle& other) const
 {
-    if (position() != StaticPosition && (visual->clip != other.visual->clip || visual->hasClip != other.visual->hasClip))
+    if (position() != StaticPosition && (visual->clip != other.visual->clip || visual->hasAutoClip != other.visual->hasAutoClip))
         return true;
 
     if (rareNonInheritedData.get() != other.rareNonInheritedData.get()) {
@@ -639,7 +640,7 @@ bool RenderStyle::diffNeedsRepaintLayer(const RenderStyle& other) const
     return false;
 }
 
-bool RenderStyle::diffNeedsRepaintObject(const RenderStyle& other) const
+bool RenderStyle::diffNeedsPaintInvalidationObject(const RenderStyle& other) const
 {
     if (inherited_flags._visibility != other.inherited_flags._visibility
         || inherited_flags.m_printColorAdjust != other.inherited_flags.m_printColorAdjust
@@ -660,8 +661,8 @@ bool RenderStyle::diffNeedsRepaintObject(const RenderStyle& other) const
             || rareNonInheritedData->m_borderFit != other.rareNonInheritedData->m_borderFit
             || rareNonInheritedData->m_objectFit != other.rareNonInheritedData->m_objectFit
             || rareNonInheritedData->m_objectPosition != other.rareNonInheritedData->m_objectPosition
-            || rareNonInheritedData->m_shapeOutside != other.rareNonInheritedData->m_shapeOutside
-            || rareNonInheritedData->m_clipPath != other.rareNonInheritedData->m_clipPath)
+            || !dataEquivalent(rareNonInheritedData->m_shapeOutside, other.rareNonInheritedData->m_shapeOutside)
+            || !dataEquivalent(rareNonInheritedData->m_clipPath, other.rareNonInheritedData->m_clipPath))
             return true;
     }
 
@@ -685,7 +686,7 @@ void RenderStyle::updatePropertySpecificDifferences(const RenderStyle& other, St
             diff.setFilterChanged();
     }
 
-    if (!diff.needsRepaint()) {
+    if (!diff.needsPaintInvalidation()) {
         if (inherited->color != other.inherited->color
             || inherited_flags.m_textUnderline != other.inherited_flags.m_textUnderline
             || visual->textDecoration != other.visual->textDecoration) {
@@ -703,15 +704,6 @@ void RenderStyle::updatePropertySpecificDifferences(const RenderStyle& other, St
                 diff.setTextOrColorChanged();
         }
     }
-}
-
-void RenderStyle::setClip(const Length& top, const Length& right, const Length& bottom, const Length& left)
-{
-    StyleVisualData* data = visual.access();
-    data->clip.m_top = top;
-    data->clip.m_right = right;
-    data->clip.m_bottom = bottom;
-    data->clip.m_left = left;
 }
 
 void RenderStyle::addCursor(PassRefPtr<StyleImage> image, const IntPoint& hotSpot)
@@ -821,14 +813,14 @@ void RenderStyle::setContent(QuoteType quote, bool add)
     rareNonInheritedData.access()->m_content = ContentData::create(quote);
 }
 
-blink::WebBlendMode RenderStyle::blendMode() const
+WebBlendMode RenderStyle::blendMode() const
 {
     if (RuntimeEnabledFeatures::cssCompositingEnabled())
-        return static_cast<blink::WebBlendMode>(rareNonInheritedData->m_effectiveBlendMode);
-    return blink::WebBlendModeNormal;
+        return static_cast<WebBlendMode>(rareNonInheritedData->m_effectiveBlendMode);
+    return WebBlendModeNormal;
 }
 
-void RenderStyle::setBlendMode(blink::WebBlendMode v)
+void RenderStyle::setBlendMode(WebBlendMode v)
 {
     if (RuntimeEnabledFeatures::cssCompositingEnabled())
         rareNonInheritedData.access()->m_effectiveBlendMode = v;
@@ -837,7 +829,7 @@ void RenderStyle::setBlendMode(blink::WebBlendMode v)
 bool RenderStyle::hasBlendMode() const
 {
     if (RuntimeEnabledFeatures::cssCompositingEnabled())
-        return static_cast<blink::WebBlendMode>(rareNonInheritedData->m_effectiveBlendMode) != blink::WebBlendModeNormal;
+        return static_cast<WebBlendMode>(rareNonInheritedData->m_effectiveBlendMode) != WebBlendModeNormal;
     return false;
 }
 

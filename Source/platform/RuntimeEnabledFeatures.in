@@ -16,10 +16,11 @@
 // condition=ENABLE_NAME is used for wrapping features in compile-time
 // #if ENABLE(FEATURE) guards.  These are deprecated and should all be removed.
 
+AnyPointerMediaQueries status=experimental
 ApplicationCache status=stable
 AudioVideoTracks depends_on=Media, status=experimental
 AuthorShadowDOMForAnyElement
-BatteryStatus status=experimental
+BatteryStatus status=stable
 Beacon status=experimental
 
 // This feature is deprecated and we are evangalizing affected sites.
@@ -41,16 +42,14 @@ CSSCompositing status=experimental
 CSSGridLayout status=experimental
 CSSMaskSourceType status=experimental
 CSSOMSmoothScroll status=experimental
-CSSTouchAction status=stable
 CSSTouchActionDelay status=test
 CSSViewport status=experimental
-CSSWillChange status=stable
 CSS3Text status=experimental
 CSS3TextDecorations status=experimental
 CompositedSelectionUpdates
 CustomSchemeHandler depends_on=NavigatorContentUtils, status=experimental
 Database status=stable
-DeviceLight status=test
+DeviceLight status=experimental
 DialogElement status=stable
 DisplayList2dCanvas
 SVGFontsOnNonGDIPlatforms
@@ -64,12 +63,10 @@ FastMobileScrolling
 FileAPIBlobClose status=experimental
 FileConstructor status=stable
 FileSystem status=stable
-FontLoadEvents status=stable
+FullscreenUnprefixed status=test
 Gamepad status=stable
 Geofencing status=test
 GeometryInterfaces status=test
-HTMLImports status=stable
-HighResolutionTimeInWorkers status=stable
 IMEAPI status=experimental
 ImageDataConstructor status=experimental
 ImageRenderingPixelated status=stable
@@ -97,7 +94,6 @@ OrientationEvent
 // Only enabled on Android, and for certain layout tests on Linux.
 OverlayFullscreenVideo
 PagePopup status=stable
-Path2D status=stable
 PathOpsSVGClipping status=stable
 PeerConnection depends_on=MediaStream, status=stable
 PreciseMemoryInfo
@@ -126,7 +122,6 @@ ShowModalDialog status=deprecated
 // Lax Mixed Content checking for WebSockets, XHR, etc. is deprecated and slated for removal. crbug.com/389089
 LaxMixedContentChecking status=deprecated
 
-SpeechSynthesis status=stable
 Stream status=experimental
 SubpixelFontScaling status=stable
 SubresourceIntegrity status=test
@@ -141,12 +136,15 @@ TargetedStyleRecalc status=stable
 // touchscreen) in ApplyWebPreferences.
 Touch status=stable
 
+// Temporary setting to allow easy rollback of change to hover media feature.
+HoverMediaQueryKeywords status=stable
+
+TextBlob
 TouchIconLoading
 ThreadedParserDataReceiver status=experimental
 UserSelectAll status=experimental
 WebAnimationsSVG
-WebAnimationsElementAnimate status=stable
-WebAnimationsAPI status=experimental, depends_on=WebAnimationsElementAnimate
+WebAnimationsAPI status=experimental
 WebAudio condition=WEB_AUDIO, status=stable
 WebGLDraftExtensions status=experimental
 WebGLImageChromium
@@ -156,3 +154,5 @@ WOFF2 status=stable
 XSLT status=stable
 
 PseudoClassesInMatchingCriteriaInAuthorShadowTrees status=test
+
+CredentialManager status=test

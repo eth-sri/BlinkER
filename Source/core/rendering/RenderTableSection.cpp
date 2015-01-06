@@ -41,7 +41,7 @@ namespace blink {
 
 using namespace HTMLNames;
 
-// Those 2 variables are used to balance the memory consumption vs the repaint time on big tables.
+// Those 2 variables are used to balance the memory consumption vs the paint invalidation time on big tables.
 static unsigned gMinTableSizeToUseFastPaintPathWithOverflowingCell = 75 * 75;
 static float gMaxAllowedOverflowingCellRatioForFastPaintPath = 0.1f;
 
@@ -77,6 +77,18 @@ static inline void updateLogicalHeightForCell(RenderTableSection::RowStruct& row
     }
 }
 
+void RenderTableSection::CellStruct::trace(Visitor* visitor)
+{
+#if ENABLE(OILPAN)
+    visitor->trace(cells);
+#endif
+}
+
+void RenderTableSection::RowStruct::trace(Visitor* visitor)
+{
+    visitor->trace(row);
+    visitor->trace(rowRenderer);
+}
 
 RenderTableSection::RenderTableSection(Element* element)
     : RenderBox(element)
@@ -95,6 +107,17 @@ RenderTableSection::RenderTableSection(Element* element)
 
 RenderTableSection::~RenderTableSection()
 {
+}
+
+void RenderTableSection::trace(Visitor* visitor)
+{
+#if ENABLE(OILPAN)
+    visitor->trace(m_children);
+    visitor->trace(m_grid);
+    visitor->trace(m_overflowingCells);
+    visitor->trace(m_cellsCollapsedBorders);
+#endif
+    RenderBox::trace(visitor);
 }
 
 void RenderTableSection::styleDidChange(StyleDifference diff, const RenderStyle* oldStyle)
@@ -332,6 +355,42 @@ static void updatePositionIncreasedWithRowHeight(long long extraHeight, long lon
 
     accumulatedPositionIncrease += (extraHeight * rowHeight) / totalHeight;
     remainder += (extraHeight * rowHeight) % totalHeight;
+}
+
+// This is mainly used to distribute whole extra rowspanning height in percent rows when all spanning rows are
+// percent rows.
+// Distributing whole extra rowspanning height in percent rows based on the ratios of percent because this method works
+// same as percent distribution when only percent rows are present and percent is 100. Also works perfectly fine when
+// percent is not equal to 100.
+void RenderTableSection::distributeWholeExtraRowSpanHeightToPercentRows(RenderTableCell* cell, int totalPercent, int& extraRowSpanningHeight, Vector<int>& rowsHeight)
+{
+    if (!extraRowSpanningHeight || !totalPercent)
+        return;
+
+    const unsigned rowSpan = cell->rowSpan();
+    const unsigned rowIndex = cell->rowIndex();
+    int remainder = 0;
+
+    int accumulatedPositionIncrease = 0;
+    for (unsigned row = rowIndex; row < (rowIndex + rowSpan); row++) {
+        if (m_grid[row].logicalHeight.isPercent()) {
+            updatePositionIncreasedWithRowHeight(extraRowSpanningHeight, m_grid[row].logicalHeight.percent(), totalPercent, accumulatedPositionIncrease, remainder);
+
+            // While whole extra spanning height is distributing in percent spanning rows, rational parts remains
+            // in every integer division. So accumulating all remainder part in integer division and when total remainder
+            // is equvalent to divisor then 1 unit increased in row position.
+            // Note that this algorithm is biased towards adding more space towards the lower rows.
+            if (remainder >= totalPercent) {
+                remainder -= totalPercent;
+                accumulatedPositionIncrease++;
+            }
+        }
+        m_rowPos[row + 1] += accumulatedPositionIncrease;
+    }
+
+    ASSERT(!remainder);
+
+    extraRowSpanningHeight -= accumulatedPositionIncrease;
 }
 
 void RenderTableSection::distributeExtraRowSpanHeightToAutoRows(RenderTableCell* cell, int totalAutoRowsHeight, int& extraRowSpanningHeight, Vector<int>& rowsHeight)
@@ -590,9 +649,14 @@ void RenderTableSection::distributeRowSpanHeightToRows(SpanningRenderTableCells&
 
         int extraRowSpanningHeight = spanningRowsHeight.spanningCellHeightIgnoringBorderSpacing - spanningRowsHeight.totalRowsHeight;
 
-        distributeExtraRowSpanHeightToPercentRows(cell, totalPercent, extraRowSpanningHeight, spanningRowsHeight.rowHeight);
-        distributeExtraRowSpanHeightToAutoRows(cell, totalAutoRowsHeight, extraRowSpanningHeight, spanningRowsHeight.rowHeight);
-        distributeExtraRowSpanHeightToRemainingRows(cell, totalRemainingRowsHeight, extraRowSpanningHeight, spanningRowsHeight.rowHeight);
+        if (totalPercent < 100 && !totalAutoRowsHeight && !totalRemainingRowsHeight) {
+            // Distributing whole extra rowspanning height in percent row when only non-percent rows height is 0.
+            distributeWholeExtraRowSpanHeightToPercentRows(cell, totalPercent, extraRowSpanningHeight, spanningRowsHeight.rowHeight);
+        } else {
+            distributeExtraRowSpanHeightToPercentRows(cell, totalPercent, extraRowSpanningHeight, spanningRowsHeight.rowHeight);
+            distributeExtraRowSpanHeightToAutoRows(cell, totalAutoRowsHeight, extraRowSpanningHeight, spanningRowsHeight.rowHeight);
+            distributeExtraRowSpanHeightToRemainingRows(cell, totalRemainingRowsHeight, extraRowSpanningHeight, spanningRowsHeight.rowHeight);
+        }
 
         ASSERT(!extraRowSpanningHeight);
 
@@ -990,9 +1054,9 @@ void RenderTableSection::layoutRows()
 
             LayoutSize childOffset(cell->location() - oldCellRect.location());
             if (childOffset.width() || childOffset.height()) {
-                // If the child moved, we have to repaint it as well as any floating/positioned
+                // If the child moved, we have to issue paint invalidations to it as well as any floating/positioned
                 // descendants. An exception is if we need a layout. In this case, we know we're going to
-                // repaint ourselves (and the child) anyway.
+                // issue paint invalidations ourselves (and the child) anyway.
                 if (!table()->selfNeedsLayout() && cell->checkForPaintInvalidation())
                     cell->setMayNeedPaintInvalidation(true);
             }
@@ -1001,7 +1065,7 @@ void RenderTableSection::layoutRows()
             for (unsigned rowIndex = r + 1; rowIndex <= totalRows; rowIndex++)
                 m_rowPos[rowIndex] += rowHeightIncreaseForPagination;
             for (unsigned c = 0; c < nEffCols; ++c) {
-                Vector<RenderTableCell*, 1>& cells = cellAt(r, c).cells;
+                WillBeHeapVector<RawPtrWillBeMember<RenderTableCell>, 1>& cells = cellAt(r, c).cells;
                 for (size_t i = 0; i < cells.size(); ++i) {
                     LayoutUnit oldLogicalHeight = cells[i]->logicalHeight();
                     cells[i]->setLogicalHeight(oldLogicalHeight + rowHeightIncreaseForPagination);
@@ -1227,7 +1291,7 @@ static inline bool compareCellPositions(RenderTableCell* elem1, RenderTableCell*
 }
 
 // This comparison is used only when we have overflowing cells as we have an unsorted array to sort. We thus need
-// to sort both on rows and columns to properly repaint.
+// to sort both on rows and columns to properly issue paint invalidations.
 static inline bool compareCellPositionsWithOverflowingCells(RenderTableCell* elem1, RenderTableCell* elem2)
 {
     if (elem1->rowIndex() != elem2->rowIndex())
@@ -1292,7 +1356,7 @@ CellSpan RenderTableSection::dirtiedRows(const LayoutRect& damageRect) const
 
     CellSpan coveredRows = spannedRows(damageRect);
 
-    // To repaint the border we might need to repaint first or last row even if they are not spanned themselves.
+    // To issue paint invalidations for the border we might need to paint invalidate the first or last row even if they are not spanned themselves.
     if (coveredRows.start() >= m_rowPos.size() - 1 && m_rowPos[m_rowPos.size() - 1] + table()->outerBorderAfter() >= damageRect.y())
         --coveredRows.start();
 
@@ -1310,7 +1374,7 @@ CellSpan RenderTableSection::dirtiedColumns(const LayoutRect& damageRect) const
     CellSpan coveredColumns = spannedColumns(damageRect);
 
     const Vector<int>& columnPos = table()->columnPositions();
-    // To repaint the border we might need to repaint first or last column even if they are not spanned themselves.
+    // To issue paint invalidations for the border we might need to paint invalidate the first or last column even if they are not spanned themselves.
     if (coveredColumns.start() >= columnPos.size() - 1 && columnPos[columnPos.size() - 1] + table()->outerBorderEnd() >= damageRect.x())
         --coveredColumns.start();
 
@@ -1375,10 +1439,10 @@ CellSpan RenderTableSection::spannedColumns(const LayoutRect& flippedRect) const
 
 void RenderTableSection::paintObject(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
-    LayoutRect localRepaintRect = paintInfo.rect;
-    localRepaintRect.moveBy(-paintOffset);
+    LayoutRect localPaintInvalidationRect = paintInfo.rect;
+    localPaintInvalidationRect.moveBy(-paintOffset);
 
-    LayoutRect tableAlignedRect = logicalRectForWritingModeAndDirection(localRepaintRect);
+    LayoutRect tableAlignedRect = logicalRectForWritingModeAndDirection(localPaintInvalidationRect);
 
     CellSpan dirtiedRows = this->dirtiedRows(tableAlignedRect);
     CellSpan dirtiedColumns = this->dirtiedColumns(tableAlignedRect);
@@ -1423,7 +1487,7 @@ void RenderTableSection::paintObject(PaintInfo& paintInfo, const LayoutPoint& pa
             ASSERT(m_overflowingCells.size() < totalRows * totalCols * gMaxAllowedOverflowingCellRatioForFastPaintPath);
 #endif
 
-            // To make sure we properly repaint the section, we repaint all the overflowing cells that we collected.
+            // To make sure we properly paint invalidate the section, we paint invalidated all the overflowing cells that we collected.
             Vector<RenderTableCell*> cells;
             copyToVector(m_overflowingCells, cells);
 
@@ -1472,8 +1536,8 @@ void RenderTableSection::paintObject(PaintInfo& paintInfo, const LayoutPoint& pa
 
 void RenderTableSection::imageChanged(WrappedImagePtr, const IntRect*)
 {
-    // FIXME: Examine cells and repaint only the rect the image paints in.
-    paintInvalidationForWholeRenderer();
+    // FIXME: Examine cells and issue paint invalidations of only the rect the image paints in.
+    setShouldDoFullPaintInvalidation(true);
 }
 
 void RenderTableSection::recalcCells()
@@ -1683,7 +1747,7 @@ void RenderTableSection::setCachedCollapsedBorder(const RenderTableCell* cell, C
 CollapsedBorderValue& RenderTableSection::cachedCollapsedBorder(const RenderTableCell* cell, CollapsedBorderSide side)
 {
     ASSERT(table()->collapseBorders());
-    HashMap<pair<const RenderTableCell*, int>, CollapsedBorderValue>::iterator it = m_cellsCollapsedBorders.find(std::make_pair(cell, side));
+    WillBeHeapHashMap<pair<RawPtrWillBeMember<const RenderTableCell>, int>, CollapsedBorderValue>::iterator it = m_cellsCollapsedBorders.find(std::make_pair(cell, side));
     ASSERT_WITH_SECURITY_IMPLICATION(it != m_cellsCollapsedBorders.end());
     return it->value;
 }

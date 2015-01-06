@@ -45,7 +45,6 @@
 #include <gtest/gtest.h>
 
 using namespace blink;
-using namespace blink;
 using testing::Test;
 using testing::_;
 
@@ -173,7 +172,7 @@ static const int alternateHeight = 50;
 
 class DrawingBufferForTests : public DrawingBuffer {
 public:
-    static PassRefPtr<DrawingBufferForTests> create(PassOwnPtr<blink::WebGraphicsContext3D> context,
+    static PassRefPtr<DrawingBufferForTests> create(PassOwnPtr<WebGraphicsContext3D> context,
         const IntSize& size, PreserveDrawingBuffer preserve, PassRefPtr<ContextEvictionManager> contextEvictionManager)
     {
         OwnPtr<Extensions3DUtil> extensionsUtil = Extensions3DUtil::create(context.get());
@@ -186,12 +185,12 @@ public:
         return drawingBuffer.release();
     }
 
-    DrawingBufferForTests(PassOwnPtr<blink::WebGraphicsContext3D> context,
+    DrawingBufferForTests(PassOwnPtr<WebGraphicsContext3D> context,
         PassOwnPtr<Extensions3DUtil> extensionsUtil,
         PreserveDrawingBuffer preserve,
         PassRefPtr<ContextEvictionManager> contextEvictionManager)
         : DrawingBuffer(context, extensionsUtil, false /* multisampleExtensionSupported */,
-            false /* packedDepthStencilExtensionSupported */, preserve, blink::WebGraphicsContext3D::Attributes(), contextEvictionManager)
+            false /* packedDepthStencilExtensionSupported */, preserve, WebGraphicsContext3D::Attributes(), contextEvictionManager)
         , m_live(0)
     { }
 
@@ -241,7 +240,7 @@ TEST_F(DrawingBufferTest, testPaintRenderingResultsToCanvas)
 
 TEST_F(DrawingBufferTest, verifyResizingProperlyAffectsMailboxes)
 {
-    blink::WebExternalTextureMailbox mailbox;
+    WebExternalTextureMailbox mailbox;
 
     IntSize initialSize(initialWidth, initialHeight);
     IntSize alternateSize(initialWidth, alternateHeight);
@@ -253,7 +252,7 @@ TEST_F(DrawingBufferTest, verifyResizingProperlyAffectsMailboxes)
 
     // Resize to 100x50.
     m_drawingBuffer->reset(IntSize(initialWidth, alternateHeight));
-    m_drawingBuffer->mailboxReleased(mailbox);
+    m_drawingBuffer->mailboxReleased(mailbox, false);
 
     // Produce a mailbox at this size.
     m_drawingBuffer->markContentsChanged();
@@ -262,7 +261,7 @@ TEST_F(DrawingBufferTest, verifyResizingProperlyAffectsMailboxes)
 
     // Reset to initial size.
     m_drawingBuffer->reset(IntSize(initialWidth, initialHeight));
-    m_drawingBuffer->mailboxReleased(mailbox);
+    m_drawingBuffer->mailboxReleased(mailbox, false);
 
     // Prepare another mailbox and verify that it's the correct size.
     m_drawingBuffer->markContentsChanged();
@@ -270,7 +269,7 @@ TEST_F(DrawingBufferTest, verifyResizingProperlyAffectsMailboxes)
     EXPECT_EQ(initialSize, webContext()->mostRecentlyProducedSize());
 
     // Prepare one final mailbox and verify that it's the correct size.
-    m_drawingBuffer->mailboxReleased(mailbox);
+    m_drawingBuffer->mailboxReleased(mailbox, false);
     m_drawingBuffer->markContentsChanged();
     EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&mailbox, 0));
     EXPECT_EQ(initialSize, webContext()->mostRecentlyProducedSize());
@@ -282,9 +281,9 @@ TEST_F(DrawingBufferTest, verifyDestructionCompleteAfterAllMailboxesReleased)
     bool live = true;
     m_drawingBuffer->m_live = &live;
 
-    blink::WebExternalTextureMailbox mailbox1;
-    blink::WebExternalTextureMailbox mailbox2;
-    blink::WebExternalTextureMailbox mailbox3;
+    WebExternalTextureMailbox mailbox1;
+    WebExternalTextureMailbox mailbox2;
+    WebExternalTextureMailbox mailbox3;
 
     IntSize initialSize(initialWidth, initialHeight);
 
@@ -297,7 +296,7 @@ TEST_F(DrawingBufferTest, verifyDestructionCompleteAfterAllMailboxesReleased)
     EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&mailbox3, 0));
 
     m_drawingBuffer->markContentsChanged();
-    m_drawingBuffer->mailboxReleased(mailbox1);
+    m_drawingBuffer->mailboxReleased(mailbox1, false);
 
     m_drawingBuffer->beginDestruction();
     EXPECT_EQ(live, true);
@@ -307,11 +306,11 @@ TEST_F(DrawingBufferTest, verifyDestructionCompleteAfterAllMailboxesReleased)
     EXPECT_EQ(live, true);
 
     weakPointer->markContentsChanged();
-    weakPointer->mailboxReleased(mailbox2);
+    weakPointer->mailboxReleased(mailbox2, false);
     EXPECT_EQ(live, true);
 
     weakPointer->markContentsChanged();
-    weakPointer->mailboxReleased(mailbox3);
+    weakPointer->mailboxReleased(mailbox3, false);
     EXPECT_EQ(live, false);
 }
 
@@ -319,9 +318,9 @@ TEST_F(DrawingBufferTest, verifyDrawingBufferStaysAliveIfResourcesAreLost)
 {
     bool live = true;
     m_drawingBuffer->m_live = &live;
-    blink::WebExternalTextureMailbox mailbox1;
-    blink::WebExternalTextureMailbox mailbox2;
-    blink::WebExternalTextureMailbox mailbox3;
+    WebExternalTextureMailbox mailbox1;
+    WebExternalTextureMailbox mailbox2;
+    WebExternalTextureMailbox mailbox3;
 
     m_drawingBuffer->markContentsChanged();
     EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&mailbox1, 0));
@@ -352,7 +351,7 @@ TEST_F(DrawingBufferTest, verifyDrawingBufferStaysAliveIfResourcesAreLost)
 
 class TextureMailboxWrapper {
 public:
-    explicit TextureMailboxWrapper(const blink::WebExternalTextureMailbox& mailbox)
+    explicit TextureMailboxWrapper(const WebExternalTextureMailbox& mailbox)
         : m_mailbox(mailbox)
     { }
 
@@ -367,14 +366,14 @@ public:
     }
 
 private:
-    blink::WebExternalTextureMailbox m_mailbox;
+    WebExternalTextureMailbox m_mailbox;
 };
 
 TEST_F(DrawingBufferTest, verifyOnlyOneRecycledMailboxMustBeKept)
 {
-    blink::WebExternalTextureMailbox mailbox1;
-    blink::WebExternalTextureMailbox mailbox2;
-    blink::WebExternalTextureMailbox mailbox3;
+    WebExternalTextureMailbox mailbox1;
+    WebExternalTextureMailbox mailbox2;
+    WebExternalTextureMailbox mailbox3;
 
     // Produce mailboxes.
     m_drawingBuffer->markContentsChanged();
@@ -386,35 +385,35 @@ TEST_F(DrawingBufferTest, verifyOnlyOneRecycledMailboxMustBeKept)
 
     // Release mailboxes by specific order; 1, 3, 2.
     m_drawingBuffer->markContentsChanged();
-    m_drawingBuffer->mailboxReleased(mailbox1);
+    m_drawingBuffer->mailboxReleased(mailbox1, false);
     m_drawingBuffer->markContentsChanged();
-    m_drawingBuffer->mailboxReleased(mailbox3);
+    m_drawingBuffer->mailboxReleased(mailbox3, false);
     m_drawingBuffer->markContentsChanged();
-    m_drawingBuffer->mailboxReleased(mailbox2);
+    m_drawingBuffer->mailboxReleased(mailbox2, false);
 
     // The first recycled mailbox must be 2. 1 and 3 were deleted by FIFO order because
     // DrawingBuffer never keeps more than one mailbox.
-    blink::WebExternalTextureMailbox recycledMailbox1;
+    WebExternalTextureMailbox recycledMailbox1;
     m_drawingBuffer->markContentsChanged();
     EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&recycledMailbox1, 0));
     EXPECT_EQ(TextureMailboxWrapper(mailbox2), TextureMailboxWrapper(recycledMailbox1));
 
     // The second recycled mailbox must be a new mailbox.
-    blink::WebExternalTextureMailbox recycledMailbox2;
+    WebExternalTextureMailbox recycledMailbox2;
     m_drawingBuffer->markContentsChanged();
     EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&recycledMailbox2, 0));
     EXPECT_NE(TextureMailboxWrapper(mailbox1), TextureMailboxWrapper(recycledMailbox2));
     EXPECT_NE(TextureMailboxWrapper(mailbox2), TextureMailboxWrapper(recycledMailbox2));
     EXPECT_NE(TextureMailboxWrapper(mailbox3), TextureMailboxWrapper(recycledMailbox2));
 
-    m_drawingBuffer->mailboxReleased(recycledMailbox1);
-    m_drawingBuffer->mailboxReleased(recycledMailbox2);
+    m_drawingBuffer->mailboxReleased(recycledMailbox1, false);
+    m_drawingBuffer->mailboxReleased(recycledMailbox2, false);
     m_drawingBuffer->beginDestruction();
 }
 
 TEST_F(DrawingBufferTest, verifyInsertAndWaitSyncPointCorrectly)
 {
-    blink::WebExternalTextureMailbox mailbox;
+    WebExternalTextureMailbox mailbox;
 
     // Produce mailboxes.
     m_drawingBuffer->markContentsChanged();
@@ -425,7 +424,7 @@ TEST_F(DrawingBufferTest, verifyInsertAndWaitSyncPointCorrectly)
 
     unsigned waitSyncPoint = webContext()->insertSyncPoint();
     mailbox.syncPoint = waitSyncPoint;
-    m_drawingBuffer->mailboxReleased(mailbox);
+    m_drawingBuffer->mailboxReleased(mailbox, false);
     // m_drawingBuffer will wait for the sync point when recycling.
     EXPECT_EQ(0u, webContext()->mostRecentlyWaitedSyncPoint());
 
@@ -437,7 +436,7 @@ TEST_F(DrawingBufferTest, verifyInsertAndWaitSyncPointCorrectly)
     m_drawingBuffer->beginDestruction();
     waitSyncPoint = webContext()->insertSyncPoint();
     mailbox.syncPoint = waitSyncPoint;
-    m_drawingBuffer->mailboxReleased(mailbox);
+    m_drawingBuffer->mailboxReleased(mailbox, false);
     // m_drawingBuffer waits for the sync point because the destruction is in progress.
     EXPECT_EQ(waitSyncPoint, webContext()->mostRecentlyWaitedSyncPoint());
 }
@@ -466,7 +465,7 @@ protected:
 
 TEST_F(DrawingBufferImageChromiumTest, verifyResizingReallocatesImages)
 {
-    blink::WebExternalTextureMailbox mailbox;
+    WebExternalTextureMailbox mailbox;
 
     IntSize initialSize(initialWidth, initialHeight);
     IntSize alternateSize(initialWidth, alternateHeight);
@@ -486,7 +485,7 @@ TEST_F(DrawingBufferImageChromiumTest, verifyResizingReallocatesImages)
     EXPECT_CALL(*webContext(), releaseTexImage2DMock(m_imageId0)).Times(1);
     // Resize to 100x50.
     m_drawingBuffer->reset(IntSize(initialWidth, alternateHeight));
-    m_drawingBuffer->mailboxReleased(mailbox);
+    m_drawingBuffer->mailboxReleased(mailbox, false);
     testing::Mock::VerifyAndClearExpectations(webContext());
 
     WGC3Duint m_imageId3 = webContext()->nextImageIdToBeCreated();
@@ -506,7 +505,7 @@ TEST_F(DrawingBufferImageChromiumTest, verifyResizingReallocatesImages)
     EXPECT_CALL(*webContext(), releaseTexImage2DMock(m_imageId2)).Times(1);
     // Reset to initial size.
     m_drawingBuffer->reset(IntSize(initialWidth, initialHeight));
-    m_drawingBuffer->mailboxReleased(mailbox);
+    m_drawingBuffer->mailboxReleased(mailbox, false);
     testing::Mock::VerifyAndClearExpectations(webContext());
 
     WGC3Duint m_imageId5 = webContext()->nextImageIdToBeCreated();
@@ -521,12 +520,12 @@ TEST_F(DrawingBufferImageChromiumTest, verifyResizingReallocatesImages)
     testing::Mock::VerifyAndClearExpectations(webContext());
 
     // Prepare one final mailbox and verify that it's the correct size.
-    m_drawingBuffer->mailboxReleased(mailbox);
+    m_drawingBuffer->mailboxReleased(mailbox, false);
     m_drawingBuffer->markContentsChanged();
     EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&mailbox, 0));
     EXPECT_EQ(initialSize, webContext()->mostRecentlyProducedSize());
     EXPECT_TRUE(mailbox.allowOverlay);
-    m_drawingBuffer->mailboxReleased(mailbox);
+    m_drawingBuffer->mailboxReleased(mailbox, false);
 
     EXPECT_CALL(*webContext(), destroyImageMock(m_imageId5)).Times(1);
     EXPECT_CALL(*webContext(), releaseTexImage2DMock(m_imageId5)).Times(1);
@@ -625,7 +624,7 @@ TEST(DrawingBufferDepthStencilTest, packedDepthStencilSupported)
         DrawingBuffer::PreserveDrawingBuffer preserve = DrawingBuffer::Preserve;
         RefPtr<ContextEvictionManager> contextEvictionManager = adoptRef(new FakeContextEvictionManager);
 
-        blink::WebGraphicsContext3D::Attributes requestedAttributes;
+        WebGraphicsContext3D::Attributes requestedAttributes;
         requestedAttributes.stencil = cases[i].requestStencil;
         requestedAttributes.depth = cases[i].requestDepth;
         RefPtr<DrawingBuffer> drawingBuffer = DrawingBuffer::create(context.release(), IntSize(10, 10), preserve, requestedAttributes, contextEvictionManager);
@@ -657,6 +656,24 @@ TEST(DrawingBufferDepthStencilTest, packedDepthStencilSupported)
 
         drawingBuffer->beginDestruction();
     }
+}
+
+TEST_F(DrawingBufferTest, verifySetIsHiddenProperlyAffectsMailboxes)
+{
+    blink::WebExternalTextureMailbox mailbox;
+
+    // Produce mailboxes.
+    m_drawingBuffer->markContentsChanged();
+    EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&mailbox, 0));
+
+    unsigned waitSyncPoint = webContext()->insertSyncPoint();
+    mailbox.syncPoint = waitSyncPoint;
+    m_drawingBuffer->setIsHidden(true);
+    m_drawingBuffer->mailboxReleased(mailbox);
+    // m_drawingBuffer deletes mailbox immediately when hidden.
+    EXPECT_EQ(waitSyncPoint, webContext()->mostRecentlyWaitedSyncPoint());
+
+    m_drawingBuffer->beginDestruction();
 }
 
 } // namespace

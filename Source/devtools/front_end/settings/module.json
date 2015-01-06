@@ -21,10 +21,13 @@
         {
             "type": "ui-setting",
             "section": "Sources",
-            "experiment": "frameworksDebuggingSupport",
             "settingType": "custom",
             "className": "WebInspector.SettingsScreen.SkipStackFramePatternSettingDelegate"
         }
     ],
-    "scripts": [ "SettingsScreen.js" ]
+    "scripts": [
+        "EditFileSystemDialog.js",
+        "FrameworkBlackboxDialog.js",
+        "SettingsScreen.js"
+    ]
 }

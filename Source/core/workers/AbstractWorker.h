@@ -46,7 +46,7 @@ class ExceptionState;
 class KURL;
 class ExecutionContext;
 
-class AbstractWorker : public RefCountedWillBeRefCountedGarbageCollected<AbstractWorker>, public EventTargetWithInlineData, public ActiveDOMObject {
+class AbstractWorker : public RefCountedWillBeGarbageCollectedFinalized<AbstractWorker>, public EventTargetWithInlineData, public ActiveDOMObject {
     REFCOUNTED_EVENT_TARGET(AbstractWorker);
     WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(AbstractWorker);
 public:
@@ -57,6 +57,11 @@ public:
 
     AbstractWorker(ExecutionContext*);
     virtual ~AbstractWorker();
+
+    virtual void trace(Visitor* visitor)
+    {
+        EventTargetWithInlineData::trace(visitor);
+    }
 
 protected:
     // Helper function that converts a URL to an absolute URL and checks the result for validity.

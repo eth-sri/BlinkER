@@ -28,7 +28,7 @@
 #include "core/page/scrolling/ScrollingCoordinator.h"
 
 #include "core/dom/Document.h"
-#include "core/dom/FullscreenElementStack.h"
+#include "core/dom/Fullscreen.h"
 #include "core/dom/Node.h"
 #include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/FrameView.h"
@@ -161,7 +161,7 @@ void ScrollingCoordinator::updateAfterCompositingChangeIfNeeded()
         scrollingWebLayer->setBounds(frameView->contentsSize());
         // If there is a fullscreen element, set the scroll clip layer to 0 so main frame won't scroll.
         Document* mainFrameDocument = m_page->deprecatedLocalMainFrame()->document();
-        Element* fullscreenElement = FullscreenElementStack::fullscreenElementFrom(*mainFrameDocument);
+        Element* fullscreenElement = Fullscreen::fullscreenElementFrom(*mainFrameDocument);
         if (fullscreenElement && fullscreenElement != mainFrameDocument->documentElement())
             scrollingWebLayer->setScrollClipLayer(0);
         else
@@ -211,10 +211,11 @@ static WebLayerPositionConstraint computePositionConstraint(const RenderLayer* l
 void ScrollingCoordinator::updateLayerPositionConstraint(RenderLayer* layer)
 {
     ASSERT(layer->hasCompositedLayerMapping());
-    CompositedLayerMappingPtr compositedLayerMapping = layer->compositedLayerMapping();
-    GraphicsLayer* mainLayer = compositedLayerMapping->localRootForOwningLayer();
+    CompositedLayerMapping* compositedLayerMapping = layer->compositedLayerMapping();
+    GraphicsLayer* mainLayer = compositedLayerMapping->childForSuperlayers();
 
     // Avoid unnecessary commits
+    clearPositionConstraintExceptForLayer(compositedLayerMapping->squashingContainmentLayer(), mainLayer);
     clearPositionConstraintExceptForLayer(compositedLayerMapping->ancestorClippingLayer(), mainLayer);
     clearPositionConstraintExceptForLayer(compositedLayerMapping->mainGraphicsLayer(), mainLayer);
 
@@ -747,12 +748,11 @@ Region ScrollingCoordinator::computeShouldHandleScrollGestureOnMainThreadRegion(
 static void accumulateDocumentTouchEventTargetRects(LayerHitTestRects& rects, const Document* document)
 {
     ASSERT(document);
-    if (!document->touchEventTargets())
+    const EventTargetSet* targets = document->frameHost()->eventHandlerRegistry().eventHandlerTargets(EventHandlerRegistry::TouchEvent);
+    if (!targets)
         return;
 
-    const TouchEventTargetSet* targets = document->touchEventTargets();
-
-    // If there's a handler on the document, html or body element (fairly common in practice),
+    // If there's a handler on the window, document, html or body element (fairly common in practice),
     // then we can quickly mark the entire document and skip looking at any other handlers.
     // Note that technically a handler on the body doesn't cover the whole document, but it's
     // reasonable to be conservative and report the whole document anyway.
@@ -761,9 +761,10 @@ static void accumulateDocumentTouchEventTargetRects(LayerHitTestRects& rects, co
     // root cc::layer with the video layer so doing this optimization causes the compositor to think
     // that there are no handlers, therefore skip it.
     if (!document->renderView()->compositor()->inOverlayFullscreenVideo()) {
-        for (TouchEventTargetSet::const_iterator iter = targets->begin(); iter != targets->end(); ++iter) {
-            Node* target = iter->key;
-            if (target == document || target == document->documentElement() || target == document->body()) {
+        for (EventTargetSet::const_iterator iter = targets->begin(); iter != targets->end(); ++iter) {
+            EventTarget* target = iter->key;
+            Node* node = target->toNode();
+            if (target->toDOMWindow() || node == document || node == document->documentElement() || node == document->body()) {
                 if (RenderView* rendererView = document->renderView()) {
                     rendererView->computeLayerHitTestRects(rects);
                 }
@@ -772,18 +773,24 @@ static void accumulateDocumentTouchEventTargetRects(LayerHitTestRects& rects, co
         }
     }
 
-    for (TouchEventTargetSet::const_iterator iter = targets->begin(); iter != targets->end(); ++iter) {
-        const Node* target = iter->key;
-        if (!target->inDocument())
+    for (EventTargetSet::const_iterator iter = targets->begin(); iter != targets->end(); ++iter) {
+        EventTarget* target = iter->key;
+        Node* node = target->toNode();
+        if (!node || !node->inDocument())
             continue;
 
-        if (target->isDocumentNode() && target != document) {
-            accumulateDocumentTouchEventTargetRects(rects, toDocument(target));
-        } else if (RenderObject* renderer = target->renderer()) {
+        // If the document belongs to an invisible subframe it does not have a composited layer
+        // and should be skipped.
+        if (node->document().isInInvisibleSubframe())
+            continue;
+
+        if (node->isDocumentNode() && node != document) {
+            accumulateDocumentTouchEventTargetRects(rects, toDocument(node));
+        } else if (RenderObject* renderer = node->renderer()) {
             // If the set also contains one of our ancestor nodes then processing
             // this node would be redundant.
             bool hasTouchEventTargetAncestor = false;
-            for (Node* ancestor = target->parentNode(); ancestor && !hasTouchEventTargetAncestor; ancestor = ancestor->parentNode()) {
+            for (Node* ancestor = node->parentNode(); ancestor && !hasTouchEventTargetAncestor; ancestor = ancestor->parentNode()) {
                 if (targets->contains(ancestor))
                     hasTouchEventTargetAncestor = true;
             }
@@ -807,7 +814,6 @@ static void accumulateDocumentTouchEventTargetRects(LayerHitTestRects& rects, co
             }
         }
     }
-
 }
 
 void ScrollingCoordinator::computeTouchEventTargetRects(LayerHitTestRects& rects)
@@ -885,17 +891,29 @@ bool ScrollingCoordinator::hasVisibleSlowRepaintViewportConstrainedObjects(Frame
         return false;
 
     for (FrameView::ViewportConstrainedObjectSet::const_iterator it = viewportConstrainedObjects->begin(), end = viewportConstrainedObjects->end(); it != end; ++it) {
-        RenderObject* viewportConstrainedObject = *it;
-        if (!viewportConstrainedObject->isBoxModelObject() || !viewportConstrainedObject->hasLayer())
-            return true;
-        RenderLayer* layer = toRenderBoxModelObject(viewportConstrainedObject)->layer();
-        // Any explicit reason that a fixed position element is not composited shouldn't cause slow scrolling.
-        if (layer->compositingState() != PaintsIntoOwnBacking && layer->viewportConstrainedNotCompositedReason() == RenderLayer::NoNotCompositedReason)
-            return true;
+        RenderObject* renderer = *it;
+        ASSERT(renderer->isBoxModelObject() && renderer->hasLayer());
+        ASSERT(renderer->style()->position() == FixedPosition);
+        RenderLayer* layer = toRenderBoxModelObject(renderer)->layer();
 
-        // Composited layers that actually paint into their enclosing ancestor
-        // must also force main thread scrolling.
-        if (layer->compositingState() == HasOwnBackingButPaintsIntoAncestor)
+        // Whether the RenderLayer scrolls with the viewport is a tree-depenent
+        // property and our viewportConstrainedObjects collection is maintained
+        // with only RenderObject-level information.
+        if (!layer->scrollsWithViewport())
+            continue;
+
+        // If the whole subtree is invisible, there's no reason to scroll on
+        // the main thread because we don't need to generate invalidations
+        // for invisible content.
+        if (layer->subtreeIsInvisible())
+            continue;
+
+        // We're only smart enough to scroll viewport-constrainted objects
+        // in the compositor if they have their own backing or they paint
+        // into a grouped back (which necessarily all have the same viewport
+        // constraints).
+        CompositingState compositingState = layer->compositingState();
+        if (compositingState != PaintsIntoOwnBacking && compositingState != PaintsIntoGroupedBacking)
             return true;
     }
     return false;
@@ -903,23 +921,20 @@ bool ScrollingCoordinator::hasVisibleSlowRepaintViewportConstrainedObjects(Frame
 
 MainThreadScrollingReasons ScrollingCoordinator::mainThreadScrollingReasons() const
 {
-    // The main thread scrolling reasons are applicable to scrolls of the main
-    // frame. If it does not exist or if it is not scrollable, there is no
-    // reason to force main thread scrolling.
+    MainThreadScrollingReasons reasons = static_cast<MainThreadScrollingReasons>(0);
+
     if (!m_page->mainFrame()->isLocalFrame())
-        return static_cast<MainThreadScrollingReasons>(0);
+        return reasons;
     FrameView* frameView = m_page->deprecatedLocalMainFrame()->view();
     if (!frameView)
-        return static_cast<MainThreadScrollingReasons>(0);
-
-    MainThreadScrollingReasons mainThreadScrollingReasons = (MainThreadScrollingReasons)0;
+        return reasons;
 
     if (frameView->hasSlowRepaintObjects())
-        mainThreadScrollingReasons |= HasSlowRepaintObjects;
-    if (hasVisibleSlowRepaintViewportConstrainedObjects(frameView))
-        mainThreadScrollingReasons |= HasNonLayerViewportConstrainedObjects;
+        reasons |= HasSlowRepaintObjects;
+    if (frameView->isScrollable() && hasVisibleSlowRepaintViewportConstrainedObjects(frameView))
+        reasons |= HasNonLayerViewportConstrainedObjects;
 
-    return mainThreadScrollingReasons;
+    return reasons;
 }
 
 String ScrollingCoordinator::mainThreadScrollingReasonsAsText(MainThreadScrollingReasons reasons)
@@ -927,11 +942,11 @@ String ScrollingCoordinator::mainThreadScrollingReasonsAsText(MainThreadScrollin
     StringBuilder stringBuilder;
 
     if (reasons & ScrollingCoordinator::HasSlowRepaintObjects)
-        stringBuilder.append("Has slow repaint objects, ");
+        stringBuilder.appendLiteral("Has slow repaint objects, ");
     if (reasons & ScrollingCoordinator::HasViewportConstrainedObjectsWithoutSupportingFixedLayers)
-        stringBuilder.append("Has viewport constrained objects without supporting fixed layers, ");
+        stringBuilder.appendLiteral("Has viewport constrained objects without supporting fixed layers, ");
     if (reasons & ScrollingCoordinator::HasNonLayerViewportConstrainedObjects)
-        stringBuilder.append("Has non-layer viewport-constrained objects, ");
+        stringBuilder.appendLiteral("Has non-layer viewport-constrained objects, ");
 
     if (stringBuilder.length())
         stringBuilder.resize(stringBuilder.length() - 2);

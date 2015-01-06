@@ -364,6 +364,18 @@ WebInspector.TabbedPane.prototype = {
     },
 
     /**
+     * @param {string} id
+     * @param {string} className
+     * @param {boolean=} force
+     */
+    toggleTabClass: function(id, className, force)
+    {
+        var tab = this._tabsById[id];
+        if (tab._toggleClass(className, force))
+            this._updateTabElements();
+    },
+
+    /**
      * @param {!WebInspector.Event} event
      */
     _zoomChanged: function(event)
@@ -833,6 +845,22 @@ WebInspector.TabbedPaneTab.prototype = {
     },
 
     /**
+     * @param {string} className
+     * @param {boolean=} force
+     * @return {boolean}
+     */
+    _toggleClass: function(className, force)
+    {
+        var element = this.tabElement;
+        var hasClass = element.classList.contains(className);
+        if (hasClass === force)
+            return false;
+        element.classList.toggle(className, force);
+        delete this._measuredWidth;
+        return true;
+    },
+
+    /**
      * @return {!WebInspector.View}
      */
     get view()
@@ -1178,10 +1206,10 @@ WebInspector.ExtensibleTabbedPaneController.prototype = {
      */
     _viewForId: function(id)
     {
-        if (this._views.contains(id))
+        if (this._views.has(id))
             return /** @type {!WebInspector.View} */ (this._views.get(id));
         var view = this._extensions[id] ? /** @type {!WebInspector.View} */ (this._extensions[id].instance()) : null;
-        this._views.put(id, view);
+        this._views.set(id, view);
         if (this._viewCallback && view)
             this._viewCallback(id, view);
         return view;

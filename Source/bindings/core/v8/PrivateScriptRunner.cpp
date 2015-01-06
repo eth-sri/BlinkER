@@ -18,41 +18,105 @@
 
 namespace blink {
 
-static v8::Handle<v8::Value> compilePrivateScript(v8::Isolate* isolate, String className)
+static void dumpV8Message(v8::Handle<v8::Message> message)
 {
-    size_t index;
+    if (message.IsEmpty())
+        return;
+
+    // FIXME: GetScriptOrigin() and GetLineNumber() return empty handles
+    // when they are called at the first time if V8 has a pending exception.
+    // So we need to call twice to get a correct ScriptOrigin and line number.
+    // This is a bug of V8.
+    message->GetScriptOrigin();
+    message->GetLineNumber();
+
+    v8::Handle<v8::Value> resourceName = message->GetScriptOrigin().ResourceName();
+    String fileName = "Unknown JavaScript file";
+    if (!resourceName.IsEmpty() && resourceName->IsString())
+        fileName = toCoreString(v8::Handle<v8::String>::Cast(resourceName));
+    int lineNumber = message->GetLineNumber();
+    v8::Handle<v8::String> errorMessage = message->Get();
+    fprintf(stderr, "%s (line %d): %s\n", fileName.utf8().data(), lineNumber, toCoreString(errorMessage).utf8().data());
+}
+
+static void dumpJSError(String exceptionName, v8::Handle<v8::Message> message)
+{
+    // FIXME: Set a ScriptOrigin of the private script and print a more informative message.
 #ifndef NDEBUG
-    for (index = 0; index < WTF_ARRAY_LENGTH(kPrivateScriptSourcesForTesting); index++) {
-        if (className == kPrivateScriptSourcesForTesting[index].name)
-            break;
+    fprintf(stderr, "Private script throws an exception: %s\n", exceptionName.utf8().data());
+    dumpV8Message(message);
+#endif
+}
+
+static v8::Handle<v8::Value> compileAndRunPrivateScript(v8::Isolate* isolate, String scriptClassName, const unsigned char* source, size_t size)
+{
+    v8::TryCatch block;
+    String sourceString(reinterpret_cast<const char*>(source), size);
+    String fileName = scriptClassName + ".js";
+    v8::Handle<v8::Script> script = V8ScriptRunner::compileScript(v8String(isolate, sourceString), fileName, TextPosition::minimumPosition(), 0, isolate, NotSharableCrossOrigin, V8CacheOptionsOff);
+    if (block.HasCaught()) {
+        fprintf(stderr, "Private script error: Compile failed. (Class name = %s)\n", scriptClassName.utf8().data());
+        dumpV8Message(block.Message());
+        RELEASE_ASSERT_NOT_REACHED();
     }
-    if (index != WTF_ARRAY_LENGTH(kPrivateScriptSourcesForTesting)) {
-        String source(reinterpret_cast<const char*>(kPrivateScriptSourcesForTesting[index].source), kPrivateScriptSourcesForTesting[index].size);
-        return V8ScriptRunner::compileAndRunInternalScript(v8String(isolate, source), isolate);
+
+    v8::Handle<v8::Value> result = V8ScriptRunner::runCompiledInternalScript(script, isolate);
+    if (block.HasCaught()) {
+        fprintf(stderr, "Private script error: installClass() failed. (Class name = %s)\n", scriptClassName.utf8().data());
+        dumpV8Message(block.Message());
+        RELEASE_ASSERT_NOT_REACHED();
+    }
+    return result;
+}
+
+// FIXME: If we have X.js, XPartial-1.js and XPartial-2.js, currently all of the JS files
+// are compiled when any of the JS files is requested. Ideally we should avoid compiling
+// unrelated JS files. For example, if a method in XPartial-1.js is requested, we just
+// need to compile X.js and XPartial-1.js, and don't need to compile XPartial-2.js.
+static void installPrivateScript(v8::Isolate* isolate, String className)
+{
+    int compiledScriptCount = 0;
+    // |kPrivateScriptSourcesForTesting| is defined in V8PrivateScriptSources.h, which is auto-generated
+    // by make_private_script_source.py.
+#ifndef NDEBUG
+    for (size_t index = 0; index < WTF_ARRAY_LENGTH(kPrivateScriptSourcesForTesting); index++) {
+        if (className == kPrivateScriptSourcesForTesting[index].className) {
+            compileAndRunPrivateScript(isolate, kPrivateScriptSourcesForTesting[index].scriptClassName, kPrivateScriptSourcesForTesting[index].source, kPrivateScriptSourcesForTesting[index].size);
+            compiledScriptCount++;
+        }
     }
 #endif
 
     // |kPrivateScriptSources| is defined in V8PrivateScriptSources.h, which is auto-generated
-    // by make_private_script.py.
+    // by make_private_script_source.py.
+    for (size_t index = 0; index < WTF_ARRAY_LENGTH(kPrivateScriptSources); index++) {
+        if (className == kPrivateScriptSources[index].className) {
+            compileAndRunPrivateScript(isolate, kPrivateScriptSources[index].scriptClassName, kPrivateScriptSources[index].source, kPrivateScriptSources[index].size);
+            compiledScriptCount++;
+        }
+    }
+
+    if (!compiledScriptCount) {
+        fprintf(stderr, "Private script error: Target source code was not found. (Class name = %s)\n", className.utf8().data());
+        RELEASE_ASSERT_NOT_REACHED();
+    }
+}
+
+static v8::Handle<v8::Value> installPrivateScriptRunner(v8::Isolate* isolate)
+{
+    const String className = "PrivateScriptRunner";
+    size_t index;
+    // |kPrivateScriptSources| is defined in V8PrivateScriptSources.h, which is auto-generated
+    // by make_private_script_source.py.
     for (index = 0; index < WTF_ARRAY_LENGTH(kPrivateScriptSources); index++) {
-        if (className == kPrivateScriptSources[index].name)
+        if (className == kPrivateScriptSources[index].className)
             break;
     }
     if (index == WTF_ARRAY_LENGTH(kPrivateScriptSources)) {
-        WTF_LOG_ERROR("Private script error: Target source code was not found. (Class name = %s)\n", className.utf8().data());
+        fprintf(stderr, "Private script error: Target source code was not found. (Class name = %s)\n", className.utf8().data());
         RELEASE_ASSERT_NOT_REACHED();
     }
-
-    v8::TryCatch block;
-    String source(reinterpret_cast<const char*>(kPrivateScriptSources[index].source), kPrivateScriptSources[index].size);
-    v8::Handle<v8::Value> result = V8ScriptRunner::compileAndRunInternalScript(v8String(isolate, source), isolate);
-    if (block.HasCaught()) {
-        WTF_LOG_ERROR("Private script error: Compile failed. (Class name = %s)\n", className.utf8().data());
-        if (!block.Message().IsEmpty())
-            WTF_LOG_ERROR("%s\n", toCoreString(block.Message()->Get()).utf8().data());
-        RELEASE_ASSERT_NOT_REACHED();
-    }
-    return result;
+    return compileAndRunPrivateScript(isolate, className, kPrivateScriptSources[index].source, kPrivateScriptSources[index].size);
 }
 
 static v8::Handle<v8::Object> classObjectOfPrivateScript(ScriptState* scriptState, String className)
@@ -64,13 +128,13 @@ static v8::Handle<v8::Object> classObjectOfPrivateScript(ScriptState* scriptStat
     if (compiledClass.IsEmpty()) {
         v8::Handle<v8::Value> installedClasses = scriptState->perContextData()->compiledPrivateScript("PrivateScriptRunner");
         if (installedClasses.IsEmpty()) {
-            installedClasses = compilePrivateScript(isolate, "PrivateScriptRunner");
+            installedClasses = installPrivateScriptRunner(isolate);
             scriptState->perContextData()->setCompiledPrivateScript("PrivateScriptRunner", installedClasses);
         }
         RELEASE_ASSERT(!installedClasses.IsEmpty());
         RELEASE_ASSERT(installedClasses->IsObject());
 
-        compilePrivateScript(isolate, className);
+        installPrivateScript(isolate, className);
         compiledClass = v8::Handle<v8::Object>::Cast(installedClasses)->Get(v8String(isolate, className));
         RELEASE_ASSERT(!compiledClass.IsEmpty());
         RELEASE_ASSERT(compiledClass->IsObject());
@@ -93,9 +157,8 @@ static void initializeHolderIfNeeded(ScriptState* scriptState, v8::Handle<v8::Ob
             v8::TryCatch block;
             V8ScriptRunner::callFunction(v8::Handle<v8::Function>::Cast(initializeFunction), scriptState->executionContext(), holder, 0, 0, isolate);
             if (block.HasCaught()) {
-                WTF_LOG_ERROR("Private script error: Object constructor threw an exception.\n");
-                if (!block.Message().IsEmpty())
-                    WTF_LOG_ERROR("%s\n", toCoreString(block.Message()->Get()).utf8().data());
+                fprintf(stderr, "Private script error: Object constructor threw an exception.\n");
+                dumpV8Message(block.Message());
                 RELEASE_ASSERT_NOT_REACHED();
             }
         }
@@ -134,12 +197,12 @@ v8::Handle<v8::Value> PrivateScriptRunner::runDOMAttributeGetter(ScriptState* sc
     v8::Handle<v8::Object> classObject = classObjectOfPrivateScript(scriptState, className);
     v8::Handle<v8::Value> descriptor = classObject->GetOwnPropertyDescriptor(v8String(scriptState->isolate(), attributeName));
     if (descriptor.IsEmpty() || !descriptor->IsObject()) {
-        WTF_LOG_ERROR("Private script error: Target DOM attribute getter was not found. (Class name = %s, Attribute name = %s)\n", className.utf8().data(), attributeName.utf8().data());
+        fprintf(stderr, "Private script error: Target DOM attribute getter was not found. (Class name = %s, Attribute name = %s)\n", className.utf8().data(), attributeName.utf8().data());
         RELEASE_ASSERT_NOT_REACHED();
     }
     v8::Handle<v8::Value> getter = v8::Handle<v8::Object>::Cast(descriptor)->Get(v8String(scriptState->isolate(), "get"));
     if (getter.IsEmpty() || !getter->IsFunction()) {
-        WTF_LOG_ERROR("Private script error: Target DOM attribute getter was not found. (Class name = %s, Attribute name = %s)\n", className.utf8().data(), attributeName.utf8().data());
+        fprintf(stderr, "Private script error: Target DOM attribute getter was not found. (Class name = %s, Attribute name = %s)\n", className.utf8().data(), attributeName.utf8().data());
         RELEASE_ASSERT_NOT_REACHED();
     }
     initializeHolderIfNeeded(scriptState, classObject, holder);
@@ -151,12 +214,12 @@ void PrivateScriptRunner::runDOMAttributeSetter(ScriptState* scriptState, String
     v8::Handle<v8::Object> classObject = classObjectOfPrivateScript(scriptState, className);
     v8::Handle<v8::Value> descriptor = classObject->GetOwnPropertyDescriptor(v8String(scriptState->isolate(), attributeName));
     if (descriptor.IsEmpty() || !descriptor->IsObject()) {
-        WTF_LOG_ERROR("Private script error: Target DOM attribute setter was not found. (Class name = %s, Attribute name = %s)\n", className.utf8().data(), attributeName.utf8().data());
+        fprintf(stderr, "Private script error: Target DOM attribute setter was not found. (Class name = %s, Attribute name = %s)\n", className.utf8().data(), attributeName.utf8().data());
         RELEASE_ASSERT_NOT_REACHED();
     }
     v8::Handle<v8::Value> setter = v8::Handle<v8::Object>::Cast(descriptor)->Get(v8String(scriptState->isolate(), "set"));
     if (setter.IsEmpty() || !setter->IsFunction()) {
-        WTF_LOG_ERROR("Private script error: Target DOM attribute setter was not found. (Class name = %s, Attribute name = %s)\n", className.utf8().data(), attributeName.utf8().data());
+        fprintf(stderr, "Private script error: Target DOM attribute setter was not found. (Class name = %s, Attribute name = %s)\n", className.utf8().data(), attributeName.utf8().data());
         RELEASE_ASSERT_NOT_REACHED();
     }
     initializeHolderIfNeeded(scriptState, classObject, holder);
@@ -169,15 +232,16 @@ v8::Handle<v8::Value> PrivateScriptRunner::runDOMMethod(ScriptState* scriptState
     v8::Handle<v8::Object> classObject = classObjectOfPrivateScript(scriptState, className);
     v8::Handle<v8::Value> method = classObject->Get(v8String(scriptState->isolate(), methodName));
     if (method.IsEmpty() || !method->IsFunction()) {
-        WTF_LOG_ERROR("Private script error: Target DOM method was not found. (Class name = %s, Method name = %s)\n", className.utf8().data(), methodName.utf8().data());
+        fprintf(stderr, "Private script error: Target DOM method was not found. (Class name = %s, Method name = %s)\n", className.utf8().data(), methodName.utf8().data());
         RELEASE_ASSERT_NOT_REACHED();
     }
     initializeHolderIfNeeded(scriptState, classObject, holder);
     return V8ScriptRunner::callFunction(v8::Handle<v8::Function>::Cast(method), scriptState->executionContext(), holder, argc, argv, scriptState->isolate());
 }
 
-bool PrivateScriptRunner::throwDOMExceptionInPrivateScriptIfNeeded(v8::Isolate* isolate, ExceptionState& exceptionState, v8::Handle<v8::Value> exception)
+bool PrivateScriptRunner::rethrowExceptionInPrivateScript(v8::Isolate* isolate, ExceptionState& exceptionState, v8::TryCatch& block)
 {
+    v8::Handle<v8::Value> exception = block.Exception();
     if (exception.IsEmpty() || !exception->IsObject())
         return false;
 
@@ -185,49 +249,49 @@ bool PrivateScriptRunner::throwDOMExceptionInPrivateScriptIfNeeded(v8::Isolate* 
     v8::Handle<v8::Value> name = exceptionObject->Get(v8String(isolate, "name"));
     if (name.IsEmpty() || !name->IsString())
         return false;
+
+    v8::Handle<v8::Message> tryCatchMessage = block.Message();
+    v8::Handle<v8::Value> message = exceptionObject->Get(v8String(isolate, "message"));
+    String messageString;
+    if (!message.IsEmpty() && message->IsString())
+        messageString = toCoreString(v8::Handle<v8::String>::Cast(message));
+
     String exceptionName = toCoreString(v8::Handle<v8::String>::Cast(name));
     if (exceptionName == "DOMExceptionInPrivateScript") {
-        v8::Handle<v8::Value> message = exceptionObject->Get(v8String(isolate, "message"));
-        RELEASE_ASSERT(!message.IsEmpty() && message->IsString());
         v8::Handle<v8::Value> code = exceptionObject->Get(v8String(isolate, "code"));
         RELEASE_ASSERT(!code.IsEmpty() && code->IsInt32());
-        exceptionState.throwDOMException(toInt32(code), toCoreString(v8::Handle<v8::String>::Cast(message)));
+        exceptionState.throwDOMException(toInt32(code), messageString);
         exceptionState.throwIfNeeded();
         return true;
     }
     if (exceptionName == "Error") {
-        v8::Handle<v8::Value> message = exceptionObject->Get(v8String(isolate, "message"));
-        RELEASE_ASSERT(!message.IsEmpty() && message->IsString());
-        exceptionState.throwDOMException(V8GeneralError, toCoreString(v8::Handle<v8::String>::Cast(message)));
+        exceptionState.throwDOMException(V8GeneralError, messageString);
         exceptionState.throwIfNeeded();
+        dumpJSError(exceptionName, tryCatchMessage);
         return true;
     }
     if (exceptionName == "TypeError") {
-        v8::Handle<v8::Value> message = exceptionObject->Get(v8String(isolate, "message"));
-        RELEASE_ASSERT(!message.IsEmpty() && message->IsString());
-        exceptionState.throwDOMException(V8TypeError, toCoreString(v8::Handle<v8::String>::Cast(message)));
+        exceptionState.throwDOMException(V8TypeError, messageString);
         exceptionState.throwIfNeeded();
+        dumpJSError(exceptionName, tryCatchMessage);
         return true;
     }
     if (exceptionName == "RangeError") {
-        v8::Handle<v8::Value> message = exceptionObject->Get(v8String(isolate, "message"));
-        RELEASE_ASSERT(!message.IsEmpty() && message->IsString());
-        exceptionState.throwDOMException(V8RangeError, toCoreString(v8::Handle<v8::String>::Cast(message)));
+        exceptionState.throwDOMException(V8RangeError, messageString);
         exceptionState.throwIfNeeded();
+        dumpJSError(exceptionName, tryCatchMessage);
         return true;
     }
     if (exceptionName == "SyntaxError") {
-        v8::Handle<v8::Value> message = exceptionObject->Get(v8String(isolate, "message"));
-        RELEASE_ASSERT(!message.IsEmpty() && message->IsString());
-        exceptionState.throwDOMException(V8SyntaxError, toCoreString(v8::Handle<v8::String>::Cast(message)));
+        exceptionState.throwDOMException(V8SyntaxError, messageString);
         exceptionState.throwIfNeeded();
+        dumpJSError(exceptionName, tryCatchMessage);
         return true;
     }
     if (exceptionName == "ReferenceError") {
-        v8::Handle<v8::Value> message = exceptionObject->Get(v8String(isolate, "message"));
-        RELEASE_ASSERT(!message.IsEmpty() && message->IsString());
-        exceptionState.throwDOMException(V8ReferenceError, toCoreString(v8::Handle<v8::String>::Cast(message)));
+        exceptionState.throwDOMException(V8ReferenceError, messageString);
         exceptionState.throwIfNeeded();
+        dumpJSError(exceptionName, tryCatchMessage);
         return true;
     }
     return false;

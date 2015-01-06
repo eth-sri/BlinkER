@@ -95,6 +95,7 @@ static inline bool shouldUpdateHeaderAfterRevalidation(const AtomicString& heade
 }
 
 DEFINE_DEBUG_ONLY_GLOBAL(RefCountedLeakCounter, cachedResourceLeakCounter, ("Resource"));
+unsigned Resource::s_instanceCount = 0;
 
 Resource::Resource(const ResourceRequest& request, Type type)
     : m_resourceRequest(request)
@@ -123,6 +124,7 @@ Resource::Resource(const ResourceRequest& request, Type type)
     , m_callbackEventAction(nullptr)
 {
     ASSERT(m_type == unsigned(type)); // m_type is a bitfield, so this tests careless updates of the enum.
+    ++s_instanceCount;
 #ifndef NDEBUG
     cachedResourceLeakCounter.increment();
 #endif
@@ -152,6 +154,7 @@ Resource::~Resource()
 #ifndef NDEBUG
     cachedResourceLeakCounter.decrement();
 #endif
+    --s_instanceCount;
 }
 
 void Resource::dispose()

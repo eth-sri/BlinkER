@@ -81,6 +81,13 @@ WebInspector.InspectorView = function()
     this._closeBracketIdentifiers = ["U+005D", "U+00DD"].keySet();
     this._lastActivePanelSetting = WebInspector.settings.createSetting("lastActivePanel", "elements");
 
+    // FIXME(399531): enable timelineOnTraceEvents experiment when running layout tests under inspector/tracing/. This code
+    // should be removed along with the old Timeline implementation once we move tracing based Timeline out of experimental.
+    if ("tracing" === this._lastActivePanelSetting.get()) {
+        WebInspector.experimentsSettings.timelineOnTraceEvents.setEnabled(true);
+        this._lastActivePanelSetting.set("timeline");
+    }
+
     this._loadPanelDesciptors();
 
     InspectorFrontendHost.events.addEventListener(InspectorFrontendHostAPI.Events.ShowConsole, this.showPanel.bind(this, "console"));
@@ -221,6 +228,7 @@ WebInspector.InspectorView.prototype = {
     {
         if (this._currentPanelLocked)
             return;
+        InspectorFrontendHost.bringToFront();
         if (this._currentPanel === x)
             return;
 
@@ -462,37 +470,3 @@ WebInspector.InspectorView.ToggleDrawerButtonProvider.prototype = {
         return WebInspector.inspectorView._drawer.toggleButton();
     }
 }
-
-/**
- * @constructor
- * @extends {WebInspector.VBox}
- */
-WebInspector.RootView = function()
-{
-    WebInspector.VBox.call(this);
-    this.markAsRoot();
-    this.element.classList.add("root-view");
-    this.element.setAttribute("spellcheck", false);
-    window.addEventListener("resize", this.doResize.bind(this), false);
-};
-
-WebInspector.RootView.prototype = {
-    attachToBody: function()
-    {
-        this.doResize();
-        this.show(document.body);
-    },
-
-    doResize: function()
-    {
-        var size = this.constraints().minimum;
-        var zoom = WebInspector.zoomManager.zoomFactor();
-        var right = Math.min(0, window.innerWidth - size.width / zoom);
-        this.element.style.marginRight = right + "px";
-        var bottom = Math.min(0, window.innerHeight - size.height / zoom);
-        this.element.style.marginBottom = bottom + "px";
-        WebInspector.VBox.prototype.doResize.call(this);
-    },
-
-    __proto__: WebInspector.VBox.prototype
-};

@@ -634,7 +634,11 @@ void SVGInlineTextBox::paintTextWithShadows(GraphicsContext* context, RenderStyl
         TextRunPaintInfo textRunPaintInfo(textRun);
         textRunPaintInfo.from = startPosition;
         textRunPaintInfo.to = endPosition;
-        textRunPaintInfo.bounds = FloatRect(textOrigin, textSize);
+
+        float baseline = scaledFont.fontMetrics().floatAscent();
+        textRunPaintInfo.bounds = FloatRect(textOrigin.x(), textOrigin.y() - baseline,
+            textSize.width(), textSize.height());
+
         scaledFont.drawText(context, textRunPaintInfo, textOrigin);
         restoreGraphicsContextAfterTextPainting(context, textRun, resourceMode);
     }
@@ -673,7 +677,7 @@ void SVGInlineTextBox::paintText(GraphicsContext* context, RenderStyle* style,
     // Draw text using selection style from the start to the end position of the selection
     if (style != selectionStyle) {
         StyleDifference diff;
-        diff.setNeedsRepaintObject();
+        diff.setNeedsPaintInvalidationObject();
         SVGResourcesCache::clientStyleChanged(&parent()->renderer(), diff, selectionStyle);
     }
 
@@ -681,7 +685,7 @@ void SVGInlineTextBox::paintText(GraphicsContext* context, RenderStyle* style,
 
     if (style != selectionStyle) {
         StyleDifference diff;
-        diff.setNeedsRepaintObject();
+        diff.setNeedsPaintInvalidationObject();
         SVGResourcesCache::clientStyleChanged(&parent()->renderer(), diff, selectionStyle);
     }
 

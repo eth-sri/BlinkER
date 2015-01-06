@@ -243,6 +243,11 @@ bool MediaSource::isTypeSupported(const String& type)
     if (contentType.type().isEmpty())
         return false;
 
+    // Note: MediaSource.isTypeSupported() returning true implies that HTMLMediaElement.canPlayType() will return "maybe" or "probably"
+    // since it does not make sense for a MediaSource to support a type the HTMLMediaElement knows it cannot play.
+    if (HTMLMediaElement::supportsType(contentType, String()) == WebMimeRegistry::IsNotSupported)
+        return false;
+
     // 3. If type contains a media type or media subtype that the MediaSource does not support, then return false.
     // 4. If type contains at a codec that the MediaSource does not support, then return false.
     // 5. If the MediaSource does not support the specified combination of media type, media subtype, and codecs then return false.
@@ -439,9 +444,9 @@ void MediaSource::endOfStream(const AtomicString& error, ExceptionState& excepti
     DEFINE_STATIC_LOCAL(const AtomicString, decode, ("decode", AtomicString::ConstructFromLiteral));
 
     if (error == network) {
-        endOfStreamInternal(blink::WebMediaSource::EndOfStreamStatusNetworkError, exceptionState);
+        endOfStreamInternal(WebMediaSource::EndOfStreamStatusNetworkError, exceptionState);
     } else if (error == decode) {
-        endOfStreamInternal(blink::WebMediaSource::EndOfStreamStatusDecodeError, exceptionState);
+        endOfStreamInternal(WebMediaSource::EndOfStreamStatusDecodeError, exceptionState);
     } else {
         ASSERT_NOT_REACHED(); // IDL enforcement should prevent this case.
     }
@@ -449,10 +454,10 @@ void MediaSource::endOfStream(const AtomicString& error, ExceptionState& excepti
 
 void MediaSource::endOfStream(ExceptionState& exceptionState)
 {
-    endOfStreamInternal(blink::WebMediaSource::EndOfStreamStatusNoError, exceptionState);
+    endOfStreamInternal(WebMediaSource::EndOfStreamStatusNoError, exceptionState);
 }
 
-void MediaSource::endOfStreamInternal(const blink::WebMediaSource::EndOfStreamStatus eosStatus, ExceptionState& exceptionState)
+void MediaSource::endOfStreamInternal(const WebMediaSource::EndOfStreamStatus eosStatus, ExceptionState& exceptionState)
 {
     // 2.2 http://www.w3.org/TR/media-source/#widl-MediaSource-endOfStream-void-EndOfStreamError-error
     // 1. If the readyState attribute is not in the "open" state then throw an

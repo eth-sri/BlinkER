@@ -373,8 +373,10 @@ void npObjectPropertyEnumerator(const v8::PropertyCallbackInfo<v8::Array>& info,
 
     // Verify that our wrapper wasn't using a NPObject which
     // has already been deleted.
-    if (!npObject || !_NPN_IsAlive(npObject))
+    if (!npObject || !_NPN_IsAlive(npObject)) {
         V8ThrowException::throwReferenceError("NPObject deleted", info.GetIsolate());
+        return;
+    }
 
     if (NP_CLASS_STRUCT_VERSION_HAS_ENUM(npObject->_class) && npObject->_class->enumerate) {
         uint32_t count;
@@ -468,7 +470,7 @@ v8::Local<v8::Object> createV8ObjectForNPObject(NPObject* object, NPObject* root
     if (value.IsEmpty())
         return value;
 
-    V8DOMWrapper::setNativeInfo(value, npObjectTypeInfo(), object);
+    V8DOMWrapper::setNativeInfo(value, npObjectTypeInfo(), npObjectToInternalPointer(object));
 
     // KJS retains the object as part of its wrapper (see Bindings::CInstance).
     _NPN_RetainObject(object);

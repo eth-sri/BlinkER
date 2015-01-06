@@ -12,7 +12,7 @@
 #include "bindings/core/v8/V8DOMConfiguration.h"
 #include "bindings/core/v8/V8HiddenValue.h"
 #include "bindings/core/v8/V8ObjectConstructor.h"
-#include "bindings/core/v8/V8WindowShell.h"
+#include "bindings/core/v8/WindowProxy.h"
 #include "core/dom/ContextFeatures.h"
 #include "core/dom/Document.h"
 #include "core/frame/LocalFrame.h"
@@ -23,12 +23,9 @@
 
 namespace blink {
 
-static void initializeScriptWrappableForInterface(TestInterfaceDocument* object)
+static void initializeScriptWrappableForInterface(TestInterfaceDocument* impl)
 {
-    if (ScriptWrappable::wrapperCanBeStoredInObject(object))
-        ScriptWrappable::fromObject(object)->setTypeInfo(&V8TestInterfaceDocument::wrapperTypeInfo);
-    else
-        ASSERT_NOT_REACHED();
+    impl->setTypeInfo(&V8TestInterfaceDocument::wrapperTypeInfo);
 }
 
 } // namespace blink
@@ -39,7 +36,8 @@ void webCoreInitializeScriptWrappableForInterface(blink::TestInterfaceDocument* 
 }
 
 namespace blink {
-const WrapperTypeInfo V8TestInterfaceDocument::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceDocument::domTemplate, V8TestInterfaceDocument::derefObject, 0, V8TestInterfaceDocument::toEventTarget, 0, V8TestInterfaceDocument::installPerContextEnabledMethods, &V8Document::wrapperTypeInfo, WrapperTypeObjectPrototype, WillBeGarbageCollectedObject };
+
+const WrapperTypeInfo V8TestInterfaceDocument::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceDocument::domTemplate, V8TestInterfaceDocument::refObject, V8TestInterfaceDocument::derefObject, V8TestInterfaceDocument::createPersistentHandle, 0, V8TestInterfaceDocument::toEventTarget, 0, V8TestInterfaceDocument::installConditionallyEnabledMethods, V8TestInterfaceDocument::installConditionallyEnabledProperties, &V8Document::wrapperTypeInfo, WrapperTypeObjectPrototype, WillBeGarbageCollectedObject };
 
 namespace TestInterfaceDocumentV8Internal {
 
@@ -81,7 +79,7 @@ v8::Handle<v8::Object> V8TestInterfaceDocument::findInstanceInPrototypeChain(v8:
 
 TestInterfaceDocument* V8TestInterfaceDocument::toNativeWithTypeCheck(v8::Isolate* isolate, v8::Handle<v8::Value> value)
 {
-    return hasInstance(value, isolate) ? fromInternalPointer(v8::Handle<v8::Object>::Cast(value)->GetAlignedPointerFromInternalField(v8DOMWrapperObjectIndex)) : 0;
+    return hasInstance(value, isolate) ? fromInternalPointer(blink::toInternalPointer(v8::Handle<v8::Object>::Cast(value))) : 0;
 }
 
 EventTarget* V8TestInterfaceDocument::toEventTarget(v8::Handle<v8::Object> object)
@@ -98,7 +96,7 @@ v8::Handle<v8::Object> wrap(TestInterfaceDocument* impl, v8::Handle<v8::Object> 
     DOMWrapperWorld& world = DOMWrapperWorld::current(isolate);
     if (world.isMainWorld()) {
         if (LocalFrame* frame = impl->frame())
-            frame->script().windowShell(world)->updateDocumentWrapper(wrapper);
+            frame->script().windowProxy(world)->updateDocumentWrapper(wrapper);
     }
     return wrapper;
 }
@@ -107,12 +105,10 @@ v8::Handle<v8::Object> V8TestInterfaceDocument::createWrapper(PassRefPtrWillBeRa
 {
     ASSERT(impl);
     ASSERT(!DOMDataStore::containsWrapper<V8TestInterfaceDocument>(impl.get(), isolate));
-    if (ScriptWrappable::wrapperCanBeStoredInObject(impl.get())) {
-        const WrapperTypeInfo* actualInfo = ScriptWrappable::fromObject(impl.get())->typeInfo();
-        // Might be a XXXConstructor::wrapperTypeInfo instead of an XXX::wrapperTypeInfo. These will both have
-        // the same object de-ref functions, though, so use that as the basis of the check.
-        RELEASE_ASSERT_WITH_SECURITY_IMPLICATION(actualInfo->derefObjectFunction == wrapperTypeInfo.derefObjectFunction);
-    }
+    const WrapperTypeInfo* actualInfo = impl->typeInfo();
+    // Might be a XXXConstructor::wrapperTypeInfo instead of an XXX::wrapperTypeInfo. These will both have
+    // the same object de-ref functions, though, so use that as the basis of the check.
+    RELEASE_ASSERT_WITH_SECURITY_IMPLICATION(actualInfo->derefObjectFunction == wrapperTypeInfo.derefObjectFunction);
 
     if (LocalFrame* frame = impl->frame()) {
         if (frame->script().initializeMainWorld()) {
@@ -126,16 +122,34 @@ v8::Handle<v8::Object> V8TestInterfaceDocument::createWrapper(PassRefPtrWillBeRa
     if (UNLIKELY(wrapper.IsEmpty()))
         return wrapper;
 
-    installPerContextEnabledProperties(wrapper, impl.get(), isolate);
+    installConditionallyEnabledProperties(wrapper, isolate);
     V8DOMWrapper::associateObjectWithWrapper<V8TestInterfaceDocument>(impl, &wrapperTypeInfo, wrapper, isolate, WrapperConfiguration::Dependent);
     return wrapper;
 }
 
-void V8TestInterfaceDocument::derefObject(void* object)
+
+void V8TestInterfaceDocument::refObject(ScriptWrappableBase* internalPointer)
 {
 #if !ENABLE(OILPAN)
-    fromInternalPointer(object)->deref();
-#endif // !ENABLE(OILPAN)
+    fromInternalPointer(internalPointer)->ref();
+#endif
+}
+
+void V8TestInterfaceDocument::derefObject(ScriptWrappableBase* internalPointer)
+{
+#if !ENABLE(OILPAN)
+    fromInternalPointer(internalPointer)->deref();
+#endif
+}
+
+PersistentNode* V8TestInterfaceDocument::createPersistentHandle(ScriptWrappableBase* internalPointer)
+{
+#if ENABLE(OILPAN)
+    return new Persistent<TestInterfaceDocument>(fromInternalPointer(internalPointer));
+#else
+    ASSERT_NOT_REACHED();
+    return 0;
+#endif
 }
 
 template<>

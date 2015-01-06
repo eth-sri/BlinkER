@@ -24,41 +24,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-importScript("jsdifflib.js")
-importScript("Placard.js");
-importScript("AddSourceMapURLDialog.js");
-importScript("BreakpointsSidebarPane.js");
-importScript("CallStackSidebarPane.js");
-importScript("SimpleHistoryManager.js");
-importScript("EditingLocationHistoryManager.js");
-importScript("FilePathScoreFunction.js");
-importScript("FilteredItemSelectionDialog.js");
-importScript("UISourceCodeFrame.js");
-importScript("JavaScriptSourceFrame.js");
-importScript("CSSSourceFrame.js");
-importScript("NavigatorView.js");
-importScript("RevisionHistoryView.js");
-importScript("ScopeChainSidebarPane.js");
-importScript("SourcesNavigator.js");
-importScript("StyleSheetOutlineDialog.js");
-importScript("TabbedEditorContainer.js");
-importScript("WatchExpressionsSidebarPane.js");
-importScript("WorkersSidebarPane.js");
-importScript("TargetsToolbar.js");
-importScript("ScriptFormatterEditorAction.js");
-importScript("InplaceFormatterEditorAction.js");
-importScript("ScriptFormatter.js");
-importScript("SourcesView.js");
-
-// Search results pane
-importScript("AdvancedSearchView.js");
-importScript("FileBasedSearchResultsPane.js");
-importScript("SourcesSearchScope.js");
-
 /**
  * @constructor
- * @implements {WebInspector.ContextMenu.Provider}
  * @extends {WebInspector.Panel}
+ * @implements {WebInspector.ContextMenu.Provider}
+ * @implements {WebInspector.TargetManager.Observer}
  * @param {!WebInspector.Workspace=} workspaceForTest
  */
 WebInspector.SourcesPanel = function(workspaceForTest)
@@ -71,7 +41,6 @@ WebInspector.SourcesPanel = function(workspaceForTest)
 
     this.debugToolbar = this._createDebugToolbar();
     this._debugToolbarDrawer = this._createDebugToolbarDrawer();
-    this._targetsToolbar = new WebInspector.TargetsToolbar();
 
     const initialDebugSidebarWidth = 225;
     this._splitView = new WebInspector.SplitView(true, true, "sourcesPanelSplitViewState", initialDebugSidebarWidth);
@@ -105,6 +74,7 @@ WebInspector.SourcesPanel = function(workspaceForTest)
     this._splitView.installResizer(this._debugSidebarResizeWidgetElement);
 
     this.sidebarPanes = {};
+    this.sidebarPanes.threads = new WebInspector.ThreadsSidebarPane();
     this.sidebarPanes.watchExpressions = new WebInspector.WatchExpressionsSidebarPane();
     this.sidebarPanes.callstack = new WebInspector.CallStackSidebarPane();
     this.sidebarPanes.callstack.addEventListener(WebInspector.CallStackSidebarPane.Events.CallFrameSelected, this._callFrameSelectedInSidebar.bind(this));
@@ -115,9 +85,6 @@ WebInspector.SourcesPanel = function(workspaceForTest)
     this.sidebarPanes.domBreakpoints = WebInspector.domBreakpointsSidebarPane.createProxy(this);
     this.sidebarPanes.xhrBreakpoints = new WebInspector.XHRBreakpointsSidebarPane();
     this.sidebarPanes.eventListenerBreakpoints = new WebInspector.EventListenerBreakpointsSidebarPane();
-
-    if (!WebInspector.isWorkerFrontend())
-        this.sidebarPanes.workerList = new WebInspector.WorkersSidebarPane();
 
     this._extensionSidebarPanes = [];
     this._installDebuggerSidebarController();
@@ -139,6 +106,7 @@ WebInspector.SourcesPanel = function(workspaceForTest)
     WebInspector.targetManager.addModelListener(WebInspector.DebuggerModel, WebInspector.DebuggerModel.Events.CallFrameSelected, this._callFrameSelected, this);
     WebInspector.targetManager.addModelListener(WebInspector.DebuggerModel, WebInspector.DebuggerModel.Events.ConsoleCommandEvaluatedInSelectedCallFrame, this._consoleCommandEvaluatedInSelectedCallFrame, this);
     WebInspector.targetManager.addModelListener(WebInspector.DebuggerModel, WebInspector.DebuggerModel.Events.GlobalObjectCleared, this._debuggerReset, this);
+    WebInspector.targetManager.observeTargets(this);
 }
 
 WebInspector.SourcesPanel.minToolbarWidth = 215;
@@ -352,8 +320,6 @@ WebInspector.SourcesPanel.prototype = {
 
     _showEditor: function(forceShowInPanel)
     {
-        if (this._sourcesView.isShowing())
-            return;
         WebInspector.inspectorView.showPanel("sources");
     },
 
@@ -1071,7 +1037,6 @@ WebInspector.SourcesPanel.prototype = {
         var vbox = new WebInspector.VBox();
         vbox.element.appendChild(this._debugToolbarDrawer);
         vbox.element.appendChild(this.debugToolbar);
-        vbox.element.appendChild(this._targetsToolbar.element);
         vbox.setMinimumAndPreferredSizes(25, 25, WebInspector.SourcesPanel.minToolbarWidth, 100);
         var sidebarPaneStack = new WebInspector.SidebarPaneStack();
         sidebarPaneStack.element.classList.add("flex-auto");
@@ -1082,20 +1047,18 @@ WebInspector.SourcesPanel.prototype = {
             for (var pane in this.sidebarPanes)
                 sidebarPaneStack.addPane(this.sidebarPanes[pane]);
             this._extensionSidebarPanesContainer = sidebarPaneStack;
-
             this.sidebarPaneView = vbox;
         } else {
             var splitView = new WebInspector.SplitView(true, true, "sourcesPanelDebuggerSidebarSplitViewState", 0.5);
             vbox.show(splitView.mainElement());
 
             // Populate the left stack.
+            sidebarPaneStack.addPane(this.sidebarPanes.threads);
             sidebarPaneStack.addPane(this.sidebarPanes.callstack);
             sidebarPaneStack.addPane(this.sidebarPanes.jsBreakpoints);
             sidebarPaneStack.addPane(this.sidebarPanes.domBreakpoints);
             sidebarPaneStack.addPane(this.sidebarPanes.xhrBreakpoints);
             sidebarPaneStack.addPane(this.sidebarPanes.eventListenerBreakpoints);
-            if (this.sidebarPanes.workerList)
-                sidebarPaneStack.addPane(this.sidebarPanes.workerList);
 
             var tabbedPane = new WebInspector.SidebarTabbedPane();
             tabbedPane.show(splitView.sidebarElement());
@@ -1109,11 +1072,12 @@ WebInspector.SourcesPanel.prototype = {
             this._extensionSidebarPanesContainer.addPane(this._extensionSidebarPanes[i]);
 
         this.sidebarPaneView.show(this._splitView.sidebarElement());
-
+        this.sidebarPanes.threads.expand();
         this.sidebarPanes.scopechain.expand();
         this.sidebarPanes.jsBreakpoints.expand();
         this.sidebarPanes.callstack.expand();
-
+        this._sidebarPaneStack = sidebarPaneStack;
+        this._updateTargetsSidebarVisibility();
         if (WebInspector.settings.watchExpressions.get().length > 0)
             this.sidebarPanes.watchExpressions.expand();
     },
@@ -1135,6 +1099,29 @@ WebInspector.SourcesPanel.prototype = {
     sourcesView: function()
     {
         return this._sourcesView;
+    },
+
+    /**
+     * @param {!WebInspector.Target} target
+     */
+    targetAdded: function(target)
+    {
+        this._updateTargetsSidebarVisibility();
+    },
+
+    /**
+     * @param {!WebInspector.Target} target
+     */
+    targetRemoved: function(target)
+    {
+        this._updateTargetsSidebarVisibility();
+    },
+
+    _updateTargetsSidebarVisibility: function()
+    {
+        if (!this._sidebarPaneStack)
+            return;
+        this._sidebarPaneStack.togglePaneHidden(this.sidebarPanes.threads, WebInspector.targetManager.targets().length < 2);
     },
 
     __proto__: WebInspector.Panel.prototype
@@ -1302,7 +1289,7 @@ WebInspector.SourcesPanel.DisableJavaScriptSettingDelegate.prototype = {
         this._disableJSInfo = disableJSInfoParent.createChild("span", "object-info-state-note hidden");
         this._disableJSInfo.title = WebInspector.UIString("JavaScript is blocked on the inspected page (may be disabled in browser settings).");
 
-        WebInspector.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, this._updateScriptDisabledCheckbox, this);
+        WebInspector.targetManager.addEventListener(WebInspector.TargetManager.Events.MainFrameNavigated, this._updateScriptDisabledCheckbox, this);
         this._updateScriptDisabledCheckbox();
         return disableJSElement;
     },

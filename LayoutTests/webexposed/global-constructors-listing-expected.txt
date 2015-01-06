@@ -74,6 +74,8 @@ Comment
 CompositionEvent
 ConvolverNode
 Counter
+Credential
+CredentialsContainer
 CustomEvent
 DOMError
 DOMException
@@ -108,6 +110,7 @@ EvalError
 Event
 EventSource
 EventTarget
+FederatedCredential
 File
 FileError
 FileList
@@ -163,6 +166,7 @@ HTMLMapElement
 HTMLMarqueeElement
 HTMLMediaElement
 HTMLMenuElement
+HTMLMenuItemElement
 HTMLMetaElement
 HTMLMeterElement
 HTMLModElement
@@ -218,6 +222,7 @@ Int16Array
 Int32Array
 Int8Array
 KeyboardEvent
+LocalCredential
 Location
 MIDIConnectionEvent
 MIDIMessageEvent
@@ -232,6 +237,7 @@ MediaKeyNeededEvent
 MediaKeySession
 MediaKeys
 MediaList
+MediaQueryListEvent
 MediaSource
 MediaStreamAudioDestinationNode
 MediaStreamAudioSourceNode
@@ -253,7 +259,6 @@ Node
 NodeFilter
 NodeIterator
 NodeList
-Notation
 Notification
 Number
 Object

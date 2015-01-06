@@ -49,7 +49,6 @@
 
 namespace blink {
 
-class Resource;
 class Chrome;
 class DOMWrapperWorld;
 class DocumentLoader;
@@ -59,6 +58,7 @@ class EventRacerLog;
 class FetchContext;
 class FormState;
 class FormSubmission;
+class Frame;
 class FrameLoaderClient;
 class IconController;
 class NavigationAction;
@@ -105,6 +105,7 @@ public:
     bool closeURL();
     // FIXME: clear() is trying to do too many things. We should break it down into smaller functions.
     void clear();
+    void replaceDocumentWhileExecutingJavaScriptURL(const String& source, Document* ownerDocument);
 
     // Sets a timer to notify the client that the initial empty document has
     // been accessed, and thus it is no longer safe to show a provisional URL
@@ -158,7 +159,7 @@ public:
     void forceSandboxFlags(SandboxFlags flags) { m_forcedSandboxFlags |= flags; }
     SandboxFlags effectiveSandboxFlags() const;
 
-    LocalFrame* opener();
+    Frame* opener();
     void setOpener(LocalFrame*);
 
     void detachFromParent();
@@ -180,8 +181,6 @@ public:
     bool allAncestorsAreComplete() const; // including this
 
     bool shouldClose();
-
-    void started();
 
     bool allowPlugins(ReasonForCallingAllowPlugins);
 
@@ -226,7 +225,6 @@ private:
     void loadInSameDocument(const KURL&, PassRefPtr<SerializedScriptValue> stateObject, FrameLoadType, ClientRedirectPolicy);
 
     void scheduleCheckCompleted();
-    void startCheckCompleteTimer();
 
     LocalFrame* m_frame;
 
@@ -272,18 +270,12 @@ private:
 
     bool m_inStopAllLoaders;
 
-    // FIXME: This is only used in checkCompleted(). Figure out a way to disentangle it.
-    bool m_isComplete;
-
     Timer<FrameLoader> m_checkTimer;
-    bool m_shouldCallCheckCompleted;
 
     bool m_didAccessInitialDocument;
     Timer<FrameLoader> m_didAccessInitialDocumentTimer;
 
     SandboxFlags m_forcedSandboxFlags;
-
-    bool m_willDetachClient;
 
     RefPtr<EventRacerLog> m_eventRacerLog;
     RefPtr<EventRacerLog> m_provisionalEventRacerLog;

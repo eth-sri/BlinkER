@@ -1,45 +1,60 @@
-layer at (0,0) size 800x600
-  RenderView at (0,0) size 800x600
-layer at (0,0) size 800x600
-  RenderBlock {HTML} at (0,0) size 800x600
-    RenderBody {BODY} at (8,8) size 784x584
-layer at (8,8) size 90x90
-  RenderBlock (relative positioned) {DIV} at (0,0) size 90x90
-    RenderTable {TABLE} at (0,0) size 60x60
-      RenderBlock {CAPTION} at (0,0) size 60x0 [bgcolor=#0000FF]
-      RenderTableSection {TBODY} at (0,0) size 60x60
-        RenderTableRow {TR} at (0,0) size 60x30
-          RenderTableCell {TD} at (0,15) size 60x0 [bgcolor=#FFFF00] [r=0 c=0 rs=1 cs=1]
-        RenderTableRow {TR} at (0,30) size 60x30
-          RenderTableCell {TD} at (0,45) size 60x0 [bgcolor=#008000] [r=1 c=0 rs=1 cs=1]
-layer at (8,98) size 90x90
-  RenderBlock (relative positioned) {DIV} at (0,90) size 90x90
-    RenderTable {TABLE} at (0,0) size 60x60
-      RenderTableSection {TBODY} at (0,0) size 60x0
-        RenderTableRow {TR} at (0,0) size 60x0
-          RenderTableCell {TD} at (0,0) size 60x0 [r=0 c=0 rs=1 cs=1]
-            RenderBlock {DIV} at (0,0) size 60x0 [bgcolor=#0000FF]
-      RenderTableSection {TBODY} at (0,0) size 60x60
-        RenderTableRow {TR} at (0,0) size 60x30
-          RenderTableCell {TD} at (0,15) size 60x0 [bgcolor=#FFFF00] [r=0 c=0 rs=1 cs=1]
-        RenderTableRow {TR} at (0,30) size 60x30
-          RenderTableCell {TD} at (0,45) size 60x0 [bgcolor=#008000] [r=1 c=0 rs=1 cs=1]
-layer at (8,188) size 90x90
-  RenderBlock (relative positioned) {DIV} at (0,180) size 90x90
-    RenderTable {TABLE} at (0,0) size 60x90
-      RenderBlock {CAPTION} at (0,0) size 60x30
-      RenderTableSection {TBODY} at (0,30) size 60x60
-        RenderTableRow {TR} at (0,0) size 60x30
-          RenderTableCell {TD} at (0,15) size 60x0 [bgcolor=#008000] [r=0 c=0 rs=1 cs=1]
-        RenderTableRow {TR} at (0,30) size 60x30
-          RenderTableCell {TD} at (0,45) size 60x0 [bgcolor=#FFFF00] [r=1 c=0 rs=1 cs=1]
-layer at (8,308) size 90x90
-  RenderBlock (relative positioned) {DIV} at (0,300) size 90x90
-    RenderTable {TABLE} at (0,0) size 60x83 [border: (4px solid #008000)]
-      RenderBlock {CAPTION} at (25,0) size 10x15
-        RenderBlock {DIV} at (0,0) size 10x15
-      RenderTableSection {TBODY} at (4,19) size 52x60
-        RenderTableRow {TR} at (0,0) size 52x30
-          RenderTableCell {TD} at (0,10) size 52x10 [border: (4px none #000000)] [r=0 c=0 rs=1 cs=1]
-        RenderTableRow {TR} at (0,30) size 52x30
-          RenderTableCell {TD} at (0,40) size 52x10 [border: (4px solid #FFFF00) (4px none #000000)] [r=1 c=0 rs=1 cs=1]
+{
+  "bounds": [800, 600],
+  "children": [
+    {
+      "bounds": [800, 600],
+      "contentsOpaque": true,
+      "drawsContent": true,
+      "repaintRects": [
+        [33, 308, 10, 15],
+        [33, 308, 10, 15],
+        [12, 357, 52, 30],
+        [12, 342, 52, 30],
+        [12, 327, 52, 60],
+        [12, 327, 52, 30],
+        [12, 312, 52, 60],
+        [12, 312, 52, 30],
+        [8, 353, 60, 38],
+        [8, 338, 60, 38],
+        [8, 323, 60, 38],
+        [8, 308, 60, 83],
+        [8, 308, 60, 68],
+        [8, 308, 60, 38],
+        [8, 248, 60, 30],
+        [8, 248, 60, 30],
+        [8, 218, 60, 60],
+        [8, 218, 60, 30],
+        [8, 218, 60, 30],
+        [8, 218, 60, 30],
+        [8, 218, 60, 30],
+        [8, 188, 60, 60],
+        [8, 188, 60, 30],
+        [8, 188, 60, 30],
+        [8, 188, 60, 30],
+        [8, 158, 60, 30],
+        [8, 158, 60, 30],
+        [8, 128, 60, 60],
+        [8, 128, 60, 30],
+        [8, 128, 60, 30],
+        [8, 128, 60, 30],
+        [8, 128, 60, 30],
+        [8, 98, 60, 60],
+        [8, 98, 60, 30],
+        [8, 98, 60, 30],
+        [8, 98, 60, 30],
+        [8, 68, 60, 30],
+        [8, 98, 60, 30],
+        [8, 38, 60, 60],
+        [8, 38, 60, 30],
+        [8, 38, 60, 30],
+        [8, 38, 60, 30],
+        [8, 38, 60, 30],
+        [8, 8, 60, 60],
+        [8, 8, 60, 30],
+        [8, 8, 60, 30],
+        [8, 8, 60, 30]
+      ]
+    }
+  ]
+}
+

@@ -48,8 +48,6 @@
 #include "wtf/Assertions.h"
 #include "wtf/text/CString.h"
 
-using namespace blink;
-
 namespace blink {
 
 static PassOwnPtr<WebMediaPlayer> createWebMediaPlayer(WebMediaPlayerClient* client, const WebURL& url, LocalFrame* frame)
@@ -106,19 +104,9 @@ void WebMediaPlayerClientImpl::sizeChanged()
     m_client->mediaPlayerSizeChanged();
 }
 
-double WebMediaPlayerClientImpl::volume() const
-{
-    return mediaElement().playerVolume();
-}
-
 void WebMediaPlayerClientImpl::playbackStateChanged()
 {
     m_client->mediaPlayerPlaybackStateChanged();
-}
-
-WebMediaPlayer::Preload WebMediaPlayerClientImpl::preload() const
-{
-    return static_cast<WebMediaPlayer::Preload>(m_preload);
 }
 
 void WebMediaPlayerClientImpl::keyAdded(const WebString& keySystem, const WebString& sessionId)
@@ -141,7 +129,7 @@ void WebMediaPlayerClientImpl::keyNeeded(const WebString& contentType, const uns
     HTMLMediaElementEncryptedMedia::keyNeeded(mediaElement(), contentType, initData, initDataLength);
 }
 
-void WebMediaPlayerClientImpl::setWebLayer(blink::WebLayer* layer)
+void WebMediaPlayerClientImpl::setWebLayer(WebLayer* layer)
 {
     m_client->mediaPlayerSetWebLayer(layer);
 }
@@ -212,7 +200,7 @@ void WebMediaPlayerClientImpl::load(WebMediaPlayer::LoadType loadType, const WTF
     m_audioSourceProvider.wrap(m_webMediaPlayer->audioSourceProvider());
 #endif
 
-    m_webMediaPlayer->setVolume(mediaElement().playerVolume());
+    m_webMediaPlayer->setVolume(mediaElement().effectiveMediaVolume());
 
     m_webMediaPlayer->setPoster(poster);
 
@@ -223,8 +211,6 @@ void WebMediaPlayerClientImpl::load(WebMediaPlayer::LoadType loadType, const WTF
 
 void WebMediaPlayerClientImpl::setPreload(MediaPlayer::Preload preload)
 {
-    m_preload = preload;
-
     if (m_webMediaPlayer)
         m_webMediaPlayer->setPreload(static_cast<WebMediaPlayer::Preload>(preload));
 }
@@ -243,12 +229,11 @@ PassOwnPtr<MediaPlayer> WebMediaPlayerClientImpl::create(MediaPlayerClient* clie
 
 WebMediaPlayerClientImpl::WebMediaPlayerClientImpl(MediaPlayerClient* client)
     : m_client(client)
-    , m_preload(MediaPlayer::Auto)
 {
     ASSERT(m_client);
 }
 
-blink::HTMLMediaElement& WebMediaPlayerClientImpl::mediaElement() const
+HTMLMediaElement& WebMediaPlayerClientImpl::mediaElement() const
 {
     return *static_cast<HTMLMediaElement*>(m_client);
 }
@@ -271,7 +256,7 @@ void WebMediaPlayerClientImpl::AudioSourceProviderImpl::setClient(AudioSourcePro
     MutexLocker locker(provideInputLock);
 
     if (client)
-        m_client = adoptPtrWillBeNoop(new WebMediaPlayerClientImpl::AudioClientImpl(client));
+        m_client = new WebMediaPlayerClientImpl::AudioClientImpl(client);
     else
         m_client.clear();
 

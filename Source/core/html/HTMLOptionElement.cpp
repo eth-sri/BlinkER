@@ -309,7 +309,7 @@ void HTMLOptionElement::didRecalcStyle(StyleRecalcChange change)
     // FIXME: We ask our owner select to repaint regardless of which property changed.
     if (HTMLSelectElement* select = ownerSelectElement()) {
         if (RenderObject* renderer = select->renderer())
-            renderer->paintInvalidationForWholeRenderer();
+            renderer->setShouldDoFullPaintInvalidation(true);
     }
 }
 
@@ -336,11 +336,13 @@ Node::InsertionNotificationRequest HTMLOptionElement::insertedInto(ContainerNode
         select->setRecalcListItems();
         // Do not call selected() since calling updateListItemSelectedStates()
         // at this time won't do the right thing. (Why, exactly?)
-        // FIXME: Might be better to call this unconditionally, always passing m_isSelected,
-        // rather than only calling it if we are selected.
-        if (m_isSelected)
+        if (m_isSelected) {
+            // FIXME: Might be better to call this unconditionally, always
+            // passing m_isSelected, rather than only calling it if we are
+            // selected.
             select->optionSelectionStateChanged(this, true);
-        select->scrollToSelection();
+            select->scrollToSelection();
+        }
     }
 
     return HTMLElement::insertedInto(insertionPoint);
@@ -395,6 +397,24 @@ bool HTMLOptionElement::spatialNavigationFocused() const
     if (!select || !select->focused())
         return false;
     return select->spatialNavigationFocusedOption() == this;
+}
+
+bool HTMLOptionElement::isDisplayNone() const
+{
+    // If m_style is not set, then the node is still unattached.
+    // We have to wait till it gets attached to read the display property.
+    if (!m_style)
+        return false;
+
+    if (m_style->display() != NONE) {
+        Element* parent = parentElement();
+        ASSERT(parent);
+        if (isHTMLOptGroupElement(*parent)) {
+            RenderStyle* parentStyle = parent->renderStyle() ? parent->renderStyle() : parent->computedStyle();
+            return !parentStyle || parentStyle->display() == NONE;
+        }
+    }
+    return m_style->display() == NONE;
 }
 
 } // namespace blink

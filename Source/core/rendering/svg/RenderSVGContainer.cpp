@@ -48,6 +48,12 @@ RenderSVGContainer::~RenderSVGContainer()
 {
 }
 
+void RenderSVGContainer::trace(Visitor* visitor)
+{
+    visitor->trace(m_children);
+    RenderSVGModelObject::trace(visitor);
+}
+
 void RenderSVGContainer::layout()
 {
     ASSERT(needsLayout());
@@ -101,15 +107,12 @@ void RenderSVGContainer::paint(PaintInfo& paintInfo, const LayoutPoint&)
 {
     ANNOTATE_GRAPHICS_CONTEXT(paintInfo, this);
 
-    if (paintInfo.context->paintingDisabled())
-        return;
-
     // Spec: groups w/o children still may render filter content.
     if (!firstChild() && !selfWillPaint())
         return;
 
-    FloatRect repaintRect = paintInvalidationRectInLocalCoordinates();
-    if (!SVGRenderSupport::paintInfoIntersectsRepaintRect(repaintRect, localToParentTransform(), paintInfo))
+    FloatRect paintInvalidationRect = paintInvalidationRectInLocalCoordinates();
+    if (!SVGRenderSupport::paintInfoIntersectsPaintInvalidationRect(paintInvalidationRect, localToParentTransform(), paintInfo))
         return;
 
     PaintInfo childPaintInfo(paintInfo);
@@ -145,7 +148,7 @@ void RenderSVGContainer::paint(PaintInfo& paintInfo, const LayoutPoint&)
     // FIXME: This means our focus ring won't share our rotation like it should.
     // We should instead disable our clip during PaintPhaseOutline
     if (paintInfo.phase == PaintPhaseForeground && style()->outlineWidth() && style()->visibility() == VISIBLE) {
-        IntRect paintRectInParent = enclosingIntRect(localToParentTransform().mapRect(repaintRect));
+        IntRect paintRectInParent = enclosingIntRect(localToParentTransform().mapRect(paintInvalidationRect));
         paintOutline(paintInfo, paintRectInParent);
     }
 }
@@ -160,8 +163,8 @@ void RenderSVGContainer::addFocusRingRects(Vector<IntRect>& rects, const LayoutP
 
 void RenderSVGContainer::updateCachedBoundaries()
 {
-    SVGRenderSupport::computeContainerBoundingBoxes(this, m_objectBoundingBox, m_objectBoundingBoxValid, m_strokeBoundingBox, m_repaintBoundingBox);
-    SVGRenderSupport::intersectRepaintRectWithResources(this, m_repaintBoundingBox);
+    SVGRenderSupport::computeContainerBoundingBoxes(this, m_objectBoundingBox, m_objectBoundingBoxValid, m_strokeBoundingBox, m_paintInvalidationBoundingBox);
+    SVGRenderSupport::intersectPaintInvalidationRectWithResources(this, m_paintInvalidationBoundingBox);
 }
 
 bool RenderSVGContainer::nodeAtFloatPoint(const HitTestRequest& request, HitTestResult& result, const FloatPoint& pointInParent, HitTestAction hitTestAction)

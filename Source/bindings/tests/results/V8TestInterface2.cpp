@@ -25,12 +25,9 @@
 
 namespace blink {
 
-static void initializeScriptWrappableForInterface(TestInterface2* object)
+static void initializeScriptWrappableForInterface(TestInterface2* impl)
 {
-    if (ScriptWrappable::wrapperCanBeStoredInObject(object))
-        ScriptWrappable::fromObject(object)->setTypeInfo(&V8TestInterface2::wrapperTypeInfo);
-    else
-        ASSERT_NOT_REACHED();
+    impl->setTypeInfo(&V8TestInterface2::wrapperTypeInfo);
 }
 
 } // namespace blink
@@ -41,7 +38,8 @@ void webCoreInitializeScriptWrappableForInterface(blink::TestInterface2* object)
 }
 
 namespace blink {
-const WrapperTypeInfo V8TestInterface2::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterface2::domTemplate, V8TestInterface2::derefObject, 0, 0, V8TestInterface2::visitDOMWrapper, V8TestInterface2::installPerContextEnabledMethods, 0, WrapperTypeObjectPrototype, RefCountedObject };
+
+const WrapperTypeInfo V8TestInterface2::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterface2::domTemplate, V8TestInterface2::refObject, V8TestInterface2::derefObject, V8TestInterface2::createPersistentHandle, 0, 0, V8TestInterface2::visitDOMWrapper, V8TestInterface2::installConditionallyEnabledMethods, V8TestInterface2::installConditionallyEnabledProperties, 0, WrapperTypeObjectPrototype, RefCountedObject };
 
 namespace TestInterface2V8Internal {
 
@@ -51,7 +49,8 @@ static void itemMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "item", "TestInterface2", info.Holder(), info.GetIsolate());
     if (UNLIKELY(info.Length() < 1)) {
-        throwMinimumArityTypeError(exceptionState, 1, info.Length());
+        setMinimumArityTypeError(exceptionState, 1, info.Length());
+        exceptionState.throwIfNeeded();
         return;
     }
     TestInterface2* impl = V8TestInterface2::toNative(info.Holder());
@@ -80,7 +79,8 @@ static void setItemMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "setItem", "TestInterface2", info.Holder(), info.GetIsolate());
     if (UNLIKELY(info.Length() < 2)) {
-        throwMinimumArityTypeError(exceptionState, 2, info.Length());
+        setMinimumArityTypeError(exceptionState, 2, info.Length());
+        exceptionState.throwIfNeeded();
         return;
     }
     TestInterface2* impl = V8TestInterface2::toNative(info.Holder());
@@ -111,7 +111,8 @@ static void deleteItemMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "deleteItem", "TestInterface2", info.Holder(), info.GetIsolate());
     if (UNLIKELY(info.Length() < 1)) {
-        throwMinimumArityTypeError(exceptionState, 1, info.Length());
+        setMinimumArityTypeError(exceptionState, 1, info.Length());
+        exceptionState.throwIfNeeded();
         return;
     }
     TestInterface2* impl = V8TestInterface2::toNative(info.Holder());
@@ -140,7 +141,8 @@ static void namedItemMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "namedItem", "TestInterface2", info.Holder(), info.GetIsolate());
     if (UNLIKELY(info.Length() < 1)) {
-        throwMinimumArityTypeError(exceptionState, 1, info.Length());
+        setMinimumArityTypeError(exceptionState, 1, info.Length());
+        exceptionState.throwIfNeeded();
         return;
     }
     TestInterface2* impl = V8TestInterface2::toNative(info.Holder());
@@ -167,7 +169,8 @@ static void setNamedItemMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "setNamedItem", "TestInterface2", info.Holder(), info.GetIsolate());
     if (UNLIKELY(info.Length() < 2)) {
-        throwMinimumArityTypeError(exceptionState, 2, info.Length());
+        setMinimumArityTypeError(exceptionState, 2, info.Length());
+        exceptionState.throwIfNeeded();
         return;
     }
     TestInterface2* impl = V8TestInterface2::toNative(info.Holder());
@@ -196,7 +199,8 @@ static void deleteNamedItemMethod(const v8::FunctionCallbackInfo<v8::Value>& inf
 {
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "deleteNamedItem", "TestInterface2", info.Holder(), info.GetIsolate());
     if (UNLIKELY(info.Length() < 1)) {
-        throwMinimumArityTypeError(exceptionState, 1, info.Length());
+        setMinimumArityTypeError(exceptionState, 1, info.Length());
+        exceptionState.throwIfNeeded();
         return;
     }
     TestInterface2* impl = V8TestInterface2::toNative(info.Holder());
@@ -426,16 +430,16 @@ static void namedPropertyEnumeratorCallback(const v8::PropertyCallbackInfo<v8::A
 
 } // namespace TestInterface2V8Internal
 
-void V8TestInterface2::visitDOMWrapper(void* object, const v8::Persistent<v8::Object>& wrapper, v8::Isolate* isolate)
+void V8TestInterface2::visitDOMWrapper(ScriptWrappableBase* internalPointer, const v8::Persistent<v8::Object>& wrapper, v8::Isolate* isolate)
 {
-    TestInterface2* impl = fromInternalPointer(object);
+    TestInterface2* impl = fromInternalPointer(internalPointer);
     // The ownerNode() method may return a reference or a pointer.
     if (Node* owner = WTF::getPtr(impl->ownerNode())) {
         Node* root = V8GCController::opaqueRootForGC(owner, isolate);
         isolate->SetReferenceFromGroup(v8::UniqueId(reinterpret_cast<intptr_t>(root)), wrapper);
         return;
     }
-    setObjectGroup(object, wrapper, isolate);
+    setObjectGroup(internalPointer, wrapper, isolate);
 }
 
 static const V8DOMConfiguration::MethodConfiguration V8TestInterface2Methods[] = {
@@ -479,6 +483,11 @@ static void installV8TestInterface2Template(v8::Handle<v8::FunctionTemplate> fun
     functionTemplate->SetLength(0);
     v8::Local<v8::ObjectTemplate> instanceTemplate ALLOW_UNUSED = functionTemplate->InstanceTemplate();
     v8::Local<v8::ObjectTemplate> prototypeTemplate ALLOW_UNUSED = functionTemplate->PrototypeTemplate();
+    if (RuntimeEnabledFeatures::featureNameEnabled()) {
+        static const V8DOMConfiguration::ConstantConfiguration constantConfiguration = {"CONST_VALUE_1", 1, 0, 0, V8DOMConfiguration::ConstantTypeUnsignedShort};
+        V8DOMConfiguration::installConstants(functionTemplate, prototypeTemplate, &constantConfiguration, 1, isolate);
+    }
+    COMPILE_ASSERT(1 == TestInterface2::CONST_VALUE_1, TheValueOfTestInterface2_CONST_VALUE_1DoesntMatchWithImplementation);
     functionTemplate->InstanceTemplate()->SetIndexedPropertyHandler(TestInterface2V8Internal::indexedPropertyGetterCallback, TestInterface2V8Internal::indexedPropertySetterCallback, 0, TestInterface2V8Internal::indexedPropertyDeleterCallback, indexedPropertyEnumerator<TestInterface2>);
     functionTemplate->InstanceTemplate()->SetNamedPropertyHandler(TestInterface2V8Internal::namedPropertyGetterCallback, TestInterface2V8Internal::namedPropertySetterCallback, TestInterface2V8Internal::namedPropertyQueryCallback, TestInterface2V8Internal::namedPropertyDeleterCallback, TestInterface2V8Internal::namedPropertyEnumeratorCallback);
 
@@ -503,7 +512,7 @@ v8::Handle<v8::Object> V8TestInterface2::findInstanceInPrototypeChain(v8::Handle
 
 TestInterface2* V8TestInterface2::toNativeWithTypeCheck(v8::Isolate* isolate, v8::Handle<v8::Value> value)
 {
-    return hasInstance(value, isolate) ? fromInternalPointer(v8::Handle<v8::Object>::Cast(value)->GetAlignedPointerFromInternalField(v8DOMWrapperObjectIndex)) : 0;
+    return hasInstance(value, isolate) ? fromInternalPointer(blink::toInternalPointer(v8::Handle<v8::Object>::Cast(value))) : 0;
 }
 
 v8::Handle<v8::Object> wrap(TestInterface2* impl, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
@@ -521,25 +530,35 @@ v8::Handle<v8::Object> V8TestInterface2::createWrapper(PassRefPtr<TestInterface2
 {
     ASSERT(impl);
     ASSERT(!DOMDataStore::containsWrapper<V8TestInterface2>(impl.get(), isolate));
-    if (ScriptWrappable::wrapperCanBeStoredInObject(impl.get())) {
-        const WrapperTypeInfo* actualInfo = ScriptWrappable::fromObject(impl.get())->typeInfo();
-        // Might be a XXXConstructor::wrapperTypeInfo instead of an XXX::wrapperTypeInfo. These will both have
-        // the same object de-ref functions, though, so use that as the basis of the check.
-        RELEASE_ASSERT_WITH_SECURITY_IMPLICATION(actualInfo->derefObjectFunction == wrapperTypeInfo.derefObjectFunction);
-    }
+    const WrapperTypeInfo* actualInfo = impl->typeInfo();
+    // Might be a XXXConstructor::wrapperTypeInfo instead of an XXX::wrapperTypeInfo. These will both have
+    // the same object de-ref functions, though, so use that as the basis of the check.
+    RELEASE_ASSERT_WITH_SECURITY_IMPLICATION(actualInfo->derefObjectFunction == wrapperTypeInfo.derefObjectFunction);
 
     v8::Handle<v8::Object> wrapper = V8DOMWrapper::createWrapper(creationContext, &wrapperTypeInfo, toInternalPointer(impl.get()), isolate);
     if (UNLIKELY(wrapper.IsEmpty()))
         return wrapper;
 
-    installPerContextEnabledProperties(wrapper, impl.get(), isolate);
+    installConditionallyEnabledProperties(wrapper, isolate);
     V8DOMWrapper::associateObjectWithWrapper<V8TestInterface2>(impl, &wrapperTypeInfo, wrapper, isolate, WrapperConfiguration::Dependent);
     return wrapper;
 }
 
-void V8TestInterface2::derefObject(void* object)
+
+void V8TestInterface2::refObject(ScriptWrappableBase* internalPointer)
 {
-    fromInternalPointer(object)->deref();
+    fromInternalPointer(internalPointer)->ref();
+}
+
+void V8TestInterface2::derefObject(ScriptWrappableBase* internalPointer)
+{
+    fromInternalPointer(internalPointer)->deref();
+}
+
+PersistentNode* V8TestInterface2::createPersistentHandle(ScriptWrappableBase* internalPointer)
+{
+    ASSERT_NOT_REACHED();
+    return 0;
 }
 
 template<>

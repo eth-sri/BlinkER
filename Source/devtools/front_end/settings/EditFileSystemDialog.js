@@ -88,6 +88,7 @@ WebInspector.EditFileSystemDialog = function(fileSystemPath)
         this._addExcludedFolderRow(excludedFolderEntries[i]);
 
     this.element.tabIndex = 0;
+    this._hasMappingChanges = false;
 }
 
 WebInspector.EditFileSystemDialog.show = function(element, fileSystemPath)
@@ -137,6 +138,10 @@ WebInspector.EditFileSystemDialog.prototype = {
 
     willHide: function(event)
     {
+        if (!this._hasMappingChanges)
+            return;
+        if (window.confirm(WebInspector.UIString("It is recommended to restart DevTools after making these changes. Would you like to restart it?")))
+            WebInspector.reload();
     },
 
     _fileMappingAdded: function(event)
@@ -229,6 +234,7 @@ WebInspector.EditFileSystemDialog.prototype = {
 
         var entry = this._entries[urlPrefix];
         WebInspector.isolatedFileSystemManager.mapping().removeFileMapping(entry.fileSystemPath, entry.urlPrefix, entry.pathPrefix);
+        this._hasMappingChanges = true;
     },
 
     /**
@@ -241,6 +247,7 @@ WebInspector.EditFileSystemDialog.prototype = {
         var normalizedURLPrefix = this._normalizePrefix(urlPrefix);
         var normalizedPathPrefix = this._normalizePrefix(pathPrefix);
         WebInspector.isolatedFileSystemManager.mapping().addFileMapping(this._fileSystemPath, normalizedURLPrefix, normalizedPathPrefix);
+        this._hasMappingChanges = true;
         this._fileMappingsList.selectItem(normalizedURLPrefix);
         return true;
     },
@@ -315,7 +322,7 @@ WebInspector.EditFileSystemDialog.prototype = {
      */
     _validateExcludedFolder: function(path, allowedPath)
     {
-        return !!path && (path === allowedPath || !this._excludedFolderEntries.contains(path));
+        return !!path && (path === allowedPath || !this._excludedFolderEntries.has(path));
     },
 
     /**
@@ -351,7 +358,7 @@ WebInspector.EditFileSystemDialog.prototype = {
         if (!fileSystemPath || this._fileSystemPath !== fileSystemPath)
             return;
         var path = entry.path;
-        this._excludedFolderEntries.put(path, entry);
+        this._excludedFolderEntries.set(path, entry);
         this._excludedFolderList.addItem(path, null);
         this._resize();
     },

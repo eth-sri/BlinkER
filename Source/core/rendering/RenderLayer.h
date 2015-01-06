@@ -48,7 +48,6 @@
 #include "core/rendering/LayerFragment.h"
 #include "core/rendering/LayerPaintingInfo.h"
 #include "core/rendering/RenderBox.h"
-#include "core/rendering/RenderLayerBlendInfo.h"
 #include "core/rendering/RenderLayerClipper.h"
 #include "core/rendering/RenderLayerFilterInfo.h"
 #include "core/rendering/RenderLayerReflectionInfo.h"
@@ -56,8 +55,8 @@
 #include "core/rendering/RenderLayerScrollableArea.h"
 #include "core/rendering/RenderLayerStackingNode.h"
 #include "core/rendering/RenderLayerStackingNodeIterator.h"
-#include "core/rendering/compositing/CompositedLayerMappingPtr.h"
 #include "platform/graphics/CompositingReasons.h"
+#include "public/platform/WebBlendMode.h"
 #include "wtf/OwnPtr.h"
 
 namespace blink {
@@ -115,6 +114,7 @@ public:
 
     void styleChanged(StyleDifference, const RenderStyle* oldStyle);
 
+    // FIXME: Many people call this function while it has out-of-date information.
     bool isSelfPaintingLayer() const { return m_isSelfPaintingLayer; }
 
     void setLayerType(LayerType layerType) { m_layerType = layerType; }
@@ -135,11 +135,8 @@ public:
         return curr;
     }
 
-    const LayoutPoint& location() const { ASSERT(!m_needsPositionUpdate); return m_location; }
-    // FIXME: size() should ASSERT(!m_needsPositionUpdate) as well, but that fails in some tests,
-    // for example, fast/repaint/clipped-relative.html.
-    const IntSize& size() const { return m_size; }
-    void setSizeHackForRenderTreeAsText(const IntSize& size) { m_size = size; }
+    LayoutPoint location() const;
+    IntSize size() const;
 
     LayoutRect rect() const { return LayoutRect(location(), size()); }
 
@@ -152,7 +149,6 @@ public:
     void contentChanged(ContentChangeType);
 
     void updateLayerPositionsAfterLayout();
-    void updateLayerPositionsAfterOverflowScroll();
 
     bool isPaginated() const { return m_isPaginated; }
     RenderLayer* enclosingPaginationLayer() const { return m_enclosingPaginationLayer; }
@@ -160,7 +156,8 @@ public:
     void updateTransformationMatrix();
     RenderLayer* renderingContextRoot();
 
-    const LayoutSize& offsetForInFlowPosition() const { return m_offsetForInFlowPosition; }
+    // Our current relative position offset.
+    const LayoutSize offsetForInFlowPosition() const;
 
     void blockSelectionGapsBoundsChanged();
     void addBlockSelectionGapsBounds(const LayoutRect&);
@@ -174,13 +171,14 @@ public:
 
     bool subtreeIsInvisible() const { return !hasVisibleContent() && !hasVisibleDescendant(); }
 
-    // FIXME: We should ASSERT(!m_visibleContentStatusDirty) here, but see https://bugs.webkit.org/show_bug.cgi?id=71044
-    // ditto for hasVisibleDescendant(), see https://bugs.webkit.org/show_bug.cgi?id=71277
-    bool hasVisibleContent() const { return m_hasVisibleContent; }
-    bool hasVisibleDescendant() const { return m_hasVisibleDescendant; }
+    // FIXME: hasVisibleContent() should call updateDescendantDependentFlags() if m_visibleContentStatusDirty.
+    bool hasVisibleContent() const { ASSERT(!m_visibleContentStatusDirty); return m_hasVisibleContent; }
 
-    void setHasVisibleContent();
+    // FIXME: hasVisibleDescendant() should call updateDescendantDependentFlags() if m_visibleDescendantStatusDirty.
+    bool hasVisibleDescendant() const { ASSERT(!m_visibleDescendantStatusDirty); return m_hasVisibleDescendant; }
+
     void dirtyVisibleContentStatus();
+    void potentiallyDirtyVisibleContentStatus(EVisibility);
 
     bool hasBoxDecorationsOrBackground() const;
     bool hasVisibleBoxDecorations() const;
@@ -188,10 +186,6 @@ public:
     bool isVisuallyNonEmpty() const;
     // True if this layer container renderers that paint.
     bool hasNonEmptyChildRenderers() const;
-
-    // FIXME: We should ASSERT(!m_hasSelfPaintingLayerDescendantDirty); here but we hit the same bugs as visible content above.
-    // Part of the issue is with subtree relayout: we don't check if our ancestors have some descendant flags dirty, missing some updates.
-    bool hasSelfPaintingLayerDescendant() const { return m_hasSelfPaintingLayerDescendant; }
 
     // Will ensure that hasNonCompositiedChild are up to date.
     void updateScrollingStateAfterCompositingChange();
@@ -304,14 +298,16 @@ public:
     // compositing state may legally be read.
     bool isAllowedToQueryCompositingState() const;
 
-    // NOTE: Don't call these compositing methods unless you know what you are doing and are sure it is the best approach!
-    CompositedLayerMappingPtr compositedLayerMapping() const;
-    CompositedLayerMappingPtr ensureCompositedLayerMapping();
+    // Don't null check this.
+    CompositedLayerMapping* compositedLayerMapping() const;
+    // FIXME: This should return a reference.
+    CompositedLayerMapping* ensureCompositedLayerMapping();
     GraphicsLayer* graphicsLayerBacking() const;
     GraphicsLayer* graphicsLayerBackingForScrolling() const;
     // NOTE: If you are using hasCompositedLayerMapping to determine the state of compositing for this layer,
     // (and not just to do bookkeeping related to the mapping like, say, allocating or deallocating a mapping),
     // then you may have incorrect logic. Use compositingState() instead.
+    // FIXME: This is identical to null checking compositedLayerMapping(), why not just call that?
     bool hasCompositedLayerMapping() const { return m_compositedLayerMapping.get(); }
     void clearCompositedLayerMapping(bool layerBeingDestroyed = false);
     CompositedLayerMapping* groupedMapping() const { return m_groupedMapping; }
@@ -376,23 +372,6 @@ public:
 
     bool isInTopLayer() const;
 
-    enum ViewportConstrainedNotCompositedReason {
-        NoNotCompositedReason = 0,
-        NotCompositedForBoundsOutOfView,
-        NotCompositedForNonViewContainer,
-        NotCompositedForNoVisibleContent,
-        NotCompositedForUnscrollableAncestors,
-        NumNotCompositedReasons,
-
-        // This is the number of bits used to store the viewport constrained not composited
-        // reasons. We define this constant since sizeof won't return the number of bits, and we
-        // shouldn't duplicate the constant.
-        ViewportConstrainedNotCompositedReasonBits = 3
-    };
-
-    void setViewportConstrainedNotCompositedReason(ViewportConstrainedNotCompositedReason reason) { m_viewportConstrainedNotCompositedReason = reason; }
-    ViewportConstrainedNotCompositedReason viewportConstrainedNotCompositedReason() const { ASSERT(isAllowedToQueryCompositingState()); return static_cast<ViewportConstrainedNotCompositedReason>(m_viewportConstrainedNotCompositedReason); }
-
     bool scrollsWithViewport() const;
     bool scrollsWithRespectTo(const RenderLayer*) const;
 
@@ -403,7 +382,7 @@ public:
 
     // FIXME: This should probably return a ScrollableArea but a lot of internal methods are mistakenly exposed.
     RenderLayerScrollableArea* scrollableArea() const { return m_scrollableArea.get(); }
-    RenderLayerRepainter& repainter() { return m_repainter; }
+    RenderLayerRepainter& paintInvalidator() { return m_paintInvalidator; }
     RenderLayerClipper& clipper() { return m_clipper; }
     const RenderLayerClipper& clipper() const { return m_clipper; }
 
@@ -418,8 +397,6 @@ public:
 
     // paintLayer() assumes that the caller will clip to the bounds of the painting dirty if necessary.
     void paintLayer(GraphicsContext*, const LayerPaintingInfo&, PaintLayerFlags);
-
-    RenderLayerBlendInfo& blendInfo() { return m_blendInfo; }
 
     bool scrollsOverflow() const;
 
@@ -481,8 +458,13 @@ public:
 
     class DescendantDependentCompositingInputs {
     public:
-        DescendantDependentCompositingInputs() : hasDescendantWithClipPath(false) { }
+        DescendantDependentCompositingInputs()
+            : hasDescendantWithClipPath(false)
+            , hasDescendantWithBlendMode(false)
+        { }
+
         unsigned hasDescendantWithClipPath : 1;
+        unsigned hasDescendantWithBlendMode : 1;
     };
 
     void setNeedsCompositingInputsUpdate();
@@ -513,6 +495,7 @@ public:
     bool isUnclippedDescendant() const { return ancestorDependentCompositingInputs().isUnclippedDescendant; }
     bool hasAncestorWithClipPath() const { return ancestorDependentCompositingInputs().hasAncestorWithClipPath; }
     bool hasDescendantWithClipPath() const { return descendantDependentCompositingInputs().hasDescendantWithClipPath; }
+    bool hasDescendantWithBlendMode() const { return descendantDependentCompositingInputs().hasDescendantWithBlendMode; }
 
     bool lostGroupedMapping() const { ASSERT(isAllowedToQueryCompositingState()); return m_lostGroupedMapping; }
     void setLostGroupedMapping(bool b) { m_lostGroupedMapping = b; }
@@ -527,6 +510,7 @@ public:
     void setShouldIsolateCompositedDescendants(bool);
 
     void updateDescendantDependentFlags();
+    void updateDescendantDependentFlagsForEntireSubtree();
 
     void updateOrRemoveFilterEffectRenderer();
 
@@ -540,6 +524,8 @@ public:
 
     void didUpdateNeedsCompositedScrolling();
 
+    void setShouldDoFullPaintInvalidationIncludingNonCompositingDescendants();
+
 private:
     // Bounding box in the coordinates of this layer.
     LayoutRect logicalBoundingBox() const;
@@ -552,16 +538,22 @@ private:
     void clipToRect(const LayerPaintingInfo&, GraphicsContext*, const ClipRect&, PaintLayerFlags, BorderRadiusClippingRule = IncludeSelfForBorderRadius);
     void restoreClip(GraphicsContext*, const LayoutRect& paintDirtyRect, const ClipRect&);
 
-    // Returns true if the position changed.
-    bool updateLayerPosition();
-
     void updateLayerPositionRecursive();
-    void updateLayerPositionsAfterScrollRecursive();
 
     void setNextSibling(RenderLayer* next) { m_next = next; }
     void setPreviousSibling(RenderLayer* prev) { m_previous = prev; }
     void setFirstChild(RenderLayer* first) { m_first = first; }
     void setLastChild(RenderLayer* last) { m_last = last; }
+
+    void updateHasSelfPaintingLayerDescendant() const;
+
+    bool hasSelfPaintingLayerDescendant() const
+    {
+        if (m_hasSelfPaintingLayerDescendantDirty)
+            updateHasSelfPaintingLayerDescendant();
+        ASSERT(!m_hasSelfPaintingLayerDescendantDirty);
+        return m_hasSelfPaintingLayerDescendant;
+    }
 
     LayoutPoint renderBoxLocation() const { return renderer()->isBox() ? toRenderBox(renderer())->location() : LayoutPoint(); }
 
@@ -570,7 +562,7 @@ private:
 
     // Returns whether this layer should be painted during sofware painting (i.e., not via calls from CompositedLayerMapping to draw into composited
     // layers).
-    bool shouldPaintLayerInSoftwareMode(GraphicsContext*, const LayerPaintingInfo&, PaintLayerFlags paintFlags);
+    bool shouldPaintLayerInSoftwareMode(const LayerPaintingInfo&, PaintLayerFlags paintFlags);
 
     void paintChildren(unsigned childrenToVisit, GraphicsContext*, const LayerPaintingInfo&, PaintLayerFlags);
     void paintPaginatedChildLayer(RenderLayer* childLayer, GraphicsContext*, const LayerPaintingInfo&, PaintLayerFlags);
@@ -637,7 +629,6 @@ private:
     void updateScrollableArea();
 
     void dirtyAncestorChainVisibleDescendantStatus();
-    void setAncestorChainHasVisibleDescendant();
 
     bool attemptDirectCompositingUpdate(StyleDifference, const RenderStyle* oldStyle);
     void updateTransform(const RenderStyle* oldStyle, RenderStyle* newStyle);
@@ -665,8 +656,8 @@ private:
 
     // If have no self-painting descendants, we don't have to walk our children during painting. This can lead to
     // significant savings, especially if the tree has lots of non-self-painting layers grouped together (e.g. table cells).
-    unsigned m_hasSelfPaintingLayerDescendant : 1;
-    unsigned m_hasSelfPaintingLayerDescendantDirty : 1;
+    mutable unsigned m_hasSelfPaintingLayerDescendant : 1;
+    mutable unsigned m_hasSelfPaintingLayerDescendantDirty : 1;
 
     const unsigned m_isRootLayer : 1;
 
@@ -682,10 +673,6 @@ private:
     unsigned m_hasVisibleNonLayerContent : 1;
 
     unsigned m_isPaginated : 1; // If we think this layer is split by a multi-column ancestor, then this bit will be set.
-
-#if ENABLE(ASSERT)
-    unsigned m_needsPositionUpdate : 1;
-#endif
 
     unsigned m_3DTransformedDescendantStatusDirty : 1;
     // Set on a stacking context layer that has 3D descendants anywhere
@@ -713,9 +700,6 @@ private:
     // and we don't yet know to what graphics layer this RenderLayer will be assigned.
     unsigned m_lostGroupedMapping : 1;
 
-    // The reason, if any exists, that a fixed-position layer is chosen not to be composited.
-    unsigned m_viewportConstrainedNotCompositedReason : ViewportConstrainedNotCompositedReasonBits;
-
     RenderLayerModelObject* m_renderer;
 
     RenderLayer* m_parent;
@@ -723,15 +707,6 @@ private:
     RenderLayer* m_next;
     RenderLayer* m_first;
     RenderLayer* m_last;
-
-    // Our current relative position offset.
-    LayoutSize m_offsetForInFlowPosition;
-
-    // Our (x,y) coordinates are in our parent layer's coordinate space.
-    LayoutPoint m_location;
-
-    // The layer's width/height
-    IntSize m_size;
 
     // Cached normal flow values for absolute positioned elements with static left/top values.
     LayoutUnit m_staticInlinePosition;
@@ -759,11 +734,10 @@ private:
 
     CompositedLayerMapping* m_groupedMapping;
 
-    RenderLayerRepainter m_repainter;
+    RenderLayerRepainter m_paintInvalidator;
     RenderLayerClipper m_clipper; // FIXME: Lazily allocate?
     OwnPtr<RenderLayerStackingNode> m_stackingNode;
-    OwnPtr<RenderLayerReflectionInfo> m_reflectionInfo;
-    RenderLayerBlendInfo m_blendInfo;
+    OwnPtrWillBePersistent<RenderLayerReflectionInfo> m_reflectionInfo;
 
     LayoutSize m_subpixelAccumulation; // The accumulated subpixel offset of a composited layer's composited bounds compared to absolute coordinates.
 };

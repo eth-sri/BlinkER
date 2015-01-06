@@ -129,6 +129,7 @@ source_set("core") {
     "//skia",
     "//third_party/npapi",
     "//third_party/qcms",
+    "//third_party/WebKit/Source/platform",
     "//third_party/WebKit/Source/wtf",
     "//url",
     "//v8",
@@ -298,10 +299,13 @@ source_set("testing") {
 
   deps = [
     ":core",
+    ":core_generated",
   ]
 
-  sources = webcore_testing_files
+  sources = generated_core_testing_dictionary_files + webcore_testing_files
   sources += [
+    "$bindings_core_v8_output_dir/V8DictionaryTest.cpp",
+    "$bindings_core_v8_output_dir/V8DictionaryTest.h",
     "$bindings_core_v8_output_dir/V8GarbageCollectedScriptWrappable.cpp",
     "$bindings_core_v8_output_dir/V8GarbageCollectedScriptWrappable.h",
     "$bindings_core_v8_output_dir/V8GCObservation.cpp",
@@ -326,6 +330,8 @@ source_set("testing") {
     "$bindings_core_v8_output_dir/V8LayerRectList.h",
     "$bindings_core_v8_output_dir/V8RefCountedScriptWrappable.cpp",
     "$bindings_core_v8_output_dir/V8RefCountedScriptWrappable.h",
+    "$bindings_core_v8_output_dir/V8InternalDictionary.cpp",
+    "$bindings_core_v8_output_dir/V8InternalDictionary.h",
   ]
 }
 
@@ -414,6 +420,9 @@ source_set("core_generated") {
     # Generated from make_style_builder.py
     "$blink_core_output_dir/StyleBuilder.cpp",
     "$blink_core_output_dir/StyleBuilderFunctions.cpp",
+
+    # Generated from make_css_property_metadata.py
+    "$blink_core_output_dir/CSSPropertyMetadata.cpp",
   ]
 
   configs -= core_config_remove
@@ -589,12 +598,8 @@ group("make_core_generated") {
 }
 
 # "CSSPropertyNames" in make_core_generated from GYP.
-process_in_files("make_core_generated_css_property_names") {
+css_properties("make_core_generated_css_property_names") {
   script = "../build/scripts/make_css_property_names.py"
-  in_files = [ 
-    "css/CSSPropertyNames.in",
-    "css/SVGCSSPropertyNames.in",
-  ]
   outputs = [
     "$blink_core_output_dir/CSSPropertyNames.cpp",
     "$blink_core_output_dir/CSSPropertyNames.h",
@@ -617,11 +622,8 @@ process_in_files("make_core_generated_media_features") {
 }
 
 # "StylePropertyShorthand" in make_core_generated from GYP.
-process_in_files("make_core_generated_style_property_shorthand") {
+css_properties("make_core_generated_style_property_shorthand") {
   script = "../build/scripts/make_style_shorthands.py"
-  in_files = [
-    "css/CSSShorthands.in",
-  ]
   other_inputs = [
     "../build/scripts/templates/StylePropertyShorthand.cpp.tmpl",
     "../build/scripts/templates/StylePropertyShorthand.h.tmpl",
@@ -633,12 +635,8 @@ process_in_files("make_core_generated_style_property_shorthand") {
 }
 
 # "StyleBuilder" in make_core_generated from GYP.
-process_in_files("make_core_generated_style_builder") {
+css_properties("make_core_generated_style_builder") {
   script = "../build/scripts/make_style_builder.py"
-
-  in_files = [
-    "css/CSSProperties.in",
-  ]
   other_inputs = [
     "../build/scripts/templates/StyleBuilder.cpp.tmpl",
     "../build/scripts/templates/StyleBuilderFunctions.cpp.tmpl",
@@ -648,6 +646,17 @@ process_in_files("make_core_generated_style_builder") {
     "$blink_core_output_dir/StyleBuilder.cpp",
     "$blink_core_output_dir/StyleBuilderFunctions.h",
     "$blink_core_output_dir/StyleBuilderFunctions.cpp",
+  ]
+}
+
+# "CSSPropertyMetadata" in make_core_generated from GYP.
+css_properties("make_core_generated_css_property_metadata") {
+  script = "../build/scripts/make_css_property_metadata.py"
+  other_inputs = [
+    "../build/scripts/templates/CSSPropertyMetadata.cpp.tmpl",
+  ]
+  outputs = [
+    "$blink_core_output_dir/CSSPropertyMetadata.cpp",
   ]
 }
 
@@ -904,7 +913,7 @@ make_qualified_names("make_core_generated_xml_names") {
 
 # "MakeTokenMatcher" in make_core_generated from GYP.
 make_token_matcher("make_core_generated_make_token_matcher") {
-  input_file = "css/CSSTokenizer-in.cpp"
+  input_file = "css/parser/CSSTokenizer-in.cpp"
   output_file = "$blink_core_output_dir/CSSTokenizer.cpp"
 }
 
@@ -949,7 +958,8 @@ action("make_core_generated_private_script_for_testing") {
   script = "../build/scripts/make_private_script_source.py"
 
   inputs = [
-    "testing/PrivateScriptTest.js",
+      "testing/PartialPrivateScriptTest.js",
+      "testing/PrivateScriptTest.js",
   ]
   outputs = [
     "$blink_core_output_dir/PrivateScriptSourcesForTesting.h",
@@ -1064,7 +1074,7 @@ action("make_core_generated_html_element_lookup_trie") {
 action_foreach("make_core_generated_bison") {
   script = "../build/scripts/rule_bison.py"
   sources = [
-    "css/CSSGrammar.y",
+    "css/parser/CSSGrammar.y",
     "xml/XPathGrammar.y",
   ]
   outputs = [

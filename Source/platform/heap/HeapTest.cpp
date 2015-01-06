@@ -65,7 +65,6 @@ public:
 
     unsigned hash() { return IntHash<int>::hash(m_x); }
 
-protected:
     IntWrapper(int x) : m_x(x) { }
 
 private:
@@ -159,7 +158,7 @@ template<> struct DefaultHash<blink::ThreadMarker> {
 // ThreadMarkerHash is the default hash for ThreadMarker
 template<> struct HashTraits<blink::ThreadMarker> : GenericHashTraits<blink::ThreadMarker> {
     static const bool emptyValueIsZero = true;
-    static void constructDeletedValue(blink::ThreadMarker& slot) { new (NotNull, &slot) blink::ThreadMarker(HashTableDeletedValue); }
+    static void constructDeletedValue(blink::ThreadMarker& slot, bool) { new (NotNull, &slot) blink::ThreadMarker(HashTableDeletedValue); }
     static bool isDeletedValue(const blink::ThreadMarker& slot) { return slot.isHashTableDeletedValue(); }
 };
 
@@ -182,7 +181,7 @@ template<> struct HashTraits<blink::PairWithWeakHandling> : blink::WeakHandlingH
     static const bool needsDestruction = false;
     static const bool hasIsEmptyValueFunction = true;
     static bool isEmptyValue(const blink::PairWithWeakHandling& value) { return !value.first; }
-    static void constructDeletedValue(blink::PairWithWeakHandling& slot) { new (NotNull, &slot) blink::PairWithWeakHandling(HashTableDeletedValue); }
+    static void constructDeletedValue(blink::PairWithWeakHandling& slot, bool) { new (NotNull, &slot) blink::PairWithWeakHandling(HashTableDeletedValue); }
     static bool isDeletedValue(const blink::PairWithWeakHandling& value) { return value.isHashTableDeletedValue(); }
 };
 
@@ -264,16 +263,7 @@ public:
         m_count++;
     }
 
-    virtual void markConservatively(HeapObjectHeader* header) OVERRIDE
-    {
-        ASSERT_NOT_REACHED();
-    }
-
-    virtual void markConservatively(FinalizedHeapObjectHeader* header) OVERRIDE
-    {
-        ASSERT_NOT_REACHED();
-    }
-
+    virtual void registerDelayedMarkNoTracing(const void*) OVERRIDE { }
     virtual void registerWeakMembers(const void*, const void*, WeakPointerCallback) OVERRIDE { }
     virtual void registerWeakTable(const void*, EphemeronCallback, EphemeronCallback) OVERRIDE { }
 #if ENABLE(ASSERT)
@@ -636,17 +626,20 @@ private:
 
 int SimpleFinalizedObject::s_destructorCalls = 0;
 
-class TestTypedHeapClass : public GarbageCollected<TestTypedHeapClass> {
+class Node : public GarbageCollected<Node> {
 public:
-    static TestTypedHeapClass* create()
+    static Node* create(int i)
     {
-        return new TestTypedHeapClass();
+        return new Node(i);
     }
 
     void trace(Visitor*) { }
 
+    int value() { return m_value; }
+
 private:
-    TestTypedHeapClass() { }
+    Node(int i) : m_value(i) { }
+    int m_value;
 };
 
 class Bar : public GarbageCollectedFinalized<Bar> {
@@ -1696,7 +1689,7 @@ TEST(HeapTest, TypedHeapSanity)
 {
     // We use TraceCounter for allocating an object on the general heap.
     Persistent<TraceCounter> generalHeapObject = TraceCounter::create();
-    Persistent<TestTypedHeapClass> typedHeapObject = TestTypedHeapClass::create();
+    Persistent<Node> typedHeapObject = Node::create(0);
     EXPECT_NE(pageHeaderFromObject(generalHeapObject.get()),
         pageHeaderFromObject(typedHeapObject.get()));
 }
@@ -1924,7 +1917,7 @@ TEST(HeapTest, LargeObjects)
         Persistent<LargeObject> object = LargeObject::create();
         EXPECT_TRUE(ThreadState::current()->contains(object));
         EXPECT_TRUE(ThreadState::current()->contains(reinterpret_cast<char*>(object.get()) + sizeof(LargeObject) - 1));
-#if ENABLE(GC_TRACING)
+#if ENABLE(GC_PROFILE_MARKING)
         const GCInfo* info = ThreadState::current()->findGCInfo(reinterpret_cast<Address>(object.get()));
         EXPECT_NE(reinterpret_cast<const GCInfo*>(0), info);
         EXPECT_EQ(info, ThreadState::current()->findGCInfo(reinterpret_cast<Address>(object.get()) + sizeof(LargeObject) - 1));
@@ -3317,14 +3310,14 @@ TEST(HeapTest, CheckAndMarkPointer)
     // This is a low-level test where we call checkAndMarkPointer. This method
     // causes the object start bitmap to be computed which requires the heap
     // to be in a consistent state (e.g. the free allocation area must be put
-    // into a free list header). However when we call makeConsistentForGC it
+    // into a free list header). However when we call makeConsistentForSweeping it
     // also clears out the freelists so we have to rebuild those before trying
     // to allocate anything again. We do this by forcing a GC after doing the
     // checkAndMarkPointer tests.
     {
         TestGCScope scope(ThreadState::HeapPointersOnStack);
         EXPECT_TRUE(scope.allThreadsParked()); // Fail the test if we could not park all threads.
-        Heap::makeConsistentForGC();
+        Heap::makeConsistentForSweeping();
         for (size_t i = 0; i < objectAddresses.size(); i++) {
             EXPECT_TRUE(Heap::checkAndMarkPointer(&visitor, objectAddresses[i]));
             EXPECT_TRUE(Heap::checkAndMarkPointer(&visitor, endAddresses[i]));
@@ -3343,7 +3336,7 @@ TEST(HeapTest, CheckAndMarkPointer)
     {
         TestGCScope scope(ThreadState::HeapPointersOnStack);
         EXPECT_TRUE(scope.allThreadsParked());
-        Heap::makeConsistentForGC();
+        Heap::makeConsistentForSweeping();
         for (size_t i = 0; i < objectAddresses.size(); i++) {
             // We would like to assert that checkAndMarkPointer returned false
             // here because the pointers no longer point into a valid object
@@ -4225,6 +4218,24 @@ TEST(HeapTest, MapWithCustomWeaknessHandling2)
     EXPECT_EQ(livingInt, i1->value.second);
 }
 
+static void addElementsToWeakMap(HeapHashMap<int, WeakMember<IntWrapper> >* map)
+{
+    // Key cannot be zero in hashmap.
+    for (int i = 1; i < 11; i++)
+        map->add(i, IntWrapper::create(i));
+}
+
+// crbug.com/402426
+// If it doesn't assert a concurrent modification to the map, then it's passing.
+TEST(HeapTest, RegressNullIsStrongified)
+{
+    Persistent<HeapHashMap<int, WeakMember<IntWrapper> > > map = new HeapHashMap<int, WeakMember<IntWrapper> >();
+    addElementsToWeakMap(map);
+    HeapHashMap<int, WeakMember<IntWrapper> >::AddResult result = map->add(800, nullptr);
+    Heap::collectGarbage(ThreadState::HeapPointersOnStack);
+    result.storedValue->value = IntWrapper::create(42);
+}
+
 TEST(HeapTest, Bind)
 {
     Closure closure = bind(&Bar::trace, Bar::create(), static_cast<Visitor*>(0));
@@ -4831,12 +4842,127 @@ TEST(HeapTest, ObjectDeadBit)
     DeadBitTester::test();
 }
 
+class ThreadedStrongificationTester {
+public:
+    static void test()
+    {
+        IntWrapper::s_destructorCalls = 0;
+
+        MutexLocker locker(mainThreadMutex());
+        createThread(&workerThreadMain, 0, "Worker Thread");
+
+        // Wait for the worker thread initialization. The worker
+        // allocates a weak collection where both collection and
+        // contents are kept alive via persistent pointers.
+        parkMainThread();
+
+        // Perform two garbage collections where the worker thread does
+        // not wake up in between. This will cause us to remove marks
+        // and mark unmarked objects dead. The collection on the worker
+        // heap is found through the persistent and the backing should
+        // be marked.
+        Heap::collectGarbage(ThreadState::NoHeapPointersOnStack);
+        Heap::collectGarbage(ThreadState::NoHeapPointersOnStack);
+
+        // Wake up the worker thread so it can continue. It will sweep
+        // and perform another GC where the backing store of its
+        // collection should be strongified.
+        wakeWorkerThread();
+
+        // Wait for the worker thread to sweep its heaps before checking.
+        {
+            ThreadState::SafePointScope scope(ThreadState::NoHeapPointersOnStack);
+            parkMainThread();
+        }
+    }
+
+private:
+
+    static HeapHashSet<WeakMember<IntWrapper> >* allocateCollection()
+    {
+        // Create a weak collection that is kept alive by a persistent
+        // and keep the contents alive with a persistents as
+        // well.
+        Persistent<IntWrapper> wrapper1 = IntWrapper::create(32);
+        Persistent<IntWrapper> wrapper2 = IntWrapper::create(32);
+        Persistent<IntWrapper> wrapper3 = IntWrapper::create(32);
+        Persistent<IntWrapper> wrapper4 = IntWrapper::create(32);
+        Persistent<IntWrapper> wrapper5 = IntWrapper::create(32);
+        Persistent<IntWrapper> wrapper6 = IntWrapper::create(32);
+        Persistent<HeapHashSet<WeakMember<IntWrapper> > > weakCollection = new HeapHashSet<WeakMember<IntWrapper> >;
+        weakCollection->add(wrapper1);
+        weakCollection->add(wrapper2);
+        weakCollection->add(wrapper3);
+        weakCollection->add(wrapper4);
+        weakCollection->add(wrapper5);
+        weakCollection->add(wrapper6);
+
+        // Signal the main thread that the worker is done with its allocation.
+        wakeMainThread();
+
+        {
+            // Wait for the main thread to do two GCs without sweeping
+            // this thread heap. The worker waits within a safepoint,
+            // but there is no sweeping until leaving the safepoint
+            // scope. If the weak collection backing is marked dead
+            // because of this we will not get strongification in the
+            // GC we force when we continue.
+            ThreadState::SafePointScope scope(ThreadState::NoHeapPointersOnStack);
+            parkWorkerThread();
+        }
+
+        return weakCollection;
+    }
+
+    static void workerThreadMain(void* data)
+    {
+        MutexLocker locker(workerThreadMutex());
+
+        ThreadState::attach();
+
+        {
+            Persistent<HeapHashSet<WeakMember<IntWrapper> > > collection = allocateCollection();
+            {
+                // Prevent weak processing with an iterator and GC.
+                HeapHashSet<WeakMember<IntWrapper> >::iterator it = collection->begin();
+                Heap::collectGarbage(ThreadState::HeapPointersOnStack);
+
+                // The backing should be strongified because of the iterator.
+                EXPECT_EQ(6u, collection->size());
+                EXPECT_EQ(32, (*it)->value());
+            }
+
+            // Disregarding the iterator but keeping the collection alive
+            // with a persistent should lead to weak processing.
+            Heap::collectGarbage(ThreadState::NoHeapPointersOnStack);
+            EXPECT_EQ(0u, collection->size());
+        }
+
+        wakeMainThread();
+        ThreadState::detach();
+    }
+
+    static volatile uintptr_t s_workerObjectPointer;
+};
+
+TEST(HeapTest, ThreadedStrongification)
+{
+    ThreadedStrongificationTester::test();
+}
+
+static bool allocateAndReturnBool()
+{
+    Heap::collectGarbage(ThreadState::HeapPointersOnStack);
+    return true;
+}
+
 class MixinWithGarbageCollectionInConstructor : public GarbageCollectedMixin {
 public:
-    MixinWithGarbageCollectionInConstructor()
+    MixinWithGarbageCollectionInConstructor() : m_dummy(allocateAndReturnBool())
     {
-        Heap::collectGarbage(ThreadState::HeapPointersOnStack);
     }
+private:
+    bool m_dummy;
 };
 
 class ClassWithGarbageCollectingMixinConstructor
@@ -4975,12 +5101,13 @@ TEST(HeapTest, RecursiveMutex)
 }
 
 template<typename T>
-class TraceIfNeededTester : public GarbageCollected<TraceIfNeededTester<T> > {
+class TraceIfNeededTester : public GarbageCollectedFinalized<TraceIfNeededTester<T> > {
 public:
     static TraceIfNeededTester<T>* create() { return new TraceIfNeededTester<T>(); }
     static TraceIfNeededTester<T>* create(const T& obj) { return new TraceIfNeededTester<T>(obj); }
     void trace(Visitor* visitor) { TraceIfNeeded<T>::trace(visitor, &m_obj); }
     T& obj() { return m_obj; }
+    ~TraceIfNeededTester() { }
 private:
     TraceIfNeededTester() { }
     explicit TraceIfNeededTester(const T& obj) : m_obj(obj) { }
@@ -5028,6 +5155,177 @@ TEST(HeapTest, TraceIfNeeded)
         m_vec->trace(&visitor);
         EXPECT_EQ(2u, visitor.count());
     }
+}
+
+class AllocatesOnAssignment {
+public:
+    AllocatesOnAssignment(std::nullptr_t)
+        : m_value(nullptr)
+    { }
+    AllocatesOnAssignment(int x)
+        : m_value(new IntWrapper(x))
+    { }
+    AllocatesOnAssignment(IntWrapper* x)
+        : m_value(x)
+    { }
+
+    AllocatesOnAssignment& operator=(const AllocatesOnAssignment x)
+    {
+        m_value = x.m_value;
+        return *this;
+    }
+
+    enum DeletedMarker {
+        DeletedValue
+    };
+
+    AllocatesOnAssignment(const AllocatesOnAssignment& other)
+    {
+        Heap::collectGarbage(ThreadState::HeapPointersOnStack);
+        m_value = new IntWrapper(other.m_value->value());
+    }
+
+    AllocatesOnAssignment(DeletedMarker)
+        : m_value(reinterpret_cast<IntWrapper*>(-1)) { }
+
+    inline bool isDeleted() const { return m_value == reinterpret_cast<IntWrapper*>(-1); }
+
+    virtual void trace(Visitor* visitor)
+    {
+        visitor->trace(m_value);
+    }
+
+    int value() { return m_value->value(); }
+
+private:
+    Member<IntWrapper> m_value;
+
+    friend bool operator==(const AllocatesOnAssignment&, const AllocatesOnAssignment&);
+    friend void swap(AllocatesOnAssignment&, AllocatesOnAssignment&);
+};
+
+bool operator==(const AllocatesOnAssignment& a, const AllocatesOnAssignment& b)
+{
+    if (a.m_value)
+        return b.m_value && a.m_value->value() == b.m_value->value();
+    return !b.m_value;
+}
+
+void swap(AllocatesOnAssignment& a, AllocatesOnAssignment& b)
+{
+    std::swap(a.m_value, b.m_value);
+}
+
+struct DegenerateHash {
+    static unsigned hash(const AllocatesOnAssignment&) { return 0; }
+    static bool equal(const AllocatesOnAssignment& a, const AllocatesOnAssignment& b) { return !a.isDeleted() && a == b; }
+    static const bool safeToCompareToEmptyOrDeleted = true;
+};
+
+struct AllocatesOnAssignmentHashTraits : WTF::GenericHashTraits<AllocatesOnAssignment> {
+    typedef AllocatesOnAssignment T;
+    typedef std::nullptr_t EmptyValueType;
+    static EmptyValueType emptyValue() { return nullptr; }
+    static const bool emptyValueIsZero = false; // Can't be zero if it has a vtable.
+    static const bool needsDestruction = false;
+    static void constructDeletedValue(T& slot, bool) { slot = T(AllocatesOnAssignment::DeletedValue); }
+    static bool isDeletedValue(const T& value) { return value.isDeleted(); }
+};
+
+} // namespace blink
+
+namespace WTF {
+
+template<> struct DefaultHash<blink::AllocatesOnAssignment> {
+    typedef blink::DegenerateHash Hash;
+};
+
+template <> struct HashTraits<blink::AllocatesOnAssignment> : blink::AllocatesOnAssignmentHashTraits { };
+
+} // namespace WTF
+
+namespace blink {
+
+TEST(HeapTest, GCInHashMapOperations)
+{
+    typedef HeapHashMap<AllocatesOnAssignment, AllocatesOnAssignment> Map;
+    Map* map = new Map();
+    IntWrapper* key = new IntWrapper(42);
+    map->add(key, AllocatesOnAssignment(103));
+    map->remove(key);
+    for (int i = 0; i < 10; i++)
+        map->add(AllocatesOnAssignment(i), AllocatesOnAssignment(i));
+    for (Map::iterator it = map->begin(); it != map->end(); ++it)
+        EXPECT_EQ(it->key.value(), it->value.value());
+}
+
+class PartObjectWithVirtualMethod {
+public:
+    virtual void trace(Visitor*) { }
+};
+
+class ObjectWithVirtualPartObject : public GarbageCollected<ObjectWithVirtualPartObject> {
+public:
+    ObjectWithVirtualPartObject() : m_dummy(allocateAndReturnBool()) { }
+    void trace(Visitor* visitor) { visitor->trace(m_part); }
+private:
+    bool m_dummy;
+    PartObjectWithVirtualMethod m_part;
+};
+
+TEST(HeapTest, PartObjectWithVirtualMethod)
+{
+    ObjectWithVirtualPartObject* object = new ObjectWithVirtualPartObject();
+    EXPECT_TRUE(object);
+}
+
+class AllocInSuperConstructorArgumentSuper : public GarbageCollectedFinalized<AllocInSuperConstructorArgumentSuper> {
+public:
+    AllocInSuperConstructorArgumentSuper(bool value) : m_value(value) { }
+    virtual void trace(Visitor*) { }
+    bool value() { return m_value; }
+private:
+    bool m_value;
+};
+
+class AllocInSuperConstructorArgument : public AllocInSuperConstructorArgumentSuper {
+public:
+    AllocInSuperConstructorArgument()
+        : AllocInSuperConstructorArgumentSuper(allocateAndReturnBool())
+    {
+    }
+};
+
+// Regression test for crbug.com/404511. Tests conservative marking of
+// an object with an uninitialized vtable.
+TEST(HeapTest, AllocationInSuperConstructorArgument)
+{
+    AllocInSuperConstructorArgument* object = new AllocInSuperConstructorArgument();
+    EXPECT_TRUE(object);
+    Heap::collectAllGarbage();
+}
+
+class NonNodeAllocatingNodeInDestructor : public GarbageCollectedFinalized<NonNodeAllocatingNodeInDestructor> {
+public:
+    ~NonNodeAllocatingNodeInDestructor()
+    {
+        s_node = new Persistent<Node>(Node::create(10));
+    }
+
+    void trace(Visitor*) { }
+
+    static Persistent<Node>* s_node;
+};
+
+Persistent<Node>* NonNodeAllocatingNodeInDestructor::s_node = 0;
+
+TEST(HeapTest, NonNodeAllocatingNodeInDestructor)
+{
+    new NonNodeAllocatingNodeInDestructor();
+    Heap::collectGarbage(ThreadState::NoHeapPointersOnStack);
+    EXPECT_EQ(10, (*NonNodeAllocatingNodeInDestructor::s_node)->value());
+    delete NonNodeAllocatingNodeInDestructor::s_node;
+    NonNodeAllocatingNodeInDestructor::s_node = 0;
 }
 
 } // namespace blink

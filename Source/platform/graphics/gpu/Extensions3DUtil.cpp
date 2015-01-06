@@ -23,7 +23,7 @@ void splitStringHelper(const String& str, HashSet<String>& set)
 
 } // anonymous namespace
 
-PassOwnPtr<Extensions3DUtil> Extensions3DUtil::create(blink::WebGraphicsContext3D* context)
+PassOwnPtr<Extensions3DUtil> Extensions3DUtil::create(WebGraphicsContext3D* context)
 {
     OwnPtr<Extensions3DUtil> out = adoptPtr(new Extensions3DUtil(context));
     if (!out->initializeExtensions())
@@ -31,7 +31,7 @@ PassOwnPtr<Extensions3DUtil> Extensions3DUtil::create(blink::WebGraphicsContext3
     return out.release();
 }
 
-Extensions3DUtil::Extensions3DUtil(blink::WebGraphicsContext3D* context)
+Extensions3DUtil::Extensions3DUtil(WebGraphicsContext3D* context)
     : m_context(context)
 {
 }
@@ -42,12 +42,6 @@ Extensions3DUtil::~Extensions3DUtil()
 
 bool Extensions3DUtil::initializeExtensions()
 {
-    if (!m_context->makeContextCurrent()) {
-        // Most likely the GPU process exited and the attempt to reconnect to it failed.
-        // Need to try to restore the context again later.
-        return false;
-    }
-
     if (m_context->isContextLost()) {
         // Need to try to restore the context again later.
         return false;

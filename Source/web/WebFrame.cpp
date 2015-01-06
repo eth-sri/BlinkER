@@ -7,21 +7,21 @@
 
 #include "core/frame/RemoteFrame.h"
 #include "core/html/HTMLFrameOwnerElement.h"
+#include "platform/UserGestureIndicator.h"
 #include "web/OpenedFrameTracker.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebRemoteFrameImpl.h"
 #include <algorithm>
 
-
 namespace blink {
 
-blink::Frame* toWebCoreFrame(const WebFrame* frame)
+Frame* toCoreFrame(const WebFrame* frame)
 {
     if (!frame)
         return 0;
 
     return frame->isWebLocalFrame()
-        ? static_cast<blink::Frame*>(toWebLocalFrameImpl(frame)->frame())
+        ? static_cast<Frame*>(toWebLocalFrameImpl(frame)->frame())
         : toWebRemoteFrameImpl(frame)->frame();
 }
 
@@ -31,9 +31,9 @@ void WebFrame::swap(WebFrame* frame)
 
     // All child frames must have been detached first.
     ASSERT(!m_firstChild && !m_lastChild);
-    // The frame being swapped in should not have a blink::Frame associated
+    // The frame being swapped in should not have a Frame associated
     // with it yet.
-    ASSERT(!toWebCoreFrame(frame));
+    ASSERT(!toCoreFrame(frame));
 
     if (m_parent) {
         if (m_parent->m_firstChild == this)
@@ -62,18 +62,28 @@ void WebFrame::swap(WebFrame* frame)
         frame->m_openedFrameTracker.reset(m_openedFrameTracker.release());
     }
 
-    // Finally, clone the state of the current blink::Frame into one matching
+    // Finally, clone the state of the current Frame into one matching
     // the type of the passed in WebFrame.
     // FIXME: This is a bit clunky; this results in pointless decrements and
     // increments of connected subframes.
-    blink::Frame* oldFrame = toWebCoreFrame(this);
-    blink::FrameOwner* owner = oldFrame->owner();
+    Frame* oldFrame = toCoreFrame(this);
+    FrameOwner* owner = oldFrame->owner();
     oldFrame->disconnectOwnerElement();
     if (frame->isWebLocalFrame()) {
-        toWebLocalFrameImpl(frame)->initializeWebCoreFrame(oldFrame->host(), owner, oldFrame->tree().name(), nullAtom);
+        toWebLocalFrameImpl(frame)->initializeCoreFrame(oldFrame->host(), owner, oldFrame->tree().name(), nullAtom);
     } else {
-        toWebRemoteFrameImpl(frame)->initializeWebCoreFrame(oldFrame->host(), owner, oldFrame->tree().name());
+        toWebRemoteFrameImpl(frame)->initializeCoreFrame(oldFrame->host(), owner, oldFrame->tree().name());
     }
+}
+
+v8::Handle<v8::Value> WebFrame::executeScriptAndReturnValueForTests(const WebScriptSource& source)
+{
+    // FIXME: This fake UserGestureIndicator is required for a bunch of browser
+    // tests to pass. We should update the tests to simulate input and get rid
+    // of this.
+    // http://code.google.com/p/chromium/issues/detail?id=86397
+    UserGestureIndicator gestureIndicator(DefinitelyProcessingNewUserGesture);
+    return executeScriptAndReturnValue(source);
 }
 
 WebFrame* WebFrame::opener() const
@@ -105,7 +115,7 @@ void WebFrame::appendChild(WebFrame* child)
         m_firstChild = child;
     }
 
-    toWebCoreFrame(this)->tree().invalidateScopedChildCount();
+    toCoreFrame(this)->tree().invalidateScopedChildCount();
 }
 
 void WebFrame::removeChild(WebFrame* child)
@@ -124,7 +134,7 @@ void WebFrame::removeChild(WebFrame* child)
 
     child->m_previousSibling = child->m_nextSibling = 0;
 
-    toWebCoreFrame(this)->tree().invalidateScopedChildCount();
+    toCoreFrame(this)->tree().invalidateScopedChildCount();
 }
 
 WebFrame* WebFrame::parent() const
@@ -162,23 +172,21 @@ WebFrame* WebFrame::nextSibling() const
 
 WebFrame* WebFrame::traversePrevious(bool wrap) const
 {
-    blink::Frame* frame = toWebCoreFrame(this);
-    if (!frame)
-        return 0;
-    return fromFrame(frame->tree().traversePreviousWithWrap(wrap));
+    if (Frame* frame = toCoreFrame(this))
+        return fromFrame(frame->tree().traversePreviousWithWrap(wrap));
+    return 0;
 }
 
 WebFrame* WebFrame::traverseNext(bool wrap) const
 {
-    blink::Frame* frame = toWebCoreFrame(this);
-    if (!frame)
-        return 0;
-    return fromFrame(frame->tree().traverseNextWithWrap(wrap));
+    if (Frame* frame = toCoreFrame(this))
+        return fromFrame(frame->tree().traverseNextWithWrap(wrap));
+    return 0;
 }
 
 WebFrame* WebFrame::findChildByName(const WebString& name) const
 {
-    blink::Frame* frame = toWebCoreFrame(this);
+    Frame* frame = toCoreFrame(this);
     if (!frame)
         return 0;
     // FIXME: It's not clear this should ever be called to find a remote frame.
@@ -186,7 +194,7 @@ WebFrame* WebFrame::findChildByName(const WebString& name) const
     return fromFrame(frame->tree().child(name));
 }
 
-WebFrame* WebFrame::fromFrame(blink::Frame* frame)
+WebFrame* WebFrame::fromFrame(Frame* frame)
 {
     if (!frame)
         return 0;

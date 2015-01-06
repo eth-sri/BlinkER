@@ -23,7 +23,7 @@ callback CustomElementConstructor = Element ();
 typedef (CanvasRenderingContext2D or WebGLRenderingContext) RenderingContext;
 
 [
-    SpecialWrapFor=HTMLDocument|XMLDocument
+    SpecialWrapFor=(HTMLDocument,XMLDocument)
 ] interface Document : Node {
 
     // DOM Level 1 Core
@@ -183,8 +183,6 @@ typedef (CanvasRenderingContext2D or WebGLRenderingContext) RenderingContext;
     [RuntimeEnabled=Touch] attribute EventHandler ontouchend;
     [RuntimeEnabled=Touch] attribute EventHandler ontouchmove;
     [RuntimeEnabled=Touch] attribute EventHandler ontouchstart;
-    attribute EventHandler onwebkitfullscreenchange;
-    attribute EventHandler onwebkitfullscreenerror;
     attribute EventHandler onwheel;
 
     [RuntimeEnabled=Touch] Touch createTouch([Default=Undefined] optional Window window,

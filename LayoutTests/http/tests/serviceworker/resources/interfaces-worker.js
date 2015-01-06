@@ -9,6 +9,7 @@ test(function() {
                     {
                         scope: 'string',
                         clients: 'object',
+                        close: 'function',
 
                         onactivate: EVENT_HANDLER,
                         onfetch: EVENT_HANDLER,
@@ -19,10 +20,10 @@ test(function() {
     verifyInterface('ServiceWorkerClients',
                     self.clients,
                     {
-                        getServiced: 'function'
+                        getAll: 'function'
                     });
 
-    verifyInterface('Client');
+    verifyInterface('ServiceWorkerClient');
     // FIXME: Get an instance and test it, or ensure property exists on prototype.
 
 }, 'Interfaces and attributes in ServiceWorkerGlobalScope');

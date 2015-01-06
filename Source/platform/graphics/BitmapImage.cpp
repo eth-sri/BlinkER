@@ -43,7 +43,7 @@ namespace blink {
 BitmapImage::BitmapImage(ImageObserver* observer)
     : Image(observer)
     , m_currentFrame(0)
-    , m_frames(0)
+    , m_frames()
     , m_frameTimer(0)
     , m_repetitionCount(cAnimationNone)
     , m_repetitionCountStatus(Unknown)
@@ -243,11 +243,6 @@ bool BitmapImage::dataChanged(bool allDataReceived)
     return isSizeAvailable();
 }
 
-bool BitmapImage::isAllDataReceived() const
-{
-    return m_allDataReceived;
-}
-
 bool BitmapImage::hasColorProfile() const
 {
     return m_source.hasColorProfile();
@@ -258,25 +253,25 @@ String BitmapImage::filenameExtension() const
     return m_source.filenameExtension();
 }
 
-void BitmapImage::draw(GraphicsContext* ctxt, const FloatRect& dstRect, const FloatRect& srcRect, CompositeOperator compositeOp, blink::WebBlendMode blendMode)
+void BitmapImage::draw(GraphicsContext* ctxt, const FloatRect& dstRect, const FloatRect& srcRect, CompositeOperator compositeOp, WebBlendMode blendMode)
 {
     draw(ctxt, dstRect, srcRect, compositeOp, blendMode, DoNotRespectImageOrientation);
 }
 
-void BitmapImage::draw(GraphicsContext* ctxt, const FloatRect& dstRect, const FloatRect& srcRect, CompositeOperator compositeOp, blink::WebBlendMode blendMode, RespectImageOrientationEnum shouldRespectImageOrientation)
+void BitmapImage::draw(GraphicsContext* ctxt, const FloatRect& dstRect, const FloatRect& srcRect, CompositeOperator compositeOp, WebBlendMode blendMode, RespectImageOrientationEnum shouldRespectImageOrientation)
 {
     // Spin the animation to the correct frame before we try to draw it, so we
     // don't draw an old frame and then immediately need to draw a newer one,
     // causing flicker and wasting CPU.
     startAnimation();
 
-    RefPtr<NativeImageSkia> bm = nativeImageForCurrentFrame();
-    if (!bm)
+    RefPtr<NativeImageSkia> image = nativeImageForCurrentFrame();
+    if (!image)
         return; // It's too early and we don't have an image yet.
 
     FloatRect normDstRect = adjustForNegativeSize(dstRect);
     FloatRect normSrcRect = adjustForNegativeSize(srcRect);
-    normSrcRect.intersect(FloatRect(0, 0, bm->bitmap().width(), bm->bitmap().height()));
+    normSrcRect.intersect(FloatRect(0, 0, image->bitmap().width(), image->bitmap().height()));
 
     if (normSrcRect.isEmpty() || normDstRect.isEmpty())
         return; // Nothing to draw.
@@ -302,10 +297,17 @@ void BitmapImage::draw(GraphicsContext* ctxt, const FloatRect& dstRect, const Fl
         }
     }
 
-    bm->draw(ctxt, normSrcRect, normDstRect, compositeOp, blendMode);
+    image->draw(ctxt, normSrcRect, normDstRect, compositeOp, blendMode);
 
     if (ImageObserver* observer = imageObserver())
         observer->didDraw(this);
+}
+
+void BitmapImage::resetDecoder()
+{
+    ASSERT(isMainThread());
+
+    m_source.resetDecoder();
 }
 
 size_t BitmapImage::frameCount()
@@ -368,7 +370,7 @@ PassRefPtr<NativeImageSkia> BitmapImage::nativeImageForCurrentFrame()
 
 PassRefPtr<Image> BitmapImage::imageForDefaultFrame()
 {
-    if (isBitmapImage() && maybeAnimated())
+    if (isAnimated())
         return BitmapImage::create(frameAtIndex(0));
 
     return Image::imageForDefaultFrame();
@@ -553,9 +555,15 @@ bool BitmapImage::maybeAnimated()
 {
     if (m_animationFinished)
         return false;
-    if (frameCount() > 1)
+    if (isAnimated())
         return true;
+
     return m_source.repetitionCount() != cAnimationNone;
+}
+
+bool BitmapImage::isAnimated()
+{
+    return frameCount() > 1;
 }
 
 void BitmapImage::advanceAnimation(Timer<BitmapImage>*)
@@ -637,4 +645,4 @@ Color BitmapImage::solidColor() const
     return m_solidColor;
 }
 
-}
+} // namespace blink

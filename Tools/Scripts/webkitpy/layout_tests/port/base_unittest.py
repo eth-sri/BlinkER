@@ -30,14 +30,13 @@ import logging
 import optparse
 import sys
 import tempfile
-import webkitpy.thirdparty.unittest2 as unittest
+import unittest
 
 from webkitpy.common.system.executive import Executive, ScriptError
 from webkitpy.common.system import executive_mock
 from webkitpy.common.system.filesystem_mock import MockFileSystem
 from webkitpy.common.system.outputcapture import OutputCapture
 from webkitpy.common.system.path import abspath_to_uri
-from webkitpy.thirdparty.mock import Mock
 from webkitpy.tool.mocktool import MockOptions
 from webkitpy.common.system.executive_mock import MockExecutive, MockExecutive2
 from webkitpy.common.system.systemhost_mock import MockSystemHost
@@ -142,6 +141,12 @@ class PortTest(unittest.TestCase):
         self.assertIn('exp.txt', diff)
         self.assertIn('act.txt', diff)
         self.assertNotIn('nosuchthing', diff)
+
+        # Test for missing newline at end of file diff output.
+        content_a = "Hello\n\nWorld"
+        content_b = "Hello\n\nWorld\n\n\n"
+        expected = "--- exp.txt\n+++ act.txt\n@@ -1,3 +1,5 @@\n Hello\n \n-World\n\ No newline at end of file\n+World\n+\n+\n"
+        self.assertEqual(expected, port.diff_text(content_a, content_b, 'exp.txt', 'act.txt'))
 
     def test_setup_test_run(self):
         port = self.make_port()

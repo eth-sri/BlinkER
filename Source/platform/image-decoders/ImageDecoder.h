@@ -36,8 +36,8 @@
 #include "public/platform/Platform.h"
 #include "wtf/Assertions.h"
 #include "wtf/RefPtr.h"
-#include "wtf/text/WTFString.h"
 #include "wtf/Vector.h"
+#include "wtf/text/WTFString.h"
 
 #if USE(QCMSLIB)
 #include "qcms.h"
@@ -54,7 +54,7 @@ class PLATFORM_EXPORT ImagePlanes {
 public:
     ImagePlanes();
 
-    void set(void* planes[3], size_t rowBytes[3]);
+    void setPlanes(void* planes[3], size_t rowBytes[3]);
     void* plane(int);
     size_t rowBytes(int) const;
 
@@ -102,10 +102,12 @@ public:
         m_isAllDataReceived = allDataReceived;
     }
 
-    // Lazily-decodes enough of the image to get the size (if possible).
-    // FIXME: Right now that has to be done by each subclass; factor the
-    // decode call out and use it here.
     virtual bool isSizeAvailable()
+    {
+        return !m_failed && m_sizeAvailable;
+    }
+
+    bool isSizeAvailable() const
     {
         return !m_failed && m_sizeAvailable;
     }

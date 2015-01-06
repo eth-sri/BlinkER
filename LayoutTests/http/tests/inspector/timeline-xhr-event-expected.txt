@@ -1,3 +1,5 @@
+CONSOLE WARNING: The XMLHttpRequest progress event property 'totalSize' is deprecated. Please use 'total' instead.
+CONSOLE WARNING: The XMLHttpRequest progress event property 'position' is deprecated. Please use 'loaded' instead.
 Tests the Timeline events for XMLHttpReqeust
 
 XHRReadyStateChange Properties:
@@ -10,6 +12,7 @@ XHRReadyStateChange Properties:
     endTime : <number>
     frameId : <string>
     startTime : <number>
+    thread : <string>
     type : "XHRReadyStateChange"
 }
 XHRReadyStateChange Properties:
@@ -22,6 +25,7 @@ XHRReadyStateChange Properties:
     endTime : <number>
     frameId : <string>
     startTime : <number>
+    thread : <string>
     type : "XHRReadyStateChange"
 }
 XHRReadyStateChange Properties:
@@ -34,6 +38,7 @@ XHRReadyStateChange Properties:
     endTime : <number>
     frameId : <string>
     startTime : <number>
+    thread : <string>
     type : "XHRReadyStateChange"
 }
 XHRLoad Properties:
@@ -45,6 +50,7 @@ XHRLoad Properties:
     endTime : <number>
     frameId : <string>
     startTime : <number>
+    thread : <string>
     type : "XHRLoad"
 }
 

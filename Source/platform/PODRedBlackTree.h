@@ -44,7 +44,7 @@
 // In debug mode, printing of the data contained in the tree is
 // enabled. This requires the template specialization to be available:
 //
-//   template<> struct blink::ValueToString<T> {
+//   template<> struct ValueToString<T> {
 //       static String string(const T& t);
 //   };
 //
@@ -797,10 +797,10 @@ private:
     {
         StringBuilder builder;
         for (int i = 0; i < indentation; i++)
-            builder.append(" ");
-        builder.append("-");
+            builder.append(' ');
+        builder.append('-');
         if (node) {
-            builder.append(" ");
+            builder.append(' ');
             builder.append(ValueToString<T>::string(node->data()));
             builder.append((node->color() == Black) ? " (black)" : " (red)");
         }

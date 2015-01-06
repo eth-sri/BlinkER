@@ -30,6 +30,7 @@
 #include "core/dom/Element.h"
 #include "core/dom/NodeRareData.h"
 #include "core/html/HTMLFormElement.h"
+#include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLObjectElement.h"
 
@@ -40,7 +41,6 @@ using namespace HTMLNames;
 RadioNodeList::RadioNodeList(ContainerNode& rootNode, const AtomicString& name, CollectionType type)
     : LiveNodeList(rootNode, type, InvalidateForFormControls, isHTMLFormElement(rootNode) ? NodeListIsRootedAtDocument : NodeListIsRootedAtNode)
     , m_name(name)
-    , m_onlyMatchImgElements(type == RadioImgNodeListType)
 {
     ScriptWrappable::init(this);
 }
@@ -48,7 +48,7 @@ RadioNodeList::RadioNodeList(ContainerNode& rootNode, const AtomicString& name, 
 RadioNodeList::~RadioNodeList()
 {
 #if !ENABLE(OILPAN)
-    ownerNode().nodeLists()->removeCache(this, m_onlyMatchImgElements ? RadioImgNodeListType : RadioNodeListType, m_name);
+    ownerNode().nodeLists()->removeCache(this, type(), m_name);
 #endif
 }
 
@@ -64,7 +64,7 @@ static inline HTMLInputElement* toRadioButtonInputElement(Element& element)
 
 String RadioNodeList::value() const
 {
-    if (m_onlyMatchImgElements)
+    if (shouldOnlyMatchImgElements())
         return String();
     unsigned length = this->length();
     for (unsigned i = 0; i < length; ++i) {
@@ -78,7 +78,7 @@ String RadioNodeList::value() const
 
 void RadioNodeList::setValue(const String& value)
 {
-    if (m_onlyMatchImgElements)
+    if (shouldOnlyMatchImgElements())
         return;
     unsigned length = this->length();
     for (unsigned i = 0; i < length; ++i) {
@@ -97,7 +97,7 @@ bool RadioNodeList::matchesByIdOrName(const Element& testElement) const
 
 bool RadioNodeList::checkElementMatchesRadioNodeListFilter(const Element& testElement) const
 {
-    ASSERT(!m_onlyMatchImgElements);
+    ASSERT(!shouldOnlyMatchImgElements());
     ASSERT(isHTMLObjectElement(testElement) || testElement.isFormControlElement());
     if (isHTMLFormElement(ownerNode())) {
         HTMLFormElement* formElement = toHTMLElement(testElement).formOwner();
@@ -110,11 +110,11 @@ bool RadioNodeList::checkElementMatchesRadioNodeListFilter(const Element& testEl
 
 bool RadioNodeList::elementMatches(const Element& element) const
 {
-    if (m_onlyMatchImgElements) {
+    if (shouldOnlyMatchImgElements()) {
         if (!isHTMLImageElement(element))
             return false;
 
-        if (toHTMLElement(element).formOwner() != ownerNode())
+        if (toHTMLImageElement(element).formOwner() != ownerNode())
             return false;
 
         return matchesByIdOrName(element);

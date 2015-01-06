@@ -1,7 +1,15 @@
-An orange rect should be painted.
-In DumpRenderTree, there should be repaint logs of 100x100 rect. We don't care how many times is the log dumpped.
-(repaint rects
-  (rect 214 21 100 100)
-  (rect 214 21 100 100)
-)
+{
+  "bounds": [800, 600],
+  "children": [
+    {
+      "bounds": [800, 600],
+      "contentsOpaque": true,
+      "drawsContent": true,
+      "repaintRects": [
+        [214, 21, 100, 100],
+        [214, 21, 100, 100]
+      ]
+    }
+  ]
+}
 

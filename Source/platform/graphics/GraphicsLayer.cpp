@@ -38,7 +38,7 @@
 #include "platform/scroll/ScrollableArea.h"
 #include "platform/text/TextStream.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebAnimation.h"
+#include "public/platform/WebCompositorAnimation.h"
 #include "public/platform/WebCompositorSupport.h"
 #include "public/platform/WebFilterOperations.h"
 #include "public/platform/WebFloatPoint.h"
@@ -59,7 +59,7 @@
 #endif
 
 using blink::Platform;
-using blink::WebAnimation;
+using blink::WebCompositorAnimation;
 using blink::WebFilterOperations;
 using blink::WebLayer;
 using blink::WebPoint;
@@ -82,7 +82,7 @@ GraphicsLayer::GraphicsLayer(GraphicsLayerClient* client)
     : m_client(client)
     , m_backgroundColor(Color::transparent)
     , m_opacity(1)
-    , m_blendMode(blink::WebBlendModeNormal)
+    , m_blendMode(WebBlendModeNormal)
     , m_hasTransformOrigin(false)
     , m_contentsOpaque(false)
     , m_shouldFlattenTransform(true)
@@ -137,7 +137,7 @@ GraphicsLayer::~GraphicsLayer()
     removeAllChildren();
     removeFromParent();
 
-    resetTrackedRepaints();
+    resetTrackedPaintInvalidations();
     ASSERT(!m_parent);
 }
 
@@ -417,7 +417,7 @@ GraphicsLayerDebugInfo& GraphicsLayer::debugInfo()
     return m_debugInfo;
 }
 
-blink::WebGraphicsLayerDebugInfo* GraphicsLayer::takeDebugInfoFor(WebLayer* layer)
+WebGraphicsLayerDebugInfo* GraphicsLayer::takeDebugInfoFor(WebLayer* layer)
 {
     GraphicsLayerDebugInfo* clone = m_debugInfo.clone();
     clone->setDebugName(debugName(layer));
@@ -430,14 +430,14 @@ WebLayer* GraphicsLayer::contentsLayerIfRegistered()
     return m_contentsLayer;
 }
 
-void GraphicsLayer::resetTrackedRepaints()
+void GraphicsLayer::resetTrackedPaintInvalidations()
 {
     repaintRectMap().remove(this);
 }
 
 void GraphicsLayer::addRepaintRect(const FloatRect& repaintRect)
 {
-    if (m_client->isTrackingRepaints()) {
+    if (m_client->isTrackingPaintInvalidations()) {
         FloatRect largestRepaintRect(FloatPoint(), m_size);
         largestRepaintRect.intersect(repaintRect);
         RepaintMap::iterator repaintIt = repaintRectMap().find(this);
@@ -563,7 +563,7 @@ PassRefPtr<JSONObject> GraphicsLayer::layerTreeAsJSON(LayerTreeFlags flags, Rend
     if (m_opacity != 1)
         json->setNumber("opacity", m_opacity);
 
-    if (m_blendMode != blink::WebBlendModeNormal)
+    if (m_blendMode != WebBlendModeNormal)
         json->setString("blendMode", compositeOperatorName(CompositeSourceOver, m_blendMode));
 
     if (m_isRootForIsolatedGroup)
@@ -610,7 +610,7 @@ PassRefPtr<JSONObject> GraphicsLayer::layerTreeAsJSON(LayerTreeFlags flags, Rend
     if (m_replicatedLayer)
         json->setString("replicatedLayer", flags & LayerTreeIncludesDebugInfo ? pointerAsString(m_replicatedLayer) : "");
 
-    if ((flags & LayerTreeIncludesRepaintRects) && repaintRectMap().contains(this) && !repaintRectMap().get(this).isEmpty()) {
+    if ((flags & LayerTreeIncludesPaintInvalidationRects) && repaintRectMap().contains(this) && !repaintRectMap().get(this).isEmpty()) {
         Vector<FloatRect> repaintRectsCopy = repaintRectMap().get(this);
         std::sort(repaintRectsCopy.begin(), repaintRectsCopy.end(), &compareFloatRects);
         RefPtr<JSONArray> repaintRectsJSON = adoptRef(new JSONArray);
@@ -672,7 +672,7 @@ String GraphicsLayer::layerTreeAsText(LayerTreeFlags flags) const
     return json->toPrettyJSONString();
 }
 
-String GraphicsLayer::debugName(blink::WebLayer* webLayer) const
+String GraphicsLayer::debugName(WebLayer* webLayer) const
 {
     String name;
     if (!m_client)
@@ -795,13 +795,13 @@ void GraphicsLayer::setContentsVisible(bool contentsVisible)
     updateLayerIsDrawable();
 }
 
-void GraphicsLayer::setClipParent(blink::WebLayer* parent)
+void GraphicsLayer::setClipParent(WebLayer* parent)
 {
     m_hasClipParent = !!parent;
     m_layer->layer()->setClipParent(parent);
 }
 
-void GraphicsLayer::setScrollParent(blink::WebLayer* parent)
+void GraphicsLayer::setScrollParent(WebLayer* parent)
 {
     m_hasScrollParent = !!parent;
     m_layer->layer()->setScrollParent(parent);
@@ -821,6 +821,7 @@ void GraphicsLayer::setContentsOpaque(bool opaque)
     m_contentsOpaque = opaque;
     m_layer->layer()->setOpaque(m_contentsOpaque);
     m_opaqueRectTrackingContentLayerDelegate->setOpaque(m_contentsOpaque);
+    clearContentsLayerIfUnregistered();
     if (m_contentsLayer)
         m_contentsLayer->setOpaque(opaque);
 }
@@ -862,12 +863,12 @@ void GraphicsLayer::setOpacity(float opacity)
     platformLayer()->setOpacity(opacity);
 }
 
-void GraphicsLayer::setBlendMode(blink::WebBlendMode blendMode)
+void GraphicsLayer::setBlendMode(WebBlendMode blendMode)
 {
     if (m_blendMode == blendMode)
         return;
     m_blendMode = blendMode;
-    platformLayer()->setBlendMode(blink::WebBlendMode(blendMode));
+    platformLayer()->setBlendMode(WebBlendMode(blendMode));
 }
 
 void GraphicsLayer::setIsRootForIsolatedGroup(bool isolated)
@@ -952,9 +953,9 @@ void GraphicsLayer::setContentsToNinePatch(Image* image, const IntRect& aperture
     setContentsTo(m_ninePatchLayer ? m_ninePatchLayer->layer() : 0);
 }
 
-bool GraphicsLayer::addAnimation(PassOwnPtr<WebAnimation> popAnimation)
+bool GraphicsLayer::addAnimation(PassOwnPtr<WebCompositorAnimation> popAnimation)
 {
-    OwnPtr<WebAnimation> animation(popAnimation);
+    OwnPtr<WebCompositorAnimation> animation(popAnimation);
     ASSERT(animation);
     platformLayer()->setAnimationDelegate(this);
 
@@ -1033,13 +1034,13 @@ void GraphicsLayer::paint(GraphicsContext& context, const IntRect& clip)
 }
 
 
-void GraphicsLayer::notifyAnimationStarted(double monotonicTime, WebAnimation::TargetProperty)
+void GraphicsLayer::notifyAnimationStarted(double monotonicTime, WebCompositorAnimation::TargetProperty)
 {
     if (m_client)
         m_client->notifyAnimationStarted(this, monotonicTime);
 }
 
-void GraphicsLayer::notifyAnimationFinished(double, WebAnimation::TargetProperty)
+void GraphicsLayer::notifyAnimationFinished(double, WebCompositorAnimation::TargetProperty)
 {
     // Do nothing.
 }

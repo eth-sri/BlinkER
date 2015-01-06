@@ -27,12 +27,9 @@
 
 namespace blink {
 
-static void initializeScriptWrappableForInterface(TestInterfaceEventConstructor* object)
+static void initializeScriptWrappableForInterface(TestInterfaceEventConstructor* impl)
 {
-    if (ScriptWrappable::wrapperCanBeStoredInObject(object))
-        ScriptWrappable::fromObject(object)->setTypeInfo(&V8TestInterfaceEventConstructor::wrapperTypeInfo);
-    else
-        ASSERT_NOT_REACHED();
+    impl->setTypeInfo(&V8TestInterfaceEventConstructor::wrapperTypeInfo);
 }
 
 } // namespace blink
@@ -43,7 +40,8 @@ void webCoreInitializeScriptWrappableForInterface(blink::TestInterfaceEventConst
 }
 
 namespace blink {
-const WrapperTypeInfo V8TestInterfaceEventConstructor::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceEventConstructor::domTemplate, V8TestInterfaceEventConstructor::derefObject, 0, 0, 0, V8TestInterfaceEventConstructor::installPerContextEnabledMethods, &V8Event::wrapperTypeInfo, WrapperTypeObjectPrototype, WillBeGarbageCollectedObject };
+
+const WrapperTypeInfo V8TestInterfaceEventConstructor::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceEventConstructor::domTemplate, V8TestInterfaceEventConstructor::refObject, V8TestInterfaceEventConstructor::derefObject, V8TestInterfaceEventConstructor::createPersistentHandle, 0, 0, 0, V8TestInterfaceEventConstructor::installConditionallyEnabledMethods, V8TestInterfaceEventConstructor::installConditionallyEnabledProperties, &V8Event::wrapperTypeInfo, WrapperTypeObjectPrototype, WillBeGarbageCollectedObject };
 
 namespace TestInterfaceEventConstructorV8Internal {
 
@@ -381,7 +379,7 @@ v8::Handle<v8::Object> V8TestInterfaceEventConstructor::findInstanceInPrototypeC
 
 TestInterfaceEventConstructor* V8TestInterfaceEventConstructor::toNativeWithTypeCheck(v8::Isolate* isolate, v8::Handle<v8::Value> value)
 {
-    return hasInstance(value, isolate) ? fromInternalPointer(v8::Handle<v8::Object>::Cast(value)->GetAlignedPointerFromInternalField(v8DOMWrapperObjectIndex)) : 0;
+    return hasInstance(value, isolate) ? fromInternalPointer(blink::toInternalPointer(v8::Handle<v8::Object>::Cast(value))) : 0;
 }
 
 v8::Handle<v8::Object> wrap(TestInterfaceEventConstructor* impl, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
@@ -395,27 +393,43 @@ v8::Handle<v8::Object> V8TestInterfaceEventConstructor::createWrapper(PassRefPtr
 {
     ASSERT(impl);
     ASSERT(!DOMDataStore::containsWrapper<V8TestInterfaceEventConstructor>(impl.get(), isolate));
-    if (ScriptWrappable::wrapperCanBeStoredInObject(impl.get())) {
-        const WrapperTypeInfo* actualInfo = ScriptWrappable::fromObject(impl.get())->typeInfo();
-        // Might be a XXXConstructor::wrapperTypeInfo instead of an XXX::wrapperTypeInfo. These will both have
-        // the same object de-ref functions, though, so use that as the basis of the check.
-        RELEASE_ASSERT_WITH_SECURITY_IMPLICATION(actualInfo->derefObjectFunction == wrapperTypeInfo.derefObjectFunction);
-    }
+    const WrapperTypeInfo* actualInfo = impl->typeInfo();
+    // Might be a XXXConstructor::wrapperTypeInfo instead of an XXX::wrapperTypeInfo. These will both have
+    // the same object de-ref functions, though, so use that as the basis of the check.
+    RELEASE_ASSERT_WITH_SECURITY_IMPLICATION(actualInfo->derefObjectFunction == wrapperTypeInfo.derefObjectFunction);
 
     v8::Handle<v8::Object> wrapper = V8DOMWrapper::createWrapper(creationContext, &wrapperTypeInfo, toInternalPointer(impl.get()), isolate);
     if (UNLIKELY(wrapper.IsEmpty()))
         return wrapper;
 
-    installPerContextEnabledProperties(wrapper, impl.get(), isolate);
+    installConditionallyEnabledProperties(wrapper, isolate);
     V8DOMWrapper::associateObjectWithWrapper<V8TestInterfaceEventConstructor>(impl, &wrapperTypeInfo, wrapper, isolate, WrapperConfiguration::Independent);
     return wrapper;
 }
 
-void V8TestInterfaceEventConstructor::derefObject(void* object)
+
+void V8TestInterfaceEventConstructor::refObject(ScriptWrappableBase* internalPointer)
 {
 #if !ENABLE(OILPAN)
-    fromInternalPointer(object)->deref();
-#endif // !ENABLE(OILPAN)
+    fromInternalPointer(internalPointer)->ref();
+#endif
+}
+
+void V8TestInterfaceEventConstructor::derefObject(ScriptWrappableBase* internalPointer)
+{
+#if !ENABLE(OILPAN)
+    fromInternalPointer(internalPointer)->deref();
+#endif
+}
+
+PersistentNode* V8TestInterfaceEventConstructor::createPersistentHandle(ScriptWrappableBase* internalPointer)
+{
+#if ENABLE(OILPAN)
+    return new Persistent<TestInterfaceEventConstructor>(fromInternalPointer(internalPointer));
+#else
+    ASSERT_NOT_REACHED();
+    return 0;
+#endif
 }
 
 template<>

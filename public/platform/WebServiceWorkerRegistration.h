@@ -9,9 +9,15 @@
 
 namespace blink {
 
+class WebServiceWorkerRegistrationProxy;
+
 class WebServiceWorkerRegistration {
 public:
     virtual ~WebServiceWorkerRegistration() { }
+
+    virtual void setProxy(WebServiceWorkerRegistrationProxy*) { }
+    virtual WebServiceWorkerRegistrationProxy* proxy() { return 0; }
+    virtual void proxyStopped() { }
 
     virtual WebURL scope() const { return WebURL(); }
 };

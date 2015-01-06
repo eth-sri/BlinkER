@@ -1,12 +1,16 @@
-This test checks that grid items correctly repaint when 'z-index' changes.
-
-For this test to pass, there should be no red below.
-
-(repaint rects
-  (rect 8 236 200 100)
-  (rect 8 236 200 100)
-  (rect 8 236 200 100)
-  (rect 8 126 200 100)
-  (rect 8 126 200 100)
-)
+{
+  "bounds": [800, 600],
+  "children": [
+    {
+      "bounds": [800, 600],
+      "contentsOpaque": true,
+      "drawsContent": true,
+      "repaintRects": [
+        [8, 236, 200, 100],
+        [8, 236, 200, 100],
+        [8, 126, 200, 100]
+      ]
+    }
+  ]
+}
 

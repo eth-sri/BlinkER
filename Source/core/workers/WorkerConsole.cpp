@@ -31,6 +31,7 @@
 
 #include "core/workers/WorkerConsole.h"
 
+#include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/ScriptCallStack.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkerReportingProxy.h"
@@ -49,10 +50,12 @@ WorkerConsole::~WorkerConsole()
 {
 }
 
-void WorkerConsole::reportMessageToClient(MessageLevel level, const String& message, PassRefPtrWillBeRawPtr<ScriptCallStack> callStack)
+void WorkerConsole::reportMessageToConsole(PassRefPtrWillBeRawPtr<ConsoleMessage> consoleMessage)
 {
-    const ScriptCallFrame& lastCaller = callStack->at(0);
-    m_scope->thread()->workerReportingProxy().reportConsoleMessage(ConsoleAPIMessageSource, level, message, lastCaller.lineNumber(), lastCaller.sourceURL());
+    const ScriptCallFrame& lastCaller = consoleMessage->callStack()->at(0);
+    consoleMessage->setURL(lastCaller.sourceURL());
+    consoleMessage->setLineNumber(lastCaller.lineNumber());
+    m_scope->addMessage(consoleMessage);
 }
 
 ExecutionContext* WorkerConsole::context()

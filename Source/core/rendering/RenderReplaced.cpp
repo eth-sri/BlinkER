@@ -36,12 +36,12 @@
 
 namespace blink {
 
-const int cDefaultWidth = 300;
-const int cDefaultHeight = 150;
+const int RenderReplaced::defaultWidth = 300;
+const int RenderReplaced::defaultHeight = 150;
 
 RenderReplaced::RenderReplaced(Element* element)
     : RenderBox(element)
-    , m_intrinsicSize(cDefaultWidth, cDefaultHeight)
+    , m_intrinsicSize(defaultWidth, defaultHeight)
 {
     setReplaced(true);
 }
@@ -94,8 +94,8 @@ void RenderReplaced::layout()
 
 void RenderReplaced::intrinsicSizeChanged()
 {
-    int scaledWidth = static_cast<int>(cDefaultWidth * style()->effectiveZoom());
-    int scaledHeight = static_cast<int>(cDefaultHeight * style()->effectiveZoom());
+    int scaledWidth = static_cast<int>(defaultWidth * style()->effectiveZoom());
+    int scaledHeight = static_cast<int>(defaultHeight * style()->effectiveZoom());
     m_intrinsicSize = IntSize(scaledWidth, scaledHeight);
     setNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation();
 }
@@ -501,7 +501,7 @@ LayoutRect RenderReplaced::selectionRectForPaintInvalidation(const RenderLayerMo
 
     LayoutRect rect = localSelectionRect();
     if (clipToVisibleContent)
-        mapRectToPaintInvalidationBacking(paintInvalidationContainer, rect);
+        mapRectToPaintInvalidationBacking(paintInvalidationContainer, rect, 0);
     else
         rect = localToContainerQuad(FloatRect(rect), paintInvalidationContainer).enclosingBoundingBox();
 
@@ -532,7 +532,7 @@ void RenderReplaced::setSelectionState(SelectionState state)
     if (!inlineBoxWrapper())
         return;
 
-    // We only include the space below the baseline in our layer's cached repaint rect if the
+    // We only include the space below the baseline in our layer's cached paint invalidation rect if the
     // image is selected. Since the selection state has changed update the rect.
     if (hasLayer())
         setPreviousPaintInvalidationRect(boundsRectForPaintInvalidation(containerForPaintInvalidation()));
@@ -569,9 +569,9 @@ LayoutRect RenderReplaced::clippedOverflowRectForPaintInvalidation(const RenderL
         return LayoutRect();
 
     // The selectionRect can project outside of the overflowRect, so take their union
-    // for repainting to avoid selection painting glitches.
+    // for paint invalidation to avoid selection painting glitches.
     LayoutRect r = isSelected() ? localSelectionRect() : visualOverflowRect();
-    mapRectToPaintInvalidationBacking(paintInvalidationContainer, r, false /* fixed */, paintInvalidationState);
+    mapRectToPaintInvalidationBacking(paintInvalidationContainer, r, paintInvalidationState);
     return r;
 }
 

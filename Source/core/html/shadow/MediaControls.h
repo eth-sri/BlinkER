@@ -82,7 +82,8 @@ private:
 
     enum HideBehaviorFlags {
         IgnoreVideoHover = 1 << 0,
-        IgnoreFocus = 1 << 1
+        IgnoreFocus = 1 << 1,
+        IgnoreControlsHover = 1 << 2
     };
 
     bool shouldHideMediaControls(unsigned behaviorFlags = 0) const;
@@ -127,6 +128,7 @@ private:
     Timer<MediaControls> m_hideMediaControlsTimer;
     bool m_isMouseOverControls : 1;
     bool m_isPausedForScrubbing : 1;
+    bool m_wasLastEventTouch : 1;
 };
 
 DEFINE_ELEMENT_TYPE_CASTS(MediaControls, isMediaControls());

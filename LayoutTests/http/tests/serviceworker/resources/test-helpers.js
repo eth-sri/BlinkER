@@ -1,31 +1,37 @@
 // Adapter for testharness.js-style tests with Service Workers
 
+// Can only be used with a worker that installs successfully, since it
+// first registers to acquire a ServiceWorkerRegistration object to
+// unregister.
+// FIXME: Use getRegistration() when implemented.
 function service_worker_unregister_and_register(test, url, scope) {
-    var options = scope ? { scope: scope } : {};
-    return navigator.serviceWorker.unregister(scope).then(
-        test.step_func(function() {
-            return navigator.serviceWorker.register(url, options);
-        }),
-        unreached_rejection(test, 'Unregister should not fail')
-    ).then(test.step_func(function(worker) {
-          return Promise.resolve(worker);
-        }),
-        unreached_rejection(test, 'Registration should not fail')
-    );
+  if (!scope || scope.length == 0)
+    return Promise.reject(new Error('tests must define a scope'));
+
+  var options = { scope: scope };
+  return navigator.serviceWorker.register(url, options)
+      .then(function(registration) {
+          return registration.unregister();
+        })
+      .then(function() {
+          return navigator.serviceWorker.register(url, options);
+        })
+      .catch(unreached_rejection(test,
+                                 'unregister and register should not fail'));
 }
 
 function service_worker_unregister_and_done(test, scope) {
     return navigator.serviceWorker.unregister(scope).then(
         test.done.bind(test),
-        unreached_rejection(test, 'Unregister should not fail'));
+        unreached_rejection(test, 'unregister should not fail'));
 }
 
 // Rejection-specific helper that provides more details
 function unreached_rejection(test, prefix) {
     return test.step_func(function(error) {
-        var reason = error.name ? error.name : error;
-        var prefix = prefix ? prefix : "unexpected rejection";
-        assert_unreached(prefix + ': ' + reason);
+        var reason = error.message || error.name || error;
+        var error_prefix = prefix || 'unexpected rejection';
+        assert_unreached(error_prefix + ': ' + reason);
     });
 }
 
@@ -44,12 +50,31 @@ function with_iframe(url, f) {
     });
 }
 
+function unload_iframe(iframe) {
+  var saw_unload = new Promise(function(resolve) {
+      iframe.contentWindow.addEventListener('unload', function() {
+          resolve();
+        });
+    });
+  iframe.src = '';
+  iframe.remove();
+  return saw_unload;
+}
+
 function normalizeURL(url) {
   return new URL(url, document.location).toString().replace(/#.*$/, '');
 }
 
+function wait_for_update(test, registration) {
+    return new Promise(test.step_func(function(resolve) {
+        registration.addEventListener('updatefound', test.step_func(function() {
+            resolve(registration.installing);
+        }));
+    }));
+}
+
 function wait_for_state(test, worker, state) {
-    return new Promise(test.step_func(function(resolve, reject) {
+    return new Promise(test.step_func(function(resolve) {
         worker.addEventListener('statechange', test.step_func(function() {
             if (worker.state === state)
                 resolve(state);
@@ -101,6 +126,9 @@ function wait_for_state(test, worker, state) {
 
     var test = async_test(description);
     service_worker_unregister_and_register(test, url, scope)
+      .then(function(registration) {
+          return wait_for_update(test, registration);
+        })
       .then(function(worker) { return fetch_tests_from_worker(worker); })
       .then(function() { return navigator.serviceWorker.unregister(scope); })
       .then(function() { test.done(); })

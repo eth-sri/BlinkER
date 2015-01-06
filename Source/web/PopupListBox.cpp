@@ -57,8 +57,6 @@
 #include "wtf/CurrentTime.h"
 #include <limits>
 
-using namespace blink;
-
 namespace blink {
 
 using namespace WTF::Unicode;
@@ -713,6 +711,7 @@ void PopupListBox::updateFromElement()
         PopupMenuStyle style = m_popupClient->itemStyle(i);
         m_items[i]->textDirection = style.textDirection();
         m_items[i]->hasTextDirectionOverride = style.hasTextDirectionOverride();
+        m_items[i]->displayNone = style.isDisplayNone();
     }
 
     m_selectedIndex = m_popupClient->selectedIndex();
@@ -725,6 +724,17 @@ void PopupListBox::setMaxWidthAndLayout(int maxWidth)
 {
     m_maxWindowWidth = maxWidth;
     layout();
+}
+
+int PopupListBox::getRowBaseWidth(int index)
+{
+    Font font = getRowFont(index);
+    PopupMenuStyle style = m_popupClient->itemStyle(index);
+    String text = m_popupClient->itemText(index);
+    if (text.isEmpty())
+        return 0;
+    TextRun textRun(text, 0, 0, TextRun::AllowTrailingExpansion, style.textDirection(), style.hasTextDirectionOverride());
+    return font.width(textRun);
 }
 
 void PopupListBox::layout()
@@ -744,13 +754,7 @@ void PopupListBox::layout()
         y += getRowHeight(i);
 
         // Ensure the popup is wide enough to fit this item.
-        Font itemFont = getRowFont(i);
-        String text = m_popupClient->itemText(i);
-        int width = 0;
-        if (!text.isEmpty())
-            width = itemFont.width(TextRun(text));
-
-        baseWidth = max(baseWidth, width);
+        baseWidth = max(baseWidth, getRowBaseWidth(i));
         // FIXME: http://b/1210481 We should get the padding of individual
         // option elements.
         paddingWidth = max<int>(paddingWidth,

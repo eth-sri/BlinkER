@@ -26,7 +26,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import webkitpy.thirdparty.unittest2 as unittest
+import unittest
 
 from webkitpy.common.checkout.baselineoptimizer import BaselineOptimizer
 from webkitpy.common.checkout.scm.scm_mock import MockSCM
@@ -36,7 +36,6 @@ from webkitpy.common.net.layouttestresults import LayoutTestResults
 from webkitpy.common.system.executive_mock import MockExecutive
 from webkitpy.common.system.executive_mock import MockExecutive2
 from webkitpy.common.system.outputcapture import OutputCapture
-from webkitpy.thirdparty.mock import Mock
 from webkitpy.tool.commands.rebaseline import *
 from webkitpy.tool.mocktool import MockTool, MockOptions
 
@@ -1129,7 +1128,6 @@ Bug(foo) fast/dom/prototype-taco.html [ NeedsRebaseline ]
                 ],
                 [['python', 'echo', 'optimize-baselines', '--no-modify-scm', '--suffixes', 'txt', 'fast/dom/prototype-taco.html']],
                 ['git', 'cl', 'upload', '-f'],
-                ['git', 'cl', 'set_close'],
             ])
         finally:
             builders._exact_matches = old_exact_matches

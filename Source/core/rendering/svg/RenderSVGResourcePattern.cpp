@@ -42,14 +42,14 @@ void RenderSVGResourcePattern::removeAllClientsFromCache(bool markForInvalidatio
 {
     m_patternMap.clear();
     m_shouldCollectPatternAttributes = true;
-    markAllClientsForInvalidation(markForInvalidation ? RepaintInvalidation : ParentOnlyInvalidation);
+    markAllClientsForInvalidation(markForInvalidation ? PaintInvalidation : ParentOnlyInvalidation);
 }
 
 void RenderSVGResourcePattern::removeClientFromCache(RenderObject* client, bool markForInvalidation)
 {
     ASSERT(client);
     m_patternMap.remove(client);
-    markClientForInvalidation(client, markForInvalidation ? RepaintInvalidation : ParentOnlyInvalidation);
+    markClientForInvalidation(client, markForInvalidation ? PaintInvalidation : ParentOnlyInvalidation);
 }
 
 PatternData* RenderSVGResourcePattern::buildPattern(RenderObject* object, unsigned short resourceMode)
@@ -107,7 +107,7 @@ PatternData* RenderSVGResourcePattern::buildPattern(RenderObject* object, unsign
 
     // Build pattern.
     OwnPtr<PatternData> patternData = adoptPtr(new PatternData);
-    patternData->pattern = Pattern::create(copiedImage, true, true);
+    patternData->pattern = Pattern::createBitmapPattern(copiedImage);
 
     // Compute pattern space transformation.
     const IntSize tileImageSize = tileImage->size();

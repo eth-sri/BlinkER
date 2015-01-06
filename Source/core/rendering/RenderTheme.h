@@ -90,18 +90,12 @@ public:
     // the baseline position API above).
     bool isControlContainer(ControlPart) const;
 
-    // A method asking if the control changes its tint when the window has focus or not.
-    virtual bool controlSupportsTints(const RenderObject*) const { return false; }
-
     // Whether or not the control has been styled enough by the author to disable the native appearance.
     virtual bool isControlStyled(const RenderStyle*, const CachedUAStyle*) const;
 
-    // A general method asking if any control tinting is supported at all.
-    virtual bool supportsControlTints() const { return false; }
-
-    // Some controls may spill out of their containers (e.g., the check on an OS X checkbox).  When these controls repaint,
+    // Some controls may spill out of their containers (e.g., the check on an OS X checkbox). When these controls issues paint invalidations,
     // the theme needs to communicate this inflated rect to the engine so that it can invalidate the whole control.
-    virtual void adjustRepaintRect(const RenderObject*, IntRect&);
+    virtual void adjustPaintInvalidationRect(const RenderObject*, IntRect&);
 
     // This method is called whenever a relevant state changes on a particular themed object, e.g., the mouse becomes pressed
     // or a control becomes disabled.

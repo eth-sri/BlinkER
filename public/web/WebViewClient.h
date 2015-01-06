@@ -53,8 +53,6 @@ class WebCompositorOutputSurface;
 class WebDateTimeChooserCompletion;
 class WebDragData;
 class WebElement;
-class WebExternalPopupMenu;
-class WebExternalPopupMenuClient;
 class WebFileChooserCompletion;
 class WebGestureEvent;
 class WebHitTestResult;
@@ -101,12 +99,9 @@ public:
         return 0;
     }
 
-    // Create a new WebPopupMenu.  In the second form, the client is
-    // responsible for rendering the contents of the popup menu.
+    // Create a new WebPopupMenu.
     virtual WebWidget* createPopupMenu(WebPopupType) { return 0; }
     virtual WebWidget* createPopupMenu(const WebPopupMenuInfo&) { return 0; }
-    virtual WebExternalPopupMenu* createExternalPopupMenu(
-        const WebPopupMenuInfo&, WebExternalPopupMenuClient*) { return 0; }
 
     // Create a session storage namespace object associated with this WebView.
     virtual WebStorageNamespace* createSessionStorageNamespace() { return 0; }
@@ -163,6 +158,8 @@ public:
     // Show a notification popup for the specified form vaidation messages
     // besides the anchor rectangle. An implementation of this function should
     // not hide the popup until hideValidationMessage call.
+    virtual void showValidationMessage(const WebRect& anchorInRootView, const WebString& mainText, WebTextDirection mainTextDir, const WebString& supplementalText, WebTextDirection supplementalTextDir) { }
+    // FIXME: BUG91638, when landed on chrome side, this will be removed.
     virtual void showValidationMessage(const WebRect& anchorInRootView, const WebString& mainText, const WebString& supplementalText, WebTextDirection hint) { }
 
     // Hide notifation popup for form validation messages.

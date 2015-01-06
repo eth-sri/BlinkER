@@ -61,6 +61,10 @@ public:
     HitTestResult& operator=(const HitTestResult&);
     void trace(Visitor*);
 
+    // For point-based hit tests, these accessors provide information about the node
+    // under the point. For rect-based hit tests they are meaningless (reflect the
+    // last candidate node observed in the rect).
+    // FIXME: Make these less error-prone for rect-based hit tests (center point or fail).
     Node* innerNode() const { return m_innerNode.get(); }
     Node* innerPossiblyPseudoNode() const { return m_innerPossiblyPseudoNode.get(); }
     Element* innerElement() const;
@@ -106,6 +110,9 @@ public:
     Image* image() const;
     IntRect imageRect() const;
     KURL absoluteImageURL() const;
+    // This variant of absoluteImageURL will also convert <canvas> elements
+    // to huge image data URLs (very expensive).
+    KURL absoluteImageURLIncludingCanvasDataURL() const;
     KURL absoluteMediaURL() const;
     KURL absoluteLinkURL() const;
     String textContent() const;
@@ -132,6 +139,7 @@ public:
     Node* targetNode() const { return innerNode(); }
 
 private:
+    KURL absoluteImageURLInternal(bool allowCanvas) const;
     NodeSet& mutableRectBasedTestResult(); // See above.
     HTMLMediaElement* mediaElement() const;
 

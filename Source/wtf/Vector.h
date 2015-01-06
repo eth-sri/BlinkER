@@ -763,12 +763,6 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
             ASSERT(begin());
         }
 
-// Works around an assert in VS2010. See https://connect.microsoft.com/VisualStudio/feedback/details/558044/std-copy-should-not-check-dest-when-first-last
-#if COMPILER(MSVC) && defined(_ITERATOR_DEBUG_LEVEL) && _ITERATOR_DEBUG_LEVEL
-        if (!begin())
-            return *this;
-#endif
-
         std::copy(other.begin(), other.begin() + size(), begin());
         TypeOperations::uninitializedCopy(other.begin() + size(), other.end(), end());
         m_size = other.size();
@@ -794,12 +788,6 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
             reserveCapacity(other.size());
             ASSERT(begin());
         }
-
-// Works around an assert in VS2010. See https://connect.microsoft.com/VisualStudio/feedback/details/558044/std-copy-should-not-check-dest-when-first-last
-#if COMPILER(MSVC) && defined(_ITERATOR_DEBUG_LEVEL) && _ITERATOR_DEBUG_LEVEL
-        if (!begin())
-            return *this;
-#endif
 
         std::copy(other.begin(), other.begin() + size(), begin());
         TypeOperations::uninitializedCopy(other.begin() + size(), other.end(), end());
@@ -1012,6 +1000,7 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
     template<typename T, size_t inlineCapacity, typename Allocator> template<typename U>
     void Vector<T, inlineCapacity, Allocator>::append(const U* data, size_t dataSize)
     {
+        ASSERT(Allocator::isAllocationAllowed());
         size_t newSize = m_size + dataSize;
         if (newSize > capacity()) {
             data = expandCapacity(newSize, data);
@@ -1026,6 +1015,7 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
     template<typename T, size_t inlineCapacity, typename Allocator> template<typename U>
     ALWAYS_INLINE void Vector<T, inlineCapacity, Allocator>::append(const U& val)
     {
+        ASSERT(Allocator::isAllocationAllowed());
         if (LIKELY(size() != capacity())) {
             new (NotNull, end()) T(val);
             ++m_size;
@@ -1069,6 +1059,7 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
     template<typename T, size_t inlineCapacity, typename Allocator> template<typename U>
     void Vector<T, inlineCapacity, Allocator>::insert(size_t position, const U* data, size_t dataSize)
     {
+        ASSERT(Allocator::isAllocationAllowed());
         RELEASE_ASSERT(position <= size());
         size_t newSize = m_size + dataSize;
         if (newSize > capacity()) {
@@ -1085,6 +1076,7 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
     template<typename T, size_t inlineCapacity, typename Allocator> template<typename U>
     inline void Vector<T, inlineCapacity, Allocator>::insert(size_t position, const U& val)
     {
+        ASSERT(Allocator::isAllocationAllowed());
         RELEASE_ASSERT(position <= size());
         const U* data = &val;
         if (size() == capacity()) {

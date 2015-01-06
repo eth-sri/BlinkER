@@ -32,6 +32,7 @@
 
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "platform/Logging.h"
 #include "modules/webdatabase/DatabaseAuthorizer.h"
 #include "modules/webdatabase/DatabaseBase.h"
@@ -605,8 +606,8 @@ bool DatabaseBackendBase::isInterrupted()
 // See about:histograms in chromium.
 void DatabaseBackendBase::reportOpenDatabaseResult(int errorSite, int webSqlErrorCode, int sqliteErrorCode)
 {
-    if (blink::Platform::current()->databaseObserver()) {
-        blink::Platform::current()->databaseObserver()->reportOpenDatabaseResult(
+    if (Platform::current()->databaseObserver()) {
+        Platform::current()->databaseObserver()->reportOpenDatabaseResult(
             createDatabaseIdentifierFromSecurityOrigin(securityOrigin()),
             stringIdentifier(), isSyncDatabase(),
             errorSite, webSqlErrorCode, sqliteErrorCode);
@@ -615,8 +616,8 @@ void DatabaseBackendBase::reportOpenDatabaseResult(int errorSite, int webSqlErro
 
 void DatabaseBackendBase::reportChangeVersionResult(int errorSite, int webSqlErrorCode, int sqliteErrorCode)
 {
-    if (blink::Platform::current()->databaseObserver()) {
-        blink::Platform::current()->databaseObserver()->reportChangeVersionResult(
+    if (Platform::current()->databaseObserver()) {
+        Platform::current()->databaseObserver()->reportChangeVersionResult(
             createDatabaseIdentifierFromSecurityOrigin(securityOrigin()),
             stringIdentifier(), isSyncDatabase(),
             errorSite, webSqlErrorCode, sqliteErrorCode);
@@ -625,8 +626,8 @@ void DatabaseBackendBase::reportChangeVersionResult(int errorSite, int webSqlErr
 
 void DatabaseBackendBase::reportStartTransactionResult(int errorSite, int webSqlErrorCode, int sqliteErrorCode)
 {
-    if (blink::Platform::current()->databaseObserver()) {
-        blink::Platform::current()->databaseObserver()->reportStartTransactionResult(
+    if (Platform::current()->databaseObserver()) {
+        Platform::current()->databaseObserver()->reportStartTransactionResult(
             createDatabaseIdentifierFromSecurityOrigin(securityOrigin()),
             stringIdentifier(), isSyncDatabase(),
             errorSite, webSqlErrorCode, sqliteErrorCode);
@@ -635,8 +636,8 @@ void DatabaseBackendBase::reportStartTransactionResult(int errorSite, int webSql
 
 void DatabaseBackendBase::reportCommitTransactionResult(int errorSite, int webSqlErrorCode, int sqliteErrorCode)
 {
-    if (blink::Platform::current()->databaseObserver()) {
-        blink::Platform::current()->databaseObserver()->reportCommitTransactionResult(
+    if (Platform::current()->databaseObserver()) {
+        Platform::current()->databaseObserver()->reportCommitTransactionResult(
             createDatabaseIdentifierFromSecurityOrigin(securityOrigin()),
             stringIdentifier(), isSyncDatabase(),
             errorSite, webSqlErrorCode, sqliteErrorCode);
@@ -645,8 +646,8 @@ void DatabaseBackendBase::reportCommitTransactionResult(int errorSite, int webSq
 
 void DatabaseBackendBase::reportExecuteStatementResult(int errorSite, int webSqlErrorCode, int sqliteErrorCode)
 {
-    if (blink::Platform::current()->databaseObserver()) {
-        blink::Platform::current()->databaseObserver()->reportExecuteStatementResult(
+    if (Platform::current()->databaseObserver()) {
+        Platform::current()->databaseObserver()->reportExecuteStatementResult(
             createDatabaseIdentifierFromSecurityOrigin(securityOrigin()),
             stringIdentifier(), isSyncDatabase(),
             errorSite, webSqlErrorCode, sqliteErrorCode);
@@ -655,8 +656,8 @@ void DatabaseBackendBase::reportExecuteStatementResult(int errorSite, int webSql
 
 void DatabaseBackendBase::reportVacuumDatabaseResult(int sqliteErrorCode)
 {
-    if (blink::Platform::current()->databaseObserver()) {
-        blink::Platform::current()->databaseObserver()->reportVacuumDatabaseResult(
+    if (Platform::current()->databaseObserver()) {
+        Platform::current()->databaseObserver()->reportVacuumDatabaseResult(
             createDatabaseIdentifierFromSecurityOrigin(securityOrigin()),
             stringIdentifier(), isSyncDatabase(), sqliteErrorCode);
     }
@@ -664,7 +665,7 @@ void DatabaseBackendBase::reportVacuumDatabaseResult(int sqliteErrorCode)
 
 void DatabaseBackendBase::logErrorMessage(const String& message)
 {
-    executionContext()->addConsoleMessage(StorageMessageSource, ErrorMessageLevel, message);
+    executionContext()->addConsoleMessage(ConsoleMessage::create(StorageMessageSource, ErrorMessageLevel, message));
 }
 
 ExecutionContext* DatabaseBackendBase::executionContext() const

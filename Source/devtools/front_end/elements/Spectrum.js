@@ -365,6 +365,7 @@ WebInspector.SpectrumPopupHelper.prototype = {
             this.hide(true);
         }
 
+        delete this._isHidden;
         this._anchorElement = element;
 
         this._spectrum.setColor(color);
@@ -372,7 +373,10 @@ WebInspector.SpectrumPopupHelper.prototype = {
         this.reposition(element);
 
         document.addEventListener("mousedown", this._hideProxy, false);
-        window.addEventListener("blur", this._hideProxy, false);
+        window.addEventListener("resize", this._hideProxy, false);
+
+        WebInspector.targetManager.addModelListener(WebInspector.ResourceTreeModel, WebInspector.ResourceTreeModel.EventTypes.ColorPicked, this._colorPicked, this);
+        PageAgent.setColorPickerEnabled(true);
         return true;
     },
 
@@ -389,12 +393,16 @@ WebInspector.SpectrumPopupHelper.prototype = {
      */
     hide: function(commitEdit)
     {
-        if (!this._popover.isShowing())
+        if (this._isHidden)
             return;
+        this._isHidden = true;
         this._popover.hide();
 
         document.removeEventListener("mousedown", this._hideProxy, false);
-        window.removeEventListener("blur", this._hideProxy, false);
+        window.removeEventListener("resize", this._hideProxy, false);
+
+        PageAgent.setColorPickerEnabled(false);
+        WebInspector.targetManager.removeModelListener(WebInspector.ResourceTreeModel, WebInspector.ResourceTreeModel.EventTypes.ColorPicked, this._colorPicked, this);
 
         this.dispatchEventToListeners(WebInspector.SpectrumPopupHelper.Events.Hidden, !!commitEdit);
 
@@ -415,6 +423,18 @@ WebInspector.SpectrumPopupHelper.prototype = {
             this.hide(false);
             event.consume(true);
         }
+    },
+
+    /**
+     * @param {!WebInspector.Event} event
+     */
+    _colorPicked: function(event)
+    {
+        var color = /** @type {!DOMAgent.RGBA} */ (event.data);
+        var rgba = [color.r, color.g, color.b, (color.a / 2.55 | 0) / 100];
+        this._spectrum.setColor(WebInspector.Color.fromRGBA(rgba));
+        this._spectrum._onchange();
+        InspectorFrontendHost.bringToFront();
     },
 
     __proto__: WebInspector.Object.prototype

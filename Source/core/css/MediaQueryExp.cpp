@@ -31,10 +31,11 @@
 #include "core/css/MediaQueryExp.h"
 
 #include "core/css/CSSAspectRatioValue.h"
-#include "core/css/CSSParserValues.h"
 #include "core/css/CSSPrimitiveValue.h"
+#include "core/css/parser/CSSParserValues.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "platform/Decimal.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "wtf/text/StringBuffer.h"
 #include "wtf/text/StringBuilder.h"
 
@@ -49,6 +50,9 @@ static inline bool featureWithCSSValueID(const String& mediaFeature, const CSSPa
 
     return mediaFeature == orientationMediaFeature
         || mediaFeature == pointerMediaFeature
+        || mediaFeature == anyPointerMediaFeature
+        || (mediaFeature == hoverMediaFeature && RuntimeEnabledFeatures::hoverMediaQueryKeywordsEnabled())
+        || mediaFeature == anyHoverMediaFeature
         || mediaFeature == scanMediaFeature;
 }
 
@@ -57,8 +61,12 @@ static inline bool featureWithValidIdent(const String& mediaFeature, CSSValueID 
     if (mediaFeature == orientationMediaFeature)
         return ident == CSSValuePortrait || ident == CSSValueLandscape;
 
-    if (mediaFeature == pointerMediaFeature)
+    if (mediaFeature == pointerMediaFeature || mediaFeature == anyPointerMediaFeature)
         return ident == CSSValueNone || ident == CSSValueCoarse || ident == CSSValueFine;
+
+    if ((mediaFeature == hoverMediaFeature && RuntimeEnabledFeatures::hoverMediaQueryKeywordsEnabled())
+        || mediaFeature == anyHoverMediaFeature)
+        return ident == CSSValueNone || ident == CSSValueOnDemand || ident == CSSValueHover;
 
     if (mediaFeature == scanMediaFeature)
         return ident == CSSValueInterlace || ident == CSSValueProgressive;
@@ -148,7 +156,7 @@ static inline bool featureWithZeroOrOne(const String& mediaFeature, const CSSPar
         return false;
 
     return mediaFeature == gridMediaFeature
-        || mediaFeature == hoverMediaFeature;
+        || (mediaFeature == hoverMediaFeature && !RuntimeEnabledFeatures::hoverMediaQueryKeywordsEnabled());
 }
 
 static inline bool featureWithAspectRatio(const String& mediaFeature)
@@ -176,8 +184,10 @@ static inline bool featureWithoutValue(const String& mediaFeature)
         || mediaFeature == aspectRatioMediaFeature
         || mediaFeature == deviceAspectRatioMediaFeature
         || mediaFeature == hoverMediaFeature
+        || mediaFeature == anyHoverMediaFeature
         || mediaFeature == transform3dMediaFeature
         || mediaFeature == pointerMediaFeature
+        || mediaFeature == anyPointerMediaFeature
         || mediaFeature == devicePixelRatioMediaFeature
         || mediaFeature == resolutionMediaFeature
         || mediaFeature == scanMediaFeature;
@@ -237,7 +247,6 @@ PassOwnPtrWillBeRawPtr<MediaQueryExp> MediaQueryExp::createIfValid(const String&
                 expValue.value = value->fValue;
                 expValue.unit = (CSSPrimitiveValue::UnitType)value->unit;
                 expValue.isValue = true;
-                expValue.isInteger = value->isInt;
             } else if (featureWithPositiveInteger(lowerMediaFeature, value)
                 || featureWithPositiveNumber(lowerMediaFeature, value)
                 || featureWithZeroOrOne(lowerMediaFeature, value)) {
@@ -247,7 +256,6 @@ PassOwnPtrWillBeRawPtr<MediaQueryExp> MediaQueryExp::createIfValid(const String&
                 expValue.value = value->fValue;
                 expValue.unit = CSSPrimitiveValue::CSS_NUMBER;
                 expValue.isValue = true;
-                expValue.isInteger = value->isInt;
             }
 
             isValid = (expValue.isID || expValue.isValue);
@@ -305,13 +313,13 @@ bool MediaQueryExp::operator==(const MediaQueryExp& other) const
 String MediaQueryExp::serialize() const
 {
     StringBuilder result;
-    result.append("(");
+    result.append('(');
     result.append(m_mediaFeature.lower());
     if (m_expValue.isValid()) {
-        result.append(": ");
+        result.appendLiteral(": ");
         result.append(m_expValue.cssText());
     }
-    result.append(")");
+    result.append(')');
 
     return result.toString();
 }
@@ -329,7 +337,7 @@ String MediaQueryExpValue::cssText() const
         output.append(CSSPrimitiveValue::unitTypeToString(unit));
     } else if (isRatio) {
         output.append(printNumber(numerator));
-        output.append("/");
+        output.append('/');
         output.append(printNumber(denominator));
     } else if (isID) {
         output.append(getValueName(id));

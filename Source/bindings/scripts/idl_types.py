@@ -7,6 +7,10 @@ Classes:
 IdlTypeBase
  IdlType
  IdlUnionType
+ IdlArrayOrSequenceType
+  IdlArrayType
+  IdlSequenceType
+ IdlNullableType
 """
 
 from collections import defaultdict
@@ -96,66 +100,17 @@ def set_ancestors(new_ancestors):
 
 
 class IdlTypeBase(object):
-    """Base class for IdlType and IdlUnionType."""
+    """Base class for IdlType, IdlUnionType, IdlArrayOrSequenceType and IdlNullableType."""
 
-    def __init__(self, is_array=False, is_sequence=False, is_nullable=False):
-        self.base_type = None
-        self.is_array = is_array
-        self.is_sequence = is_sequence
-        self.is_nullable = is_nullable
-
-    @property
-    def native_array_element_type(self):
-        return None
-
-    @property
-    def array_element_type(self):
-        return None
-
-    @property
-    def is_basic_type(self):
-        return False
-
-    @property
-    def is_callback_function(self):
-        return False
-
-    @property
-    def is_dictionary(self):
-        return False
-
-    @property
-    def is_enum(self):
-        return False
-
-    @property
-    def is_integer_type(self):
-        return False
-
-    @property
-    def is_numeric_type(self):
-        return False
-
-    @property
-    def is_primitivee_type(self):
-        return False
-
-    @property
-    def is_string_type(self):
-        return False
-
-    @property
-    def is_union_type(self):
-        return False
-
-    @property
-    def may_raise_exception_on_conversion(self):
-        return False
-
-    @property
-    def name(self):
+    def __str__(self):
         raise NotImplementedError(
-            'name property should be defined in subclasses')
+            '__str__() should be defined in subclasses')
+
+    def __getattr__(self, name):
+        # Default undefined attributes to None (analogous to Jinja variables).
+        # This allows us to not define default properties in the base class, and
+        # allows us to relay __getattr__ in IdlNullableType to the inner type.
+        return None
 
     def resolve_typedefs(self, typedefs):
         raise NotImplementedError(
@@ -168,7 +123,6 @@ class IdlTypeBase(object):
 
 class IdlType(IdlTypeBase):
     # FIXME: incorporate Nullable, etc.
-    # FIXME: use nested types: IdlArrayType, IdlNullableType, IdlSequenceType
     # to support types like short?[] vs. short[]?, instead of treating these
     # as orthogonal properties (via flags).
     callback_functions = set()
@@ -176,46 +130,19 @@ class IdlType(IdlTypeBase):
     dictionaries = set()
     enums = {}  # name -> values
 
-    def __init__(self, base_type, is_array=False, is_sequence=False, is_nullable=False, is_unrestricted=False):
-        super(IdlType, self).__init__(is_array=is_array, is_sequence=is_sequence, is_nullable=is_nullable)
-        if is_array and is_sequence:
-            raise ValueError('Array of Sequences are not allowed.')
+    def __init__(self, base_type, is_unrestricted=False):
+        super(IdlType, self).__init__()
         if is_unrestricted:
             self.base_type = 'unrestricted %s' % base_type
         else:
             self.base_type = base_type
 
     def __str__(self):
-        type_string = self.base_type
-        if self.is_array:
-            return type_string + '[]'
-        if self.is_sequence:
-            return 'sequence<%s>' % type_string
-        if self.is_nullable:
-            # FIXME: Dictionary::ConversionContext::setConversionType can't
-            # handle the '?' in nullable types (passes nullability separately).
-            # Update that function to handle nullability from the type name,
-            # simplifying its signature.
-            # return type_string + '?'
-            return type_string
-        return type_string
-
-    # FIXME: move to v8_types.py
-    @property
-    def native_array_element_type(self):
-        return self.array_element_type or self.sequence_element_type
-
-    @property
-    def array_element_type(self):
-        return self.is_array and IdlType(self.base_type)
-
-    @property
-    def sequence_element_type(self):
-        return self.is_sequence and IdlType(self.base_type)
+        return self.base_type
 
     @property
     def is_basic_type(self):
-        return self.base_type in BASIC_TYPES and not self.native_array_element_type
+        return self.base_type in BASIC_TYPES
 
     @property
     def is_callback_function(self):
@@ -230,13 +157,6 @@ class IdlType(IdlTypeBase):
         return self.base_type in IdlType.dictionaries
 
     @property
-    def is_composite_type(self):
-        return (self.name == 'Any' or
-                self.array_element_type or
-                self.sequence_element_type or
-                self.is_union_type)
-
-    @property
     def is_enum(self):
         # FIXME: add an IdlEnumType class and a resolve_enums step at end of
         # IdlDefinitions constructor
@@ -248,15 +168,15 @@ class IdlType(IdlTypeBase):
 
     @property
     def is_integer_type(self):
-        return self.base_type in INTEGER_TYPES and not self.native_array_element_type
+        return self.base_type in INTEGER_TYPES
 
     @property
     def is_numeric_type(self):
-        return self.base_type in NUMERIC_TYPES and not self.native_array_element_type
+        return self.base_type in NUMERIC_TYPES
 
     @property
     def is_primitive_type(self):
-        return self.base_type in PRIMITIVE_TYPES and not self.native_array_element_type
+        return self.base_type in PRIMITIVE_TYPES
 
     @property
     def is_interface_type(self):
@@ -265,16 +185,16 @@ class IdlType(IdlTypeBase):
         # http://www.w3.org/TR/WebIDL/#idl-interface
         # In C++ these are RefPtr or PassRefPtr types.
         return not(self.is_basic_type or
-                   self.is_composite_type or
                    self.is_callback_function or
                    self.is_dictionary or
                    self.is_enum or
+                   self.name == 'Any' or
                    self.name == 'Object' or
                    self.name == 'Promise')  # Promise will be basic in future
 
     @property
     def is_string_type(self):
-        return self.base_type_name in STRING_TYPES
+        return self.name in STRING_TYPES
 
     @property
     def may_raise_exception_on_conversion(self):
@@ -286,24 +206,13 @@ class IdlType(IdlTypeBase):
         return isinstance(self, IdlUnionType)
 
     @property
-    def base_type_name(self):
-        base_type = self.base_type
-        return TYPE_NAMES.get(base_type, base_type)
-
-    @property
     def name(self):
-        """Return type name.
+        """Return type name
 
         http://heycam.github.io/webidl/#dfn-type-name
         """
-        base_type_name = self.base_type_name
-        if self.is_array:
-            return base_type_name + 'Array'
-        if self.is_sequence:
-            return base_type_name + 'Sequence'
-        if self.is_nullable:
-            return base_type_name + 'OrNull'
-        return base_type_name
+        base_type = self.base_type
+        return TYPE_NAMES.get(base_type, base_type)
 
     @classmethod
     def set_callback_functions(cls, new_callback_functions):
@@ -322,25 +231,9 @@ class IdlType(IdlTypeBase):
         cls.enums.update(new_enums)
 
     def resolve_typedefs(self, typedefs):
-        if self.base_type not in typedefs:
-            return self
-        new_type = typedefs[self.base_type]
-        if type(new_type) != type(self):
-            # If type changes, need to return a different object,
-            # since can't change type(self)
-            return new_type
-        # If type doesn't change, just mutate self to avoid a new object
-        # FIXME: a bit ugly; use __init__ instead of setting flags
-        self.base_type = new_type.base_type
-        # handle array both in use and in typedef itself:
-        # typedef Type TypeDef;
-        # TypeDef[] ...
-        # and:
-        # typedef Type[] TypeArray
-        # TypeArray ...
-        self.is_array |= new_type.is_array
-        self.is_sequence |= new_type.is_sequence
-        return self
+        # This function either returns |self| or a different object.
+        # FIXME: Rename typedefs_resolved().
+        return typedefs.get(self.base_type, self)
 
 
 ################################################################################
@@ -349,8 +242,8 @@ class IdlType(IdlTypeBase):
 
 class IdlUnionType(IdlTypeBase):
     # http://heycam.github.io/webidl/#idl-union
-    def __init__(self, member_types, is_nullable=False):
-        super(IdlUnionType, self).__init__(is_nullable=is_nullable)
+    def __init__(self, member_types):
+        super(IdlUnionType, self).__init__()
         self.member_types = member_types
 
     @property
@@ -359,10 +252,87 @@ class IdlUnionType(IdlTypeBase):
 
     @property
     def name(self):
+        """Return type name (or inner type name if nullable)
+
+        http://heycam.github.io/webidl/#dfn-type-name
+        """
         return 'Or'.join(member_type.name for member_type in self.member_types)
 
     def resolve_typedefs(self, typedefs):
         self.member_types = [
             typedefs.get(member_type, member_type)
             for member_type in self.member_types]
+        return self
+
+
+################################################################################
+# IdlArrayOrSequenceType, IdlArrayType, IdlSequenceType
+################################################################################
+
+class IdlArrayOrSequenceType(IdlTypeBase):
+    """Base class for IdlArrayType and IdlSequenceType."""
+
+    def __init__(self, element_type):
+        super(IdlArrayOrSequenceType, self).__init__()
+        self.element_type = element_type
+
+    def resolve_typedefs(self, typedefs):
+        self.element_type = self.element_type.resolve_typedefs(typedefs)
+        return self
+
+
+class IdlArrayType(IdlArrayOrSequenceType):
+    def __init__(self, element_type):
+        super(IdlArrayType, self).__init__(element_type)
+
+    def __str__(self):
+        return '%s[]' % self.element_type
+
+    @property
+    def name(self):
+        return self.element_type.name + 'Array'
+
+
+class IdlSequenceType(IdlArrayOrSequenceType):
+    def __init__(self, element_type):
+        super(IdlSequenceType, self).__init__(element_type)
+
+    def __str__(self):
+        return 'sequence<%s>' % self.element_type
+
+    @property
+    def name(self):
+        return self.element_type.name + 'Sequence'
+
+
+################################################################################
+# IdlNullableType
+################################################################################
+
+class IdlNullableType(IdlTypeBase):
+    def __init__(self, inner_type):
+        super(IdlNullableType, self).__init__()
+        self.inner_type = inner_type
+
+    def __str__(self):
+        # FIXME: Dictionary::ConversionContext::setConversionType can't
+        # handle the '?' in nullable types (passes nullability separately).
+        # Update that function to handle nullability from the type name,
+        # simplifying its signature.
+        # return str(self.inner_type) + '?'
+        return str(self.inner_type)
+
+    def __getattr__(self, name):
+        return getattr(self.inner_type, name)
+
+    @property
+    def is_nullable(self):
+        return True
+
+    @property
+    def name(self):
+        return self.inner_type.name + 'OrNull'
+
+    def resolve_typedefs(self, typedefs):
+        self.inner_type = self.inner_type.resolve_typedefs(typedefs)
         return self

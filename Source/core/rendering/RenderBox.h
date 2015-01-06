@@ -414,7 +414,7 @@ public:
     void deleteLineBoxWrapper();
 
     virtual LayoutRect clippedOverflowRectForPaintInvalidation(const RenderLayerModelObject* paintInvalidationContainer, const PaintInvalidationState* = 0) const OVERRIDE;
-    virtual void mapRectToPaintInvalidationBacking(const RenderLayerModelObject* paintInvalidationContainer, LayoutRect&, bool fixed = false, const PaintInvalidationState* = 0) const OVERRIDE;
+    virtual void mapRectToPaintInvalidationBacking(const RenderLayerModelObject* paintInvalidationContainer, LayoutRect&, const PaintInvalidationState*) const OVERRIDE;
     virtual void invalidatePaintForOverhangingFloats(bool paintAllDescendants);
 
     virtual LayoutUnit containingBlockLogicalWidthForContent() const OVERRIDE;
@@ -580,7 +580,7 @@ public:
     virtual void computeIntrinsicRatioInformation(FloatSize& /* intrinsicSize */, double& /* intrinsicRatio */) const { }
 
     IntSize scrolledContentOffset() const;
-    void applyCachedClipAndScrollOffsetForRepaint(LayoutRect& paintRect) const;
+    void applyCachedClipAndScrollOffsetForPaintInvalidation(LayoutRect& paintRect) const;
 
     virtual bool hasRelativeLogicalHeight() const;
 
@@ -664,7 +664,7 @@ protected:
 
     virtual bool shouldComputeSizeAsReplaced() const { return isReplaced() && !isInlineBlockOrInlineTable(); }
 
-    virtual void mapLocalToContainer(const RenderLayerModelObject* repaintContainer, TransformState&, MapCoordinatesFlags = ApplyContainerFlip, bool* wasFixed = 0, const PaintInvalidationState* = 0) const OVERRIDE;
+    virtual void mapLocalToContainer(const RenderLayerModelObject* paintInvalidationContainer, TransformState&, MapCoordinatesFlags = ApplyContainerFlip, bool* wasFixed = 0, const PaintInvalidationState* = 0) const OVERRIDE;
     virtual void mapAbsoluteToLocalPoint(MapCoordinatesFlags, TransformState&) const OVERRIDE;
 
     void paintRootBoxFillLayers(const PaintInfo&);
@@ -679,6 +679,7 @@ protected:
     virtual InvalidationReason getPaintInvalidationReason(const RenderLayerModelObject& paintInvalidationContainer,
         const LayoutRect& oldBounds, const LayoutPoint& oldPositionFromPaintInvalidationContainer,
         const LayoutRect& newBounds, const LayoutPoint& newPositionFromPaintInvalidationContainer) OVERRIDE;
+    virtual void incrementallyInvalidatePaint(const RenderLayerModelObject& paintInvalidationContainer, const LayoutRect& oldBounds, const LayoutRect& newBounds, const LayoutPoint& positionFromPaintInvalidationContainer) OVERRIDE;
 
     virtual void clearPaintInvalidationState(const PaintInvalidationState&) OVERRIDE;
 #if ENABLE(ASSERT)
@@ -692,8 +693,8 @@ private:
     bool autoWidthShouldFitContent() const;
     void shrinkToFitWidth(const LayoutUnit availableSpace, const LayoutUnit logicalLeftValue, const LayoutUnit bordersPlusPadding, LogicalExtentComputedValues&) const;
 
-    // Returns true if we did a full repaint
-    bool repaintLayerRectsForImage(WrappedImagePtr, const FillLayer&, bool drawingBackground);
+    // Returns true if we queued up a paint invalidation.
+    bool paintInvalidationLayerRectsForImage(WrappedImagePtr, const FillLayer&, bool drawingBackground);
 
     bool skipContainingBlockForPercentHeightCalculation(const RenderBox* containingBlock) const;
 
@@ -731,6 +732,8 @@ private:
     }
 
     void savePreviousBorderBoxSizeIfNeeded();
+    LayoutSize computePreviousBorderBoxSize(const LayoutSize& previousBoundsSize) const;
+
     bool logicalHeightComputesAsNone(SizeType) const;
 
     virtual InvalidationReason invalidatePaintIfNeeded(const PaintInvalidationState&, const RenderLayerModelObject& newPaintInvalidationContainer) OVERRIDE FINAL;
@@ -744,6 +747,8 @@ private:
     // updateLogicalHeight. This is logicalHeight() before it is clamped to
     // min/max.
     mutable LayoutUnit m_intrinsicContentLogicalHeight;
+
+    void inflatePaintInvalidationRectForReflectionAndFilter(LayoutRect&) const;
 
 protected:
     LayoutBoxExtent m_marginBox;

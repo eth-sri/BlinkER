@@ -160,6 +160,12 @@ RenderBlock::RenderBlock(ContainerNode* node)
     // By default, subclasses do not have inline children.
 }
 
+void RenderBlock::trace(Visitor* visitor)
+{
+    visitor->trace(m_children);
+    RenderBox::trace(visitor);
+}
+
 static void removeBlockFromDescendantAndContainerMaps(RenderBlock* block, TrackedDescendantsMap*& descendantMap, TrackedContainerMap*& containerMap)
 {
     if (OwnPtr<TrackedRendererListHashSet> descendantSet = descendantMap->take(block)) {
@@ -210,7 +216,7 @@ static void appendImagesFromStyle(Vector<ImageResource*>& images, RenderStyle& b
         appendImageIfNotNull(images, blockStyle.shapeOutside()->image());
 }
 
-RenderBlock::~RenderBlock()
+void RenderBlock::removeFromGlobalMaps()
 {
     if (hasColumns())
         gColumnInfoMap->take(this);
@@ -218,6 +224,22 @@ RenderBlock::~RenderBlock()
         removeBlockFromDescendantAndContainerMaps(this, gPercentHeightDescendantsMap, gPercentHeightContainerMap);
     if (gPositionedDescendantsMap)
         removeBlockFromDescendantAndContainerMaps(this, gPositionedDescendantsMap, gPositionedContainerMap);
+}
+
+RenderBlock::~RenderBlock()
+{
+#if !ENABLE(OILPAN)
+    removeFromGlobalMaps();
+#endif
+}
+
+void RenderBlock::destroy()
+{
+    RenderBox::destroy();
+#if ENABLE(OILPAN)
+    // RenderObject::removeChild called in destory() depends on gColumnInfoMap.
+    removeFromGlobalMaps();
+#endif
 }
 
 void RenderBlock::willBeDestroyed()
@@ -371,16 +393,16 @@ void RenderBlock::invalidateTreeIfNeeded(const PaintInvalidationState& paintInva
         for (TrackedRendererListHashSet::iterator it = positionedObjects->begin(); it != end; ++it) {
             RenderBox* box = *it;
 
-            // One of the renderers we're skipping over here may be the child's repaint container,
-            // so we can't pass our own repaint container along.
-            const RenderLayerModelObject& repaintContainerForChild = *box->containerForPaintInvalidation();
+            // One of the renderers we're skipping over here may be the child's paint invalidation container,
+            // so we can't pass our own paint invalidation container along.
+            const RenderLayerModelObject& paintInvalidationContainerForChild = *box->containerForPaintInvalidation();
 
             // If it's a new paint invalidation container, we won't have properly accumulated the offset into the
             // PaintInvalidationState.
             // FIXME: Teach PaintInvalidationState to handle this case. crbug.com/371485
-            if (&repaintContainerForChild != newPaintInvalidationContainer) {
+            if (&paintInvalidationContainerForChild != newPaintInvalidationContainer) {
                 ForceHorriblySlowRectMapping slowRectMapping(&childPaintInvalidationState);
-                PaintInvalidationState disabledPaintInvalidationState(childPaintInvalidationState, *this, repaintContainerForChild);
+                PaintInvalidationState disabledPaintInvalidationState(childPaintInvalidationState, *this, paintInvalidationContainerForChild);
                 box->invalidateTreeIfNeeded(disabledPaintInvalidationState);
                 continue;
             }
@@ -389,13 +411,13 @@ void RenderBlock::invalidateTreeIfNeeded(const PaintInvalidationState& paintInva
             // a relatively positioned inline element, we need to account for
             // the inline elements position in PaintInvalidationState.
             if (box->style()->position() == AbsolutePosition) {
-                RenderObject* container = box->container(&repaintContainerForChild, 0);
+                RenderObject* container = box->container(&paintInvalidationContainerForChild, 0);
                 if (container->isRelPositioned() && container->isRenderInline()) {
                     // FIXME: We should be able to use PaintInvalidationState for this.
                     // Currently, we will place absolutely positioned elements inside
                     // relatively positioned inline blocks in the wrong location. crbug.com/371485
                     ForceHorriblySlowRectMapping slowRectMapping(&childPaintInvalidationState);
-                    PaintInvalidationState disabledPaintInvalidationState(childPaintInvalidationState, *this, repaintContainerForChild);
+                    PaintInvalidationState disabledPaintInvalidationState(childPaintInvalidationState, *this, paintInvalidationContainerForChild);
                     box->invalidateTreeIfNeeded(disabledPaintInvalidationState);
                     continue;
                 }
@@ -1006,7 +1028,7 @@ void RenderBlock::makeChildrenNonInline(RenderObject *insertionPoint)
         ASSERT(!c->isInline());
 #endif
 
-    paintInvalidationForWholeRenderer();
+    setShouldDoFullPaintInvalidation(true);
 }
 
 void RenderBlock::removeLeftoverAnonymousBlock(RenderBlock* child)
@@ -1049,7 +1071,7 @@ void RenderBlock::removeLeftoverAnonymousBlock(RenderBlock* child)
     }
 
     child->children()->setFirstChild(0);
-    child->m_next = 0;
+    child->m_next = nullptr;
 
     // Remove all the information in the flow thread associated with the leftover anonymous block.
     child->removeFromRenderFlowThread();
@@ -1496,7 +1518,7 @@ void RenderBlock::addVisualOverflowFromTheme()
         return;
 
     IntRect inflatedRect = pixelSnappedBorderBoxRect();
-    RenderTheme::theme().adjustRepaintRect(this, inflatedRect);
+    RenderTheme::theme().adjustPaintInvalidationRect(this, inflatedRect);
     addVisualOverflow(inflatedRect);
 }
 
@@ -1561,7 +1583,7 @@ bool RenderBlock::simplifiedLayout()
 
 
     {
-        // LayoutState needs this deliberate scope to pop before repaint
+        // LayoutState needs this deliberate scope to pop before paint invalidation.
         LayoutState state(*this, locationOffset());
 
         if (needsPositionedMovementLayout() && !tryLayoutDoingPositionedMovementOnly())
@@ -1796,9 +1818,6 @@ void RenderBlock::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 
 void RenderBlock::paintColumnRules(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
-    if (paintInfo.context->paintingDisabled())
-        return;
-
     const Color& ruleColor = resolveColor(CSSPropertyWebkitColumnRuleColor);
     bool ruleTransparent = style()->columnRuleIsTransparent();
     EBorderStyle ruleStyle = style()->columnRuleStyle();
@@ -1944,7 +1963,7 @@ void RenderBlock::paintContents(PaintInfo& paintInfo, const LayoutPoint& paintOf
 {
     // Avoid painting descendants of the root element when stylesheets haven't loaded.  This eliminates FOUC.
     // It's ok not to draw, because later on, when all the stylesheets do load, styleResolverChanged() on the Document
-    // will do a full repaint.
+    // will do a full paint invalidation.
     if (document().didLayoutWithPendingStylesheets() && !isRenderView())
         return;
 
@@ -2099,8 +2118,12 @@ void RenderBlock::paintObject(PaintInfo& paintInfo, const LayoutPoint& paintOffs
     }
 
     // 5. paint outline.
-    if ((paintPhase == PaintPhaseOutline || paintPhase == PaintPhaseSelfOutline) && hasOutline() && style()->visibility() == VISIBLE)
-        paintOutline(paintInfo, LayoutRect(paintOffset, size()));
+    if ((paintPhase == PaintPhaseOutline || paintPhase == PaintPhaseSelfOutline) && style()->hasOutline() && style()->visibility() == VISIBLE) {
+        // Don't paint focus ring for anonymous block continuation because the
+        // inline element having outline-style:auto paints the whole focus ring.
+        if (!style()->outlineStyleIsAuto() || !isAnonymousBlockContinuation())
+            paintOutline(paintInfo, LayoutRect(paintOffset, size()));
+    }
 
     // 6. paint continuation outlines.
     if ((paintPhase == PaintPhaseOutline || paintPhase == PaintPhaseChildOutlines))
@@ -2168,7 +2191,7 @@ bool RenderBlock::paintsContinuationOutline(RenderInline* flow)
 void RenderBlock::paintContinuationOutlines(PaintInfo& info, const LayoutPoint& paintOffset)
 {
     RenderInline* inlineCont = inlineElementContinuation();
-    if (inlineCont && inlineCont->hasOutline() && inlineCont->style()->visibility() == VISIBLE) {
+    if (inlineCont && inlineCont->style()->hasOutline() && inlineCont->style()->visibility() == VISIBLE) {
         RenderInline* inlineRenderer = toRenderInline(inlineCont->node()->renderer());
         RenderBlock* cb = containingBlock();
 
@@ -2242,7 +2265,7 @@ bool RenderBlock::isSelectionRoot() const
     return false;
 }
 
-GapRects RenderBlock::selectionGapRectsForRepaint(const RenderLayerModelObject* repaintContainer)
+GapRects RenderBlock::selectionGapRectsForPaintInvalidation(const RenderLayerModelObject* paintInvalidationContainer)
 {
     ASSERT(!needsLayout());
 
@@ -2250,17 +2273,17 @@ GapRects RenderBlock::selectionGapRectsForRepaint(const RenderLayerModelObject* 
         return GapRects();
 
     TransformState transformState(TransformState::ApplyTransformDirection, FloatPoint());
-    mapLocalToContainer(repaintContainer, transformState, ApplyContainerFlip | UseTransforms);
-    LayoutPoint offsetFromRepaintContainer = roundedLayoutPoint(transformState.mappedPoint());
+    mapLocalToContainer(paintInvalidationContainer, transformState, ApplyContainerFlip | UseTransforms);
+    LayoutPoint offsetFromPaintInvalidationContainer = roundedLayoutPoint(transformState.mappedPoint());
 
     if (hasOverflowClip())
-        offsetFromRepaintContainer -= scrolledContentOffset();
+        offsetFromPaintInvalidationContainer -= scrolledContentOffset();
 
     LayoutUnit lastTop = 0;
     LayoutUnit lastLeft = logicalLeftSelectionOffset(this, lastTop);
     LayoutUnit lastRight = logicalRightSelectionOffset(this, lastTop);
 
-    return selectionGaps(this, offsetFromRepaintContainer, IntSize(), lastTop, lastLeft, lastRight);
+    return selectionGaps(this, offsetFromPaintInvalidationContainer, IntSize(), lastTop, lastLeft, lastRight);
 }
 
 void RenderBlock::paintSelection(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
@@ -3281,7 +3304,7 @@ bool RenderBlock::requiresColumns(int desiredColumnCount) const
     return firstChild()
         && (desiredColumnCount != 1 || !style()->hasAutoColumnWidth() || isPaginated)
         && !firstChild()->isAnonymousColumnsBlock()
-        && !firstChild()->isAnonymousColumnSpanBlock();
+        && !firstChild()->isAnonymousColumnSpanBlock() && !isFlexibleBoxIncludingDeprecated();
 }
 
 void RenderBlock::setDesiredColumnCountAndWidth(int count, LayoutUnit width)
@@ -3477,27 +3500,27 @@ void RenderBlock::adjustRectForColumns(LayoutRect& r) const
 
     if (startColumn == endColumn) {
         // The rect is fully contained within one column. Adjust for our offsets
-        // and repaint only that portion.
+        // and issue paint invalidations only that portion.
         LayoutUnit logicalLeftOffset = logicalLeftOffsetForContent();
         LayoutRect colRect = columnRectAt(colInfo, startColumn);
-        LayoutRect repaintRect = r;
+        LayoutRect paintInvalidationRect = r;
 
         if (colInfo->progressionAxis() == ColumnInfo::InlineAxis) {
             if (isHorizontal)
-                repaintRect.move(colRect.x() - logicalLeftOffset, - static_cast<int>(startColumn) * colHeight);
+                paintInvalidationRect.move(colRect.x() - logicalLeftOffset, - static_cast<int>(startColumn) * colHeight);
             else
-                repaintRect.move(- static_cast<int>(startColumn) * colHeight, colRect.y() - logicalLeftOffset);
+                paintInvalidationRect.move(- static_cast<int>(startColumn) * colHeight, colRect.y() - logicalLeftOffset);
         } else {
             if (isHorizontal)
-                repaintRect.move(0, colRect.y() - startColumn * colHeight - beforeBorderPadding);
+                paintInvalidationRect.move(0, colRect.y() - startColumn * colHeight - beforeBorderPadding);
             else
-                repaintRect.move(colRect.x() - startColumn * colHeight - beforeBorderPadding, 0);
+                paintInvalidationRect.move(colRect.x() - startColumn * colHeight - beforeBorderPadding, 0);
         }
-        repaintRect.intersect(colRect);
-        result.unite(repaintRect);
+        paintInvalidationRect.intersect(colRect);
+        result.unite(paintInvalidationRect);
     } else {
         // We span multiple columns. We can just unite the start and end column to get the final
-        // repaint rect.
+        // paint invalidation rect.
         result.unite(columnRectAt(colInfo, startColumn));
         result.unite(columnRectAt(colInfo, endColumn));
     }
@@ -3926,6 +3949,17 @@ int RenderBlock::lastLineBoxBaseline(LineDirectionMode lineDirection) const
     return -1;
 }
 
+static inline bool isRenderBlockFlowOrRenderButton(RenderObject* renderObject)
+{
+    // We include isRenderButton in this check because buttons are implemented
+    // using flex box but should still support first-line|first-letter.
+    // The flex box and grid specs require that flex box and grid do not
+    // support first-line|first-letter, though.
+    // FIXME: Remove when buttons are implemented with align-items instead
+    // of flex box.
+    return renderObject->isRenderBlockFlow() || renderObject->isRenderButton();
+}
+
 RenderBlock* RenderBlock::firstLineBlock() const
 {
     RenderBlock* firstLineBlock = const_cast<RenderBlock*>(this);
@@ -3935,15 +3969,9 @@ RenderBlock* RenderBlock::firstLineBlock() const
         if (hasPseudo)
             break;
         RenderObject* parentBlock = firstLineBlock->parent();
-        // We include isRenderButton in this check because buttons are
-        // implemented using flex box but should still support first-line. The
-        // flex box spec requires that flex box does not support first-line,
-        // though.
-        // FIXME: Remove when buttons are implemented with align-items instead
-        // of flexbox.
         if (firstLineBlock->isReplaced() || firstLineBlock->isFloating()
             || !parentBlock
-            || (!parentBlock->isRenderBlockFlow() && !parentBlock->isRenderButton()))
+            || !isRenderBlockFlowOrRenderButton(parentBlock))
             break;
         ASSERT_WITH_SECURITY_IMPLICATION(parentBlock->isRenderBlock());
         if (toRenderBlock(parentBlock)->firstChild() != firstLineBlock)
@@ -3989,21 +4017,15 @@ static inline RenderObject* findFirstLetterBlock(RenderBlock* start)
 {
     RenderObject* firstLetterBlock = start;
     while (true) {
-        // We include isRenderButton in these two checks because buttons are
-        // implemented using flex box but should still support first-letter.
-        // The flex box spec requires that flex box does not support
-        // first-letter, though.
-        // FIXME: Remove when buttons are implemented with align-items instead
-        // of flexbox.
         bool canHaveFirstLetterRenderer = firstLetterBlock->style()->hasPseudoStyle(FIRST_LETTER)
             && firstLetterBlock->canHaveGeneratedChildren()
-            && (!firstLetterBlock->isFlexibleBox() || firstLetterBlock->isRenderButton());
+            && isRenderBlockFlowOrRenderButton(firstLetterBlock);
         if (canHaveFirstLetterRenderer)
             return firstLetterBlock;
 
         RenderObject* parentBlock = firstLetterBlock->parent();
         if (firstLetterBlock->isReplaced() || !parentBlock
-            || (!parentBlock->isRenderBlockFlow() && !parentBlock->isRenderButton())) {
+            || !isRenderBlockFlowOrRenderButton(parentBlock)) {
             return 0;
         }
         ASSERT(parentBlock->isRenderBlock());
@@ -4186,7 +4208,7 @@ void RenderBlock::updateFirstLetter()
         }
     }
 
-    if (!currChild)
+    if (!currChild || !isRenderBlockFlowOrRenderButton(firstLetterBlock))
         return;
 
     // If the child already has style, then it has already been created, so we just want
@@ -4365,21 +4387,6 @@ void RenderBlock::updateDragState(bool dragOn)
     RenderBox::updateDragState(dragOn);
     if (continuation())
         continuation()->updateDragState(dragOn);
-}
-
-RenderStyle* RenderBlock::outlineStyle() const
-{
-    if (!isAnonymousBlockContinuation())
-        return style();
-
-    RenderStyle* continuationStyle = continuation()->style();
-
-    // Don't propagate auto outline to continuations, because the renderer having
-    // auto outline will handle invalidation and painting of the whole outline.
-    if (continuationStyle->outlineStyleIsAuto() == AUTO_ON)
-        return style();
-
-    return continuationStyle;
 }
 
 void RenderBlock::childBecameNonInline(RenderObject*)
@@ -4682,6 +4689,7 @@ RenderBlock* RenderBlock::createAnonymousWithParentRendererAndDisplay(const Rend
     }
 
     RefPtr<RenderStyle> newStyle = RenderStyle::createAnonymousStyleWithDisplay(parent->style(), newDisplay);
+    parent->updateAnonymousChildStyle(newBox, newStyle.get());
     newBox->setStyle(newStyle.release());
     return newBox;
 }
@@ -4692,6 +4700,7 @@ RenderBlockFlow* RenderBlock::createAnonymousColumnsWithParentRenderer(const Ren
     newStyle->inheritColumnPropertiesFrom(parent->style());
 
     RenderBlockFlow* newBox = RenderBlockFlow::createAnonymous(&parent->document());
+    parent->updateAnonymousChildStyle(newBox, newStyle.get());
     newBox->setStyle(newStyle.release());
     return newBox;
 }
@@ -4702,6 +4711,7 @@ RenderBlockFlow* RenderBlock::createAnonymousColumnSpanWithParentRenderer(const 
     newStyle->setColumnSpan(ColumnSpanAll);
 
     RenderBlockFlow* newBox = RenderBlockFlow::createAnonymous(&parent->document());
+    parent->updateAnonymousChildStyle(newBox, newStyle.get());
     newBox->setStyle(newStyle.release());
     return newBox;
 }

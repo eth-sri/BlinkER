@@ -52,6 +52,7 @@ class RenderBlockFlow : public RenderBlock {
 public:
     explicit RenderBlockFlow(ContainerNode*);
     virtual ~RenderBlockFlow();
+    virtual void trace(Visitor*) OVERRIDE;
 
     static RenderBlockFlow* createAnonymous(Document*);
 
@@ -96,8 +97,6 @@ public:
 
     virtual LayoutUnit logicalLeftSelectionOffset(RenderBlock* rootBlock, LayoutUnit position) OVERRIDE;
     virtual LayoutUnit logicalRightSelectionOffset(RenderBlock* rootBlock, LayoutUnit position) OVERRIDE;
-
-    LayoutUnit computeStartPositionDeltaForChildAvoidingFloats(const RenderBox* child, LayoutUnit childMarginStart);
 
     RootInlineBox* createAndAppendRootInlineBox();
 
@@ -167,11 +166,11 @@ public:
         return obj->isFloating() || (obj->isOutOfFlowPositioned() && !obj->style()->isOriginalDisplayInlineType() && !obj->container()->isRenderInline());
     }
 
-    RenderMultiColumnFlowThread* multiColumnFlowThread() const { return m_rareData ? m_rareData->m_multiColumnFlowThread : 0; }
+    RenderMultiColumnFlowThread* multiColumnFlowThread() const { return m_rareData ? m_rareData->m_multiColumnFlowThread.get() : 0; }
     void resetMultiColumnFlowThread()
     {
         if (m_rareData)
-            m_rareData->m_multiColumnFlowThread = 0;
+            m_rareData->m_multiColumnFlowThread = nullptr;
     }
 
     void addOverflowFromInlineChildren();
@@ -189,7 +188,7 @@ public:
 
 protected:
     void rebuildFloatsFromIntruding();
-    void layoutInlineChildren(bool relayoutChildren, LayoutUnit& repaintLogicalTop, LayoutUnit& repaintLogicalBottom, LayoutUnit afterEdge);
+    void layoutInlineChildren(bool relayoutChildren, LayoutUnit& paintInvalidationLogicalTop, LayoutUnit& paintInvalidationLogicalBottom, LayoutUnit afterEdge);
 
     void createFloatingObjects();
 
@@ -350,19 +349,20 @@ public:
     MarginValues marginValuesForChild(RenderBox* child) const;
 
     // Allocated only when some of these fields have non-default values
-    struct RenderBlockFlowRareData {
-        WTF_MAKE_NONCOPYABLE(RenderBlockFlowRareData); WTF_MAKE_FAST_ALLOCATED;
+    struct RenderBlockFlowRareData : public NoBaseWillBeGarbageCollected<RenderBlockFlowRareData> {
+        WTF_MAKE_NONCOPYABLE(RenderBlockFlowRareData); WTF_MAKE_FAST_ALLOCATED_WILL_BE_REMOVED;
     public:
         RenderBlockFlowRareData(const RenderBlockFlow* block)
             : m_margins(positiveMarginBeforeDefault(block), negativeMarginBeforeDefault(block), positiveMarginAfterDefault(block), negativeMarginAfterDefault(block))
             , m_paginationStrut(0)
-            , m_multiColumnFlowThread(0)
+            , m_multiColumnFlowThread(nullptr)
             , m_lineBreakToAvoidWidow(-1)
             , m_didBreakAtLineToAvoidWidow(false)
             , m_discardMarginBefore(false)
             , m_discardMarginAfter(false)
         {
         }
+        void trace(Visitor*);
 
         static LayoutUnit positiveMarginBeforeDefault(const RenderBlockFlow* block)
         {
@@ -384,7 +384,7 @@ public:
         MarginValues m_margins;
         LayoutUnit m_paginationStrut;
 
-        RenderMultiColumnFlowThread* m_multiColumnFlowThread;
+        RawPtrWillBeMember<RenderMultiColumnFlowThread> m_multiColumnFlowThread;
 
         int m_lineBreakToAvoidWidow;
         bool m_didBreakAtLineToAvoidWidow : 1;
@@ -448,12 +448,13 @@ private:
 
     RenderBlockFlowRareData& ensureRareData();
 
-    LayoutUnit m_repaintLogicalTop;
-    LayoutUnit m_repaintLogicalBottom;
+    LayoutUnit m_paintInvalidationLogicalTop;
+    LayoutUnit m_paintInvalidationLogicalBottom;
 
     virtual bool isSelfCollapsingBlock() const OVERRIDE;
+
 protected:
-    OwnPtr<RenderBlockFlowRareData> m_rareData;
+    OwnPtrWillBeMember<RenderBlockFlowRareData> m_rareData;
     OwnPtr<FloatingObjects> m_floatingObjects;
 
     friend class BreakingContext; // FIXME: It uses insertFloatingObject and positionNewFloatOnLine, if we move those out from the private scope/add a helper to LineBreaker, we can remove this friend
@@ -482,7 +483,7 @@ private:
     void layoutRunsAndFloatsInRange(LineLayoutState&, InlineBidiResolver&,
         const InlineIterator& cleanLineStart, const BidiStatus& cleanLineBidiStatus);
     void linkToEndLineIfNeeded(LineLayoutState&);
-    static void repaintDirtyFloats(Vector<FloatWithRect>& floats);
+    static void markDirtyFloatsForPaintInvalidation(Vector<FloatWithRect>& floats);
     void checkFloatsInCleanLine(RootInlineBox*, Vector<FloatWithRect>&, size_t& floatIndex, bool& encounteredNewFloat, bool& dirtiedByFloat);
     RootInlineBox* determineStartPosition(LineLayoutState&, InlineBidiResolver&);
     void determineEndPosition(LineLayoutState&, RootInlineBox* startBox, InlineIterator& cleanLineStart, BidiStatus& cleanLineBidiStatus);

@@ -40,7 +40,7 @@ public:
     explicit CompositingLayerAssigner(RenderLayerCompositor*);
     ~CompositingLayerAssigner();
 
-    void assign(RenderLayer* updateRoot, Vector<RenderLayer*>& layersNeedingRepaint);
+    void assign(RenderLayer* updateRoot, Vector<RenderLayer*>& layersNeedingPaintInvalidation);
 
     bool layersChanged() const { return m_layersChanged; }
 
@@ -57,10 +57,10 @@ private:
             , nextSquashedLayerIndex(0)
             , totalAreaOfSquashedRects(0) { }
 
-        void updateSquashingStateForNewMapping(CompositedLayerMappingPtr, bool hasNewCompositedLayerMapping);
+        void updateSquashingStateForNewMapping(CompositedLayerMapping*, bool hasNewCompositedLayerMapping);
 
         // The most recent composited backing that the layer should squash onto if needed.
-        CompositedLayerMappingPtr mostRecentMapping;
+        CompositedLayerMapping* mostRecentMapping;
         bool hasMostRecentMapping;
 
         // Whether all RenderLayers in the stacking subtree rooted at the most recent mapping's
@@ -79,11 +79,11 @@ private:
         uint64_t totalAreaOfSquashedRects;
     };
 
-    void assignLayersToBackingsInternal(RenderLayer*, SquashingState&, Vector<RenderLayer*>& layersNeedingRepaint);
-    void assignLayersToBackingsForReflectionLayer(RenderLayer* reflectionLayer, Vector<RenderLayer*>& layersNeedingRepaint);
+    void assignLayersToBackingsInternal(RenderLayer*, SquashingState&, Vector<RenderLayer*>& layersNeedingPaintInvalidation);
+    void assignLayersToBackingsForReflectionLayer(RenderLayer* reflectionLayer, Vector<RenderLayer*>& layersNeedingPaintInvalidation);
     CompositingReasons getReasonsPreventingSquashing(const RenderLayer*, const SquashingState&);
     bool squashingWouldExceedSparsityTolerance(const RenderLayer* candidate, const SquashingState&);
-    void updateSquashingAssignment(RenderLayer*, SquashingState&, CompositingStateTransitionType, Vector<RenderLayer*>& layersNeedingRepaint);
+    void updateSquashingAssignment(RenderLayer*, SquashingState&, CompositingStateTransitionType, Vector<RenderLayer*>& layersNeedingPaintInvalidation);
     bool needsOwnBacking(const RenderLayer*) const;
 
     RenderLayerCompositor* m_compositor;

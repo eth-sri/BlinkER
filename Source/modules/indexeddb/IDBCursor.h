@@ -38,41 +38,30 @@
 
 namespace blink {
 
-class WebBlobInfo;
-
-} // namespace blink
-
-namespace blink {
-
 class ExceptionState;
 class IDBAny;
 class IDBTransaction;
 class ExecutionContext;
 class SharedBuffer;
+class WebBlobInfo;
 
 class IDBCursor : public GarbageCollectedFinalized<IDBCursor>, public ScriptWrappable {
 public:
-    static const AtomicString& directionNext();
-    static const AtomicString& directionNextUnique();
-    static const AtomicString& directionPrev();
-    static const AtomicString& directionPrevUnique();
+    static WebIDBCursorDirection stringToDirection(const String& modeString, ExceptionState&);
 
-    static blink::WebIDBCursorDirection stringToDirection(const String& modeString, ExceptionState&);
-    static const AtomicString& directionToString(unsigned short mode);
-
-    static IDBCursor* create(PassOwnPtr<blink::WebIDBCursor>, blink::WebIDBCursorDirection, IDBRequest*, IDBAny* source, IDBTransaction*);
+    static IDBCursor* create(PassOwnPtr<WebIDBCursor>, WebIDBCursorDirection, IDBRequest*, IDBAny* source, IDBTransaction*);
     virtual ~IDBCursor();
     void trace(Visitor*);
     void contextWillBeDestroyed() { m_backend.clear(); }
 
     // Implement the IDL
-    const String& direction() const { return directionToString(m_direction); }
+    const String& direction() const;
     ScriptValue key(ScriptState*);
     ScriptValue primaryKey(ScriptState*);
     ScriptValue value(ScriptState*);
     ScriptValue source(ScriptState*) const;
 
-    IDBRequest* update(ScriptState*, ScriptValue&, ExceptionState&);
+    IDBRequest* update(ScriptState*, const ScriptValue&, ExceptionState&);
     void advance(unsigned long, ExceptionState&);
     void continueFunction(ScriptState*, const ScriptValue& key, ExceptionState&);
     void continuePrimaryKey(ScriptState*, const ScriptValue& key, const ScriptValue& primaryKey, ExceptionState&);
@@ -86,22 +75,22 @@ public:
     void postSuccessHandlerCallback();
     bool isDeleted() const;
     void close();
-    void setValueReady(IDBKey*, IDBKey* primaryKey, PassRefPtr<SharedBuffer> value, PassOwnPtr<Vector<blink::WebBlobInfo> >);
+    void setValueReady(IDBKey*, IDBKey* primaryKey, PassRefPtr<SharedBuffer> value, PassOwnPtr<Vector<WebBlobInfo> >);
     IDBKey* idbPrimaryKey() const { return m_primaryKey; }
     IDBRequest* request() const { return m_request.get(); }
     virtual bool isKeyCursor() const { return true; }
     virtual bool isCursorWithValue() const { return false; }
 
 protected:
-    IDBCursor(PassOwnPtr<blink::WebIDBCursor>, blink::WebIDBCursorDirection, IDBRequest*, IDBAny* source, IDBTransaction*);
+    IDBCursor(PassOwnPtr<WebIDBCursor>, WebIDBCursorDirection, IDBRequest*, IDBAny* source, IDBTransaction*);
 
 private:
     IDBObjectStore* effectiveObjectStore() const;
     void handleBlobAcks();
 
-    OwnPtr<blink::WebIDBCursor> m_backend;
+    OwnPtr<WebIDBCursor> m_backend;
     Member<IDBRequest> m_request;
-    const blink::WebIDBCursorDirection m_direction;
+    const WebIDBCursorDirection m_direction;
     Member<IDBAny> m_source;
     Member<IDBTransaction> m_transaction;
     bool m_gotValue;
@@ -111,7 +100,7 @@ private:
     Member<IDBKey> m_key;
     Member<IDBKey> m_primaryKey;
     RefPtr<SharedBuffer> m_value;
-    OwnPtr<Vector<blink::WebBlobInfo> > m_blobInfo;
+    OwnPtr<Vector<WebBlobInfo> > m_blobInfo;
 };
 
 } // namespace blink

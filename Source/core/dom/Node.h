@@ -80,7 +80,8 @@ class RenderObject;
 class RenderStyle;
 class SVGQualifiedName;
 class ShadowRoot;
-class StaticNodeList;
+template <typename NodeType> class StaticNodeTypeList;
+typedef StaticNodeTypeList<Node> StaticNodeList;
 class TagCollection;
 class Text;
 class TouchEvent;
@@ -105,7 +106,10 @@ protected:
         : m_renderer(renderer)
     { }
 
-private:
+protected:
+    // Oilpan: This member is traced in NodeRareData.
+    // FIXME: Can we add traceAfterDispatch and finalizeGarbageCollectedObject
+    // to NodeRareDataBase, and make m_renderer Member<>?
     RenderObject* m_renderer;
 };
 

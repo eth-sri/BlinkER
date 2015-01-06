@@ -43,6 +43,7 @@
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/ScriptCallStack.h"
 #include "modules/websockets/CloseEvent.h"
 #include "platform/Logging.h"
@@ -187,7 +188,7 @@ static String encodeSubprotocolString(const String& protocol)
         if (protocol[i] < 0x20 || protocol[i] > 0x7E)
             builder.append(String::format("\\u%04X", protocol[i]));
         else if (protocol[i] == 0x5c)
-            builder.append("\\\\");
+            builder.appendLiteral("\\\\");
         else
             builder.append(protocol[i]);
     }
@@ -244,7 +245,7 @@ DOMWebSocket::~DOMWebSocket()
 
 void DOMWebSocket::logError(const String& message)
 {
-    executionContext()->addConsoleMessage(JSMessageSource, ErrorMessageLevel, message);
+    executionContext()->addConsoleMessage(ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, message));
 }
 
 DOMWebSocket* DOMWebSocket::create(ExecutionContext* context, const String& url, ExceptionState& exceptionState)
