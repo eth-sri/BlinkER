@@ -103,6 +103,10 @@ WebInspector.ConsoleView = function()
     this._promptElement.id = "console-prompt";
     this._promptElement.spellcheck = false;
 
+    // FIXME: This is a workaround for the selection machinery bug. See crbug.com/410899
+    var selectAllFixer = this._messagesElement.createChild("div", "console-view-fix-select-all");
+    selectAllFixer.textContent = ".";
+
     this._showAllMessagesCheckbox = new WebInspector.StatusBarCheckbox(WebInspector.UIString("Show all messages"));
     this._showAllMessagesCheckbox.inputElement.checked = true;
     this._showAllMessagesCheckbox.inputElement.addEventListener("change", this._updateMessageList.bind(this), false);
@@ -135,28 +139,55 @@ WebInspector.ConsoleView = function()
 
     this._registerWithMessageSink();
     WebInspector.targetManager.observeTargets(this);
-    WebInspector.multitargetConsoleModel.addEventListener(WebInspector.ConsoleModel.Events.ConsoleCleared, this._consoleCleared, this);
-    WebInspector.multitargetConsoleModel.addEventListener(WebInspector.ConsoleModel.Events.MessageAdded, this._onConsoleMessageAdded, this);
-    WebInspector.multitargetConsoleModel.addEventListener(WebInspector.ConsoleModel.Events.CommandEvaluated, this._commandEvaluated, this);
     WebInspector.targetManager.addModelListener(WebInspector.RuntimeModel, WebInspector.RuntimeModel.Events.ExecutionContextCreated, this._onExecutionContextCreated, this);
     WebInspector.targetManager.addModelListener(WebInspector.RuntimeModel, WebInspector.RuntimeModel.Events.ExecutionContextDestroyed, this._onExecutionContextDestroyed, this);
+    WebInspector.targetManager.addEventListener(WebInspector.TargetManager.Events.MainFrameNavigated, this._onMainFrameNavigated, this);
 
-    /**
-     * @param {!WebInspector.ConsoleMessage} message
-     * @this {WebInspector.ConsoleView}
-     */
-    function appendMessage(message)
-    {
-         var viewMessage = this._createViewMessage(message);
-         this._consoleMessageAdded(viewMessage);
-    }
-
-    WebInspector.multitargetConsoleModel.messages().forEach(appendMessage, this);
+    this._initConsoleMessages();
 
     WebInspector.context.addFlavorChangeListener(WebInspector.ExecutionContext, this._executionContextChangedExternally, this);
 }
 
 WebInspector.ConsoleView.prototype = {
+    /**
+     * @param {!WebInspector.Event} event
+     */
+    _onMainFrameNavigated: function(event)
+    {
+        var frame = /** @type {!WebInspector.ResourceTreeFrame} */(event.data);
+        WebInspector.console.addMessage(WebInspector.UIString("Navigated to %s", frame.url));
+    },
+
+    _initConsoleMessages: function()
+    {
+        var mainTarget = WebInspector.targetManager.mainTarget();
+        if (!WebInspector.isWorkerFrontend() && (!mainTarget || !mainTarget.resourceTreeModel.cachedResourcesLoaded())) {
+            WebInspector.targetManager.addModelListener(WebInspector.ResourceTreeModel, WebInspector.ResourceTreeModel.EventTypes.CachedResourcesLoaded, this._onResourceTreeModelLoaded, this);
+            return;
+        }
+        this._fetchMultitargetMessages();
+    },
+
+    /**
+     * @param {!WebInspector.Event} event
+     */
+    _onResourceTreeModelLoaded: function(event)
+    {
+        var resourceTreeModel = event.target;
+        if (resourceTreeModel.target() !== WebInspector.targetManager.mainTarget())
+            return;
+        WebInspector.targetManager.removeModelListener(WebInspector.ResourceTreeModel, WebInspector.ResourceTreeModel.EventTypes.CachedResourcesLoaded, this._onResourceTreeModelLoaded, this);
+        this._fetchMultitargetMessages();
+    },
+
+    _fetchMultitargetMessages: function()
+    {
+        WebInspector.multitargetConsoleModel.addEventListener(WebInspector.ConsoleModel.Events.ConsoleCleared, this._consoleCleared, this);
+        WebInspector.multitargetConsoleModel.addEventListener(WebInspector.ConsoleModel.Events.MessageAdded, this._onConsoleMessageAdded, this);
+        WebInspector.multitargetConsoleModel.addEventListener(WebInspector.ConsoleModel.Events.CommandEvaluated, this._commandEvaluated, this);
+        WebInspector.multitargetConsoleModel.messages().forEach(this._addConsoleMessage, this);
+    },
+
     /**
      * @return {number}
      */
@@ -198,7 +229,7 @@ WebInspector.ConsoleView.prototype = {
     {
         this._viewport.invalidate();
         target.runtimeModel.executionContexts().forEach(this._executionContextCreated, this);
-        if (WebInspector.targetManager.targets().length > 1)
+        if (WebInspector.targetManager.targets().length > 1 && !WebInspector.isWorkerFrontend())
             this._showAllMessagesCheckbox.element.classList.toggle("hidden", false);
     },
 
@@ -306,6 +337,11 @@ WebInspector.ConsoleView.prototype = {
      */
     _executionContextCreated: function(executionContext)
     {
+        // FIXME(413886): We never want to show execution context for the main thread of shadow page in service/shared worker frontend.
+        // This check could be removed once we do not send this context to frontend.
+        if (WebInspector.isWorkerFrontend() && executionContext.target() === WebInspector.targetManager.mainTarget())
+            return;
+
         var newOption = document.createElement("option");
         newOption.__executionContext = executionContext;
         newOption.text = this._titleFor(executionContext);
@@ -808,13 +844,18 @@ WebInspector.ConsoleView.prototype = {
                 addMessage();
                 return;
             }
-
             var url;
+            var lineNumber;
+            var columnNumber;
             var script = target.debuggerModel.scriptForId(response.location.scriptId);
-            if (script && script.sourceURL)
+            if (script && script.sourceURL) {
                 url = script.sourceURL;
+                // FIXME(WK62725): Debugger line/column are 0-based, while console ones are 1-based.
+                lineNumber = response.location.lineNumber + 1;
+                columnNumber = response.location.columnNumber + 1;
+            }
             // FIXME: this should be using live location.
-            addMessage(url, response.location.lineNumber, response.location.columnNumber);
+            addMessage(url, lineNumber, columnNumber);
         }
     },
 

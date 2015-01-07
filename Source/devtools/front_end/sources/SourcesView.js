@@ -37,17 +37,18 @@ WebInspector.SourcesView = function(workspace, sourcesPanel)
     this._historyManager = new WebInspector.EditingLocationHistoryManager(this, this.currentSourceFrame.bind(this));
 
     this._statusBarContainerElement = this.element.createChild("div", "sources-status-bar");
+    this._statusBarEditorActionsElement = this._statusBarContainerElement.createChild("div");
 
+    self.runtime.instancesPromise(WebInspector.SourcesView.EditorAction).then(appendButtonsForExtensions.bind(this));
     /**
+     * @param {!Array.<!WebInspector.SourcesView.EditorAction>} actions
      * @this {WebInspector.SourcesView}
-     * @param {!WebInspector.SourcesView.EditorAction} EditorAction
      */
-    function appendButtonForExtension(EditorAction)
+    function appendButtonsForExtensions(actions)
     {
-        this._statusBarContainerElement.appendChild(EditorAction.button(this));
+        for (var i = 0; i < actions.length; ++i)
+            this._statusBarEditorActionsElement.appendChild(actions[i].button(this));
     }
-    var editorActions = /** @type {!Array.<!WebInspector.SourcesView.EditorAction>} */ (self.runtime.instances(WebInspector.SourcesView.EditorAction));
-    editorActions.forEach(appendButtonForExtension.bind(this));
 
     this._scriptViewStatusBarItemsContainer = this._statusBarContainerElement.createChild("div", "inline-block");
     this._scriptViewStatusBarTextContainer = this._statusBarContainerElement.createChild("div", "hbox");
@@ -69,7 +70,7 @@ WebInspector.SourcesView = function(workspace, sourcesPanel)
             return;
 
         event.returnValue = WebInspector.UIString("DevTools have unsaved changes that will be permanently lost.");
-        WebInspector.inspectorView.showPanel("sources");
+        WebInspector.inspectorView.setCurrentPanel(WebInspector.SourcesPanel.instance());
         for (var i = 0; i < unsavedSourceCodes.length; ++i)
             WebInspector.Revealer.reveal(unsavedSourceCodes[i]);
     }
@@ -82,6 +83,16 @@ WebInspector.SourcesView = function(workspace, sourcesPanel)
 WebInspector.SourcesView.Events = {
     EditorClosed: "EditorClosed",
     EditorSelected: "EditorSelected",
+}
+
+/**
+ * @param {!WebInspector.UISourceCode} uiSourceCode
+ * @return {string}
+ */
+WebInspector.SourcesView.uiSourceCodeHighlighterType = function(uiSourceCode)
+{
+    var mimeType = WebInspector.ResourceType.mimeTypesForExtensions[uiSourceCode.extension().toLowerCase()];
+    return mimeType || uiSourceCode.contentType().canonicalMimeType();
 }
 
 WebInspector.SourcesView.prototype = {
@@ -293,7 +304,7 @@ WebInspector.SourcesView.prototype = {
 
     /**
      * @param {!WebInspector.UISourceCode} uiSourceCode
-     * @param {number=} lineNumber
+     * @param {number=} lineNumber 0-based
      * @param {number=} columnNumber
      * @param {boolean=} omitFocus
      * @param {boolean=} omitHighlight
@@ -351,7 +362,7 @@ WebInspector.SourcesView.prototype = {
             sourceFrame = new WebInspector.UISourceCodeFrame(uiSourceCode);
         break;
         }
-        sourceFrame.setHighlighterType(uiSourceCode.highlighterType());
+        sourceFrame.setHighlighterType(WebInspector.SourcesView.uiSourceCodeHighlighterType(uiSourceCode));
         this._sourceFramesByUISourceCode.set(uiSourceCode, sourceFrame);
         this._historyManager.trackSourceFrameCursorJumps(sourceFrame);
         return sourceFrame;
@@ -393,7 +404,7 @@ WebInspector.SourcesView.prototype = {
         if (!oldSourceFrame)
             return;
         if (this._sourceFrameMatchesUISourceCode(oldSourceFrame, uiSourceCode)) {
-            oldSourceFrame.setHighlighterType(uiSourceCode.highlighterType());
+            oldSourceFrame.setHighlighterType(WebInspector.SourcesView.uiSourceCodeHighlighterType(uiSourceCode));
         } else {
             this._editorContainer.removeUISourceCode(uiSourceCode);
             this._removeSourceFrame(uiSourceCode);
@@ -402,7 +413,7 @@ WebInspector.SourcesView.prototype = {
 
     /**
      * @param {!WebInspector.UISourceCode} uiSourceCode
-     * @return {!WebInspector.SourceFrame}
+     * @return {!WebInspector.UISourceCodeFrame}
      */
     viewForFile: function(uiSourceCode)
     {
@@ -532,7 +543,7 @@ WebInspector.SourcesView.prototype = {
          */
         function searchResultsChanged()
         {
-            this._searchableView.cancelSearch();
+            this.performSearch(query, false, false);
         }
 
         this._searchView.performSearch(query, shouldJump, !!jumpBackwards, finishedCallback.bind(this), currentMatchChanged.bind(this), searchResultsChanged.bind(this));

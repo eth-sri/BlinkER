@@ -28,7 +28,7 @@
         },
         {
           "position": [8, 0],
-          "bounds": [216, 100],
+          "bounds": [211, 100],
           "drawsContent": true,
           "backgroundColor": "#90EE90"
         }

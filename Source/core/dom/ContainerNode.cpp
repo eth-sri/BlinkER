@@ -1002,11 +1002,11 @@ void ContainerNode::focusStateChanged()
 
     if (styleChangeType() < SubtreeStyleChange) {
         if (renderStyle()->affectedByFocus() && renderStyle()->hasPseudoStyle(FIRST_LETTER))
-            setNeedsStyleRecalc(SubtreeStyleChange);
+            setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::createWithExtraData(StyleChangeReason::PseudoClass, StyleChangeExtraData::Focus));
         else if (isElementNode() && toElement(this)->childrenOrSiblingsAffectedByFocus())
             document().ensureStyleResolver().ensureUpdatedRuleFeatureSet().scheduleStyleInvalidationForPseudoChange(CSSSelector::PseudoFocus, *toElement(this));
         else if (renderStyle()->affectedByFocus())
-            setNeedsStyleRecalc(LocalStyleChange);
+            setNeedsStyleRecalc(LocalStyleChange, StyleChangeReasonForTracing::createWithExtraData(StyleChangeReason::PseudoClass, StyleChangeExtraData::Focus));
     }
 
     if (renderer() && renderer()->style()->hasAppearance())
@@ -1029,7 +1029,7 @@ void ContainerNode::setFocus(bool received)
     if (isElementNode() && toElement(this)->childrenOrSiblingsAffectedByFocus() && styleChangeType() < SubtreeStyleChange)
         document().ensureStyleResolver().ensureUpdatedRuleFeatureSet().scheduleStyleInvalidationForPseudoChange(CSSSelector::PseudoFocus, *toElement(this));
     else
-        setNeedsStyleRecalc(LocalStyleChange);
+        setNeedsStyleRecalc(LocalStyleChange, StyleChangeReasonForTracing::createWithExtraData(StyleChangeReason::PseudoClass, StyleChangeExtraData::Focus));
 }
 
 void ContainerNode::setActive(bool down)
@@ -1043,11 +1043,11 @@ void ContainerNode::setActive(bool down)
     if (renderer()) {
         if (styleChangeType() < SubtreeStyleChange) {
             if (renderStyle()->affectedByActive() && renderStyle()->hasPseudoStyle(FIRST_LETTER))
-                setNeedsStyleRecalc(SubtreeStyleChange);
+                setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::createWithExtraData(StyleChangeReason::PseudoClass, StyleChangeExtraData::Active));
             else if (isElementNode() && toElement(this)->childrenOrSiblingsAffectedByActive())
                 document().ensureStyleResolver().ensureUpdatedRuleFeatureSet().scheduleStyleInvalidationForPseudoChange(CSSSelector::PseudoActive, *toElement(this));
             else if (renderStyle()->affectedByActive())
-                setNeedsStyleRecalc(LocalStyleChange);
+                setNeedsStyleRecalc(LocalStyleChange, StyleChangeReasonForTracing::createWithExtraData(StyleChangeReason::PseudoClass, StyleChangeExtraData::Active));
         }
 
         if (renderStyle()->hasAppearance())
@@ -1069,17 +1069,17 @@ void ContainerNode::setHovered(bool over)
         if (isElementNode() && toElement(this)->childrenOrSiblingsAffectedByHover() && styleChangeType() < SubtreeStyleChange)
             document().ensureStyleResolver().ensureUpdatedRuleFeatureSet().scheduleStyleInvalidationForPseudoChange(CSSSelector::PseudoHover, *toElement(this));
         else
-            setNeedsStyleRecalc(LocalStyleChange);
+            setNeedsStyleRecalc(LocalStyleChange, StyleChangeReasonForTracing::createWithExtraData(StyleChangeReason::PseudoClass, StyleChangeExtraData::Hover));
         return;
     }
 
     if (styleChangeType() < SubtreeStyleChange) {
         if (renderStyle()->affectedByHover() && renderStyle()->hasPseudoStyle(FIRST_LETTER))
-            setNeedsStyleRecalc(SubtreeStyleChange);
+            setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::createWithExtraData(StyleChangeReason::PseudoClass, StyleChangeExtraData::Hover));
         else if (isElementNode() && toElement(this)->childrenOrSiblingsAffectedByHover())
             document().ensureStyleResolver().ensureUpdatedRuleFeatureSet().scheduleStyleInvalidationForPseudoChange(CSSSelector::PseudoHover, *toElement(this));
         else if (renderStyle()->affectedByHover())
-            setNeedsStyleRecalc(LocalStyleChange);
+            setNeedsStyleRecalc(LocalStyleChange, StyleChangeReasonForTracing::createWithExtraData(StyleChangeReason::PseudoClass, StyleChangeExtraData::Hover));
     }
 
     if (renderer()->style()->hasAppearance())
@@ -1205,6 +1205,37 @@ void ContainerNode::setRestyleFlag(DynamicRestyleFlags mask)
     ensureRareData().setRestyleFlag(mask);
 }
 
+void ContainerNode::recalcChildStyle(StyleRecalcChange change)
+{
+    ASSERT(document().inStyleRecalc());
+    ASSERT(change >= UpdatePseudoElements || childNeedsStyleRecalc());
+    ASSERT(!needsStyleRecalc());
+
+    if (change < Force && hasRareData() && childNeedsStyleRecalc())
+        checkForChildrenAdjacentRuleChanges();
+
+    // This loop is deliberately backwards because we use insertBefore in the rendering tree, and want to avoid
+    // a potentially n^2 loop to find the insertion point while resolving style. Having us start from the last
+    // child and work our way back means in the common case, we'll find the insertion point in O(1) time.
+    // See crbug.com/288225
+    StyleResolver& styleResolver = document().ensureStyleResolver();
+    Text* lastTextNode = 0;
+    for (Node* child = lastChild(); child; child = child->previousSibling()) {
+        if (child->isTextNode()) {
+            toText(child)->recalcTextStyle(change, lastTextNode);
+            lastTextNode = toText(child);
+        } else if (child->isElementNode()) {
+            Element* element = toElement(child);
+            if (element->shouldCallRecalcStyle(change))
+                element->recalcStyle(change, lastTextNode);
+            else if (element->supportsStyleSharing())
+                styleResolver.addToStyleSharingList(*element);
+            if (element->renderer())
+                lastTextNode = 0;
+        }
+    }
+}
+
 void ContainerNode::checkForChildrenAdjacentRuleChanges()
 {
     bool hasDirectAdjacentRules = childrenAffectedByDirectAdjacentRules();
@@ -1221,7 +1252,7 @@ void ContainerNode::checkForChildrenAdjacentRuleChanges()
         bool childRulesChanged = child->needsStyleRecalc() && child->styleChangeType() >= SubtreeStyleChange;
 
         if (forceCheckOfNextElementCount || forceCheckOfAnyElementSibling)
-            child->setNeedsStyleRecalc(SubtreeStyleChange);
+            child->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::SiblingSelector));
 
         if (childRulesChanged && hasDirectAdjacentRules)
             forceCheckOfNextElementCount = document.styleEngine()->maxDirectAdjacentSelectors();
@@ -1250,7 +1281,7 @@ void ContainerNode::checkForSiblingStyleChanges(SiblingCheckType changeType, Nod
     // here. recalcStyle will then force a walk of the children when it sees that this has happened.
     if (((childrenAffectedByForwardPositionalRules() || childrenAffectedByIndirectAdjacentRules()) && nodeAfterChange)
         || (childrenAffectedByBackwardPositionalRules() && nodeBeforeChange)) {
-        setNeedsStyleRecalc(SubtreeStyleChange);
+        setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::SiblingSelector));
         return;
     }
 
@@ -1270,12 +1301,12 @@ void ContainerNode::checkForSiblingStyleChanges(SiblingCheckType changeType, Nod
         // This is the element insertion as first child element case.
         if (firstChildElement != elementAfterChange && elementAfterChangeStyle && elementAfterChangeStyle->firstChildState()) {
             ASSERT(changeType == SiblingElementInserted);
-            elementAfterChange->setNeedsStyleRecalc(SubtreeStyleChange);
+            elementAfterChange->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::SiblingSelector));
         }
 
         // This is the first child element removal case.
         if (changeType == SiblingElementRemoved && firstChildElement == elementAfterChange && firstChildElement && (!firstChildElementStyle || !firstChildElementStyle->firstChildState()))
-            firstChildElement->setNeedsStyleRecalc(SubtreeStyleChange);
+            firstChildElement->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::SiblingSelector));
     }
 
     // :last-child. In the parser callback case, we don't have to check anything, since we were right the first time.
@@ -1292,20 +1323,20 @@ void ContainerNode::checkForSiblingStyleChanges(SiblingCheckType changeType, Nod
         // This is the element insertion as last child element case.
         if (lastChildElement != elementBeforeChange && elementBeforeChangeStyle && elementBeforeChangeStyle->lastChildState()) {
             ASSERT(SiblingElementInserted);
-            elementBeforeChange->setNeedsStyleRecalc(SubtreeStyleChange);
+            elementBeforeChange->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::SiblingSelector));
         }
 
         // This is the last child element removal case. The parser callback case is similar to node removal as well in that we need to change the last child
         // to match now.
         if ((changeType == SiblingElementRemoved || changeType == FinishedParsingChildren) && lastChildElement == elementBeforeChange && lastChildElement && (!lastChildElementStyle || !lastChildElementStyle->lastChildState()))
-            lastChildElement->setNeedsStyleRecalc(SubtreeStyleChange);
+            lastChildElement->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::SiblingSelector));
     }
 
     // The + selector. We need to invalidate the first element following the change. It is the only possible element
     // that could be affected by this DOM change.
     if (childrenAffectedByDirectAdjacentRules() && nodeAfterChange) {
         if (Element* elementAfterChange = nodeAfterChange->isElementNode() ? toElement(nodeAfterChange) : ElementTraversal::nextSibling(*nodeAfterChange))
-            elementAfterChange->setNeedsStyleRecalc(SubtreeStyleChange);
+            elementAfterChange->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::SiblingSelector));
     }
 }
 

@@ -58,7 +58,6 @@
 #include "core/css/StylePropertySet.h"
 #include "core/css/StyleRuleImport.h"
 #include "core/css/StyleSheetContents.h"
-#include "core/css/parser/BisonCSSParser.h"
 #include "core/css/resolver/AnimatedStyleBuilder.h"
 #include "core/css/resolver/MatchResult.h"
 #include "core/css/resolver/MediaQueryResult.h"
@@ -375,11 +374,6 @@ StyleResolver::~StyleResolver()
 {
 }
 
-static inline bool applyAuthorStylesOf(const Element* element)
-{
-    return element->treeScope().applyAuthorStyles();
-}
-
 void StyleResolver::matchAuthorRulesForShadowHost(Element* element, ElementRuleCollector& collector, bool includeEmptyRules, WillBeHeapVector<RawPtrWillBeMember<ScopedStyleResolver>, 8>& resolvers, WillBeHeapVector<RawPtrWillBeMember<ScopedStyleResolver>, 8>& resolversInShadowTree)
 {
     collector.clearMatchedRules();
@@ -387,16 +381,15 @@ void StyleResolver::matchAuthorRulesForShadowHost(Element* element, ElementRuleC
 
     CascadeScope cascadeScope = 0;
     CascadeOrder cascadeOrder = 0;
-    bool applyAuthorStyles = applyAuthorStylesOf(element);
 
     for (int j = resolversInShadowTree.size() - 1; j >= 0; --j)
-        resolversInShadowTree.at(j)->collectMatchingAuthorRules(collector, includeEmptyRules, applyAuthorStyles, cascadeScope, cascadeOrder++);
+        resolversInShadowTree.at(j)->collectMatchingAuthorRules(collector, includeEmptyRules, cascadeScope, cascadeOrder++);
 
     if (resolvers.isEmpty() || resolvers.first()->treeScope() != element->treeScope())
         ++cascadeScope;
     cascadeOrder += resolvers.size();
     for (unsigned i = 0; i < resolvers.size(); ++i)
-        resolvers.at(i)->collectMatchingAuthorRules(collector, includeEmptyRules, applyAuthorStyles, cascadeScope++, --cascadeOrder);
+        resolvers.at(i)->collectMatchingAuthorRules(collector, includeEmptyRules, cascadeScope++, --cascadeOrder);
 
     m_treeBoundaryCrossingRules.collectTreeBoundaryCrossingRules(element, collector, includeEmptyRules);
     collector.sortAndTransferMatchedRules();
@@ -407,9 +400,8 @@ void StyleResolver::matchAuthorRules(Element* element, ElementRuleCollector& col
     collector.clearMatchedRules();
     collector.matchedResult().ranges.lastAuthorRule = collector.matchedResult().matchedProperties.size() - 1;
 
-    bool applyAuthorStyles = applyAuthorStylesOf(element);
     if (document().styleEngine()->hasOnlyScopedResolverForDocument()) {
-        document().scopedStyleResolver()->collectMatchingAuthorRules(collector, includeEmptyRules, applyAuthorStyles, ignoreCascadeScope);
+        document().scopedStyleResolver()->collectMatchingAuthorRules(collector, includeEmptyRules, ignoreCascadeScope);
         m_treeBoundaryCrossingRules.collectTreeBoundaryCrossingRules(element, collector, includeEmptyRules);
         collector.sortAndTransferMatchedRules();
         return;
@@ -433,7 +425,7 @@ void StyleResolver::matchAuthorRules(Element* element, ElementRuleCollector& col
     for (unsigned i = 0; i < resolvers.size(); ++i, --cascadeOrder) {
         ScopedStyleResolver* resolver = resolvers.at(i);
         // FIXME: Need to clarify how to treat style scoped.
-        resolver->collectMatchingAuthorRules(collector, includeEmptyRules, applyAuthorStyles, cascadeScope++, resolver->treeScope() == element->treeScope() && resolver->treeScope().rootNode().isShadowRoot() ? 0 : cascadeOrder);
+        resolver->collectMatchingAuthorRules(collector, includeEmptyRules, cascadeScope++, resolver->treeScope() == element->treeScope() && resolver->treeScope().rootNode().isShadowRoot() ? 0 : cascadeOrder);
     }
 
     m_treeBoundaryCrossingRules.collectTreeBoundaryCrossingRules(element, collector, includeEmptyRules);
@@ -524,16 +516,6 @@ PassRefPtr<RenderStyle> StyleResolver::styleForDocument(Document& document)
     document.setupFontBuilder(documentStyle.get());
 
     return documentStyle.release();
-}
-
-// FIXME: This is duplicated with StyleAdjuster.cpp
-// Perhaps this should move onto ElementResolveContext or even Element?
-static inline bool isAtShadowBoundary(const Element* element)
-{
-    if (!element)
-        return false;
-    ContainerNode* parentNode = element->parentNode();
-    return parentNode && parentNode->isShadowRoot();
 }
 
 static inline void resetDirectionAndWritingModeOnDocument(Document& document)
@@ -664,15 +646,15 @@ PassRefPtr<RenderStyle> StyleResolver::styleForElement(Element* element, RenderS
     return state.takeStyle();
 }
 
-PassRefPtr<RenderStyle> StyleResolver::styleForKeyframe(Element* element, const RenderStyle& elementStyle, RenderStyle* parentStyle, const StyleKeyframe* keyframe, const AtomicString& animationName)
+PassRefPtr<RenderStyle> StyleResolver::styleForKeyframe(Element& element, const RenderStyle& elementStyle, RenderStyle* parentStyle, const StyleKeyframe* keyframe, const AtomicString& animationName)
 {
     ASSERT(document().frame());
     ASSERT(document().settings());
     ASSERT(!hasPendingAuthorStyleSheets());
 
-    if (element == document().documentElement())
+    if (&element == document().documentElement())
         resetDirectionAndWritingModeOnDocument(document());
-    StyleResolverState state(document(), element, parentStyle);
+    StyleResolverState state(document(), &element, parentStyle);
 
     MatchResult result;
     result.addMatchedProperties(&keyframe->properties());
@@ -787,6 +769,7 @@ bool StyleResolver::pseudoStyleForElementInternal(Element& element, const Pseudo
         state.setParentStyle(RenderStyle::clone(state.style()));
     }
 
+    state.style()->setStyleType(pseudoStyleRequest.pseudoId);
     state.fontBuilder().initForStyleResolve(state.document(), state.style());
 
     // Since we don't use pseudo-elements in any of our quirk/print
@@ -802,8 +785,6 @@ bool StyleResolver::pseudoStyleForElementInternal(Element& element, const Pseudo
 
         if (collector.matchedResult().matchedProperties.isEmpty())
             return false;
-
-        state.style()->setStyleType(pseudoStyleRequest.pseudoId);
 
         applyMatchedProperties(state, collector.matchedResult());
         applyCallbackSelectors(state);
@@ -839,8 +820,11 @@ PassRefPtr<RenderStyle> StyleResolver::pseudoStyleForElement(Element* element, c
         return nullptr;
 
     StyleResolverState state(document(), element, parentStyle);
-    if (!pseudoStyleForElementInternal(*element, pseudoStyleRequest, parentStyle, state))
-        return nullptr;
+    if (!pseudoStyleForElementInternal(*element, pseudoStyleRequest, parentStyle, state)) {
+        if (pseudoStyleRequest.type == PseudoStyleRequest::ForRenderer)
+            return nullptr;
+        return state.takeStyle();
+    }
 
     if (PseudoElement* pseudoElement = element->pseudoElement(pseudoStyleRequest.pseudoId))
         setAnimationUpdateIfNeeded(state, *pseudoElement);
@@ -936,8 +920,6 @@ PassRefPtr<RenderStyle> StyleResolver::styleForText(Text* textNode)
 void StyleResolver::updateFont(StyleResolverState& state)
 {
     state.fontBuilder().createFont(document().styleEngine()->fontSelector(), state.parentStyle(), state.style());
-    if (state.fontBuilder().fontSizeHasViewportUnits())
-        state.style()->setHasViewportUnits();
 }
 
 PassRefPtrWillBeRawPtr<StyleRuleList> StyleResolver::styleRulesForElement(Element* element, unsigned rulesToInclude)
@@ -981,9 +963,9 @@ void StyleResolver::collectPseudoRulesForElement(Element* element, ElementRuleCo
 // -------------------------------------------------------------------------------------
 // this is mostly boring stuff on how to apply a certain rule to the renderstyle...
 
-bool StyleResolver::applyAnimatedProperties(StyleResolverState& state, Element* animatingElement)
+bool StyleResolver::applyAnimatedProperties(StyleResolverState& state, const Element* animatingElement)
 {
-    const Element* element = state.element();
+    Element* element = state.element();
     ASSERT(element);
 
     // The animating element may be this element, or its pseudo element. It is
@@ -1049,16 +1031,14 @@ void StyleResolver::collectScopedResolversForHostedShadowTrees(const Element* el
 
 void StyleResolver::styleTreeResolveScopedKeyframesRules(const Element* element, WillBeHeapVector<RawPtrWillBeMember<ScopedStyleResolver>, 8>& resolvers)
 {
-    Document& document = element->document();
     TreeScope& treeScope = element->treeScope();
-    bool applyAuthorStyles = treeScope.applyAuthorStyles();
 
     // Add resolvers for shadow roots hosted by the given element.
     collectScopedResolversForHostedShadowTrees(element, resolvers);
 
     // Add resolvers while walking up DOM tree from the given element.
     for (ScopedStyleResolver* scopedResolver = scopedResolverFor(element); scopedResolver; scopedResolver = scopedResolver->parent()) {
-        if (scopedResolver->treeScope() == treeScope || (applyAuthorStyles && scopedResolver->treeScope() == document))
+        if (scopedResolver->treeScope() == treeScope)
             resolvers.append(scopedResolver);
     }
 }

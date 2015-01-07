@@ -14,7 +14,7 @@ FAIL childWindow.applicationCache.onobsolete should be null. Threw exception Typ
 FAIL childWindow.applicationCache.onprogress should be null. Threw exception TypeError: Cannot read property 'onprogress' of null
 FAIL childWindow.applicationCache.onupdateready should be null. Threw exception TypeError: Cannot read property 'onupdateready' of null
 FAIL childWindow.applicationCache.status should be 0. Threw exception TypeError: Cannot read property 'status' of null
-FAIL childWindow.closed should be false. Was true.
+PASS childWindow.closed is true
 PASS childWindow.defaultStatus is ''
 PASS childWindow.defaultstatus is ''
 PASS childWindow.devicePixelRatio is 0
@@ -50,12 +50,10 @@ PASS childWindow.navigator.language is window.navigator.language
 PASS childWindow.navigator.maxTouchPoints is 0
 PASS childWindow.navigator.onLine is window.navigator.onLine
 PASS childWindow.navigator.platform is window.navigator.platform
+FAIL childWindow.navigator.presentation.onavailablechange should be null. Threw exception TypeError: Cannot read property 'onavailablechange' of null
 PASS childWindow.navigator.product is window.navigator.product
 PASS childWindow.navigator.productSub is window.navigator.productSub
-FAIL childWindow.navigator.serviceWorker.active should be null. Threw exception TypeError: Cannot read property 'active' of null
 FAIL childWindow.navigator.serviceWorker.controller should be null. Threw exception TypeError: Cannot read property 'controller' of null
-FAIL childWindow.navigator.serviceWorker.installing should be null. Threw exception TypeError: Cannot read property 'installing' of null
-FAIL childWindow.navigator.serviceWorker.waiting should be null. Threw exception TypeError: Cannot read property 'waiting' of null
 PASS childWindow.navigator.userAgent is ''
 PASS childWindow.navigator.vendor is window.navigator.vendor
 PASS childWindow.navigator.vendorSub is ''

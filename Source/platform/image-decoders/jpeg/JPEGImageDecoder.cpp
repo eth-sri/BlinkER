@@ -252,18 +252,23 @@ static void readColorProfile(jpeg_decompress_struct* info, ColorProfile& colorPr
 }
 #endif
 
-static IntSize computeUVSize(const jpeg_decompress_struct* info)
+static IntSize computeYUVSize(const jpeg_decompress_struct* info, int component, ImageDecoder::SizeType sizeType)
 {
-    int h = info->cur_comp_info[0]->h_samp_factor;
-    int v = info->cur_comp_info[0]->v_samp_factor;
-    return IntSize((info->output_width + h - 1) / h, (info->output_height + v - 1) / v);
+    if (sizeType == ImageDecoder::SizeForMemoryAllocation) {
+        return IntSize(info->cur_comp_info[component]->width_in_blocks * DCTSIZE, info->cur_comp_info[component]->height_in_blocks * DCTSIZE);
+    }
+    return IntSize(info->cur_comp_info[component]->downsampled_width, info->cur_comp_info[component]->downsampled_height);
 }
 
 static yuv_subsampling yuvSubsampling(const jpeg_decompress_struct& info)
 {
     if ((DCTSIZE == 8)
         && (info.num_components == 3)
+        && (info.comps_in_scan >= info.num_components)
         && (info.scale_denom <= 8)
+        && (info.cur_comp_info[0])
+        && (info.cur_comp_info[1])
+        && (info.cur_comp_info[2])
         && (info.cur_comp_info[1]->h_samp_factor == 1)
         && (info.cur_comp_info[1]->v_samp_factor == 1)
         && (info.cur_comp_info[2]->h_samp_factor == 1)
@@ -411,9 +416,8 @@ public:
             case JCS_YCbCr:
                 // libjpeg can convert YCbCr image pixels to RGB.
                 m_info.out_color_space = rgbOutputColorSpace();
-                if (m_decoder->YUVDecoding() && (yuvSubsampling(m_info) != YUV_UNKNOWN)) {
+                if (m_decoder->hasImagePlanes() && (yuvSubsampling(m_info) != YUV_UNKNOWN))
                     overrideColorSpace = JCS_YCbCr;
-                }
                 break;
             case JCS_GRAYSCALE:
             case JCS_RGB:
@@ -472,6 +476,7 @@ public:
             if (overrideColorSpace == JCS_YCbCr) {
                 m_info.out_color_space = JCS_YCbCr;
                 m_info.raw_data_out = TRUE;
+                m_uvSize = computeYUVSize(&m_info, 1, ImageDecoder::SizeForMemoryAllocation); // U size and V size have to be the same if we got here
             }
 
             // Don't allocate a giant and superfluous memory buffer when the
@@ -593,6 +598,7 @@ public:
     jpeg_decompress_struct* info() { return &m_info; }
     JSAMPARRAY samples() const { return m_samples; }
     JPEGImageDecoder* decoder() { return m_decoder; }
+    IntSize uvSize() const { return m_uvSize; }
 #if USE(QCMSLIB)
     qcms_transform* colorTransform() const { return m_transform; }
 
@@ -634,6 +640,8 @@ private:
     jstate m_state;
 
     JSAMPARRAY m_samples;
+
+    IntSize m_uvSize;
 
 #if USE(QCMSLIB)
     qcms_transform* m_transform;
@@ -709,16 +717,13 @@ void JPEGImageDecoder::setDecodedSize(unsigned width, unsigned height)
     m_decodedSize = IntSize(width, height);
 }
 
-IntSize JPEGImageDecoder::decodedYUVSize(int component) const
+IntSize JPEGImageDecoder::decodedYUVSize(int component, ImageDecoder::SizeType sizeType) const
 {
-    if (((component == 1) || (component == 2)) && m_reader.get()) { // Asking for U or V
-        const jpeg_decompress_struct* info = m_reader->info();
-        if (info && (info->out_color_space == JCS_YCbCr)) {
-            return computeUVSize(info);
-        }
-    }
+    ASSERT((component >= 0) && (component <= 2) && m_reader);
+    const jpeg_decompress_struct* info = m_reader->info();
 
-    return m_decodedSize;
+    ASSERT(info->out_color_space == JCS_YCbCr);
+    return computeYUVSize(info, component, sizeType);
 }
 
 unsigned JPEGImageDecoder::desiredScaleNumerator() const
@@ -736,8 +741,17 @@ unsigned JPEGImageDecoder::desiredScaleNumerator() const
     return scaleNumerator;
 }
 
+bool JPEGImageDecoder::canDecodeToYUV() const
+{
+    ASSERT(ImageDecoder::isSizeAvailable() && m_reader);
+
+    return m_reader->info()->out_color_space == JCS_YCbCr;
+}
+
 bool JPEGImageDecoder::decodeToYUV()
 {
+    if (!hasImagePlanes())
+        return false;
     PlatformInstrumentation::willDecodeImage("JPEG");
     decode(false);
     PlatformInstrumentation::didDecodeImage();
@@ -771,9 +785,9 @@ bool JPEGImageDecoder::setFailed()
     return ImageDecoder::setFailed();
 }
 
-void JPEGImageDecoder::setImagePlanes(OwnPtr<ImagePlanes>& imagePlanes)
+void JPEGImageDecoder::setImagePlanes(PassOwnPtr<ImagePlanes> imagePlanes)
 {
-    m_imagePlanes = imagePlanes.release();
+    m_imagePlanes = imagePlanes;
 }
 
 template <J_COLOR_SPACE colorSpace> void setPixel(ImageFrame& buffer, ImageFrame::PixelData* pixel, JSAMPARRAY samples, int column)
@@ -843,7 +857,7 @@ static bool outputRawData(JPEGImageReader* reader, ImagePlanes* imagePlanes)
     int yHeight = info->output_height;
     int yMaxH = yHeight - 1;
     int v = info->cur_comp_info[0]->v_samp_factor;
-    IntSize uvSize = computeUVSize(info);
+    IntSize uvSize = reader->uvSize();
     int uvMaxH = uvSize.height() - 1;
     JSAMPROW outputY = static_cast<JSAMPROW>(imagePlanes->plane(0));
     JSAMPROW outputU = static_cast<JSAMPROW>(imagePlanes->plane(1));
@@ -910,14 +924,14 @@ static bool outputRawData(JPEGImageReader* reader, ImagePlanes* imagePlanes)
 
 bool JPEGImageDecoder::outputScanlines()
 {
+    if (hasImagePlanes()) {
+        return outputRawData(m_reader.get(), m_imagePlanes.get());
+    }
+
     if (m_frameBufferCache.isEmpty())
         return false;
 
     jpeg_decompress_struct* info = m_reader->info();
-
-    if (m_imagePlanes.get()) {
-        return outputRawData(m_reader.get(), m_imagePlanes.get());
-    }
 
     // Initialize the framebuffer if needed.
     ImageFrame& buffer = m_frameBufferCache[0];
@@ -991,7 +1005,7 @@ void JPEGImageDecoder::decode(bool onlySize)
         setFailed();
     // If we're done decoding the image, we don't need the JPEGImageReader
     // anymore.  (If we failed, |m_reader| has already been cleared.)
-    else if (!m_frameBufferCache.isEmpty() && (m_frameBufferCache[0].status() == ImageFrame::FrameComplete))
+    else if ((!m_frameBufferCache.isEmpty() && (m_frameBufferCache[0].status() == ImageFrame::FrameComplete)) || (hasImagePlanes() && !onlySize))
         m_reader.clear();
 }
 

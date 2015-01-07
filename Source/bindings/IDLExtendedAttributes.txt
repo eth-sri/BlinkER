@@ -62,10 +62,10 @@ Immutable
 ImplementedAs=*
 ImplementedInPrivateScript
 InitializedByEventConstructor
+Iterable
 LegacyTreatAsPartialInterface
 LogActivity=|GetterOnly|SetterOnly
 LogAllWorlds
-LogPreviousValue
 MeasureAs=*
 NamedConstructor=*
 NoImplHeader
@@ -94,7 +94,6 @@ RuntimeEnabled=*
 SetWrapperReferenceFrom=*
 SetWrapperReferenceTo=*
 SetterCallWith=ExecutionContext|ScriptArguments|ActiveWindow|FirstWindow
-SpecialWrapFor=*
 TreatNullAs=NullString|EmptyString
 TreatReturnedNullStringAs=Null|Undefined
 TreatUndefinedAs=NullString

@@ -5,9 +5,10 @@ found in the LICENSE file.
 -->
 
 <link rel="import" href="ct-commit.html">
+<link rel="import" href="ct-detailed-commit.html">
 <link rel="import" href="../bower_components/paper-button/paper-button.html">
 
-<polymer-element name="ct-commit-list" attributes="commitList">
+<polymer-element name="ct-commit-list" attributes="commitList detailed">
   <template>
     <style>
       :host {
@@ -16,18 +17,30 @@ found in the LICENSE file.
       paper-icon-button {
         vertical-align: middle;
       }
+      paper-icon-button::shadow #icon {
+        margin: 0px;
+      }
       .repository-info {
         display: block;
+        margin-bottom: 10px;
+      }
+      ct-commit {
+        margin-left: 10px;
       }
     </style>
     <template repeat="{{ repository in commitList.repositories }}">
       <div class="repository-info">
-        {{ repository.name }} {{ repository.range }}
+        <span style="font-weight: bold">{{ repository.name }}</span> {{ repository.range }}
         <paper-icon-button icon="unfold-more"
             on-click="{{ _toggle }}" repository="{{ repository.name }}"></paper-icon-button>
         <template if="{{ repository.expanded }}">
           <template repeat="{{ commit in repository.commits }}">
-            <ct-commit data="{{ commit }}"></ct-commit>
+            <template if="{{ !detailed }}">
+              <ct-commit data="{{ commit }}"></ct-commit>
+            </template>
+            <template if="{{ detailed }}">
+              <ct-detailed-commit data="{{ commit }}"></ct-detailed-commit>
+            </template>
           </template>
         </template>
       </div>
@@ -35,6 +48,7 @@ found in the LICENSE file.
   </template>
   <script>
   Polymer({
+    detailed: false,
     _toggle: function(event, detail, sender, target) {
       var repo = sender.getAttribute('repository');
       var r = this.commitList.repositories.find(function(item) {

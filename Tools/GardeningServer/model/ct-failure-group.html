@@ -7,12 +7,11 @@ found in the LICENSE file.
 <link rel="import" href="ct-commit-list.html">
 
 <script>
-function CTFailureGroup(failures, commitList) {
-  this.failures = failures;
-  this.commitList = commitList;
-  this._annotation = CTFailureGroup._mergeAnnotations(failures.map(function(failure) {
-    return failure.annotations();
-  }).flatten());
+function CTFailureGroup(key, data, category) {
+  this.key = key;
+  this.data = data;
+  this._annotation = CTFailureGroup._mergeAnnotations(data.getAnnotations());
+  this._originalCategory = category || 'default';
   this._computeProperties();
 }
 
@@ -30,7 +29,7 @@ CTFailureGroup.prototype.unsnooze = function() {
 
 CTFailureGroup.prototype.setBug = function(bug) {
   if (/^[0-9]+$/.test(bug))
-    bug = 'http://crbug.com/' + bug;
+    bug = 'https://crbug.com/' + bug;
   return this._annotate({
     bug: bug,
   });
@@ -42,13 +41,21 @@ CTFailureGroup.prototype.clearBug = function(bug) {
   });
 };
 
+CTFailureGroup.prototype._failedOnce = function() {
+  return this.data.failedOnce && this.data.failedOnce();
+}
+
 CTFailureGroup.prototype._computeProperties = function() {
   this.isSnoozed = Date.now() < this._annotation.snoozeTime;
   if (this.isSnoozed) {
     this.category = 'snoozed';
   } else {
-    // FIXME: crbug.com/400397 Split into: Whole step failure, Tree closer, Test failure, Flaky tests
-    this.category = 'default';
+    if (this._failedOnce()) {
+      this.category = 'failedOnce';
+    } else {
+      this.category = this._originalCategory;
+    }
+    // FIXME: crbug.com/400397 Split Tree closers into their own list.
   }
 
   this.bug = this._annotation.bug;
@@ -57,12 +64,6 @@ CTFailureGroup.prototype._computeProperties = function() {
     this.bugLabel = 'Bug ' + /([0-9]{3,})/.exec(this.bug)[0];
   else
     this.bugLabel = undefined;
-};
-
-CTFailureGroup.prototype.failureKeys = function() {
-  return this.failures.map(function(failure) {
-    return failure.keys();
-  }).flatten();
 };
 
 CTFailureGroup._mergeAnnotations = function(failureAnnotations) {
@@ -88,7 +89,7 @@ CTFailureGroup.prototype._annotate = function(newAnnotation) {
   var failureAnnotations = [];
   // FIXME: Post the new annotation to frontend rather than storing locally.
   return CTFailureGroup.fetchAnnotations().then(function(annotations) {
-    this.failureKeys().forEach(function(failureKey) {
+    this.data.failureKeys().forEach(function(failureKey) {
       var annotation = annotations[failureKey] || {};
 
       Object.keys(newAnnotation, function(key, value) {

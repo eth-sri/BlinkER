@@ -65,7 +65,6 @@ EventTargetData::~EventTargetData()
 
 EventTarget::EventTarget()
 {
-    ScriptWrappable::init(this);
 }
 
 EventTarget::~EventTarget()
@@ -175,6 +174,11 @@ bool EventTarget::removeEventListener(const AtomicString& eventType, PassRefPtr<
         eventTargetAccess(log, Operation::WRITE_MEMORY, this, eventType);
         log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE, "undefined");
     }
+
+    // FIXME: listener null check should throw TypeError (and be done in
+    // generated bindings), but breaks legacy content. http://crbug.com/249598
+    if (!listener)
+        return false;
 
     EventTargetData* d = eventTargetData();
     if (!d)

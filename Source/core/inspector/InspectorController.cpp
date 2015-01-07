@@ -121,7 +121,7 @@ InspectorController::InspectorController(Page* page, InspectorClient* inspectorC
 
     m_agents.append(PageRuntimeAgent::create(injectedScriptManager, inspectorClient, pageScriptDebugServer, m_page, m_pageAgent));
 
-    m_agents.append(PageConsoleAgent::create(injectedScriptManager, m_domAgent, m_timelineAgent, m_tracingAgent, m_page));
+    m_agents.append(PageConsoleAgent::create(injectedScriptManager, m_domAgent, m_timelineAgent, m_page));
 
     ASSERT_ARG(inspectorClient, inspectorClient);
     m_injectedScriptManager->injectedScriptHost()->init(m_instrumentingAgents.get(), pageScriptDebugServer);
@@ -143,6 +143,7 @@ void InspectorController::trace(Visitor* visitor)
     visitor->trace(m_resourceAgent);
     visitor->trace(m_layerTreeAgent);
     visitor->trace(m_tracingAgent);
+    visitor->trace(m_inspectorBackendDispatcher);
     visitor->trace(m_page);
     visitor->trace(m_agents);
 }
@@ -209,6 +210,12 @@ void InspectorController::initializeDeferredAgents()
 
 void InspectorController::willBeDestroyed()
 {
+#if ENABLE(ASSERT)
+    ASSERT(m_page->mainFrame());
+    if (m_page->mainFrame()->isLocalFrame())
+        ASSERT(m_page->deprecatedLocalMainFrame()->view());
+#endif
+
     disconnectFrontend();
     m_injectedScriptManager->disconnect();
     m_inspectorClient = 0;
@@ -416,9 +423,12 @@ void InspectorController::deviceOrPageScaleFactorChanged()
 
 bool InspectorController::deviceEmulationEnabled()
 {
-    if (InspectorPageAgent* pageAgent = m_instrumentingAgents->inspectorPageAgent())
-        return pageAgent->deviceMetricsOverrideEnabled();
-    return false;
+    return m_pageAgent->deviceMetricsOverrideEnabled();
+}
+
+bool InspectorController::screencastEnabled()
+{
+    return m_pageAgent->screencastEnabled();
 }
 
 void InspectorController::resume()

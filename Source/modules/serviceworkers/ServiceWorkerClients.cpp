@@ -6,7 +6,6 @@
 #include "modules/serviceworkers/ServiceWorkerClients.h"
 
 #include "bindings/core/v8/CallbackPromiseAdapter.h"
-#include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "modules/serviceworkers/ServiceWorkerClient.h"
 #include "modules/serviceworkers/ServiceWorkerError.h"
@@ -22,10 +21,10 @@ namespace {
     class ClientArray {
     public:
         typedef blink::WebServiceWorkerClientsInfo WebType;
-        static WillBeHeapVector<RefPtrWillBeMember<ServiceWorkerClient> > take(ScriptPromiseResolver*, WebType* webClientsRaw)
+        static HeapVector<Member<ServiceWorkerClient> > take(ScriptPromiseResolver*, WebType* webClientsRaw)
         {
             OwnPtr<WebType> webClients = adoptPtr(webClientsRaw);
-            WillBeHeapVector<RefPtrWillBeMember<ServiceWorkerClient> > clients;
+            HeapVector<Member<ServiceWorkerClient> > clients;
             for (size_t i = 0; i < webClients->clientIDs.size(); ++i) {
                 clients.append(ServiceWorkerClient::create(webClients->clientIDs[i]));
             }
@@ -43,26 +42,21 @@ namespace {
 
 } // namespace
 
-PassRefPtrWillBeRawPtr<ServiceWorkerClients> ServiceWorkerClients::create()
+ServiceWorkerClients* ServiceWorkerClients::create()
 {
-    return adoptRefWillBeNoop(new ServiceWorkerClients());
+    return new ServiceWorkerClients();
 }
 
 ServiceWorkerClients::ServiceWorkerClients()
 {
-    ScriptWrappable::init(this);
 }
 
-DEFINE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(ServiceWorkerClients);
-
-ScriptPromise ServiceWorkerClients::getAll(ScriptState* scriptState, const Dictionary& options)
+ScriptPromise ServiceWorkerClients::getAll(ScriptState* scriptState, const ServiceWorkerClientQueryOptions& options)
 {
     RefPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(scriptState);
     ScriptPromise promise = resolver->promise();
 
-    bool includeUncontrolled = false;
-    DictionaryHelper::get(options, "includeUncontrolled", includeUncontrolled);
-    if (includeUncontrolled) {
+    if (options.includeUncontrolled()) {
         // FIXME: Currently we don't support includeUncontrolled=true.
         resolver->reject(DOMException::create(NotSupportedError, "includeUncontrolled parameter of getAll is not supported."));
         return promise;

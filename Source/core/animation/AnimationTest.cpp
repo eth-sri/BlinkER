@@ -8,7 +8,6 @@
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/Nullable.h"
 #include "core/animation/AnimationClock.h"
-#include "core/animation/AnimationHelpers.h"
 #include "core/animation/AnimationNodeTiming.h"
 #include "core/animation/AnimationTestHelper.h"
 #include "core/animation/AnimationTimeline.h"
@@ -28,7 +27,7 @@ protected:
         , document(pageHolder->document())
         , element(document.createElement("foo", ASSERT_NO_EXCEPTION))
     {
-        document.animationClock().resetTimeForTesting();
+        document.animationClock().resetTimeForTesting(document.timeline().zeroTime());
         EXPECT_EQ(0, document.timeline().currentTime());
     }
 

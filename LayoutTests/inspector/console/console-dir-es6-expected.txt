@@ -4,6 +4,8 @@ CONSOLE MESSAGE: line 22: [object Map]
 CONSOLE MESSAGE: line 22: [object WeakMap]
 CONSOLE MESSAGE: line 26: [object Set]
 CONSOLE MESSAGE: line 26: [object WeakSet]
+CONSOLE MESSAGE: line 34: [object Set]
+CONSOLE MESSAGE: line 37: [object WeakMap]
 Tests that console logging dumps proper messages.
 
 console-dir-es6.html:15 Object
@@ -18,18 +20,27 @@ console-dir-es6.html:22 Map
     size: (...)
     __proto__: Map
     <entries>[1]
-    0: {key:Object, value:Object}
+        0: {Object => Object}
 console-dir-es6.html:22 WeakMap
     __proto__: WeakMap
     <entries>[1]
-    0: {key:Object, value:Object}
+        0: {Object => Object}
 console-dir-es6.html:26 Set
     size: (...)
     __proto__: Set
     <entries>[1]
-    0: Object
+        0: Object
 console-dir-es6.html:26 WeakSet
     __proto__: WeakSet
     <entries>[1]
-    0: Object
+        0: Object
+console-dir-es6.html:34 Set
+    size: (...)
+    __proto__: Set
+    <entries>[1]
+        0: Set
+console-dir-es6.html:37 WeakMap
+    __proto__: WeakMap
+    <entries>[0]
+        No Entries
 

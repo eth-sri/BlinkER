@@ -224,7 +224,6 @@ WebInspector.ProfileType.prototype = {
     },
 
     /**
-     * @nosideeffects
      * @return {?WebInspector.ProfileHeader}
      */
     profileBeingRecorded: function()
@@ -304,7 +303,7 @@ WebInspector.ProfileType.DataDisplayDelegate.prototype = {
  */
 WebInspector.ProfileHeader = function(target, profileType, title)
 {
-    this._weakTarget = target ? target.weakReference() : new WeakReference(null);
+    this._target = target;
     this._profileType = profileType;
     this.title = title;
     this.uid = profileType._nextProfileUid++;
@@ -335,15 +334,7 @@ WebInspector.ProfileHeader.prototype = {
      */
     target: function()
     {
-        return this._weakTarget.get();
-    },
-
-    /**
-     * @return {!WeakReference.<!WebInspector.Target>}
-     */
-    weakTarget: function()
-    {
-        return this._weakTarget;
+        return this._target;
     },
 
     /**
@@ -598,7 +589,7 @@ WebInspector.ProfilesPanel.prototype = {
      */
     _updateRecordButton: function(toggled)
     {
-        if (WebInspector.experimentsSettings.disableAgentsWhenProfile.isEnabled())
+        if (Runtime.experiments.isEnabled("disableAgentsWhenProfile"))
             WebInspector.inspectorView.setCurrentPanelLocked(toggled);
         var isAcquiredInSomeTarget = WebInspector.profilingLock().isAcquired();
         var enable = toggled || !isAcquiredInSomeTarget;
@@ -1151,7 +1142,7 @@ WebInspector.ProfilesPanel.ContextMenuProvider.prototype = {
      */
     appendApplicableItems: function(event, contextMenu, target)
     {
-        WebInspector.inspectorView.panel("profiles").appendApplicableItems(event, contextMenu, target);
+        WebInspector.ProfilesPanel._instance().appendApplicableItems(event, contextMenu, target);
     }
 }
 
@@ -1207,9 +1198,13 @@ WebInspector.ProfileSidebarTreeElement.prototype = {
         this.profile.removeEventListener(WebInspector.ProfileHeader.Events.ProfileReceived, this._onProfileReceived, this);
     },
 
+    /**
+     * @return {boolean}
+     */
     onselect: function()
     {
         this._dataDisplayDelegate.showProfile(this.profile);
+        return true;
     },
 
     /**
@@ -1259,10 +1254,15 @@ WebInspector.ProfileGroupSidebarTreeElement = function(dataDisplayDelegate, titl
 }
 
 WebInspector.ProfileGroupSidebarTreeElement.prototype = {
+    /**
+     * @return {boolean}
+     */
     onselect: function()
     {
-        if (this.children.length > 0)
+        var hasChildren = this.children.length > 0;
+        if (hasChildren)
             this._dataDisplayDelegate.showProfile(this.children[this.children.length - 1].profile);
+        return hasChildren;
     },
 
     __proto__: WebInspector.SidebarTreeElement.prototype
@@ -1282,9 +1282,13 @@ WebInspector.ProfilesSidebarTreeElement = function(panel)
 }
 
 WebInspector.ProfilesSidebarTreeElement.prototype = {
+    /**
+     * @return {boolean}
+     */
     onselect: function()
     {
         this._panel._showLauncherView();
+        return true;
     },
 
     get selectable()
@@ -1293,4 +1297,32 @@ WebInspector.ProfilesSidebarTreeElement.prototype = {
     },
 
     __proto__: WebInspector.SidebarTreeElement.prototype
+}
+
+/**
+ * @return {!WebInspector.ProfilesPanel}
+ */
+WebInspector.ProfilesPanel._instance = function()
+{
+    if (!WebInspector.ProfilesPanel._instanceObject)
+        WebInspector.ProfilesPanel._instanceObject = new WebInspector.ProfilesPanel();
+    return WebInspector.ProfilesPanel._instanceObject;
+}
+
+/**
+ * @constructor
+ * @implements {WebInspector.PanelFactory}
+ */
+WebInspector.ProfilesPanelFactory = function()
+{
+}
+
+WebInspector.ProfilesPanelFactory.prototype = {
+    /**
+     * @return {!WebInspector.Panel}
+     */
+    createPanel: function()
+    {
+        return WebInspector.ProfilesPanel._instance();
+    }
 }

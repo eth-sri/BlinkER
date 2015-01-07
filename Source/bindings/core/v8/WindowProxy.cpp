@@ -36,7 +36,6 @@
 #include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8DOMActivityLogger.h"
 #include "bindings/core/v8/V8Document.h"
-#include "bindings/core/v8/V8GCForContextDispose.h"
 #include "bindings/core/v8/V8HTMLCollection.h"
 #include "bindings/core/v8/V8HTMLDocument.h"
 #include "bindings/core/v8/V8HiddenValue.h"
@@ -71,8 +70,8 @@ namespace blink {
 
 static void checkDocumentWrapper(v8::Handle<v8::Object> wrapper, Document* document)
 {
-    ASSERT(V8Document::toNative(wrapper) == document);
-    ASSERT(!document->isHTMLDocument() || (V8Document::toNative(v8::Handle<v8::Object>::Cast(wrapper->GetPrototype())) == document));
+    ASSERT(V8Document::toImpl(wrapper) == document);
+    ASSERT(!document->isHTMLDocument() || (V8Document::toImpl(v8::Handle<v8::Object>::Cast(wrapper->GetPrototype())) == document));
 }
 
 PassOwnPtr<WindowProxy> WindowProxy::create(LocalFrame* frame, DOMWrapperWorld& world, v8::Isolate* isolate)
@@ -97,14 +96,14 @@ void WindowProxy::disposeContext(GlobalDetachmentBehavior behavior)
     m_frame->loader().client()->willReleaseScriptContext(context, m_world->worldId());
 
     if (behavior == DetachGlobal)
-        context->DetachGlobal();
+        m_scriptState->detachGlobalObject();
 
     m_scriptState->disposePerContextData();
 
     // It's likely that disposing the context has created a lot of
     // garbage. Notify V8 about this so it'll have a chance of cleaning
     // it up when idle.
-    V8GCForContextDispose::instanceTemplate().notifyContextDisposed(m_frame->isMainFrame());
+    V8PerIsolateData::mainThreadIsolate()->ContextDisposedNotification();
 }
 
 void WindowProxy::clearForClose()
@@ -281,11 +280,12 @@ static v8::Handle<v8::Object> toInnerGlobalObject(v8::Handle<v8::Context> contex
 bool WindowProxy::installDOMWindow()
 {
     LocalDOMWindow* window = m_frame->domWindow();
-    v8::Local<v8::Object> windowWrapper = V8ObjectConstructor::newInstance(m_isolate, m_scriptState->perContextData()->constructorForType(&V8Window::wrapperTypeInfo));
+    const WrapperTypeInfo* wrapperTypeInfo = window->wrapperTypeInfo();
+    v8::Local<v8::Object> windowWrapper = V8ObjectConstructor::newInstance(m_isolate, m_scriptState->perContextData()->constructorForType(wrapperTypeInfo));
     if (windowWrapper.IsEmpty())
         return false;
 
-    V8DOMWrapper::setNativeInfoForHiddenWrapper(v8::Handle<v8::Object>::Cast(windowWrapper->GetPrototype()), &V8Window::wrapperTypeInfo, V8Window::toInternalPointer(window));
+    V8DOMWrapper::setNativeInfoForHiddenWrapper(v8::Handle<v8::Object>::Cast(windowWrapper->GetPrototype()), wrapperTypeInfo, window->toScriptWrappableBase());
 
     // Install the windowWrapper as the prototype of the innerGlobalObject.
     // The full structure of the global object is as follows:
@@ -308,10 +308,10 @@ bool WindowProxy::installDOMWindow()
     //       views of the LocalDOMWindow will die together once that wrapper clears the persistent
     //       reference.
     v8::Handle<v8::Object> innerGlobalObject = toInnerGlobalObject(m_scriptState->context());
-    V8DOMWrapper::setNativeInfoForHiddenWrapper(innerGlobalObject, &V8Window::wrapperTypeInfo, V8Window::toInternalPointer(window));
+    V8DOMWrapper::setNativeInfoForHiddenWrapper(innerGlobalObject, wrapperTypeInfo, window->toScriptWrappableBase());
     innerGlobalObject->SetPrototype(windowWrapper);
-    V8DOMWrapper::associateObjectWithWrapper<V8Window>(PassRefPtrWillBeRawPtr<LocalDOMWindow>(window), &V8Window::wrapperTypeInfo, windowWrapper, m_isolate, WrapperConfiguration::Dependent);
-    V8Window::installConditionallyEnabledProperties(windowWrapper, m_isolate);
+    V8DOMWrapper::associateObjectWithWrapperNonTemplate(window, wrapperTypeInfo, windowWrapper, m_isolate);
+    wrapperTypeInfo->installConditionallyEnabledProperties(windowWrapper, m_isolate);
     return true;
 }
 
@@ -437,7 +437,7 @@ static void getter(v8::Local<v8::String> property, const v8::PropertyCallbackInf
 {
     // FIXME: Consider passing StringImpl directly.
     AtomicString name = toCoreAtomicString(property);
-    HTMLDocument* htmlDocument = V8HTMLDocument::toNative(info.Holder());
+    HTMLDocument* htmlDocument = V8HTMLDocument::toImpl(info.Holder());
     ASSERT(htmlDocument);
     v8::Handle<v8::Value> result = getNamedProperty(htmlDocument, name, info.Holder(), info.GetIsolate());
     if (!result.IsEmpty()) {

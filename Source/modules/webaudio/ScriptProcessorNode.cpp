@@ -28,6 +28,7 @@
 
 #include "modules/webaudio/ScriptProcessorNode.h"
 
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/CrossThreadTask.h"
 #include "core/dom/ExecutionContext.h"
 #include "modules/webaudio/AudioBuffer.h"
@@ -97,7 +98,6 @@ ScriptProcessorNode::ScriptProcessorNode(AudioContext* context, float sampleRate
     , m_numberOfOutputChannels(numberOfOutputChannels)
     , m_internalInputBus(AudioBus::create(numberOfInputChannels, AudioNode::ProcessingSizeInFrames, false))
 {
-    ScriptWrappable::init(this);
     // Regardless of the allowed buffer sizes, we still need to process at the granularity of the AudioNode.
     if (m_bufferSize < AudioNode::ProcessingSizeInFrames)
         m_bufferSize = AudioNode::ProcessingSizeInFrames;
@@ -108,6 +108,8 @@ ScriptProcessorNode::ScriptProcessorNode(AudioContext* context, float sampleRate
     addOutput(AudioNodeOutput::create(this, numberOfOutputChannels));
 
     setNodeType(NodeTypeJavaScript);
+    m_channelCount = numberOfInputChannels;
+    m_channelCountMode = Explicit;
 
     initialize();
 }
@@ -272,6 +274,30 @@ double ScriptProcessorNode::tailTime() const
 double ScriptProcessorNode::latencyTime() const
 {
     return std::numeric_limits<double>::infinity();
+}
+
+void ScriptProcessorNode::setChannelCount(unsigned long channelCount, ExceptionState& exceptionState)
+{
+    ASSERT(isMainThread());
+    AudioContext::AutoLocker locker(context());
+
+    if (channelCount != m_channelCount) {
+        exceptionState.throwDOMException(
+            NotSupportedError,
+            "channelCount cannot be changed from " + String::number(m_channelCount) + " to " + String::number(channelCount));
+    }
+}
+
+void ScriptProcessorNode::setChannelCountMode(const String& mode, ExceptionState& exceptionState)
+{
+    ASSERT(isMainThread());
+    AudioContext::AutoLocker locker(context());
+
+    if ((mode == "max") || (mode == "clamped-max")) {
+        exceptionState.throwDOMException(
+            NotSupportedError,
+            "channelCountMode cannot be changed from 'explicit' to '" + mode + "'");
+    }
 }
 
 void ScriptProcessorNode::trace(Visitor* visitor)

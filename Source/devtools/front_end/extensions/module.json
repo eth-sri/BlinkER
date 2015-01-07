@@ -5,7 +5,13 @@
             "className": "WebInspector.ExtensionServer"
         }
     ],
-    "dependencies": ["sources"],
+    "dependencies": [
+        "components",
+        "elements",
+        "network",
+        "sources",
+        "audits"
+    ],
     "scripts": [
         "ExtensionAPI.js",
         "ExtensionRegistryStub.js",

@@ -14,17 +14,21 @@ enum RequestCredentials { "omit", "same-origin", "include" };
     RuntimeEnabled=ServiceWorker,
     Exposed=ServiceWorker,
     RaisesException=Constructor,
-    WillBeGarbageCollected,
+    ActiveDOMObject,
+    GarbageCollected,
 ] interface Request {
     readonly attribute ByteString method;
     readonly attribute ScalarValueString url;
     readonly attribute Headers headers;
-    [CallWith=ExecutionContext] readonly attribute FetchBodyStream body;
 
     readonly attribute DOMString referrer;
     readonly attribute RequestMode mode;
     readonly attribute RequestCredentials credentials;
 
+    Request clone();
+
     // FIXME: Implement the following:
     // readonly attribute RequestContext context;
 };
+
+Request implements Body;

@@ -110,6 +110,13 @@ public:
         FrameTypeTopLevel
     };
 
+    enum FetchRequestMode {
+        FetchRequestModeSameOrigin,
+        FetchRequestModeNoCORS,
+        FetchRequestModeCORS,
+        FetchRequestModeCORSWithForcedPreflight
+    };
+
     class ExtraData {
     public:
         virtual ~ExtraData() { }
@@ -210,6 +217,14 @@ public:
     // WebURLLoader. See WebURLResponse::downloadedFilePath.
     BLINK_PLATFORM_EXPORT bool downloadToFile() const;
     BLINK_PLATFORM_EXPORT void setDownloadToFile(bool);
+
+    // True if the request should not be handled by the ServiceWorker.
+    BLINK_PLATFORM_EXPORT bool skipServiceWorker() const;
+    BLINK_PLATFORM_EXPORT void setSkipServiceWorker(bool);
+
+    // The request mode which will be passed to the ServiceWorker.
+    BLINK_PLATFORM_EXPORT FetchRequestMode fetchRequestMode() const;
+    BLINK_PLATFORM_EXPORT void setFetchRequestMode(FetchRequestMode);
 
     // Extra data associated with the underlying resource request. Resource
     // requests can be copied. If non-null, each copy of a resource requests

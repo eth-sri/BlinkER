@@ -78,13 +78,6 @@ const WTF::ThreadIdentifier UndefinedThreadIdentifier = 0xffffffff;
 
 namespace blink {
 
-bool AudioContext::isSampleRateRangeGood(float sampleRate)
-{
-    // FIXME: It would be nice if the minimum sample-rate could be less than 44.1KHz,
-    // but that will require some fixes in HRTFPanner::fftSizeForSampleRate(), and some testing there.
-    return sampleRate >= 44100 && sampleRate <= 96000;
-}
-
 // Don't allow more than this number of simultaneous AudioContexts talking to hardware.
 const unsigned MaxHardwareContexts = 6;
 unsigned AudioContext::s_hardwareContextCount = 0;
@@ -117,8 +110,6 @@ AudioContext::AudioContext(Document* document)
     , m_graphOwnerThread(UndefinedThreadIdentifier)
     , m_isOfflineContext(false)
 {
-    ScriptWrappable::init(this);
-
     m_destinationNode = DefaultAudioDestinationNode::create(this);
 
     initialize();
@@ -140,8 +131,6 @@ AudioContext::AudioContext(Document* document, unsigned numberOfChannels, size_t
     , m_graphOwnerThread(UndefinedThreadIdentifier)
     , m_isOfflineContext(true)
 {
-    ScriptWrappable::init(this);
-
     // Create a new destination for offline rendering.
     m_renderTarget = AudioBuffer::create(numberOfChannels, numberOfFrames, sampleRate);
     if (m_renderTarget.get())
@@ -245,7 +234,7 @@ AudioBuffer* AudioContext::createBuffer(unsigned numberOfChannels, size_t number
     return AudioBuffer::create(numberOfChannels, numberOfFrames, sampleRate, exceptionState);
 }
 
-void AudioContext::decodeAudioData(ArrayBuffer* audioData, PassOwnPtr<AudioBufferCallback> successCallback, PassOwnPtr<AudioBufferCallback> errorCallback, ExceptionState& exceptionState)
+void AudioContext::decodeAudioData(ArrayBuffer* audioData, AudioBufferCallback* successCallback, AudioBufferCallback* errorCallback, ExceptionState& exceptionState)
 {
     if (!audioData) {
         exceptionState.throwDOMException(
@@ -677,6 +666,9 @@ void AudioContext::handlePreRenderTasks()
     // It's OK if the tryLock() fails, we'll just take slightly longer to pick up the changes.
     bool mustReleaseLock;
     if (tryLock(mustReleaseLock)) {
+        // Update the channel count mode.
+        updateChangedChannelCountMode();
+
         // Fixup the state of any dirty AudioSummingJunctions and AudioNodeOutputs.
         handleDirtyAudioSummingJunctions();
         handleDirtyAudioNodeOutputs();
@@ -697,6 +689,9 @@ void AudioContext::handlePostRenderTasks()
     // from the render graph (in which case they'll render silence).
     bool mustReleaseLock;
     if (tryLock(mustReleaseLock)) {
+        // Update the channel count mode.
+        updateChangedChannelCountMode();
+
         // Take care of AudioNode tasks where the tryLock() failed previously.
         handleDeferredAudioNodeTasks();
 
@@ -892,6 +887,30 @@ void AudioContext::trace(Visitor* visitor)
     visitor->trace(m_liveNodes);
     visitor->trace(m_liveAudioSummingJunctions);
     EventTargetWithInlineData::trace(visitor);
+}
+
+void AudioContext::addChangedChannelCountMode(AudioNode* node)
+{
+    ASSERT(isGraphOwner());
+    ASSERT(isMainThread());
+    m_deferredCountModeChange.add(node);
+}
+
+void AudioContext::removeChangedChannelCountMode(AudioNode* node)
+{
+    ASSERT(isGraphOwner());
+
+    m_deferredCountModeChange.remove(node);
+}
+
+void AudioContext::updateChangedChannelCountMode()
+{
+    ASSERT(isGraphOwner());
+
+    for (HashSet<AudioNode*>::iterator k = m_deferredCountModeChange.begin(); k != m_deferredCountModeChange.end(); ++k)
+        (*k)->updateChannelCountMode();
+
+    m_deferredCountModeChange.clear();
 }
 
 } // namespace blink

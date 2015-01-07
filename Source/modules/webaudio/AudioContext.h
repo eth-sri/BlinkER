@@ -74,6 +74,7 @@ class WaveShaperNode;
 
 class AudioContext : public RefCountedGarbageCollectedWillBeGarbageCollectedFinalized<AudioContext>, public ActiveDOMObject, public EventTargetWithInlineData {
     DEFINE_EVENT_TARGET_REFCOUNTING_WILL_BE_REMOVED(RefCountedGarbageCollected<AudioContext>);
+    DEFINE_WRAPPERTYPEINFO();
     WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(AudioContext);
 public:
     // Create an AudioContext for rendering to the audio hardware.
@@ -98,7 +99,7 @@ public:
     AudioBuffer* createBuffer(unsigned numberOfChannels, size_t numberOfFrames, float sampleRate, ExceptionState&);
 
     // Asynchronous audio file data decoding.
-    void decodeAudioData(ArrayBuffer*, PassOwnPtr<AudioBufferCallback>, PassOwnPtr<AudioBufferCallback>, ExceptionState&);
+    void decodeAudioData(ArrayBuffer*, AudioBufferCallback*, AudioBufferCallback*, ExceptionState&);
 
     AudioListener* listener() { return m_listener.get(); }
 
@@ -149,6 +150,12 @@ public:
 
     // Called right before handlePostRenderTasks() to handle nodes which need to be pulled even when they are not connected to anything.
     void processAutomaticPullNodes(size_t framesToProcess);
+
+    // Keep track of AudioNode's that have their channel count mode changed. We process the changes
+    // in the post rendering phase.
+    void addChangedChannelCountMode(AudioNode*);
+    void removeChangedChannelCountMode(AudioNode*);
+    void updateChangedChannelCountMode();
 
     // Keeps track of the number of connections made.
     void incrementConnectionCount()
@@ -231,8 +238,6 @@ public:
 protected:
     explicit AudioContext(Document*);
     AudioContext(Document*, unsigned numberOfChannels, size_t numberOfFrames, float sampleRate);
-
-    static bool isSampleRateRangeGood(float sampleRate);
 
 private:
     void initialize();
@@ -340,6 +345,11 @@ private:
     bool m_isOfflineContext;
 
     AsyncAudioDecoder m_audioDecoder;
+
+    // Collection of nodes where the channel count mode has changed. We want the channel count mode
+    // to change in the pre- or post-rendering phase so as not to disturb the running audio thread.
+    GC_PLUGIN_IGNORE("http://crbug.com/404527")
+    HashSet<AudioNode*> m_deferredCountModeChange;
 
     // This is considering 32 is large enough for multiple channels audio.
     // It is somewhat arbitrary and could be increased if necessary.

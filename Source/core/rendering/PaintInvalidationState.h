@@ -6,26 +6,27 @@
 #define PaintInvalidationState_h
 
 #include "platform/geometry/LayoutRect.h"
+#include "platform/transforms/AffineTransform.h"
 #include "wtf/Noncopyable.h"
 
 namespace blink {
 
-class RenderBox;
-class RenderInline;
 class RenderLayerModelObject;
 class RenderObject;
-class RenderView;
 class RenderSVGModelObject;
+class RenderView;
 
 class PaintInvalidationState {
     WTF_MAKE_NONCOPYABLE(PaintInvalidationState);
 public:
     PaintInvalidationState(const PaintInvalidationState& next, RenderLayerModelObject& renderer, const RenderLayerModelObject& paintInvalidationContainer);
+    PaintInvalidationState(const PaintInvalidationState& next, const RenderSVGModelObject& renderer);
 
     explicit PaintInvalidationState(const RenderView&);
 
     const LayoutRect& clipRect() const { return m_clipRect; }
     const LayoutSize& paintOffset() const { return m_paintOffset; }
+    const AffineTransform& svgTransform() const { ASSERT(m_svgTransform); return *m_svgTransform; }
 
     bool cachedOffsetsEnabled() const { return m_cachedOffsetsEnabled; }
     bool isClipped() const { return m_clipped; }
@@ -34,7 +35,6 @@ public:
     void setForceCheckForPaintInvalidation() { m_forceCheckForPaintInvalidation = true; }
 
     const RenderLayerModelObject& paintInvalidationContainer() const { return m_paintInvalidationContainer; }
-    const RenderObject& renderer() const { return m_renderer; }
 
     bool canMapToContainer(const RenderLayerModelObject* container) const
     {
@@ -42,6 +42,7 @@ public:
     }
 private:
     void applyClipIfNeeded(const RenderObject&);
+    void addClipRectRelativeToPaintOffset(const LayoutSize& clipSize);
 
     friend class ForceHorriblySlowRectMapping;
 
@@ -56,7 +57,10 @@ private:
 
     const RenderLayerModelObject& m_paintInvalidationContainer;
 
-    const RenderObject& m_renderer;
+    // Transform from the initial viewport coordinate system of an outermost
+    // SVG root to the userspace _before_ the relevant element. Combining this
+    // with |m_paintOffset| yields the "final" offset.
+    OwnPtr<AffineTransform> m_svgTransform;
 };
 
 } // namespace blink

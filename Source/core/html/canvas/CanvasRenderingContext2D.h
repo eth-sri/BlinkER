@@ -60,13 +60,14 @@ class GraphicsContext;
 class HTMLCanvasElement;
 class HTMLImageElement;
 class HTMLVideoElement;
-class ImageBitmap;
+class HitRegionOptions;
 class ImageData;
 class TextMetrics;
 
 typedef WillBeHeapHashMap<String, RefPtrWillBeMember<MutableStylePropertySet> > MutableStylePropertyMap;
 
 class CanvasRenderingContext2D FINAL: public CanvasRenderingContext, public ScriptWrappable, public CanvasPathMethods {
+    DEFINE_WRAPPERTYPEINFO();
 public:
     static PassOwnPtrWillBeRawPtr<CanvasRenderingContext2D> create(HTMLCanvasElement* canvas, const Canvas2DContextAttributes* attrs, bool usesCSSCompatibilityParseMode)
     {
@@ -231,8 +232,7 @@ public:
     void drawFocusIfNeeded(Element*);
     void drawFocusIfNeeded(Path2D*, Element*);
 
-    void addHitRegion(ExceptionState&);
-    void addHitRegion(const Dictionary&, ExceptionState&);
+    void addHitRegion(const HitRegionOptions&, ExceptionState&);
     void removeHitRegion(const String& id);
     void clearHitRegions();
     HitRegion* hitRegionAtPoint(const LayoutPoint&);
@@ -353,7 +353,7 @@ private:
     bool focusRingCallIsValid(const Path&, Element*);
     void drawFocusRing(const Path&);
 
-    void addHitRegionInternal(const HitRegionOptions&, ExceptionState&);
+    void addHitRegionInternal(const HitRegionOptionsInternal&, ExceptionState&);
     bool hasClip() { return state().m_hasClip; }
 
     void validateStateStack();
@@ -386,4 +386,4 @@ DEFINE_TYPE_CASTS(CanvasRenderingContext2D, CanvasRenderingContext, context, con
 
 } // namespace blink
 
-#endif
+#endif // CanvasRenderingContext2D_h

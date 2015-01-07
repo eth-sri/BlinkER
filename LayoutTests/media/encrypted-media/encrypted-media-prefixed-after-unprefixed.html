@@ -21,7 +21,8 @@
                     MediaKeys.create('org.w3.clearkey').then(function(mediaKeys) {
                         assert_not_equals(mediaKeys, null);
                         assert_equals(mediaKeys.keySystem, 'org.w3.clearkey');
-                        video.setMediaKeys(mediaKeys);
+                        return video.setMediaKeys(mediaKeys);
+                    }).then(function(result) {
                         assert_throws('InvalidStateError',
                                       function () { video.webkitGenerateKeyRequest('webkit-org.w3.clearkey'); });
                         test.done();
@@ -30,7 +31,7 @@
                     });
                 }
 
-                video.src = '../content/test.webm';
+                video.src = '../content/test-encrypted.webm';
                 waitForEventAndRunStep('loadstart', video, loadStarted, test);
             }, 'Call prefixed EME API after unprefixed EME API.');
         </script>

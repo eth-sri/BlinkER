@@ -195,7 +195,6 @@ void RuleFeatureSet::extractInvalidationSetFeature(const CSSSelector& selector, 
 }
 
 RuleFeatureSet::RuleFeatureSet()
-    : m_targetedStyleRecalcEnabled(RuntimeEnabledFeatures::targetedStyleRecalcEnabled())
 {
 }
 
@@ -212,9 +211,22 @@ DescendantInvalidationSet* RuleFeatureSet::invalidationSetForSelector(const CSSS
     if (selector.match() == CSSSelector::Id)
         return &ensureIdInvalidationSet(selector.value());
     if (selector.match() == CSSSelector::PseudoClass) {
-        CSSSelector::PseudoType pseudo = selector.pseudoType();
-        if (pseudo == CSSSelector::PseudoHover || pseudo == CSSSelector::PseudoActive || pseudo == CSSSelector::PseudoFocus)
-            return &ensurePseudoInvalidationSet(pseudo);
+        switch (selector.pseudoType()) {
+        case CSSSelector::PseudoEmpty:
+        case CSSSelector::PseudoHover:
+        case CSSSelector::PseudoActive:
+        case CSSSelector::PseudoFocus:
+        case CSSSelector::PseudoChecked:
+        case CSSSelector::PseudoEnabled:
+        case CSSSelector::PseudoDisabled:
+        case CSSSelector::PseudoIndeterminate:
+        case CSSSelector::PseudoLink:
+        case CSSSelector::PseudoTarget:
+        case CSSSelector::PseudoVisited:
+            return &ensurePseudoInvalidationSet(selector.pseudoType());
+        default:
+            break;
+        }
     }
     return 0;
 }
@@ -332,16 +344,13 @@ void RuleFeatureSet::addFeaturesToInvalidationSets(const CSSSelector& selector, 
 
 void RuleFeatureSet::addContentAttr(const AtomicString& attributeName)
 {
-    DescendantInvalidationSet& invalidationSet = ensureAttributeInvalidationSet(attributeName);
-    invalidationSet.setWholeSubtreeInvalid();
+    ensureAttributeInvalidationSet(attributeName);
 }
 
 void RuleFeatureSet::collectFeaturesFromRuleData(const RuleData& ruleData)
 {
     FeatureMetadata metadata;
-    InvalidationSetMode mode = UseSubtreeStyleChange;
-    if (m_targetedStyleRecalcEnabled)
-        mode = updateInvalidationSets(ruleData.selector());
+    InvalidationSetMode mode = updateInvalidationSets(ruleData.selector());
 
     collectFeaturesFromSelector(ruleData.selector(), metadata, mode);
     m_metadata.add(metadata);
@@ -382,11 +391,6 @@ DescendantInvalidationSet& RuleFeatureSet::ensurePseudoInvalidationSet(CSSSelect
     if (addResult.isNewEntry)
         addResult.storedValue->value = DescendantInvalidationSet::create();
     return *addResult.storedValue->value;
-}
-
-void RuleFeatureSet::collectFeaturesFromSelector(const CSSSelector& selector)
-{
-    collectFeaturesFromSelector(selector, m_metadata, UseSubtreeStyleChange);
 }
 
 void RuleFeatureSet::collectFeaturesFromSelector(const CSSSelector& selector, RuleFeatureSet::FeatureMetadata& metadata, InvalidationSetMode mode)

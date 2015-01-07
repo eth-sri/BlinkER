@@ -42,7 +42,6 @@ MediaQueryList::MediaQueryList(ExecutionContext* context, PassRefPtrWillBeRawPtr
     , m_matchesDirty(true)
     , m_matches(false)
 {
-    ScriptWrappable::init(this);
     m_matcher->addMediaQueryList(this);
     updateMatches();
 }
@@ -74,7 +73,6 @@ void MediaQueryList::addListener(PassRefPtrWillBeRawPtr<MediaQueryListListener> 
     if (!listener)
         return;
 
-    listener->setMediaQueryList(this);
     m_listeners.add(listener);
 }
 
@@ -84,7 +82,6 @@ void MediaQueryList::removeListener(PassRefPtrWillBeRawPtr<MediaQueryListListene
         return;
 
     RefPtrWillBeRawPtr<MediaQueryList> protect(this);
-    listener->clearMediaQueryList();
     m_listeners.remove(listener);
 }
 

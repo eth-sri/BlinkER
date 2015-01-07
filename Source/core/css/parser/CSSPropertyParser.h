@@ -48,9 +48,7 @@ class CSSValueList;
 class CSSBasicShape;
 class CSSBasicShapeInset;
 class CSSGridLineNamesValue;
-class ImmutableStylePropertySet;
 class StylePropertyShorthand;
-class UseCounter;
 
 // Inputs: PropertyID, isImportant bool, CSSParserValueList.
 // Outputs: Vector of CSSProperties
@@ -58,20 +56,22 @@ class UseCounter;
 class CSSPropertyParser {
     STACK_ALLOCATED();
 public:
-    CSSPropertyParser(OwnPtr<CSSParserValueList>&,
-        const CSSParserContext&, bool inViewport,
+    static bool parseValue(CSSPropertyID, bool important,
+        CSSParserValueList*, const CSSParserContext&, bool inViewport,
         WillBeHeapVector<CSSProperty, 256>&, CSSRuleSourceData::Type);
-    ~CSSPropertyParser();
 
     // FIXME: Should this be on a separate ColorParser object?
     template<typename StringType>
     static bool fastParseColor(RGBA32&, const StringType&, bool strict);
 
-    bool parseValue(CSSPropertyID, bool important);
-
     static bool isSystemColor(int id);
 
 private:
+    CSSPropertyParser(CSSParserValueList*, const CSSParserContext&, bool inViewport,
+        WillBeHeapVector<CSSProperty, 256>&, CSSRuleSourceData::Type);
+
+    bool parseValue(CSSPropertyID, bool important);
+
     bool inShorthand() const { return m_inParseShorthand; }
     bool inQuirksMode() const { return isQuirksModeBehavior(m_context.mode()); }
 
@@ -153,7 +153,7 @@ private:
     PassRefPtrWillBeRawPtr<CSSPrimitiveValue> parseGridBreadth(CSSParserValue*);
     bool parseGridTemplateAreasRow(NamedGridAreaMap&, const size_t, size_t&);
     PassRefPtrWillBeRawPtr<CSSValue> parseGridTemplateAreas();
-    void parseGridLineNames(CSSParserValueList&, CSSValueList&, CSSGridLineNamesValue* = 0);
+    bool parseGridLineNames(CSSParserValueList&, CSSValueList&, CSSGridLineNamesValue* = 0);
     PassRefPtrWillBeRawPtr<CSSValue> parseGridAutoFlow(CSSParserValueList&);
 
     bool parseClipShape(CSSPropertyID, bool important);
@@ -174,7 +174,7 @@ private:
     bool parseFont(bool important);
     PassRefPtrWillBeRawPtr<CSSValueList> parseFontFamily();
 
-    bool parseCounter(CSSPropertyID, int defaultValue, bool important);
+    PassRefPtrWillBeRawPtr<CSSValue> parseCounter(int defaultValue);
     PassRefPtrWillBeRawPtr<CSSValue> parseCounterContent(CSSParserValueList* args, bool counters);
 
     bool parseColorParameters(CSSParserValue*, int* colorValues, bool parseAlpha);
@@ -354,8 +354,7 @@ private:
 
 private:
     // Inputs:
-    // FIXME: This should not be an OwnPtr&, many callers will need to be changed.
-    const OwnPtr<CSSParserValueList>& m_valueList;
+    CSSParserValueList* m_valueList;
     const CSSParserContext& m_context;
     const bool m_inViewport;
 
@@ -385,7 +384,7 @@ CSSPropertyID cssPropertyID(const String&);
 CSSValueID cssValueKeywordID(const CSSParserString&);
 
 bool isKeywordPropertyID(CSSPropertyID);
-bool isValidKeywordPropertyAndValue(CSSPropertyID, CSSValueID, const CSSParserContext&);
+bool isValidKeywordPropertyAndValue(CSSPropertyID, CSSValueID);
 
 } // namespace blink
 

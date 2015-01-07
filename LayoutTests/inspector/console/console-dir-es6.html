@@ -26,6 +26,16 @@ function onload()
         console.dir(s);
     });
 
+    // Test circular dependency by entries.
+    var s1 = new Set();
+    var s2 = new Set();
+    s1.add(s2);
+    s2.add(s1);
+    console.dir(s1);
+
+    // Test "No Entries" placeholder.
+    console.dir(new WeakMap());
+
     runTest();
 }
 
@@ -33,9 +43,14 @@ function test()
 {
     InspectorTest.expandConsoleMessages(step1);
 
+    function expandTreeElementFilter(treeElement)
+    {
+        return treeElement.title === "<entries>";
+    }
+
     function step1()
     {
-        InspectorTest.expandConsoleTreeElements(WebInspector.CollectionEntriesMainTreeElement, dumpConsoleMessages);
+        InspectorTest.expandConsoleMessages(dumpConsoleMessages, expandTreeElementFilter);
     }
 
     function dumpConsoleMessages()

@@ -59,7 +59,6 @@ inline SVGAElement::SVGAElement(Document& document)
     , m_svgTarget(SVGAnimatedString::create(this, SVGNames::targetAttr, SVGString::create()))
     , m_wasFocusedByMouse(false)
 {
-    ScriptWrappable::init(this);
     addToPropertyMap(m_svgTarget);
 }
 
@@ -92,7 +91,7 @@ void SVGAElement::svgAttributeChanged(const QualifiedName& attrName)
         setIsLink(!hrefString().isNull());
 
         if (wasLink != isLink())
-            setNeedsStyleRecalc(SubtreeStyleChange);
+            setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::LinkColorChange));
 
         return;
     }
@@ -166,14 +165,11 @@ bool SVGAElement::shouldHaveFocusAppearance() const
     return !m_wasFocusedByMouse || SVGGraphicsElement::supportsFocus();
 }
 
-bool SVGAElement::wasFocusedByMouse() const
+void SVGAElement::dispatchFocusEvent(Element* oldFocusedElement, FocusType type)
 {
-    return m_wasFocusedByMouse;
-}
-
-void SVGAElement::setWasFocusedByMouse(bool wasFocusedByMouse)
-{
-    m_wasFocusedByMouse = wasFocusedByMouse;
+    if (type != FocusTypePage)
+        m_wasFocusedByMouse = type == FocusTypeMouse;
+    SVGGraphicsElement::dispatchFocusEvent(oldFocusedElement, type);
 }
 
 bool SVGAElement::isURLAttribute(const Attribute& attribute) const

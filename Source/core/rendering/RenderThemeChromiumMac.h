@@ -86,6 +86,8 @@ public:
 
     virtual bool supportsSelectionForegroundColors() const OVERRIDE { return false; }
 
+    virtual bool isModalColorChooser() const { return false; }
+
 protected:
     RenderThemeChromiumMac();
     virtual ~RenderThemeChromiumMac();
@@ -153,7 +155,6 @@ private:
 
     NSPopUpButtonCell* popupButton() const;
     NSSearchFieldCell* search() const;
-    NSMenu* searchMenuTemplate() const;
     NSTextFieldCell* textField() const;
 
     NSLevelIndicatorStyle levelIndicatorStyleFor(ControlPart) const;

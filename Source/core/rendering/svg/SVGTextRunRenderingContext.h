@@ -39,14 +39,11 @@ public:
     RenderObject* renderer() const { return m_renderer; }
 
 #if ENABLE(SVG_FONTS)
-    RenderSVGResource* activePaintingResource() const { return m_activePaintingResource; }
-    void setActivePaintingResource(RenderSVGResource* object) { m_activePaintingResource = object; }
-
-    virtual GlyphData glyphDataForCharacter(const Font&, const TextRun&, WidthIterator&, UChar32 character, bool mirror, int currentCharacter, unsigned& advanceLength) OVERRIDE;
+    virtual GlyphData glyphDataForCharacter(const Font&, const TextRun&, SimpleShaper&, UChar32 character, bool mirror, int currentCharacter, unsigned& advanceLength) OVERRIDE;
     virtual void drawSVGGlyphs(GraphicsContext*, const TextRun&, const SimpleFontData*, const GlyphBuffer&, int from, int to, const FloatPoint&) const OVERRIDE;
     virtual float floatWidthUsingSVGFont(const Font&, const TextRun&, int& charsConsumed, Glyph& glyphId) const OVERRIDE;
 #else
-    virtual GlyphData glyphDataForCharacter(const Font&, const TextRun&, WidthIterator&, UChar32 character, bool mirror, int currentCharacter, unsigned& advanceLength) OVERRIDE { return 0; }
+    virtual GlyphData glyphDataForCharacter(const Font&, const TextRun&, SimpleShaper&, UChar32 character, bool mirror, int currentCharacter, unsigned& advanceLength) OVERRIDE { return 0; }
     virtual void drawSVGGlyphs(GraphicsContext*, const TextRun&, const SimpleFontData*, const GlyphBuffer&, int from, int to, const FloatPoint&) const OVERRIDE { }
     virtual float floatWidthUsingSVGFont(const Font&, const TextRun&, int& charsConsumed, Glyph& glyphId) const OVERRIDE { return 0; }
 #endif
@@ -54,19 +51,12 @@ public:
 private:
     SVGTextRunRenderingContext(RenderObject* renderer)
         : m_renderer(renderer)
-#if ENABLE(SVG_FONTS)
-        , m_activePaintingResource(0)
-#endif
     {
     }
 
     virtual ~SVGTextRunRenderingContext() { }
 
     RenderObject* m_renderer;
-
-#if ENABLE(SVG_FONTS)
-    RenderSVGResource* m_activePaintingResource;
-#endif
 };
 
 inline bool textRunNeedsRenderingContext(const Font& font)

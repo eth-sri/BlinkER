@@ -49,6 +49,7 @@
 #include "core/html/HTMLElement.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLHeadElement.h"
+#include "core/html/HTMLLinkElement.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/rendering/RenderObject.h"
 #include "core/rendering/RenderView.h"
@@ -298,13 +299,15 @@ void WebDocument::beginExitTransition(const WebString& cssSelector)
 WebAXObject WebDocument::accessibilityObject() const
 {
     const Document* document = constUnwrap<Document>();
-    return WebAXObject(document->axObjectCache()->getOrCreate(document->renderView()));
+    AXObjectCache* cache = document->axObjectCache();
+    return cache ? WebAXObject(cache->getOrCreate(document->renderView())) : WebAXObject();
 }
 
 WebAXObject WebDocument::accessibilityObjectFromID(int axID) const
 {
     const Document* document = constUnwrap<Document>();
-    return WebAXObject(document->axObjectCache()->objectFromAXID(axID));
+    AXObjectCache* cache = document->axObjectCache();
+    return cache ? WebAXObject(cache->objectFromAXID(axID)) : WebAXObject();
 }
 
 WebVector<WebDraggableRegion> WebDocument::draggableRegions() const
@@ -334,6 +337,15 @@ v8::Handle<v8::Value> WebDocument::registerEmbedderCustomElement(const WebString
     if (exceptionState.hadException())
         return v8::Handle<v8::Value>();
     return constructor.v8Value();
+}
+
+WebURL WebDocument::manifestURL() const
+{
+    const Document* document = constUnwrap<Document>();
+    HTMLLinkElement* linkElement = document->linkManifest();
+    if (!linkElement)
+        return WebURL();
+    return linkElement->href();
 }
 
 WebDocument::WebDocument(const PassRefPtrWillBeRawPtr<Document>& elem)

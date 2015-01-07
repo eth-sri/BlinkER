@@ -30,6 +30,7 @@
 
 #include "config.h"
 
+#include "bindings/core/v8/V8Binding.h"
 #include "core/page/Page.h"
 #include "core/page/PageSerializer.h"
 #include "core/testing/URLTestHelpers.h"
@@ -173,6 +174,7 @@ TEST_F(PageSerializerTest, InputImage)
 
 TEST_F(PageSerializerTest, XMLDeclaration)
 {
+    V8TestingScope scope(v8::Isolate::GetCurrent());
     setBaseFolder("pageserializer/xmldecl/");
 
     registerURL("xmldecl.xml", "text/xml");

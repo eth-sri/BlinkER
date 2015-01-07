@@ -29,11 +29,14 @@
 #include "core/dom/Document.h"
 
 #include "bindings/core/v8/CustomElementConstructorBuilder.h"
+#include "bindings/core/v8/DOMDataStore.h"
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "bindings/core/v8/ScriptController.h"
+#include "bindings/core/v8/V8DOMWrapper.h"
+#include "bindings/core/v8/WindowProxy.h"
 #include "core/HTMLElementFactory.h"
 #include "core/HTMLNames.h"
 #include "core/SVGElementFactory.h"
@@ -51,7 +54,7 @@
 #include "core/css/StyleSheetContents.h"
 #include "core/css/StyleSheetList.h"
 #include "core/css/invalidation/StyleInvalidator.h"
-#include "core/css/parser/BisonCSSParser.h"
+#include "core/css/parser/CSSParser.h"
 #include "core/css/resolver/FontBuilder.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/css/resolver/StyleResolverStats.h"
@@ -112,11 +115,11 @@
 #include "core/events/ScopedEventQueue.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/frame/EventHandlerRegistry.h"
-#include "core/frame/LocalDOMWindow.h"
 #include "core/frame/FrameConsole.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/History.h"
+#include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
@@ -510,9 +513,6 @@ Document::Document(const DocumentInit& initializer, DocumentClassFlags documentC
     , m_hasViewportUnits(false)
     , m_styleRecalcElementCounter(0)
 {
-    setClient(this);
-    ScriptWrappable::init(this);
-
     if (m_frame) {
         ASSERT(m_frame->page());
         provideContextFeaturesToDocumentFrom(*this, *m_frame->page());
@@ -627,8 +627,6 @@ Document::~Document()
     liveDocumentSet().remove(this);
 #endif
 #endif
-
-    setClient(0);
 
     InspectorCounters::decrementCounter(InspectorCounters::DocumentCounter);
 }
@@ -1211,7 +1209,7 @@ void Document::setContentLanguage(const AtomicString& language)
     m_contentLanguage = language;
 
     // Document's style depends on the content language.
-    setNeedsStyleRecalc(SubtreeStyleChange);
+    setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::Language));
 }
 
 void Document::setXMLVersion(const String& version, ExceptionState& exceptionState)
@@ -1327,49 +1325,28 @@ PassRefPtrWillBeRawPtr<Range> Document::caretRangeFromPoint(int x, int y)
 template <typename CharacterType>
 static inline String canonicalizedTitle(Document* document, const String& title)
 {
-    const CharacterType* characters = title.getCharacters<CharacterType>();
     unsigned length = title.length();
-    unsigned i;
+    unsigned builderIndex = 0;
+    const CharacterType* characters = title.getCharacters<CharacterType>();
 
     StringBuffer<CharacterType> buffer(length);
-    unsigned builderIndex = 0;
 
-    // Skip leading spaces and leading characters that would convert to spaces
-    for (i = 0; i < length; ++i) {
-        CharacterType c = characters[i];
-        if (!(c <= 0x20 || c == 0x7F))
-            break;
-    }
-
-    if (i == length)
-        return String();
-
-    // Replace control characters with spaces, and backslashes with currency symbols, and collapse whitespace.
-    bool previousCharWasWS = false;
-    for (; i < length; ++i) {
-        CharacterType c = characters[i];
+    // Replace control characters with spaces and collapse whitespace.
+    bool pendingWhitespace = false;
+    for (unsigned i = 0; i < length; ++i) {
+        UChar32 c = characters[i];
         if (c <= 0x20 || c == 0x7F || (WTF::Unicode::category(c) & (WTF::Unicode::Separator_Line | WTF::Unicode::Separator_Paragraph))) {
-            if (previousCharWasWS)
-                continue;
-            buffer[builderIndex++] = ' ';
-            previousCharWasWS = true;
+            if (builderIndex != 0)
+                pendingWhitespace = true;
         } else {
+            if (pendingWhitespace) {
+                buffer[builderIndex++] = ' ';
+                pendingWhitespace = false;
+            }
             buffer[builderIndex++] = c;
-            previousCharWasWS = false;
         }
     }
-
-    // Strip trailing spaces
-    while (builderIndex > 0) {
-        --builderIndex;
-        if (buffer[builderIndex] != ' ')
-            break;
-    }
-
-    if (!builderIndex && buffer[builderIndex] == ' ')
-        return String();
-
-    buffer.shrink(builderIndex + 1);
+    buffer.shrink(builderIndex);
 
     return String::adopt(buffer);
 }
@@ -1742,7 +1719,7 @@ void Document::inheritHtmlAndBodyElementStyles(StyleRecalcChange change)
     // rare and just invalidate the cache for now.
     if (styleEngine()->usesRemUnits() && (documentElement()->needsAttach() || documentElement()->computedStyle()->fontSize() != documentElementStyle->fontSize())) {
         ensureStyleResolver().invalidateMatchedPropertiesCache();
-        documentElement()->setNeedsStyleRecalc(SubtreeStyleChange);
+        documentElement()->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::FontSizeChange));
     }
 
     EOverflow overflowX = OAUTO;
@@ -1780,13 +1757,13 @@ void Document::inheritHtmlAndBodyElementStyles(StyleRecalcChange change)
     if (body) {
         if (RenderStyle* style = body->renderStyle()) {
             if (style->direction() != rootDirection || style->writingMode() != rootWritingMode)
-                body->setNeedsStyleRecalc(SubtreeStyleChange);
+                body->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::WritingModeChange));
         }
     }
 
     if (RenderStyle* style = documentElement()->renderStyle()) {
         if (style->direction() != rootDirection || style->writingMode() != rootWritingMode)
-            documentElement()->setNeedsStyleRecalc(SubtreeStyleChange);
+            documentElement()->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::WritingModeChange));
     }
 }
 
@@ -1814,7 +1791,7 @@ void Document::updateRenderTree(StyleRecalcChange change)
     // Script can run below in WidgetUpdates, so protect the LocalFrame.
     // FIXME: Can this still happen? How does script run inside
     // UpdateSuspendScope::performDeferredWidgetTreeOperations() ?
-    RefPtr<LocalFrame> protect(m_frame);
+    RefPtrWillBeRawPtr<LocalFrame> protect(m_frame.get());
 
     TRACE_EVENT_BEGIN0("blink", "Document::updateRenderTree");
     TRACE_EVENT_SCOPED_SAMPLING_STATE("blink", "UpdateRenderTree");
@@ -1969,7 +1946,7 @@ void Document::updateLayout()
 
 void Document::setNeedsFocusedElementCheck()
 {
-    setNeedsStyleRecalc(LocalStyleChange);
+    setNeedsStyleRecalc(LocalStyleChange, StyleChangeReasonForTracing::createWithExtraData(StyleChangeReason::PseudoClass, StyleChangeExtraData::Focus));
 }
 
 void Document::clearFocusedElementSoon()
@@ -2095,7 +2072,7 @@ bool Document::dirtyElementsForLayerUpdate()
         return false;
 
     for (WillBeHeapHashSet<RawPtrWillBeMember<Element> >::iterator it = m_layerUpdateSVGFilterElements.begin(), end = m_layerUpdateSVGFilterElements.end(); it != end; ++it)
-        (*it)->setNeedsStyleRecalc(LocalStyleChange);
+        (*it)->setNeedsStyleRecalc(LocalStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::SVGFilterLayerUpdate));
     m_layerUpdateSVGFilterElements.clear();
     return true;
 }
@@ -2232,7 +2209,7 @@ void Document::detach(const AttachContext& context)
     // possible to re-attach. Eventually Document::detach() should be renamed,
     // or this setting of the frame to 0 could be made explicit in each of the
     // callers of Document::detach().
-    m_frame = 0;
+    m_frame = nullptr;
 
     if (m_mediaQueryMatcher)
         m_mediaQueryMatcher->documentDetached();
@@ -2289,7 +2266,7 @@ void Document::clearAXObjectCache()
 AXObjectCache* Document::existingAXObjectCache() const
 {
     // If the renderer is gone then we are in the process of destruction.
-    // This method will be called before m_frame = 0.
+    // This method will be called before m_frame = nullptr.
     if (!axObjectCacheOwner().renderView())
         return 0;
 
@@ -2530,15 +2507,9 @@ void Document::explicitClose()
 void Document::implicitClose()
 {
     ASSERT(!inStyleRecalc());
-
-    bool wasLocationChangePending = frame() && frame()->navigationScheduler().locationChangePending();
-    bool doload = !parsing() && m_parser && !processingLoadEvent() && !wasLocationChangePending;
-
-    // If the load was blocked because of a pending location change and the location change triggers a same document
-    // navigation, don't fire load events after the same document navigation completes (unless there's an explicit open).
-    m_loadEventProgress = LoadEventTried;
-
-    if (!doload)
+    if (processingLoadEvent() || !m_parser)
+        return;
+    if (frame() && frame()->navigationScheduler().locationChangePending())
         return;
 
     // The call to dispatchWindowLoadEvent can detach the LocalDOMWindow and cause it (and its
@@ -2666,7 +2637,10 @@ void Document::dispatchUnloadEvents()
     if (m_parser)
         m_parser->stopParsing();
 
-    if (m_loadEventProgress >= LoadEventTried && m_loadEventProgress <= UnloadEventInProgress) {
+    if (m_loadEventProgress == LoadEventNotRun)
+        return;
+
+    if (m_loadEventProgress <= UnloadEventInProgress) {
         Element* currentFocusedElement = focusedElement();
         if (isHTMLInputElement(currentFocusedElement))
             toHTMLInputElement(*currentFocusedElement).endEditing();
@@ -2819,7 +2793,7 @@ void Document::logExceptionToConsole(const String& errorMessage, int scriptId, c
     RefPtrWillBeRawPtr<ConsoleMessage> consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, errorMessage, sourceURL, lineNumber);
     consoleMessage->setScriptId(scriptId);
     consoleMessage->setCallStack(callStack);
-    addMessage(consoleMessage.release());
+    addConsoleMessage(consoleMessage.release());
 }
 
 void Document::setURL(const KURL& url)
@@ -3153,7 +3127,7 @@ void Document::processHttpEquivXFrameOptions(const AtomicString& content)
         frame->navigationScheduler().scheduleLocationChange(this, SecurityOrigin::urlWithUniqueSecurityOrigin(), Referrer());
         RefPtrWillBeRawPtr<ConsoleMessage> consoleMessage = ConsoleMessage::create(SecurityMessageSource, ErrorMessageLevel, message);
         consoleMessage->setRequestIdentifier(requestIdentifier);
-        addMessage(consoleMessage.release());
+        addConsoleMessage(consoleMessage.release());
     }
 }
 
@@ -3628,7 +3602,7 @@ bool Document::setFocusedElement(PassRefPtrWillBeRawPtr<Element> prpNewFocusedEl
                 goto SetFocusedElementDone;
             }
 
-            m_focusedElement->dispatchFocusInEvent(EventTypeNames::focusin, oldFocusedElement.get()); // DOM level 3 bubbling focus event.
+            m_focusedElement->dispatchFocusInEvent(EventTypeNames::focusin, oldFocusedElement.get(), type); // DOM level 3 bubbling focus event.
 
             if (m_focusedElement != newFocusedElement) {
                 // handler shifted focus
@@ -3638,7 +3612,7 @@ bool Document::setFocusedElement(PassRefPtrWillBeRawPtr<Element> prpNewFocusedEl
 
             // FIXME: We should remove firing DOMFocusInEvent event when we are sure no content depends
             // on it, probably when <rdar://problem/8503958> is m.
-            m_focusedElement->dispatchFocusInEvent(EventTypeNames::DOMFocusIn, oldFocusedElement.get()); // DOM level 2 for compatibility.
+            m_focusedElement->dispatchFocusInEvent(EventTypeNames::DOMFocusIn, oldFocusedElement.get(), type); // DOM level 2 for compatibility.
 
             if (m_focusedElement != newFocusedElement) {
                 // handler shifted focus
@@ -3690,10 +3664,10 @@ SetFocusedElementDone:
 void Document::setCSSTarget(Element* newTarget)
 {
     if (m_cssTarget)
-        m_cssTarget->didAffectSelector(AffectedSelectorTarget);
+        m_cssTarget->pseudoStateChanged(CSSSelector::PseudoTarget);
     m_cssTarget = newTarget;
     if (m_cssTarget)
-        m_cssTarget->didAffectSelector(AffectedSelectorTarget);
+        m_cssTarget->pseudoStateChanged(CSSSelector::PseudoTarget);
 }
 
 void Document::registerNodeList(const LiveNodeListBase* list)
@@ -4164,16 +4138,11 @@ static bool isValidNameNonASCII(const LChar* characters, unsigned length)
 
 static bool isValidNameNonASCII(const UChar* characters, unsigned length)
 {
-    unsigned i = 0;
-
-    UChar32 c;
-    U16_NEXT(characters, i, length, c)
-    if (!isValidNameStart(c))
-        return false;
-
-    while (i < length) {
-        U16_NEXT(characters, i, length, c)
-        if (!isValidNamePart(c))
+    for (unsigned i = 0; i < length;) {
+        bool first = i == 0;
+        UChar32 c;
+        U16_NEXT(characters, i, length, c); // Increments i.
+        if (first ? !isValidNameStart(c) : !isValidNamePart(c))
             return false;
     }
 
@@ -4219,8 +4188,25 @@ bool Document::isValidName(const String& name)
     return isValidNameNonASCII(characters, length);
 }
 
+enum QualifiedNameStatus {
+    QNValid,
+    QNMultipleColons,
+    QNInvalidStartChar,
+    QNInvalidChar,
+    QNEmptyPrefix,
+    QNEmptyLocalName
+};
+
+struct ParseQualifiedNameResult {
+    QualifiedNameStatus status;
+    UChar32 character;
+    ParseQualifiedNameResult() { }
+    explicit ParseQualifiedNameResult(QualifiedNameStatus status) : status(status) { }
+    ParseQualifiedNameResult(QualifiedNameStatus status, UChar32 character) : status(status), character(character) { }
+};
+
 template<typename CharType>
-static bool parseQualifiedNameInternal(const AtomicString& qualifiedName, const CharType* characters, unsigned length, AtomicString& prefix, AtomicString& localName, ExceptionState& exceptionState)
+static ParseQualifiedNameResult parseQualifiedNameInternal(const AtomicString& qualifiedName, const CharType* characters, unsigned length, AtomicString& prefix, AtomicString& localName)
 {
     bool nameStart = true;
     bool sawColon = false;
@@ -4230,36 +4216,18 @@ static bool parseQualifiedNameInternal(const AtomicString& qualifiedName, const 
         UChar32 c;
         U16_NEXT(characters, i, length, c)
         if (c == ':') {
-            if (sawColon) {
-                exceptionState.throwDOMException(NamespaceError, "The qualified name provided ('" + qualifiedName + "') contains multiple colons.");
-                return false; // multiple colons: not allowed
-            }
+            if (sawColon)
+                return ParseQualifiedNameResult(QNMultipleColons);
             nameStart = true;
             sawColon = true;
             colonPos = i - 1;
         } else if (nameStart) {
-            if (!isValidNameStart(c)) {
-                StringBuilder message;
-                message.appendLiteral("The qualified name provided ('");
-                message.append(qualifiedName);
-                message.appendLiteral("') contains the invalid name-start character '");
-                message.append(c);
-                message.appendLiteral("'.");
-                exceptionState.throwDOMException(InvalidCharacterError, message.toString());
-                return false;
-            }
+            if (!isValidNameStart(c))
+                return ParseQualifiedNameResult(QNInvalidStartChar, c);
             nameStart = false;
         } else {
-            if (!isValidNamePart(c)) {
-                StringBuilder message;
-                message.appendLiteral("The qualified name provided ('");
-                message.append(qualifiedName);
-                message.appendLiteral("') contains the invalid character '");
-                message.append(c);
-                message.appendLiteral("'.");
-                exceptionState.throwDOMException(InvalidCharacterError, message.toString());
-                return false;
-            }
+            if (!isValidNamePart(c))
+                return ParseQualifiedNameResult(QNInvalidChar, c);
         }
     }
 
@@ -4268,20 +4236,16 @@ static bool parseQualifiedNameInternal(const AtomicString& qualifiedName, const 
         localName = qualifiedName;
     } else {
         prefix = AtomicString(characters, colonPos);
-        if (prefix.isEmpty()) {
-            exceptionState.throwDOMException(NamespaceError, "The qualified name provided ('" + qualifiedName + "') has an empty namespace prefix.");
-            return false;
-        }
+        if (prefix.isEmpty())
+            return ParseQualifiedNameResult(QNEmptyPrefix);
         int prefixStart = colonPos + 1;
         localName = AtomicString(characters + prefixStart, length - prefixStart);
     }
 
-    if (localName.isEmpty()) {
-        exceptionState.throwDOMException(NamespaceError, "The qualified name provided ('" + qualifiedName + "') has an empty local name.");
-        return false;
-    }
+    if (localName.isEmpty())
+        return ParseQualifiedNameResult(QNEmptyLocalName);
 
-    return true;
+    return ParseQualifiedNameResult(QNValid);
 }
 
 bool Document::parseQualifiedName(const AtomicString& qualifiedName, AtomicString& prefix, AtomicString& localName, ExceptionState& exceptionState)
@@ -4293,9 +4257,41 @@ bool Document::parseQualifiedName(const AtomicString& qualifiedName, AtomicStrin
         return false;
     }
 
+    ParseQualifiedNameResult returnValue;
     if (qualifiedName.is8Bit())
-        return parseQualifiedNameInternal(qualifiedName, qualifiedName.characters8(), length, prefix, localName, exceptionState);
-    return parseQualifiedNameInternal(qualifiedName, qualifiedName.characters16(), length, prefix, localName, exceptionState);
+        returnValue = parseQualifiedNameInternal(qualifiedName, qualifiedName.characters8(), length, prefix, localName);
+    else
+        returnValue = parseQualifiedNameInternal(qualifiedName, qualifiedName.characters16(), length, prefix, localName);
+    if (returnValue.status == QNValid)
+        return true;
+
+    StringBuilder message;
+    message.appendLiteral("The qualified name provided ('");
+    message.append(qualifiedName);
+    message.appendLiteral("') ");
+
+    if (returnValue.status == QNMultipleColons) {
+        message.appendLiteral("contains multiple colons.");
+    } else if (returnValue.status == QNInvalidStartChar) {
+        message.appendLiteral("contains the invalid name-start character '");
+        message.append(returnValue.character);
+        message.appendLiteral("'.");
+    } else if (returnValue.status == QNInvalidChar) {
+        message.appendLiteral("contains the invalid character '");
+        message.append(returnValue.character);
+        message.appendLiteral("'.");
+    } else if (returnValue.status == QNEmptyPrefix) {
+        message.appendLiteral("has an empty namespace prefix.");
+    } else {
+        ASSERT(returnValue.status == QNEmptyLocalName);
+        message.appendLiteral("has an empty local name.");
+    }
+
+    if (returnValue.status == QNInvalidStartChar || returnValue.status == QNInvalidChar)
+        exceptionState.throwDOMException(InvalidCharacterError, message.toString());
+    else
+        exceptionState.throwDOMException(NamespaceError, message.toString());
+    return false;
 }
 
 void Document::setEncodingData(const DocumentEncodingData& newData)
@@ -4327,7 +4323,7 @@ void Document::setEncodingData(const DocumentEncodingData& newData)
         // FIXME: How is possible to not have a renderer here?
         if (renderView())
             renderView()->style()->setRTLOrdering(m_visuallyOrdered ? VisualOrder : LogicalOrder);
-        setNeedsStyleRecalc(SubtreeStyleChange);
+        setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::VisuallyOrdered));
     }
 }
 
@@ -4463,7 +4459,7 @@ void Document::applyXSLTransform(ProcessingInstruction* pi)
 {
     ASSERT(!pi->isLoading());
     UseCounter::count(*this, UseCounter::XSLProcessingInstruction);
-    RefPtrWillBeRawPtr<XSLTProcessor> processor = XSLTProcessor::create();
+    RefPtrWillBeRawPtr<XSLTProcessor> processor = XSLTProcessor::create(*this);
     processor->setXSLStyleSheet(toXSLStyleSheet(pi->sheet()));
     String resultMIMEType;
     String newSource;
@@ -4489,7 +4485,7 @@ void Document::setDesignMode(InheritedBool value)
             continue;
         if (!toLocalFrame(frame)->document())
             break;
-        toLocalFrame(frame)->document()->setNeedsStyleRecalc(SubtreeStyleChange);
+        toLocalFrame(frame)->document()->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::DesignMode));
     }
 }
 
@@ -4678,12 +4674,11 @@ void Document::finishedParsing()
     // Keep it alive until we are done.
     RefPtrWillBeRawPtr<Document> protect(this);
 
-    if (RefPtr<LocalFrame> f = frame()) {
+    if (RefPtrWillBeRawPtr<LocalFrame> frame = this->frame()) {
         // Don't update the render tree if we haven't requested the main resource yet to avoid
         // adding extra latency. Note that the first render tree update can be expensive since it
         // triggers the parsing of the default stylesheets which are compiled-in.
-        const bool mainResourceWasAlreadyRequested =
-            m_frame->loader().stateMachine()->committedFirstRealDocumentLoad();
+        const bool mainResourceWasAlreadyRequested = frame->loader().stateMachine()->committedFirstRealDocumentLoad();
 
         // FrameLoader::finishedParsing() might end up calling Document::implicitClose() if all
         // resource loads are complete. HTMLObjectElements can start loading their resources from
@@ -4695,11 +4690,11 @@ void Document::finishedParsing()
         if (mainResourceWasAlreadyRequested)
             updateRenderTreeIfNeeded();
 
-        f->loader().finishedParsing();
+        frame->loader().finishedParsing();
 
-        TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "MarkDOMContent", "data", InspectorMarkLoadEvent::data(f.get()));
+        TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "MarkDOMContent", "data", InspectorMarkLoadEvent::data(frame.get()));
         // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
-        InspectorInstrumentation::domContentLoadedEventFired(f.get());
+        InspectorInstrumentation::domContentLoadedEventFired(frame.get());
     }
 
     // Schedule dropping of the ElementDataCache. We keep it alive for a while after parsing finishes
@@ -4710,9 +4705,6 @@ void Document::finishedParsing()
 
     // Parser should have picked up all preloads by now
     m_fetcher->clearPreloads();
-
-    if (HTMLImportLoader* import = importLoader())
-        import->didFinishParsing();
 }
 
 void Document::elementDataCacheClearTimerFired(Timer<Document>*)
@@ -4776,7 +4768,7 @@ Color Document::themeColor() const
 
     for (HTMLMetaElement* metaElement = head() ? Traversal<HTMLMetaElement>::firstChild(*head()) : 0; metaElement; metaElement = Traversal<HTMLMetaElement>::nextSibling(*metaElement)) {
         RGBA32 rgb = Color::transparent;
-        if (equalIgnoringCase(metaElement->name(), "theme-color") && BisonCSSParser::parseColor(rgb, metaElement->content().string().stripWhiteSpace(), true))
+        if (equalIgnoringCase(metaElement->name(), "theme-color") && CSSParser::parseColor(rgb, metaElement->content().string().stripWhiteSpace(), true))
             return Color(rgb);
     }
     return Color();
@@ -4817,13 +4809,6 @@ void Document::initSecurityContext()
     initSecurityContext(DocumentInit(m_url, m_frame, contextDocument(), m_importsController));
 }
 
-static PassRefPtr<ContentSecurityPolicy> contentSecurityPolicyFor(Document* document)
-{
-    if (document->importsController())
-        return document->importsController()->master()->contentSecurityPolicy();
-    return ContentSecurityPolicy::create(document);
-}
-
 void Document::initSecurityContext(const DocumentInit& initializer)
 {
     if (haveInitializedSecurityOrigin()) {
@@ -4836,7 +4821,7 @@ void Document::initSecurityContext(const DocumentInit& initializer)
         // This can occur via document.implementation.createDocument().
         m_cookieURL = KURL(ParsedURLString, emptyString());
         setSecurityOrigin(SecurityOrigin::createUnique());
-        setContentSecurityPolicy(ContentSecurityPolicy::create(this));
+        initContentSecurityPolicy();
         return;
     }
 
@@ -4845,7 +4830,16 @@ void Document::initSecurityContext(const DocumentInit& initializer)
     m_cookieURL = m_url;
     enforceSandboxFlags(initializer.sandboxFlags());
     setSecurityOrigin(isSandboxed(SandboxOrigin) ? SecurityOrigin::createUnique() : SecurityOrigin::create(m_url));
-    setContentSecurityPolicy(contentSecurityPolicyFor(this));
+
+    if (importsController()) {
+        // If this document is an HTML import, grab a reference to it's master document's Content
+        // Security Policy. We don't call 'initContentSecurityPolicy' in this case, as we can't
+        // rebind the master document's policy object: its ExecutionContext needs to remain tied
+        // to the master document.
+        setContentSecurityPolicy(importsController()->master()->contentSecurityPolicy());
+    } else {
+        initContentSecurityPolicy();
+    }
 
     if (Settings* settings = initializer.settings()) {
         if (!settings->webSecurityEnabled()) {
@@ -4897,11 +4891,14 @@ void Document::initSecurityContext(const DocumentInit& initializer)
     setSecurityOrigin(initializer.owner()->securityOrigin());
 }
 
-void Document::initContentSecurityPolicy(const ContentSecurityPolicyResponseHeaders& headers)
+void Document::initContentSecurityPolicy(PassRefPtr<ContentSecurityPolicy> csp)
 {
+    setContentSecurityPolicy(csp ? csp : ContentSecurityPolicy::create());
     if (m_frame && m_frame->tree().parent() && m_frame->tree().parent()->isLocalFrame() && (shouldInheritSecurityOriginFromOwner(m_url) || isPluginDocument()))
         contentSecurityPolicy()->copyStateFrom(toLocalFrame(m_frame->tree().parent())->document()->contentSecurityPolicy());
-    contentSecurityPolicy()->didReceiveHeaders(headers);
+    if (transformSourceDocument())
+        contentSecurityPolicy()->copyStateFrom(transformSourceDocument()->contentSecurityPolicy());
+    contentSecurityPolicy()->bindToExecutionContext(this);
 }
 
 bool Document::allowInlineEventHandlers(Node* node, EventListener* listener, const String& contextURL, const WTF::OrdinalNumber& contextLine)
@@ -5047,7 +5044,7 @@ void Document::reportBlockedScriptExecutionToInspector(const String& directiveTe
     InspectorInstrumentation::scriptExecutionBlockedByCSP(this, directiveText);
 }
 
-void Document::addMessage(PassRefPtrWillBeRawPtr<ConsoleMessage> consoleMessage)
+void Document::addConsoleMessage(PassRefPtrWillBeRawPtr<ConsoleMessage> consoleMessage)
 {
     if (!isContextThread()) {
         m_taskRunner->postTask(AddConsoleMessageTask::create(consoleMessage->source(), consoleMessage->level(), consoleMessage->message()));
@@ -5248,7 +5245,7 @@ ScriptedAnimationController& Document::ensureScriptedAnimationController()
     return *m_scriptedAnimationController;
 }
 
-int Document::requestAnimationFrame(PassOwnPtr<RequestAnimationFrameCallback> callback)
+int Document::requestAnimationFrame(RequestAnimationFrameCallback* callback)
 {
     return ensureScriptedAnimationController().registerCallback(callback);
 }
@@ -5262,8 +5259,6 @@ void Document::cancelAnimationFrame(int id)
 
 void Document::serviceScriptedAnimations(double monotonicAnimationStartTime)
 {
-    WTF_LOG(ScriptedAnimationController, "Document::serviceScriptedAnimations: controller = %d",
-        m_scriptedAnimationController ? 1 : 0);
     if (!m_scriptedAnimationController)
         return;
     m_scriptedAnimationController->serviceScriptedAnimations(monotonicAnimationStartTime);
@@ -5789,6 +5784,41 @@ void Document::clearWeakMembers(Visitor* visitor)
         m_axObjectCache->clearWeakMembers(visitor);
 }
 
+v8::Handle<v8::Object> Document::wrap(v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
+{
+    // It's possible that no one except for the new wrapper owns this object at
+    // this moment, so we have to prevent GC to collect this object until the
+    // object gets associated with the wrapper.
+    RefPtrWillBeRawPtr<Document> protect(this);
+
+    ASSERT(!DOMDataStore::containsWrapperNonTemplate(this, isolate));
+
+    const WrapperTypeInfo* wrapperType = wrapperTypeInfo();
+
+    if (frame() && frame()->script().initializeMainWorld()) {
+        // initializeMainWorld may have created a wrapper for the object, retry from the start.
+        v8::Handle<v8::Object> wrapper = DOMDataStore::getWrapperNonTemplate(this, isolate);
+        if (!wrapper.IsEmpty())
+            return wrapper;
+    }
+
+    v8::Handle<v8::Object> wrapper = V8DOMWrapper::createWrapper(creationContext, wrapperType, toScriptWrappableBase(), isolate);
+    if (UNLIKELY(wrapper.IsEmpty()))
+        return wrapper;
+
+    wrapperType->installConditionallyEnabledProperties(wrapper, isolate);
+    return associateWithWrapper(wrapperType, wrapper, isolate);
+}
+
+v8::Handle<v8::Object> Document::associateWithWrapper(const WrapperTypeInfo* wrapperType, v8::Handle<v8::Object> wrapper, v8::Isolate* isolate)
+{
+    V8DOMWrapper::associateObjectWithWrapperNonTemplate(this, wrapperType, wrapper, isolate);
+    DOMWrapperWorld& world = DOMWrapperWorld::current(isolate);
+    if (world.isMainWorld() && frame())
+        frame()->script().windowProxy(world)->updateDocumentWrapper(wrapper);
+    return wrapper;
+}
+
 void Document::trace(Visitor* visitor)
 {
 #if ENABLE(OILPAN)
@@ -5817,6 +5847,7 @@ void Document::trace(Visitor* visitor)
     visitor->trace(m_styleEngine);
     visitor->trace(m_formController);
     visitor->trace(m_visitedLinkState);
+    visitor->trace(m_frame);
     visitor->trace(m_domWindow);
     visitor->trace(m_fetcher);
     visitor->trace(m_parser);
@@ -5840,8 +5871,8 @@ void Document::trace(Visitor* visitor)
     visitor->trace(m_compositorPendingAnimations);
     visitor->trace(m_contextDocument);
     visitor->registerWeakMembers<Document, &Document::clearWeakMembers>(this);
-#endif
     DocumentSupplementable::trace(visitor);
+#endif
     TreeScope::trace(visitor);
     ContainerNode::trace(visitor);
     ExecutionContext::trace(visitor);

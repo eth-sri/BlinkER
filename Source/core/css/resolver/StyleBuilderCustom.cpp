@@ -51,7 +51,6 @@
 #include "core/css/CSSHelper.h"
 #include "core/css/CSSImageSetValue.h"
 #include "core/css/CSSLineBoxContainValue.h"
-#include "core/css/parser/BisonCSSParser.h"
 #include "core/css/CSSPrimitiveValueMappings.h"
 #include "core/css/CSSPropertyMetadata.h"
 #include "core/css/Counter.h"
@@ -119,10 +118,6 @@ void StyleBuilder::applyProperty(CSSPropertyID id, StyleResolverState& state, CS
         // Limit the properties that can be applied to only the ones honored by :visited.
         return;
     }
-
-    CSSPrimitiveValue* primitiveValue = value->isPrimitiveValue() ? toCSSPrimitiveValue(value) : 0;
-    if (primitiveValue && primitiveValue->getValueID() == CSSValueCurrentcolor)
-        state.style()->setHasCurrentColor();
 
     if (isInherit && !state.parentStyle()->hasExplicitlyInheritedProperties() && !CSSPropertyMetadata::isInheritedProperty(id))
         state.parentStyle()->setHasExplicitlyInheritedProperties();
@@ -235,36 +230,6 @@ void StyleBuilderFunctions::applyValueCSSPropertyDirection(StyleResolverState& s
     Element* element = state.element();
     if (element && element == element->document().documentElement())
         element->document().setDirectionSetOnDocumentElement(true);
-}
-
-void StyleBuilderFunctions::applyInitialCSSPropertyFontFamily(StyleResolverState& state)
-{
-    state.fontBuilder().setFontFamilyInitial();
-}
-
-void StyleBuilderFunctions::applyInheritCSSPropertyFontFamily(StyleResolverState& state)
-{
-    state.fontBuilder().setFontFamilyInherit(state.parentFontDescription());
-}
-
-void StyleBuilderFunctions::applyValueCSSPropertyFontFamily(StyleResolverState& state, CSSValue* value)
-{
-    state.fontBuilder().setFontFamilyValue(value);
-}
-
-void StyleBuilderFunctions::applyInitialCSSPropertyFontSize(StyleResolverState& state)
-{
-    state.fontBuilder().setFontSizeInitial();
-}
-
-void StyleBuilderFunctions::applyInheritCSSPropertyFontSize(StyleResolverState& state)
-{
-    state.fontBuilder().setFontSizeInherit(state.parentFontDescription());
-}
-
-void StyleBuilderFunctions::applyValueCSSPropertyFontSize(StyleResolverState& state, CSSValue* value)
-{
-    state.fontBuilder().setFontSizeValue(value, state.parentStyle(), state.rootElementStyle());
 }
 
 void StyleBuilderFunctions::applyValueCSSPropertyGlyphOrientationVertical(StyleResolverState& state, CSSValue* value)
@@ -830,25 +795,6 @@ void StyleBuilderFunctions::applyValueCSSPropertyWebkitFilter(StyleResolverState
     FilterOperations operations;
     if (FilterOperationResolver::createFilterOperations(value, state.cssToLengthConversionData(), operations, state))
         state.style()->setFilter(operations);
-}
-
-// FIXME: We should use the same system for this as the rest of the pseudo-shorthands (e.g. background-position)
-void StyleBuilderFunctions::applyInitialCSSPropertyWebkitPerspectiveOrigin(StyleResolverState& state)
-{
-    applyInitialCSSPropertyWebkitPerspectiveOriginX(state);
-    applyInitialCSSPropertyWebkitPerspectiveOriginY(state);
-}
-
-void StyleBuilderFunctions::applyInheritCSSPropertyWebkitPerspectiveOrigin(StyleResolverState& state)
-{
-    applyInheritCSSPropertyWebkitPerspectiveOriginX(state);
-    applyInheritCSSPropertyWebkitPerspectiveOriginY(state);
-}
-
-void StyleBuilderFunctions::applyValueCSSPropertyWebkitPerspectiveOrigin(StyleResolverState&, CSSValue* value)
-{
-    // This is expanded in the parser
-    ASSERT_NOT_REACHED();
 }
 
 void StyleBuilderFunctions::applyInitialCSSPropertyWebkitTextEmphasisStyle(StyleResolverState& state)

@@ -397,11 +397,6 @@ Element* TreeScope::findAnchor(const String& name)
     return 0;
 }
 
-bool TreeScope::applyAuthorStyles() const
-{
-    return rootNode().isDocumentNode();
-}
-
 void TreeScope::adoptIfNeeded(Node& node)
 {
     ASSERT(this);
@@ -601,7 +596,7 @@ void TreeScope::setNeedsStyleRecalcForViewportUnits()
             root->setNeedsStyleRecalcForViewportUnits();
         RenderStyle* style = element->renderStyle();
         if (style && style->hasViewportUnits())
-            element->setNeedsStyleRecalc(LocalStyleChange);
+            element->setNeedsStyleRecalc(LocalStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::ViewportUnits));
     }
 }
 

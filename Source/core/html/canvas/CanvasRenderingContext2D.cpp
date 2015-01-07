@@ -38,8 +38,8 @@
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/CSSPropertyNames.h"
 #include "core/css/CSSFontSelector.h"
-#include "core/css/parser/BisonCSSParser.h"
 #include "core/css/StylePropertySet.h"
+#include "core/css/parser/CSSParser.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/StyleEngine.h"
@@ -55,6 +55,7 @@
 #include "core/html/canvas/CanvasGradient.h"
 #include "core/html/canvas/CanvasPattern.h"
 #include "core/html/canvas/CanvasStyle.h"
+#include "core/html/canvas/HitRegionOptions.h"
 #include "core/html/canvas/Path2D.h"
 #include "core/rendering/RenderImage.h"
 #include "core/rendering/RenderLayer.h"
@@ -99,7 +100,6 @@ CanvasRenderingContext2D::CanvasRenderingContext2D(HTMLCanvasElement* canvas, co
     , m_tryRestoreContextEventTimer(this, &CanvasRenderingContext2D::tryRestoreContextEvent)
 {
     m_stateStack.append(adoptPtrWillBeNoop(new State()));
-    ScriptWrappable::init(this);
 }
 
 void CanvasRenderingContext2D::unwindStateStack()
@@ -1525,6 +1525,7 @@ void CanvasRenderingContext2D::drawImageInternal(CanvasImageSource* imageSource,
 
     FloatRect dirtyRect = clipBounds;
     if (imageSource->isVideoElement()) {
+        // TODO(dshwang): unify video code into below code to composite correctly; crbug.com/407079
         drawVideo(static_cast<HTMLVideoElement*>(imageSource), srcRect, dstRect);
         computeDirtyRect(dstRect, clipBounds, &dirtyRect);
     } else {
@@ -1929,7 +1930,7 @@ void CanvasRenderingContext2D::setFont(const String& newFont)
     if (!parsedStyle) {
         parsedStyle = MutableStylePropertySet::create();
         CSSParserMode mode = m_usesCSSCompatibilityParseMode ? HTMLQuirksMode : HTMLStandardMode;
-        BisonCSSParser::parseValue(parsedStyle.get(), CSSPropertyFont, newFont, true, mode, 0);
+        CSSParser::parseValue(parsedStyle.get(), CSSPropertyFont, newFont, true, mode, 0);
         m_fetchedFonts.add(newFont, parsedStyle);
     }
     if (parsedStyle->isEmpty())
@@ -1950,6 +1951,7 @@ void CanvasRenderingContext2D::setFont(const String& newFont)
     // Map the <canvas> font into the text style. If the font uses keywords like larger/smaller, these will work
     // relative to the canvas.
     RefPtr<RenderStyle> newStyle = RenderStyle::create();
+    canvas()->document().updateRenderTreeIfNeeded();
     if (RenderStyle* computedStyle = canvas()->computedStyle()) {
         FontDescription elementFontDescription(computedStyle->fontDescription());
         // Reset the computed size to avoid inheriting the zoom factor from the <canvas> element.
@@ -2087,32 +2089,6 @@ void CanvasRenderingContext2D::strokeText(const String& text, float x, float y, 
     drawTextInternal(text, x, y, false, maxWidth, true);
 }
 
-static inline bool isSpaceCharacter(UChar c)
-{
-    // According to specification all space characters should be replaced with 0x0020 space character.
-    // http://www.whatwg.org/specs/web-apps/current-work/multipage/the-canvas-element.html#text-preparation-algorithm
-    // The space characters according to specification are : U+0020, U+0009, U+000A, U+000C, and U+000D.
-    // http://www.whatwg.org/specs/web-apps/current-work/multipage/common-microsyntaxes.html#space-character
-    // This function returns true for 0x000B also, so that this is backward compatible.
-    // Otherwise, the test LayoutTests/canvas/philip/tests/2d.text.draw.space.collapse.space.html will fail
-    return c == 0x0009 || c == 0x000A || c == 0x000B || c == 0x000C || c == 0x000D;
-}
-
-static String normalizeSpaces(const String& text)
-{
-    unsigned textLength = text.length();
-    Vector<UChar> charVector(textLength);
-
-    for (unsigned i = 0; i < textLength; i++) {
-        if (isSpaceCharacter(text[i]))
-            charVector[i] = ' ';
-        else
-            charVector[i] = text[i];
-    }
-
-    return String(charVector);
-}
-
 PassRefPtrWillBeRawPtr<TextMetrics> CanvasRenderingContext2D::measureText(const String& text)
 {
     RefPtrWillBeRawPtr<TextMetrics> metrics = TextMetrics::create();
@@ -2124,8 +2100,7 @@ PassRefPtrWillBeRawPtr<TextMetrics> CanvasRenderingContext2D::measureText(const 
     FontCachePurgePreventer fontCachePurgePreventer;
     canvas()->document().updateRenderTreeIfNeeded();
     const Font& font = accessFont();
-    String normalizedText = normalizeSpaces(text);
-    const TextRun textRun(normalizedText);
+    const TextRun textRun(text, 0, 0, TextRun::AllowTrailingExpansion | TextRun::ForbidLeadingExpansion, LTR, false, true, true);
     FloatRect textBounds = font.selectionRectForText(textRun, FloatPoint(), font.fontDescription().computedSize(), 0, -1, true);
 
     // x direction
@@ -2189,7 +2164,6 @@ void CanvasRenderingContext2D::drawTextInternal(const String& text, float x, flo
 
     const Font& font = accessFont();
     const FontMetrics& fontMetrics = font.fontMetrics();
-    String normalizedText = normalizeSpaces(text);
 
     // FIXME: Need to turn off font smoothing.
 
@@ -2198,11 +2172,10 @@ void CanvasRenderingContext2D::drawTextInternal(const String& text, float x, flo
     bool isRTL = direction == RTL;
     bool override = computedStyle ? isOverride(computedStyle->unicodeBidi()) : false;
 
-    TextRun textRun(normalizedText, 0, 0, TextRun::AllowTrailingExpansion, direction, override, true);
+    TextRun textRun(text, 0, 0, TextRun::AllowTrailingExpansion, direction, override, true, true);
     // Draw the item text at the correct point.
     FloatPoint location(x, y + getFontBaseline(fontMetrics));
-
-    float fontWidth = font.width(TextRun(normalizedText, 0, 0, TextRun::AllowTrailingExpansion, direction, override));
+    float fontWidth = font.width(textRun);
 
     useMaxWidth = (useMaxWidth && maxWidth < fontWidth);
     float width = useMaxWidth ? maxWidth : fontWidth;
@@ -2415,25 +2388,17 @@ void CanvasRenderingContext2D::drawFocusRing(const Path& path)
     didDraw(dirtyRect);
 }
 
-void CanvasRenderingContext2D::addHitRegion(ExceptionState& exceptionState)
+void CanvasRenderingContext2D::addHitRegion(const HitRegionOptions& options, ExceptionState& exceptionState)
 {
-    addHitRegion(Dictionary(), exceptionState);
-}
-
-void CanvasRenderingContext2D::addHitRegion(const Dictionary& options, ExceptionState& exceptionState)
-{
-    HitRegionOptions passOptions;
-
-    options.getWithUndefinedOrNullCheck("id", passOptions.id);
-    options.getWithUndefinedOrNullCheck("control", passOptions.control);
+    HitRegionOptionsInternal passOptions;
+    passOptions.id = options.id();
+    passOptions.control = options.control();
     if (passOptions.id.isEmpty() && !passOptions.control) {
         exceptionState.throwDOMException(NotSupportedError, "Both id and control are null.");
         return;
     }
 
-    RefPtrWillBeMember<Path2D> path2d;
-    options.getWithUndefinedOrNullCheck("path", path2d);
-    Path hitRegionPath = path2d ? path2d->path() : m_path;
+    Path hitRegionPath = options.hasPath() ? options.path()->path() : m_path;
 
     FloatRect clipBounds;
     GraphicsContext* context = drawingContext();
@@ -2456,9 +2421,7 @@ void CanvasRenderingContext2D::addHitRegion(const Dictionary& options, Exception
 
     passOptions.path = hitRegionPath;
 
-    String fillRuleString;
-    options.getWithUndefinedOrNullCheck("fillRule", fillRuleString);
-    if (fillRuleString.isEmpty() || fillRuleString != "evenodd")
+    if (options.fillRule() != "evenodd")
         passOptions.fillRule = RULE_NONZERO;
     else
         passOptions.fillRule = RULE_EVENODD;
@@ -2466,7 +2429,7 @@ void CanvasRenderingContext2D::addHitRegion(const Dictionary& options, Exception
     addHitRegionInternal(passOptions, exceptionState);
 }
 
-void CanvasRenderingContext2D::addHitRegionInternal(const HitRegionOptions& options, ExceptionState& exceptionState)
+void CanvasRenderingContext2D::addHitRegionInternal(const HitRegionOptionsInternal& options, ExceptionState& exceptionState)
 {
     if (!m_hitRegionManager)
         m_hitRegionManager = HitRegionManager::create();

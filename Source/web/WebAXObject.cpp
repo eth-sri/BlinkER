@@ -54,8 +54,6 @@
 #include "public/web/WebNode.h"
 #include "wtf/text/StringBuilder.h"
 
-using namespace blink;
-
 namespace blink {
 
 #if ENABLE(ASSERT)
@@ -84,12 +82,6 @@ bool WebAXObject::equals(const WebAXObject& n) const
 {
     return m_private.get() == n.m_private.get();
 }
-
-// static
-void WebAXObject::enableAccessibility() { }
-
-// static
-void WebAXObject::enableInlineTextBoxAccessibility() { }
 
 bool WebAXObject::isDetached() const
 {

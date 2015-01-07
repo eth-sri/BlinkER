@@ -3,34 +3,79 @@ This test validates initial set of loaded modules.
 
 Running: testInitialLoad
 Loaded modules:
-    main
+    bindings
+    common
+    components
     elements
+    host
+    main
+    screencast
+    sdk
+    toolbox
+    ui
+    workspace
 
 Running: testCreateElementsPanel
 Loaded modules:
-    main
+    bindings
+    common
+    components
     elements
+    host
+    main
+    screencast
+    sdk
+    toolbox
+    ui
+    workspace
 
 Running: testCreateNetworkPanel
 Loaded modules:
-    main
+    bindings
+    common
+    components
     elements
+    host
+    main
     network
+    screencast
+    sdk
     source_frame
+    toolbox
+    ui
+    workspace
 
 Running: testShowSourcesPanel
 Loaded modules:
-    main
+    bindings
+    common
+    components
     elements
+    host
+    main
     network
-    sources
+    screencast
+    sdk
     source_frame
+    sources
+    toolbox
+    ui
+    workspace
 
 Running: testOpenUISourceCode
 Loaded modules:
-    main
+    bindings
+    common
+    components
     elements
+    host
+    main
     network
-    sources
+    screencast
+    sdk
     source_frame
+    sources
+    toolbox
+    ui
+    workspace
 

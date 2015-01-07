@@ -14,7 +14,7 @@ FAIL childWindow.applicationCache.onobsolete should be null. Threw exception Typ
 FAIL childWindow.applicationCache.onprogress should be null. Threw exception TypeError: Cannot read property 'onprogress' of null
 FAIL childWindow.applicationCache.onupdateready should be null. Threw exception TypeError: Cannot read property 'onupdateready' of null
 FAIL childWindow.applicationCache.status should be 0. Threw exception TypeError: Cannot read property 'status' of null
-PASS childWindow.closed is false
+PASS childWindow.closed is true
 PASS childWindow.defaultStatus is ''
 PASS childWindow.defaultstatus is ''
 PASS childWindow.devicePixelRatio is 0
@@ -49,12 +49,10 @@ PASS childWindow.navigator.language is window.navigator.language
 PASS childWindow.navigator.maxTouchPoints is 0
 PASS childWindow.navigator.onLine is window.navigator.onLine
 PASS childWindow.navigator.platform is window.navigator.platform
+PASS childWindow.navigator.presentation.onavailablechange is null
 PASS childWindow.navigator.product is window.navigator.product
 PASS childWindow.navigator.productSub is window.navigator.productSub
-PASS childWindow.navigator.serviceWorker.active is null
 PASS childWindow.navigator.serviceWorker.controller is null
-PASS childWindow.navigator.serviceWorker.installing is null
-PASS childWindow.navigator.serviceWorker.waiting is null
 PASS childWindow.navigator.userAgent is ''
 PASS childWindow.navigator.vendor is window.navigator.vendor
 PASS childWindow.navigator.vendorSub is ''

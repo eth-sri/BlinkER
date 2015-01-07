@@ -28,7 +28,6 @@
 namespace blink {
 
 class DocumentFragment;
-class HTMLCollection;
 class HTMLFormElement;
 class HTMLMenuElement;
 class ExceptionState;
@@ -40,6 +39,7 @@ enum TranslateAttributeMode {
 };
 
 class HTMLElement : public Element {
+    DEFINE_WRAPPERTYPEINFO();
 public:
     DECLARE_ELEMENT_FACTORY_WITH_TAGNAME(HTMLElement);
 
@@ -145,7 +145,6 @@ inline HTMLElement::HTMLElement(const QualifiedName& tagName, Document& document
     : Element(tagName, &document, type)
 {
     ASSERT(!tagName.localName().isNull());
-    ScriptWrappable::init(this);
 }
 
 inline bool Node::hasTagName(const HTMLQualifiedName& name) const

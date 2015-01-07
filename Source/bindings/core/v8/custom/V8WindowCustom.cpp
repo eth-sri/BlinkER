@@ -41,7 +41,6 @@
 #include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8EventListener.h"
 #include "bindings/core/v8/V8EventListenerList.h"
-#include "bindings/core/v8/V8GCForContextDispose.h"
 #include "bindings/core/v8/V8HTMLCollection.h"
 #include "bindings/core/v8/V8HiddenValue.h"
 #include "bindings/core/v8/V8Node.h"
@@ -77,7 +76,7 @@ static void windowSetTimeoutImpl(const v8::FunctionCallbackInfo<v8::Value>& info
     if (argumentCount < 1)
         return;
 
-    LocalDOMWindow* impl = V8Window::toNative(info.Holder());
+    LocalDOMWindow* impl = V8Window::toImpl(info.Holder());
     if (!impl->frame() || !impl->document()) {
         exceptionState.throwDOMException(InvalidAccessError, "No script context is available in which to execute the script.");
         return;
@@ -138,19 +137,12 @@ static void windowSetTimeoutImpl(const v8::FunctionCallbackInfo<v8::Value>& info
     else
         timerId = DOMWindowTimers::setInterval(*impl, action.release(), timeout);
 
-    // Try to do the idle notification before the timeout expires to get better
-    // use of any idle time. Aim for the middle of the interval for simplicity.
-    if (timeout >= 0) {
-        double maximumFireInterval = static_cast<double>(timeout) / 1000 / 2;
-        V8GCForContextDispose::instanceTemplate().notifyIdleSooner(maximumFireInterval);
-    }
-
     v8SetReturnValue(info, timerId);
 }
 
 void V8Window::eventAttributeGetterCustom(const v8::PropertyCallbackInfo<v8::Value>& info)
 {
-    LocalFrame* frame = V8Window::toNative(info.Holder())->frame();
+    LocalFrame* frame = V8Window::toImpl(info.Holder())->frame();
     ExceptionState exceptionState(ExceptionState::GetterContext, "event", "Window", info.Holder(), info.GetIsolate());
     if (!BindingSecurity::shouldAllowAccessToFrame(info.GetIsolate(), frame, exceptionState)) {
         exceptionState.throwIfNeeded();
@@ -171,7 +163,7 @@ void V8Window::eventAttributeGetterCustom(const v8::PropertyCallbackInfo<v8::Val
 
 void V8Window::eventAttributeSetterCustom(v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void>& info)
 {
-    LocalFrame* frame = V8Window::toNative(info.Holder())->frame();
+    LocalFrame* frame = V8Window::toImpl(info.Holder())->frame();
     ExceptionState exceptionState(ExceptionState::SetterContext, "event", "Window", info.Holder(), info.GetIsolate());
     if (!BindingSecurity::shouldAllowAccessToFrame(info.GetIsolate(), frame, exceptionState)) {
         exceptionState.throwIfNeeded();
@@ -189,7 +181,7 @@ void V8Window::eventAttributeSetterCustom(v8::Local<v8::Value> value, const v8::
 
 void V8Window::frameElementAttributeGetterCustom(const v8::PropertyCallbackInfo<v8::Value>& info)
 {
-    LocalDOMWindow* impl = V8Window::toNative(info.Holder());
+    LocalDOMWindow* impl = V8Window::toImpl(info.Holder());
     ExceptionState exceptionState(ExceptionState::GetterContext, "frame", "Window", info.Holder(), info.GetIsolate());
     if (!BindingSecurity::shouldAllowAccessToNode(info.GetIsolate(), impl->frameElement(), exceptionState)) {
         v8SetReturnValueNull(info);
@@ -207,7 +199,7 @@ void V8Window::frameElementAttributeGetterCustom(const v8::PropertyCallbackInfo<
 
 void V8Window::openerAttributeSetterCustom(v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void>& info)
 {
-    LocalDOMWindow* impl = V8Window::toNative(info.Holder());
+    LocalDOMWindow* impl = V8Window::toImpl(info.Holder());
     ExceptionState exceptionState(ExceptionState::SetterContext, "opener", "Window", info.Holder(), info.GetIsolate());
     if (!BindingSecurity::shouldAllowAccessToFrame(info.GetIsolate(), impl->frame(), exceptionState)) {
         exceptionState.throwIfNeeded();
@@ -244,7 +236,7 @@ void V8Window::postMessageMethodCustom(const v8::FunctionCallbackInfo<v8::Value>
 {
     // None of these need to be RefPtr because info and context are guaranteed
     // to hold on to them.
-    LocalDOMWindow* window = V8Window::toNative(info.Holder());
+    LocalDOMWindow* window = V8Window::toImpl(info.Holder());
     LocalDOMWindow* source = callingDOMWindow(info.GetIsolate());
 
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "postMessage", "Window", info.Holder(), info.GetIsolate());
@@ -334,7 +326,7 @@ v8::Handle<v8::Value> DialogHandler::returnValue() const
 {
     if (!m_scriptStateForDialogFrame)
         return v8Undefined();
-    ASSERT(!m_scriptStateForDialogFrame->contextIsEmpty());
+    ASSERT(!m_scriptStateForDialogFrame->contextIsValid());
 
     v8::Isolate* isolate = m_scriptStateForDialogFrame->isolate();
     v8::EscapableHandleScope handleScope(isolate);
@@ -352,7 +344,7 @@ static void setUpDialog(LocalDOMWindow* dialog, void* handler)
 
 void V8Window::showModalDialogMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    LocalDOMWindow* impl = V8Window::toNative(info.Holder());
+    LocalDOMWindow* impl = V8Window::toImpl(info.Holder());
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "showModalDialog", "Window", info.Holder(), info.GetIsolate());
     if (!BindingSecurity::shouldAllowAccessToFrame(info.GetIsolate(), impl->frame(), exceptionState)) {
         exceptionState.throwIfNeeded();
@@ -370,7 +362,7 @@ void V8Window::showModalDialogMethodCustom(const v8::FunctionCallbackInfo<v8::Va
 
 void V8Window::openMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    LocalDOMWindow* impl = V8Window::toNative(info.Holder());
+    LocalDOMWindow* impl = V8Window::toImpl(info.Holder());
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "open", "Window", info.Holder(), info.GetIsolate());
     if (!BindingSecurity::shouldAllowAccessToFrame(info.GetIsolate(), impl->frame(), exceptionState)) {
         exceptionState.throwIfNeeded();
@@ -397,7 +389,7 @@ void V8Window::openMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 void V8Window::namedPropertyGetterCustom(v8::Local<v8::String> name, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
 
-    LocalDOMWindow* window = V8Window::toNative(info.Holder());
+    LocalDOMWindow* window = V8Window::toImpl(info.Holder());
     if (!window)
         return;
 
@@ -459,7 +451,7 @@ bool V8Window::namedSecurityCheckCustom(v8::Local<v8::Object> host, v8::Local<v8
     if (window.IsEmpty())
         return false; // the frame is gone.
 
-    LocalDOMWindow* targetWindow = V8Window::toNative(window);
+    LocalDOMWindow* targetWindow = V8Window::toImpl(window);
 
     ASSERT(targetWindow);
 
@@ -502,7 +494,7 @@ bool V8Window::indexedSecurityCheckCustom(v8::Local<v8::Object> host, uint32_t i
     if (window.IsEmpty())
         return false;
 
-    LocalDOMWindow* targetWindow = V8Window::toNative(window);
+    LocalDOMWindow* targetWindow = V8Window::toImpl(window);
 
     ASSERT(targetWindow);
 

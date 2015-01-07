@@ -33,7 +33,6 @@
 
 #include "core/rendering/RenderObject.h"
 #include "core/svg/SVGElement.h"
-#include "platform/geometry/FloatRect.h"
 
 namespace blink {
 
@@ -41,8 +40,6 @@ namespace blink {
 // but not all. (e.g. RenderSVGForeignObject, RenderSVGBlock) thus methods
 // required by SVG renders need to be declared on RenderObject, but shared
 // logic can go in this class or in SVGRenderSupport.
-
-class SVGElement;
 
 class RenderSVGModelObject : public RenderObject {
 public:
@@ -67,8 +64,6 @@ public:
 
     virtual bool isSVG() const OVERRIDE FINAL { return true; }
 
-    virtual void invalidateTreeIfNeeded(const PaintInvalidationState&) OVERRIDE;
-
 protected:
     virtual void addLayerHitTestRects(LayerHitTestRects&, const RenderLayer* currentCompositedLayer, const LayoutPoint& layerOffset, const LayoutRect& containerRect) const OVERRIDE FINAL;
     virtual void willBeDestroyed() OVERRIDE;
@@ -81,7 +76,7 @@ private:
     virtual bool nodeAtPoint(const HitTestRequest&, HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction) OVERRIDE FINAL;
     virtual void absoluteFocusRingQuads(Vector<FloatQuad>&) OVERRIDE FINAL;
 
-    void invalidatePaintIfNeeded(const PaintInvalidationState&);
+    virtual void invalidateTreeIfNeeded(const PaintInvalidationState&) OVERRIDE FINAL;
 };
 
 }

@@ -37,9 +37,9 @@ namespace blink {
 class AutoscrollController;
 class ExceptionState;
 class HTMLOptionElement;
-class MouseEvent;
 
 class HTMLSelectElement FINAL : public HTMLFormControlElementWithState, public TypeAheadDataSource {
+    DEFINE_WRAPPERTYPEINFO();
 public:
     static PassRefPtrWillBeRawPtr<HTMLSelectElement> create(Document&);
     static PassRefPtrWillBeRawPtr<HTMLSelectElement> create(Document&, HTMLFormElement*);
@@ -229,6 +229,6 @@ private:
     int m_suggestedIndex;
 };
 
-} // namespace
+} // namespace blink
 
-#endif
+#endif // HTMLSelectElement_h

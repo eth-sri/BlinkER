@@ -224,6 +224,41 @@ TestSuite.prototype.addSniffer = function(receiver, methodName, override, opt_st
     };
 };
 
+/**
+ * Waits for current throttler invocations, if any.
+ * @param {!WebInspector.Throttler} throttler
+ * @param {!function} callback
+ */
+TestSuite.prototype.waitForThrottler = function(throttler, callback)
+{
+    var test = this;
+    var scheduleShouldFail = true;
+    test.addSniffer(throttler, "schedule", onSchedule);
+
+    function hasSomethingScheduled()
+    {
+        return throttler._isRunningProcess || throttler._process;
+    }
+
+    function checkState()
+    {
+        if (!hasSomethingScheduled()) {
+            scheduleShouldFail = false;
+            callback();
+            return;
+        }
+
+        test.addSniffer(throttler, "_processCompletedForTests", checkState);
+    }
+
+    function onSchedule()
+    {
+        if (scheduleShouldFail)
+            test.fail("Unexpected Throttler.schedule");
+    }
+
+    checkState();
+};
 
 // UI Tests
 
@@ -615,8 +650,9 @@ TestSuite.prototype.testDeviceMetricsOverrides = function()
         test.releaseControl();
     }
 
-    step1();
+    WebInspector.overridesSupport._deviceMetricsChangedListenerMuted = true;
     test.takeControl();
+    this.waitForThrottler(WebInspector.overridesSupport._deviceMetricsThrottler, step1);
 };
 
 TestSuite.prototype.waitForTestResultsInConsole = function()
@@ -734,7 +770,6 @@ TestSuite.prototype.evaluateInConsole_ = function(code, callback)
 {
     function innerEvaluate()
     {
-        WebInspector.console.show();
         var consoleView = WebInspector.ConsolePanel._view();
         consoleView._prompt.text = code;
         consoleView._promptElement.dispatchEvent(TestSuite.createKeyEvent("Enter"));
@@ -750,7 +785,7 @@ TestSuite.prototype.evaluateInConsole_ = function(code, callback)
         return;
     }
 
-    innerEvaluate.call(this);
+    WebInspector.console.showPromise().then(innerEvaluate.bind(this));
 };
 
 /**

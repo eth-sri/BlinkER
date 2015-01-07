@@ -208,10 +208,6 @@ void DrawingBuffer::freeRecycledMailboxes()
 
 bool DrawingBuffer::prepareMailbox(WebExternalTextureMailbox* outMailbox, WebExternalBitmap* bitmap)
 {
-    ASSERT(!m_isHidden);
-    if (!m_contentsChanged)
-        return false;
-
     if (m_destructionInProgress) {
         // It can be hit in the following sequence.
         // 1. WebGL draws something.
@@ -220,6 +216,9 @@ bool DrawingBuffer::prepareMailbox(WebExternalTextureMailbox* outMailbox, WebExt
         // 4. Here.
         return false;
     }
+    ASSERT(!m_isHidden);
+    if (!m_contentsChanged)
+        return false;
 
     // Resolve the multisampled buffer into m_colorBuffer texture.
     if (m_multisampleMode != None)
@@ -546,6 +545,8 @@ void DrawingBuffer::paintCompositedResultsToCanvas(ImageBuffer* imageBuffer)
         context->deleteTexture(sourceTexture);
         context->flush();
         m_context->waitSyncPoint(context->insertSyncPoint());
+        imageBuffer->didModifyBackingTexture();
+
         return;
     }
 
@@ -953,7 +954,7 @@ void DrawingBuffer::paintFramebufferToCanvas(int framebuffer, int width, int hei
         // pixel data. We will then use Skia to rescale this bitmap to
         // the size of the canvas's backing store.
         if (m_resizingBitmap.width() != width || m_resizingBitmap.height() != height) {
-            if (!m_resizingBitmap.allocN32Pixels(width, height))
+            if (!m_resizingBitmap.tryAllocN32Pixels(width, height))
                 return;
         }
         readbackBitmap = &m_resizingBitmap;

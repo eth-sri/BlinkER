@@ -40,9 +40,26 @@
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "core/workers/WorkerGlobalScopeProxy.h"
+#include "platform/network/ResourceError.h"
+#include "platform/network/ResourceResponse.h"
 #include "wtf/text/StringBuilder.h"
 
 namespace blink {
+
+static const HashSet<int>& allClientReportingMessageTypes()
+{
+    DEFINE_STATIC_LOCAL(HashSet<int>, types, ());
+    if (types.isEmpty()) {
+        types.add(LogMessageType);
+        types.add(DirMessageType);
+        types.add(DirXMLMessageType);
+        types.add(TableMessageType);
+        types.add(TraceMessageType);
+        types.add(ClearMessageType);
+        types.add(AssertMessageType);
+    }
+    return types;
+}
 
 namespace {
 
@@ -51,7 +68,7 @@ int muteCount = 0;
 }
 
 FrameConsole::FrameConsole(LocalFrame& frame)
-    : m_frame(frame)
+    : m_frame(&frame)
 {
 }
 
@@ -65,7 +82,7 @@ void FrameConsole::addMessage(PassRefPtrWillBeRawPtr<ConsoleMessage> prpConsoleM
 
     // FIXME: This should not need to reach for the main-frame.
     // Inspector code should just take the current frame and know how to walk itself.
-    ExecutionContext* context = m_frame.document();
+    ExecutionContext* context = frame().document();
     if (!context)
         return;
 
@@ -81,29 +98,40 @@ void FrameConsole::addMessage(PassRefPtrWillBeRawPtr<ConsoleMessage> prpConsoleM
 
     messageStorage()->reportMessage(consoleMessage);
 
-    if (consoleMessage->source() == CSSMessageSource)
+    if (consoleMessage->source() == CSSMessageSource || consoleMessage->source() == NetworkMessageSource)
         return;
 
     RefPtrWillBeRawPtr<ScriptCallStack> reportedCallStack = nullptr;
     if (consoleMessage->source() != ConsoleAPIMessageSource) {
-        if (consoleMessage->callStack() && m_frame.chromeClient().shouldReportDetailedMessageForSource(messageURL))
+        if (consoleMessage->callStack() && frame().chromeClient().shouldReportDetailedMessageForSource(messageURL))
             reportedCallStack = consoleMessage->callStack();
     } else {
-        if (!m_frame.host() || (consoleMessage->scriptArguments() && consoleMessage->scriptArguments()->argumentCount() == 0))
+        if (!frame().host() || (consoleMessage->scriptArguments() && !consoleMessage->scriptArguments()->argumentCount()))
             return;
 
-        MessageType type = consoleMessage->type();
-        if (type == StartGroupMessageType || type == EndGroupMessageType || type == StartGroupCollapsedMessageType)
+        if (!allClientReportingMessageTypes().contains(consoleMessage->type()))
             return;
 
-        if (m_frame.chromeClient().shouldReportDetailedMessageForSource(messageURL))
+        if (frame().chromeClient().shouldReportDetailedMessageForSource(messageURL))
             reportedCallStack = createScriptCallStack(ScriptCallStack::maxCallStackSizeToCapture);
     }
 
     String stackTrace;
     if (reportedCallStack)
         stackTrace = FrameConsole::formatStackTraceString(consoleMessage->message(), reportedCallStack);
-    m_frame.chromeClient().addMessageToConsole(&m_frame, consoleMessage->source(), consoleMessage->level(), consoleMessage->message(), lineNumber, messageURL, stackTrace);
+    frame().chromeClient().addMessageToConsole(m_frame, consoleMessage->source(), consoleMessage->level(), consoleMessage->message(), lineNumber, messageURL, stackTrace);
+}
+
+void FrameConsole::reportResourceResponseReceived(DocumentLoader* loader, unsigned long requestIdentifier, const ResourceResponse& response)
+{
+    if (!loader)
+        return;
+    if (response.httpStatusCode() < 400)
+        return;
+    String message = "Failed to load resource: the server responded with a status of " + String::number(response.httpStatusCode()) + " (" + response.httpStatusText() + ')';
+    RefPtrWillBeRawPtr<ConsoleMessage> consoleMessage = ConsoleMessage::create(NetworkMessageSource, ErrorMessageLevel, message, response.url().string());
+    consoleMessage->setRequestIdentifier(requestIdentifier);
+    addMessage(consoleMessage.release());
 }
 
 String FrameConsole::formatStackTraceString(const String& originalMessage, PassRefPtrWillBeRawPtr<ScriptCallStack> callStack)
@@ -115,9 +143,9 @@ String FrameConsole::formatStackTraceString(const String& originalMessage, PassR
         stackTrace.appendLiteral(" (");
         stackTrace.append(frame.sourceURL());
         stackTrace.append(':');
-        stackTrace.append(String::number(frame.lineNumber()));
+        stackTrace.appendNumber(frame.lineNumber());
         stackTrace.append(':');
-        stackTrace.append(String::number(frame.columnNumber()));
+        stackTrace.appendNumber(frame.columnNumber());
         stackTrace.append(')');
     }
 
@@ -137,29 +165,45 @@ void FrameConsole::unmute()
 
 ConsoleMessageStorage* FrameConsole::messageStorage()
 {
-    LocalFrame* curFrame = &m_frame;
+    LocalFrame* curFrame = m_frame;
     Frame* topFrame = curFrame->tree().top();
     ASSERT(topFrame->isLocalFrame());
     LocalFrame* localTopFrame = toLocalFrame(topFrame);
     if (localTopFrame != curFrame)
         return localTopFrame->console().messageStorage();
     if (!m_consoleMessageStorage)
-        m_consoleMessageStorage = ConsoleMessageStorage::createForFrame(&m_frame);
+        m_consoleMessageStorage = ConsoleMessageStorage::createForFrame(m_frame);
     return m_consoleMessageStorage.get();
+}
+
+void FrameConsole::clearMessages()
+{
+    messageStorage()->clear();
 }
 
 void FrameConsole::adoptWorkerMessagesAfterTermination(WorkerGlobalScopeProxy* proxy)
 {
-    ConsoleMessageStorage* storage = messageStorage();
-    size_t messageCount = storage->size();
-    for (size_t i = 0; i < messageCount; ++i) {
-        if (storage->at(i)->workerGlobalScopeProxy() == proxy)
-            storage->at(i)->setWorkerGlobalScopeProxy(nullptr);
+    messageStorage()->adoptWorkerMessagesAfterTermination(proxy);
+}
+
+void FrameConsole::didFailLoading(unsigned long requestIdentifier, const ResourceError& error)
+{
+    if (error.isCancellation()) // Report failures only.
+        return;
+    StringBuilder message;
+    message.appendLiteral("Failed to load resource");
+    if (!error.localizedDescription().isEmpty()) {
+        message.appendLiteral(": ");
+        message.append(error.localizedDescription());
     }
+    RefPtrWillBeRawPtr<ConsoleMessage> consoleMessage = ConsoleMessage::create(NetworkMessageSource, ErrorMessageLevel, message.toString(), error.failingURL());
+    consoleMessage->setRequestIdentifier(requestIdentifier);
+    messageStorage()->reportMessage(consoleMessage.release());
 }
 
 void FrameConsole::trace(Visitor* visitor)
 {
+    visitor->trace(m_frame);
     visitor->trace(m_consoleMessageStorage);
 }
 

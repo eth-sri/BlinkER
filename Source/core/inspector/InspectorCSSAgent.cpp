@@ -68,7 +68,7 @@
 #include "core/rendering/RenderTextFragment.h"
 #include "platform/fonts/Font.h"
 #include "platform/fonts/GlyphBuffer.h"
-#include "platform/fonts/WidthIterator.h"
+#include "platform/fonts/SimpleShaper.h"
 #include "platform/text/TextRun.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/text/CString.h"
@@ -130,18 +130,26 @@ public:
 
 class InspectorCSSAgent::InspectorResourceContentLoaderCallback FINAL : public VoidCallback {
 public:
-    InspectorResourceContentLoaderCallback(InspectorCSSAgent*, PassRefPtr<EnableCallback>);
+    InspectorResourceContentLoaderCallback(InspectorCSSAgent*, PassRefPtrWillBeRawPtr<EnableCallback>);
+    virtual void trace(Visitor*) OVERRIDE;
     virtual void handleEvent() OVERRIDE;
 
 private:
-    InspectorCSSAgent* m_cssAgent;
-    RefPtr<EnableCallback> m_callback;
+    RawPtrWillBeMember<InspectorCSSAgent> m_cssAgent;
+    RefPtrWillBeMember<EnableCallback> m_callback;
 };
 
-InspectorCSSAgent::InspectorResourceContentLoaderCallback::InspectorResourceContentLoaderCallback(InspectorCSSAgent* cssAgent, PassRefPtr<EnableCallback> callback)
+InspectorCSSAgent::InspectorResourceContentLoaderCallback::InspectorResourceContentLoaderCallback(InspectorCSSAgent* cssAgent, PassRefPtrWillBeRawPtr<EnableCallback> callback)
     : m_cssAgent(cssAgent)
     , m_callback(callback)
 {
+}
+
+void InspectorCSSAgent::InspectorResourceContentLoaderCallback::trace(Visitor* visitor)
+{
+    visitor->trace(m_cssAgent);
+    visitor->trace(m_callback);
+    VoidCallback::trace(visitor);
 }
 
 void InspectorCSSAgent::InspectorResourceContentLoaderCallback::handleEvent()
@@ -445,7 +453,7 @@ void InspectorCSSAgent::resetNonPersistentData()
     resetPseudoStates();
 }
 
-void InspectorCSSAgent::enable(ErrorString*, PassRefPtr<EnableCallback> prpCallback)
+void InspectorCSSAgent::enable(ErrorString*, PassRefPtrWillBeRawPtr<EnableCallback> prpCallback)
 {
     m_state->setBoolean(CSSAgentState::cssAgentEnabled, true);
     if (!m_pageAgent->resourceContentLoader()) {
@@ -453,7 +461,7 @@ void InspectorCSSAgent::enable(ErrorString*, PassRefPtr<EnableCallback> prpCallb
         prpCallback->sendSuccess();
         return;
     }
-    m_pageAgent->resourceContentLoader()->ensureResourcesContentLoaded(adoptPtr(new InspectorCSSAgent::InspectorResourceContentLoaderCallback(this, prpCallback)));
+    m_pageAgent->resourceContentLoader()->ensureResourcesContentLoaded(new InspectorCSSAgent::InspectorResourceContentLoaderCallback(this, prpCallback));
 }
 
 void InspectorCSSAgent::wasEnabled()
@@ -744,9 +752,9 @@ void InspectorCSSAgent::collectPlatformFontsForRenderer(RenderText* renderer, Ha
         RenderStyle* style = renderer->style(box->isFirstLineStyle());
         const Font& font = style->font();
         TextRun run = box->constructTextRunForInspector(style, font);
-        WidthIterator it(&font, run, 0, false);
+        SimpleShaper shaper(&font, run, 0, false);
         GlyphBuffer glyphBuffer;
-        it.advance(run.length(), &glyphBuffer);
+        shaper.advance(run.length(), &glyphBuffer);
         for (unsigned i = 0; i < glyphBuffer.size(); ++i) {
             String familyName = glyphBuffer.fontDataAt(i)->platformData().fontFamilyName();
             if (familyName.isNull())
@@ -975,7 +983,7 @@ void InspectorCSSAgent::forcePseudoState(ErrorString* errorString, int nodeId, c
         m_nodeIdToForcedPseudoState.set(nodeId, forcedPseudoState);
     else
         m_nodeIdToForcedPseudoState.remove(nodeId);
-    element->ownerDocument()->setNeedsStyleRecalc(SubtreeStyleChange);
+    element->ownerDocument()->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::Inspector));
 }
 
 PassRefPtr<TypeBuilder::CSS::CSSMedia> InspectorCSSAgent::buildMediaObject(const MediaList* media, MediaListSource mediaListSource, const String& sourceURL, CSSStyleSheet* parentStyleSheet)
@@ -1443,7 +1451,7 @@ void InspectorCSSAgent::resetPseudoStates()
 
     m_nodeIdToForcedPseudoState.clear();
     for (WillBeHeapHashSet<RawPtrWillBeMember<Document> >::iterator it = documentsToChange.begin(), end = documentsToChange.end(); it != end; ++it)
-        (*it)->setNeedsStyleRecalc(SubtreeStyleChange);
+        (*it)->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::Inspector));
 }
 
 void InspectorCSSAgent::trace(Visitor* visitor)

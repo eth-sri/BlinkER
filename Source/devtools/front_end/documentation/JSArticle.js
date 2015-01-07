@@ -25,43 +25,55 @@ WebInspector.JSArticle = function()
 
 /**
  * @constructor
- * @param {string} name
- * @param {string} dataType
- * @param {string} optional
+ * @param {?WebInspector.WikiParser.Block} name
+ * @param {?WebInspector.WikiParser.Block} dataType
+ * @param {?WebInspector.WikiParser.Block} optional
  * @param {?WebInspector.WikiParser.Block} description
  */
 WebInspector.JSArticle.Parameter = function(name, dataType, optional, description)
 {
-    this.name = name;
-    this.dataType = dataType;
-    this.optional = optional;
+    this.name = WebInspector.JSArticle.unfoldStringValue(name);
+    this.dataType = WebInspector.JSArticle.unfoldStringValue(dataType);
+    var textContent = WebInspector.JSArticle.unfoldStringValue(optional);
+    this.optional = textContent ? textContent.toUpperCase() === "YES" : false;
     this.description = description;
 }
 
 /**
  * @constructor
- * @param {string} language
- * @param {string} code
- * @param {string} liveUrl
+ * @param {?WebInspector.WikiParser.Block} language
+ * @param {!WebInspector.WikiParser.Block} code
+ * @param {?WebInspector.WikiParser.Block} liveUrl
  * @param {?WebInspector.WikiParser.Block} description
  */
 WebInspector.JSArticle.Example = function(language, code, liveUrl, description)
 {
-    this.language = language;
-    this.code = code;
-    this.liveUrl = liveUrl;
+    this.language = WebInspector.JSArticle.unfoldStringValue(language);
+    this.code = WebInspector.JSArticle.unfoldStringValue(code);
+    this.liveUrl = WebInspector.JSArticle.unfoldStringValue(liveUrl);
     this.description = description;
 }
 
 /**
  * @constructor
- * @param {string} dataType
- * @param {string} returnValue
+ * @param {?WebInspector.WikiParser.Block} returnValueName
+ * @param {?WebInspector.WikiParser.Block} returnValueDescription
  */
-WebInspector.JSArticle.Method = function(dataType, returnValue)
+WebInspector.JSArticle.Method = function(returnValueName, returnValueDescription)
 {
-    this.dataType = dataType;
-    this.returnValue = returnValue;
+    this.returnValueName = WebInspector.JSArticle.unfoldStringValue(returnValueName);
+    this.returnValueDescription = returnValueDescription;
+}
+
+/**
+ * @param {?WebInspector.WikiParser.Block} block
+ * @return {?string}
+ */
+WebInspector.JSArticle.unfoldStringValue = function(block)
+{
+    if (block && block.hasChildren() && block.children()[0].hasChildren())
+        return block.children()[0].children()[0].text();
+    return null;
 }
 
 /**
@@ -70,22 +82,8 @@ WebInspector.JSArticle.Method = function(dataType, returnValue)
  */
 WebInspector.JSArticle.parse = function(wikiMarkupText)
 {
-    /**
-     * @param {string} string
-     * @param {string} debugInfo
-     * @return {?WebInspector.WikiParser.Block}
-     */
-    function parseString(string, debugInfo)
-    {
-        var result = wikiParser.parseString(string);
-        if (!result)
-            console.error("Can't parse " + debugInfo);
-        return result;
-    }
-
     var wikiParser = new WebInspector.WikiParser(wikiMarkupText);
     var wikiDocument = wikiParser.document();
-
     var article = new WebInspector.JSArticle();
     article.pageTitle = wikiDocument["Page_Title"];
     if (typeof article.pageTitle !== "string")
@@ -95,29 +93,26 @@ WebInspector.JSArticle.parse = function(wikiMarkupText)
         delete article.standardizationStatus;
     var apiObjectMethod = wikiDocument["API_Object_Method"];
     if (apiObjectMethod) {
-        var dataType = apiObjectMethod["Javascript_data_type"];
-        var returnValue = apiObjectMethod["Return_value_name"];
-        if (dataType && returnValue)
-            article.methods = new WebInspector.JSArticle.Method(dataType, returnValue);
+        var returnValueName = apiObjectMethod["Javascript_data_type"];
+        var returnValue = apiObjectMethod["Return_value_description"];
+        if (returnValueName && returnValue)
+            article.methods = new WebInspector.JSArticle.Method(returnValueName, returnValue);
     }
 
-    var remarks = wikiDocument["Remarks_Section"] ? wikiDocument["Remarks_Section"]["Remarks"] : null;
-    if (remarks)
-        article.remarks = parseString(remarks, "remarks");
+    article.remarks = wikiDocument["Remarks_Section"] ? wikiDocument["Remarks_Section"]["Remarks"] : null;
+    article.summary = wikiDocument["Summary_Section"];
 
-    var summary = wikiDocument["Summary_Section"];
-    if (summary)
-        article.summary = parseString(summary, "summary");
-
-    var examples = wikiDocument["Examples_Section"] ? wikiDocument["Examples_Section"]["Examples"] : [];
+    var examples = wikiDocument["Examples_Section"] && wikiDocument["Examples_Section"]["Examples"] ? wikiDocument["Examples_Section"]["Examples"] : [];
     if (!Array.isArray(examples) && typeof examples !== "undefined")
         examples = [examples];
 
     for (var i = 0; i < examples.length; ++i) {
-        var language = examples[i]["Single Example"]["Language"];
-        var code = examples[i]["Single Example"]["Code"];
-        var liveUrl = examples[i]["Single Example"]["LiveURL"];
-        var description = parseString(examples[i]["Single Example"]["Description"], "example description");
+        if (!examples[i].values)
+            break;
+        var language = examples[i].values["Language"];
+        var code = examples[i].values["Code"];
+        var liveUrl = examples[i].values["LiveURL"];
+        var description = examples[i].values["Description"];
         article.examples.push(new WebInspector.JSArticle.Example(language, code, liveUrl, description));
     }
 
@@ -126,10 +121,12 @@ WebInspector.JSArticle.parse = function(wikiMarkupText)
         parameters = [parameters];
 
     for (var i = 0; i < parameters.length; ++i) {
-        var name = parameters[i]["Method Parameter"]["Name"];
-        var dataType = parameters[i]["Method Parameter"]["Data type"];
-        var optional = parameters[i]["Method Parameter"]["Optional"];
-        var description = parseString(parameters[i]["Method Parameter"]["Description"], "method description");
+        if (!parameters[i].values)
+            break;
+        var name = parameters[i].values["Name"];
+        var dataType = parameters[i].values["Data type"];
+        var optional = parameters[i].values["Optional"];
+        var description = parameters[i].values["Description"];
         article.parameters.push(new WebInspector.JSArticle.Parameter(name, dataType, optional, description));
     }
 

@@ -65,7 +65,6 @@ HTMLAnchorElement::HTMLAnchorElement(const QualifiedName& tagName, Document& doc
     , m_cachedVisitedLinkHash(0)
     , m_wasFocusedByMouse(false)
 {
-    ScriptWrappable::init(this);
 }
 
 PassRefPtrWillBeRawPtr<HTMLAnchorElement> HTMLAnchorElement::create(Document& document)
@@ -90,14 +89,11 @@ bool HTMLAnchorElement::shouldHaveFocusAppearance() const
     return !m_wasFocusedByMouse || HTMLElement::supportsFocus();
 }
 
-bool HTMLAnchorElement::wasFocusedByMouse() const
+void HTMLAnchorElement::dispatchFocusEvent(Element* oldFocusedElement, FocusType type)
 {
-    return m_wasFocusedByMouse;
-}
-
-void HTMLAnchorElement::setWasFocusedByMouse(bool wasFocusedByMouse)
-{
-    m_wasFocusedByMouse = wasFocusedByMouse;
+    if (type != FocusTypePage)
+        m_wasFocusedByMouse = type == FocusTypeMouse;
+    HTMLElement::dispatchFocusEvent(oldFocusedElement, type);
 }
 
 bool HTMLAnchorElement::isMouseFocusable() const
@@ -196,13 +192,14 @@ void HTMLAnchorElement::parseAttribute(const QualifiedName& name, const AtomicSt
     if (name == hrefAttr) {
         bool wasLink = isLink();
         setIsLink(!value.isNull());
-        if (wasLink != isLink()) {
-            didAffectSelector(AffectedSelectorLink | AffectedSelectorVisited | AffectedSelectorEnabled);
-            if (wasLink && treeScope().adjustedFocusedElement() == this) {
-                // We might want to call blur(), but it's dangerous to dispatch
-                // events here.
-                document().setNeedsFocusedElementCheck();
-            }
+        if (wasLink || isLink()) {
+            pseudoStateChanged(CSSSelector::PseudoLink);
+            pseudoStateChanged(CSSSelector::PseudoVisited);
+        }
+        if (wasLink && !isLink() && treeScope().adjustedFocusedElement() == this) {
+            // We might want to call blur(), but it's dangerous to dispatch
+            // events here.
+            document().setNeedsFocusedElementCheck();
         }
         if (isLink()) {
             String parsedURL = stripLeadingAndTrailingHTMLSpaces(value);

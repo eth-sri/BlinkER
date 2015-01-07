@@ -33,6 +33,7 @@
 #include "core/fetch/RawResource.h"
 #include "core/fetch/ResourceLoaderOptions.h"
 #include "core/fetch/ResourcePtr.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/loader/DocumentLoadTiming.h"
 #include "core/loader/DocumentWriter.h"
 #include "core/loader/NavigationAction.h"
@@ -47,24 +48,15 @@ namespace blink {
 class WebThreadedDataReceiver;
 }
 
-namespace WTF {
-class SchedulePair;
-}
-
 namespace blink {
     class ApplicationCacheHost;
-    class ArchiveResource;
     class ArchiveResourceCollection;
     class ResourceFetcher;
-    class ContentFilter;
     class DocumentInit;
-    class FormState;
     class LocalFrame;
     class FrameLoader;
     class MHTMLArchive;
-    class Page;
     class ResourceLoader;
-    class SharedBuffer;
 
     class DocumentLoader : public RefCounted<DocumentLoader>, private RawResourceClient {
         WTF_MAKE_FAST_ALLOCATED;
@@ -112,15 +104,12 @@ namespace blink {
         void setIsClientRedirect(bool isClientRedirect) { m_isClientRedirect = isClientRedirect; }
         bool replacesCurrentHistoryItem() const { return m_replacesCurrentHistoryItem; }
         void setReplacesCurrentHistoryItem(bool replacesCurrentHistoryItem) { m_replacesCurrentHistoryItem = replacesCurrentHistoryItem; }
-        const AtomicString& overrideEncoding() const { return m_overrideEncoding; }
 
         bool scheduleArchiveLoad(Resource*, const ResourceRequest&);
 
         bool shouldContinueForNavigationPolicy(const ResourceRequest&, ContentSecurityPolicyCheck shouldCheckMainWorldContentSecurityPolicy, bool isTransitionNavigation = false);
         const NavigationAction& triggeringAction() const { return m_triggeringAction; }
         void setTriggeringAction(const NavigationAction& action) { m_triggeringAction = action; }
-
-        void setOverrideEncoding(const AtomicString& encoding) { m_overrideEncoding = encoding; }
 
         void setDefersLoading(bool);
 
@@ -135,6 +124,8 @@ namespace blink {
         bool isRedirect() const { return m_redirectChain.size() > 1; }
         void clearRedirectChain();
         void appendRedirect(const KURL&);
+
+        PassRefPtr<ContentSecurityPolicy> releaseContentSecurityPolicy() { return m_contentSecurityPolicy.release(); }
 
     protected:
         DocumentLoader(LocalFrame*, const ResourceRequest&, const SubstituteData&);
@@ -165,6 +156,7 @@ namespace blink {
         void willSendRequest(ResourceRequest&, const ResourceResponse&);
         void finishedLoading(double finishTime);
         void mainReceivedError(const ResourceError&);
+        void cancelLoadAfterXFrameOptionsOrCSPDenied(const ResourceResponse&);
         virtual void redirectReceived(Resource*, ResourceRequest&, const ResourceResponse&) OVERRIDE FINAL;
         virtual void updateRequest(Resource*, const ResourceRequest&) OVERRIDE FINAL;
         virtual void responseReceived(Resource*, const ResourceResponse&) OVERRIDE FINAL;
@@ -204,8 +196,6 @@ namespace blink {
         bool m_isClientRedirect;
         bool m_replacesCurrentHistoryItem;
 
-        AtomicString m_overrideEncoding;
-
         // The action that triggered loading - we keep this around for the
         // benefit of the various policy handlers.
         NavigationAction m_triggeringAction;
@@ -219,7 +209,9 @@ namespace blink {
         double m_timeOfLastDataReceived;
 
         friend class ApplicationCacheHost;  // for substitute resource delivery
-        OwnPtr<ApplicationCacheHost> m_applicationCacheHost;
+        OwnPtrWillBePersistent<ApplicationCacheHost> m_applicationCacheHost;
+
+        RefPtr<ContentSecurityPolicy> m_contentSecurityPolicy;
     };
 }
 

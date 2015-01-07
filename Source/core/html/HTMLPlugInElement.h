@@ -63,7 +63,7 @@ public:
     void requestPluginCreationWithoutRendererIfPossible();
     void createPluginWithoutRenderer();
 
-    bool usePlaceholderContent() { return m_usePlaceholderContent; }
+    bool usePlaceholderContent() const { return m_usePlaceholderContent; }
     void setUsePlaceholderContent(bool);
 
 protected:
@@ -90,6 +90,7 @@ protected:
     bool shouldUsePlugin(const KURL&, const String& mimeType, bool hasFallback, bool& useFallback);
 
     void dispatchErrorEvent();
+    void lazyReattachIfNeeded();
 
     String m_serviceType;
     String m_url;
@@ -111,7 +112,6 @@ private:
 
     // Element functions:
     virtual RenderObject* createRenderer(RenderStyle*) OVERRIDE;
-    virtual void willRecalcStyle(StyleRecalcChange) OVERRIDE FINAL;
     virtual bool supportsFocus() const OVERRIDE FINAL { return true; }
     virtual bool rendererIsFocusable() const OVERRIDE FINAL;
     virtual bool isKeyboardFocusable() const OVERRIDE FINAL;

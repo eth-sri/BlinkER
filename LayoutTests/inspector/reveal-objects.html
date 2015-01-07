@@ -21,7 +21,7 @@ function test() {
     InspectorTest.runTestSuite([
         function init(next)
         {
-            WebInspector.inspectorView.showPanel("elements");
+            WebInspector.inspectorView._showPanel("elements");
             installHooks();
 
             WebInspector.resourceTreeModel.forAllResources(function(r) {
@@ -62,44 +62,39 @@ function test() {
 
         function revealNode(next)
         {
-            WebInspector.Revealer.reveal(node);
-            next();
+            WebInspector.Revealer.revealPromise(node).then(next);
         },
 
         function revealUILocation(next)
         {
-            WebInspector.Revealer.reveal(uiLocation);
-            next();
+            WebInspector.Revealer.revealPromise(uiLocation).then(next);
         },
 
         function revealResource(next)
         {
-            WebInspector.Revealer.reveal(resource);
-            next();
+            WebInspector.Revealer.revealPromise(resource).then(next);
         },
 
         function revealRequestWithResource(next)
         {
-            WebInspector.Revealer.reveal(requestWithResource);
-            next();
+            WebInspector.Revealer.revealPromise(requestWithResource).then(next);
         },
 
         function revealRequestWithoutResource(next)
         {
-            WebInspector.Revealer.reveal(requestWithoutResource);
-            next();
+            WebInspector.Revealer.revealPromise(requestWithoutResource).then(next);
         }
     ]);
 
     function installHooks()
     {
-        WebInspector.inspectorView.panel("elements");
+        WebInspector.inspectorView._panel("elements");
         InspectorTest.addSniffer(WebInspector.ElementsPanel.prototype, "revealAndSelectNode", nodeRevealed, true);
-        WebInspector.inspectorView.panel("sources");
+        WebInspector.inspectorView._panel("sources");
         InspectorTest.addSniffer(WebInspector.SourcesPanel.prototype, "showUILocation", uiLocationRevealed, true);
-        WebInspector.inspectorView.panel("resources");
+        WebInspector.inspectorView._panel("resources");
         InspectorTest.addSniffer(WebInspector.ResourcesPanel.prototype, "showResource", resourceRevealed, true);
-        WebInspector.inspectorView.panel("network");
+        WebInspector.inspectorView._panel("network");
         InspectorTest.addSniffer(WebInspector.NetworkPanel.prototype, "revealAndHighlightRequest", requestRevealed, true);
     }
 

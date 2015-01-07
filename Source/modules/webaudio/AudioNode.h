@@ -51,6 +51,7 @@ class ExceptionState;
 
 class AudioNode : public RefCountedGarbageCollectedWillBeGarbageCollectedFinalized<AudioNode>, public EventTargetWithInlineData {
     DEFINE_EVENT_TARGET_REFCOUNTING_WILL_BE_REMOVED(RefCountedGarbageCollected<AudioNode>);
+    DEFINE_WRAPPERTYPEINFO();
     WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(AudioNode);
 public:
     enum { ProcessingSizeInFrames = 128 };
@@ -170,7 +171,7 @@ public:
     virtual void setChannelCount(unsigned long, ExceptionState&);
 
     String channelCountMode();
-    void setChannelCountMode(const String&, ExceptionState&);
+    virtual void setChannelCountMode(const String&, ExceptionState&);
 
     String channelInterpretation();
     void setChannelInterpretation(const String&, ExceptionState&);
@@ -181,6 +182,8 @@ public:
     // EventTarget
     virtual const AtomicString& interfaceName() const OVERRIDE FINAL;
     virtual ExecutionContext* executionContext() const OVERRIDE FINAL;
+
+    void updateChannelCountMode();
 
     virtual void trace(Visitor*) OVERRIDE;
 
@@ -222,6 +225,9 @@ protected:
     unsigned m_channelCount;
     ChannelCountMode m_channelCountMode;
     AudioBus::ChannelInterpretation m_channelInterpretation;
+    // The new channel count mode that will be used to set the actual mode in the pre or post
+    // rendering phase.
+    ChannelCountMode m_newChannelCountMode;
 };
 
 } // namespace blink

@@ -6,18 +6,24 @@
 #include "public/platform/WebServiceWorkerRequest.h"
 
 #include "platform/blob/BlobData.h"
+#include "platform/weborigin/KURL.h"
+#include "public/platform/WebHTTPHeaderVisitor.h"
 
 namespace blink {
 
 class WebServiceWorkerRequestPrivate : public RefCounted<WebServiceWorkerRequestPrivate> {
 public:
     WebServiceWorkerRequestPrivate()
-        : m_isReload(false) { }
+        : m_mode(WebURLRequest::FetchRequestModeNoCORS)
+        , m_isReload(false)
+    {
+    }
     WebURL m_url;
     WebString m_method;
     HTTPHeaderMap m_headers;
     RefPtr<BlobDataHandle> blobDataHandle;
     Referrer m_referrer;
+    WebURLRequest::FetchRequestMode m_mode;
     bool m_isReload;
 };
 
@@ -60,7 +66,22 @@ void WebServiceWorkerRequest::setHeader(const WebString& key, const WebString& v
 {
     if (equalIgnoringCase(key, "referer"))
         return;
-    m_private->m_headers.add(key, value);
+    m_private->m_headers.set(key, value);
+}
+
+void WebServiceWorkerRequest::appendHeader(const WebString& key, const WebString& value)
+{
+    if (equalIgnoringCase(key, "referer"))
+        return;
+    HTTPHeaderMap::AddResult result = m_private->m_headers.add(key, value);
+    if (!result.isNewEntry)
+        result.storedValue->value = result.storedValue->value + ", " + String(value);
+}
+
+void WebServiceWorkerRequest::visitHTTPHeaderFields(WebHTTPHeaderVisitor* headerVisitor) const
+{
+    for (HTTPHeaderMap::const_iterator i = m_private->m_headers.begin(), end = m_private->m_headers.end(); i != end; ++i)
+        headerVisitor->visitHeader(i->key, i->value);
 }
 
 const HTTPHeaderMap& WebServiceWorkerRequest::headers() const
@@ -83,9 +104,29 @@ void WebServiceWorkerRequest::setReferrer(const WebString& referrer, WebReferrer
     m_private->m_referrer = Referrer(referrer, static_cast<ReferrerPolicy>(referrerPolicy));
 }
 
+WebURL WebServiceWorkerRequest::referrerUrl() const
+{
+    return KURL(ParsedURLString, m_private->m_referrer.referrer);
+}
+
+WebReferrerPolicy WebServiceWorkerRequest::referrerPolicy() const
+{
+    return static_cast<WebReferrerPolicy>(m_private->m_referrer.referrerPolicy);
+}
+
 const Referrer& WebServiceWorkerRequest::referrer() const
 {
     return m_private->m_referrer;
+}
+
+void WebServiceWorkerRequest::setMode(WebURLRequest::FetchRequestMode mode)
+{
+    m_private->m_mode = mode;
+}
+
+WebURLRequest::FetchRequestMode WebServiceWorkerRequest::mode() const
+{
+    return m_private->m_mode;
 }
 
 void WebServiceWorkerRequest::setIsReload(bool isReload)

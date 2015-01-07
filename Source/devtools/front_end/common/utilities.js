@@ -169,6 +169,20 @@ String.prototype.escapeHTML = function()
 /**
  * @return {string}
  */
+String.prototype.unescapeHTML = function()
+{
+    return this.replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&#58;/g, ":")
+        .replace(/&quot;/g, "\"")
+        .replace(/&#60;/g, "<")
+        .replace(/&#62;/g, ">")
+        .replace(/&amp;/g, "&");
+}
+
+/**
+ * @return {string}
+ */
 String.prototype.collapseWhitespace = function()
 {
     return this.replace(/[\s\xA0]+/g, " ");
@@ -1150,6 +1164,15 @@ function countRegexMatches(regex, content)
 }
 
 /**
+ * @param {number} spacesCount
+ * @return {string}
+ */
+function spacesPadding(spacesCount)
+{
+    return Array(spacesCount).join("\u00a0");
+}
+
+/**
  * @param {number} value
  * @param {number} symbolsCount
  * @return {string}
@@ -1158,8 +1181,7 @@ function numberToStringWithSpacesPadding(value, symbolsCount)
 {
     var numberString = value.toString();
     var paddingLength = Math.max(0, symbolsCount - numberString.length);
-    var paddingString = Array(paddingLength + 1).join("\u00a0");
-    return paddingString + numberString;
+    return spacesPadding(paddingLength) + numberString;
 }
 
 /**
@@ -1722,31 +1744,6 @@ function suppressUnused(value)
 }
 
 /**
- * @constructor
- * @param {!T} targetObject
- * @template T
- */
-function WeakReference(targetObject)
-{
-    this._targetObject = targetObject;
-}
-
-WeakReference.prototype = {
-    /**
-     * @return {?T}
-     */
-    get: function()
-    {
-        return this._targetObject;
-    },
-
-    clear: function()
-    {
-        this._targetObject = null;
-    }
-};
-
-/**
  * @param {function()} callback
  */
 self.setImmediate = (function() {
@@ -1762,3 +1759,35 @@ self.setImmediate = (function() {
         callbacks.push(callback);
     };
 })();
+
+/**
+ * @param {string} error
+ * @return {!Promise}
+ */
+Promise.rejectWithError = function(error)
+{
+    return Promise.reject(new Error(error));
+}
+
+Promise.prototype.done = function()
+{
+    this.catch(console.error.bind(console));
+}
+
+/**
+ * @param {function()} callback
+ * @return {!Promise}
+ */
+Promise.prototype.thenOrCatch = function(callback)
+{
+    return this.then(callback, reject);
+
+    /**
+     * @param {*} e
+     */
+    function reject(e)
+    {
+        console.error(e);
+        callback();
+    }
+}

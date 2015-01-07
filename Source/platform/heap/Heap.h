@@ -35,7 +35,7 @@
 #include "platform/heap/AddressSanitizer.h"
 #include "platform/heap/ThreadState.h"
 #include "platform/heap/Visitor.h"
-
+#include "public/platform/WebThread.h"
 #include "wtf/Assertions.h"
 #include "wtf/HashCountedSet.h"
 #include "wtf/LinkedHashSet.h"
@@ -77,6 +77,9 @@ const size_t freeListMask = 2;
 // tracing of already finalized objects in another thread's heap which is a
 // use-after-free situation.
 const size_t deadBitMask = 4;
+// On free-list entries we reuse the dead bit to distinguish a normal free-list
+// entry from one that has been promptly freed.
+const size_t promptlyFreedMask = freeListMask | deadBitMask;
 #if ENABLE(GC_PROFILE_HEAP)
 const size_t heapObjectGenerations = 8;
 const size_t maxHeapObjectAge = heapObjectGenerations - 1;
@@ -91,13 +94,16 @@ const uint8_t finalizedZapValue = 24;
 // the mark bit when tracing.
 const uint8_t orphanedZapValue = 240;
 
+const int numberOfMarkingThreads = 2;
+
+const int numberOfPagesToConsiderForCoalescing = 100;
+
 enum CallbackInvocationMode {
     GlobalMarking,
     ThreadLocalMarking,
-    PostMarking,
-    WeaknessProcessing,
 };
 
+class CallbackStack;
 class HeapStats;
 class PageMemory;
 template<ThreadAffinity affinity> class ThreadLocalPersistents;
@@ -279,6 +285,12 @@ public:
     bool isFree() { return m_size & freeListMask; }
 
     NO_SANITIZE_ADDRESS
+    bool isPromptlyFreed() { return (m_size & promptlyFreedMask) == promptlyFreedMask; }
+
+    NO_SANITIZE_ADDRESS
+    void markPromptlyFreed() { m_size |= promptlyFreedMask; }
+
+    NO_SANITIZE_ADDRESS
     size_t size() const { return m_size & sizeMask; }
 
 #if ENABLE(GC_PROFILE_HEAP)
@@ -298,7 +310,7 @@ public:
 #endif
 
 protected:
-    size_t m_size;
+    volatile unsigned m_size;
 };
 
 // Our heap object layout is layered with the HeapObjectHeader closest
@@ -774,80 +786,6 @@ private:
     void clearMemory(PageMemory*);
 };
 
-// The CallbackStack contains all the visitor callbacks used to trace and mark
-// objects. A specific CallbackStack instance contains at most bufferSize elements.
-// If more space is needed a new CallbackStack instance is created and chained
-// together with the former instance. I.e. a logical CallbackStack can be made of
-// multiple chained CallbackStack object instances.
-// There are two logical callback stacks. One containing all the marking callbacks and
-// one containing the weak pointer callbacks.
-class CallbackStack {
-public:
-    CallbackStack(CallbackStack** first)
-        : m_limit(&(m_buffer[bufferSize]))
-        , m_current(&(m_buffer[0]))
-        , m_next(*first)
-    {
-#if ENABLE(ASSERT)
-        clearUnused();
-#endif
-        *first = this;
-    }
-
-    ~CallbackStack();
-    void clearUnused();
-
-    bool isEmpty();
-
-    class Item {
-    public:
-        Item() { }
-        Item(void* object, VisitorCallback callback)
-            : m_object(object)
-            , m_callback(callback)
-        {
-        }
-        void* object() { return m_object; }
-        VisitorCallback callback() { return m_callback; }
-
-    private:
-        void* m_object;
-        VisitorCallback m_callback;
-    };
-
-    static void init(CallbackStack** first);
-    static void shutdown(CallbackStack** first);
-    static void clear(CallbackStack** first)
-    {
-        if (!(*first)->isEmpty()) {
-            shutdown(first);
-            init(first);
-        }
-    }
-    template<CallbackInvocationMode Mode> bool popAndInvokeCallback(CallbackStack** first, Visitor*);
-    static void invokeCallbacks(CallbackStack** first, Visitor*);
-
-    Item* allocateEntry(CallbackStack** first)
-    {
-        if (m_current < m_limit)
-            return m_current++;
-        return (new CallbackStack(first))->allocateEntry(first);
-    }
-
-#if ENABLE(ASSERT)
-    bool hasCallbackForObject(const void*);
-#endif
-
-private:
-    void invokeOldestCallbacks(Visitor*);
-
-    static const size_t bufferSize = 4000;
-    Item m_buffer[bufferSize];
-    Item* m_limit;
-    Item* m_current;
-    CallbackStack* m_next;
-};
-
 // Non-template super class used to pass a heap around to other classes.
 class BaseHeap {
 public:
@@ -958,6 +896,8 @@ public:
 
     void removePageFromHeap(HeapPage<Header>*);
 
+    PLATFORM_EXPORT void promptlyFreeObject(Header*);
+
 private:
     void addPageToHeap(const GCInfo*);
     PLATFORM_EXPORT Address outOfLineAllocate(size_t, const GCInfo*);
@@ -986,6 +926,7 @@ private:
 
     void sweepNormalPages(HeapStats*);
     void sweepLargePages(HeapStats*);
+    bool coalesce(size_t);
 
     Address m_currentAllocationPoint;
     size_t m_remainingAllocationSize;
@@ -1012,6 +953,10 @@ private:
     int m_index;
 
     int m_numberOfNormalPages;
+
+    // The promptly freed count contains the number of promptly freed objects
+    // since the last sweep or since it was manually reset to delay coalescing.
+    size_t m_promptlyFreedCount;
 };
 
 class PLATFORM_EXPORT Heap {
@@ -1028,7 +973,7 @@ public:
 #endif
 
     // Push a trace callback on the marking stack.
-    static void pushTraceCallback(void* containerObject, TraceCallback);
+    static void pushTraceCallback(CallbackStack*, void* containerObject, TraceCallback);
 
     // Push a trace callback on the post-marking callback stack. These callbacks
     // are called after normal marking (including ephemeron iteration).
@@ -1049,9 +994,9 @@ public:
     // is OK because cells are just cleared and no deallocation can happen.
     static void pushWeakCellPointerCallback(void** cell, WeakPointerCallback);
 
-    // Pop the top of the marking stack and call the callback with the visitor
+    // Pop the top of a marking stack and call the callback with the visitor
     // and the object. Returns false when there is nothing more to do.
-    template<CallbackInvocationMode Mode> static bool popAndInvokeTraceCallback(Visitor*);
+    template<CallbackInvocationMode Mode> static bool popAndInvokeTraceCallback(CallbackStack*, Visitor*);
 
     // Remove an item from the post-marking callback stack and call
     // the callback with the visitor and the object pointer. Returns
@@ -1069,12 +1014,18 @@ public:
     static bool weakTableRegistered(const void*);
 #endif
 
-    template<typename T, typename HeapTraits = HeapTypeTrait<T> > static Address allocate(size_t);
+    template<typename T, typename HeapTraits> static Address allocate(size_t);
+    // FIXME: remove this once c++11 is allowed everywhere:
+    template<typename T> static Address allocate(size_t);
+
     template<typename T> static Address reallocate(void* previous, size_t);
 
-    static void collectGarbage(ThreadState::StackState);
+    static void collectGarbage(ThreadState::StackState, ThreadState::CauseOfGC = ThreadState::NormalGC);
     static void collectGarbageForTerminatingThread(ThreadState*);
     static void collectAllGarbage();
+    static void processMarkingStackEntries(int* numberOfMarkingThreads);
+    static void processMarkingStackOnMultipleThreads();
+    static void processMarkingStackInParallel();
     template<CallbackInvocationMode Mode> static void processMarkingStack();
     static void postMarkingProcessing();
     static void globalWeakProcessing();
@@ -1123,7 +1074,7 @@ public:
 
 private:
     static Visitor* s_markingVisitor;
-
+    static Vector<OwnPtr<blink::WebThread> >* s_markingThreads;
     static CallbackStack* s_markingStack;
     static CallbackStack* s_postMarkingCallbackStack;
     static CallbackStack* s_weakCallbackStack;
@@ -1464,7 +1415,13 @@ NO_SANITIZE_ADDRESS
 void HeapObjectHeader::mark()
 {
     checkHeader();
-    m_size |= markBitMask;
+    // The use of atomic ops guarantees that the reads and writes are
+    // atomic and that no memory operation reorderings take place.
+    // Multiple threads can still read the old value and all store the
+    // new value. However, the new value will be the same for all of
+    // the threads and the end result is therefore consistent.
+    unsigned size = asanUnsafeAcquireLoad(&m_size);
+    asanUnsafeReleaseStore(&m_size, size | markBitMask);
 }
 
 Address FinalizedHeapObjectHeader::payload()
@@ -1528,6 +1485,12 @@ Address Heap::allocate(size_t size)
     int heapIndex = HeapTraits::index(gcInfo->hasFinalizer());
     BaseHeap* heap = state->heap(heapIndex);
     return static_cast<typename HeapTraits::HeapType*>(heap)->allocate(size, gcInfo);
+}
+
+template<typename T>
+Address Heap::allocate(size_t size)
+{
+    return allocate<T, HeapTypeTrait<T> >(size);
 }
 
 template<typename T>
@@ -1597,7 +1560,8 @@ public:
     {
         return reinterpret_cast<Return>(Heap::allocate<Metadata>(size));
     }
-    static void backingFree(void* address) { }
+    PLATFORM_EXPORT static void backingFree(void* address);
+
     static void free(void* address) { }
     template<typename T>
     static void* newArray(size_t bytes)

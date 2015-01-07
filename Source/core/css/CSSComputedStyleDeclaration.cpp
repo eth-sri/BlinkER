@@ -38,7 +38,6 @@
 #include "core/css/CSSGridLineNamesValue.h"
 #include "core/css/CSSGridTemplateAreasValue.h"
 #include "core/css/CSSLineBoxContainValue.h"
-#include "core/css/parser/BisonCSSParser.h"
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSPrimitiveValueMappings.h"
 #include "core/css/CSSPropertyMetadata.h"
@@ -52,6 +51,7 @@
 #include "core/css/Pair.h"
 #include "core/css/Rect.h"
 #include "core/css/StylePropertySet.h"
+#include "core/css/parser/CSSParser.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
@@ -887,21 +887,30 @@ static PassRefPtrWillBeRawPtr<CSSValue> valueForGridTrackList(GridTrackSizingDir
 {
     const Vector<GridTrackSize>& trackSizes = direction == ForColumns ? style.gridTemplateColumns() : style.gridTemplateRows();
     const OrderedNamedGridLines& orderedNamedGridLines = direction == ForColumns ? style.orderedNamedGridColumnLines() : style.orderedNamedGridRowLines();
+    bool isRenderGrid = renderer && renderer->isRenderGrid();
 
-    // Handle the 'none' case here.
-    if (!trackSizes.size()) {
+    // Handle the 'none' case.
+    bool trackListIsEmpty = trackSizes.isEmpty();
+    if (isRenderGrid && trackListIsEmpty) {
+        // For grids we should consider every listed track, whether implicitly or explicitly created. If we don't have
+        // any explicit track and there are no children then there are no implicit tracks. We cannot simply check the
+        // number of rows/columns in our internal grid representation because it's always at least 1x1 (see r143331).
+        trackListIsEmpty = !toRenderBlock(renderer)->firstChild();
+    }
+
+    if (trackListIsEmpty) {
         ASSERT(orderedNamedGridLines.isEmpty());
         return cssValuePool().createIdentifierValue(CSSValueNone);
     }
 
     RefPtrWillBeRawPtr<CSSValueList> list = CSSValueList::createSpaceSeparated();
-    if (renderer && renderer->isRenderGrid()) {
+    if (isRenderGrid) {
         const Vector<LayoutUnit>& trackPositions = direction == ForColumns ? toRenderGrid(renderer)->columnPositions() : toRenderGrid(renderer)->rowPositions();
         // There are at least #tracks + 1 grid lines (trackPositions). Apart from that, the grid container can generate implicit grid tracks,
         // so we'll have more trackPositions than trackSizes as the latter only contain the explicit grid.
         ASSERT(trackPositions.size() - 1 >= trackSizes.size());
 
-        for (size_t i = 0; i < trackSizes.size(); ++i) {
+        for (size_t i = 0; i < trackPositions.size() - 1; ++i) {
             addValuesForNamedGridLinesAtIndex(orderedNamedGridLines, i, *list);
             list->append(zoomAdjustedPixelValue(trackPositions[i + 1] - trackPositions[i], style));
         }
@@ -1032,21 +1041,13 @@ static PassRefPtrWillBeRawPtr<CSSValue> createTimingFunctionValue(const TimingFu
     case TimingFunction::StepsFunction:
         {
             const StepsTimingFunction* stepsTimingFunction = toStepsTimingFunction(timingFunction);
-            if (stepsTimingFunction->subType() == StepsTimingFunction::Custom)
-                return CSSStepsTimingFunctionValue::create(stepsTimingFunction->numberOfSteps(), stepsTimingFunction->stepAtPosition());
+            StepsTimingFunction::StepAtPosition position = stepsTimingFunction->stepAtPosition();
+            int steps = stepsTimingFunction->numberOfSteps();
+            ASSERT(position == StepsTimingFunction::Start || position == StepsTimingFunction::End);
 
-            CSSValueID valueId;
-            switch (stepsTimingFunction->subType()) {
-            case StepsTimingFunction::Start:
-                valueId = CSSValueStepStart;
-                break;
-            case StepsTimingFunction::End:
-                valueId = CSSValueStepEnd;
-                break;
-            default:
-                ASSERT_NOT_REACHED();
-                return nullptr;
-            }
+            if (steps > 1)
+                return CSSStepsTimingFunctionValue::create(steps, position);
+            CSSValueID valueId = position == StepsTimingFunction::Start ? CSSValueStepStart : CSSValueStepEnd;
             return cssValuePool().createIdentifierValue(valueId);
         }
 
@@ -1131,7 +1132,7 @@ CSSComputedStyleDeclaration::CSSComputedStyleDeclaration(PassRefPtrWillBeRawPtr<
 {
     unsigned nameWithoutColonsStart = pseudoElementName[0] == ':' ? (pseudoElementName[1] == ':' ? 2 : 1) : 0;
     m_pseudoElementSpecifier = CSSSelector::pseudoId(CSSSelector::parsePseudoType(
-        AtomicString(pseudoElementName.substring(nameWithoutColonsStart))));
+        AtomicString(pseudoElementName.substring(nameWithoutColonsStart)), false));
 }
 
 CSSComputedStyleDeclaration::~CSSComputedStyleDeclaration()
@@ -1404,7 +1405,7 @@ static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> valueForLineHeight(RenderStyle&
 
 static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> valueForFontSize(RenderStyle& style)
 {
-    return zoomAdjustedPixelValue(style.fontDescription().computedPixelSize(), style);
+    return zoomAdjustedPixelValue(RuntimeEnabledFeatures::subpixelFontScalingEnabled() ? style.fontDescription().computedSize() : style.fontDescription().computedPixelSize(), style);
 }
 
 static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> valueForFontStretch(RenderStyle& style)
@@ -1518,7 +1519,7 @@ static bool isLayoutDependent(CSSPropertyID propertyID, PassRefPtr<RenderStyle> 
     }
 }
 
-PassRefPtr<RenderStyle> CSSComputedStyleDeclaration::computeRenderStyle(CSSPropertyID propertyID) const
+PassRefPtr<RenderStyle> CSSComputedStyleDeclaration::computeRenderStyle() const
 {
     Node* styledNode = this->styledNode();
     ASSERT(styledNode);
@@ -1580,7 +1581,7 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValu
         styledNode = this->styledNode();
         renderer = styledNode->renderer();
 
-        style = computeRenderStyle(propertyID);
+        style = computeRenderStyle();
 
         bool forceFullLayout = isLayoutDependent(propertyID, style, renderer)
             || styledNode->isInShadowTree()
@@ -1589,11 +1590,11 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValu
         if (forceFullLayout) {
             document.updateLayoutIgnorePendingStylesheets();
             styledNode = this->styledNode();
-            style = computeRenderStyle(propertyID);
+            style = computeRenderStyle();
             renderer = styledNode->renderer();
         }
     } else {
-        style = computeRenderStyle(propertyID);
+        style = computeRenderStyle();
     }
 
     if (!style)
@@ -2829,14 +2830,8 @@ String CSSComputedStyleDeclaration::getPropertyValue(CSSPropertyID propertyID) c
 
 unsigned CSSComputedStyleDeclaration::length() const
 {
-    Node* node = m_node.get();
-    if (!node)
+    if (!m_node || !m_node->inActiveDocument())
         return 0;
-
-    RenderStyle* style = node->computedStyle(m_pseudoElementSpecifier);
-    if (!style)
-        return 0;
-
     return computableProperties().size();
 }
 

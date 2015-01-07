@@ -62,10 +62,11 @@ class ExcludingMockSCM(MockSCM):
 class BaselineOptimizerTest(unittest.TestCase):
     def test_move_baselines(self):
         host = MockHost(scm=ExcludingMockSCM(['/mock-checkout/third_party/WebKit/LayoutTests/platform/mac/another/test-expected.txt']))
+        host.filesystem.write_text_file('/mock-checkout/third_party/WebKit/LayoutTests/VirtualTestSuites', '[]')
         host.filesystem.write_binary_file('/mock-checkout/third_party/WebKit/LayoutTests/platform/win/another/test-expected.txt', 'result A')
         host.filesystem.write_binary_file('/mock-checkout/third_party/WebKit/LayoutTests/platform/mac/another/test-expected.txt', 'result A')
         host.filesystem.write_binary_file('/mock-checkout/third_party/WebKit/LayoutTests/another/test-expected.txt', 'result B')
-        baseline_optimizer = BaselineOptimizer(host, host.port_factory.all_port_names(), skip_scm_commands=False)
+        baseline_optimizer = BaselineOptimizer(host, host.port_factory.get(), host.port_factory.all_port_names(), skip_scm_commands=False)
         baseline_optimizer._move_baselines('another/test-expected.txt', {
             '/mock-checkout/third_party/WebKit/LayoutTests/platform/win': 'aaa',
             '/mock-checkout/third_party/WebKit/LayoutTests/platform/mac': 'aaa',
@@ -77,10 +78,11 @@ class BaselineOptimizerTest(unittest.TestCase):
 
     def test_move_baselines_skip_scm_commands(self):
         host = MockHost(scm=ExcludingMockSCM(['/mock-checkout/third_party/WebKit/LayoutTests/platform/mac/another/test-expected.txt']))
+        host.filesystem.write_text_file('/mock-checkout/third_party/WebKit/LayoutTests/VirtualTestSuites', '[]')
         host.filesystem.write_binary_file('/mock-checkout/third_party/WebKit/LayoutTests/platform/win/another/test-expected.txt', 'result A')
         host.filesystem.write_binary_file('/mock-checkout/third_party/WebKit/LayoutTests/platform/mac/another/test-expected.txt', 'result A')
         host.filesystem.write_binary_file('/mock-checkout/third_party/WebKit/LayoutTests/another/test-expected.txt', 'result B')
-        baseline_optimizer = BaselineOptimizer(host, host.port_factory.all_port_names(), skip_scm_commands=True)
+        baseline_optimizer = BaselineOptimizer(host, host.port_factory.get(), host.port_factory.all_port_names(), skip_scm_commands=True)
         baseline_optimizer._move_baselines('another/test-expected.txt', {
             '/mock-checkout/third_party/WebKit/LayoutTests/platform/win': 'aaa',
             '/mock-checkout/third_party/WebKit/LayoutTests/platform/mac': 'aaa',
@@ -106,12 +108,14 @@ class BaselineOptimizerTest(unittest.TestCase):
         fs = host.filesystem
         webkit_base = WebKitFinder(fs).webkit_base()
         baseline_name = 'mock-baseline-expected.txt'
+        fs.write_text_file(fs.join(webkit_base, 'LayoutTests', 'VirtualTestSuites'),
+                           '[{"prefix": "gpu", "base": "fast/canvas", "args": ["--foo"]}]')
 
         for dirname, contents in results_by_directory.items():
             path = fs.join(webkit_base, 'LayoutTests', dirname, baseline_name)
             fs.write_binary_file(path, contents)
 
-        baseline_optimizer = BaselineOptimizer(host, host.port_factory.all_port_names(), skip_scm_commands=expected_files_to_delete is not None)
+        baseline_optimizer = BaselineOptimizer(host, host.port_factory.get(), host.port_factory.all_port_names(), skip_scm_commands=expected_files_to_delete is not None)
         self.assertTrue(baseline_optimizer.optimize(fs.join(baseline_dirname, baseline_name)))
 
         for dirname, contents in expected_new_results_by_directory.items():

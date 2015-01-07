@@ -33,7 +33,7 @@
  * @extends {WebInspector.PanelWithSidebarTree}
  * @implements {WebInspector.TargetManager.Observer}
  */
-WebInspector.ResourcesPanel = function(database)
+WebInspector.ResourcesPanel = function()
 {
     WebInspector.PanelWithSidebarTree.call(this, "resources");
     this.registerRequiredCSS("resourcesPanel.css");
@@ -64,7 +64,7 @@ WebInspector.ResourcesPanel = function(database)
     this.applicationCacheListTreeElement = new WebInspector.StorageCategoryTreeElement(this, WebInspector.UIString("Application Cache"), "ApplicationCache", ["application-cache-storage-tree-item"]);
     this.sidebarTree.appendChild(this.applicationCacheListTreeElement);
 
-    if (WebInspector.experimentsSettings.fileSystemInspection.isEnabled()) {
+    if (Runtime.experiments.isEnabled("fileSystemInspection")) {
         this.fileSystemListTreeElement = new WebInspector.FileSystemListTreeElement(this);
         this.sidebarTree.appendChild(this.fileSystemListTreeElement);
     }
@@ -170,7 +170,7 @@ WebInspector.ResourcesPanel.prototype = {
             this._populateDOMStorageTree();
             this._populateApplicationCacheTree(target);
             this.indexedDBListTreeElement._initialize();
-            if (WebInspector.experimentsSettings.fileSystemInspection.isEnabled())
+            if (Runtime.experiments.isEnabled("fileSystemInspection"))
                 this.fileSystemListTreeElement._initialize();
             this._initDefaultSelection();
             this._initialized = true;
@@ -474,13 +474,21 @@ WebInspector.ResourcesPanel.prototype = {
      */
     _resourceViewForResource: function(resource)
     {
-        if (WebInspector.ResourceView.hasTextContent(resource)) {
+        if (resource.hasTextContent()) {
             var treeElement = this._findTreeElementForResource(resource);
             if (!treeElement)
                 return null;
             return treeElement.sourceView();
         }
-        return WebInspector.ResourceView.nonSourceViewForResource(resource);
+
+        switch (resource.type) {
+        case WebInspector.resourceTypes.Image:
+            return new WebInspector.ImageView(resource.url, resource.mimeType, resource);
+        case WebInspector.resourceTypes.Font:
+            return new WebInspector.FontView(resource.url);
+        default:
+            return new WebInspector.EmptyView(resource.url);
+        }
     },
 
     /**
@@ -808,14 +816,18 @@ WebInspector.ResourcesPanel.ResourceRevealer.prototype = {
     /**
      * @param {!Object} resource
      * @param {number=} lineNumber
+     * @return {!Promise}
      */
     reveal: function(resource, lineNumber)
     {
         if (resource instanceof WebInspector.Resource) {
-            var panel = /** @type {?WebInspector.ResourcesPanel} */ (WebInspector.inspectorView.showPanel("resources"));
-            if (panel)
-                panel.showResource(resource, lineNumber);
+
+            var panel = WebInspector.ResourcesPanel._instance();
+            WebInspector.inspectorView.setCurrentPanel(panel);
+            panel.showResource(resource, lineNumber);
+            return Promise.resolve();
         }
+        return Promise.rejectWithError("Internal error: not a resource");
     }
 }
 
@@ -2141,4 +2153,32 @@ WebInspector.StorageCategoryView.prototype = {
     },
 
     __proto__: WebInspector.VBox.prototype
+}
+
+/**
+ * @return {!WebInspector.ResourcesPanel}
+ */
+WebInspector.ResourcesPanel._instance = function()
+{
+    if (!WebInspector.ResourcesPanel._instanceObject)
+        WebInspector.ResourcesPanel._instanceObject = new WebInspector.ResourcesPanel();
+    return WebInspector.ResourcesPanel._instanceObject;
+}
+
+/**
+ * @constructor
+ * @implements {WebInspector.PanelFactory}
+ */
+WebInspector.ResourcesPanelFactory = function()
+{
+}
+
+WebInspector.ResourcesPanelFactory.prototype = {
+    /**
+     * @return {!WebInspector.Panel}
+     */
+    createPanel: function()
+    {
+        return WebInspector.ResourcesPanel._instance();
+    }
 }

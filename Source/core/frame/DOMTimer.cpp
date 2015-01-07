@@ -161,7 +161,7 @@ void DOMTimer::didFire()
                 augmentRepeatInterval(minimumInterval - repeatInterval());
         }
 
-        WTF_LOG(Timers, "DOMTimer::fired: m_timeoutID = %d, repeatInterval = %f", m_timeoutID, repeatInterval());
+        WTF_LOG(Timers, "DOMTimer::fired: m_timeoutID = %d, repeatInterval = %f, m_action = %p", m_timeoutID, repeatInterval(), m_action.get());
 
         // No access to member variables after this point, it can delete the timer.
         m_action->execute(context);
@@ -171,7 +171,7 @@ void DOMTimer::didFire()
         return;
     }
 
-    WTF_LOG(Timers, "DOMTimer::fired: m_timeoutID = %d, one-shot", m_timeoutID);
+    WTF_LOG(Timers, "DOMTimer::fired: m_timeoutID = %d, one-shot, m_action = %p", m_timeoutID, m_action.get());
 
     // Delete timer before executing the action for one-shot timers.
     OwnPtr<ScheduledAction> action = m_action.release();

@@ -34,10 +34,9 @@
  * @param {!WebInspector.Target} target
  * @param {boolean=} omitRootDOMNode
  * @param {boolean=} selectEnabled
- * @param {function(!WebInspector.ContextMenu, !WebInspector.DOMNode)=} contextMenuCallback
  * @param {function(!WebInspector.DOMNode, string, boolean)=} setPseudoClassCallback
  */
-WebInspector.ElementsTreeOutline = function(target, omitRootDOMNode, selectEnabled, contextMenuCallback, setPseudoClassCallback)
+WebInspector.ElementsTreeOutline = function(target, omitRootDOMNode, selectEnabled, setPseudoClassCallback)
 {
     this._target = target;
     this._domModel = target.domModel;
@@ -53,6 +52,7 @@ WebInspector.ElementsTreeOutline = function(target, omitRootDOMNode, selectEnabl
     this.element.addEventListener("dragend", this._ondragend.bind(this), false);
     this.element.addEventListener("keydown", this._onkeydown.bind(this), false);
     this.element.addEventListener("webkitAnimationEnd", this._onAnimationEnd.bind(this), false);
+    this.element.addEventListener("contextmenu", this._contextMenuEventFired.bind(this), false);
 
     TreeOutline.call(this, this.element);
 
@@ -67,8 +67,6 @@ WebInspector.ElementsTreeOutline = function(target, omitRootDOMNode, selectEnabl
     this._visible = false;
     this._pickNodeMode = false;
 
-    this.element.addEventListener("contextmenu", this._contextMenuEventFired.bind(this), true);
-    this._contextMenuCallback = contextMenuCallback;
     this._setPseudoClassCallback = setPseudoClassCallback;
     this._createNodeDecorators();
 }
@@ -771,19 +769,10 @@ WebInspector.ElementsTreeOutline.prototype = {
     _contextMenuEventFired: function(event)
     {
         var treeElement = this._treeElementFromEvent(event);
-        if (!treeElement || treeElement.treeOutline !== this)
+        if (!treeElement)
             return;
 
         var contextMenu = new WebInspector.ContextMenu(event);
-        contextMenu.appendApplicableItems(treeElement._node);
-        contextMenu.show();
-    },
-
-    populateContextMenu: function(contextMenu, event)
-    {
-        var treeElement = this._treeElementFromEvent(event);
-        if (!treeElement || treeElement.treeOutline !== this)
-            return;
 
         var isPseudoElement = !!treeElement._node.pseudoType();
         var isTag = treeElement._node.nodeType() === Node.ELEMENT_NODE && !isPseudoElement;
@@ -803,21 +792,16 @@ WebInspector.ElementsTreeOutline.prototype = {
             treeElement._populateNodeContextMenu(contextMenu);
         } else if (isPseudoElement) {
             treeElement._populateScrollIntoView(contextMenu);
-        } else if (treeElement._node.isShadowRoot()) {
-            this.treeOutline._populateContextMenu(contextMenu, treeElement._node);
         }
+
+        contextMenu.appendApplicableItems(treeElement._node);
+        contextMenu.show();
     },
 
     _updateModifiedNodes: function()
     {
         if (this._elementsTreeUpdater)
             this._elementsTreeUpdater._updateModifiedNodes();
-    },
-
-    _populateContextMenu: function(contextMenu, node)
-    {
-        if (this._contextMenuCallback)
-            this._contextMenuCallback(contextMenu, node);
     },
 
     handleShortcut: function(event)
@@ -1038,10 +1022,9 @@ WebInspector.ElementsTreeElement.InitialChildrenLimit = 500;
 
 // A union of HTML4 and HTML5-Draft elements that explicitly
 // or implicitly (for HTML5) forbid the closing tag.
-// FIXME: Revise once HTML5 Final is published.
 WebInspector.ElementsTreeElement.ForbiddenClosingTagElements = [
     "area", "base", "basefont", "br", "canvas", "col", "command", "embed", "frame",
-    "hr", "img", "input", "keygen", "link", "meta", "param", "source"
+    "hr", "img", "input", "keygen", "link", "menuitem", "meta", "param", "source", "track", "wbr"
 ].keySet();
 
 // These tags we do not allow editing their tag name.
@@ -1529,7 +1512,8 @@ WebInspector.ElementsTreeElement.prototype = {
             return;
 
         if (this.treeOutline._showInElementsPanelEnabled) {
-            WebInspector.inspectorView.showPanel("elements");
+            var panel = WebInspector.ElementsPanel.instance();
+            WebInspector.inspectorView.setCurrentPanel(panel);
             this.treeOutline.selectDOMNode(this._node, true);
         }
 
@@ -1570,9 +1554,9 @@ WebInspector.ElementsTreeElement.prototype = {
         else {
             var nodeName = tag.textContent.match(/^<(.*?)>$/)[1];
             tag.textContent = '';
-            tag.appendChild(document.createTextNode('<'+nodeName));
+            tag.createTextChild('<' + nodeName);
             tag.appendChild(node);
-            tag.appendChild(document.createTextNode('>'));
+            tag.createTextChild('>');
         }
 
         this.updateSelection();
@@ -1633,7 +1617,6 @@ WebInspector.ElementsTreeElement.prototype = {
             contextMenu.appendSeparator();
         }
         this._populateNodeContextMenu(contextMenu);
-        this.treeOutline._populateContextMenu(contextMenu, this._node);
         this._populateScrollIntoView(contextMenu);
     },
 
@@ -2259,7 +2242,6 @@ WebInspector.ElementsTreeElement.prototype = {
          */
         function setValueWithEntities(element, value)
         {
-            var attrValueElement = element.createChild("span", "webkit-html-attribute-value");
             result = this._convertWhitespaceToEntities(value);
             highlightCount = result.entityRanges.length;
             value = result.text.replace(closingPunctuationRegex, replacer);
@@ -2267,8 +2249,8 @@ WebInspector.ElementsTreeElement.prototype = {
                 result.entityRanges[highlightIndex].offset += additionalHighlightOffset;
                 ++highlightIndex;
             }
-            attrValueElement.textContent = value;
-            WebInspector.highlightRangesWithStyleClass(attrValueElement, result.entityRanges, "webkit-html-entity-value");
+            element.textContent = value;
+            WebInspector.highlightRangesWithStyleClass(element, result.entityRanges, "webkit-html-entity-value");
         }
 
         var hasText = (forceValue || value.length > 0);
@@ -2277,24 +2259,49 @@ WebInspector.ElementsTreeElement.prototype = {
         attrNameElement.textContent = name;
 
         if (hasText)
-            attrSpanElement.appendChild(document.createTextNode("=\u200B\""));
+            attrSpanElement.createTextChild("=\u200B\"");
 
-        if (linkify && (name === "src" || name === "href")) {
+        var attrValueElement = attrSpanElement.createChild("span", "webkit-html-attribute-value");
+
+        /**
+         * @this {WebInspector.ElementsTreeElement}
+         * @param {string} value
+         * @return {!Element}
+         */
+        function linkifyValue(value)
+        {
             var rewrittenHref = node.resolveURL(value);
             if (rewrittenHref === null) {
-                setValueWithEntities.call(this, attrSpanElement, value);
-            } else {
-                value = value.replace(closingPunctuationRegex, "$&\u200B");
-                if (value.startsWith("data:"))
-                    value = value.trimMiddle(60);
-                attrSpanElement.appendChild(linkify(rewrittenHref, value, "webkit-html-attribute-value", node.nodeName().toLowerCase() === "a"));
+                var span = document.createElement("span");
+                setValueWithEntities.call(this, span, value);
+                return span;
+            }
+            value = value.replace(closingPunctuationRegex, "$&\u200B");
+            if (value.startsWith("data:"))
+                value = value.trimMiddle(60);
+            return linkify(rewrittenHref, value, "", node.nodeName().toLowerCase() === "a");
+        }
+
+        if (linkify && (name === "src" || name === "href")) {
+            attrValueElement.appendChild(linkifyValue.call(this, value));
+        } else if (linkify && node.nodeName().toLowerCase() === "img" && name === "srcset") {
+            var sources = value.split(",");
+            for (var i = 0; i < sources.length; ++i) {
+                if (i > 0)
+                    attrValueElement.createTextChild(", ");
+                var source = sources[i].trim();
+                var indexOfSpace = source.indexOf(" ");
+                var url = source.substring(0, indexOfSpace);
+                var tail = source.substring(indexOfSpace);
+                attrValueElement.appendChild(linkifyValue.call(this, url));
+                attrValueElement.createTextChild(tail);
             }
         } else {
-            setValueWithEntities.call(this, attrSpanElement, value);
+            setValueWithEntities.call(this, attrValueElement, value);
         }
 
         if (hasText)
-            attrSpanElement.appendChild(document.createTextNode("\""));
+            attrSpanElement.createTextChild("\"");
     },
 
     /**
@@ -2305,7 +2312,7 @@ WebInspector.ElementsTreeElement.prototype = {
     {
         var pseudoElement = parentElement.createChild("span", "webkit-html-pseudo-element");
         pseudoElement.textContent = "::" + pseudoElementName;
-        parentElement.appendChild(document.createTextNode("\u200B"));
+        parentElement.createTextChild("\u200B");
     },
 
     /**
@@ -2322,19 +2329,19 @@ WebInspector.ElementsTreeElement.prototype = {
         if (isClosingTag && isDistinctTreeElement)
             classes.push("close");
         var tagElement = parentElement.createChild("span", classes.join(" "));
-        tagElement.appendChild(document.createTextNode("<"));
+        tagElement.createTextChild("<");
         var tagNameElement = tagElement.createChild("span", isClosingTag ? "" : "webkit-html-tag-name");
         tagNameElement.textContent = (isClosingTag ? "/" : "") + tagName;
         if (!isClosingTag && node.hasAttributes()) {
             var attributes = node.attributes();
             for (var i = 0; i < attributes.length; ++i) {
                 var attr = attributes[i];
-                tagElement.appendChild(document.createTextNode(" "));
+                tagElement.createTextChild(" ");
                 this._buildAttributeDOM(tagElement, attr.name, attr.value, false, node, linkify);
             }
         }
-        tagElement.appendChild(document.createTextNode(">"));
-        parentElement.appendChild(document.createTextNode("\u200B"));
+        tagElement.createTextChild(">");
+        parentElement.createTextChild("\u200B");
     },
 
     /**
@@ -2398,7 +2405,7 @@ WebInspector.ElementsTreeElement.prototype = {
                     if (this.hasChildren) {
                         var textNodeElement = info.titleDOM.createChild("span", "webkit-html-text-node bogus");
                         textNodeElement.textContent = "\u2026";
-                        info.titleDOM.appendChild(document.createTextNode("\u200B"));
+                        info.titleDOM.createTextChild("\u200B");
                     }
                     this._buildTagDOM(info.titleDOM, tagName, true, false);
                 }
@@ -2412,7 +2419,7 @@ WebInspector.ElementsTreeElement.prototype = {
                     var result = this._convertWhitespaceToEntities(node.firstChild.nodeValue());
                     textNodeElement.textContent = result.text;
                     WebInspector.highlightRangesWithStyleClass(textNodeElement, result.entityRanges, "webkit-html-entity-value");
-                    info.titleDOM.appendChild(document.createTextNode("\u200B"));
+                    info.titleDOM.createTextChild("\u200B");
                     this._buildTagDOM(info.titleDOM, tagName, true, false);
                     info.hasChildren = false;
                 }
@@ -2432,39 +2439,39 @@ WebInspector.ElementsTreeElement.prototype = {
                     var cssSyntaxHighlighter = new WebInspector.DOMSyntaxHighlighter("text/css", true);
                     cssSyntaxHighlighter.syntaxHighlightNode(newNode);
                 } else {
-                    info.titleDOM.appendChild(document.createTextNode("\""));
+                    info.titleDOM.createTextChild("\"");
                     var textNodeElement = info.titleDOM.createChild("span", "webkit-html-text-node");
                     var result = this._convertWhitespaceToEntities(node.nodeValue());
                     textNodeElement.textContent = result.text;
                     WebInspector.highlightRangesWithStyleClass(textNodeElement, result.entityRanges, "webkit-html-entity-value");
-                    info.titleDOM.appendChild(document.createTextNode("\""));
+                    info.titleDOM.createTextChild("\"");
                 }
                 break;
 
             case Node.COMMENT_NODE:
                 var commentElement = info.titleDOM.createChild("span", "webkit-html-comment");
-                commentElement.appendChild(document.createTextNode("<!--" + node.nodeValue() + "-->"));
+                commentElement.createTextChild("<!--" + node.nodeValue() + "-->");
                 break;
 
             case Node.DOCUMENT_TYPE_NODE:
                 var docTypeElement = info.titleDOM.createChild("span", "webkit-html-doctype");
-                docTypeElement.appendChild(document.createTextNode("<!DOCTYPE " + node.nodeName()));
+                docTypeElement.createTextChild("<!DOCTYPE " + node.nodeName());
                 if (node.publicId) {
-                    docTypeElement.appendChild(document.createTextNode(" PUBLIC \"" + node.publicId + "\""));
+                    docTypeElement.createTextChild(" PUBLIC \"" + node.publicId + "\"");
                     if (node.systemId)
-                        docTypeElement.appendChild(document.createTextNode(" \"" + node.systemId + "\""));
+                        docTypeElement.createTextChild(" \"" + node.systemId + "\"");
                 } else if (node.systemId)
-                    docTypeElement.appendChild(document.createTextNode(" SYSTEM \"" + node.systemId + "\""));
+                    docTypeElement.createTextChild(" SYSTEM \"" + node.systemId + "\"");
 
                 if (node.internalSubset)
-                    docTypeElement.appendChild(document.createTextNode(" [" + node.internalSubset + "]"));
+                    docTypeElement.createTextChild(" [" + node.internalSubset + "]");
 
-                docTypeElement.appendChild(document.createTextNode(">"));
+                docTypeElement.createTextChild(">");
                 break;
 
             case Node.CDATA_SECTION_NODE:
                 var cdataElement = info.titleDOM.createChild("span", "webkit-html-text-node");
-                cdataElement.appendChild(document.createTextNode("<![CDATA[" + node.nodeValue() + "]]>"));
+                cdataElement.createTextChild("<![CDATA[" + node.nodeValue() + "]]>");
                 break;
             case Node.DOCUMENT_FRAGMENT_NODE:
                 var fragmentElement = info.titleDOM.createChild("span", "webkit-html-fragment");
@@ -2478,7 +2485,7 @@ WebInspector.ElementsTreeElement.prototype = {
                 fragmentElement.textContent = node.nodeNameInCorrectCase().collapseWhitespace();
                 break;
             default:
-                info.titleDOM.appendChild(document.createTextNode(node.nodeNameInCorrectCase().collapseWhitespace()));
+                info.titleDOM.createTextChild(node.nodeNameInCorrectCase().collapseWhitespace());
         }
         return info;
     },
@@ -2891,20 +2898,41 @@ WebInspector.ElementsTreeOutline.Renderer = function()
 WebInspector.ElementsTreeOutline.Renderer.prototype = {
     /**
      * @param {!Object} object
-     * @return {?Element}
+     * @return {!Promise.<!Element>}
      */
     render: function(object)
     {
-        if (!(object instanceof WebInspector.DOMNode))
-            return null;
-        var node = /** @type {!WebInspector.DOMNode} */ (object);
-        var treeOutline = new WebInspector.ElementsTreeOutline(node.target(), false, false);
-        treeOutline.rootDOMNode = node;
-        treeOutline.element.classList.add("outline-disclosure");
-        if (!treeOutline.children[0].hasChildren)
-            treeOutline.element.classList.add("single-node");
-        treeOutline.setVisible(true);
-        treeOutline.element.treeElementForTest = treeOutline.children[0];
-        return treeOutline.element;
+        return new Promise(renderPromise);
+
+        /**
+         * @param {function(!Element)} resolve
+         * @param {function(!Error)} reject
+         */
+        function renderPromise(resolve, reject)
+        {
+            if (object instanceof WebInspector.DOMNode)
+                onNodeResolved(/** @type {!WebInspector.DOMNode} */ (object));
+            else if (object instanceof WebInspector.DeferredDOMNode)
+                (/** @type {!WebInspector.DeferredDOMNode} */ (object)).resolve(onNodeResolved);
+            else if (object instanceof WebInspector.RemoteObject)
+                (/** @type {!WebInspector.RemoteObject} */ (object)).pushNodeToFrontend(onNodeResolved);
+            else
+                reject(new Error("Can't reveal not a node."));
+
+            /**
+             * @param {?WebInspector.DOMNode} node
+             */
+            function onNodeResolved(node)
+            {
+                var treeOutline = new WebInspector.ElementsTreeOutline(node.target(), false, false);
+                treeOutline.rootDOMNode = node;
+                treeOutline.element.classList.add("outline-disclosure");
+                if (!treeOutline.children[0].hasChildren)
+                    treeOutline.element.classList.add("single-node");
+                treeOutline.setVisible(true);
+                treeOutline.element.treeElementForTest = treeOutline.children[0];
+                resolve(treeOutline.element);
+            }
+        }
     }
 }

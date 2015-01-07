@@ -63,7 +63,6 @@ AudioBufferSourceNode::AudioBufferSourceNode(AudioContext* context, float sample
     , m_grainOffset(0.0)
     , m_grainDuration(DefaultGrainDuration)
 {
-    ScriptWrappable::init(this);
     setNodeType(NodeTypeAudioBufferSource);
 
     m_playbackRate = AudioParam::create(context, 1.0);
@@ -386,6 +385,27 @@ void AudioBufferSourceNode::start(double when, double grainOffset, double grainD
         exceptionState.throwDOMException(
             InvalidStateError,
             "cannot call start more than once.");
+        return;
+    }
+
+    if (!std::isfinite(when) || (when < 0)) {
+        exceptionState.throwDOMException(
+            InvalidStateError,
+            "Start time must be a finite non-negative number: " + String::number(when));
+        return;
+    }
+
+    if (!std::isfinite(grainOffset) || (grainOffset < 0)) {
+        exceptionState.throwDOMException(
+            InvalidStateError,
+            "Offset must be a finite non-negative number: " + String::number(grainOffset));
+        return;
+    }
+
+    if (!std::isfinite(grainDuration) || (grainDuration < 0)) {
+        exceptionState.throwDOMException(
+            InvalidStateError,
+            "Duration must be a finite non-negative number: " + String::number(grainDuration));
         return;
     }
 

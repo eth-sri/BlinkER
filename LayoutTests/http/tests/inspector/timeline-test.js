@@ -46,9 +46,14 @@ InspectorTest.timelineFrameModel = function()
     return WebInspector.panels.timeline._frameModel();
 }
 
+InspectorTest.timelineUIUtils = function()
+{
+    return WebInspector.panels.timeline._uiUtils;
+}
+
 InspectorTest.startTimeline = function(callback)
 {
-    var panel = WebInspector.inspectorView.panel("timeline");
+    var panel = WebInspector.inspectorView._panel("timeline");
     function onRecordingStarted()
     {
         panel._model.removeEventListener(WebInspector.TimelineModel.Events.RecordingStarted, onRecordingStarted, this)
@@ -60,7 +65,7 @@ InspectorTest.startTimeline = function(callback)
 
 InspectorTest.stopTimeline = function(callback)
 {
-    var panel = WebInspector.inspectorView.panel("timeline");
+    var panel = WebInspector.inspectorView._panel("timeline");
     function didStop()
     {
         panel._model.removeEventListener(WebInspector.TimelineModel.Events.RecordingStopped, didStop, this)
@@ -100,7 +105,7 @@ InspectorTest.invokeAsyncWithTimeline = function(functionName, doneCallback)
 
 InspectorTest.loadTimelineRecords = function(records)
 {
-    var model = WebInspector.inspectorView.showPanel("timeline")._model;
+    var model = WebInspector.inspectorView._showPanel("timeline")._model;
     model.reset();
     records.forEach(model._addRecord, model);
 }
@@ -165,19 +170,20 @@ InspectorTest.dumpTimelineRecord = function(record, detailsCallback, level, filt
 {
     if (typeof level !== "number")
         level = 0;
-    var prefix = "";
-    var suffix = "";
+    var message = "";
     for (var i = 0; i < level ; ++i)
-        prefix = "----" + prefix;
+        message = "----" + message;
     if (level > 0)
-        prefix = prefix + "> ";
+        message = message + "> ";
     if (record.type() === WebInspector.TimelineModel.RecordType.TimeStamp
         || record.type() === WebInspector.TimelineModel.RecordType.ConsoleTime) {
-        suffix = " : " + record.data().message;
+        message += InspectorTest.timelineUIUtils().titleForRecord(record);
+    } else  {
+        message += record.type();
     }
     if (detailsCallback)
-        suffix += " " + detailsCallback(record);
-    InspectorTest.addResult(prefix + record.type() + suffix);
+        message += " " + detailsCallback(record);
+    InspectorTest.addResult(message);
 
     var children = record.children();
     var numChildren = children.length;
@@ -210,22 +216,24 @@ InspectorTest.dumpPresentationRecord = function(presentationRecord, detailsCallb
     var record = !presentationRecord.presentationParent() ? null : presentationRecord.record();
     if (typeof level !== "number")
         level = 0;
-    var prefix = "";
-    var suffix = "";
+    var message = "";
     for (var i = 0; i < level ; ++i)
-        prefix = "----" + prefix;
+        message = "----" + message;
     if (level > 0)
-        prefix = prefix + "> ";
-    if (presentationRecord.coalesced()) {
-        suffix = " x " + presentationRecord.presentationChildren().length;
-    } else if (record && (record.type() === WebInspector.TimelineModel.RecordType.TimeStamp
-        || record.type() === WebInspector.TimelineModel.RecordType.ConsoleTime)) {
-        suffix = " : " + record.data().message;
+        message = message + "> ";
+    if (!record) {
+        message += "Root";
+    } else if (presentationRecord.coalesced()) {
+        message += record.type() + " x " + presentationRecord.presentationChildren().length;
+    } else if (record.type() === WebInspector.TimelineModel.RecordType.TimeStamp
+        || record.type() === WebInspector.TimelineModel.RecordType.ConsoleTime) {
+        message += InspectorTest.timelineUIUtils().titleForRecord(record);
+    } else {
+        message += record.type();
     }
     if (detailsCallback)
-        suffix += " " + detailsCallback(presentationRecord);
-    var typeString = record ? record.type() : "Root";
-    InspectorTest.addResult(prefix + typeString + suffix);
+        message += " " + detailsCallback(presentationRecord);
+    InspectorTest.addResult(message);
 
     var numChildren = presentationRecord.presentationChildren() ? presentationRecord.presentationChildren().length : 0;
     for (var i = 0; i < numChildren; ++i) {

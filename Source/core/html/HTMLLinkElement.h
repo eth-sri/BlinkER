@@ -38,7 +38,6 @@
 
 namespace blink {
 
-class DocumentFragment;
 class HTMLLinkElement;
 class KURL;
 class LinkImport;
@@ -115,6 +114,7 @@ private:
 
 
 class HTMLLinkElement FINAL : public HTMLElement, public LinkLoaderClient {
+    DEFINE_WRAPPERTYPEINFO();
 public:
     static PassRefPtrWillBeRawPtr<HTMLLinkElement> create(Document&, bool createdByParser);
     virtual ~HTMLLinkElement();
@@ -212,6 +212,6 @@ private:
     bool m_isInShadowTree;
 };
 
-} //namespace
+} // namespace blink
 
-#endif
+#endif // HTMLLinkElement_h

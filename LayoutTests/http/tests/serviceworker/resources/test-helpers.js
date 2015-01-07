@@ -1,18 +1,11 @@
 // Adapter for testharness.js-style tests with Service Workers
 
-// Can only be used with a worker that installs successfully, since it
-// first registers to acquire a ServiceWorkerRegistration object to
-// unregister.
-// FIXME: Use getRegistration() when implemented.
 function service_worker_unregister_and_register(test, url, scope) {
   if (!scope || scope.length == 0)
     return Promise.reject(new Error('tests must define a scope'));
 
   var options = { scope: scope };
-  return navigator.serviceWorker.register(url, options)
-      .then(function(registration) {
-          return registration.unregister();
-        })
+  return service_worker_unregister(test, scope)
       .then(function() {
           return navigator.serviceWorker.register(url, options);
         })
@@ -20,10 +13,18 @@ function service_worker_unregister_and_register(test, url, scope) {
                                  'unregister and register should not fail'));
 }
 
+function service_worker_unregister(test, documentUrl) {
+  return navigator.serviceWorker.getRegistration(documentUrl)
+      .then(function(registration) {
+          if (registration)
+            return registration.unregister();
+        })
+      .catch(unreached_rejection(test, 'unregister should not fail'));
+}
+
 function service_worker_unregister_and_done(test, scope) {
-    return navigator.serviceWorker.unregister(scope).then(
-        test.done.bind(test),
-        unreached_rejection(test, 'unregister should not fail'));
+  return service_worker_unregister(test, scope)
+      .then(test.done.bind(test));
 }
 
 // Rejection-specific helper that provides more details
@@ -65,21 +66,98 @@ function normalizeURL(url) {
   return new URL(url, document.location).toString().replace(/#.*$/, '');
 }
 
+function get_newest_worker(registration) {
+  if (!registration) {
+    return Promise.reject(new Error(
+        'get_newest_worker must be passed a ServiceWorkerRegistration'));
+  }
+  if (registration.installing)
+    return Promise.resolve(registration.installing);
+  if (registration.waiting)
+    return Promise.resolve(registration.waiting);
+  if (registration.active)
+    return Promise.resolve(registration.active);
+  return Promise.reject(new Error(
+      'registration must have at least one version'));
+}
+
 function wait_for_update(test, registration) {
-    return new Promise(test.step_func(function(resolve) {
-        registration.addEventListener('updatefound', test.step_func(function() {
-            resolve(registration.installing);
-        }));
+  if (!registration || registration.unregister == undefined) {
+    return Promise.reject(new Error(
+        'wait_for_update must be passed a ServiceWorkerRegistration'));
+  }
+
+  return new Promise(test.step_func(function(resolve) {
+      registration.addEventListener('updatefound', test.step_func(function() {
+          resolve(registration.installing);
+      }));
     }));
 }
 
 function wait_for_state(test, worker, state) {
-    return new Promise(test.step_func(function(resolve) {
-        worker.addEventListener('statechange', test.step_func(function() {
-            if (worker.state === state)
-                resolve(state);
+  if (!worker || worker.state == undefined) {
+    return Promise.reject(new Error(
+        'wait_for_state must be passed a ServiceWorker'));
+  }
+  if (worker.state === state)
+    return Promise.resolve(state);
+
+  if (state === 'installing') {
+    switch (worker.state) {
+    case 'installed':
+    case 'activating':
+    case 'activated':
+    case 'redundant':
+      return Promise.reject(new Error(
+          'worker is ' + worker.state + ' but waiting for ' + state));
+    }
+  }
+
+  if (state === 'installed') {
+    switch (worker.state) {
+    case 'activating':
+    case 'activated':
+    case 'redundant':
+      return Promise.reject(new Error(
+          'worker is ' + worker.state + ' but waiting for ' + state));
+    }
+  }
+
+  if (state === 'activating') {
+    switch (worker.state) {
+    case 'activated':
+    case 'redundant':
+      return Promise.reject(new Error(
+          'worker is ' + worker.state + ' but waiting for ' + state));
+    }
+  }
+
+  if (state === 'activated') {
+    switch (worker.state) {
+    case 'redundant':
+      return Promise.reject(new Error(
+          'worker is ' + worker.state + ' but waiting for ' + state));
+    }
+  }
+
+  return new Promise(test.step_func(function(resolve) {
+      worker.addEventListener('statechange', test.step_func(function() {
+          if (worker.state === state)
+            resolve(state);
         }));
     }));
+}
+
+function wait_for_activated(test, registration) {
+  var expected_state = 'activated';
+  if (registration.active)
+    return wait_for_state(test, registration.active, expected_state);
+  if (registration.waiting)
+    return wait_for_state(test, registration.waiting, expected_state);
+  if (registration.installing)
+    return wait_for_state(test, registration.installing, expected_state);
+  return Promise.reject(
+      new Error('registration must have at least one version'));
 }
 
 (function() {
@@ -121,16 +199,18 @@ function wait_for_state(test, worker, state) {
   };
 
   function service_worker_test(url, description) {
-    var scope = window.location.origin + '/service-worker-scope/' +
+    var scope = window.location.origin + '/service-worker-scope' +
       window.location.pathname;
 
     var test = async_test(description);
+    var registration;
     service_worker_unregister_and_register(test, url, scope)
-      .then(function(registration) {
+      .then(function(r) {
+          registration = r;
           return wait_for_update(test, registration);
         })
       .then(function(worker) { return fetch_tests_from_worker(worker); })
-      .then(function() { return navigator.serviceWorker.unregister(scope); })
+      .then(function() { return registration.unregister(); })
       .then(function() { test.done(); })
       .catch(test.step_func(function(e) { throw e; }));
   };
@@ -141,6 +221,7 @@ function wait_for_state(test, worker, state) {
 function get_host_info() {
     var ORIGINAL_HOST = '127.0.0.1';
     var REMOTE_HOST = 'localhost';
+    var UNAUTHENTICATED_HOST = 'example.test';
     var HTTP_PORT = 8000;
     var HTTPS_PORT = 8443;
     try {
@@ -157,7 +238,8 @@ function get_host_info() {
         HTTP_ORIGIN: 'http://' + ORIGINAL_HOST + ':' + HTTP_PORT,
         HTTPS_ORIGIN: 'https://' + ORIGINAL_HOST + ':' + HTTPS_PORT,
         HTTP_REMOTE_ORIGIN: 'http://' + REMOTE_HOST + ':' + HTTP_PORT,
-        HTTPS_REMOTE_ORIGIN: 'https://' + REMOTE_HOST + ':' + HTTPS_PORT
+        HTTPS_REMOTE_ORIGIN: 'https://' + REMOTE_HOST + ':' + HTTPS_PORT,
+        UNAUTHENTICATED_ORIGIN: 'http://' + UNAUTHENTICATED_HOST + ':' + HTTP_PORT
     };
 }
 

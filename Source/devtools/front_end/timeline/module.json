@@ -1,12 +1,15 @@
 {
     "extensions": [
         {
-            "type": "@WebInspector.Panel",
+            "type": "@WebInspector.PanelFactory",
             "name": "timeline",
             "title": "Timeline",
             "order": 3,
-            "className": "WebInspector.TimelinePanel"
+            "className": "WebInspector.TimelinePanelFactory"
         }
+    ],
+    "dependencies": [
+        "components"
     ],
     "scripts": [
         "CountersGraph.js",
@@ -30,6 +33,7 @@
         "TimelineView.js",
         "TimelineLayersView.js",
         "TimelinePaintProfilerView.js",
+        "TracingModel.js",
         "TracingTimelineUIUtils.js",
         "TransformController.js",
         "PaintProfilerView.js",

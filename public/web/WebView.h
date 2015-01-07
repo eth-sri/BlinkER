@@ -288,13 +288,9 @@ public:
     // Sets the ratio as computed by computePageScaleConstraints.
     virtual void setDeviceScaleFactor(float) = 0;
 
-
-    // Fixed Layout --------------------------------------------------------
-
-    // Locks main frame's layout size to specified size. Passing WebSize(0, 0)
-    // removes the lock.
-    virtual void setFixedLayoutSize(const WebSize&) = 0;
-
+    // Set and reset the device color profile.
+    virtual void setDeviceColorProfile(const WebVector<char>&) = 0;
+    virtual void resetDeviceColorProfile() = 0;
 
     // Auto-Resize -----------------------------------------------------------
 

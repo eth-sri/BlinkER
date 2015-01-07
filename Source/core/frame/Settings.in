@@ -118,6 +118,11 @@ mediaPlaybackRequiresUserGesture initial=false
 
 scrollAnimatorEnabled initial=true
 
+# Used to disable threaded, compositor scrolling for testing purposes.
+# crbug.com/410974 tracks removal once alternative solutions for selective
+# main thread scrolling are supported.
+threadedScrollingEnabled initial=true, invalidate=Style
+
 # Used in layout tests for gesture tap highlights. Makes the highlights square
 # (rather than rounded) to make it possible to reftest the results.
 mockGestureTapHighlightsEnabled initial=false
@@ -264,7 +269,7 @@ deviceScaleAdjustment type=double, initial=1.0, invalidate=TextAutosizing
 # The spec ( https://dvcs.w3.org/hg/webperf/raw-file/tip/specs/Beacon/Overview.html )
 # does not proscribe an upper limit, but allows for it -- the underlying
 # API will return 'false' in that case.
-maxBeaconTransmission type=int, initial=16384
+maxBeaconTransmission type=int, initial=65536
 
 # This value is set to false if the platform does not support fullscreen.
 # When set to false all the requests to enter fullscreen will return an error
@@ -282,6 +287,8 @@ disallowFullscreenForNonMediaElements initial=false
 
 # V8 supports different types of caching. Used by V8 bindings.
 v8CacheOptions type=V8CacheOptions, initial=V8CacheOptionsOff
+
+v8ScriptStreamingEnabled initial=false
 
 # These values are bit fields for the properties of available pointing devices
 # and may take on multiple values (e.g. laptop with touchpad and touchscreen

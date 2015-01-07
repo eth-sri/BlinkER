@@ -30,6 +30,7 @@ namespace blink {
 
 class SVGAElement FINAL : public SVGGraphicsElement,
                           public SVGURIReference {
+    DEFINE_WRAPPERTYPEINFO();
 public:
     DECLARE_NODE_FACTORY(SVGAElement);
     SVGAnimatedString* svgTarget() { return m_svgTarget.get(); }
@@ -50,8 +51,7 @@ private:
 
     virtual bool supportsFocus() const OVERRIDE;
     virtual bool shouldHaveFocusAppearance() const OVERRIDE FINAL;
-    virtual bool wasFocusedByMouse() const OVERRIDE FINAL;
-    virtual void setWasFocusedByMouse(bool) OVERRIDE FINAL;
+    virtual void dispatchFocusEvent(Element* oldFocusedElement, FocusType) OVERRIDE;
     virtual bool isMouseFocusable() const OVERRIDE;
     virtual bool isKeyboardFocusable() const OVERRIDE;
     virtual bool isURLAttribute(const Attribute&) const OVERRIDE;

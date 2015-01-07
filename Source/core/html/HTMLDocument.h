@@ -29,11 +29,10 @@
 
 namespace blink {
 
-class FrameView;
 class HTMLBodyElement;
-class HTMLElement;
 
 class HTMLDocument : public Document, public ResourceClient {
+    DEFINE_WRAPPERTYPEINFO();
 public:
     static PassRefPtrWillBeRawPtr<HTMLDocument> create(const DocumentInit& initializer = DocumentInit())
     {

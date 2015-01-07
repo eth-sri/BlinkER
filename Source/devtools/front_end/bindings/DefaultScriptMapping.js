@@ -56,8 +56,10 @@ WebInspector.DefaultScriptMapping.prototype = {
         var debuggerModelLocation = /** @type {!WebInspector.DebuggerModel.Location} */ (rawLocation);
         var script = debuggerModelLocation.script();
         var uiSourceCode = this._uiSourceCodeForScriptId[script.scriptId];
-        var lineNumber = debuggerModelLocation.lineNumber;
+        var lineNumber = debuggerModelLocation.lineNumber - (script.isInlineScriptWithSourceURL() ? script.lineOffset : 0);
         var columnNumber = debuggerModelLocation.columnNumber || 0;
+        if (script.isInlineScriptWithSourceURL() && !lineNumber && columnNumber)
+            columnNumber -= script.columnOffset;
         return uiSourceCode.uiLocation(lineNumber, columnNumber);
     },
 
@@ -71,6 +73,8 @@ WebInspector.DefaultScriptMapping.prototype = {
     {
         var scriptId = this._scriptIdForUISourceCode.get(uiSourceCode);
         var script = this._debuggerModel.scriptForId(scriptId);
+        if (script.isInlineScriptWithSourceURL())
+            return this._debuggerModel.createRawLocation(script, lineNumber + script.lineOffset, lineNumber ? columnNumber : columnNumber + script.columnOffset);
         return this._debuggerModel.createRawLocation(script, lineNumber, columnNumber);
     },
 
@@ -170,11 +174,11 @@ WebInspector.DebuggerProjectDelegate.prototype = {
      */
     addScript: function(script)
     {
-        var contentProvider = script.isInlineScript() ? new WebInspector.ConcatenatedScriptsContentProvider([script]) : script;
+        var contentProvider = script.isInlineScript() && !script.hasSourceURL ? new WebInspector.ConcatenatedScriptsContentProvider([script]) : script;
         var splitURL = WebInspector.ParsedURL.splitURL(script.sourceURL);
         var name = splitURL[splitURL.length - 1];
         name = "VM" + script.scriptId + (name ? " " + name : "");
-        return this.addContentProvider("", name, script.sourceURL, contentProvider);
+        return this.addContentProvider("", name, script.sourceURL, script.sourceURL, contentProvider);
     },
 
     __proto__: WebInspector.ContentProviderBasedProjectDelegate.prototype

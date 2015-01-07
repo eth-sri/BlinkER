@@ -29,6 +29,7 @@
 #include "core/editing/TextGranularity.h"
 #include "core/events/TextEventInputType.h"
 #include "core/page/DragActions.h"
+#include "core/page/EventWithHitTestResults.h"
 #include "core/page/FocusType.h"
 #include "core/rendering/HitTestRequest.h"
 #include "core/rendering/style/RenderStyleConstants.h"
@@ -72,17 +73,12 @@ class PlatformWheelEvent;
 class RenderLayer;
 class RenderLayerScrollableArea;
 class RenderObject;
-class RenderWidget;
 class ScrollableArea;
 class Scrollbar;
 class TextEvent;
-class TouchEvent;
 class VisibleSelection;
 class WheelEvent;
 class Widget;
-
-typedef EventWithHitTestResults<PlatformGestureEvent> GestureEventWithHitTestResults;
-typedef EventWithHitTestResults<PlatformMouseEvent> MouseEventWithHitTestResults;
 
 enum AppendTrailingWhitespace { ShouldAppendTrailingWhitespace, DontAppendTrailingWhitespace };
 enum CheckDragHysteresis { ShouldCheckDragHysteresis, DontCheckDragHysteresis };
@@ -148,6 +144,7 @@ public:
 
     // Called on the local root frame exactly once per gesture event.
     bool handleGestureEvent(const PlatformGestureEvent&);
+    bool handleGestureEvent(const GestureEventWithHitTestResults&);
 
     // Hit-test the provided (non-scroll) gesture event, applying touch-adjustment and updating
     // hover/active state across all frames if necessary. This should be called at most once
@@ -194,8 +191,12 @@ public:
     bool useHandCursor(Node*, bool isOverLink);
 
     void notifyElementActivated();
+    void notifySelectionChanged();
 
     PassRefPtr<UserGestureToken> takeLastMouseDownGestureToken() { return m_lastMouseDownUserGestureToken.release(); }
+
+    int clickCount() { return m_clickCount; }
+    bool mouseDownWasSingleClickInSelection() { return m_mouseDownWasSingleClickInSelection; }
 
 private:
     static DragState& dragState();
@@ -354,7 +355,7 @@ private:
 
     RefPtrWillBeMember<Node> m_nodeUnderMouse;
     RefPtrWillBeMember<Node> m_lastNodeUnderMouse;
-    RefPtr<LocalFrame> m_lastMouseMoveEventSubframe;
+    RefPtrWillBeMember<LocalFrame> m_lastMouseMoveEventSubframe;
     RefPtr<Scrollbar> m_lastScrollbarUnderMouse;
     Cursor m_currentMouseCursor;
 

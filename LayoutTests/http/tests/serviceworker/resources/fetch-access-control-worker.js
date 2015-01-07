@@ -46,9 +46,9 @@ function getRequestInit(params) {
 
 function headersToArray(headers) {
   var ret = [];
-  headers.forEach(function(value, key) {
-      ret.push([key, value]);
-    });
+  for (var header of headers) {
+    ret.push(header);
+  }
   return ret;
 }
 
@@ -75,15 +75,28 @@ self.addEventListener('fetch', function(event) {
           } else if (!params['noChange']) {
             request = new Request(request, init);
           }
+          var response;
           fetch(request)
             .then(function(res) {
-                // Send the result to fetch-access-control.html.
-                port.postMessage({fetchResult: 'resolved',
-                                  hasBody: !!res.body,
-                                  headers: headersToArray(res.headers),
-                                  type: res.type,
-                                  originalURL: originalURL});
-                resolve(res);
+                response = res;
+                res.text()
+                  .then(function(body) {
+                      // Send the result to fetch-access-control.html.
+                      port.postMessage(
+                        {
+                          fetchResult: 'resolved',
+                          body: body,
+                          headers: headersToArray(response.headers),
+                          type: response.type,
+                          originalURL: originalURL
+                        });
+                      resolve(response);
+                    })
+                  .catch(function(e) {
+                      // Send the result to fetch-access-control.html.
+                      port.postMessage({fetchResult: 'error'});
+                      reject();
+                    });
               })
             .catch(function(e) {
                 // Send the result to fetch-access-control.html.

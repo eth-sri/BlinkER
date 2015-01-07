@@ -28,6 +28,7 @@
 #include "core/css/parser/BisonCSSParser.h"
 
 #include "core/CSSValueKeywords.h"
+#include "core/MediaTypeNames.h"
 #include "core/StylePropertyShorthand.h"
 #include "core/css/CSSAspectRatioValue.h"
 #include "core/css/CSSBasicShapes.h"
@@ -354,7 +355,7 @@ static bool parseSimpleLengthValue(MutableStylePropertySet* declaration, CSSProp
     return true;
 }
 
-bool isValidKeywordPropertyAndValue(CSSPropertyID propertyId, CSSValueID valueID, const CSSParserContext& parserContext)
+bool isValidKeywordPropertyAndValue(CSSPropertyID propertyId, CSSValueID valueID)
 {
     if (valueID == CSSValueInvalid)
         return false;
@@ -412,7 +413,6 @@ bool isValidKeywordPropertyAndValue(CSSPropertyID propertyId, CSSValueID valueID
         // for the list of supported list-style-types.
         return (valueID >= CSSValueDisc && valueID <= CSSValueKatakanaIroha) || valueID == CSSValueNone;
     case CSSPropertyObjectFit:
-        ASSERT(RuntimeEnabledFeatures::objectFitPositionEnabled());
         return valueID == CSSValueFill || valueID == CSSValueContain || valueID == CSSValueCover || valueID == CSSValueNone || valueID == CSSValueScaleDown;
     case CSSPropertyOutlineStyle: // (<border-style> except hidden) | auto
         return valueID == CSSValueAuto || valueID == CSSValueNone || (valueID >= CSSValueInset && valueID <= CSSValueDouble);
@@ -671,7 +671,7 @@ bool isKeywordPropertyID(CSSPropertyID propertyId)
     }
 }
 
-static bool parseKeywordValue(MutableStylePropertySet* declaration, CSSPropertyID propertyId, const String& string, bool important, const CSSParserContext& parserContext)
+static bool parseKeywordValue(MutableStylePropertySet* declaration, CSSPropertyID propertyId, const String& string, bool important)
 {
     ASSERT(!string.isEmpty());
 
@@ -698,7 +698,7 @@ static bool parseKeywordValue(MutableStylePropertySet* declaration, CSSPropertyI
         value = cssValuePool().createInheritedValue();
     else if (valueID == CSSValueInitial)
         value = cssValuePool().createExplicitInitialValue();
-    else if (isValidKeywordPropertyAndValue(propertyId, valueID, parserContext))
+    else if (isValidKeywordPropertyAndValue(propertyId, valueID))
         value = cssValuePool().createIdentifierValue(valueID);
     else
         return false;
@@ -877,49 +877,15 @@ static bool parseSimpleTransform(MutableStylePropertySet* properties, CSSPropert
     return true;
 }
 
-PassRefPtrWillBeRawPtr<CSSValueList> BisonCSSParser::parseFontFaceValue(const AtomicString& string)
-{
-    if (string.isEmpty())
-        return nullptr;
-    RefPtrWillBeRawPtr<MutableStylePropertySet> dummyStyle = MutableStylePropertySet::create();
-    if (!parseValue(dummyStyle.get(), CSSPropertyFontFamily, string, false, HTMLQuirksMode, 0))
-        return nullptr;
-
-    RefPtrWillBeRawPtr<CSSValue> fontFamily = dummyStyle->getPropertyCSSValue(CSSPropertyFontFamily);
-    if (!fontFamily->isValueList())
-        return nullptr;
-
-    return toCSSValueList(dummyStyle->getPropertyCSSValue(CSSPropertyFontFamily).get());
-}
-
-PassRefPtrWillBeRawPtr<CSSValue> BisonCSSParser::parseAnimationTimingFunctionValue(const String& string)
-{
-    if (string.isEmpty())
-        return nullptr;
-    RefPtrWillBeRawPtr<MutableStylePropertySet> style = MutableStylePropertySet::create();
-    if (!parseValue(style.get(), CSSPropertyTransitionTimingFunction, string, false, HTMLStandardMode, 0))
-        return nullptr;
-
-    RefPtrWillBeRawPtr<CSSValue> value = style->getPropertyCSSValue(CSSPropertyTransitionTimingFunction);
-    if (!value || value->isInitialValue() || value->isInheritedValue())
-        return nullptr;
-    CSSValueList* valueList = toCSSValueList(value.get());
-    if (valueList->length() > 1)
-        return nullptr;
-    return valueList->item(0);
-}
-
-bool BisonCSSParser::parseValue(MutableStylePropertySet* declaration, CSSPropertyID propertyID, const String& string, bool important, const Document& document)
+bool BisonCSSParser::parseValue(MutableStylePropertySet* declaration, CSSPropertyID propertyID, const String& string, bool important, const CSSParserContext& context)
 {
     ASSERT(!string.isEmpty());
-
-    CSSParserContext context(document, UseCounter::getFrom(&document));
 
     if (parseSimpleLengthValue(declaration, propertyID, string, important, context.mode()))
         return true;
     if (parseColorValue(declaration, propertyID, string, important, context.mode()))
         return true;
-    if (parseKeywordValue(declaration, propertyID, string, important, context))
+    if (parseKeywordValue(declaration, propertyID, string, important))
         return true;
 
     BisonCSSParser parser(context);
@@ -933,18 +899,16 @@ bool BisonCSSParser::parseValue(MutableStylePropertySet* declaration, CSSPropert
         return true;
     if (parseColorValue(declaration, propertyID, string, important, cssParserMode))
         return true;
+    if (parseKeywordValue(declaration, propertyID, string, important))
+        return true;
+    if (parseSimpleTransform(declaration, propertyID, string, important))
+        return true;
 
     CSSParserContext context(cssParserMode, 0);
     if (contextStyleSheet) {
         context = contextStyleSheet->parserContext();
         context.setMode(cssParserMode);
     }
-
-    if (parseKeywordValue(declaration, propertyID, string, important, context))
-        return true;
-    if (parseSimpleTransform(declaration, propertyID, string, important))
-        return true;
-
     BisonCSSParser parser(context);
     return parser.parseValue(declaration, propertyID, string, important, contextStyleSheet);
 }
@@ -1103,19 +1067,6 @@ bool BisonCSSParser::parseDeclaration(MutableStylePropertySet* declaration, cons
     return ok;
 }
 
-PassRefPtrWillBeRawPtr<MediaQuerySet> BisonCSSParser::parseMediaQueryList(const String& string)
-{
-    ASSERT(!m_mediaList);
-
-    // can't use { because tokenizer state switches from mediaquery to initial state when it sees { token.
-    // instead insert one " " (which is caught by maybe_space in CSSGrammar.y)
-    setupParser("@-internal-medialist ", string, "");
-    cssyyparse(this);
-
-    ASSERT(m_mediaList);
-    return m_mediaList.release();
-}
-
 bool BisonCSSParser::parseAttributeMatchType(CSSSelector::AttributeMatchType& matchType, const String& string)
 {
     if (!RuntimeEnabledFeatures::cssAttributeCaseSensitivityEnabled() && !isUASheetBehavior(m_context.mode()))
@@ -1179,8 +1130,7 @@ void BisonCSSParser::setCurrentProperty(CSSPropertyID propId)
 
 bool BisonCSSParser::parseValue(CSSPropertyID propId, bool important)
 {
-    CSSPropertyParser parser(m_valueList, m_context, m_inViewport, m_parsedProperties, m_ruleHeaderType);
-    return parser.parseValue(propId, important);
+    return CSSPropertyParser::parseValue(propId, important, m_valueList.get(), m_context, m_inViewport, m_parsedProperties, m_ruleHeaderType);
 }
 
 
@@ -1195,7 +1145,7 @@ public:
         const UChar* characters;
         unsigned nameLength = name.length();
 
-        const unsigned longestNameLength = 12;
+        const unsigned longestNameLength = 11;
         UChar characterBuffer[longestNameLength];
         if (name.is8Bit()) {
             unsigned length = std::min(longestNameLength, nameLength);
@@ -1207,97 +1157,97 @@ public:
             characters = name.characters16();
 
         SWITCH(characters, nameLength) {
-            CASE("skew(") {
+            CASE("skew") {
                 m_unit = CSSPropertyParser::FAngle;
                 m_type = CSSTransformValue::SkewTransformOperation;
                 m_allowSingleArgument = true;
                 m_argCount = 3;
             }
-            CASE("scale(") {
+            CASE("scale") {
                 m_unit = CSSPropertyParser::FNumber;
                 m_type = CSSTransformValue::ScaleTransformOperation;
                 m_allowSingleArgument = true;
                 m_argCount = 3;
             }
-            CASE("skewx(") {
+            CASE("skewx") {
                 m_unit = CSSPropertyParser::FAngle;
                 m_type = CSSTransformValue::SkewXTransformOperation;
             }
-            CASE("skewy(") {
+            CASE("skewy") {
                 m_unit = CSSPropertyParser::FAngle;
                 m_type = CSSTransformValue::SkewYTransformOperation;
             }
-            CASE("matrix(") {
+            CASE("matrix") {
                 m_unit = CSSPropertyParser::FNumber;
                 m_type = CSSTransformValue::MatrixTransformOperation;
                 m_argCount = 11;
             }
-            CASE("rotate(") {
+            CASE("rotate") {
                 m_unit = CSSPropertyParser::FAngle;
                 m_type = CSSTransformValue::RotateTransformOperation;
             }
-            CASE("scalex(") {
+            CASE("scalex") {
                 m_unit = CSSPropertyParser::FNumber;
                 m_type = CSSTransformValue::ScaleXTransformOperation;
             }
-            CASE("scaley(") {
+            CASE("scaley") {
                 m_unit = CSSPropertyParser::FNumber;
                 m_type = CSSTransformValue::ScaleYTransformOperation;
             }
-            CASE("scalez(") {
+            CASE("scalez") {
                 m_unit = CSSPropertyParser::FNumber;
                 m_type = CSSTransformValue::ScaleZTransformOperation;
             }
-            CASE("scale3d(") {
+            CASE("scale3d") {
                 m_unit = CSSPropertyParser::FNumber;
                 m_type = CSSTransformValue::Scale3DTransformOperation;
                 m_argCount = 5;
             }
-            CASE("rotatex(") {
+            CASE("rotatex") {
                 m_unit = CSSPropertyParser::FAngle;
                 m_type = CSSTransformValue::RotateXTransformOperation;
             }
-            CASE("rotatey(") {
+            CASE("rotatey") {
                 m_unit = CSSPropertyParser::FAngle;
                 m_type = CSSTransformValue::RotateYTransformOperation;
             }
-            CASE("rotatez(") {
+            CASE("rotatez") {
                 m_unit = CSSPropertyParser::FAngle;
                 m_type = CSSTransformValue::RotateZTransformOperation;
             }
-            CASE("matrix3d(") {
+            CASE("matrix3d") {
                 m_unit = CSSPropertyParser::FNumber;
                 m_type = CSSTransformValue::Matrix3DTransformOperation;
                 m_argCount = 31;
             }
-            CASE("rotate3d(") {
+            CASE("rotate3d") {
                 m_unit = CSSPropertyParser::FNumber;
                 m_type = CSSTransformValue::Rotate3DTransformOperation;
                 m_argCount = 7;
             }
-            CASE("translate(") {
+            CASE("translate") {
                 m_unit = CSSPropertyParser::FLength | CSSPropertyParser::FPercent;
                 m_type = CSSTransformValue::TranslateTransformOperation;
                 m_allowSingleArgument = true;
                 m_argCount = 3;
             }
-            CASE("translatex(") {
+            CASE("translatex") {
                 m_unit = CSSPropertyParser::FLength | CSSPropertyParser::FPercent;
                 m_type = CSSTransformValue::TranslateXTransformOperation;
             }
-            CASE("translatey(") {
+            CASE("translatey") {
                 m_unit = CSSPropertyParser::FLength | CSSPropertyParser::FPercent;
                 m_type = CSSTransformValue::TranslateYTransformOperation;
             }
-            CASE("translatez(") {
+            CASE("translatez") {
                 m_unit = CSSPropertyParser::FLength | CSSPropertyParser::FPercent;
                 m_type = CSSTransformValue::TranslateZTransformOperation;
             }
-            CASE("perspective(") {
+            CASE("perspective") {
                 m_unit = CSSPropertyParser::FNumber;
                 m_type = CSSTransformValue::PerspectiveTransformOperation;
             }
-            CASE("translate3d(") {
+            CASE("translate3d") {
                 m_unit = CSSPropertyParser::FLength | CSSPropertyParser::FPercent;
                 m_type = CSSTransformValue::Translate3DTransformOperation;
                 m_argCount = 5;
@@ -1534,12 +1484,12 @@ MediaQuery* BisonCSSParser::createFloatingMediaQuery(MediaQuery::Restrictor rest
 
 MediaQuery* BisonCSSParser::createFloatingMediaQuery(PassOwnPtrWillBeRawPtr<WillBeHeapVector<OwnPtrWillBeMember<MediaQueryExp> > > expressions)
 {
-    return createFloatingMediaQuery(MediaQuery::None, AtomicString("all", AtomicString::ConstructFromLiteral), expressions);
+    return createFloatingMediaQuery(MediaQuery::None, MediaTypeNames::all, expressions);
 }
 
 MediaQuery* BisonCSSParser::createFloatingNotAllQuery()
 {
-    return createFloatingMediaQuery(MediaQuery::Not, AtomicString("all", AtomicString::ConstructFromLiteral), sinkFloatingMediaQueryExpList(createFloatingMediaQueryExpList()));
+    return createFloatingMediaQuery(MediaQuery::Not, MediaTypeNames::all, sinkFloatingMediaQueryExpList(createFloatingMediaQueryExpList()));
 }
 
 PassOwnPtrWillBeRawPtr<MediaQuery> BisonCSSParser::sinkFloatingMediaQuery(MediaQuery* query)

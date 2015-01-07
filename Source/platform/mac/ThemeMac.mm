@@ -34,8 +34,6 @@
 #import "platform/scroll/ScrollView.h"
 #include "wtf/StdLibExtras.h"
 
-using namespace std;
-
 NSRect focusRingClipRect;
 
 // This is a view whose sole purpose is to tell AppKit that it's flipped.
@@ -367,6 +365,8 @@ static NSButtonCell *radio(ControlStates states, const IntRect& zoomedRect, floa
     setControlSize(radioCell, radioSizes(), zoomedRect.size(), zoomFactor);
 
     // Update the various states we respond to.
+    // Cocoa draws NSMixedState NSRadioButton as NSOnState so we don't want that.
+    states &= ~IndeterminateControlState;
     updateStates(radioCell, states);
     
     return radioCell;

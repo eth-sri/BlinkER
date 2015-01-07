@@ -106,6 +106,7 @@ static const char touchEventEmulationEnabled[] = "touchEventEmulationEnabled";
 static const char pageAgentEmulatedMedia[] = "pageAgentEmulatedMedia";
 static const char showSizeOnResize[] = "showSizeOnResize";
 static const char showGridOnResize[] = "showGridOnResize";
+static const char screencastEnabled[] = "screencastEnabled";
 }
 
 namespace {
@@ -146,21 +147,29 @@ static float calculateFontScaleFactor(int width, int height, float deviceScaleFa
 
 class InspectorPageAgent::GetResourceContentLoadListener FINAL : public VoidCallback {
 public:
-    GetResourceContentLoadListener(InspectorPageAgent*, const String& frameId, const String& url, PassRefPtr<GetResourceContentCallback>);
+    GetResourceContentLoadListener(InspectorPageAgent*, const String& frameId, const String& url, PassRefPtrWillBeRawPtr<GetResourceContentCallback>);
+    virtual void trace(Visitor*) OVERRIDE;
     virtual void handleEvent() OVERRIDE;
 private:
-    InspectorPageAgent* m_pageAgent;
+    RawPtrWillBeMember<InspectorPageAgent> m_pageAgent;
     String m_frameId;
     String m_url;
-    RefPtr<GetResourceContentCallback> m_callback;
+    RefPtrWillBeMember<GetResourceContentCallback> m_callback;
 };
 
-InspectorPageAgent::GetResourceContentLoadListener::GetResourceContentLoadListener(InspectorPageAgent* pageAgent, const String& frameId, const String& url, PassRefPtr<GetResourceContentCallback> callback)
+InspectorPageAgent::GetResourceContentLoadListener::GetResourceContentLoadListener(InspectorPageAgent* pageAgent, const String& frameId, const String& url, PassRefPtrWillBeRawPtr<GetResourceContentCallback> callback)
     : m_pageAgent(pageAgent)
     , m_frameId(frameId)
     , m_url(url)
     , m_callback(callback)
 {
+}
+
+void InspectorPageAgent::GetResourceContentLoadListener::trace(Visitor* visitor)
+{
+    visitor->trace(m_pageAgent);
+    visitor->trace(m_callback);
+    VoidCallback::trace(visitor);
 }
 
 void InspectorPageAgent::GetResourceContentLoadListener::handleEvent()
@@ -480,7 +489,17 @@ void InspectorPageAgent::enable(ErrorString*)
     m_enabled = true;
     m_state->setBoolean(PageAgentState::pageAgentEnabled, true);
     m_instrumentingAgents->setInspectorPageAgent(this);
-    m_inspectorResourceContentLoader = adoptPtr(new InspectorResourceContentLoader(m_page));
+    if (m_inspectorResourceContentLoader)
+        m_inspectorResourceContentLoader->dispose();
+    m_inspectorResourceContentLoader = adoptPtrWillBeNoop(new InspectorResourceContentLoader(m_page));
+}
+
+void InspectorPageAgent::discardAgent()
+{
+    if (!m_inspectorResourceContentLoader)
+        return;
+    m_inspectorResourceContentLoader->dispose();
+    m_inspectorResourceContentLoader.clear();
 }
 
 void InspectorPageAgent::disable(ErrorString*)
@@ -490,7 +509,10 @@ void InspectorPageAgent::disable(ErrorString*)
     m_state->remove(PageAgentState::pageAgentScriptsToEvaluateOnLoad);
     m_overlay->hide();
     m_instrumentingAgents->setInspectorPageAgent(0);
-    m_inspectorResourceContentLoader.clear();
+    if (m_inspectorResourceContentLoader) {
+        m_inspectorResourceContentLoader->dispose();
+        m_inspectorResourceContentLoader.clear();
+    }
     m_deviceMetricsOverridden = false;
 
     setShowPaintRects(0, false);
@@ -501,6 +523,7 @@ void InspectorPageAgent::disable(ErrorString*)
         setContinuousPaintingEnabled(0, false);
     setShowScrollBottleneckRects(0, false);
     setShowViewportSizeOnResize(0, false, 0);
+    stopScreencast(0);
 
     if (m_state->getBoolean(PageAgentState::touchEventEmulationEnabled)) {
         updateTouchEventEmulationInPage(false);
@@ -700,7 +723,7 @@ void InspectorPageAgent::getResourceTree(ErrorString*, RefPtr<TypeBuilder::Page:
     object = buildObjectForFrameTree(m_page->deprecatedLocalMainFrame());
 }
 
-void InspectorPageAgent::getResourceContentAfterResourcesContentLoaded(const String& frameId, const String& url, PassRefPtr<GetResourceContentCallback> callback)
+void InspectorPageAgent::getResourceContentAfterResourcesContentLoaded(const String& frameId, const String& url, PassRefPtrWillBeRawPtr<GetResourceContentCallback> callback)
 {
     ErrorString errorString;
     LocalFrame* frame = assertFrame(&errorString, frameId);
@@ -718,7 +741,7 @@ void InspectorPageAgent::getResourceContentAfterResourcesContentLoaded(const Str
     callback->sendSuccess(content, base64Encoded);
 }
 
-void InspectorPageAgent::getResourceContent(ErrorString* errorString, const String& frameId, const String& url, PassRefPtr<GetResourceContentCallback> callback)
+void InspectorPageAgent::getResourceContent(ErrorString* errorString, const String& frameId, const String& url, PassRefPtrWillBeRawPtr<GetResourceContentCallback> callback)
 {
     String content;
     if (getEditedResourceContent(url, &content)) {
@@ -729,7 +752,7 @@ void InspectorPageAgent::getResourceContent(ErrorString* errorString, const Stri
         callback->sendFailure("Agent is not enabled.");
         return;
     }
-    m_inspectorResourceContentLoader->ensureResourcesContentLoaded(adoptPtr(new GetResourceContentLoadListener(this, frameId, url, callback)));
+    m_inspectorResourceContentLoader->ensureResourcesContentLoaded(new GetResourceContentLoadListener(this, frameId, url, callback));
 }
 
 static bool textContentForResource(Resource* cachedResource, String* result)
@@ -1103,6 +1126,11 @@ bool InspectorPageAgent::deviceMetricsOverrideEnabled()
     return m_enabled && m_deviceMetricsOverridden;
 }
 
+bool InspectorPageAgent::screencastEnabled()
+{
+    return m_enabled && m_state->getBoolean(PageAgentState::screencastEnabled);
+}
+
 // static
 DocumentLoader* InspectorPageAgent::assertDocumentLoader(ErrorString* errorString, LocalFrame* frame)
 {
@@ -1421,6 +1449,16 @@ bool InspectorPageAgent::compositingEnabled(ErrorString* errorString)
     return true;
 }
 
+void InspectorPageAgent::startScreencast(ErrorString*, const String* format, const int* quality, const int* maxWidth, const int* maxHeight)
+{
+    m_state->setBoolean(PageAgentState::screencastEnabled, true);
+}
+
+void InspectorPageAgent::stopScreencast(ErrorString*)
+{
+    m_state->setBoolean(PageAgentState::screencastEnabled, false);
+}
+
 void InspectorPageAgent::setShowViewportSizeOnResize(ErrorString*, bool show, const bool* showGrid)
 {
     m_state->setBoolean(PageAgentState::showSizeOnResize, show);
@@ -1449,6 +1487,7 @@ void InspectorPageAgent::trace(Visitor* visitor)
 {
     visitor->trace(m_page);
     visitor->trace(m_injectedScriptManager);
+    visitor->trace(m_inspectorResourceContentLoader);
     InspectorBaseAgent::trace(visitor);
 }
 

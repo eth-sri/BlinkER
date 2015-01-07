@@ -57,8 +57,8 @@ AudioNode::AudioNode(AudioContext* context, float sampleRate)
     , m_channelCount(2)
     , m_channelCountMode(Max)
     , m_channelInterpretation(AudioBus::Speakers)
+    , m_newChannelCountMode(Max)
 {
-    ScriptWrappable::init(this);
     m_context->registerLiveNode(*this);
 #if DEBUG_AUDIONODE_REFERENCES
     if (!s_isNodeCountInitialized) {
@@ -74,7 +74,8 @@ AudioNode::~AudioNode()
     --s_instanceCount;
 #if DEBUG_AUDIONODE_REFERENCES
     --s_nodeCount[nodeType()];
-    fprintf(stderr, "%p: %d: AudioNode::~AudioNode() %d\n", this, nodeType(), m_connectionRefCount);
+    fprintf(stderr, "%p: %2d: AudioNode::~AudioNode() %d [%d]\n",
+        this, nodeType(), m_connectionRefCount, s_nodeCount[nodeType()]);
 #endif
 }
 
@@ -93,6 +94,7 @@ void AudioNode::dispose()
     ASSERT(isMainThread());
     ASSERT(context()->isGraphOwner());
 
+    context()->removeChangedChannelCountMode(this);
     context()->removeAutomaticPullNode(this);
     context()->disposeOutputs(*this);
     for (unsigned i = 0; i < m_outputs.size(); ++i)
@@ -150,6 +152,7 @@ void AudioNode::setNodeType(NodeType type)
 
 #if DEBUG_AUDIONODE_REFERENCES
     ++s_nodeCount[type];
+    fprintf(stderr, "%p: %2d: AudioNode::AudioNode [%3d]\n", this, nodeType(), s_nodeCount[nodeType()]);
 #endif
 }
 
@@ -309,17 +312,17 @@ void AudioNode::setChannelCountMode(const String& mode, ExceptionState& exceptio
     ChannelCountMode oldMode = m_channelCountMode;
 
     if (mode == "max") {
-        m_channelCountMode = Max;
+        m_newChannelCountMode = Max;
     } else if (mode == "clamped-max") {
-        m_channelCountMode = ClampedMax;
+        m_newChannelCountMode = ClampedMax;
     } else if (mode == "explicit") {
-        m_channelCountMode = Explicit;
+        m_newChannelCountMode = Explicit;
     } else {
         ASSERT_NOT_REACHED();
     }
 
-    if (m_channelCountMode != oldMode)
-        updateChannelsForInputs();
+    if (m_newChannelCountMode != oldMode)
+        context()->addChangedChannelCountMode(this);
 }
 
 String AudioNode::channelInterpretation()
@@ -481,6 +484,11 @@ void AudioNode::disableOutputsIfNecessary()
 void AudioNode::makeConnection()
 {
     atomicIncrement(&m_connectionRefCount);
+
+#if DEBUG_AUDIONODE_REFERENCES
+    fprintf(stderr, "%p: %2d: AudioNode::ref   %3d [%3d]\n",
+        this, nodeType(), m_connectionRefCount, s_nodeCount[nodeType()]);
+#endif
     // See the disabling code in disableOutputsIfNecessary(). This handles
     // the case where a node is being re-connected after being used at least
     // once and disconnected. In this case, we need to re-enable.
@@ -519,6 +527,12 @@ void AudioNode::breakConnection()
 void AudioNode::breakConnectionWithLock()
 {
     atomicDecrement(&m_connectionRefCount);
+
+#if DEBUG_AUDIONODE_REFERENCES
+    fprintf(stderr, "%p: %2d: AudioNode::deref %3d [%3d]\n",
+        this, nodeType(), m_connectionRefCount, s_nodeCount[nodeType()]);
+#endif
+
     if (!m_connectionRefCount)
         disableOutputsIfNecessary();
 }
@@ -536,7 +550,7 @@ void AudioNode::printNodeCounts()
     fprintf(stderr, "===========================\n");
 
     for (unsigned i = 0; i < NodeTypeEnd; ++i)
-        fprintf(stderr, "%d: %d\n", i, s_nodeCount[i]);
+        fprintf(stderr, "%2d: %d\n", i, s_nodeCount[i]);
 
     fprintf(stderr, "===========================\n\n\n");
 }
@@ -549,6 +563,12 @@ void AudioNode::trace(Visitor* visitor)
     visitor->trace(m_inputs);
     visitor->trace(m_outputs);
     EventTargetWithInlineData::trace(visitor);
+}
+
+void AudioNode::updateChannelCountMode()
+{
+    m_channelCountMode = m_newChannelCountMode;
+    updateChannelsForInputs();
 }
 
 } // namespace blink

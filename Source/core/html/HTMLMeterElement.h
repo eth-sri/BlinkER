@@ -25,11 +25,11 @@
 
 namespace blink {
 
-class ExceptionState;
 class MeterValueElement;
 class RenderMeter;
 
 class HTMLMeterElement FINAL : public LabelableElement {
+    DEFINE_WRAPPERTYPEINFO();
 public:
     static PassRefPtrWillBeRawPtr<HTMLMeterElement> create(Document&);
 
@@ -82,6 +82,6 @@ private:
     RefPtrWillBeMember<MeterValueElement> m_value;
 };
 
-} // namespace
+} // namespace blink
 
-#endif
+#endif // HTMLMeterElement_h

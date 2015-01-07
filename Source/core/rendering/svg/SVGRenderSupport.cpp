@@ -34,12 +34,14 @@
 #include "core/rendering/svg/RenderSVGResourceFilter.h"
 #include "core/rendering/svg/RenderSVGResourceMasker.h"
 #include "core/rendering/svg/RenderSVGRoot.h"
+#include "core/rendering/svg/RenderSVGShape.h"
 #include "core/rendering/svg/RenderSVGText.h"
 #include "core/rendering/svg/RenderSVGViewportContainer.h"
 #include "core/rendering/svg/SVGResources.h"
 #include "core/rendering/svg/SVGResourcesCache.h"
 #include "core/svg/SVGElement.h"
 #include "platform/geometry/TransformState.h"
+#include "platform/graphics/Path.h"
 
 namespace blink {
 
@@ -52,14 +54,29 @@ LayoutRect SVGRenderSupport::clippedOverflowRectForPaintInvalidation(const Rende
     // Pass our local paint rect to computeRectForPaintInvalidation() which will
     // map to parent coords and recurse up the parent chain.
     FloatRect paintInvalidationRect = object->paintInvalidationRectInLocalCoordinates();
+    paintInvalidationRect.inflate(object->style()->outlineWidth());
+
+    if (paintInvalidationState && paintInvalidationState->canMapToContainer(paintInvalidationContainer)) {
+        // Compute accumulated SVG transform and apply to local paint rect.
+        AffineTransform transform = paintInvalidationState->svgTransform() * object->localToParentTransform();
+        paintInvalidationRect = transform.mapRect(paintInvalidationRect);
+        // FIXME: These are quirks carried forward from RenderSVGRoot::computeFloatRectForPaintInvalidation.
+        LayoutRect rect;
+        if (!paintInvalidationRect.isEmpty())
+            rect = enclosingIntRect(paintInvalidationRect);
+        // Offset by SVG root paint offset and apply clipping as needed.
+        rect.move(paintInvalidationState->paintOffset());
+        if (paintInvalidationState->isClipped())
+            rect.intersect(paintInvalidationState->clipRect());
+        return rect;
+    }
+
     object->computeFloatRectForPaintInvalidation(paintInvalidationContainer, paintInvalidationRect, paintInvalidationState);
     return enclosingLayoutRect(paintInvalidationRect);
 }
 
 void SVGRenderSupport::computeFloatRectForPaintInvalidation(const RenderObject* object, const RenderLayerModelObject* paintInvalidationContainer, FloatRect& paintInvalidationRect, const PaintInvalidationState* paintInvalidationState)
 {
-    paintInvalidationRect.inflate(object->style()->outlineWidth());
-
     // Translate to coords in our parent renderer, and then call computeFloatRectForPaintInvalidation() on our parent.
     paintInvalidationRect = object->localToParentTransform().mapRect(paintInvalidationRect);
     object->parent()->computeFloatRectForPaintInvalidation(paintInvalidationContainer, paintInvalidationRect, paintInvalidationState);
@@ -68,6 +85,13 @@ void SVGRenderSupport::computeFloatRectForPaintInvalidation(const RenderObject* 
 void SVGRenderSupport::mapLocalToContainer(const RenderObject* object, const RenderLayerModelObject* paintInvalidationContainer, TransformState& transformState, bool* wasFixed, const PaintInvalidationState* paintInvalidationState)
 {
     transformState.applyTransform(object->localToParentTransform());
+
+    if (paintInvalidationState && paintInvalidationState->canMapToContainer(paintInvalidationContainer)) {
+        // |svgTransform| contains localToBorderBoxTransform mentioned below.
+        transformState.applyTransform(paintInvalidationState->svgTransform());
+        transformState.move(paintInvalidationState->paintOffset());
+        return;
+    }
 
     RenderObject* parent = object->parent();
 
@@ -361,6 +385,16 @@ void SVGRenderSupport::applyStrokeStyleToStrokeData(StrokeData* strokeData, cons
         dashArray.append(dashes->at(i)->value(lengthContext));
 
     strokeData->setLineDash(dashArray, svgStyle.strokeDashOffset()->value(lengthContext));
+}
+
+void SVGRenderSupport::fillOrStrokePath(GraphicsContext* context, unsigned short resourceMode, const Path& path)
+{
+    ASSERT(resourceMode != ApplyToDefaultMode);
+
+    if (resourceMode & ApplyToFillMode)
+        context->fillPath(path);
+    if (resourceMode & ApplyToStrokeMode)
+        context->strokePath(path);
 }
 
 bool SVGRenderSupport::isRenderableTextNode(const RenderObject* object)

@@ -115,7 +115,7 @@ interface InspectorInstrumentation {
     [CSS, Inline=FastReturn]
     void activeStyleSheetsUpdated([Keep] Document*);
 
-    [Console, PageRuntime]
+    [PageRuntime]
     void frameWindowDiscarded(LocalFrame*, LocalDOMWindow* domWindow);
 
     [CSS, Inline=FastReturn]
@@ -286,7 +286,7 @@ interface InspectorInstrumentation {
     [Resource]
     void markResourceAsCached(Page*, unsigned long identifier);
 
-    [Timeline, Resource, Console] // Console should come AFTER Resource notification, front-end relies on this.
+    [Timeline, Resource]
     void didReceiveResourceResponse([Keep] LocalFrame*, unsigned long identifier, DocumentLoader*, const ResourceResponse&, ResourceLoader*);
 
     [Inline=Forward]
@@ -304,7 +304,7 @@ interface InspectorInstrumentation {
     [Resource]
     void didReceiveCORSRedirectResponse([Keep] LocalFrame*, unsigned long identifier, DocumentLoader*, const ResourceResponse&, ResourceLoader*);
 
-    [Timeline, Resource, Console] // Console should come AFTER Resource notification, front-end relies on this.
+    [Timeline, Resource]
     void didFailLoading(LocalFrame* frame, unsigned long identifier, const ResourceError&);
 
     [Resource]
@@ -340,7 +340,7 @@ interface InspectorInstrumentation {
     [Canvas, Page]
     void frameDetachedFromParent([Keep] LocalFrame*);
 
-    [Console, Resource, DOM, Canvas, Page, PageDebugger]
+    [Resource, DOM, Canvas, Page, PageDebugger]
     void didCommitLoad([Keep] LocalFrame*, DocumentLoader*);
 
     [DOM, Inline=FastReturn]
@@ -483,13 +483,10 @@ class ConsoleMessage;
     [Console, Debugger]
     void addMessageToConsole(ExecutionContext* context, ConsoleMessage* consoleMessage);
 
-    [Console]
-    void consoleCount(ExecutionContext* context, ScriptState* state, PassRefPtrWillBeRawPtr<ScriptArguments> arguments);
-
-    [Console, Timeline]
+    [Timeline]
     void consoleTime([Keep] ExecutionContext* context, const String& title);
 
-    [Console, Timeline]
+    [Timeline]
     void consoleTimeEnd([Keep] ExecutionContext* context, const String& title, ScriptState* state);
 
     [Timeline, Inline=FastReturn]
@@ -506,6 +503,9 @@ class ConsoleMessage;
 
     [Profiler, Inline=FastReturn]
     void consoleProfileEnd(ExecutionContext* context, const String& title);
+
+    [Console]
+    void consoleMessagesCleared(ExecutionContext* context);
 }
 
 interface InspectorOverrides {

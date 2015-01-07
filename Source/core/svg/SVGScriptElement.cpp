@@ -38,7 +38,6 @@ inline SVGScriptElement::SVGScriptElement(Document& document, bool wasInsertedBy
     , m_svgLoadEventTimer(this, &SVGElement::svgLoadEventTimerFired)
     , m_loader(ScriptLoader::create(this, wasInsertedByParser, alreadyStarted))
 {
-    ScriptWrappable::init(this);
 }
 
 SVGScriptElement::~SVGScriptElement()
@@ -126,7 +125,8 @@ void SVGScriptElement::childrenChanged(const ChildrenChange& change)
 
 void SVGScriptElement::didMoveToNewDocument(Document& oldDocument)
 {
-    oldDocument.scriptRunner()->movePendingAsyncScript(document().scriptRunner(), m_loader.get());
+    if (RefPtrWillBeRawPtr<Document> contextDocument = document().contextDocument().get())
+        oldDocument.scriptRunner()->movePendingAsyncScript(contextDocument->scriptRunner(), m_loader.get());
     SVGElement::didMoveToNewDocument(oldDocument);
 }
 

@@ -39,7 +39,6 @@
 #include "public/platform/WebMimeRegistry.h"
 
 namespace blink {
-class WebContentDecryptionModule;
 class WebInbandTextTrack;
 class WebLayer;
 }
@@ -74,8 +73,8 @@ typedef Vector<CueInterval> CueList;
 // But it can't be until the Chromium WebMediaPlayerClientImpl class is fixed so it
 // no longer depends on typecasting a MediaPlayerClient to an HTMLMediaElement.
 
-class HTMLMediaElement : public HTMLElement, public WillBeHeapSupplementable<HTMLMediaElement>, public MediaPlayerClient, public ActiveDOMObject
-{
+class HTMLMediaElement : public HTMLElement, public WillBeHeapSupplementable<HTMLMediaElement>, public MediaPlayerClient, public ActiveDOMObject {
+    DEFINE_WRAPPERTYPEINFO();
     WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(HTMLMediaElement);
 public:
     static blink::WebMimeRegistry::SupportsType supportsType(const ContentType&, const String& keySystem = String());
@@ -87,10 +86,6 @@ public:
 #if ENABLE(WEB_AUDIO)
     void clearWeakMembers(Visitor*);
 #endif
-
-    // Do not use player().
-    // FIXME: Replace all uses with webMediaPlayer() and remove this API.
-    MediaPlayer* player() const { return m_player.get(); }
     blink::WebMediaPlayer* webMediaPlayer() const { return m_player ? m_player->webMediaPlayer() : 0; }
 
     virtual bool hasVideo() const { return false; }
@@ -108,6 +103,9 @@ public:
     void scheduleDelayedAction(DelayedActionType);
 
     bool isActive() const { return m_active; }
+
+    bool hasRemoteRoutes() const { return m_remoteRoutesAvailable; }
+    bool isPlayingRemotely() const { return m_playingRemotely; }
 
     // error state
     PassRefPtrWillBeRawPtr<MediaError> error() const;
@@ -146,9 +144,11 @@ public:
     bool ended() const;
     bool autoplay() const;
     bool loop() const;
-    void setLoop(bool b);
+    void setLoop(bool);
     void play();
     void pause();
+    void requestRemotePlayback();
+    void requestRemotePlaybackControl();
 
     // statistics
     unsigned webkitAudioDecodedByteCount() const;
@@ -185,7 +185,7 @@ public:
 
     void addTextTrack(TextTrack*);
     void removeTextTrack(TextTrack*);
-    void closeCaptionTracksChanged();
+    void textTracksChanged();
     void notifyMediaPlayerOfTextTrackChanges();
 
     // Implements the "forget the media element's media-resource-specific tracks" algorithm in the HTML5 spec.
@@ -261,12 +261,14 @@ public:
     bool closedCaptionsVisible() const;
     void setClosedCaptionsVisible(bool);
 
+    void remoteRouteAvailabilityChanged(bool);
+    void connectedToRemoteDevice();
+    void disconnectedFromRemoteDevice();
+
     MediaControls* mediaControls() const;
 
     void sourceWasRemoved(HTMLSourceElement*);
     void sourceWasAdded(HTMLSourceElement*);
-
-    bool isPlaying() const { return m_playing; }
 
     // ActiveDOMObject functions.
     virtual bool hasPendingActivity() const OVERRIDE FINAL;
@@ -375,7 +377,7 @@ private:
     void startProgressEventTimer();
     void stopPeriodicTimers();
 
-    void seek(double time, ExceptionState&);
+    void seek(double time);
     void finishSeek();
     void checkIfSeekNeeded();
     void addPlayedRange(double start, double end);
@@ -432,9 +434,6 @@ private:
     bool stoppedDueToErrors() const;
     bool couldPlayIfEnoughData() const;
 
-    // Pauses playback without changing any states or generating events
-    void setPausedInternal(bool);
-
     void setShouldDelayLoadEvent(bool);
     void invalidateCachedTime();
     void refreshCachedTime() const;
@@ -442,9 +441,6 @@ private:
     bool hasMediaControls() const;
     bool createMediaControls();
     void configureMediaControls();
-
-    void prepareMediaFragmentURI();
-    void applyMediaFragmentURI();
 
     virtual void* preDispatchEventHandler(Event*) OVERRIDE FINAL;
 
@@ -508,6 +504,9 @@ private:
     // The last time a timeupdate event was sent in movie time.
     double m_lastTimeUpdateEventMovieTime;
 
+    // The default playback start position.
+    double m_defaultPlaybackStartPosition;
+
     // Loading state.
     enum LoadState { WaitingForSource, LoadingFromSrcAttr, LoadingFromSourceElement };
     LoadState m_loadState;
@@ -539,11 +538,10 @@ private:
 
     RefPtrWillBeMember<HTMLMediaSource> m_mediaSource;
 
+    // Cached time value. Only valid when ready state is HAVE_METADATA or
+    // higher, otherwise the current time is assumed to be zero.
     mutable double m_cachedTime;
-    mutable double m_cachedTimeWallClockUpdateTime;
-    mutable double m_minimumWallClockTimeToCacheMediaTime;
 
-    double m_fragmentStartTime;
     double m_fragmentEndTime;
 
     typedef unsigned PendingActionFlags;
@@ -566,8 +564,6 @@ private:
     // time has not changed since sending an "ended" event
     bool m_sentEndEvent : 1;
 
-    bool m_pausedInternal : 1;
-
     bool m_closedCaptionsVisible : 1;
 
     bool m_completelyLoaded : 1;
@@ -577,6 +573,8 @@ private:
     bool m_tracksAreReady : 1;
     bool m_haveVisibleTextTrack : 1;
     bool m_processingPreferenceChange : 1;
+    bool m_remoteRoutesAvailable : 1;
+    bool m_playingRemotely : 1;
 #if ENABLE(OILPAN)
     bool m_isFinalizing : 1;
     bool m_closeMediaSourceWhenFinalizing : 1;
@@ -635,6 +633,6 @@ inline bool isHTMLMediaElement(const HTMLElement& element)
 
 DEFINE_HTMLELEMENT_TYPE_CASTS_WITH_FUNCTION(HTMLMediaElement);
 
-} //namespace
+} // namespace blink
 
-#endif
+#endif // HTMLMediaElement_h

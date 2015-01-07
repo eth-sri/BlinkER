@@ -5,24 +5,16 @@ self.addEventListener('fetch', function(event) {
     }
     event.respondWith(new Promise(function(resolve) {
         var headers = [];
-        event.request.headers.forEach(function(value, key) {
-            headers.push([key, value]);
-          });
-        if (!event.request.body) {
-          resolve(new Response(JSON.stringify({
-              method: event.request.method,
-              headers: headers,
-              body: null
-            })));
-          return;
+        for (var header of event.request.headers) {
+          headers.push(header);
         }
-        event.request.body.asText()
+        event.request.text()
           .then(function(result) {
               resolve(new Response(JSON.stringify({
                   method: event.request.method,
                   headers: headers,
                   body: result
                 })));
-            })
+            });
       }));
   });

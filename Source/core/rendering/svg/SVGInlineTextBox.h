@@ -28,8 +28,6 @@
 
 namespace blink {
 
-class RenderSVGResource;
-
 class SVGInlineTextBox FINAL : public InlineTextBox {
 public:
     SVGInlineTextBox(RenderObject&);
@@ -60,18 +58,9 @@ public:
     void setStartsNewTextChunk(bool newTextChunk) { m_startsNewTextChunk = newTextChunk; }
 
     int offsetForPositionInFragment(const SVGTextFragment&, float position, bool includePartialGlyphs) const;
-    FloatRect selectionRectForTextFragment(const SVGTextFragment&, int fragmentStartPosition, int fragmentEndPosition, RenderStyle*);
 
 private:
     TextRun constructTextRun(RenderStyle*, const SVGTextFragment&) const;
-
-    bool acquirePaintingResource(GraphicsContext*&, float scalingFactor, RenderObject*,
-        RenderStyle*, RenderSVGResourceModeFlags);
-    void releasePaintingResource(GraphicsContext*&, const Path*, RenderSVGResourceModeFlags);
-
-    bool prepareGraphicsContextForTextPainting(GraphicsContext*&, float scalingFactor, TextRun&,
-        RenderStyle*, RenderSVGResourceModeFlags);
-    void restoreGraphicsContextAfterTextPainting(GraphicsContext*&, TextRun&, RenderSVGResourceModeFlags);
 
     void paintDecoration(GraphicsContext*, TextDecoration, const SVGTextFragment&);
     void paintDecorationWithStyle(GraphicsContext*, TextDecoration, const SVGTextFragment&,
@@ -86,10 +75,11 @@ private:
 
     virtual bool nodeAtPoint(const HitTestRequest&, HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, LayoutUnit lineTop, LayoutUnit lineBottom) OVERRIDE;
 
+    FloatRect selectionRectForTextFragment(const SVGTextFragment&, int fragmentStartPosition, int fragmentEndPosition, RenderStyle*);
+
 private:
     float m_logicalHeight;
     bool m_startsNewTextChunk : 1;
-    RenderSVGResource* m_paintingResource;
     Vector<SVGTextFragment> m_textFragments;
 };
 

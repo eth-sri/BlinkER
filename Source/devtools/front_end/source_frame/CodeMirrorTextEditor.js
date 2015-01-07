@@ -44,6 +44,8 @@ WebInspector.CodeMirrorTextEditor = function(url, delegate)
     this.registerRequiredCSS("cm/codemirror.css");
     this.registerRequiredCSS("cmdevtools.css");
 
+    this.element.appendChild(WebInspector.CodeMirrorUtils.createThemeStyle());
+
     this._codeMirror = new window.CodeMirror(this.element, {
         lineNumbers: true,
         gutters: ["CodeMirror-linenumbers"],
@@ -52,6 +54,8 @@ WebInspector.CodeMirrorTextEditor = function(url, delegate)
         styleSelectedText: true,
         electricChars: false
     });
+    this._codeMirrorElement = this.element.lastElementChild;
+
     this._codeMirror._codeMirrorTextEditor = this;
 
     CodeMirror.keyMap["devtools-common"] = {
@@ -126,6 +130,14 @@ WebInspector.CodeMirrorTextEditor = function(url, delegate)
     this._enableBracketMatchingIfNeeded();
 
     this._codeMirror.setOption("keyMap", WebInspector.isMac() ? "devtools-mac" : "devtools-pc");
+
+    CodeMirror.commands.maybeAvoidSmartSingleQuotes = this._maybeAvoidSmartQuotes.bind(this, "'");
+    CodeMirror.commands.maybeAvoidSmartDoubleQuotes = this._maybeAvoidSmartQuotes.bind(this, "\"");
+    this._codeMirror.addKeyMap({
+        "'": "maybeAvoidSmartSingleQuotes",
+        "'\"'": "maybeAvoidSmartDoubleQuotes"
+    });
+
     this._codeMirror.setOption("flattenSpans", false);
 
     this._codeMirror.setOption("maxHighlightLength", WebInspector.CodeMirrorTextEditor.maxHighlightLength);
@@ -160,8 +172,8 @@ WebInspector.CodeMirrorTextEditor = function(url, delegate)
     this.element.addEventListener("mousedown", updateAnticipateJumpFlag.bind(this, false), false);
 
     this.element.style.overflow = "hidden";
-    this.element.firstChild.classList.add("source-code");
-    this.element.firstChild.classList.add("fill");
+    this._codeMirrorElement.classList.add("source-code");
+    this._codeMirrorElement.classList.add("fill");
     this._elementToWidget = new Map();
     this._nestedUpdatesCounter = 0;
 
@@ -327,6 +339,29 @@ WebInspector.CodeMirrorTextEditor.MaximumNumberOfWhitespacesPerSingleSpan = 16;
 WebInspector.CodeMirrorTextEditor.MaxEditableTextSize = 1024 * 1024 * 10;
 
 WebInspector.CodeMirrorTextEditor.prototype = {
+    /**
+     * @param {string} quoteCharacter
+     * @return {*}
+     */
+    _maybeAvoidSmartQuotes: function(quoteCharacter)
+    {
+        if (!WebInspector.settings.textEditorBracketMatching.get())
+            return CodeMirror.Pass;
+        var selections = this.selections();
+        if (selections.length !== 1 || !selections[0].isEmpty())
+            return CodeMirror.Pass;
+
+        var selection = selections[0];
+        var token = this.tokenAtTextPosition(selection.startLine, selection.startColumn);
+        if (!token || token.type.indexOf("string") === -1)
+            return CodeMirror.Pass;
+        var line = this.line(selection.startLine);
+        var tokenValue = line.substring(token.startColumn, token.endColumn + 1);
+        if (tokenValue[0] === tokenValue[tokenValue.length - 1] && (tokenValue[0] === "'" || tokenValue[0] === "\""))
+            return CodeMirror.Pass;
+        this._codeMirror.replaceSelection(quoteCharacter);
+    },
+
     _onKeyHandled: function()
     {
         WebInspector.shortcutRegistry.dismissPendingShortcutAction();
@@ -1053,7 +1088,7 @@ WebInspector.CodeMirrorTextEditor.prototype = {
     },
 
     /**
-     * @param {number} lineNumber
+     * @param {number} lineNumber 0-based
      * @param {number=} columnNumber
      * @param {boolean=} shouldHighlight
      */
@@ -1110,7 +1145,7 @@ WebInspector.CodeMirrorTextEditor.prototype = {
     {
         var scrollInfo = this._codeMirror.getScrollInfo();
         var newPaddingBottom;
-        var linesElement = this.element.firstElementChild.querySelector(".CodeMirror-lines");
+        var linesElement = this._codeMirrorElement.querySelector(".CodeMirror-lines");
         var lineCount = this._codeMirror.lineCount();
         if (lineCount <= 1)
             newPaddingBottom = 0;
@@ -2406,16 +2441,3 @@ WebInspector.CodeMirrorTextEditor._overrideModeWithPrefixedTokens = function(mod
 WebInspector.CodeMirrorTextEditor._overrideModeWithPrefixedTokens("css", "css-");
 WebInspector.CodeMirrorTextEditor._overrideModeWithPrefixedTokens("javascript", "js-");
 WebInspector.CodeMirrorTextEditor._overrideModeWithPrefixedTokens("xml", "xml-");
-
-(function() {
-    var backgroundColor = InspectorFrontendHost.getSelectionBackgroundColor();
-    var backgroundColorRule = backgroundColor ? ".CodeMirror .CodeMirror-selected { background-color: " + backgroundColor + ";}" : "";
-    var foregroundColor = InspectorFrontendHost.getSelectionForegroundColor();
-    var foregroundColorRule = foregroundColor ? ".CodeMirror .CodeMirror-selectedtext:not(.CodeMirror-persist-highlight) { color: " + foregroundColor + "!important;}" : "";
-    if (!foregroundColorRule && !backgroundColorRule)
-        return;
-
-    var style = document.createElement("style");
-    style.textContent = backgroundColorRule + foregroundColorRule;
-    document.head.appendChild(style);
-})();

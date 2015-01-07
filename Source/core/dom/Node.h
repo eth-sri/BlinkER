@@ -28,6 +28,7 @@
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/MutationObserver.h"
 #include "core/dom/SimulatedClickOptions.h"
+#include "core/dom/StyleChangeReason.h"
 #include "core/dom/TreeScope.h"
 #include "core/dom/TreeShared.h"
 #include "core/editing/EditingBoundary.h"
@@ -122,12 +123,12 @@ protected:
 #endif
 
 class Node : NODE_BASE_CLASSES {
+    DEFINE_EVENT_TARGET_REFCOUNTING_WILL_BE_REMOVED(TreeShared<Node>);
+    DEFINE_WRAPPERTYPEINFO();
+    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(Node);
     friend class Document;
     friend class TreeScope;
     friend class TreeScopeAdopter;
-
-    DEFINE_EVENT_TARGET_REFCOUNTING_WILL_BE_REMOVED(TreeShared<Node>);
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(Node);
 public:
     enum NodeType {
         ELEMENT_NODE = 1,
@@ -354,7 +355,7 @@ public:
     void setChildNeedsStyleRecalc() { setFlag(ChildNeedsStyleRecalcFlag); }
     void clearChildNeedsStyleRecalc() { clearFlag(ChildNeedsStyleRecalcFlag); }
 
-    void setNeedsStyleRecalc(StyleChangeType);
+    void setNeedsStyleRecalc(StyleChangeType, const StyleChangeReasonForTracing&);
     void clearNeedsStyleRecalc();
 
     bool childNeedsDistributionRecalc() const { return getFlag(ChildNeedsDistributionRecalcFlag); }
@@ -666,6 +667,9 @@ public:
 
     unsigned lengthOfContents() const;
 
+    virtual v8::Handle<v8::Object> wrap(v8::Handle<v8::Object> creationContext, v8::Isolate*) OVERRIDE;
+    virtual v8::Handle<v8::Object> associateWithWrapper(const WrapperTypeInfo*, v8::Handle<v8::Object> wrapper, v8::Isolate*) OVERRIDE;
+
 private:
     enum NodeFlags {
         HasRareDataFlag = 1,
@@ -793,8 +797,6 @@ private:
     bool isUserActionElementHovered() const;
     bool isUserActionElementFocused() const;
 
-    void traceStyleChange(StyleChangeType);
-    void traceStyleChangeIfNeeded(StyleChangeType);
     void setStyleChange(StyleChangeType);
 
     virtual RenderStyle* nonRendererStyle() const { return 0; }
@@ -899,4 +901,4 @@ void showTree(const blink::Node*);
 void showNodePath(const blink::Node*);
 #endif
 
-#endif
+#endif // Node_h

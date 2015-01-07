@@ -33,6 +33,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
+#include "platform/audio/AudioUtilities.h"
 
 namespace blink {
 
@@ -66,9 +67,14 @@ OfflineAudioContext* OfflineAudioContext::create(ExecutionContext* context, unsi
         return 0;
     }
 
-    if (!isSampleRateRangeGood(sampleRate)) {
-        exceptionState.throwDOMException(SyntaxError, "sample rate (" + String::number(sampleRate) + ") must be in the range 44100-96000 Hz.");
-        return 0;
+    if (!AudioUtilities::isValidAudioBufferSampleRate(sampleRate)) {
+        exceptionState.throwDOMException(
+            IndexSizeError,
+            ExceptionMessages::indexOutsideRange(
+                "sampleRate", sampleRate,
+                AudioUtilities::minAudioBufferSampleRate(), ExceptionMessages::InclusiveBound,
+                AudioUtilities::maxAudioBufferSampleRate(), ExceptionMessages::InclusiveBound));
+        return nullptr;
     }
 
     OfflineAudioContext* audioContext = adoptRefCountedGarbageCollectedWillBeNoop(new OfflineAudioContext(document, numberOfChannels, numberOfFrames, sampleRate));
@@ -89,7 +95,6 @@ OfflineAudioContext* OfflineAudioContext::create(ExecutionContext* context, unsi
 OfflineAudioContext::OfflineAudioContext(Document* document, unsigned numberOfChannels, size_t numberOfFrames, float sampleRate)
     : AudioContext(document, numberOfChannels, numberOfFrames, sampleRate)
 {
-    ScriptWrappable::init(this);
 }
 
 OfflineAudioContext::~OfflineAudioContext()

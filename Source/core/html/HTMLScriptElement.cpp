@@ -42,7 +42,6 @@ inline HTMLScriptElement::HTMLScriptElement(Document& document, bool wasInserted
     : HTMLElement(scriptTag, document)
     , m_loader(ScriptLoader::create(this, wasInsertedByParser, alreadyStarted))
 {
-    ScriptWrappable::init(this);
 }
 
 PassRefPtrWillBeRawPtr<HTMLScriptElement> HTMLScriptElement::create(Document& document, bool wasInsertedByParser, bool alreadyStarted)
@@ -73,7 +72,8 @@ void HTMLScriptElement::childrenChanged(const ChildrenChange& change)
 
 void HTMLScriptElement::didMoveToNewDocument(Document& oldDocument)
 {
-    oldDocument.scriptRunner()->movePendingAsyncScript(document().scriptRunner(), m_loader.get());
+    if (RefPtrWillBeRawPtr<Document> contextDocument = document().contextDocument().get())
+        oldDocument.scriptRunner()->movePendingAsyncScript(contextDocument->scriptRunner(), m_loader.get());
     HTMLElement::didMoveToNewDocument(oldDocument);
 }
 

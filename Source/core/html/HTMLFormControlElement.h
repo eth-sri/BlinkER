@@ -30,11 +30,8 @@
 namespace blink {
 
 class FormDataList;
-class HTMLFieldSetElement;
 class HTMLFormElement;
-class HTMLLegendElement;
 class ValidationMessageClient;
-class ValidityState;
 
 // HTMLFormControlElement is the default implementation of FormAssociatedElement,
 // and form-associated element implementations should use HTMLFormControlElement
@@ -130,9 +127,9 @@ protected:
     virtual bool isKeyboardFocusable() const OVERRIDE;
     virtual bool shouldShowFocusRingOnMouseFocus() const;
     virtual bool shouldHaveFocusAppearance() const OVERRIDE FINAL;
-    virtual bool wasFocusedByMouse() const OVERRIDE;
-    virtual void setWasFocusedByMouse(bool) OVERRIDE FINAL;
     virtual void dispatchBlurEvent(Element* newFocusedElement) OVERRIDE;
+    virtual void dispatchFocusEvent(Element* oldFocusedElement, FocusType) OVERRIDE;
+    virtual void willCallDefaultEventHandler(const Event&) OVERRIDE FINAL;
 
     virtual void didRecalcStyle(StyleRecalcChange) OVERRIDE FINAL;
 

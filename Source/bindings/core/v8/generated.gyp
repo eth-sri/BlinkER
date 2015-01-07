@@ -78,7 +78,6 @@
       # Update that regex if command line changes (other than changing flags)
       'action': [
         'python',
-        '-S',  # skip 'import site' to speed up startup
         '<(bindings_scripts_dir)/idl_compiler.py',
         '--cache-dir',
         '<(bindings_scripts_output_dir)',
@@ -132,8 +131,7 @@
       '../../modules/generated.gyp:interfaces_info',
     ],
     'sources': [
-      # FIXME: Add '<@(core_dictionary_idl_files)',
-      # See comment on core/core.gypi
+      '<@(core_dictionary_idl_files)',
       '<@(core_testing_dictionary_idl_files)',
     ],
     'actions': [{
@@ -142,6 +140,7 @@
       'explicit_idl_action': 1,
       'msvs_cygwin_shell': 0,
       'inputs': [
+        '<@(core_dictionary_idl_files)',
         '<@(core_testing_dictionary_idl_files)',
         '<@(idl_lexer_parser_files)',
         '<@(idl_cache_files)',
@@ -150,8 +149,7 @@
         '<(bindings_modules_output_dir)/InterfacesInfoModules.pickle',
       ],
       'outputs': [
-        # FIXME: Add '<@(generated_core_dictionary_files)',
-        # See comment on core/core.gypi
+        '<@(generated_core_dictionary_files)',
         '<@(generated_core_testing_dictionary_files)',
       ],
       'action': [

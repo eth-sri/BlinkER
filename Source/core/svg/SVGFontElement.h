@@ -52,6 +52,7 @@ typedef Vector<SVGKerningPair> KerningPairVector;
 typedef HashMap<KerningPairKey, float> KerningTable;
 
 class SVGFontElement FINAL : public SVGElement {
+    DEFINE_WRAPPERTYPEINFO();
 public:
     DECLARE_NODE_FACTORY(SVGFontElement);
 
@@ -62,7 +63,7 @@ public:
     float horizontalKerningForPairOfGlyphs(Glyph, Glyph) const;
     float verticalKerningForPairOfGlyphs(Glyph, Glyph) const;
 
-    // Used by SimpleFontData/WidthIterator.
+    // Used by SimpleFontData/SimpleShaper.
     SVGGlyph svgGlyphForGlyph(Glyph);
     Glyph missingGlyph();
 
@@ -88,4 +89,4 @@ private:
 } // namespace blink
 
 #endif // ENABLE(SVG_FONTS)
-#endif
+#endif // SVGFontElement_h

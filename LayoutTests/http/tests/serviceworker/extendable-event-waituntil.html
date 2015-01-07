@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<title>ExtendableEvent: waitUntil</title>
+<script src="../resources/testharness.js"></script>
+<script src="../resources/testharnessreport.js"></script>
+<script src="resources/test-helpers.js"></script>
+<script>
+// Temporary measure to diagnose timeouts on Win XP. Let the W3C harness
+// timeout before run-webkit-tests does, so it can report the particular
+// test that timed out.
+// FIXME: Remove after the cause of timeout is fixed.
+var properties = {timeout: 5500};
+
+function runTest(test, scope, onRegister) {
+  var script = 'resources/extendable-event-waituntil.js';
+  service_worker_unregister_and_register(test, script, scope)
+    .then(function(registration) {
+        return get_newest_worker(registration);
+      })
+    .then(test.step_func(onRegister));
+}
+
+function syncWorker(test, worker, obj) {
+  var channel = new MessageChannel();
+  channel.port1.onmessage = test.step_func(function(e) {
+      var message = e.data;
+      assert_equals(message, 'SYNC',
+                    'Should receive sync message from worker.');
+      obj.synced = true;
+      channel.port1.postMessage('ACK');
+    });
+  worker.postMessage({port: channel.port2}, [channel.port2]);
+}
+
+async_test(function(t) {
+    // Passing scope as the test switch for worker script.
+    var scope = 'install-fulfilled';
+    var onRegister = function(worker) {
+        var obj = {};
+        wait_for_state(t, worker, 'installed')
+          .then(function() {
+              assert_true(
+                obj.synced,
+                'state should be "installed" after the waitUntil promise ' +
+                    'for "oninstall" is fulfilled.');
+              service_worker_unregister_and_done(t, scope);
+            })
+          .catch(unreached_rejection(t));
+        syncWorker(t, worker, obj);
+      };
+    runTest(t, scope, onRegister);
+  }, 'Test install event waitUntil fulfilled', properties);
+
+async_test(function(t) {
+    var scope = 'activate-fulfilled';
+    var onRegister = function(worker) {
+        var obj = {};
+        wait_for_state(t, worker, 'activating')
+          .then(function() {
+              syncWorker(t, worker, obj);
+              return wait_for_state(t, worker, 'activated');
+            })
+          .then(function() {
+              assert_true(
+                obj.synced,
+                'state should be "activated" after the waitUntil promise ' +
+                    'for "onactivate" is fulfilled.');
+              service_worker_unregister_and_done(t, scope);
+            })
+          .catch(unreached_rejection(t));
+      };
+    runTest(t, scope, onRegister);
+  }, 'Test activate event waitUntil fulfilled', properties);
+
+async_test(function(t) {
+    var scope = 'install-rejected';
+    var onRegister = function(worker) {
+        wait_for_state(t, worker, 'redundant')
+          .then(function() {
+              service_worker_unregister_and_done(t, scope);
+            })
+          .catch(unreached_rejection(t));
+      };
+    runTest(t, scope, onRegister);
+  }, 'Test install event waitUntil rejected', properties);
+
+async_test(function(t) {
+    var scope = 'activate-rejected';
+    var onRegister = function(worker) {
+        wait_for_state(t, worker, 'redundant')
+          .then(function() {
+              service_worker_unregister_and_done(t, scope);
+            })
+          .catch(unreached_rejection(t));
+      };
+    runTest(t, scope, onRegister);
+  }, 'Test activate event waitUntil rejected.', properties);
+
+async_test(function(t) {
+    var scope = 'activate-multiple-fulfilled';
+    var onRegister = function(worker) {
+        var obj1 = {};
+        var obj2 = {};
+        wait_for_state(t, worker, 'activating')
+          .then(function() {
+              syncWorker(t, worker, obj1);
+              syncWorker(t, worker, obj2);
+              return wait_for_state(t, worker, 'activated');
+            })
+          .then(function() {
+              assert_true(
+                obj1.synced && obj2.synced,
+                'state should be "activated" after all waitUntil promises ' +
+                    'for "onactivate" are fulfilled.');
+              service_worker_unregister_and_done(t, scope);
+            })
+          .catch(unreached_rejection(t));
+      };
+    runTest(t, scope, onRegister);
+  }, 'Test ExtendableEvent multiple waitUntil fulfilled.', properties);
+
+async_test(function(t) {
+    var scope = 'activate-reject-precedence';
+    var onRegister = function(worker) {
+        wait_for_state(t, worker, 'redundant')
+          .then(function() {
+              service_worker_unregister_and_done(t, scope);
+            })
+          .catch(unreached_rejection(t));
+      };
+    runTest(t, scope, onRegister);
+  }, 'Test ExtendableEvent waitUntil reject precedence.', properties);
+</script>

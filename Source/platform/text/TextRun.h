@@ -40,7 +40,7 @@ class GraphicsContext;
 class GlyphBuffer;
 class SimpleFontData;
 struct GlyphData;
-struct WidthIterator;
+struct SimpleShaper;
 
 class PLATFORM_EXPORT TextRun {
     WTF_MAKE_FAST_ALLOCATED;
@@ -68,6 +68,7 @@ public:
         , m_characterScanForCodePath(characterScanForCodePath)
         , m_disableSpacing(false)
         , m_tabSize(0)
+        , m_normalizeSpace(false)
     {
         m_data.characters8 = c;
     }
@@ -86,11 +87,12 @@ public:
         , m_characterScanForCodePath(characterScanForCodePath)
         , m_disableSpacing(false)
         , m_tabSize(0)
+        , m_normalizeSpace(false)
     {
         m_data.characters16 = c;
     }
 
-    TextRun(const String& string, float xpos = 0, float expansion = 0, ExpansionBehavior expansionBehavior = AllowTrailingExpansion | ForbidLeadingExpansion, TextDirection direction = LTR, bool directionalOverride = false, bool characterScanForCodePath = true)
+    TextRun(const String& string, float xpos = 0, float expansion = 0, ExpansionBehavior expansionBehavior = AllowTrailingExpansion | ForbidLeadingExpansion, TextDirection direction = LTR, bool directionalOverride = false, bool characterScanForCodePath = true, bool normalizeSpace = false)
         : m_charactersLength(string.length())
         , m_len(string.length())
         , m_xpos(xpos)
@@ -103,6 +105,7 @@ public:
         , m_characterScanForCodePath(characterScanForCodePath)
         , m_disableSpacing(false)
         , m_tabSize(0)
+        , m_normalizeSpace(normalizeSpace)
     {
         if (!m_charactersLength) {
             m_is8Bit = true;
@@ -116,7 +119,7 @@ public:
         }
     }
 
-    TextRun(const StringView& string, float xpos = 0, float expansion = 0, ExpansionBehavior expansionBehavior = AllowTrailingExpansion | ForbidLeadingExpansion, TextDirection direction = LTR, bool directionalOverride = false, bool characterScanForCodePath = true)
+    TextRun(const StringView& string, float xpos = 0, float expansion = 0, ExpansionBehavior expansionBehavior = AllowTrailingExpansion | ForbidLeadingExpansion, TextDirection direction = LTR, bool directionalOverride = false, bool characterScanForCodePath = true, bool normalizeSpace = false)
         : m_charactersLength(string.length())
         , m_len(string.length())
         , m_xpos(xpos)
@@ -129,6 +132,7 @@ public:
         , m_characterScanForCodePath(characterScanForCodePath)
         , m_disableSpacing(false)
         , m_tabSize(0)
+        , m_normalizeSpace(normalizeSpace)
     {
         if (!m_charactersLength) {
             m_is8Bit = true;
@@ -167,6 +171,9 @@ public:
     int length() const { return m_len; }
     int charactersLength() const { return m_charactersLength; }
 
+    bool normalizeSpace() const { return m_normalizeSpace; }
+    void setNormalizeSpace(bool normalizeSpace) { m_normalizeSpace = normalizeSpace; }
+
     void setText(const LChar* c, unsigned len) { m_data.characters8 = c; m_len = len; m_is8Bit = true;}
     void setText(const UChar* c, unsigned len) { m_data.characters16 = c; m_len = len; m_is8Bit = false;}
     void setText(const String&);
@@ -200,7 +207,7 @@ public:
     public:
         virtual ~RenderingContext() { }
 
-        virtual GlyphData glyphDataForCharacter(const Font&, const TextRun&, WidthIterator&, UChar32 character, bool mirror, int currentCharacter, unsigned& advanceLength) = 0;
+        virtual GlyphData glyphDataForCharacter(const Font&, const TextRun&, SimpleShaper&, UChar32 character, bool mirror, int currentCharacter, unsigned& advanceLength) = 0;
         virtual void drawSVGGlyphs(GraphicsContext*, const TextRun&, const SimpleFontData*, const GlyphBuffer&, int from, int to, const FloatPoint&) const = 0;
         virtual float floatWidthUsingSVGFont(const Font&, const TextRun&, int& charsConsumed, Glyph& glyphId) const = 0;
     };
@@ -231,6 +238,7 @@ private:
     unsigned m_characterScanForCodePath : 1;
     unsigned m_disableSpacing : 1;
     unsigned m_tabSize;
+    bool m_normalizeSpace;
     RefPtr<RenderingContext> m_renderingContext;
 };
 

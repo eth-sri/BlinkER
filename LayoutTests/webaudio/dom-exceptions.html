@@ -19,6 +19,8 @@ var otherContext;
 var node;
 var node2;
 var mode;
+var panner;
+var script;
 
 function runTest() {
     if (window.testRunner) {
@@ -146,7 +148,23 @@ function runTest() {
     buffer = context.createBuffer(1,1, context.sampleRate);
     shouldNotThrow("source = context.createBufferSource()");
     shouldNotThrow("source.buffer = buffer");
+    shouldThrow("source.start(-1)");
+    shouldThrow("source.start(Infinity)");
+    shouldThrow("source.start(-Infinity)");
+    shouldThrow("source.start(NaN)");
+    shouldThrow("source.start(1, Infinity)");
+    shouldThrow("source.start(1, -Infinity)");
+    shouldThrow("source.start(1, NaN)");
+    shouldThrow("source.start(1, -1)");
+    shouldThrow("source.start(1, 1, Infinity)");
+    shouldThrow("source.start(1, 1, -Infinity)");
+    shouldThrow("source.start(1, 1, NaN)");
+    shouldThrow("source.start(1, 1, -1)");
     shouldNotThrow("source.start()");
+    shouldThrow("source.stop(-1)");
+    shouldThrow("source.stop(Infinity)");
+    shouldThrow("source.stop(-Infinity)");
+    shouldThrow("source.stop(NaN)");
     shouldNotThrow("source.stop()");
 
     // It's not clear from the spec, but I think it's valid to call start(). The spec is silent on
@@ -174,7 +192,15 @@ function runTest() {
     
     // Start/stop for OscillatorNodes
     shouldNotThrow("source = context.createOscillator()");
+    shouldThrow("source.start(-1)");
+    shouldThrow("source.start(Infinity)");
+    shouldThrow("source.start(-Infinity)");
+    shouldThrow("source.start(NaN)");
     shouldNotThrow("source.start()");
+    shouldThrow("source.stop(-1)");
+    shouldThrow("source.stop(Infinity)");
+    shouldThrow("source.stop(-Infinity)");
+    shouldThrow("source.stop(NaN)");
     shouldNotThrow("source.stop()");
 
     shouldNotThrow("osc = context.createOscillator()");
@@ -195,6 +221,33 @@ function runTest() {
     shouldNotThrow("oc = new OfflineAudioContext(1, 44100, 44100)");
     shouldNotThrow("conv = oc.createConvolver()");
     shouldThrow("conv.buffer = oc.createBuffer(1, 100, 22050)");
+
+    // PannerNode channel count and mode
+    panner = context.createPanner();
+    // Channel count can only be set to 1 or 2.
+    shouldNotThrow("panner.channelCount = 1");
+    shouldNotThrow("panner.channelCount = 2");
+    shouldThrow("panner.channelCount = 0");
+    shouldThrow("panner.channelCount = 3");
+    // It is illegal to set the mode to 'max'
+    shouldThrow("panner.channelCountMode = 'max'");
+    shouldNotThrow("panner.channelCountMode = 'explicit'");
+    shouldNotThrow("panner.channelCountMode = 'clamped-max'");
+    shouldNotThrow("panner.channelCountMode = 'junk'");
+
+    // Test channel count and mode for a ScriptProcessor.
+    shouldNotThrow("script = context.createScriptProcessor(256, 3)");
+    // Make sure the channelCount and mode are set correctly.
+    shouldBeEqualToNumber("script.channelCount", 3);
+    shouldBeEqualToString("script.channelCountMode", "explicit");
+    // Cannot change the channelCount or mode to anything else
+    shouldNotThrow("script.channelCount = 3");
+    shouldThrow("script.channelCount = 1");
+    shouldThrow("script.channelCount = 7");
+    shouldNotThrow("script.channelCountMode = 'explicit'");
+    shouldThrow("script.channelCountMode = 'max'");
+    shouldThrow("script.channelCountMode = 'clamped-max'");
+    shouldNotThrow("script.channelCountMode = 'junk'");
 }
 
 runTest();

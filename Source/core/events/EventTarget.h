@@ -91,8 +91,6 @@ public:
 //   errors.
 // - If you added an onfoo attribute, use DEFINE_ATTRIBUTE_EVENT_LISTENER(foo)
 //   in your class declaration.
-// - Call ScriptWrappable::init(this) in your constructor, unless you are already
-//   doing so.
 // - Override EventTarget::interfaceName() and executionContext(). The former
 //   will typically return EventTargetNames::YourClassName. The latter will
 //   return ActiveDOMObject::executionContext (if you are an ActiveDOMObject)
@@ -102,6 +100,7 @@ public:
 // Optionally, add a FooEvent.idl class, but that's outside the scope of this
 // comment (and much more straightforward).
 class EventTarget : public WillBeGarbageCollectedMixin, public ScriptWrappable {
+    DEFINE_WRAPPERTYPEINFO();
 public:
 #if !ENABLE(OILPAN)
     void ref() { refEventTarget(); }

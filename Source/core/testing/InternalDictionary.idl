@@ -2,12 +2,26 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+enum InternalEnum { "foo", "bar", "baz" };
+
 [
     GarbageCollected
 ] dictionary InternalDictionary {
     long longMember;
-    DOMString stringMember = "defaultStringValue";
-    boolean? booleanOrNullMember = null;
-    double? doubleOrNullMember;
+    long longMemberWithDefault = 42;
+    long? longOrNullMember;
+    long? longOrNullMemberWithDefault = null;
+    boolean booleanMember;
+    double doubleMember;
+    DOMString stringMember;
+    DOMString stringMemberWithDefault = "defaultStringValue";
     sequence<DOMString> stringSequenceMember;
+    sequence<DOMString>? stringSequenceOrNullMember;
+    InternalEnum enumMember;
+    InternalEnum enumMemberWithDefault = "foo";
+    InternalEnum? enumOrNullMember;
+    Element elementMember;
+    Element? elementOrNullMember;
+    object objectMember;
+    object? objectOrNullMemberWithDefault = null;
 };

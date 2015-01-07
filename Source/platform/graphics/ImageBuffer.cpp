@@ -168,7 +168,7 @@ WebLayer* ImageBuffer::platformLayer() const
 
 bool ImageBuffer::copyToPlatformTexture(WebGraphicsContext3D* context, Platform3DObject texture, GLenum internalFormat, GLenum destType, GLint level, bool premultiplyAlpha, bool flipY)
 {
-    if (!m_surface->isAccelerated() || !platformLayer() || !isSurfaceValid())
+    if (!m_surface->isAccelerated() || !getBackingTexture() || !isSurfaceValid())
         return false;
 
     if (!Extensions3DUtil::canUseCopyTextureCHROMIUM(internalFormat, destType, level))
@@ -225,6 +225,11 @@ Platform3DObject ImageBuffer::getBackingTexture()
     return m_surface->getBackingTexture();
 }
 
+void ImageBuffer::didModifyBackingTexture()
+{
+    m_surface->didModifyBackingTexture();
+}
+
 bool ImageBuffer::copyRenderingResultsFromDrawingBuffer(DrawingBuffer* drawingBuffer, bool fromFrontBuffer)
 {
     if (!drawingBuffer)
@@ -238,8 +243,14 @@ bool ImageBuffer::copyRenderingResultsFromDrawingBuffer(DrawingBuffer* drawingBu
         return false;
 
     m_surface->invalidateCachedBitmap();
-    return drawingBuffer->copyToPlatformTexture(context3D, tex, GL_RGBA,
+    bool result = drawingBuffer->copyToPlatformTexture(context3D, tex, GL_RGBA,
         GL_UNSIGNED_BYTE, 0, true, false, fromFrontBuffer);
+
+    if (result) {
+        m_surface->didModifyBackingTexture();
+    }
+
+    return result;
 }
 
 void ImageBuffer::draw(GraphicsContext* context, const FloatRect& destRect, const FloatRect* srcPtr, CompositeOperator op, WebBlendMode blendMode)
@@ -415,10 +426,8 @@ String ImageBuffer::toDataURL(const String& mimeType, const double* quality) con
     Vector<char> encodedImage;
     if (!isSurfaceValid() || !encodeImage(m_surface->bitmap(), mimeType, quality, &encodedImage))
         return "data:,";
-    Vector<char> base64Data;
-    base64Encode(encodedImage, base64Data);
 
-    return "data:" + mimeType + ";base64," + base64Data;
+    return "data:" + mimeType + ";base64," + base64Encode(encodedImage);
 }
 
 String ImageDataToDataURL(const ImageDataBuffer& imageData, const String& mimeType, const double* quality)
@@ -429,10 +438,7 @@ String ImageDataToDataURL(const ImageDataBuffer& imageData, const String& mimeTy
     if (!encodeImage(imageData, mimeType, quality, &encodedImage))
         return "data:,";
 
-    Vector<char> base64Data;
-    base64Encode(encodedImage, base64Data);
-
-    return "data:" + mimeType + ";base64," + base64Data;
+    return "data:" + mimeType + ";base64," + base64Encode(encodedImage);
 }
 
 } // namespace blink

@@ -177,6 +177,10 @@ public:
     bool downloadToFile() const { return m_downloadToFile; }
     void setDownloadToFile(bool downloadToFile) { m_downloadToFile = downloadToFile; }
 
+    // True if the request should not be handled by the ServiceWorker.
+    bool skipServiceWorker() const { return m_skipServiceWorker; }
+    void setSkipServiceWorker(bool skipServiceWorker) { m_skipServiceWorker = skipServiceWorker; }
+
     // Extra data associated with this request.
     ExtraData* extraData() const { return m_extraData.get(); }
     void setExtraData(PassRefPtr<ExtraData> extraData) { m_extraData = extraData; }
@@ -186,6 +190,15 @@ public:
 
     blink::WebURLRequest::FrameType frameType() const { return m_frameType; }
     void setFrameType(blink::WebURLRequest::FrameType frameType) { m_frameType = frameType; }
+
+    blink::WebURLRequest::FetchRequestMode fetchRequestMode() const
+    {
+        return m_fetchRequestMode;
+    }
+    void setFetchRequestMode(blink::WebURLRequest::FetchRequestMode mode)
+    {
+        m_fetchRequestMode = mode;
+    }
 
     bool cacheControlContainsNoCache() const;
     bool cacheControlContainsNoStore() const;
@@ -213,6 +226,7 @@ private:
     bool m_reportRawHeaders : 1;
     bool m_hasUserGesture : 1;
     bool m_downloadToFile : 1;
+    bool m_skipServiceWorker : 1;
     ResourceLoadPriority m_priority;
     int m_intraPriorityValue;
     int m_requestorID;
@@ -221,6 +235,7 @@ private:
     RefPtr<ExtraData> m_extraData;
     blink::WebURLRequest::RequestContext m_requestContext;
     blink::WebURLRequest::FrameType m_frameType;
+    blink::WebURLRequest::FetchRequestMode m_fetchRequestMode;
     ReferrerPolicy m_referrerPolicy;
 
     mutable CacheControlHeader m_cacheControlHeaderCache;
@@ -250,6 +265,7 @@ public:
     bool m_reportUploadProgress;
     bool m_hasUserGesture;
     bool m_downloadToFile;
+    bool m_skipServiceWorker;
     ResourceLoadPriority m_priority;
     int m_intraPriorityValue;
     int m_requestorID;
@@ -257,6 +273,7 @@ public:
     int m_appCacheHostID;
     blink::WebURLRequest::RequestContext m_requestContext;
     blink::WebURLRequest::FrameType m_frameType;
+    blink::WebURLRequest::FetchRequestMode m_fetchRequestMode;
     ReferrerPolicy m_referrerPolicy;
 };
 

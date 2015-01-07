@@ -357,16 +357,19 @@ static void normalizeCharacters(const TextRun& run, unsigned length, UChar* dest
         UChar32 character;
         U16_NEXT(source, position, length, character);
         // Don't normalize tabs as they are not treated as spaces for word-end.
-        if (Character::treatAsSpace(character) && character != '\t')
-            character = ' ';
+        if (run.normalizeSpace() && Character::isNormalizedCanvasSpaceCharacter(character))
+            character = space;
+        else if (Character::treatAsSpace(character) && character != characterTabulation)
+            character = space;
         else if (Character::treatAsZeroWidthSpaceInComplexScript(character))
             character = zeroWidthSpace;
+
         U16_APPEND(destination, *destinationLength, length, character, error);
         ASSERT_UNUSED(error, !error);
     }
 }
 
-HarfBuzzShaper::HarfBuzzShaper(const Font* font, const TextRun& run, ForTextEmphasisOrNot forTextEmphasis)
+HarfBuzzShaper::HarfBuzzShaper(const Font* font, const TextRun& run, ForTextEmphasisOrNot forTextEmphasis, HashSet<const SimpleFontData*>* fallbackFonts)
     : m_font(font)
     , m_normalizedBufferLength(0)
     , m_run(run)
@@ -379,6 +382,7 @@ HarfBuzzShaper::HarfBuzzShaper(const Font* font, const TextRun& run, ForTextEmph
     , m_toIndex(m_run.length())
     , m_forTextEmphasis(forTextEmphasis)
     , m_glyphBoundingBox(std::numeric_limits<float>::max(), std::numeric_limits<float>::min(), std::numeric_limits<float>::min(), std::numeric_limits<float>::max())
+    , m_fallbackFonts(fallbackFonts)
 {
     m_normalizedBuffer = adoptArrayPtr(new UChar[m_run.length() + 1]);
     normalizeCharacters(m_run, m_run.length(), m_normalizedBuffer.get(), &m_normalizedBufferLength);
@@ -389,7 +393,7 @@ HarfBuzzShaper::HarfBuzzShaper(const Font* font, const TextRun& run, ForTextEmph
 // In complex text word-spacing affects each line-break, space (U+0020) and non-breaking space (U+00A0).
 static inline bool isCodepointSpace(UChar c)
 {
-    return c == ' ' || c == noBreakSpace || c == '\n';
+    return c == space || c == noBreakSpace || c == newlineCharacter;
 }
 
 static inline bool isWordEnd(const UChar* normalizedBuffer, unsigned index)
@@ -611,17 +615,18 @@ struct CandidateRun {
 };
 
 static inline bool collectCandidateRuns(const UChar* normalizedBuffer,
-    size_t bufferLength, const Font* font, Vector<CandidateRun>* runs)
+    size_t bufferLength, const Font* font, Vector<CandidateRun>* runs, bool isSpaceNormalize)
 {
     const UChar* normalizedBufferEnd = normalizedBuffer + bufferLength;
     SurrogatePairAwareTextIterator iterator(normalizedBuffer, 0, bufferLength, bufferLength);
     UChar32 character;
     unsigned clusterLength = 0;
     unsigned startIndexOfCurrentRun = 0;
+
     if (!iterator.consume(character, clusterLength))
         return false;
 
-    const SimpleFontData* nextFontData = font->glyphDataForCharacter(character, false).fontData;
+    const SimpleFontData* nextFontData = font->glyphDataForCharacter(character, false, isSpaceNormalize).fontData;
     UErrorCode errorCode = U_ZERO_ERROR;
     UScriptCode nextScript = uscript_getScript(character, &errorCode);
     if (U_FAILURE(errorCode))
@@ -643,7 +648,7 @@ static inline bool collectCandidateRuns(const UChar* normalizedBuffer,
                 continue;
             }
 
-            nextFontData = font->glyphDataForCharacter(character, false).fontData;
+            nextFontData = font->glyphDataForCharacter(character, false, isSpaceNormalize).fontData;
             nextScript = uscript_getScript(character, &errorCode);
             if (U_FAILURE(errorCode))
                 return false;
@@ -752,7 +757,7 @@ bool HarfBuzzShaper::createHarfBuzzRuns()
 {
     Vector<CandidateRun> candidateRuns;
     if (!collectCandidateRuns(m_normalizedBuffer.get(),
-        m_normalizedBufferLength, m_font, &candidateRuns))
+        m_normalizedBufferLength, m_font, &candidateRuns, m_run.normalizeSpace()))
         return false;
 
     if (!resolveCandidateRuns(candidateRuns))
@@ -795,6 +800,8 @@ void HarfBuzzShaper::addHarfBuzzRun(unsigned startCharacter,
 {
     ASSERT(endCharacter > startCharacter);
     ASSERT(script != USCRIPT_INVALID_CODE);
+    if (m_fallbackFonts)
+        m_fallbackFonts->add(fontData);
     return m_harfBuzzRuns.append(HarfBuzzRun::create(fontData,
         startCharacter, endCharacter - startCharacter,
         TextDirectionToHBDirection(m_run.direction()),
@@ -856,7 +863,7 @@ bool HarfBuzzShaper::shapeHarfBuzzRuns()
 
         // Add a space as pre-context to the buffer. This prevents showing dotted-circle
         // for combining marks at the beginning of runs.
-        static const uint16_t preContext = ' ';
+        static const uint16_t preContext = space;
         hb_buffer_add_utf16(harfBuzzBuffer.get(), &preContext, 1, 1, 0);
 
         if (fontDescription.variant() == FontVariantSmallCaps && u_islower(m_normalizedBuffer[currentRun->startIndex()])) {
@@ -892,7 +899,6 @@ void HarfBuzzShaper::setGlyphPositionsForHarfBuzzRun(HarfBuzzRun* currentRun, hb
 
     if (!currentRun->hasGlyphToCharacterIndexes()) {
         // FIXME: https://crbug.com/337886
-        ASSERT_NOT_REACHED();
         return;
     }
 

@@ -63,14 +63,14 @@ static LocalFrame* findFrame(v8::Local<v8::Object> host, v8::Local<v8::Value> da
         v8::Handle<v8::Object> windowWrapper = V8Window::findInstanceInPrototypeChain(host, isolate);
         if (windowWrapper.IsEmpty())
             return 0;
-        return V8Window::toNative(windowWrapper)->frame();
+        return V8Window::toImpl(windowWrapper)->frame();
     }
 
     if (V8History::wrapperTypeInfo.equals(type))
-        return V8History::toNative(host)->frame();
+        return V8History::toImpl(host)->frame();
 
     if (V8Location::wrapperTypeInfo.equals(type))
-        return V8Location::toNative(host)->frame();
+        return V8Location::toImpl(host)->frame();
 
     // This function can handle only those types listed above.
     ASSERT_NOT_REACHED();
@@ -127,7 +127,7 @@ static void messageHandlerInMainThread(v8::Handle<v8::Message> message, v8::Hand
         v8::Handle<v8::Object> obj = v8::Handle<v8::Object>::Cast(data);
         const WrapperTypeInfo* type = toWrapperTypeInfo(obj);
         if (V8DOMException::wrapperTypeInfo.isSubclass(type)) {
-            DOMException* exception = V8DOMException::toNative(obj);
+            DOMException* exception = V8DOMException::toImpl(obj);
             if (exception && !exception->messageForConsole().isEmpty())
                 event->setUnsanitizedMessage("Uncaught " + exception->toStringForConsole());
         }
@@ -189,10 +189,6 @@ static void timerTraceProfilerInMainThread(const char* name, int status)
 
 static void initializeV8Common(v8::Isolate* isolate)
 {
-    v8::ResourceConstraints constraints;
-    constraints.ConfigureDefaults(static_cast<uint64_t>(blink::Platform::current()->physicalMemoryMB()) << 20, static_cast<uint32_t>(blink::Platform::current()->virtualMemoryLimitMB()) << 20, static_cast<uint32_t>(blink::Platform::current()->numberOfProcessors()));
-    v8::SetResourceConstraints(isolate, &constraints);
-
     v8::V8::AddGCPrologueCallback(V8GCController::gcPrologue);
     v8::V8::AddGCEpilogueCallback(V8GCController::gcEpilogue);
 
@@ -201,7 +197,7 @@ static void initializeV8Common(v8::Isolate* isolate)
     isolate->SetAutorunMicrotasks(false);
 }
 
-void V8Initializer::initializeMainThreadIfNeeded(v8::Isolate* isolate)
+void V8Initializer::initializeMainThreadIfNeeded()
 {
     ASSERT(isMainThread());
 
@@ -210,10 +206,13 @@ void V8Initializer::initializeMainThreadIfNeeded(v8::Isolate* isolate)
         return;
     initialized = true;
 
+    gin::IsolateHolder::Initialize(gin::IsolateHolder::kNonStrictMode, v8ArrayBufferAllocator());
+
+    v8::Isolate* isolate = V8PerIsolateData::initialize();
+
     initializeV8Common(isolate);
 
     v8::V8::SetFatalErrorHandler(reportFatalErrorInMainThread);
-    V8PerIsolateData::ensureInitialized(isolate);
     v8::V8::AddMessageListener(messageHandlerInMainThread);
     v8::V8::SetFailedAccessCheckCallbackFunction(failedAccessCheckCallbackInMainThread);
     v8::V8::SetAllowCodeGenerationFromStringsCallback(codeGenerationCheckCallbackInMainThread);
@@ -269,10 +268,8 @@ void V8Initializer::initializeWorker(v8::Isolate* isolate)
     v8::V8::AddMessageListener(messageHandlerInWorker);
     v8::V8::SetFatalErrorHandler(reportFatalErrorInWorker);
 
-    v8::ResourceConstraints resourceConstraints;
     uint32_t here;
-    resourceConstraints.set_stack_limit(&here - kWorkerMaxStackSize / sizeof(uint32_t*));
-    v8::SetResourceConstraints(isolate, &resourceConstraints);
+    isolate->SetStackLimit(reinterpret_cast<uintptr_t>(&here - kWorkerMaxStackSize / sizeof(uint32_t*)));
 }
 
 } // namespace blink

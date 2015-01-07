@@ -12,6 +12,7 @@
 namespace blink {
 
 class LocalDOMWindow;
+class WorkerGlobalScopeProxy;
 
 class ConsoleMessageStorage FINAL : public NoBaseWillBeGarbageCollected<ConsoleMessageStorage> {
     WTF_MAKE_NONCOPYABLE(ConsoleMessageStorage);
@@ -31,10 +32,12 @@ public:
     void clear();
 
     Vector<unsigned> argumentCounts() const;
+
+    void adoptWorkerMessagesAfterTermination(WorkerGlobalScopeProxy*);
     void frameWindowDiscarded(LocalDOMWindow*);
 
     size_t size() const;
-    PassRefPtrWillBeRawPtr<ConsoleMessage> at(size_t index) const;
+    ConsoleMessage* at(size_t index) const;
 
     int expiredCount() const;
 
@@ -47,9 +50,9 @@ private:
     ExecutionContext* executionContext() const;
 
     int m_expiredCount;
-    WillBeHeapVector<RefPtrWillBeMember<ConsoleMessage> > m_messages;
+    WillBeHeapDeque<RefPtrWillBeMember<ConsoleMessage> > m_messages;
     RawPtrWillBeMember<ExecutionContext> m_context;
-    LocalFrame* m_frame;
+    RawPtrWillBeMember<LocalFrame> m_frame;
 };
 
 } // namespace blink

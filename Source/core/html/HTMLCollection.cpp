@@ -168,7 +168,6 @@ HTMLCollection::HTMLCollection(ContainerNode& ownerNode, CollectionType type, It
     , m_overridesItemAfter(itemAfterOverrideType == OverridesItemAfter)
     , m_shouldOnlyIncludeDirectChildren(shouldTypeOnlyIncludeDirectChildren(type))
 {
-    ScriptWrappable::init(this);
 }
 
 PassRefPtrWillBeRawPtr<HTMLCollection> HTMLCollection::create(ContainerNode& base, CollectionType type)
@@ -189,18 +188,18 @@ HTMLCollection::~HTMLCollection()
 
 void HTMLCollection::invalidateCache(Document* oldDocument) const
 {
-    m_collectionIndexCache.invalidate();
+    m_collectionItemsCache.invalidate();
     invalidateIdNameCacheMaps(oldDocument);
 }
 
 unsigned HTMLCollection::length() const
 {
-    return m_collectionIndexCache.nodeCount(*this);
+    return m_collectionItemsCache.nodeCount(*this);
 }
 
 Element* HTMLCollection::item(unsigned offset) const
 {
-    return m_collectionIndexCache.nodeAt(*this, offset);
+    return m_collectionItemsCache.nodeAt(*this, offset);
 }
 
 static inline bool isMatchingHTMLElement(const HTMLCollection& htmlCollection, const HTMLElement& element)
@@ -501,7 +500,7 @@ HTMLCollection::NamedItemCache::NamedItemCache()
 void HTMLCollection::trace(Visitor* visitor)
 {
     visitor->trace(m_namedItemCache);
-    visitor->trace(m_collectionIndexCache);
+    visitor->trace(m_collectionItemsCache);
     LiveNodeListBase::trace(visitor);
 }
 

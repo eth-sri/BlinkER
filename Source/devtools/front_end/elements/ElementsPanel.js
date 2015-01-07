@@ -57,7 +57,6 @@ WebInspector.ElementsPanel = function()
         this.contentElement.classList.add("nowrap");
     WebInspector.settings.domWordWrap.addChangeListener(this._domWordWrapSettingChanged.bind(this));
 
-    this.contentElement.addEventListener("contextmenu", this._contextMenuEventFired.bind(this), true);
     this._splitView.sidebarElement().addEventListener("contextmenu", this._sidebarContextMenuEventFired.bind(this), false);
 
     var crumbsContainer = stackElement.createChild("div");
@@ -130,7 +129,7 @@ WebInspector.ElementsPanel.prototype = {
      */
     targetAdded: function(target)
     {
-        var treeOutline = new WebInspector.ElementsTreeOutline(target, true, true, this._populateContextMenu.bind(this), this._setPseudoClassForNode.bind(this));
+        var treeOutline = new WebInspector.ElementsTreeOutline(target, true, true, this._setPseudoClassForNode.bind(this));
         treeOutline.wireToDOMModel();
         treeOutline.addEventListener(WebInspector.ElementsTreeOutline.Events.SelectedNodeChanged, this._selectedNodeChanged, this);
         treeOutline.addEventListener(WebInspector.ElementsTreeOutline.Events.NodePicked, this._onNodePicked, this);
@@ -234,16 +233,6 @@ WebInspector.ElementsPanel.prototype = {
     onResize: function()
     {
         this._updateTreeOutlineVisibleWidth();
-    },
-
-    omitDefaultSelection: function()
-    {
-        this._omitDefaultSelection = true;
-    },
-
-    stopOmittingDefaultSelection: function()
-    {
-        delete this._omitDefaultSelection;
     },
 
     /**
@@ -451,16 +440,6 @@ WebInspector.ElementsPanel.prototype = {
         }
     },
 
-    _contextMenuEventFired: function(event)
-    {
-        if (this.sidebarPanes.styles.isEditingSelector())
-            return;
-        var contextMenu = new WebInspector.ContextMenu(event);
-        for (var i = 0; i < this._treeOutlines.length; ++i)
-            this._treeOutlines[i].populateContextMenu(contextMenu, event);
-        contextMenu.show();
-    },
-
     _domWordWrapSettingChanged: function(event)
     {
         if (event.data)
@@ -483,14 +462,6 @@ WebInspector.ElementsPanel.prototype = {
         this._searchableView.cancelSearch();
         WebInspector.inspectorView.setCurrentPanel(this);
         this.selectDOMNode(node, true);
-    },
-
-    _populateContextMenu: function(contextMenu, node)
-    {
-        // Add debbuging-related actions
-        contextMenu.appendSeparator();
-        var pane = WebInspector.domBreakpointsSidebarPane;
-        pane.populateNodeContextMenu(node, contextMenu);
     },
 
     /**
@@ -1274,10 +1245,21 @@ WebInspector.ElementsPanel.prototype = {
      */
     revealAndSelectNode: function(node)
     {
+        if (WebInspector.inspectElementModeController && WebInspector.inspectElementModeController.enabled()) {
+            InspectorFrontendHost.bringToFront();
+            WebInspector.inspectElementModeController.disable();
+        }
+
+        this._omitDefaultSelection = true;
         WebInspector.inspectorView.setCurrentPanel(this);
         node = WebInspector.settings.showUAShadowDOM.get() ? node : this._leaveUserAgentShadowDOM(node);
         node.highlightForTwoSeconds();
         this.selectDOMNode(node, true);
+        delete this._omitDefaultSelection;
+
+        if (!this._notFirstInspectElement)
+            InspectorFrontendHost.inspectElementCompleted();
+        this._notFirstInspectElement = true;
     },
 
     /**
@@ -1292,10 +1274,18 @@ WebInspector.ElementsPanel.prototype = {
             && !(object instanceof WebInspector.DeferredDOMNode)) {
             return;
         }
+
+        // Add debbuging-related actions
+        if (object instanceof WebInspector.DOMNode) {
+            contextMenu.appendSeparator();
+            WebInspector.domBreakpointsSidebarPane.populateNodeContextMenu(object, contextMenu);
+        }
+
         // Skip adding "Reveal..." menu item for our own tree outline.
         if (this.element.isAncestor(/** @type {!Node} */ (event.target)))
             return;
         var commandCallback = WebInspector.Revealer.reveal.bind(WebInspector.Revealer, object);
+
         contextMenu.appendItem(WebInspector.useLowerCaseMenuTitles() ? "Reveal in Elements panel" : "Reveal in Elements Panel", commandCallback);
     },
 
@@ -1465,7 +1455,7 @@ WebInspector.ElementsPanel.ContextMenuProvider.prototype = {
      */
     appendApplicableItems: function(event, contextMenu, target)
     {
-        /** @type {!WebInspector.ElementsPanel} */ (WebInspector.inspectorView.panel("elements")).appendApplicableItems(event, contextMenu, target);
+        WebInspector.ElementsPanel.instance().appendApplicableItems(event, contextMenu, target);
     }
 }
 
@@ -1480,144 +1470,68 @@ WebInspector.ElementsPanel.DOMNodeRevealer = function()
 WebInspector.ElementsPanel.DOMNodeRevealer.prototype = {
     /**
      * @param {!Object} node
+     * @return {!Promise}
      */
     reveal: function(node)
     {
-        if (WebInspector.inspectElementModeController && WebInspector.inspectElementModeController.enabled()) {
-            InspectorFrontendHost.bringToFront();
-            WebInspector.inspectElementModeController.disable();
-        }
-
-        var panel = /** @type {!WebInspector.ElementsPanel} */ (WebInspector.inspectorView.panel("elements"));
-        if (node instanceof WebInspector.DOMNode)
-            panel.revealAndSelectNode(/** @type {!WebInspector.DOMNode} */ (node));
-        else if (node instanceof WebInspector.DeferredDOMNode)
-            (/** @type {!WebInspector.DeferredDOMNode} */ (node)).resolve(onNodeResolved);
+        return new Promise(revealPromise);
 
         /**
-         * @param {?WebInspector.DOMNode} resolvedNode
+         * @param {function(undefined)} resolve
+         * @param {function(!Error)} reject
          */
-        function onNodeResolved(resolvedNode)
+        function revealPromise(resolve, reject)
         {
-            if (resolvedNode)
-                panel.revealAndSelectNode(resolvedNode);
+            var panel = WebInspector.ElementsPanel.instance();
+            if (node instanceof WebInspector.DOMNode)
+                onNodeResolved(/** @type {!WebInspector.DOMNode} */ (node));
+            else if (node instanceof WebInspector.DeferredDOMNode)
+                (/** @type {!WebInspector.DeferredDOMNode} */ (node)).resolve(onNodeResolved);
+            else if (node instanceof WebInspector.RemoteObject)
+                (/** @type {!WebInspector.RemoteObject} */ (node)).pushNodeToFrontend(onNodeResolved);
+            else
+                reject(new Error("Can't reveal a non-node."));
+
+            /**
+             * @param {?WebInspector.DOMNode} resolvedNode
+             */
+            function onNodeResolved(resolvedNode)
+            {
+                if (resolvedNode) {
+                    panel.revealAndSelectNode(resolvedNode);
+                    resolve(undefined);
+                    return;
+                }
+                reject(new Error("Could not resolve node to reveal."));
+            }
         }
     }
 }
 
 /**
- * @constructor
- * @implements {WebInspector.Revealer}
+ * @return {!WebInspector.ElementsPanel}
  */
-WebInspector.ElementsPanel.NodeRemoteObjectRevealer = function()
+WebInspector.ElementsPanel.instance = function()
 {
-}
-
-WebInspector.ElementsPanel.NodeRemoteObjectRevealer.prototype = {
-    /**
-     * @param {!Object} remoteObject
-     */
-    reveal: function(remoteObject)
-    {
-        revealElement(/** @type {!WebInspector.RemoteObject} */ (remoteObject));
-
-        /**
-         * @param {?WebInspector.RemoteObject} remoteObject
-         */
-        function revealElement(remoteObject)
-        {
-            if (remoteObject)
-                remoteObject.pushNodeToFrontend(selectNode.bind(null, remoteObject));
-        }
-
-        /**
-         * @param {?WebInspector.RemoteObject} remoteObject
-         * @param {?WebInspector.DOMNode} node
-         */
-        function selectNode(remoteObject, node)
-        {
-            if (node) {
-                WebInspector.Revealer.reveal(node);
-                return;
-            }
-            if (!remoteObject || remoteObject.description !== "#text" || !remoteObject.isNode())
-                return;
-            remoteObject.callFunction(parentElement, undefined, revealElement);
-        }
-
-        /**
-         * @suppressReceiverCheck
-         * @this {Element}
-         */
-        function parentElement()
-        {
-            return this.parentElement;
-        }
-    }
+    if (!WebInspector.ElementsPanel._instanceObject)
+        WebInspector.ElementsPanel._instanceObject = new WebInspector.ElementsPanel();
+    return WebInspector.ElementsPanel._instanceObject;
 }
 
 /**
  * @constructor
+ * @implements {WebInspector.PanelFactory}
  */
-WebInspector.ElementsPanel.NodeRemoteObjectInspector = function()
+WebInspector.ElementsPanelFactory = function()
 {
 }
 
-WebInspector.ElementsPanel.NodeRemoteObjectInspector.prototype = {
+WebInspector.ElementsPanelFactory.prototype = {
     /**
-     * @param {!Object} object
+     * @return {!WebInspector.Panel}
      */
-    inspectNodeObject: function(object)
+    createPanel: function()
     {
-        var remoteObject = /** @type {!WebInspector.RemoteObject} */ (object);
-        if (!remoteObject.isNode()) {
-            remoteObject.release();
-            return;
-        }
-        var elementsPanel = /** @type {!WebInspector.ElementsPanel} */ (WebInspector.inspectorView.panel("elements"));
-        revealElement(remoteObject);
-
-        /**
-         * @param {?WebInspector.RemoteObject} remoteObject
-         */
-        function revealElement(remoteObject)
-        {
-            if (!remoteObject)
-                return;
-            remoteObject.pushNodeToFrontend(selectNode.bind(null, remoteObject));
-            elementsPanel.omitDefaultSelection();
-            WebInspector.inspectorView.setCurrentPanel(elementsPanel);
-        }
-
-        /**
-         * @param {!WebInspector.RemoteObject} remoteObject
-         * @param {?WebInspector.DOMNode} node
-         */
-        function selectNode(remoteObject, node)
-        {
-            elementsPanel.stopOmittingDefaultSelection();
-            if (node) {
-                WebInspector.Revealer.reveal(node);
-                if (!WebInspector._notFirstInspectElement && !WebInspector.inspectorView.drawerVisible())
-                    InspectorFrontendHost.inspectElementCompleted();
-                WebInspector._notFirstInspectElement = true;
-                remoteObject.release();
-                return;
-            }
-            if (remoteObject.description !== "#text" || !remoteObject.isNode()) {
-                remoteObject.release();
-                return;
-            }
-            remoteObject.callFunction(parentElement, undefined, revealElement);
-        }
-
-        /**
-         * @suppressReceiverCheck
-         * @this {Element}
-         */
-        function parentElement()
-        {
-            return this.parentElement;
-        }
+        return WebInspector.ElementsPanel.instance();
     }
 }

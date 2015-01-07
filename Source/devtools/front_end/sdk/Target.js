@@ -14,8 +14,6 @@
 WebInspector.Target = function(name, connection, callback)
 {
     Protocol.Agents.call(this, connection.agentsMap());
-    /** @type {!WeakReference.<!WebInspector.Target>} */
-    this._weakReference = new WeakReference(this);
     this._name = name;
     this._connection = connection;
     connection.addEventListener(InspectorBackendClass.Connection.Events.Disconnected, this._onDisconnect, this);
@@ -28,10 +26,10 @@ WebInspector.Target = function(name, connection, callback)
     this._capabilities = {};
     this.pageAgent().canScreencast(this._initializeCapability.bind(this, WebInspector.Target.Capabilities.CanScreencast, null));
     this.pageAgent().canEmulate(this._initializeCapability.bind(this, WebInspector.Target.Capabilities.CanEmulate, null));
-    if (WebInspector.experimentsSettings.timelinePowerProfiler.isEnabled())
+    if (Runtime.experiments.isEnabled("timelinePowerProfiler"))
         this.powerAgent().canProfilePower(this._initializeCapability.bind(this, WebInspector.Target.Capabilities.CanProfilePower, null));
     this.workerAgent().canInspectWorkers(this._initializeCapability.bind(this, WebInspector.Target.Capabilities.CanInspectWorkers, this._loadedWithCapabilities.bind(this, callback)));
-    if (WebInspector.experimentsSettings.timelineOnTraceEvents.isEnabled())
+    if (Runtime.experiments.isEnabled("timelineOnTraceEvents"))
         this.consoleAgent().setTracingBasedTimeline(true);
 }
 
@@ -65,14 +63,6 @@ WebInspector.Target.prototype = {
     name: function()
     {
         return this._name;
-    },
-
-    /**
-     * @return {!WeakReference.<!WebInspector.Target>}
-     */
-    weakReference: function()
-    {
-       return this._weakReference;
     },
 
     /**
@@ -147,7 +137,7 @@ WebInspector.Target.prototype = {
             WebInspector.workerManager = this.workerManager;
 
         if (this.hasCapability(WebInspector.Target.Capabilities.CanProfilePower))
-            WebInspector.powerProfiler = new WebInspector.PowerProfiler();
+            WebInspector.powerProfiler = new WebInspector.PowerProfiler(this);
 
         /** @type {!WebInspector.TimelineManager} */
         this.timelineManager = new WebInspector.TimelineManager(this);
@@ -214,7 +204,6 @@ WebInspector.Target.prototype = {
 
     _dispose: function()
     {
-        this._weakReference.clear();
         this.debuggerModel.dispose();
         this.networkManager.dispose();
         this.cpuProfilerModel.dispose();

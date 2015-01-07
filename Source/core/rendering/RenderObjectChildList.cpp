@@ -29,6 +29,7 @@
 
 #include "core/accessibility/AXObjectCache.h"
 #include "core/rendering/RenderCounter.h"
+#include "core/rendering/RenderLayer.h"
 #include "core/rendering/RenderObject.h"
 #include "core/rendering/RenderView.h"
 #include "core/rendering/style/RenderStyle.h"
@@ -70,12 +71,8 @@ RenderObject* RenderObjectChildList::removeChildNode(RenderObject* owner, Render
         // that a positioned child got yanked). We also issue paint invalidations, so that the area exposed when the child
         // disappears gets paint invalidated properly.
         if (!owner->documentBeingDestroyed() && notifyRenderer && oldChild->everHadLayout()) {
-            oldChild->setNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation();
-            // We only issue paint invalidations for |oldChild| if we have a RenderLayer as its visual overflow may not be tracked by its parent.
-            if (oldChild->isBody())
-                owner->view()->invalidatePaintForWholeRenderer();
-            else
-                oldChild->invalidatePaintForWholeRenderer();
+            oldChild->setNeedsLayoutAndPrefWidthsRecalc();
+            invalidatePaintOnRemoval(*oldChild);
         }
     }
 
@@ -164,12 +161,29 @@ void RenderObjectChildList::insertChildNode(RenderObject* owner, RenderObject* n
         RenderCounter::rendererSubtreeAttached(newChild);
     }
 
-    newChild->setNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation();
+    newChild->setNeedsLayoutAndPrefWidthsRecalc();
+    newChild->setShouldDoFullPaintInvalidationWithReason(InvalidationRendererInsertion);
     if (!owner->normalChildNeedsLayout())
         owner->setChildNeedsLayout(); // We may supply the static position for an absolute positioned child.
 
     if (AXObjectCache* cache = owner->document().axObjectCache())
         cache->childrenChanged(owner);
+}
+
+void RenderObjectChildList::invalidatePaintOnRemoval(const RenderObject& oldChild)
+{
+    if (!oldChild.isRooted())
+        return;
+    if (oldChild.isBody()) {
+        oldChild.view()->setShouldDoFullPaintInvalidation(true);
+        return;
+    }
+    if (oldChild.isText()) {
+        oldChild.parent()->setShouldDoFullPaintInvalidation(true);
+        return;
+    }
+    DisableCompositingQueryAsserts disabler;
+    oldChild.invalidatePaintUsingContainer(oldChild.containerForPaintInvalidation(), oldChild.previousPaintInvalidationRect(), InvalidationRendererRemoval);
 }
 
 } // namespace blink

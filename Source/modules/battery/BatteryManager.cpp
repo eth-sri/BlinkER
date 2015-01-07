@@ -31,7 +31,6 @@ BatteryManager::BatteryManager(ExecutionContext* context)
     , m_batteryStatus(BatteryStatus::create())
     , m_state(NotStarted)
 {
-    ScriptWrappable::init(this);
 }
 
 ScriptPromise BatteryManager::startRequest(ScriptState* scriptState)
@@ -45,6 +44,7 @@ ScriptPromise BatteryManager::startRequest(ScriptState* scriptState)
     if (m_state == Resolved) {
         // FIXME: Consider returning the same promise in this case. See crbug.com/385025.
         m_resolver->resolve(this);
+        m_resolver = nullptr;
     } else if (m_state == NotStarted) {
         m_state = Pending;
         m_hasEventListener = true;
@@ -86,6 +86,7 @@ void BatteryManager::didUpdateData()
         ASSERT(m_resolver);
         m_state = Resolved;
         m_resolver->resolve(this);
+        m_resolver = nullptr;
         return;
     }
 

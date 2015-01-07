@@ -53,12 +53,12 @@
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/inspector/InspectorInstrumentation.h"
-#include "core/inspector/InspectorTraceEvents.h"
 #include "core/page/Chrome.h"
 #include "core/page/EventHandler.h"
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
+#include "core/paint/ScrollbarPainter.h"
 #include "core/rendering/RenderGeometryMap.h"
 #include "core/rendering/RenderScrollbar.h"
 #include "core/rendering/RenderScrollbarPart.h"
@@ -186,12 +186,12 @@ void RenderLayerScrollableArea::invalidateScrollbarRect(Scrollbar* scrollbar, co
 
     if (scrollbar == m_vBar.get()) {
         if (GraphicsLayer* layer = layerForVerticalScrollbar()) {
-            layer->setNeedsDisplayInRect(rect);
+            layer->setNeedsDisplayInRect(rect, WebInvalidationDebugAnnotationsScrollbar);
             return;
         }
     } else {
         if (GraphicsLayer* layer = layerForHorizontalScrollbar()) {
-            layer->setNeedsDisplayInRect(rect);
+            layer->setNeedsDisplayInRect(rect, WebInvalidationDebugAnnotationsScrollbar);
             return;
         }
     }
@@ -223,7 +223,7 @@ void RenderLayerScrollableArea::invalidateScrollbarRect(Scrollbar* scrollbar, co
 void RenderLayerScrollableArea::invalidateScrollCornerRect(const IntRect& rect)
 {
     if (GraphicsLayer* layer = layerForScrollCorner()) {
-        layer->setNeedsDisplayInRect(rect);
+        layer->setNeedsDisplayInRect(rect, WebInvalidationDebugAnnotationsScrollbar);
         return;
     }
 
@@ -402,12 +402,8 @@ void RenderLayerScrollableArea::setScrollOffset(const IntPoint& newScrollOffset)
     }
 
     // Just schedule a full paint invalidation of our object.
-    if (requiresPaintInvalidation) {
-        if (box().frameView()->isInPerformLayout())
-            box().setShouldDoFullPaintInvalidation(true);
-        else
-            box().invalidatePaintUsingContainer(paintInvalidationContainer, layer()->renderer()->previousPaintInvalidationRect(), InvalidationScroll);
-    }
+    if (requiresPaintInvalidation)
+        box().setShouldDoFullPaintInvalidation(true);
 
     // Schedule the scroll DOM event.
     if (box().node())
@@ -1075,7 +1071,7 @@ void RenderLayerScrollableArea::paintScrollCorner(GraphicsContext* context, cons
         return;
 
     if (m_scrollCorner) {
-        m_scrollCorner->paintIntoRect(context, paintOffset, absRect);
+        ScrollbarPainter::paintIntoRect(m_scrollCorner, context, paintOffset, absRect);
         return;
     }
 
@@ -1183,7 +1179,7 @@ void RenderLayerScrollableArea::paintResizer(GraphicsContext* context, const Int
         return;
 
     if (m_resizer) {
-        m_resizer->paintIntoRect(context, paintOffset, absRect);
+        ScrollbarPainter::paintIntoRect(m_resizer, context, paintOffset, absRect);
         return;
     }
 
@@ -1458,7 +1454,8 @@ static bool layerNeedsCompositedScrolling(const RenderLayer* layer)
     return layer->scrollsOverflow()
         && layer->compositor()->preferCompositingToLCDTextEnabled()
         && !layer->hasDescendantWithClipPath()
-        && !layer->hasAncestorWithClipPath();
+        && !layer->hasAncestorWithClipPath()
+        && !layer->renderer()->style()->hasBorderRadius();
 }
 
 void RenderLayerScrollableArea::updateNeedsCompositedScrolling()

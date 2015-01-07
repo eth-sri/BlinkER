@@ -34,11 +34,19 @@
 #include "platform/graphics/ImageObserver.h"
 #include "platform/graphics/skia/NativeImageSkia.h"
 #include "platform/graphics/skia/SkiaUtils.h"
-#include "wtf/CurrentTime.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
+
+PassRefPtr<BitmapImage> BitmapImage::create(PassRefPtr<NativeImageSkia> nativeImage, ImageObserver* observer)
+{
+    if (!nativeImage) {
+        return BitmapImage::create(observer);
+    }
+
+    return adoptRef(new BitmapImage(nativeImage, observer));
+}
 
 BitmapImage::BitmapImage(ImageObserver* observer)
     : Image(observer)
@@ -101,6 +109,11 @@ bool BitmapImage::isBitmapImage() const
     return true;
 }
 
+bool BitmapImage::currentFrameHasSingleSecurityOrigin() const
+{
+    return true;
+}
+
 void BitmapImage::destroyDecodedData(bool destroyAll)
 {
     for (size_t i = 0; i < m_frames.size(); ++i) {
@@ -156,6 +169,7 @@ void BitmapImage::cacheFrame(size_t index)
     const IntSize frameSize(index ? m_source.frameSizeAtIndex(index) : m_size);
     if (frameSize != m_size)
         m_hasUniformFrameSize = false;
+
     if (m_frames[index].m_frame) {
         int deltaBytes = safeCast<int>(m_frames[index].m_frameBytes);
         // The fully-decoded frame will subsume the partially decoded data used
@@ -187,18 +201,9 @@ IntSize BitmapImage::sizeRespectingOrientation() const
     return m_sizeRespectingOrientation;
 }
 
-IntSize BitmapImage::currentFrameSize() const
-{
-    if (!m_currentFrame || m_hasUniformFrameSize)
-        return size();
-    IntSize frameSize = m_source.frameSizeAtIndex(m_currentFrame);
-    return frameSize;
-}
-
 bool BitmapImage::getHotSpot(IntPoint& hotSpot) const
 {
-    bool result = m_source.getHotSpot(hotSpot);
-    return result;
+    return m_source.getHotSpot(hotSpot);
 }
 
 bool BitmapImage::dataChanged(bool allDataReceived)
@@ -315,10 +320,10 @@ size_t BitmapImage::frameCount()
     if (!m_haveFrameCount) {
         m_frameCount = m_source.frameCount();
         // If decoder is not initialized yet, m_source.frameCount() returns 0.
-        if (m_frameCount) {
+        if (m_frameCount)
             m_haveFrameCount = true;
-        }
     }
+
     return m_frameCount;
 }
 
@@ -339,6 +344,7 @@ bool BitmapImage::ensureFrameIsCached(size_t index)
 
     if (index >= m_frames.size() || !m_frames[index].m_frame)
         cacheFrame(index);
+
     return true;
 }
 
@@ -346,6 +352,7 @@ PassRefPtr<NativeImageSkia> BitmapImage::frameAtIndex(size_t index)
 {
     if (!ensureFrameIsCached(index))
         return nullptr;
+
     return m_frames[index].m_frame;
 }
 
@@ -353,6 +360,7 @@ bool BitmapImage::frameIsCompleteAtIndex(size_t index)
 {
     if (index < m_frames.size() && m_frames[index].m_haveMetadata && m_frames[index].m_isComplete)
         return true;
+
     return m_source.frameIsCompleteAtIndex(index);
 }
 
@@ -360,6 +368,7 @@ float BitmapImage::frameDurationAtIndex(size_t index)
 {
     if (index < m_frames.size() && m_frames[index].m_haveMetadata)
         return m_frames[index].m_duration;
+
     return m_source.frameDurationAtIndex(index);
 }
 
@@ -370,7 +379,7 @@ PassRefPtr<NativeImageSkia> BitmapImage::nativeImageForCurrentFrame()
 
 PassRefPtr<Image> BitmapImage::imageForDefaultFrame()
 {
-    if (isAnimated())
+    if (frameCount() > 1 && frameAtIndex(0))
         return BitmapImage::create(frameAtIndex(0));
 
     return Image::imageForDefaultFrame();
@@ -414,8 +423,6 @@ bool BitmapImage::notSolidColor()
     return size().width() != 1 || size().height() != 1 || frameCount() > 1;
 }
 #endif
-
-
 
 int BitmapImage::repetitionCount(bool imageKnownToBeComplete)
 {
@@ -555,15 +562,10 @@ bool BitmapImage::maybeAnimated()
 {
     if (m_animationFinished)
         return false;
-    if (isAnimated())
+    if (frameCount() > 1)
         return true;
 
     return m_source.repetitionCount() != cAnimationNone;
-}
-
-bool BitmapImage::isAnimated()
-{
-    return frameCount() > 1;
 }
 
 void BitmapImage::advanceAnimation(Timer<BitmapImage>*)
@@ -637,6 +639,7 @@ bool BitmapImage::mayFillWithSolidColor()
         checkForSolidColor();
         ASSERT(m_checkedForSolidColor);
     }
+
     return m_isSolidColor && !m_currentFrame;
 }
 

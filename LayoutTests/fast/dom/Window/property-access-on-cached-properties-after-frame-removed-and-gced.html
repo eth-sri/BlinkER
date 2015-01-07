@@ -26,18 +26,14 @@ function runTest()
     description("Tests access of cached DOMWindow properties after the associated frame is removed from a web page and garbage collected. Test should not crash and properties should be set to sane defaults.");
     var frame = document.getElementById("frame");
     childWindow = frame.contentWindow;
-    collectProperties();
+    // Have expected results assume that the frame has been closed (=> window.closed = true.)
+    collectProperties(true);
     frame.parentNode.removeChild(frame);
-    window.setTimeout(verifyResults, 0);
-}
-
-function verifyResults()
-{
-    if (window.gc)
-        gc();
-    for (var i = 0; i < propertiesToVerify.length; ++i)
-        shouldBe(propertiesToVerify[i].property, propertiesToVerify[i].expected);
-    finishJSTest();
+    asyncGC(function () {
+        for (var i = 0; i < propertiesToVerify.length; ++i)
+            shouldBe(propertiesToVerify[i].property, propertiesToVerify[i].expected);
+        finishJSTest();
+    });
 }
 </script>
 </head>

@@ -7,6 +7,7 @@
       "drawsContent": true,
       "children": [
         {
+          "shouldFlattenTransform": false,
           "children": [
             {
               "position": [8, 8],
@@ -18,7 +19,6 @@
               "drawsContent": true,
               "repaintRects": [
                 [55, 55, 500, 500],
-                [0, 0, 500, 500],
                 [0, 0, 500, 500],
                 [0, 0, 50, 50]
               ]

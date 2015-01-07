@@ -7,13 +7,14 @@
       "drawsContent": true,
       "children": [
         {
+          "shouldFlattenTransform": false,
           "children": [
             {
               "position": [21, 21],
               "bounds": [100, 100]
             },
             {
-              "bounds": [216, 142],
+              "bounds": [211, 142],
               "drawsContent": true
             }
           ]

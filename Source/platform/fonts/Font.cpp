@@ -33,7 +33,7 @@
 #include "platform/fonts/GlyphBuffer.h"
 #include "platform/fonts/GlyphPageTreeNode.h"
 #include "platform/fonts/SimpleFontData.h"
-#include "platform/fonts/WidthIterator.h"
+#include "platform/fonts/SimpleShaper.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/text/TextRun.h"
@@ -103,24 +103,23 @@ void Font::update(PassRefPtrWillBeRawPtr<FontSelector> fontSelector) const
     m_fontFallbackList->invalidate(fontSelector);
 }
 
-void Font::drawText(GraphicsContext* context, const TextRunPaintInfo& runInfo, const FloatPoint& point, CustomFontNotReadyAction customFontNotReadyAction) const
+float Font::drawText(GraphicsContext* context, const TextRunPaintInfo& runInfo, const FloatPoint& point, CustomFontNotReadyAction customFontNotReadyAction) const
 {
     // Don't draw anything while we are using custom fonts that are in the process of loading,
     // except if the 'force' argument is set to true (in which case it will use a fallback
     // font).
     if (shouldSkipDrawing() && customFontNotReadyAction == DoNotPaintIfFontNotReady)
-        return;
+        return 0;
 
     CodePath codePathToUse = codePath(runInfo.run);
     // FIXME: Use the fast code path once it handles partial runs with kerning and ligatures. See http://webkit.org/b/100050
     if (codePathToUse != ComplexPath && fontDescription().typesettingFeatures() && (runInfo.from || runInfo.to != runInfo.run.length()))
         codePathToUse = ComplexPath;
 
-    if (codePathToUse != ComplexPath) {
-        drawSimpleText(context, runInfo, point);
-    } else {
-        drawComplexText(context, runInfo, point);
-    }
+    if (codePathToUse != ComplexPath)
+        return drawSimpleText(context, runInfo, point);
+
+    return drawComplexText(context, runInfo, point);
 }
 
 void Font::drawEmphasisMarks(GraphicsContext* context, const TextRunPaintInfo& runInfo, const AtomicString& mark, const FloatPoint& point) const
@@ -154,9 +153,6 @@ float Font::width(const TextRun& run, HashSet<const SimpleFontData*>* fallbackFo
 {
     CodePath codePathToUse = codePath(run);
     if (codePathToUse != ComplexPath) {
-        // The complex path is more restrictive about returning fallback fonts than the simple path, so we need an explicit test to make their behaviors match.
-        if (!FontPlatformFeatures::canReturnFallbackFontsForComplexText())
-            fallbackFonts = 0;
         // The simple path can optimize the case where glyph overflow is not observable.
         if (codePathToUse != SimpleWithGlyphOverflowPath && (glyphOverflow && !glyphOverflow->computeBounds))
             glyphOverflow = 0;
@@ -205,6 +201,42 @@ float Font::width(const TextRun& run, int& charsConsumed, Glyph& glyphId) const
     charsConsumed = run.length();
     glyphId = 0;
     return width(run);
+}
+
+PassTextBlobPtr Font::buildTextBlob(const TextRunPaintInfo& runInfo, const FloatPoint& textOrigin, bool couldUseLCDRenderedText, CustomFontNotReadyAction customFontNotReadyAction) const
+{
+    ASSERT(RuntimeEnabledFeatures::textBlobEnabled());
+
+    // FIXME: Some logic in common with Font::drawText. Would be nice to
+    // deduplicate.
+    if (shouldSkipDrawing() && customFontNotReadyAction == DoNotPaintIfFontNotReady)
+        return nullptr;
+
+    CodePath codePathToUse = codePath(runInfo.run);
+    // FIXME: Use the fast code path once it handles partial runs with kerning and ligatures. See http://webkit.org/b/100050
+    if (codePathToUse != ComplexPath && fontDescription().typesettingFeatures() && (runInfo.from || runInfo.to != runInfo.run.length()))
+        codePathToUse = ComplexPath;
+
+    if (codePathToUse != ComplexPath)
+        return buildTextBlobForSimpleText(runInfo, textOrigin, couldUseLCDRenderedText);
+
+    return nullptr;
+}
+
+PassTextBlobPtr Font::buildTextBlobForSimpleText(const TextRunPaintInfo& runInfo, const FloatPoint& textOrigin, bool couldUseLCDRenderedText) const
+{
+    GlyphBuffer glyphBuffer;
+    float initialAdvance = getGlyphsAndAdvancesForSimpleText(runInfo, glyphBuffer);
+    ASSERT(!glyphBuffer.hasVerticalAdvances());
+
+    if (glyphBuffer.isEmpty())
+        return nullptr;
+
+    FloatRect blobBounds = runInfo.bounds;
+    blobBounds.moveBy(-textOrigin);
+
+    float ignoredWidth;
+    return buildTextBlob(glyphBuffer, initialAdvance, blobBounds, ignoredWidth, couldUseLCDRenderedText);
 }
 
 FloatRect Font::selectionRectForText(const TextRun& run, const FloatPoint& point, int h, int from, int to, bool accountForGlyphBounds) const
@@ -258,6 +290,12 @@ CodePath Font::codePath(const TextRun& run) const
         return ComplexPath;
 
     if (run.length() > 1 && fontDescription().typesettingFeatures())
+        return ComplexPath;
+
+    // FIXME: This really shouldn't be needed but for some reason the
+    // TextRendering setting doesn't propagate to typesettingFeatures in time
+    // for the prefs width calculation.
+    if (fontDescription().textRendering() == OptimizeLegibility || fontDescription().textRendering() == GeometricPrecision)
         return ComplexPath;
 
     if (!run.characterScanForCodePath())
@@ -395,7 +433,7 @@ static inline std::pair<GlyphData, GlyphPage*> glyphDataAndPageForNonCJKCharacte
     return std::make_pair(data, page);
 }
 
-std::pair<GlyphData, GlyphPage*> Font::glyphDataAndPageForCharacter(UChar32 c, bool mirror, FontDataVariant variant) const
+std::pair<GlyphData, GlyphPage*> Font::glyphDataAndPageForCharacter(UChar32& c, bool mirror, bool normalizeSpace, FontDataVariant variant) const
 {
     ASSERT(isMainThread());
 
@@ -412,6 +450,9 @@ std::pair<GlyphData, GlyphPage*> Font::glyphDataAndPageForCharacter(UChar32 c, b
             variant = NormalVariant;
         }
     }
+
+    if (normalizeSpace && Character::isNormalizedCanvasSpaceCharacter(c))
+        c = space;
 
     if (mirror)
         c = mirroredChar(c);
@@ -570,7 +611,8 @@ bool Font::getEmphasisMarkGlyphData(const AtomicString& mark, GlyphData& glyphDa
         character = U16_GET_SUPPLEMENTARY(character, low);
     }
 
-    glyphData = glyphDataForCharacter(character, false, EmphasisMarkVariant);
+    bool normalizeSpace = false;
+    glyphData = glyphDataForCharacter(character, false, normalizeSpace, EmphasisMarkVariant);
     return true;
 }
 
@@ -626,19 +668,19 @@ float Font::getGlyphsAndAdvancesForSimpleText(const TextRunPaintInfo& runInfo, G
 {
     float initialAdvance;
 
-    WidthIterator it(this, runInfo.run, 0, false, forTextEmphasis);
-    it.advance(runInfo.from);
-    float beforeWidth = it.m_runWidthSoFar;
-    it.advance(runInfo.to, &glyphBuffer);
+    SimpleShaper shaper(this, runInfo.run, 0, false, forTextEmphasis);
+    shaper.advance(runInfo.from);
+    float beforeWidth = shaper.runWidthSoFar();
+    shaper.advance(runInfo.to, &glyphBuffer);
 
     if (glyphBuffer.isEmpty())
         return 0;
 
-    float afterWidth = it.m_runWidthSoFar;
+    float afterWidth = shaper.runWidthSoFar();
 
     if (runInfo.run.rtl()) {
-        it.advance(runInfo.run.length());
-        initialAdvance = it.m_runWidthSoFar - afterWidth;
+        shaper.advance(runInfo.run.length());
+        initialAdvance = shaper.runWidthSoFar() - afterWidth;
         glyphBuffer.reverse();
     } else {
         initialAdvance = beforeWidth;
@@ -647,7 +689,7 @@ float Font::getGlyphsAndAdvancesForSimpleText(const TextRunPaintInfo& runInfo, G
     return initialAdvance;
 }
 
-void Font::drawSimpleText(GraphicsContext* context, const TextRunPaintInfo& runInfo, const FloatPoint& point) const
+float Font::drawSimpleText(GraphicsContext* context, const TextRunPaintInfo& runInfo, const FloatPoint& point) const
 {
     // This glyph buffer holds our glyphs+advances+font data for each glyph.
     GlyphBuffer glyphBuffer;
@@ -655,26 +697,23 @@ void Font::drawSimpleText(GraphicsContext* context, const TextRunPaintInfo& runI
     ASSERT(!glyphBuffer.hasVerticalAdvances());
 
     if (glyphBuffer.isEmpty())
-        return;
+        return 0;
 
     TextBlobPtr textBlob;
+    float advance = 0;
     if (RuntimeEnabledFeatures::textBlobEnabled()) {
-        // Using text blob causes a small difference in how gradients and
-        // patterns are rendered.
-        // FIXME: Fix this, most likely in Skia.
-        if (!context->strokeGradient() && !context->strokePattern() && !context->fillGradient() && !context->fillPattern()) {
-            FloatRect blobBounds = runInfo.bounds;
-            blobBounds.moveBy(-point);
-            textBlob = buildTextBlob(glyphBuffer, initialAdvance, blobBounds);
-        }
+        FloatRect blobBounds = runInfo.bounds;
+        blobBounds.moveBy(-point);
+        textBlob = buildTextBlob(glyphBuffer, initialAdvance, blobBounds, advance, context->couldUseLCDRenderedText());
     }
 
     if (textBlob) {
         drawTextBlob(context, textBlob.get(), point.data());
-    } else {
-        FloatPoint startPoint(point.x() + initialAdvance, point.y());
-        drawGlyphBuffer(context, runInfo, glyphBuffer, startPoint);
+        return advance;
     }
+
+    FloatPoint startPoint(point.x() + initialAdvance, point.y());
+    return drawGlyphBuffer(context, runInfo, glyphBuffer, startPoint);
 }
 
 void Font::drawEmphasisMarksForSimpleText(GraphicsContext* context, const TextRunPaintInfo& runInfo, const AtomicString& mark, const FloatPoint& point) const
@@ -688,7 +727,7 @@ void Font::drawEmphasisMarksForSimpleText(GraphicsContext* context, const TextRu
     drawEmphasisMarks(context, runInfo, glyphBuffer, mark, FloatPoint(point.x() + initialAdvance, point.y()));
 }
 
-void Font::drawGlyphBuffer(GraphicsContext* context, const TextRunPaintInfo& runInfo, const GlyphBuffer& glyphBuffer, const FloatPoint& point) const
+float Font::drawGlyphBuffer(GraphicsContext* context, const TextRunPaintInfo& runInfo, const GlyphBuffer& glyphBuffer, const FloatPoint& point) const
 {
     // Draw each contiguous run of glyphs that use the same font data.
     const SimpleFontData* fontData = glyphBuffer.fontDataAt(0);
@@ -699,6 +738,9 @@ void Font::drawGlyphBuffer(GraphicsContext* context, const TextRunPaintInfo& run
 #if ENABLE(SVG_FONTS)
     TextRun::RenderingContext* renderingContext = runInfo.run.renderingContext();
 #endif
+
+    float widthSoFar = 0;
+    widthSoFar += glyphBuffer.advanceAt(0).width();
     while (nextGlyph < glyphBuffer.size()) {
         const SimpleFontData* nextFontData = glyphBuffer.fontDataAt(nextGlyph);
 
@@ -715,6 +757,7 @@ void Font::drawGlyphBuffer(GraphicsContext* context, const TextRunPaintInfo& run
             startPoint = nextPoint;
         }
         nextPoint += glyphBuffer.advanceAt(nextGlyph);
+        widthSoFar += glyphBuffer.advanceAt(nextGlyph).width();
         nextGlyph++;
     }
 
@@ -724,6 +767,7 @@ void Font::drawGlyphBuffer(GraphicsContext* context, const TextRunPaintInfo& run
     else
 #endif
         drawGlyphs(context, fontData, glyphBuffer, lastFrom, nextGlyph - lastFrom, startPoint, runInfo.bounds);
+        return widthSoFar;
 }
 
 inline static float offsetToMiddleOfGlyph(const SimpleFontData* fontData, Glyph glyph)
@@ -774,17 +818,17 @@ void Font::drawEmphasisMarks(GraphicsContext* context, const TextRunPaintInfo& r
 
 float Font::floatWidthForSimpleText(const TextRun& run, HashSet<const SimpleFontData*>* fallbackFonts, IntRectExtent* glyphBounds) const
 {
-    WidthIterator it(this, run, fallbackFonts, glyphBounds);
-    it.advance(run.length());
+    SimpleShaper shaper(this, run, fallbackFonts, glyphBounds);
+    shaper.advance(run.length());
 
     if (glyphBounds) {
-        glyphBounds->setTop(floorf(-it.minGlyphBoundingBoxY()));
-        glyphBounds->setBottom(ceilf(it.maxGlyphBoundingBoxY()));
-        glyphBounds->setLeft(floorf(it.firstGlyphOverflow()));
-        glyphBounds->setRight(ceilf(it.lastGlyphOverflow()));
+        glyphBounds->setTop(floorf(-shaper.minGlyphBoundingBoxY()));
+        glyphBounds->setBottom(ceilf(shaper.maxGlyphBoundingBoxY()));
+        glyphBounds->setLeft(floorf(shaper.firstGlyphOverflow()));
+        glyphBounds->setRight(ceilf(shaper.lastGlyphOverflow()));
     }
 
-    return it.m_runWidthSoFar;
+    return shaper.runWidthSoFar();
 }
 
 FloatRect Font::pixelSnappedSelectionRect(float fromX, float toX, float y, float height)
@@ -797,15 +841,15 @@ FloatRect Font::pixelSnappedSelectionRect(float fromX, float toX, float y, float
 
 FloatRect Font::selectionRectForSimpleText(const TextRun& run, const FloatPoint& point, int h, int from, int to, bool accountForGlyphBounds) const
 {
-    WidthIterator it(this, run, 0, accountForGlyphBounds);
-    it.advance(from);
-    float fromX = it.m_runWidthSoFar;
-    it.advance(to);
-    float toX = it.m_runWidthSoFar;
+    SimpleShaper shaper(this, run, 0, accountForGlyphBounds);
+    shaper.advance(from);
+    float fromX = shaper.runWidthSoFar();
+    shaper.advance(to);
+    float toX = shaper.runWidthSoFar();
 
     if (run.rtl()) {
-        it.advance(run.length());
-        float totalWidth = it.m_runWidthSoFar;
+        shaper.advance(run.length());
+        float totalWidth = shaper.runWidthSoFar();
         float beforeWidth = fromX;
         float afterWidth = toX;
         fromX = totalWidth - afterWidth;
@@ -813,22 +857,22 @@ FloatRect Font::selectionRectForSimpleText(const TextRun& run, const FloatPoint&
     }
 
     return pixelSnappedSelectionRect(point.x() + fromX, point.x() + toX,
-        accountForGlyphBounds ? it.minGlyphBoundingBoxY() : point.y(),
-        accountForGlyphBounds ? it.maxGlyphBoundingBoxY() - it.minGlyphBoundingBoxY() : h);
+        accountForGlyphBounds ? shaper.minGlyphBoundingBoxY() : point.y(),
+        accountForGlyphBounds ? shaper.maxGlyphBoundingBoxY() - shaper.minGlyphBoundingBoxY() : h);
 }
 
 int Font::offsetForPositionForSimpleText(const TextRun& run, float x, bool includePartialGlyphs) const
 {
     float delta = x;
 
-    WidthIterator it(this, run);
+    SimpleShaper shaper(this, run);
     unsigned offset;
     if (run.rtl()) {
         delta -= floatWidthForSimpleText(run);
         while (1) {
-            offset = it.m_currentCharacter;
+            offset = shaper.currentOffset();
             float w;
-            if (!it.advanceOneCharacter(w))
+            if (!shaper.advanceOneCharacter(w))
                 break;
             delta += w;
             if (includePartialGlyphs) {
@@ -841,9 +885,9 @@ int Font::offsetForPositionForSimpleText(const TextRun& run, float x, bool inclu
         }
     } else {
         while (1) {
-            offset = it.m_currentCharacter;
+            offset = shaper.currentOffset();
             float w;
-            if (!it.advanceOneCharacter(w))
+            if (!shaper.advanceOneCharacter(w))
                 break;
             delta -= w;
             if (includePartialGlyphs) {

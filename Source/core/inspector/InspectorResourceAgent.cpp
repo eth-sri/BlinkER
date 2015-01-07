@@ -98,7 +98,7 @@ static PassRefPtr<JSONObject> buildObjectForHeaders(const HTTPHeaderMap& headers
 class InspectorThreadableLoaderClient FINAL : public ThreadableLoaderClient {
     WTF_MAKE_NONCOPYABLE(InspectorThreadableLoaderClient);
 public:
-    InspectorThreadableLoaderClient(PassRefPtr<LoadResourceForFrontendCallback> callback)
+    InspectorThreadableLoaderClient(PassRefPtrWillBeRawPtr<LoadResourceForFrontendCallback> callback)
         : m_callback(callback)
         , m_statusCode(0) { }
 
@@ -166,7 +166,7 @@ private:
         delete this;
     }
 
-    RefPtr<LoadResourceForFrontendCallback> m_callback;
+    RefPtrWillBePersistent<LoadResourceForFrontendCallback> m_callback;
     RefPtr<ThreadableLoader> m_loader;
     OwnPtr<TextResourceDecoder> m_decoder;
     ScriptString m_responseText;
@@ -213,6 +213,9 @@ static PassRefPtr<TypeBuilder::Network::ResourceTiming> buildObjectForTiming(con
         .setConnectEnd(timing.calculateMillisecondDelta(timing.connectEnd))
         .setSslStart(timing.calculateMillisecondDelta(timing.sslStart))
         .setSslEnd(timing.calculateMillisecondDelta(timing.sslEnd))
+        .setServiceWorkerFetchStart(timing.calculateMillisecondDelta(timing.serviceWorkerFetchStart))
+        .setServiceWorkerFetchReady(timing.calculateMillisecondDelta(timing.serviceWorkerFetchReady))
+        .setServiceWorkerFetchEnd(timing.calculateMillisecondDelta(timing.serviceWorkerFetchEnd))
         .setSendStart(timing.calculateMillisecondDelta(timing.sendStart))
         .setSendEnd(timing.calculateMillisecondDelta(timing.sendEnd))
         .setReceiveHeadersEnd(timing.calculateMillisecondDelta(timing.receiveHeadersEnd))
@@ -315,9 +318,8 @@ void InspectorResourceAgent::willSendRequest(unsigned long identifier, DocumentL
     // Ignore the request initiated internally.
     if (initiatorInfo.name == FetchInitiatorTypeNames::internal)
         return;
-
-    if (!m_hostId.isEmpty())
-        request.addHTTPHeaderField(kDevToolsEmulateNetworkConditionsClientId, AtomicString(m_hostId));
+    if (loader && loader->substituteData().isValid())
+        return;
 
     String requestId = IdentifiersFactory::requestId(identifier);
     m_resourcesData->resourceCreated(requestId, m_pageAgent->loaderId(loader));
@@ -347,7 +349,12 @@ void InspectorResourceAgent::willSendRequest(unsigned long identifier, DocumentL
             initiatorObject = it->value;
     }
 
-    m_frontend->requestWillBeSent(requestId, frameId, m_pageAgent->loaderId(loader), urlWithoutFragment(loader->url()).string(), buildObjectForResourceRequest(request), currentTime(), initiatorObject, buildObjectForResourceResponse(redirectResponse, loader));
+    RefPtr<TypeBuilder::Network::Request> requestInfo(buildObjectForResourceRequest(request));
+
+    if (!m_hostId.isEmpty())
+        request.addHTTPHeaderField(kDevToolsEmulateNetworkConditionsClientId, AtomicString(m_hostId));
+
+    m_frontend->requestWillBeSent(requestId, frameId, m_pageAgent->loaderId(loader), urlWithoutFragment(loader->url()).string(), requestInfo.release(), currentTime(), initiatorObject, buildObjectForResourceResponse(redirectResponse, loader));
 }
 
 void InspectorResourceAgent::markResourceAsCached(unsigned long identifier)
@@ -369,6 +376,9 @@ bool isResponseEmpty(PassRefPtr<TypeBuilder::Network::Response> response)
 
 void InspectorResourceAgent::didReceiveResourceResponse(LocalFrame* frame, unsigned long identifier, DocumentLoader* loader, const ResourceResponse& response, ResourceLoader* resourceLoader)
 {
+    if (loader && loader->substituteData().isValid())
+        return;
+
     String requestId = IdentifiersFactory::requestId(identifier);
     RefPtr<TypeBuilder::Network::Response> resourceResponse = buildObjectForResourceResponse(response, loader);
 
@@ -768,9 +778,9 @@ void InspectorResourceAgent::emulateNetworkConditions(ErrorString*, bool, double
 {
 }
 
-void InspectorResourceAgent::loadResourceForFrontend(ErrorString* errorString, const String& frameId, const String& url, const RefPtr<JSONObject>* requestHeaders, PassRefPtr<LoadResourceForFrontendCallback> prpCallback)
+void InspectorResourceAgent::loadResourceForFrontend(ErrorString* errorString, const String& frameId, const String& url, const RefPtr<JSONObject>* requestHeaders, PassRefPtrWillBeRawPtr<LoadResourceForFrontendCallback> prpCallback)
 {
-    RefPtr<LoadResourceForFrontendCallback> callback = prpCallback;
+    RefPtrWillBeRawPtr<LoadResourceForFrontendCallback> callback = prpCallback;
     LocalFrame* frame = m_pageAgent->assertFrame(errorString, frameId);
     if (!frame)
         return;

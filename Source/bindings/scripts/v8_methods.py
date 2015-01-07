@@ -34,7 +34,7 @@ Extends IdlTypeBase and IdlUnionType with property |union_arguments|.
 Design doc: http://www.chromium.org/developers/design-documents/idl-compiler
 """
 
-from idl_definitions import IdlArgument
+from idl_definitions import IdlArgument, IdlOperation
 from idl_types import IdlTypeBase, IdlUnionType, inherits_interface
 from v8_globals import includes
 import v8_types
@@ -50,25 +50,6 @@ CUSTOM_REGISTRATION_EXTENDED_ATTRIBUTES = frozenset([
     'NotEnumerable',
     'Unforgeable',
 ])
-
-
-def argument_needs_try_catch(method, argument):
-    return_promise = method.idl_type and method.idl_type.name == 'Promise'
-    idl_type = argument.idl_type
-    base_type = idl_type.base_type
-
-    return not(
-        # These cases are handled by separate code paths in the
-        # generate_argument() macro in Source/bindings/templates/methods.cpp.
-        idl_type.is_callback_interface or
-        base_type == 'SerializedScriptValue' or
-        (argument.is_variadic and idl_type.is_wrapper_type) or
-        # String and enumeration arguments converted using one of the
-        # TOSTRING_* macros except for _PROMISE variants in
-        # Source/bindings/core/v8/V8BindingMacros.h don't use a v8::TryCatch.
-        ((base_type == 'DOMString' or idl_type.is_enum) and
-         not argument.is_variadic and
-         not return_promise))
 
 
 def use_local_result(method):
@@ -119,7 +100,7 @@ def method_context(interface, method):
         includes.add('bindings/core/v8/BindingSecurity.h')
     is_custom_element_callbacks = 'CustomElementCallbacks' in extended_attributes
     if is_custom_element_callbacks:
-        includes.add('core/dom/custom/CustomElementCallbackDispatcher.h')
+        includes.add('core/dom/custom/CustomElementProcessingStack.h')
 
     is_do_not_check_security = 'DoNotCheckSecurity' in extended_attributes
 
@@ -133,17 +114,12 @@ def method_context(interface, method):
 
     is_raises_exception = 'RaisesException' in extended_attributes
 
-    arguments_need_try_catch = (
-        any(argument_needs_try_catch(method, argument)
-            for argument in arguments))
-
     return {
         'activity_logging_world_list': v8_utilities.activity_logging_world_list(method),  # [ActivityLogging]
         'arguments': [argument_context(interface, method, argument, index)
                       for index, argument in enumerate(arguments)],
         'argument_declarations_for_private_script':
             argument_declarations_for_private_script(interface, method),
-        'arguments_need_try_catch': arguments_need_try_catch,
         'conditional_string': v8_utilities.conditional_string(method),
         'cpp_type': (v8_types.cpp_template_type('Nullable', idl_type.cpp_type)
                      if idl_type.is_explicit_nullable else idl_type.cpp_type),
@@ -163,8 +139,8 @@ def method_context(interface, method):
             is_check_security_for_frame or
             is_check_security_for_window or
             any(argument for argument in arguments
-                if argument.idl_type.name == 'SerializedScriptValue' or
-                   argument.idl_type.may_raise_exception_on_conversion),
+                if (argument.idl_type.name == 'SerializedScriptValue' or
+                    argument_conversion_needs_exception_state(method, argument))),
         'idl_type': idl_type.base_type,
         'is_call_with_execution_context': has_extended_attribute_value(method, 'CallWith', 'ExecutionContext'),
         'is_call_with_script_arguments': is_call_with_script_arguments,
@@ -215,8 +191,6 @@ def argument_context(interface, method, argument, index):
     idl_type = argument.idl_type
     this_cpp_value = cpp_value(interface, method, index)
     is_variadic_wrapper_type = argument.is_variadic and idl_type.is_wrapper_type
-    return_promise = (method.idl_type.name == 'Promise' if method.idl_type
-                                                        else False)
 
     if ('ImplementedInPrivateScript' in extended_attributes and
         not idl_type.is_wrapper_type and
@@ -247,8 +221,9 @@ def argument_context(interface, method, argument, index):
         'idl_type': idl_type.base_type,
         'idl_type_object': idl_type,
         'index': index,
-        'is_clamp': 'Clamp' in extended_attributes,
         'is_callback_interface': idl_type.is_callback_interface,
+        # FIXME: Remove generic 'Dictionary' special-casing
+        'is_dictionary': idl_type.is_dictionary or idl_type.base_type == 'Dictionary',
         'is_nullable': idl_type.is_nullable,
         'is_optional': argument.is_optional,
         'is_variadic_wrapper_type': is_variadic_wrapper_type,
@@ -259,7 +234,7 @@ def argument_context(interface, method, argument, index):
             creation_context='scriptState->context()->Global()'),
         'v8_set_return_value': v8_set_return_value(interface.name, method, this_cpp_value),
         'v8_set_return_value_for_main_world': v8_set_return_value(interface.name, method, this_cpp_value, for_main_world=True),
-        'v8_value_to_local_cpp_value': v8_value_to_local_cpp_value(argument, index, return_promise=return_promise),
+        'v8_value_to_local_cpp_value': v8_value_to_local_cpp_value(argument, index, return_promise=method.returns_promise),
         'vector_type': v8_types.cpp_ptr_type('Vector', 'HeapVector', idl_type.gc_type),
     }
 
@@ -283,8 +258,9 @@ def cpp_value(interface, method, number_of_arguments):
         idl_type = argument.idl_type
         if idl_type.name == 'EventListener':
             return argument.name
-        if (idl_type.is_callback_interface or
-            idl_type.name in ['NodeFilter', 'NodeFilterOrNull',
+        if idl_type.is_dictionary:
+            return '*%s' % argument.name
+        if (idl_type.name in ['NodeFilter', 'NodeFilterOrNull',
                               'XPathNSResolver', 'XPathNSResolverOrNull']):
             # FIXME: remove this special case
             return '%s.release()' % argument.name
@@ -370,15 +346,16 @@ def v8_value_to_local_cpp_variadic_value(argument, index, return_promise):
 
     suffix = ''
 
-    macro = 'TONATIVE_VOID'
+    macro = 'TONATIVE_VOID_EXCEPTIONSTATE'
     macro_args = [
-      argument.name,
-      'toNativeArguments<%s>(info, %s)' % (idl_type.cpp_type, index),
+        argument.name,
+        'toImplArguments<%s>(info, %s, exceptionState)' % (idl_type.cpp_type, index),
+        'exceptionState',
     ]
 
     if return_promise:
         suffix += '_PROMISE'
-        macro_args.append('info')
+        macro_args.extend(['info', 'ScriptState::current(info.GetIsolate())'])
 
     suffix += '_INTERNAL'
 
@@ -457,3 +434,17 @@ def argument_default_cpp_value(argument):
 IdlTypeBase.union_arguments = None
 IdlUnionType.union_arguments = property(union_arguments)
 IdlArgument.default_cpp_value = property(argument_default_cpp_value)
+
+
+def method_returns_promise(method):
+    return method.idl_type and method.idl_type.name == 'Promise'
+
+IdlOperation.returns_promise = property(method_returns_promise)
+
+
+def argument_conversion_needs_exception_state(method, argument):
+    idl_type = argument.idl_type
+    return (idl_type.v8_conversion_needs_exception_state or
+            argument.is_variadic or
+            (method.returns_promise and (idl_type.is_string_type or
+                                         idl_type.is_enum)))

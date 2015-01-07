@@ -35,8 +35,6 @@
 
 namespace blink {
 
-class Element;
-
 class CustomElementProcessingStep {
     WTF_MAKE_NONCOPYABLE(CustomElementProcessingStep);
 public:
@@ -44,9 +42,9 @@ public:
 
     virtual ~CustomElementProcessingStep() { }
     virtual void dispatch(Element*) = 0;
-    virtual bool isCreated() const { return false; }
+    virtual bool isCreatedCallback() const { return false; }
 };
 
-}
+} // namespace blink
 
 #endif // CustomElementProcessingStep_h

@@ -296,6 +296,22 @@ void RenderLayerCompositor::updateWithoutAcceleratedCompositing(CompositingUpdat
 #endif
 }
 
+static void forceRecomputePaintInvalidationRectsIncludingNonCompositingDescendants(RenderObject* renderer)
+{
+    // We clear the previous paint invalidation rect as it's wrong (paint invaliation container
+    // changed, ...). Forcing a full invalidation will make us recompute it. Also we are not
+    // changing the previous position from our paint invalidation container, which is fine as
+    // we want a full paint invalidation anyway.
+    renderer->setPreviousPaintInvalidationRect(LayoutRect());
+    renderer->setShouldDoFullPaintInvalidation(true);
+
+    for (RenderObject* child = renderer->slowFirstChild(); child; child = child->nextSibling()) {
+        if (!child->isPaintInvalidationContainer())
+            forceRecomputePaintInvalidationRectsIncludingNonCompositingDescendants(child);
+    }
+}
+
+
 void RenderLayerCompositor::updateIfNeeded()
 {
     CompositingUpdateType updateType = m_pendingUpdateType;
@@ -376,12 +392,8 @@ void RenderLayerCompositor::updateIfNeeded()
         m_needsUpdateFixedBackground = false;
     }
 
-    for (unsigned i = 0; i < layersNeedingPaintInvalidation.size(); i++) {
-        RenderLayer* layer = layersNeedingPaintInvalidation[i];
-        layer->paintInvalidator().computePaintInvalidationRectsIncludingNonCompositingDescendants();
-
-        paintInvalidationOnCompositingChange(layer);
-    }
+    for (unsigned i = 0; i < layersNeedingPaintInvalidation.size(); i++)
+        forceRecomputePaintInvalidationRectsIncludingNonCompositingDescendants(layersNeedingPaintInvalidation[i]->renderer());
 
     // Inform the inspector that the layer tree has changed.
     if (m_renderView.frame()->isMainFrame())
@@ -446,8 +458,10 @@ bool RenderLayerCompositor::allocateOrClearCompositedLayerMapping(RenderLayer* l
         break;
     }
 
-    if (layer->hasCompositedLayerMapping() && layer->compositedLayerMapping()->updateRequiresOwnBackingStoreForIntrinsicReasons())
+    if (layer->hasCompositedLayerMapping() && layer->compositedLayerMapping()->updateRequiresOwnBackingStoreForIntrinsicReasons()) {
         compositedLayerMappingChanged = true;
+        layer->compositedLayerMapping()->setNeedsGraphicsLayerUpdate(GraphicsLayerUpdateSubtree);
+    }
 
     if (compositedLayerMappingChanged && layer->renderer()->isRenderPart()) {
         RenderLayerCompositor* innerCompositor = frameContentsCompositor(toRenderPart(layer->renderer()));
@@ -474,7 +488,12 @@ void RenderLayerCompositor::paintInvalidationOnCompositingChange(RenderLayer* la
     if (layer->renderer() != &m_renderView && !layer->renderer()->parent())
         return;
 
-    layer->paintInvalidator().paintInvalidationIncludingNonCompositingDescendants();
+    // For querying RenderLayer::compositingState()
+    // Eager invalidation here is correct, since we are invalidating with respect to the previous frame's
+    // compositing state when changing the compositing backing of the layer.
+    DisableCompositingQueryAsserts disabler;
+
+    layer->renderer()->invalidatePaintIncludingNonCompositingDescendants();
 }
 
 void RenderLayerCompositor::frameViewDidChangeLocation(const IntPoint& contentsOffset)
@@ -488,6 +507,7 @@ void RenderLayerCompositor::frameViewDidChangeSize()
     if (m_containerLayer) {
         FrameView* frameView = m_renderView.frameView();
         m_containerLayer->setSize(frameView->unscaledVisibleContentSize());
+        m_overflowControlsHostLayer->setSize(frameView->unscaledVisibleContentSize(IncludeScrollbars));
 
         frameViewDidScroll();
         updateOverflowControlsLayers();
@@ -712,6 +732,7 @@ void RenderLayerCompositor::updateRootLayerPosition()
     if (m_containerLayer) {
         FrameView* frameView = m_renderView.frameView();
         m_containerLayer->setSize(frameView->unscaledVisibleContentSize());
+        m_overflowControlsHostLayer->setSize(frameView->unscaledVisibleContentSize(IncludeScrollbars));
     }
 }
 
@@ -748,11 +769,13 @@ bool RenderLayerCompositor::clipsCompositingDescendants(const RenderLayer* layer
     return layer->hasCompositingDescendant() && layer->renderer()->hasClipOrOverflowClip();
 }
 
-// If an element has negative z-index children, those children render in front of the
+// If an element has composited negative z-index children, those children render in front of the
 // layer background, so we need an extra 'contents' layer for the foreground of the layer
 // object.
 bool RenderLayerCompositor::needsContentsCompositingLayer(const RenderLayer* layer) const
 {
+    if (!layer->hasCompositingDescendant())
+        return false;
     return layer->stackingNode()->hasNegativeZOrderList();
 }
 
@@ -972,9 +995,12 @@ void RenderLayerCompositor::ensureRootLayer()
         // Create a layer to host the clipping layer and the overflow controls layers.
         m_overflowControlsHostLayer = GraphicsLayer::create(graphicsLayerFactory(), this);
 
+        // Clip iframe's overflow controls layer.
+        bool containerMasksToBounds = !m_renderView.frame()->isLocalRoot();
+        m_overflowControlsHostLayer->setMasksToBounds(containerMasksToBounds);
+
         // Create a clipping layer if this is an iframe or settings require to clip.
         m_containerLayer = GraphicsLayer::create(graphicsLayerFactory(), this);
-        bool containerMasksToBounds = !m_renderView.frame()->isLocalRoot();
         if (Settings* settings = m_renderView.document().settings()) {
             if (settings->mainFrameClipsContent())
                 containerMasksToBounds = true;

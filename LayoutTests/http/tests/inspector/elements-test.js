@@ -84,7 +84,7 @@ InspectorTest.expandedNodeWithId = function(idValue)
 
 InspectorTest.selectNode = function(node)
 {
-    WebInspector.Revealer.reveal(node);
+    return WebInspector.Revealer.revealPromise(node);
 }
 
 InspectorTest.selectNodeWithId = function(idValue, callback)
@@ -92,8 +92,7 @@ InspectorTest.selectNodeWithId = function(idValue, callback)
     callback = InspectorTest.safeWrap(callback);
     function onNodeFound(node)
     {
-        InspectorTest.selectNode(node);
-        callback(node);
+        InspectorTest.selectNode(node).then(callback.bind(null, node));
     }
     InspectorTest.nodeWithId(idValue, onNodeFound);
 }
@@ -137,7 +136,7 @@ InspectorTest.waitForStylesForClass = function(classValue, callback, requireRebu
 
 InspectorTest.selectNodeAndWaitForStyles = function(idValue, callback)
 {
-    WebInspector.inspectorView.showPanel("elements");
+    WebInspector.inspectorView._showPanel("elements");
 
     callback = InspectorTest.safeWrap(callback);
 
@@ -524,9 +523,10 @@ InspectorTest.expandElementsTree = function(callback)
     {
         InspectorTest.firstElementsTreeOutline()._updateModifiedNodes();
         expand(InspectorTest.firstElementsTreeOutline());
-        callback(expandedSomething);
+        // Make all promises succeed.
+        setTimeout(callback.bind(null, expandedSomething));
     }
-    WebInspector.inspectorView.showPanel("elements");
+    WebInspector.inspectorView._showPanel("elements");
     InspectorTest.findNode(function() { return false; }, onAllNodesAvailable);
 };
 
@@ -739,7 +739,7 @@ InspectorTest.dumpBreadcrumb = function(message)
     if (message)
         InspectorTest.addResult(message + ":");
     var result = [];
-    var crumbs = WebInspector.inspectorView.panel("elements").crumbsElement;
+    var crumbs = WebInspector.inspectorView._panel("elements").crumbsElement;
     var crumb = crumbs.lastChild;
     while (crumb) {
         result.unshift(crumb.textContent);
@@ -756,20 +756,26 @@ InspectorTest.matchingSelectors = function(rule)
     return "[" + selectors.join(", ") + "]";
 }
 
+InspectorTest.addNewRuleInStyleSheet = function(styleSheetHeader, selector, callback)
+{
+    InspectorTest.addSniffer(WebInspector.StylesSidebarPane.prototype, "_addBlankSection", onBlankSection.bind(null, selector, callback));
+    WebInspector.panels.elements.sidebarPanes.styles._createNewRuleInStyleSheet(styleSheetHeader);
+}
+
 InspectorTest.addNewRule = function(selector, callback)
 {
     // Click "Add new rule".
     document.getElementById("add-style-button-test-id").click();
-    InspectorTest.addSniffer(WebInspector.StylesSidebarPane.prototype, "_addBlankSection", onBlankSection);
+    InspectorTest.addSniffer(WebInspector.StylesSidebarPane.prototype, "_addBlankSection", onBlankSection.bind(null, selector, callback));
+}
 
-    function onBlankSection()
-    {
-        var section = WebInspector.panels.elements.sidebarPanes.styles.sections[0][2];
-        if (typeof selector === "string")
-            section._selectorElement.textContent = selector;
-        section._selectorElement.dispatchEvent(InspectorTest.createKeyEvent("Enter"));
-        InspectorTest.runAfterPendingDispatches(callback.bind(null, section));
-    }
+function onBlankSection(selector, callback)
+{
+    var section = WebInspector.panels.elements.sidebarPanes.styles.sections[0][2];
+    if (typeof selector === "string")
+        section._selectorElement.textContent = selector;
+    section._selectorElement.dispatchEvent(InspectorTest.createKeyEvent("Enter"));
+    InspectorTest.runAfterPendingDispatches(callback.bind(null, section));
 }
 
 InspectorTest.dumpInspectorHighlight = function(node, callback)

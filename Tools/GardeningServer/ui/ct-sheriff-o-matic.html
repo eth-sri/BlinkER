@@ -4,7 +4,7 @@ Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
 
-<script src="../bower_components/sugar/release/sugar-full.development.js"></script>
+<link rel="import" href="../lib/sugar.html">
 <script src="../scripts/results.js"></script>
 
 <link rel="import" href="../bower_components/core-animated-pages/core-animated-pages.html">
@@ -32,9 +32,11 @@ found in the LICENSE file.
         color: white;
         cursor: default;
         display: flex;
+        flex-wrap: wrap;
         justify-content: space-between;
         font-size: 1.1em;
         padding: 0 5px;
+        white-space: nowrap;
       }
       header a, header span {
         color: white;
@@ -44,6 +46,7 @@ found in the LICENSE file.
       }
       #right-toolbar {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
       }
       ct-last-updated {
@@ -59,14 +62,7 @@ found in the LICENSE file.
 
     <header>
       <div>
-        <template if="{{ selected == 0 }}">
-          <img src="../favicon.ico"> <span>Sheriff-o-matic</span>
-        </template>
-        <template if="{{ selected == 1 }}">
-          <a on-click="{{ onBack }}" href="">
-            &lt;&lt; Go back
-          </a>
-        </template>
+        <img src="../favicon.ico"> <span>Sheriff-o-matic</span>
       </div>
       <div id="right-toolbar">
         <ct-last-updated date="{{ failures.lastUpdateDate }}"></ct-last-updated>
@@ -76,48 +72,37 @@ found in the LICENSE file.
 
     <core-animated-pages selected="{{ selected }}" transitions="slide-from-right">
       <ct-unexpected-failures id="unexpected" tree="{{ tree }}" commitLog="{{ commitLog }}" failures="{{ failures }}" on-ct-examine-failures="{{ onExamine }}"></ct-unexpected-failures>
-      <ct-results-panel failures="{{ currentFailures }}" tree="{{ tree }}"></ct-results-panel>
+      <ct-results-panel group="{{ examinedFailureGroup }}"></ct-results-panel>
     </core-animated-pages>
   </template>
   <script>
     var kUpdateFrequency = 1000 * 30;
 
     Polymer({
-      tree: "",
+      tree: '',
       treeList: null,
       selected: 0,
-      currentFailures: [],
+      examinedFailureGroup: null,
+      _pendingFailureGroupKey: '',
 
       updateFromHistoryState: function(state) {
+        this._pendingFailureGroupKey = state.examinedFailureGroupKey;
         if ('selected' in state)
           this.selected = state.selected;
-        if ('currentFailures' in state) {
-          this.currentFailures = [];
-          state.currentFailures.forEach(function(failure) {
-            this.currentFailures.push(
-              new CTFailure(failure.step, failure.testName, failure.resultNodesByBuilder));
-          }, this);
-        }
       },
 
       onPopState: function(e) {
         this.updateFromHistoryState(e.state);
       },
 
-      onBack: function(event) {
-        if (event.button == 0) {
-          window.history.back();
-          event.preventDefault();
-        }
-      },
-
       onExamine: function(event) {
         window.history.pushState({
-          currentFailures: event.detail.failures,
+          examinedFailureGroupKey: event.detail.key,
           selected: 1,
         });
 
-        this.currentFailures = event.detail.failures;
+
+        this.examinedFailureGroup = event.detail;
         this.selected = 1;
       },
 
@@ -151,11 +136,24 @@ found in the LICENSE file.
       },
 
       update: function() {
-        // FIXME: These shouldn't update if there's already an update in
-        // progress.
-        this.commitLog.update();
-        this.failures.update();
+        if (this._promise)
+          return;
+        this._promise = Promise.all(
+          [this.commitLog.update(),
+           this.failures.update()]).then(this._updateCompleted.bind(this));
+      },
+
+      _updateCompleted: function() {
+        this._promise = null;
         this.$.unexpected.update();
+        if (!this.failures.failures)
+          return;
+        if (!this._pendingFailureGroupKey)
+          return;
+        this.examinedFailureGroup = this.failures.failures[this.tree].find(function(group) {
+          return group.key == this._pendingFailureGroupKey;
+        }.bind(this));
+        this._pendingFailureGroupKey = '';
       },
 
     });

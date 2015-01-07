@@ -56,6 +56,7 @@
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/PinchViewport.h"
+#include "core/frame/Settings.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLFrameOwnerElement.h"
@@ -80,14 +81,12 @@
 #include "core/page/EventHandler.h"
 #include "core/page/FrameTree.h"
 #include "core/page/Page.h"
-#include "core/frame/Settings.h"
 #include "core/page/WindowFeatures.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "core/xml/parser/XMLDocumentParser.h"
 #include "platform/Logging.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/geometry/FloatRect.h"
-#include "platform/network/ContentSecurityPolicyResponseHeaders.h"
 #include "platform/network/HTTPParsers.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/scroll/ScrollAnimator.h"
@@ -131,6 +130,16 @@ FrameLoader::FrameLoader(LocalFrame* frame)
 
 FrameLoader::~FrameLoader()
 {
+    // Verify that this FrameLoader has been detached.
+    ASSERT(!m_progressTracker);
+}
+
+void FrameLoader::trace(Visitor* visitor)
+{
+    visitor->trace(m_frame);
+    visitor->trace(m_mixedContentChecker);
+    visitor->trace(m_progressTracker);
+    visitor->trace(m_fetchContext);
 }
 
 void FrameLoader::init()
@@ -245,6 +254,8 @@ void FrameLoader::didExplicitOpen()
 
 void FrameLoader::clear()
 {
+    // clear() is called during (Local)Frame finalization and when creating
+    // a new Document within it (DocumentLoader::createWriterFor().)
     if (m_stateMachine.creatingInitialEmptyDocument())
         return;
 
@@ -252,7 +263,6 @@ void FrameLoader::clear()
     m_frame->document()->cancelParsing();
     m_frame->document()->prepareForDestruction();
     m_frame->document()->removeFocusedElementOfSubtree(m_frame->document());
-
     m_frame->selection().prepareForDestruction();
     m_frame->eventHandler().clear();
     if (m_frame->view())
@@ -357,22 +367,6 @@ void FrameLoader::receivedFirstData()
     dispatchDidClearDocumentOfWindowObject();
 }
 
-static void didFailContentSecurityPolicyCheck(FrameLoader* loader)
-{
-    // load event and stopAllLoaders can detach the LocalFrame, so protect it.
-    RefPtr<LocalFrame> frame(loader->frame());
-
-    // Move the page to a unique origin, and cancel the load.
-    frame->document()->enforceSandboxFlags(SandboxOrigin);
-    loader->stopAllLoaders();
-
-    // Fire a load event, as timing attacks would otherwise reveal that the
-    // frame was blocked. This way, it looks like every other cross-origin
-    // page.
-    if (FrameOwner* frameOwner = frame->owner())
-        frameOwner->dispatchLoad();
-}
-
 void FrameLoader::didBeginDocument(bool dispatch)
 {
     m_frame->document()->setReadyState(Document::Loading);
@@ -383,12 +377,7 @@ void FrameLoader::didBeginDocument(bool dispatch)
     if (dispatch)
         dispatchDidClearDocumentOfWindowObject();
 
-    m_frame->document()->initContentSecurityPolicy(m_documentLoader ? ContentSecurityPolicyResponseHeaders(m_documentLoader->response()) : ContentSecurityPolicyResponseHeaders());
-
-    if (!m_frame->document()->contentSecurityPolicy()->allowAncestors(m_frame)) {
-        didFailContentSecurityPolicyCheck(this);
-        return;
-    }
+    m_frame->document()->initContentSecurityPolicy(m_documentLoader ? m_documentLoader->releaseContentSecurityPolicy() : ContentSecurityPolicy::create());
 
     Settings* settings = m_frame->document()->settings();
     if (settings) {
@@ -423,7 +412,7 @@ void FrameLoader::finishedParsing()
     // This can be called from the LocalFrame's destructor, in which case we shouldn't protect ourselves
     // because doing so will cause us to re-enter the destructor when protector goes out of scope.
     // Null-checking the FrameView indicates whether or not we're in the destructor.
-    RefPtr<LocalFrame> protector = m_frame->view() ? m_frame : 0;
+    RefPtrWillBeRawPtr<LocalFrame> protect(m_frame->view() ? m_frame.get() : nullptr);
 
     if (client())
         client()->dispatchDidFinishDocumentLoad();
@@ -481,7 +470,7 @@ bool FrameLoader::allAncestorsAreComplete() const
 
 void FrameLoader::checkCompleted(EventAction *action)
 {
-    RefPtr<LocalFrame> protect(m_frame);
+    RefPtrWillBeRawPtr<LocalFrame> protect(m_frame.get());
 
     if (action)
         m_completeTriggers.deferJoin(action);
@@ -579,6 +568,11 @@ void FrameLoader::setOpener(LocalFrame* opener)
 
 bool FrameLoader::allowPlugins(ReasonForCallingAllowPlugins reason)
 {
+    // With Oilpan, a FrameLoader might be accessed after the
+    // FrameHost has been detached. FrameClient will not be
+    // accessible, so bail early.
+    if (!client())
+        return false;
     Settings* settings = m_frame->settings();
     bool allowed = client()->allowPlugins(settings && settings->pluginsEnabled());
     if (!allowed && reason == AboutToInstantiatePlugin)
@@ -649,7 +643,7 @@ void FrameLoader::loadInSameDocument(const KURL& url, PassRefPtr<SerializedScrip
 
 void FrameLoader::completed(EventAction *action)
 {
-    RefPtr<LocalFrame> protect(m_frame);
+    RefPtrWillBeRawPtr<LocalFrame> protect(m_frame.get());
 
     for (Frame* descendant = m_frame->tree().traverseNext(m_frame); descendant; descendant = descendant->tree().traverseNext(m_frame)) {
         if (descendant->isLocalFrame())
@@ -773,7 +767,7 @@ void FrameLoader::load(const FrameLoadRequest& passedRequest)
 {
     ASSERT(m_frame->document());
 
-    RefPtr<LocalFrame> protect(m_frame);
+    RefPtrWillBeRawPtr<LocalFrame> protect(m_frame.get());
 
     if (m_inStopAllLoaders)
         return;
@@ -782,8 +776,8 @@ void FrameLoader::load(const FrameLoadRequest& passedRequest)
     if (!prepareRequestForThisFrame(request))
         return;
 
-    RefPtr<LocalFrame> targetFrame = request.formState() ? 0 : findFrameForNavigation(AtomicString(request.frameName()), request.formState() ? request.formState()->sourceDocument() : m_frame->document());
-    if (targetFrame && targetFrame != m_frame) {
+    RefPtrWillBeRawPtr<LocalFrame> targetFrame = request.formState() ? 0 : findFrameForNavigation(AtomicString(request.frameName()), request.formState() ? request.formState()->sourceDocument() : m_frame->document());
+    if (targetFrame && targetFrame.get() != m_frame) {
         request.setFrameName("_self");
         targetFrame->loader().load(request);
         if (Page* page = targetFrame->page())
@@ -855,7 +849,7 @@ ResourceRequest FrameLoader::requestFromHistoryItem(HistoryItem* item, ResourceR
     return request;
 }
 
-void FrameLoader::reload(ReloadPolicy reloadPolicy, const KURL& overrideURL, const AtomicString& overrideEncoding, ClientRedirectPolicy clientRedirectPolicy)
+void FrameLoader::reload(ReloadPolicy reloadPolicy, const KURL& overrideURL, ClientRedirectPolicy clientRedirectPolicy)
 {
     if (!m_currentItem)
         return;
@@ -878,9 +872,10 @@ void FrameLoader::reload(ReloadPolicy reloadPolicy, const KURL& overrideURL, con
         request.setURL(overrideURL);
         request.clearHTTPReferrer();
     }
+    request.setSkipServiceWorker(reloadPolicy == EndToEndReload);
 
     FrameLoadType type = reloadPolicy == EndToEndReload ? FrameLoadTypeReloadFromOrigin : FrameLoadTypeReload;
-    loadWithNavigationAction(NavigationAction(request, type), type, nullptr, SubstituteData(), CheckContentSecurityPolicy, clientRedirectPolicy, overrideEncoding);
+    loadWithNavigationAction(NavigationAction(request, type), type, nullptr, SubstituteData(), CheckContentSecurityPolicy, clientRedirectPolicy);
 }
 
 void FrameLoader::stopAllLoaders()
@@ -894,11 +889,11 @@ void FrameLoader::stopAllLoaders()
 
     // Calling stopLoading() on the provisional document loader can blow away
     // the frame from underneath.
-    RefPtr<LocalFrame> protect(m_frame);
+    RefPtrWillBeRawPtr<LocalFrame> protect(m_frame.get());
 
     m_inStopAllLoaders = true;
 
-    for (RefPtr<Frame> child = m_frame->tree().firstChild(); child; child = child->tree().nextSibling()) {
+    for (RefPtrWillBeRawPtr<Frame> child = m_frame->tree().firstChild(); child; child = child->tree().nextSibling()) {
         if (child->isLocalFrame())
             toLocalFrame(child.get())->loader().stopAllLoaders();
     }
@@ -933,7 +928,8 @@ void FrameLoader::didAccessInitialDocument()
 
 void FrameLoader::didAccessInitialDocumentTimerFired(Timer<FrameLoader>*)
 {
-    client()->didAccessInitialDocument();
+    if (client())
+        client()->didAccessInitialDocument();
 }
 
 void FrameLoader::notifyIfInitialDocumentAccessed()
@@ -944,19 +940,12 @@ void FrameLoader::notifyIfInitialDocumentAccessed()
     }
 }
 
-bool FrameLoader::isLoading() const
-{
-    if (m_provisionalDocumentLoader)
-        return true;
-    return m_documentLoader && m_documentLoader->isLoading();
-}
-
 void FrameLoader::commitProvisionalLoad()
 {
     ASSERT(client()->hasWebView());
     ASSERT(m_state == FrameStateProvisional);
     RefPtr<DocumentLoader> pdl = m_provisionalDocumentLoader;
-    RefPtr<LocalFrame> protect(m_frame);
+    RefPtrWillBeRawPtr<LocalFrame> protect(m_frame.get());
 
     // Check if the destination page is allowed to access the previous page's timing information.
     if (m_frame->document()) {
@@ -1047,10 +1036,10 @@ static bool isDocumentDoneLoading(Document* document)
 bool FrameLoader::checkLoadCompleteForThisFrame()
 {
     ASSERT(client()->hasWebView());
-    RefPtr<LocalFrame> protect(m_frame);
+    RefPtrWillBeRawPtr<LocalFrame> protect(m_frame.get());
 
     bool allChildrenAreDoneLoading = true;
-    for (RefPtr<Frame> child = m_frame->tree().firstChild(); child; child = child->tree().nextSibling()) {
+    for (RefPtrWillBeRawPtr<Frame> child = m_frame->tree().firstChild(); child; child = child->tree().nextSibling()) {
         if (child->isLocalFrame())
             allChildrenAreDoneLoading &= toLocalFrame(child.get())->loader().checkLoadCompleteForThisFrame();
     }
@@ -1177,8 +1166,10 @@ String FrameLoader::userAgent(const KURL& url) const
 
 void FrameLoader::detachFromParent()
 {
+#if !ENABLE(OILPAN)
     // The caller must protect a reference to m_frame.
     ASSERT(m_frame->refCount() > 1);
+#endif
 
     InspectorInstrumentation::frameDetachedFromParent(m_frame);
 
@@ -1212,6 +1203,7 @@ void FrameLoader::detachClient()
     ASSERT(client());
 
     // Finish all cleanup work that might require talking to the embedder.
+    m_progressTracker->dispose();
     m_progressTracker.clear();
     setOpener(0);
     // Notify ScriptController that the frame is closing, since its cleanup ends up calling
@@ -1232,7 +1224,7 @@ void FrameLoader::detachClient()
 void FrameLoader::receivedMainResourceError(const ResourceError& error)
 {
     // Retain because the stop may release the last reference to it.
-    RefPtr<LocalFrame> protect(m_frame);
+    RefPtrWillBeRawPtr<LocalFrame> protect(m_frame.get());
 
     if (m_frame->document()->parser())
         m_frame->document()->parser()->stopParsing();
@@ -1274,7 +1266,7 @@ void FrameLoader::scrollToFragmentWithParentBoundary(const KURL& url)
         return;
 
     // Leaking scroll position to a cross-origin ancestor would permit the so-called "framesniffing" attack.
-    RefPtr<LocalFrame> boundaryFrame(url.hasFragmentIdentifier() ? m_frame->document()->findUnsafeParentScrollPropagationBoundary() : 0);
+    RefPtrWillBeRawPtr<LocalFrame> boundaryFrame = url.hasFragmentIdentifier() ? m_frame->document()->findUnsafeParentScrollPropagationBoundary() : 0;
 
     if (boundaryFrame)
         boundaryFrame->view()->setSafeToPropagateScrollToParent(false);
@@ -1292,7 +1284,7 @@ bool FrameLoader::shouldClose()
         return true;
 
     // Store all references to each subframe in advance since beforeunload's event handler may modify frame
-    Vector<RefPtr<LocalFrame> > targetFrames;
+    WillBeHeapVector<RefPtrWillBeMember<LocalFrame> > targetFrames;
     targetFrames.append(m_frame);
     for (Frame* child = m_frame->tree().firstChild(); child; child = child->tree().traverseNext(m_frame)) {
         // FIXME: There is not yet any way to dispatch events to out-of-process frames.
@@ -1321,8 +1313,8 @@ bool FrameLoader::shouldClose()
 
 bool FrameLoader::validateTransitionNavigationMode()
 {
-    if (frame()->document()->inQuirksMode()) {
-        frame()->document()->addConsoleMessage(ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, "Ignoring transition elements due to quirks mode."));
+    if (m_frame->document()->inQuirksMode()) {
+        m_frame->document()->addConsoleMessage(ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, "Ignoring transition elements due to quirks mode."));
         return false;
     }
 
@@ -1333,7 +1325,7 @@ bool FrameLoader::validateTransitionNavigationMode()
 bool FrameLoader::dispatchNavigationTransitionData()
 {
     Vector<Document::TransitionElementData> elementData;
-    frame()->document()->getTransitionElementData(elementData);
+    m_frame->document()->getTransitionElementData(elementData);
     if (elementData.isEmpty() || !validateTransitionNavigationMode())
         return false;
 
@@ -1344,7 +1336,7 @@ bool FrameLoader::dispatchNavigationTransitionData()
     return true;
 }
 
-void FrameLoader::loadWithNavigationAction(const NavigationAction& action, FrameLoadType type, PassRefPtrWillBeRawPtr<FormState> formState, const SubstituteData& substituteData, ContentSecurityPolicyCheck shouldCheckMainWorldContentSecurityPolicy, ClientRedirectPolicy clientRedirect, const AtomicString& overrideEncoding)
+void FrameLoader::loadWithNavigationAction(const NavigationAction& action, FrameLoadType type, PassRefPtrWillBeRawPtr<FormState> formState, const SubstituteData& substituteData, ContentSecurityPolicyCheck shouldCheckMainWorldContentSecurityPolicy, ClientRedirectPolicy clientRedirect)
 {
     ASSERT(client()->hasWebView());
     if (m_frame->document()->pageDismissalEventBeingDispatched() != Document::NoDismissal)
@@ -1365,21 +1357,12 @@ void FrameLoader::loadWithNavigationAction(const NavigationAction& action, Frame
     m_policyDocumentLoader->setReplacesCurrentHistoryItem(replacesCurrentHistoryItem);
     m_policyDocumentLoader->setIsClientRedirect(clientRedirect == ClientRedirect);
 
-    Frame* parent = m_frame->tree().parent();
-    if (parent && parent->isLocalFrame())
-        m_policyDocumentLoader->setOverrideEncoding(toLocalFrame(parent)->loader().documentLoader()->overrideEncoding());
-    else if (!overrideEncoding.isEmpty())
-        m_policyDocumentLoader->setOverrideEncoding(overrideEncoding);
-    else if (m_documentLoader)
-        m_policyDocumentLoader->setOverrideEncoding(m_documentLoader->overrideEncoding());
-
-
     bool isTransitionNavigation = false;
     if (RuntimeEnabledFeatures::navigationTransitionsEnabled() && type != FrameLoadTypeReload && type != FrameLoadTypeReloadFromOrigin && type != FrameLoadTypeSame)
         isTransitionNavigation = dispatchNavigationTransitionData();
 
     // stopAllLoaders can detach the LocalFrame, so protect it.
-    RefPtr<LocalFrame> protect(m_frame);
+    RefPtrWillBeRawPtr<LocalFrame> protect(m_frame.get());
     if ((!m_policyDocumentLoader->shouldContinueForNavigationPolicy(request, shouldCheckMainWorldContentSecurityPolicy, isTransitionNavigation) || !shouldClose()) && m_policyDocumentLoader) {
         m_policyDocumentLoader->detachFromFrame();
         m_policyDocumentLoader = nullptr;
@@ -1476,13 +1459,13 @@ bool FrameLoader::shouldInterruptLoadForXFrameOptions(const String& content, con
     case XFrameOptionsConflict: {
         RefPtrWillBeRawPtr<ConsoleMessage> consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, "Multiple 'X-Frame-Options' headers with conflicting values ('" + content + "') encountered when loading '" + url.elidedString() + "'. Falling back to 'DENY'.");
         consoleMessage->setRequestIdentifier(requestIdentifier);
-        m_frame->document()->addMessage(consoleMessage.release());
+        m_frame->document()->addConsoleMessage(consoleMessage.release());
         return true;
     }
     case XFrameOptionsInvalid: {
         RefPtrWillBeRawPtr<ConsoleMessage> consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, "Invalid 'X-Frame-Options' header encountered when loading '" + url.elidedString() + "': '" + content + "' is not a recognized directive. The header will be ignored.");
         consoleMessage->setRequestIdentifier(requestIdentifier);
-        m_frame->document()->addMessage(consoleMessage.release());
+        m_frame->document()->addConsoleMessage(consoleMessage.release());
         return false;
     }
     default:
@@ -1517,7 +1500,7 @@ LocalFrame* FrameLoader::findFrameForNavigation(const AtomicString& name, Docume
 
 void FrameLoader::loadHistoryItem(HistoryItem* item, HistoryLoadType historyLoadType, ResourceRequestCachePolicy cachePolicy)
 {
-    RefPtr<LocalFrame> protect(m_frame);
+    RefPtrWillBeRawPtr<LocalFrame> protect(m_frame.get());
     if (m_frame->page()->defersLoading()) {
         m_deferredHistoryLoad = DeferredHistoryLoad(item, historyLoadType, cachePolicy);
         return;

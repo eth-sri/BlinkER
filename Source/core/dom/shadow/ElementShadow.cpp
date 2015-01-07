@@ -254,7 +254,7 @@ const DestinationInsertionPoints* ElementShadow::destinationInsertionPointsFor(c
 
 void ElementShadow::distribute()
 {
-    host()->setNeedsStyleRecalc(SubtreeStyleChange);
+    host()->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::Shadow));
     WillBeHeapVector<RawPtrWillBeMember<HTMLShadowElement>, 32> shadowInsertionPoints;
     DistributionPool pool(*host());
 
@@ -331,9 +331,9 @@ void ElementShadow::collectSelectFeatureSetFrom(ShadowRoot& root)
     }
 }
 
-void ElementShadow::didAffectSelector(AffectedSelectorMask mask)
+void ElementShadow::distributedNodePseudoStateChanged(CSSSelector::PseudoType pseudo)
 {
-    if (ensureSelectFeatureSet().hasSelectorFor(mask))
+    if (ensureSelectFeatureSet().hasSelectorForPseudoType(pseudo))
         setNeedsDistributionRecalc();
 }
 

@@ -26,7 +26,6 @@ crbug.com/24182 fast/frames/cached-frame-counter.html [ Slow ]
 crbug.com/24182 fast/frames/frame-limit.html [ Slow ]
 crbug.com/24182 fast/images/png-suite/test.html [ Slow ]
 crbug.com/24182 fast/overflow/lots-of-sibling-inline-boxes.html [ Slow ] # Particularly slow in Debug: >12x slower!
-crbug.com/310866 fast/workers/storage/use-same-database-in-page-and-workers.html [ Slow ]
 crbug.com/24182 html5lib/generated/run-tests16-data.html [ Slow ]
 crbug.com/24182 html5lib/webkit-resumer.html [ Slow ]
 crbug.com/24182 http/tests/accessibility/slow-document-load.html [ Slow ]
@@ -69,6 +68,7 @@ crbug.com/24182 virtual/gpu/fast/canvas/canvas-toDataURL-jpeg-crash.html [ Slow 
 crbug.com/24182 virtual/gpu/fast/canvas/getPutImageDataPairTest.html [ Slow ]
 crbug.com/24182 virtual/gpu/fast/canvas/webgl/read-pixels-test.html [ Slow ]
 crbug.com/24182 fast/dom/timer-throttling-background-page-near-alignment-interval.html [ Slow ]
+crbug.com/24182 http/tests/perf/large-inlined-script.html [ Slow ]
 
 # FIXME: Most inspector tests are slow. We should triage and consolidate these bugs and figure out if any are unusually slow.
 webkit.org/b/60109 inspector/elements/edit-dom-actions.html [ Slow ]
@@ -101,6 +101,9 @@ crbug.com/247466 [ Linux Release ] inspector/sources/debugger/debugger-activatio
 
 # This test is intentionally SLOW as we're waiting for a connection timeout.
 crbug.com/73609 http/tests/media/video-play-stall.html [ Slow ]
+
+# This test uses a throttled load to stay in NETWORK_LOADING.
+crbug.com/400659 http/tests/media/gc-while-network-loading.html [ Slow ]
 
 # This has been Slow in Debug since added in r164270.
 crbug.com/330389 [ Debug ] css-parser/color3_hsl.html [ Slow ]
@@ -170,6 +173,4 @@ crbug.com/364225 virtual/gpu/fast/canvas/canvas-composite-text-alpha.html [ Slow
 
 crbug.com/372424 fast/dom/DOMImplementation/createDocument-with-used-doctype.html [ Slow ]
 
-crbug.com/301515 fast/workers/worker-exception-during-navigation.html [ Slow ]
-crbug.com/301515 fast/workers/worker-supplement-gc.html [ Slow ]
-crbug.com/301515 http/tests/serviceworker/chromium/service-worker-gc.html [ Slow ]
+crbug.com/372424 http/tests/serviceworker/chromium/registration-stress.html [ Slow ]

@@ -24,6 +24,7 @@
 
 #include "bindings/core/v8/ScriptString.h"
 #include "core/dom/ActiveDOMObject.h"
+#include "core/dom/DocumentParserClient.h"
 #include "core/events/EventListener.h"
 #include "core/loader/ThreadableLoaderClient.h"
 #include "core/streams/ReadableStreamImpl.h"
@@ -58,10 +59,12 @@ class XMLHttpRequest FINAL
     : public RefCountedWillBeGarbageCollectedFinalized<XMLHttpRequest>
     , public XMLHttpRequestEventTarget
     , private ThreadableLoaderClient
+    , public DocumentParserClient
     , public ActiveDOMObject {
-    WTF_MAKE_FAST_ALLOCATED_WILL_BE_REMOVED;
+    DEFINE_WRAPPERTYPEINFO();
     REFCOUNTED_EVENT_TARGET(XMLHttpRequest);
     WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(XMLHttpRequest);
+    WTF_MAKE_FAST_ALLOCATED_WILL_BE_REMOVED;
 public:
     static PassRefPtrWillBeRawPtr<XMLHttpRequest> create(ExecutionContext*, PassRefPtr<SecurityOrigin> = nullptr);
     virtual ~XMLHttpRequest();
@@ -165,6 +168,11 @@ private:
     virtual void didFail(const ResourceError&) OVERRIDE;
     virtual void didFailRedirectCheck() OVERRIDE;
 
+    // DocumentParserClient
+    virtual void notifyParserStopped() OVERRIDE;
+
+    void endLoading();
+
     // Returns the MIME type part of m_mimeTypeOverride if present and
     // successfully parsed, or returns one of the "Content-Type" header value
     // of the received response.
@@ -215,8 +223,6 @@ private:
     // m_receivedLength and m_response.
     void dispatchProgressEventFromSnapshot(const AtomicString&);
 
-    // Does clean up common for all kind of didFail() call.
-    void handleDidFailGeneric();
     // Handles didFail() call not caused by cancellation or timeout.
     void handleNetworkError();
     // Handles didFail() call for cancellations. For example, the
@@ -243,6 +249,7 @@ private:
     PersistentWillBeMember<UnderlyingSource> m_streamSource;
 
     RefPtr<ThreadableLoader> m_loader;
+    unsigned long m_loaderIdentifier;
     State m_state;
 
     ResourceResponse m_response;
@@ -255,7 +262,7 @@ private:
     RefPtrWillBeMember<DocumentParser> m_responseDocumentParser;
 
     RefPtr<SharedBuffer> m_binaryResponseBuilder;
-    long long m_downloadedBlobLength;
+    long long m_lengthDownloadedToFile;
 
     RefPtr<ArrayBuffer> m_responseArrayBuffer;
 
@@ -284,6 +291,9 @@ private:
     bool m_uploadEventsAllowed;
     bool m_uploadComplete;
     bool m_sameOriginRequest;
+    // True iff the ongoing resource loading is using the downloadToFile
+    // option.
+    bool m_downloadingToFile;
 };
 
 } // namespace blink

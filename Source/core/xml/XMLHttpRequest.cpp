@@ -144,8 +144,9 @@ PassRefPtrWillBeRawPtr<XMLHttpRequest> XMLHttpRequest::create(ExecutionContext* 
 XMLHttpRequest::XMLHttpRequest(ExecutionContext* context, PassRefPtr<SecurityOrigin> securityOrigin)
     : ActiveDOMObject(context)
     , m_timeoutMilliseconds(0)
+    , m_loaderIdentifier(0)
     , m_state(UNSENT)
-    , m_downloadedBlobLength(0)
+    , m_lengthDownloadedToFile(0)
     , m_receivedLength(0)
     , m_lastSendLineNumber(0)
     , m_exceptionCode(0)
@@ -159,11 +160,11 @@ XMLHttpRequest::XMLHttpRequest(ExecutionContext* context, PassRefPtr<SecurityOri
     , m_uploadEventsAllowed(true)
     , m_uploadComplete(false)
     , m_sameOriginRequest(true)
+    , m_downloadingToFile(false)
 {
 #ifndef NDEBUG
     xmlHttpRequestCounter.increment();
 #endif
-    ScriptWrappable::init(this);
 }
 
 XMLHttpRequest::~XMLHttpRequest()
@@ -261,29 +262,41 @@ Document* XMLHttpRequest::responseXML(ExceptionState& exceptionState)
 Blob* XMLHttpRequest::responseBlob()
 {
     ASSERT(m_responseTypeCode == ResponseTypeBlob);
-    ASSERT(!m_binaryResponseBuilder.get());
 
     // We always return null before DONE.
     if (m_error || m_state != DONE)
         return 0;
 
     if (!m_responseBlob) {
-        // When responseType is set to "blob", we redirect the downloaded data
-        // to a file-handle directly in the browser process. We get the
-        // file-path from the ResourceResponse directly instead of copying the
-        // bytes between the browser and the renderer.
         OwnPtr<BlobData> blobData = BlobData::create();
-        String filePath = m_response.downloadedFilePath();
-        // If we errored out or got no data, we still return a blob, just an
-        // empty one.
-        if (!filePath.isEmpty() && m_downloadedBlobLength) {
-            blobData->appendFile(filePath);
-            // FIXME: finalResponseMIMETypeWithFallback() defaults to text/xml
-            // which may be incorrect. Replace it with finalResponseMIMEType()
-            // after compatibility investigation.
-            blobData->setContentType(finalResponseMIMETypeWithFallback());
+        if (m_downloadingToFile) {
+            ASSERT(!m_binaryResponseBuilder.get());
+
+            // When responseType is set to "blob", we redirect the downloaded
+            // data to a file-handle directly in the browser process. We get
+            // the file-path from the ResourceResponse directly instead of
+            // copying the bytes between the browser and the renderer.
+            String filePath = m_response.downloadedFilePath();
+            // If we errored out or got no data, we still return a blob, just
+            // an empty one.
+            if (!filePath.isEmpty() && m_lengthDownloadedToFile) {
+                blobData->appendFile(filePath);
+                // FIXME: finalResponseMIMETypeWithFallback() defaults to
+                // text/xml which may be incorrect. Replace it with
+                // finalResponseMIMEType() after compatibility investigation.
+                blobData->setContentType(finalResponseMIMETypeWithFallback());
+            }
+            m_responseBlob = Blob::create(BlobDataHandle::create(blobData.release(), m_lengthDownloadedToFile));
+        } else {
+            size_t size = 0;
+            if (m_binaryResponseBuilder.get() && m_binaryResponseBuilder->size()) {
+                size = m_binaryResponseBuilder->size();
+                blobData->appendBytes(m_binaryResponseBuilder->data(), size);
+                blobData->setContentType(finalResponseMIMETypeWithFallback());
+                m_binaryResponseBuilder.clear();
+            }
+            m_responseBlob = Blob::create(BlobDataHandle::create(blobData.release(), size));
         }
-        m_responseBlob = Blob::create(BlobDataHandle::create(blobData.release(), m_downloadedBlobLength));
     }
 
     return m_responseBlob.get();
@@ -363,7 +376,7 @@ void XMLHttpRequest::setResponseType(const String& responseType, ExceptionState&
     // Newer functionality is not available to synchronous requests in window contexts, as a spec-mandated
     // attempt to discourage synchronous XHR use. responseType is one such piece of functionality.
     if (!m_async && executionContext()->isDocument()) {
-        exceptionState.throwDOMException(InvalidAccessError, "The response type can only be changed for asynchronous HTTP requests made from a document.");
+        exceptionState.throwDOMException(InvalidAccessError, "The response type cannot be changed for synchronous requests made from a document.");
         return;
     }
 
@@ -433,19 +446,17 @@ void XMLHttpRequest::trackProgress(int length)
 {
     m_receivedLength += length;
 
-    if (m_async)
-        dispatchProgressEventFromSnapshot(EventTypeNames::progress);
-
     if (m_state != LOADING) {
         changeState(LOADING);
     } else {
-        // Firefox calls readyStateChanged every time it receives data. Do
-        // the same to align with Firefox.
+        // Dispatch a readystatechange event because many applications use
+        // it to track progress although this is not specified.
         //
-        // FIXME: Make our implementation and the spec consistent. This
-        // behavior was needed when the progress event was not available.
+        // FIXME: Stop dispatching this event for progress tracking.
         dispatchReadyStateChangeEvent();
     }
+    if (m_async)
+        dispatchProgressEventFromSnapshot(EventTypeNames::progress);
 }
 
 void XMLHttpRequest::changeState(State newState)
@@ -473,7 +484,7 @@ void XMLHttpRequest::dispatchReadyStateChangeEvent()
             else
                 action = XMLHttpRequestProgressEventThrottle::Flush;
         }
-        m_progressEventThrottle.dispatchReadyStateChangeEvent(XMLHttpRequestProgressEvent::create(EventTypeNames::readystatechange), action);
+        m_progressEventThrottle.dispatchReadyStateChangeEvent(Event::create(EventTypeNames::readystatechange), action);
         TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "UpdateCounters", "data", InspectorUpdateCountersEvent::data());
     }
 
@@ -544,12 +555,6 @@ void XMLHttpRequest::open(const AtomicString& method, const KURL& url, bool asyn
     m_state = UNSENT;
     m_error = false;
     m_uploadComplete = false;
-
-    // clear stuff from possible previous load
-    clearResponse();
-    clearRequest();
-
-    ASSERT(m_state == UNSENT);
 
     if (!isValidHTTPToken(method)) {
         exceptionState.throwDOMException(SyntaxError, "'" + method + "' is not a valid HTTP method.");
@@ -855,7 +860,8 @@ void XMLHttpRequest::createRequest(PassRefPtr<FormData> httpBody, ExceptionState
 
     // When responseType is set to "blob", we redirect the downloaded data to a
     // file-handle directly.
-    if (responseTypeCode() == ResponseTypeBlob) {
+    m_downloadingToFile = responseTypeCode() == ResponseTypeBlob;
+    if (m_downloadingToFile) {
         request.setDownloadToFile(true);
         resourceLoaderOptions.dataBufferingPolicy = DoNotBufferData;
     }
@@ -889,23 +895,36 @@ void XMLHttpRequest::abort()
 {
     WTF_LOG(Network, "XMLHttpRequest %p abort()", this);
 
+    // internalAbort() clears |m_loader|. Compute |sendFlag| now.
+    //
+    // |sendFlag| corresponds to "the send() flag" defined in the XHR spec.
+    //
+    // |sendFlag| is only set when we have an active, asynchronous loader.
+    // Don't use it as "the send() flag" when the XHR is in sync mode.
     bool sendFlag = m_loader;
 
-    // Response is cleared next, save needed progress event data.
+    // internalAbort() clears the response. Save the data needed for
+    // dispatching ProgressEvents.
     long long expectedLength = m_response.expectedContentLength();
     long long receivedLength = m_receivedLength;
 
     if (!internalAbort())
         return;
 
-    clearResponse();
-
-    // Clear headers as required by the spec
-    m_requestHeaders.clear();
-
-    if (!((m_state <= OPENED && !sendFlag) || m_state == DONE)) {
-        ASSERT(!m_loader);
-        handleRequestError(0, EventTypeNames::abort, receivedLength, expectedLength);
+    // The script never gets any chance to call abort() on a sync XHR between
+    // send() call and transition to the DONE state. It's because a sync XHR
+    // doesn't dispatch any event between them. So, if |m_async| is false, we
+    // can skip the "request error steps" (defined in the XHR spec) without any
+    // state check.
+    //
+    // FIXME: It's possible open() is invoked in internalAbort() and |m_async|
+    // becomes true by that. We should implement more reliable treatment for
+    // nested method invocations at some point.
+    if (m_async) {
+        if ((m_state == OPENED && sendFlag) || m_state == HEADERS_RECEIVED || m_state == LOADING) {
+            ASSERT(!m_loader);
+            handleRequestError(0, EventTypeNames::abort, receivedLength, expectedLength);
+        }
     }
     m_state = UNSENT;
 }
@@ -914,12 +933,23 @@ void XMLHttpRequest::clearVariablesForLoading()
 {
     m_decoder.clear();
 
+    if (m_responseDocumentParser) {
+        m_responseDocumentParser->removeClient(this);
+#if !ENABLE(OILPAN)
+        m_responseDocumentParser->detach();
+#endif
+        m_responseDocumentParser = nullptr;
+    }
+
     m_finalResponseCharset = String();
 }
 
 bool XMLHttpRequest::internalAbort()
 {
     m_error = true;
+
+    if (m_responseDocumentParser && !m_responseDocumentParser->isStopped())
+        m_responseDocumentParser->stopParsing();
 
     clearVariablesForLoading();
 
@@ -934,6 +964,9 @@ bool XMLHttpRequest::internalAbort()
         // FIXME: Create a more specific error.
         m_responseStream->error(DOMException::create(!m_async && m_exceptionCode ? m_exceptionCode : AbortError, "XMLHttpRequest::abort"));
     }
+
+    clearResponse();
+    clearRequest();
 
     if (!m_loader)
         return true;
@@ -971,10 +1004,11 @@ void XMLHttpRequest::clearResponse()
 
     m_parsedResponse = false;
     m_responseDocument = nullptr;
-    m_responseDocumentParser = nullptr;
 
     m_responseBlob = nullptr;
-    m_downloadedBlobLength = 0;
+
+    m_downloadingToFile = false;
+    m_lengthDownloadedToFile = 0;
 
     m_responseLegacyStream = nullptr;
     m_responseStream = nullptr;
@@ -988,14 +1022,6 @@ void XMLHttpRequest::clearResponse()
 void XMLHttpRequest::clearRequest()
 {
     m_requestHeaders.clear();
-}
-
-void XMLHttpRequest::handleDidFailGeneric()
-{
-    clearResponse();
-    clearRequest();
-
-    m_error = true;
 }
 
 void XMLHttpRequest::dispatchProgressEvent(const AtomicString& type, long long receivedLength, long long expectedLength)
@@ -1026,7 +1052,6 @@ void XMLHttpRequest::handleNetworkError()
     if (!internalAbort())
         return;
 
-    handleDidFailGeneric();
     handleRequestError(NetworkError, EventTypeNames::error, receivedLength, expectedLength);
 }
 
@@ -1038,7 +1063,9 @@ void XMLHttpRequest::handleDidCancel()
     long long expectedLength = m_response.expectedContentLength();
     long long receivedLength = m_receivedLength;
 
-    handleDidFailGeneric();
+    if (!internalAbort())
+        return;
+
     handleRequestError(AbortError, EventTypeNames::abort, receivedLength, expectedLength);
 }
 
@@ -1274,19 +1301,20 @@ void XMLHttpRequest::didFinishLoading(unsigned long identifier, double)
     if (m_state < HEADERS_RECEIVED)
         changeState(HEADERS_RECEIVED);
 
+    m_loaderIdentifier = identifier;
+
     if (m_responseDocumentParser) {
+        // |DocumentParser::finish()| tells the parser that we have reached end of the data.
+        // When using |HTMLDocumentParser|, which works asynchronously, we do not have the
+        // complete document just after the |DocumentParser::finish()| call.
+        // Wait for the parser to call us back in |notifyParserStopped| to progress state.
         m_responseDocumentParser->finish();
-        m_responseDocumentParser = nullptr;
-
-        m_responseDocument->implicitClose();
-
-        if (!m_responseDocument->wellFormed())
-            m_responseDocument = nullptr;
-
-        m_parsedResponse = true;
-    } else if (m_decoder) {
-        m_responseText = m_responseText.concatenateWith(m_decoder->flush());
+        ASSERT(m_responseDocument);
+        return;
     }
+
+    if (m_decoder)
+        m_responseText = m_responseText.concatenateWith(m_decoder->flush());
 
     if (m_responseLegacyStream)
         m_responseLegacyStream->finalize();
@@ -1295,11 +1323,40 @@ void XMLHttpRequest::didFinishLoading(unsigned long identifier, double)
         m_responseStream->close();
 
     clearVariablesForLoading();
+    endLoading();
+}
 
-    InspectorInstrumentation::didFinishXHRLoading(executionContext(), this, this, identifier, m_responseText, m_method, m_url, m_lastSendURL, m_lastSendLineNumber);
+void XMLHttpRequest::notifyParserStopped()
+{
+    // This should only be called when response document is parsed asynchronously.
+    ASSERT(m_responseDocumentParser);
+    ASSERT(!m_responseDocumentParser->isParsing());
+    ASSERT(!m_responseLegacyStream);
+    ASSERT(!m_responseStream);
+
+    // Do nothing if we are called from |internalAbort()|.
+    if (m_error)
+        return;
+
+    clearVariablesForLoading();
+
+    m_responseDocument->implicitClose();
+
+    if (!m_responseDocument->wellFormed())
+        m_responseDocument = nullptr;
+
+    m_parsedResponse = true;
+
+    endLoading();
+}
+
+void XMLHttpRequest::endLoading()
+{
+    InspectorInstrumentation::didFinishXHRLoading(executionContext(), this, this, m_loaderIdentifier, m_responseText, m_method, m_url, m_lastSendURL, m_lastSendLineNumber);
 
     if (m_loader)
         m_loader = nullptr;
+    m_loaderIdentifier = 0;
 
     changeState(DONE);
 }
@@ -1344,6 +1401,7 @@ void XMLHttpRequest::parseDocumentChunk(const char* data, int len)
             return;
 
         m_responseDocumentParser = m_responseDocument->implicitOpen();
+        m_responseDocumentParser->addClient(this);
     }
     ASSERT(m_responseDocumentParser);
 
@@ -1380,13 +1438,18 @@ PassOwnPtr<TextResourceDecoder> XMLHttpRequest::createDecoder() const
 
 void XMLHttpRequest::didReceiveData(const char* data, int len)
 {
-    ASSERT(m_responseTypeCode != ResponseTypeBlob);
+    ASSERT(!m_downloadingToFile);
 
     if (m_error)
         return;
 
     if (m_state < HEADERS_RECEIVED)
         changeState(HEADERS_RECEIVED);
+
+    // We need to check for |m_error| again, because |changeState| may trigger
+    // readystatechange, and user javascript can cause |abort()|.
+    if (m_error)
+        return;
 
     if (!len)
         return;
@@ -1401,7 +1464,7 @@ void XMLHttpRequest::didReceiveData(const char* data, int len)
             m_decoder = createDecoder();
 
         m_responseText = m_responseText.concatenateWith(m_decoder->decode(data, len));
-    } else if (m_responseTypeCode == ResponseTypeArrayBuffer) {
+    } else if (m_responseTypeCode == ResponseTypeArrayBuffer || m_responseTypeCode == ResponseTypeBlob) {
         // Buffer binary data.
         if (!m_binaryResponseBuilder)
             m_binaryResponseBuilder = SharedBuffer::create();
@@ -1418,18 +1481,15 @@ void XMLHttpRequest::didReceiveData(const char* data, int len)
         m_responseStream->enqueue(ArrayBuffer::create(data, len));
     }
 
-    if (m_error)
-        return;
-
     trackProgress(len);
 }
 
 void XMLHttpRequest::didDownloadData(int dataLength)
 {
-    ASSERT(m_responseTypeCode == ResponseTypeBlob);
-
     if (m_error)
         return;
+
+    ASSERT(m_downloadingToFile);
 
     if (m_state < HEADERS_RECEIVED)
         changeState(HEADERS_RECEIVED);
@@ -1442,7 +1502,7 @@ void XMLHttpRequest::didDownloadData(int dataLength)
     if (m_error)
         return;
 
-    m_downloadedBlobLength += dataLength;
+    m_lengthDownloadedToFile += dataLength;
 
     trackProgress(dataLength);
 }
@@ -1458,7 +1518,6 @@ void XMLHttpRequest::handleDidTimeout()
     if (!internalAbort())
         return;
 
-    handleDidFailGeneric();
     handleRequestError(TimeoutError, EventTypeNames::timeout, receivedLength, expectedLength);
 }
 
@@ -1482,7 +1541,10 @@ bool XMLHttpRequest::hasPendingActivity() const
     // Neither this object nor the JavaScript wrapper should be deleted while
     // a request is in progress because we need to keep the listeners alive,
     // and they are referenced by the JavaScript wrapper.
-    return m_loader;
+    // |m_loader| is non-null while request is active and ThreadableLoaderClient
+    // callbacks may be called, and |m_responseDocumentParser| is non-null while
+    // DocumentParserClient callbacks may be called.
+    return m_loader || m_responseDocumentParser;
 }
 
 void XMLHttpRequest::contextDestroyed()

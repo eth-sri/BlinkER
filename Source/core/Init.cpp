@@ -31,6 +31,7 @@
 #include "config.h"
 #include "Init.h"
 
+#include "bindings/core/v8/ScriptStreamerThread.h"
 #include "core/EventNames.h"
 #include "core/EventTargetNames.h"
 #include "core/EventTypeNames.h"
@@ -46,8 +47,10 @@
 #include "core/XMLNSNames.h"
 #include "core/XMLNames.h"
 #include "core/dom/Document.h"
+#include "core/dom/StyleChangeReason.h"
 #include "core/events/EventFactory.h"
 #include "core/html/parser/HTMLParserThread.h"
+#include "core/workers/WorkerThread.h"
 #include "platform/EventTracer.h"
 #include "platform/FontFamilyNames.h"
 #include "platform/Partitions.h"
@@ -72,9 +75,6 @@ void CoreInitializer::init()
     ASSERT(!m_isInited);
     m_isInited = true;
 
-    // It would make logical sense to do this and WTF::StringStatics::init() in
-    // WTF::initialize() but there are ordering dependencies.
-    AtomicString::init();
     HTMLNames::init();
     SVGNames::init();
     XLinkNames::init();
@@ -92,7 +92,12 @@ void CoreInitializer::init()
     MediaFeatureNames::init();
     MediaTypeNames::init();
 
+    // It would make logical sense to do this in WTF::initialize() but there are
+    // ordering dependencies, e.g. about "xmlns".
     WTF::StringStatics::init();
+
+    StyleChangeExtraData::init();
+
     QualifiedName::init();
     Partitions::init();
     EventTracer::initialize();
@@ -105,14 +110,21 @@ void CoreInitializer::init()
 
     StringImpl::freezeStaticStrings();
 
-    // Creates HTMLParserThread::shared, but does not start the thread.
+    // Creates HTMLParserThread::shared and ScriptStreamerThread::shared, but
+    // does not start the threads.
     HTMLParserThread::init();
+    ScriptStreamerThread::init();
 }
 
 void CoreInitializer::shutdown()
 {
-    // Make sure we stop the HTMLParserThread before Platform::current() is cleared.
+    // Make sure we stop the HTMLParserThread and ScriptStreamerThread before
+    // Platform::current() is cleared.
+    ScriptStreamerThread::shutdown();
     HTMLParserThread::shutdown();
+
+    // Make sure we stop WorkerThreads before Partition::shutdown() which frees ExecutionContext.
+    WorkerThread::terminateAndWaitForAllWorkers();
 
     Partitions::shutdown();
 }

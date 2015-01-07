@@ -144,7 +144,7 @@ void ScriptController::updateSecurityOrigin(SecurityOrigin* origin)
 v8::Local<v8::Value> ScriptController::callFunction(v8::Handle<v8::Function> function, v8::Handle<v8::Value> receiver, int argc, v8::Handle<v8::Value> info[])
 {
     // Keep LocalFrame (and therefore ScriptController) alive.
-    RefPtr<LocalFrame> protect(m_frame);
+    RefPtrWillBeRawPtr<LocalFrame> protect(m_frame);
     return ScriptController::callFunction(m_frame->document(), function, receiver, argc, info, m_isolate);
 }
 
@@ -177,7 +177,7 @@ v8::Local<v8::Value> ScriptController::callFunction(ExecutionContext* context, v
     return result;
 }
 
-v8::Local<v8::Value> ScriptController::executeScriptAndReturnValue(v8::Handle<v8::Context> context, const ScriptSourceCode& source, AccessControlStatus corsStatus)
+v8::Local<v8::Value> ScriptController::executeScriptAndReturnValue(v8::Handle<v8::Context> context, const ScriptSourceCode& source, AccessControlStatus corsStatus, double* compilationFinishTime)
 {
     TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "EvaluateScript", "data", InspectorEvaluateScriptEvent::data(m_frame, source.url().string(), source.startLine()));
     TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline.stack"), "CallStack", "stack", InspectorCallStackEvent::currentCallStack());
@@ -199,8 +199,11 @@ v8::Local<v8::Value> ScriptController::executeScriptAndReturnValue(v8::Handle<v8
 
         v8::Handle<v8::Script> script = V8ScriptRunner::compileScript(source, m_isolate, corsStatus, v8CacheOptions);
 
+        if (compilationFinishTime) {
+            *compilationFinishTime = WTF::monotonicallyIncreasingTime();
+        }
         // Keep LocalFrame (and therefore ScriptController) alive.
-        RefPtr<LocalFrame> protect(m_frame);
+        RefPtrWillBeRawPtr<LocalFrame> protect(m_frame);
         if (RefPtr<EventRacerLog> log = EventRacerContext::getLog()) {
             ASSERT(log->hasAction());
             OperationScope op("v8:exec-scr");
@@ -259,6 +262,7 @@ WindowProxy* ScriptController::windowProxy(DOMWrapperWorld& world)
 
 bool ScriptController::shouldBypassMainWorldCSP()
 {
+    v8::HandleScope handleScope(m_isolate);
     v8::Handle<v8::Context> context = m_isolate->GetCurrentContext();
     if (context.IsEmpty() || !toDOMWindow(context))
         return false;
@@ -278,7 +282,7 @@ TextPosition ScriptController::eventHandlerPosition() const
 void ScriptController::bindToWindowObject(LocalFrame* frame, const String& key, NPObject* object)
 {
     ScriptState* scriptState = ScriptState::forMainWorld(frame);
-    if (scriptState->contextIsEmpty())
+    if (scriptState->contextIsValid())
         return;
 
     ScriptState::Scope scope(scriptState);
@@ -387,7 +391,7 @@ static NPObject* createNoScriptObject()
 static NPObject* createScriptObject(LocalFrame* frame, v8::Isolate* isolate)
 {
     ScriptState* scriptState = ScriptState::forMainWorld(frame);
-    if (scriptState->contextIsEmpty())
+    if (scriptState->contextIsValid())
         return createNoScriptObject();
 
     ScriptState::Scope scope(scriptState);
@@ -423,7 +427,7 @@ NPObject* ScriptController::createScriptObjectForPluginElement(HTMLPlugInElement
         return createNoScriptObject();
 
     ScriptState* scriptState = ScriptState::forMainWorld(m_frame);
-    if (scriptState->contextIsEmpty())
+    if (scriptState->contextIsValid())
         return createNoScriptObject();
 
     ScriptState::Scope scope(scriptState);
@@ -552,7 +556,7 @@ bool ScriptController::executeScriptIfJavaScriptURL(const KURL& url)
 
     // We need to hold onto the LocalFrame here because executing script can
     // destroy the frame.
-    RefPtr<LocalFrame> protector(m_frame);
+    RefPtrWillBeRawPtr<LocalFrame> protect(m_frame);
     RefPtrWillBeRawPtr<Document> ownerDocument(m_frame->document());
 
     const int javascriptSchemeLength = sizeof("javascript:") - 1;
@@ -587,10 +591,10 @@ void ScriptController::executeScriptInMainWorld(const String& script, ExecuteScr
     evaluateScriptInMainWorld(ScriptSourceCode(script), NotSharableCrossOrigin, policy);
 }
 
-void ScriptController::executeScriptInMainWorld(const ScriptSourceCode& sourceCode, AccessControlStatus corsStatus)
+void ScriptController::executeScriptInMainWorld(const ScriptSourceCode& sourceCode, AccessControlStatus corsStatus, double* compilationFinishTime)
 {
     v8::HandleScope handleScope(m_isolate);
-    evaluateScriptInMainWorld(sourceCode, corsStatus, DoNotExecuteScriptWhenScriptsDisabled);
+    evaluateScriptInMainWorld(sourceCode, corsStatus, DoNotExecuteScriptWhenScriptsDisabled, compilationFinishTime);
 }
 
 v8::Local<v8::Value> ScriptController::executeScriptInMainWorldAndReturnValue(const ScriptSourceCode& sourceCode)
@@ -598,7 +602,7 @@ v8::Local<v8::Value> ScriptController::executeScriptInMainWorldAndReturnValue(co
     return evaluateScriptInMainWorld(sourceCode, NotSharableCrossOrigin, DoNotExecuteScriptWhenScriptsDisabled);
 }
 
-v8::Local<v8::Value> ScriptController::evaluateScriptInMainWorld(const ScriptSourceCode& sourceCode, AccessControlStatus corsStatus, ExecuteScriptPolicy policy)
+v8::Local<v8::Value> ScriptController::evaluateScriptInMainWorld(const ScriptSourceCode& sourceCode, AccessControlStatus corsStatus, ExecuteScriptPolicy policy, double* compilationFinishTime)
 {
     if (policy == DoNotExecuteScriptWhenScriptsDisabled && !canExecuteScripts(AboutToExecuteScript))
         return v8::Local<v8::Value>();
@@ -615,14 +619,14 @@ v8::Local<v8::Value> ScriptController::evaluateScriptInMainWorld(const ScriptSou
     ScriptState* scriptState = ScriptState::from(context);
     ScriptState::Scope scope(scriptState);
 
-    RefPtr<LocalFrame> protect(m_frame);
+    RefPtrWillBeRawPtr<LocalFrame> protect(m_frame);
     if (m_frame->loader().stateMachine()->isDisplayingInitialEmptyDocument())
         m_frame->loader().didAccessInitialDocument();
 
     OwnPtr<ScriptSourceCode> maybeProcessedSourceCode =  InspectorInstrumentation::preprocess(m_frame, sourceCode);
     const ScriptSourceCode& sourceCodeToCompile = maybeProcessedSourceCode ? *maybeProcessedSourceCode : sourceCode;
 
-    v8::Local<v8::Value> object = executeScriptAndReturnValue(scriptState->context(), sourceCodeToCompile, corsStatus);
+    v8::Local<v8::Value> object = executeScriptAndReturnValue(scriptState->context(), sourceCodeToCompile, corsStatus, compilationFinishTime);
     m_sourceURL = savedSourceURL;
 
     if (object.IsEmpty())

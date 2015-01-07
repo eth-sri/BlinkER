@@ -107,7 +107,8 @@ public:
     virtual WebPlugin* createPlugin(WebLocalFrame*, const WebPluginParams&) { return 0; }
 
     // May return null.
-    virtual WebMediaPlayer* createMediaPlayer(WebLocalFrame*, const WebURL&, WebMediaPlayerClient*) { return 0; }
+    // WebContentDecryptionModule* may be null if one has not yet been set.
+    virtual WebMediaPlayer* createMediaPlayer(WebLocalFrame*, const WebURL&, WebMediaPlayerClient*, WebContentDecryptionModule*) { return 0; }
 
     // May return null.
     virtual WebContentDecryptionModule* createContentDecryptionModule(WebLocalFrame*, const WebSecurityOrigin&, const WebString& keySystem) { return 0; }
@@ -568,6 +569,11 @@ public:
 
     // Notifies embedder about an accessibility event.
     virtual void postAccessibilityEvent(const WebAXObject&, WebAXEvent) { }
+
+    // ServiceWorker -------------------------------------------------------
+
+    // Whether the frame is controlled by the ServiceWorker
+    virtual bool isControlledByServiceWorker() { return false; }
 
 protected:
     virtual ~WebFrameClient() { }

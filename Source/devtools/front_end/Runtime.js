@@ -30,6 +30,7 @@
 
 // This gets all concatenated module descriptors in the release mode.
 var allDescriptors = [];
+var applicationDescriptor;
 var _loadedScripts = {};
 
 /**
@@ -46,7 +47,8 @@ function loadResource(url)
         console.error(url + " -> " + new Error().stack);
         throw e;
     }
-    return xhr.responseText;
+    // xhr.status === 0 if loading from bundle.
+    return xhr.status < 400 ? xhr.responseText : "";
 }
 
 
@@ -94,8 +96,10 @@ function loadScript(scriptName)
         return;
     _loadedScripts[sourceURL] = true;
     var scriptSource = loadResource(sourceURL);
-    if (!scriptSource)
-        throw "empty response arrived for script '" + sourceURL + "'";
+    if (!scriptSource) {
+        console.error("Empty response arrived for script '" + sourceURL + "'");
+        return;
+    }
     var oldPrefix = self._importScriptPathPrefix;
     self._importScriptPathPrefix += scriptName.substring(0, scriptName.lastIndexOf("/") + 1);
     try {
@@ -106,7 +110,7 @@ function loadScript(scriptName)
 }
 
 (function() {
-    var baseUrl = location.origin + location.pathname;
+    var baseUrl = self.location ? self.location.origin + self.location.pathname : "";
     self._importScriptPathPrefix = baseUrl.substring(0, baseUrl.lastIndexOf("/") + 1);
 })();
 
@@ -137,9 +141,15 @@ var Runtime = function()
      * @type {!Object.<string, !Runtime.ModuleDescriptor>}
      */
     this._descriptorsMap = {};
+
     for (var i = 0; i < allDescriptors.length; ++i)
         this._descriptorsMap[allDescriptors[i]["name"]] = allDescriptors[i];
 }
+
+/**
+ * @type {!Object.<string, string>}
+ */
+Runtime._queryParamsObject = { __proto__: null };
 
 /**
  * @return {boolean}
@@ -157,7 +167,7 @@ Runtime.isReleaseMode = function()
 Runtime.startSharedWorker = function(moduleName, workerName)
 {
     if (Runtime.isReleaseMode())
-        return new SharedWorker(moduleName + ".js", workerName);
+        return new SharedWorker(moduleName + "_module.js", workerName);
 
     var content = loadResource(moduleName + "/module.json");
     if (!content)
@@ -175,7 +185,7 @@ Runtime.startSharedWorker = function(moduleName, workerName)
 Runtime.startWorker = function(moduleName)
 {
     if (Runtime.isReleaseMode())
-        return new Worker(moduleName + ".js");
+        return new Worker(moduleName + "_module.js");
 
     var content = loadResource(moduleName + "/module.json");
     if (!content)
@@ -217,11 +227,117 @@ Runtime.startWorker = function(moduleName)
     }
 }
 
+/**
+ * @param {string} appName
+ */
+Runtime.startApplication = function(appName)
+{
+    console.timeStamp("Runtime.startApplication");
+    var experiments = Runtime._experimentsSetting();
+
+    var allDescriptorsByName = {};
+    for (var i = 0; Runtime.isReleaseMode() && i < allDescriptors.length; ++i) {
+        var d = allDescriptors[i];
+        allDescriptorsByName[d["name"]] = d;
+    }
+    var moduleDescriptors = applicationDescriptor || Runtime._parseJsonURL(appName + ".json");
+    var allModules = [];
+    var coreModuleNames = [];
+    moduleDescriptors.forEach(populateModules);
+
+    /**
+     * @param {!Object} desc
+     */
+    function populateModules(desc)
+    {
+        if (!isActive(desc))
+            return;
+        var name = desc.name;
+        var moduleJSON = allDescriptorsByName[name];
+        if (!moduleJSON) {
+            moduleJSON = Runtime._parseJsonURL(name + "/module.json");
+            moduleJSON["name"] = name;
+        }
+        allModules.push(moduleJSON);
+        if (desc["type"] === "autostart")
+            coreModuleNames.push(name);
+    }
+
+    /**
+     * @param {!Object} descriptor
+     * @return {boolean}
+     */
+    function isActive(descriptor)
+    {
+        var activatorExperiment = descriptor["experiment"];
+        if (activatorExperiment) {
+            var shouldBePresent = activatorExperiment.charAt(0) !== "!";
+            if (!shouldBePresent)
+                activatorExperiment = activatorExperiment.substr(1);
+            if (!!experiments[activatorExperiment] !== shouldBePresent)
+                return false;
+        }
+        return descriptor["type"] !== "worker";
+    }
+
+    Runtime._initializeApplication(allModules);
+    self.runtime.loadAutoStartModules(coreModuleNames);
+}
+
+/**
+ * @param {string} name
+ * @return {?string}
+ */
+Runtime.queryParam = function(name)
+{
+    return Runtime._queryParamsObject[name] || null;
+}
+
+/**
+ * @return {!Object}
+ */
+Runtime._experimentsSetting = function()
+{
+    try {
+        return /** @type {!Object} */ (JSON.parse(self.localStorage && self.localStorage["experiments"] ? self.localStorage["experiments"] : "{}"));
+    } catch (e) {
+        console.error("Failed to parse localStorage['experiments']");
+        return {};
+    }
+}
+
+/**
+ * @param {!Array.<!Runtime.ModuleDescriptor>} descriptors
+ */
+Runtime._initializeApplication = function(descriptors)
+{
+    self.runtime = new Runtime();
+    var names = [];
+    for (var i = 0; i < descriptors.length; ++i) {
+        var name = descriptors[i]["name"];
+        self.runtime._descriptorsMap[name] = descriptors[i];
+        names.push(name);
+    }
+    self.runtime._registerModules(names);
+}
+
+/**
+ * @param {string} url
+ * @return {*}
+ */
+Runtime._parseJsonURL = function(url)
+{
+    var json = loadResource(url);
+    if (!json)
+        throw new Error("Resource not found at " + url + " " + new Error().stack);
+    return JSON.parse(json);
+}
+
 Runtime.prototype = {
     /**
      * @param {!Array.<string>} configuration
      */
-    registerModules: function(configuration)
+    _registerModules: function(configuration)
     {
         for (var i = 0; i < configuration.length; ++i)
             this._registerModule(configuration[i]);
@@ -236,6 +352,7 @@ Runtime.prototype = {
             var content = loadResource(moduleName + "/module.json");
             if (!content)
                 throw new Error("Module is not defined: " + moduleName + " " + new Error().stack);
+
             var module = /** @type {!Runtime.ModuleDescriptor} */ (self.eval("(" + content + ")"));
             module["name"] = moduleName;
             this._descriptorsMap[moduleName] = module;
@@ -251,6 +368,28 @@ Runtime.prototype = {
     loadModule: function(moduleName)
     {
         this._modulesMap[moduleName]._load();
+    },
+
+    /**
+     * @param {string} moduleName
+     * @return {!Promise.<undefined>}
+     */
+    loadModulePromise: function(moduleName)
+    {
+        return this._modulesMap[moduleName]._loadPromise();
+    },
+
+    /**
+     * @param {!Array.<string>} moduleNames
+     */
+    loadAutoStartModules: function(moduleNames)
+    {
+        for (var i = 0; i < moduleNames.length; ++i) {
+            if (Runtime.isReleaseMode())
+                self.runtime._modulesMap[moduleNames[i]]._loaded = true;
+            else
+                self.runtime.loadModule(moduleNames[i]);
+        }
     },
 
     /**
@@ -330,6 +469,8 @@ Runtime.prototype = {
      */
     extensions: function(type, context)
     {
+        return this._extensions.filter(filter).sort(orderComparator);
+
         /**
          * @param {!Runtime.Extension} extension
          * @return {boolean}
@@ -338,9 +479,23 @@ Runtime.prototype = {
         {
             if (extension._type !== type && extension._typeClass() !== type)
                 return false;
+            var activatorExperiment = extension.descriptor()["experiment"];
+            if (activatorExperiment && !Runtime.experiments.isEnabled(activatorExperiment))
+                return false;
             return !context || extension.isApplicable(context);
         }
-        return this._extensions.filter(filter);
+
+        /**
+         * @param {!Runtime.Extension} extension1
+         * @param {!Runtime.Extension} extension2
+         * @return {number}
+         */
+        function orderComparator(extension1, extension2)
+        {
+            var order1 = extension1.descriptor()["order"] || 0;
+            var order2 = extension2.descriptor()["order"] || 0;
+            return order1 - order2;
+        }
     },
 
     /**
@@ -356,19 +511,15 @@ Runtime.prototype = {
     /**
      * @param {*} type
      * @param {?Object=} context
-     * @return {!Array.<!Object>}
+     * @return {!Promise.<!Array.<!Object>>}
      */
-    instances: function(type, context)
+    instancesPromise: function(type, context)
     {
-        /**
-         * @param {!Runtime.Extension} extension
-         * @return {?Object}
-         */
-        function instantiate(extension)
-        {
-            return extension.instance();
-        }
-        return this.extensions(type, context).filter(instantiate).map(instantiate);
+        var extensions = this.extensions(type, context);
+        var promises = [];
+        for (var i = 0; i < extensions.length; ++i)
+            promises.push(extensions[i].instancePromise());
+        return Promise.some(promises);
     },
 
     /**
@@ -383,50 +534,16 @@ Runtime.prototype = {
     },
 
     /**
-     * @param {string|!Function} type
-     * @param {string} nameProperty
-     * @param {string} orderProperty
-     * @return {function(string, string):number}
+     * @param {*} type
+     * @param {?Object=} context
+     * @return {!Promise.<!Object>}
      */
-    orderComparator: function(type, nameProperty, orderProperty)
+    instancePromise: function(type, context)
     {
-        var extensions = this.extensions(type);
-        var orderForName = {};
-        for (var i = 0; i < extensions.length; ++i) {
-            var descriptor = extensions[i].descriptor();
-            orderForName[descriptor[nameProperty]] = descriptor[orderProperty];
-        }
-
-        /**
-         * @param {string} name1
-         * @param {string} name2
-         * @return {number}
-         */
-        function result(name1, name2)
-        {
-            if (name1 in orderForName && name2 in orderForName)
-                return orderForName[name1] - orderForName[name2];
-            if (name1 in orderForName)
-                return -1;
-            if (name2 in orderForName)
-                return 1;
-            return compare(name1, name2);
-        }
-
-        /**
-         * @param {string} left
-         * @param {string} right
-         * @return {number}
-         */
-        function compare(left, right)
-        {
-            if (left > right)
-              return 1;
-            if (left < right)
-                return -1;
-            return 0;
-        }
-        return result;
+        var extension = this.extension(type, context);
+        if (!extension)
+            return Promise.reject(new Error("No such extension: " + type + " in given context."));
+        return extension.instancePromise();
     },
 
     /**
@@ -503,7 +620,7 @@ Runtime.Module = function(manager, descriptor)
     this._manager = manager;
     this._descriptor = descriptor;
     this._name = descriptor.name;
-    var extensions = /** @type {?Array.<!Runtime.ExtensionDescriptor>}*/ (descriptor.extensions);
+    var extensions = /** @type {?Array.<!Runtime.ExtensionDescriptor>} */ (descriptor.extensions);
     for (var i = 0; extensions && i < extensions.length; ++i)
         this._manager._extensions.push(new Runtime.Extension(this, extensions[i]));
     this._loaded = false;
@@ -535,17 +652,60 @@ Runtime.Module.prototype = {
         var dependencies = this._descriptor.dependencies;
         for (var i = 0; dependencies && i < dependencies.length; ++i)
             this._manager.loadModule(dependencies[i]);
-        if (this._descriptor.scripts) {
-            if (Runtime.isReleaseMode()) {
-                loadScript(this._name + ".js");
-            } else {
-                var scripts = this._descriptor.scripts;
-                for (var i = 0; i < scripts.length; ++i)
-                    loadScript(this._name + "/" + scripts[i]);
-            }
-        }
+        this._loadScripts();
         this._isLoading = false;
         this._loaded = true;
+    },
+
+    /**
+     * @return {!Promise.<undefined>}
+     */
+    _loadPromise: function()
+    {
+        if (this._loaded)
+            return Promise.resolve();
+
+        if (this._pendingLoadPromise)
+            return this._pendingLoadPromise;
+
+        if (this._isLoading)
+            throw new Error("Module " + this._name + " is loaded from itself");
+
+        this._isLoading = true;
+        var dependencies = this._descriptor.dependencies;
+        var dependencyPromises = [];
+        for (var i = 0; dependencies && i < dependencies.length; ++i)
+            dependencyPromises.push(this._manager._modulesMap[dependencies[i]]._loadPromise());
+        this._isLoading = false;
+
+        this._pendingLoadPromise = Promise.all(dependencyPromises)
+            .then(loadScripts.bind(this));
+
+        return this._pendingLoadPromise;
+
+        /**
+         * @this {Runtime.Module}
+         */
+        function loadScripts()
+        {
+            // FIXME: migrate to loadScriptAsync.
+            delete this._pendingLoadPromise;
+            this._loadScripts();
+            this._loaded = true;
+        }
+    },
+
+    _loadScripts: function()
+    {
+        if (!this._descriptor.scripts)
+            return;
+        if (Runtime.isReleaseMode()) {
+            loadScript(this._name + "_module.js");
+        } else {
+            var scripts = this._descriptor.scripts;
+            for (var i = 0; i < scripts.length; ++i)
+                loadScript(this._name + "/" + scripts[i]);
+        }
     }
 }
 
@@ -622,10 +782,261 @@ Runtime.Extension.prototype = {
             this._instance = new constructorFunction();
         }
         return this._instance;
+    },
+
+    /**
+     * @return {!Promise.<!Object>}
+     */
+    instancePromise: function()
+    {
+        if (!this._className)
+            return Promise.reject(new Error("No class name in extension"));
+        if (this._instance)
+            return Promise.resolve(this._instance);
+
+        return this._module._loadPromise().then(constructInstance.bind(this));
+
+        /**
+         * @this {Runtime.Extension}
+         * @return {!Object}
+         */
+        function constructInstance()
+        {
+            // FIXME: remove this check once instance() is removed.
+            if (this._instance)
+                return this._instance;
+            var constructorFunction = window.eval(/** @type {string} */ (this._className));
+            if (!(constructorFunction instanceof Function))
+                throw new Error("Constructor is not a function: " + this._className);
+            this._instance = new constructorFunction();
+            return this._instance;
+        }
     }
 }
 
 /**
- * @type {!Runtime}
+ * @constructor
  */
+Runtime.ExperimentsSupport = function()
+{
+    this._supportEnabled = Runtime.queryParam("experiments") !== null;
+    this._experiments = [];
+    this._experimentNames = {};
+    this._enabledTransiently = {};
+}
+
+Runtime.ExperimentsSupport.prototype = {
+    /**
+     * @return {!Array.<!Runtime.Experiment>}
+     */
+    allExperiments: function()
+    {
+        return this._experiments.slice();
+    },
+
+    /**
+     * @return {boolean}
+     */
+    supportEnabled: function()
+    {
+        return this._supportEnabled;
+    },
+
+    /**
+     * @param {!Object} value
+     */
+    _setExperimentsSetting: function(value)
+    {
+        if (!self.localStorage)
+            return;
+        self.localStorage["experiments"] = JSON.stringify(value);
+    },
+
+    /**
+     * @param {string} experimentName
+     * @param {string} experimentTitle
+     * @param {boolean=} hidden
+     */
+    register: function(experimentName, experimentTitle, hidden)
+    {
+        console.assert(!this._experimentNames[experimentName], "Duplicate registration of experiment " + experimentName);
+        this._experimentNames[experimentName] = true;
+        this._experiments.push(new Runtime.Experiment(this, experimentName, experimentTitle, !!hidden));
+    },
+
+    /**
+     * @param {string} experimentName
+     * @return {boolean}
+     */
+    isEnabled: function(experimentName)
+    {
+        this._checkExperiment(experimentName);
+
+        if (this._enabledTransiently[experimentName])
+            return true;
+        if (!this.supportEnabled())
+            return false;
+
+        return !!Runtime._experimentsSetting()[experimentName];
+    },
+
+    /**
+     * @param {string} experimentName
+     * @param {boolean} enabled
+     */
+    setEnabled: function(experimentName, enabled)
+    {
+        this._checkExperiment(experimentName);
+        if (!enabled)
+            delete this._enabledTransiently[experimentName];
+        var experimentsSetting = Runtime._experimentsSetting();
+        experimentsSetting[experimentName] = enabled;
+        this._setExperimentsSetting(experimentsSetting);
+    },
+
+    /**
+     * @param {!Array.<string>} experimentNames
+     */
+    setDefaultExperiments: function(experimentNames)
+    {
+        for (var i = 0; i < experimentNames.length; ++i) {
+            this._checkExperiment(experimentNames[i]);
+            this._enabledTransiently[experimentNames[i]] = true;
+        }
+    },
+
+    /**
+     * @param {string} experimentName
+     */
+    enableForTest: function(experimentName)
+    {
+        this._checkExperiment(experimentName);
+        this._enabledTransiently[experimentName] = true;
+    },
+
+    cleanUpStaleExperiments: function()
+    {
+        var experimentsSetting = Runtime._experimentsSetting();
+        var cleanedUpExperimentSetting = {};
+        for (var i = 0; i < this._experiments.length; ++i) {
+            var experimentName = this._experiments[i].name;
+            if (experimentsSetting[experimentName])
+                cleanedUpExperimentSetting[experimentName] = true;
+        }
+        this._setExperimentsSetting(cleanedUpExperimentSetting);
+    },
+
+    /**
+     * @param {string} experimentName
+     */
+    _checkExperiment: function(experimentName)
+    {
+        console.assert(this._experimentNames[experimentName], "Unknown experiment " + experimentName);
+    }
+}
+
+/**
+ * @constructor
+ * @param {!Runtime.ExperimentsSupport} experiments
+ * @param {string} name
+ * @param {string} title
+ * @param {boolean} hidden
+ */
+Runtime.Experiment = function(experiments, name, title, hidden)
+{
+    this.name = name;
+    this.title = title;
+    this.hidden = hidden;
+    this._experiments = experiments;
+}
+
+Runtime.Experiment.prototype = {
+    /**
+     * @return {boolean}
+     */
+    isEnabled: function()
+    {
+        return this._experiments.isEnabled(this.name);
+    },
+
+    /**
+     * @param {boolean} enabled
+     */
+    setEnabled: function(enabled)
+    {
+        this._experiments.setEnabled(this.name, enabled);
+    }
+}
+
+{(function parseQueryParameters()
+{
+    var queryParams = location.search;
+    if (!queryParams)
+        return;
+    var params = queryParams.substring(1).split("&");
+    for (var i = 0; i < params.length; ++i) {
+        var pair = params[i].split("=");
+        Runtime._queryParamsObject[pair[0]] = pair[1];
+    }
+
+    // Patch settings from the URL param (for tests).
+    var settingsParam = Runtime.queryParam("settings");
+    if (settingsParam) {
+        try {
+            var settings = JSON.parse(window.decodeURI(settingsParam));
+            for (var key in settings)
+                window.localStorage[key] = settings[key];
+        } catch(e) {
+            // Ignore malformed settings.
+        }
+    }
+})();}
+
+/**
+ * @param {!Array.<!Promise.<T, !Error>>} promises
+ * @return {!Promise.<!Array.<T>>}
+ * @template T
+ */
+Promise.some = function(promises)
+{
+    var all = [];
+    var wasRejected = [];
+    for (var i = 0; i < promises.length; ++i) {
+        // Workaround closure compiler bug.
+        var handlerFunction = /** @type {function()} */ (handler.bind(null, i));
+        all.push(promises[i].catch(handlerFunction));
+    }
+
+    return Promise.all(all).then(filterOutFailuresResults);
+
+    /**
+     * @param {!Array.<T>} results
+     * @return {!Array.<T>}
+     * @template T
+     */
+    function filterOutFailuresResults(results)
+    {
+        var filtered = [];
+        for (var i = 0; i < results.length; ++i) {
+            if (!wasRejected[i])
+                filtered.push(results[i]);
+        }
+        return filtered;
+    }
+
+    /**
+     * @param {number} index
+     * @param {!Error} e
+     */
+    function handler(index, e)
+    {
+        wasRejected[index] = true;
+        console.error(e);
+    }
+}
+
+// This must be constructed after the query parameters have been parsed.
+Runtime.experiments = new Runtime.ExperimentsSupport();
+
+/** @type {!Runtime} */
 var runtime;

@@ -5,7 +5,7 @@ InspectorTest.startDebuggerTest = function(callback, quiet)
     console.assert(WebInspector.debuggerModel.debuggerEnabled(), "Debugger has to be enabled");
     if (quiet !== undefined)
         InspectorTest._quiet = quiet;
-    WebInspector.inspectorView.showPanel("sources");
+    WebInspector.inspectorView._showPanel("sources");
 
     InspectorTest.addSniffer(WebInspector.debuggerModel, "_pausedScript", InspectorTest._pausedScript, true);
     InspectorTest.addSniffer(WebInspector.debuggerModel, "_resumedScript", InspectorTest._resumedScript, true);
@@ -290,7 +290,7 @@ InspectorTest._resumedScript = function()
 
 InspectorTest.showUISourceCode = function(uiSourceCode, callback)
 {
-    var panel = WebInspector.inspectorView.showPanel("sources");
+    var panel = WebInspector.inspectorView._showPanel("sources");
     panel.showUISourceCode(uiSourceCode);
     var sourceFrame = panel.visibleView;
     if (sourceFrame.loaded)
@@ -306,7 +306,7 @@ InspectorTest.showScriptSource = function(scriptName, callback)
 
 InspectorTest.waitForScriptSource = function(scriptName, callback)
 {
-    var panel = WebInspector.inspectorView.showPanel("sources");
+    var panel = WebInspector.inspectorView._showPanel("sources");
     var uiSourceCodes = panel._workspace.uiSourceCodes();
     for (var i = 0; i < uiSourceCodes.length; ++i) {
         if (uiSourceCodes[i].name() === scriptName) {
@@ -455,11 +455,13 @@ InspectorTest.checkUILocation = function(uiSourceCode, lineNumber, columnNumber,
 
 InspectorTest.scriptFormatter = function()
 {
-    var editorActions = self.runtime.instances(WebInspector.SourcesView.EditorAction);
-    for (var i = 0; i < editorActions.length; ++i) {
-        if (editorActions[i] instanceof WebInspector.ScriptFormatterEditorAction)
-            return editorActions[i];
-    }
+    return self.runtime.instancesPromise(WebInspector.SourcesView.EditorAction).then(function(editorActions) {
+        for (var i = 0; i < editorActions.length; ++i) {
+            if (editorActions[i] instanceof WebInspector.ScriptFormatterEditorAction)
+                return editorActions[i];
+        }
+        return null;
+    });
 };
 
 };

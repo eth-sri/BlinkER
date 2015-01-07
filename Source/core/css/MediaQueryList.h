@@ -30,10 +30,8 @@
 
 namespace blink {
 
-class Document;
 class ExecutionContext;
 class MediaQueryListListener;
-class MediaQueryEvaluator;
 class MediaQueryMatcher;
 class MediaQuerySet;
 
@@ -44,6 +42,7 @@ class MediaQuerySet;
 
 class MediaQueryList FINAL : public RefCountedWillBeGarbageCollectedFinalized<MediaQueryList>, public EventTargetWithInlineData, public ActiveDOMObject {
     DEFINE_EVENT_TARGET_REFCOUNTING_WILL_BE_REMOVED(RefCounted<MediaQueryList>);
+    DEFINE_WRAPPERTYPEINFO();
     WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(MediaQueryList);
 public:
     static PassRefPtrWillBeRawPtr<MediaQueryList> create(ExecutionContext*, PassRefPtrWillBeRawPtr<MediaQueryMatcher>, PassRefPtrWillBeRawPtr<MediaQuerySet>);
@@ -88,6 +87,6 @@ private:
     bool m_matches;
 };
 
-}
+} // namespace blink
 
 #endif // MediaQueryList_h

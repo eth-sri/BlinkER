@@ -34,6 +34,7 @@
 #include "core/fetch/CachePolicy.h"
 #include "core/fetch/FetchInitiatorInfo.h"
 #include "core/fetch/Resource.h"
+#include "platform/heap/Handle.h"
 #include "platform/network/ResourceLoadPriority.h"
 #include "wtf/Noncopyable.h"
 
@@ -41,9 +42,7 @@ namespace blink {
 
 class Document;
 class DocumentLoader;
-class LocalFrame;
 class KURL;
-class Page;
 class ResourceError;
 class ResourceLoader;
 class ResourceResponse;
@@ -54,13 +53,14 @@ enum FetchResourceType {
     FetchSubresource
 };
 
-class FetchContext {
+class FetchContext : public NoBaseWillBeGarbageCollectedFinalized<FetchContext> {
     WTF_MAKE_NONCOPYABLE(FetchContext);
 public:
     static FetchContext& nullInstance();
 
     FetchContext() { }
     virtual ~FetchContext() { }
+    virtual void trace(Visitor*) { }
 
     virtual void reportLocalLoadFailed(const KURL&);
     virtual void addAdditionalRequestHeaders(Document*, ResourceRequest&, FetchResourceType);

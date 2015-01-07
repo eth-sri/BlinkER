@@ -8,6 +8,7 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/V8Binding.h"
+#include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/fileapi/Blob.h"
 #include "core/frame/ConsoleTypes.h"
@@ -183,11 +184,6 @@ TEST_F(DOMWebSocketTest, invalidSubprotocols)
 {
     Vector<String> subprotocols;
     subprotocols.append("@subprotocol-|'\"x\x01\x02\x03x");
-
-    {
-        InSequence s;
-        EXPECT_CALL(channel(), disconnect());
-    }
 
     m_websocket->connect("ws://example.com/", subprotocols, m_exceptionState);
 

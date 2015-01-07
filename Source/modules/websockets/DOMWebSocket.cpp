@@ -235,7 +235,6 @@ DOMWebSocket::DOMWebSocket(ExecutionContext* context)
     , m_eventQueue(EventQueue::create(this))
     , m_bufferedAmountConsumeTimer(this, &DOMWebSocket::reflectBufferedAmountConsumption)
 {
-    ScriptWrappable::init(this);
 }
 
 DOMWebSocket::~DOMWebSocket()
@@ -318,22 +317,21 @@ void DOMWebSocket::connect(const String& url, const Vector<String>& protocols, E
         return;
     }
 
-    m_channel = createChannel(executionContext(), this);
-
+    // Fail if not all elements in |protocols| are valid.
     for (size_t i = 0; i < protocols.size(); ++i) {
         if (!isValidSubprotocolString(protocols[i])) {
             m_state = CLOSED;
             exceptionState.throwDOMException(SyntaxError, "The subprotocol '" + encodeSubprotocolString(protocols[i]) + "' is invalid.");
-            releaseChannel();
             return;
         }
     }
+
+    // Fail if there're duplicated elements in |protocols|.
     HashSet<String> visited;
     for (size_t i = 0; i < protocols.size(); ++i) {
         if (!visited.add(protocols[i]).isNewEntry) {
             m_state = CLOSED;
             exceptionState.throwDOMException(SyntaxError, "The subprotocol '" + encodeSubprotocolString(protocols[i]) + "' is duplicated.");
-            releaseChannel();
             return;
         }
     }
@@ -341,6 +339,8 @@ void DOMWebSocket::connect(const String& url, const Vector<String>& protocols, E
     String protocolString;
     if (!protocols.isEmpty())
         protocolString = joinStrings(protocols, subprotocolSeperator());
+
+    m_channel = createChannel(executionContext(), this);
 
     if (!m_channel->connect(m_url, protocolString)) {
         m_state = CLOSED;

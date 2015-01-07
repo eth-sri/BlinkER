@@ -1,4 +1,5 @@
-A 'frame-ancestors' CSP directive with a URL matching this origin should allow rendering.
+CONSOLE ERROR: Refused to display 'http://localhost:8080/security/contentSecurityPolicy/resources/frame-ancestors.pl?policy=http://example.com/' in a frame because an ancestor violates the following Content Security Policy directive: "frame-ancestors http://example.com/".
+A 'frame-ancestors' CSP directive with a URL which doesn't match this origin should be blocked.
 
 On success, you will see a series of "PASS" messages, followed by "TEST COMPLETE".
 
@@ -13,4 +14,4 @@ TEST COMPLETE
 --------
 Frame: '<!--framePath //<!--frame0-->-->'
 --------
-This is an IFrame sending a Content Security Policy header containing "frame-ancestors http://127.0.0.1:8000".
+

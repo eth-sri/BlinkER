@@ -30,6 +30,7 @@
 
 #include "config.h"
 
+#include "platform/Task.h"
 #include "platform/heap/Handle.h"
 #include "platform/heap/Heap.h"
 #include "platform/heap/HeapLinkedStack.h"
@@ -418,11 +419,14 @@ class ThreadedTesterBase {
 protected:
     static void test(ThreadedTesterBase* tester)
     {
-        for (int i = 0; i < numberOfThreads; i++)
-            createThread(&threadFunc, tester, "testing thread");
+        Vector<OwnPtr<WebThread>, numberOfThreads> m_threads;
+        for (int i = 0; i < numberOfThreads; i++) {
+            m_threads.append(adoptPtr(Platform::current()->createThread("blink gc testing thread")));
+            m_threads.last()->postTask(new Task(WTF::bind(threadFunc, tester)));
+        }
         while (tester->m_threadsToFinish) {
             ThreadState::SafePointScope scope(ThreadState::NoHeapPointersOnStack);
-            yield();
+            Platform::current()->yieldCurrentThread();
         }
         delete tester;
     }
@@ -481,7 +485,7 @@ protected:
                         globalPersistent = adoptPtr(new GlobalIntWrapperPersistent(IntWrapper::create(0x0ed0cabb)));
                     }
                     ThreadState::SafePointScope scope(ThreadState::NoHeapPointersOnStack);
-                    yield();
+                    Platform::current()->yieldCurrentThread();
                 }
 
                 if (gcCount < gcPerThread) {
@@ -495,7 +499,7 @@ protected:
                 EXPECT_EQ((*globalPersistent)->value(), 0x0ed0cabb);
             }
             ThreadState::SafePointScope scope(ThreadState::NoHeapPointersOnStack);
-            yield();
+            Platform::current()->yieldCurrentThread();
         }
         ThreadState::detach();
         atomicDecrement(&m_threadsToFinish);
@@ -525,7 +529,7 @@ private:
                     weakMap->add(static_cast<unsigned>(i), IntWrapper::create(0));
                     weakMap2.add(static_cast<unsigned>(i), IntWrapper::create(0));
                     ThreadState::SafePointScope scope(ThreadState::NoHeapPointersOnStack);
-                    yield();
+                    Platform::current()->yieldCurrentThread();
                 }
 
                 if (gcCount < gcPerThread) {
@@ -539,7 +543,7 @@ private:
                 EXPECT_TRUE(weakMap2.isEmpty());
             }
             ThreadState::SafePointScope scope(ThreadState::NoHeapPointersOnStack);
-            yield();
+            Platform::current()->yieldCurrentThread();
         }
         ThreadState::detach();
         atomicDecrement(&m_threadsToFinish);
@@ -1502,7 +1506,7 @@ TEST(HeapTest, BasicFunctionality)
         if (testPagesAllocated)
             EXPECT_EQ(heapStats.totalAllocatedSpace(), blinkPageSize);
 
-        CheckWithSlack(alloc32 + 32 + sizeof(HeapObjectHeader), alloc64, slack);
+        CheckWithSlack(alloc32 + 32 + sizeof(FinalizedHeapObjectHeader), alloc64, slack);
 
         EXPECT_EQ(alloc32->get(0), 40);
         EXPECT_EQ(alloc32->get(31), 40);
@@ -1879,11 +1883,11 @@ TEST(HeapTest, HashMapOfMembers)
         IntWrapper* gross(map->get(dozen));
         EXPECT_EQ(gross->value(), 144);
 
-        // This should clear out junk created by all the adds.
+        // This should clear out any junk backings created by all the adds.
         Heap::collectGarbage(ThreadState::NoHeapPointersOnStack);
         HeapStats afterGC3;
         getHeapStats(&afterGC3);
-        EXPECT_TRUE(afterGC3.totalObjectSpace() < afterAdding1000.totalObjectSpace());
+        EXPECT_TRUE(afterGC3.totalObjectSpace() <= afterAdding1000.totalObjectSpace());
     }
 
     Heap::collectGarbage(ThreadState::NoHeapPointersOnStack);
@@ -3949,11 +3953,12 @@ class GCParkingThreadTester {
 public:
     static void test()
     {
-        createThread(&sleeperMainFunc, 0, "SleepingThread");
+        OwnPtr<WebThread> sleepingThread = adoptPtr(Platform::current()->createThread("SleepingThread"));
+        sleepingThread->postTask(new Task(WTF::bind(sleeperMainFunc)));
 
         // Wait for the sleeper to run.
         while (!s_sleeperRunning) {
-            yield();
+            Platform::current()->yieldCurrentThread();
         }
 
         {
@@ -3969,8 +3974,9 @@ public:
             // We enter the safepoint here since the sleeper thread will detach
             // causing it to GC.
             ThreadState::current()->safePoint(ThreadState::NoHeapPointersOnStack);
-            yield();
+            Platform::current()->yieldCurrentThread();
         }
+
         {
             // Since the sleeper thread has detached this is the only thread.
             TestGCScope scope(ThreadState::NoHeapPointersOnStack);
@@ -3979,14 +3985,14 @@ public:
     }
 
 private:
-    static void sleeperMainFunc(void* data)
+    static void sleeperMainFunc()
     {
         ThreadState::attach();
         s_sleeperRunning = true;
 
         // Simulate a long running op that is not entering a safepoint.
         while (!s_sleeperDone) {
-            yield();
+            Platform::current()->yieldCurrentThread();
         }
 
         ThreadState::detach();
@@ -4644,7 +4650,8 @@ public:
         IntWrapper::s_destructorCalls = 0;
 
         MutexLocker locker(mainThreadMutex());
-        createThread(&workerThreadMain, 0, "Worker Thread");
+        OwnPtr<WebThread> workerThread = adoptPtr(Platform::current()->createThread("Test Worker Thread"));
+        workerThread->postTask(new Task(WTF::bind(workerThreadMain)));
 
         parkMainThread();
 
@@ -4702,7 +4709,7 @@ public:
     }
 
 private:
-    static void workerThreadMain(void* data)
+    static void workerThreadMain()
     {
         MutexLocker locker(workerThreadMutex());
         ThreadState::attach();
@@ -4747,7 +4754,8 @@ public:
         IntWrapper::s_destructorCalls = 0;
 
         MutexLocker locker(mainThreadMutex());
-        createThread(&workerThreadMain, 0, "Worker Thread");
+        OwnPtr<WebThread> workerThread = adoptPtr(Platform::current()->createThread("Test Worker Thread"));
+        workerThread->postTask(new Task(WTF::bind(workerThreadMain)));
 
         // Wait for the worker thread to have done its initialization,
         // IE. the worker allocates an object and then throw aways any
@@ -4796,7 +4804,7 @@ public:
 
 private:
 
-    static void workerThreadMain(void* data)
+    static void workerThreadMain()
     {
         MutexLocker locker(workerThreadMutex());
 
@@ -4849,7 +4857,8 @@ public:
         IntWrapper::s_destructorCalls = 0;
 
         MutexLocker locker(mainThreadMutex());
-        createThread(&workerThreadMain, 0, "Worker Thread");
+        OwnPtr<WebThread> workerThread = adoptPtr(Platform::current()->createThread("Test Worker Thread"));
+        workerThread->postTask(new Task(WTF::bind(workerThreadMain)));
 
         // Wait for the worker thread initialization. The worker
         // allocates a weak collection where both collection and
@@ -4914,7 +4923,7 @@ private:
         return weakCollection;
     }
 
-    static void workerThreadMain(void* data)
+    static void workerThreadMain()
     {
         MutexLocker locker(workerThreadMutex());
 
@@ -5032,7 +5041,8 @@ public:
         DestructorLockingObject::s_destructorCalls = 0;
 
         MutexLocker locker(mainThreadMutex());
-        createThread(&workerThreadMain, 0, "Worker Thread");
+        OwnPtr<WebThread> workerThread = adoptPtr(Platform::current()->createThread("Test Worker Thread"));
+        workerThread->postTask(new Task(WTF::bind(workerThreadMain)));
 
         // Park the main thread until the worker thread has initialized.
         parkMainThread();
@@ -5058,7 +5068,7 @@ public:
     }
 
 private:
-    static void workerThreadMain(void* data)
+    static void workerThreadMain()
     {
         MutexLocker locker(workerThreadMutex());
         ThreadState::attach();

@@ -45,8 +45,6 @@ class CustomElementDescriptor;
 class CustomElementMicrotaskImportStep;
 class CustomElementMicrotaskStep;
 class CustomElementRegistrationContext;
-class Document;
-class Element;
 class HTMLImportChild;
 
 class CustomElementScheduler FINAL : public NoBaseWillBeGarbageCollected<CustomElementScheduler> {
@@ -62,28 +60,12 @@ public:
     static void microtaskDispatcherDidFinish();
     static void callbackDispatcherDidFinish();
 
-    void trace(Visitor*);
-
 private:
     CustomElementScheduler() { }
 
-    static CustomElementScheduler& instance();
     static void enqueueMicrotaskStep(Document&, PassOwnPtrWillBeRawPtr<CustomElementMicrotaskStep>, bool importIsSync = true);
-
-    CustomElementCallbackQueue& ensureCallbackQueue(PassRefPtrWillBeRawPtr<Element>);
-    CustomElementCallbackQueue& schedule(PassRefPtrWillBeRawPtr<Element>);
-
-    // FIXME: Consider moving the element's callback queue to
-    // ElementRareData. Then the scheduler can become completely
-    // static.
-    void clearElementCallbackQueueMap();
-
-    // The element -> callback queue map is populated by the scheduler
-    // and owns the lifetimes of the CustomElementCallbackQueues.
-    typedef WillBeHeapHashMap<RawPtrWillBeMember<Element>, OwnPtrWillBeMember<CustomElementCallbackQueue> > ElementCallbackQueueMap;
-    ElementCallbackQueueMap m_elementCallbackQueueMap;
 };
 
-}
+} // namespace blink
 
 #endif // CustomElementScheduler_h

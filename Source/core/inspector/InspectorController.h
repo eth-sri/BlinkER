@@ -112,6 +112,7 @@ public:
 
     void deviceOrPageScaleFactorChanged();
     bool deviceEmulationEnabled();
+    bool screencastEnabled();
 
     bool isUnderTest();
     void evaluateForTestInFrontend(long callId, const String& script);
@@ -157,7 +158,7 @@ private:
     RawPtrWillBeMember<InspectorLayerTreeAgent> m_layerTreeAgent;
     RawPtrWillBeMember<InspectorTracingAgent> m_tracingAgent;
 
-    RefPtr<InspectorBackendDispatcher> m_inspectorBackendDispatcher;
+    RefPtrWillBeMember<InspectorBackendDispatcher> m_inspectorBackendDispatcher;
     InspectorFrontendClient* m_inspectorFrontendClient;
     OwnPtr<InspectorFrontend> m_inspectorFrontend;
     RawPtrWillBeMember<Page> m_page;

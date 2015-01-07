@@ -32,6 +32,9 @@
   'variables': {
     'platform_heap_files': [
       'AddressSanitizer.h',
+      'CallbackStack.cpp',
+      'CallbackStack.h',
+      'Handle.cpp',
       'Handle.h',
       'Heap.cpp',
       'Heap.h',

@@ -52,7 +52,6 @@ inline SharedWorker::SharedWorker(ExecutionContext* context)
     : AbstractWorker(context)
     , m_isBeingConnected(false)
 {
-    ScriptWrappable::init(this);
 }
 
 PassRefPtrWillBeRawPtr<SharedWorker> SharedWorker::create(ExecutionContext* context, const String& url, const String& name, ExceptionState& exceptionState)
@@ -104,9 +103,11 @@ bool SharedWorker::hasPendingActivity() const
 
 void SharedWorker::trace(Visitor* visitor)
 {
+#if ENABLE(OILPAN)
     visitor->trace(m_port);
+    HeapSupplementable<SharedWorker>::trace(visitor);
+#endif
     AbstractWorker::trace(visitor);
-    WillBeHeapSupplementable<SharedWorker>::trace(visitor);
 }
 
 } // namespace blink

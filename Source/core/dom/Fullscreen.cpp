@@ -39,6 +39,7 @@
 #include "core/html/HTMLMediaElement.h"
 #include "core/page/Chrome.h"
 #include "core/page/ChromeClient.h"
+#include "core/page/EventHandler.h"
 #include "core/rendering/RenderFullScreen.h"
 #include "platform/UserGestureIndicator.h"
 
@@ -409,7 +410,7 @@ bool Fullscreen::fullscreenEnabled(Document& document)
     return fullscreenIsAllowedForAllOwners(document) && fullscreenIsSupported(document);
 }
 
-void Fullscreen::willEnterFullScreenForElement(Element* element)
+void Fullscreen::didEnterFullScreenForElement(Element* element)
 {
     ASSERT(element);
     if (!document()->isActive())
@@ -437,32 +438,15 @@ void Fullscreen::willEnterFullScreenForElement(Element* element)
     m_fullScreenElement->setContainsFullScreenElementOnAncestorsCrossingFrameBoundaries(true);
 
     // FIXME: This should not call updateStyleIfNeeded.
-    document()->setNeedsStyleRecalc(SubtreeStyleChange);
+    document()->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::FullScreen));
     document()->updateRenderTreeIfNeeded();
-}
-
-void Fullscreen::didEnterFullScreenForElement(Element*)
-{
-    if (!m_fullScreenElement)
-        return;
-
-    if (!document()->isActive())
-        return;
 
     m_fullScreenElement->didBecomeFullscreenElement();
 
+    if (document()->frame())
+        document()->frame()->eventHandler().scheduleHoverStateUpdate();
+
     m_eventQueueTimer.startOneShot(0, FROM_HERE);
-}
-
-void Fullscreen::willExitFullScreenForElement(Element*)
-{
-    if (!m_fullScreenElement)
-        return;
-
-    if (!document()->isActive())
-        return;
-
-    m_fullScreenElement->willStopBeingFullscreenElement();
 }
 
 void Fullscreen::didExitFullScreenForElement(Element*)
@@ -473,6 +457,8 @@ void Fullscreen::didExitFullScreenForElement(Element*)
     if (!document()->isActive())
         return;
 
+    m_fullScreenElement->willStopBeingFullscreenElement();
+
     m_fullScreenElement->setContainsFullScreenElementOnAncestorsCrossingFrameBoundaries(false);
 
     m_areKeysEnabledInFullScreen = false;
@@ -481,7 +467,10 @@ void Fullscreen::didExitFullScreenForElement(Element*)
         m_fullScreenRenderer->unwrapRenderer();
 
     m_fullScreenElement = nullptr;
-    document()->setNeedsStyleRecalc(SubtreeStyleChange);
+    document()->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::FullScreen));
+
+    if (document()->frame())
+        document()->frame()->eventHandler().scheduleHoverStateUpdate();
 
     // When fullyExitFullscreen is called, we call exitFullscreen on the topDocument(). That means
     // that the events will be queued there. So if we have no events here, start the timer on the

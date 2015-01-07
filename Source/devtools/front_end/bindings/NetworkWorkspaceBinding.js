@@ -76,6 +76,14 @@ WebInspector.NetworkProjectDelegate.prototype = {
     },
 
     /**
+     * @return {string}
+     */
+    url: function()
+    {
+        return this._name;
+    },
+
+    /**
      * @param {string} parentPath
      * @param {string} name
      * @param {string} url
@@ -84,7 +92,7 @@ WebInspector.NetworkProjectDelegate.prototype = {
      */
     addFile: function(parentPath, name, url, contentProvider)
     {
-        return this.addContentProvider(parentPath, name, url, contentProvider);
+        return this.addContentProvider(parentPath, name, url, url, contentProvider);
     },
 
     __proto__: WebInspector.ContentProviderBasedProjectDelegate.prototype

@@ -151,7 +151,7 @@ void HTMLFormControlElement::parseAttribute(const QualifiedName& name, const Ato
         m_isReadOnly = !value.isNull();
         if (wasReadOnly != m_isReadOnly) {
             setNeedsWillValidateCheck();
-            setNeedsStyleRecalc(SubtreeStyleChange);
+            setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::fromAttribute(name));
             if (renderer() && renderer()->style()->hasAppearance())
                 RenderTheme::theme().stateChanged(renderer(), ReadOnlyControlState);
         }
@@ -171,7 +171,8 @@ void HTMLFormControlElement::parseAttribute(const QualifiedName& name, const Ato
 void HTMLFormControlElement::disabledAttributeChanged()
 {
     setNeedsWillValidateCheck();
-    didAffectSelector(AffectedSelectorDisabled | AffectedSelectorEnabled);
+    pseudoStateChanged(CSSSelector::PseudoDisabled);
+    pseudoStateChanged(CSSSelector::PseudoEnabled);
     if (renderer() && renderer()->style()->hasAppearance())
         RenderTheme::theme().stateChanged(renderer(), EnabledControlState);
     if (isDisabledFormControl() && treeScope().adjustedFocusedElement() == this) {
@@ -186,7 +187,7 @@ void HTMLFormControlElement::requiredAttributeChanged()
     setNeedsValidityCheck();
     // Style recalculation is needed because style selectors may include
     // :required and :optional pseudo-classes.
-    setNeedsStyleRecalc(SubtreeStyleChange);
+    setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::fromAttribute(requiredAttr));
 }
 
 bool HTMLFormControlElement::supportsAutofocus() const
@@ -205,7 +206,7 @@ void HTMLFormControlElement::setAutofilled(bool autofilled)
         return;
 
     m_isAutofilled = autofilled;
-    setNeedsStyleRecalc(SubtreeStyleChange);
+    setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::ControlValue));
 }
 
 static bool shouldAutofocusOnAttach(const HTMLFormControlElement* element)
@@ -339,14 +340,22 @@ bool HTMLFormControlElement::shouldHaveFocusAppearance() const
     return !m_wasFocusedByMouse || shouldShowFocusRingOnMouseFocus();
 }
 
-bool HTMLFormControlElement::wasFocusedByMouse() const
+void HTMLFormControlElement::dispatchFocusEvent(Element* oldFocusedElement, FocusType type)
 {
-    return m_wasFocusedByMouse;
+    if (type != FocusTypePage)
+        m_wasFocusedByMouse = type == FocusTypeMouse;
+    HTMLElement::dispatchFocusEvent(oldFocusedElement, type);
 }
 
-void HTMLFormControlElement::setWasFocusedByMouse(bool wasFocusedByMouse)
+void HTMLFormControlElement::willCallDefaultEventHandler(const Event& event)
 {
-    m_wasFocusedByMouse = wasFocusedByMouse;
+    if (!m_wasFocusedByMouse)
+        return;
+    if (!event.isKeyboardEvent() || event.type() != EventTypeNames::keydown)
+        return;
+    m_wasFocusedByMouse = false;
+    if (renderer())
+        renderer()->setShouldDoFullPaintInvalidation(true);
 }
 
 short HTMLFormControlElement::tabIndex() const
@@ -393,7 +402,7 @@ void HTMLFormControlElement::setNeedsWillValidateCheck()
     m_willValidateInitialized = true;
     m_willValidate = newWillValidate;
     setNeedsValidityCheck();
-    setNeedsStyleRecalc(SubtreeStyleChange);
+    setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::Validate));
     if (!m_willValidate)
         hideVisibleValidationMessage();
 }
@@ -484,7 +493,7 @@ void HTMLFormControlElement::setNeedsValidityCheck()
     bool newIsValid = valid();
     if (willValidate() && newIsValid != m_isValid) {
         // Update style for pseudo classes such as :valid :invalid.
-        setNeedsStyleRecalc(SubtreeStyleChange);
+        setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::createWithExtraData(StyleChangeReason::PseudoClass, StyleChangeExtraData::Invalid));
     }
     m_isValid = newIsValid;
 
@@ -544,4 +553,4 @@ void HTMLFormControlElement::setFocus(bool flag)
         dispatchFormControlChangeEvent();
 }
 
-} // namespace Webcore
+} // namespace blink

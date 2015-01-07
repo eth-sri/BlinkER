@@ -51,7 +51,7 @@ InspectorTest.evaluateInConsole = function(code, callback)
 {
     callback = InspectorTest.safeWrap(callback);
 
-    WebInspector.inspectorView.panel("console");
+    WebInspector.inspectorView._panel("console");
     var consoleView = WebInspector.ConsolePanel._view();
     consoleView.visible = true;
     consoleView._prompt.text = code;
@@ -251,13 +251,13 @@ InspectorTest.navigate = function(url, callback)
 {
     InspectorTest._pageLoadedCallback = InspectorTest.safeWrap(callback);
 
-    WebInspector.inspectorView.panel("network")._networkLogView._reset();
+    WebInspector.inspectorView._panel("network")._networkLogView._reset();
     InspectorTest.evaluateInConsole("window.location = '" + url + "'");
 }
 
 InspectorTest.recordNetwork = function()
 {
-    WebInspector.inspectorView.panel("network")._networkLogView._recordButton.toggled = true;
+    WebInspector.inspectorView._panel("network")._networkLogView._recordButton.toggled = true;
 }
 
 InspectorTest.hardReloadPage = function(callback, scriptToEvaluateOnLoad, scriptPreprocessor)
@@ -403,7 +403,7 @@ InspectorTest.addConsoleSniffer = function(override, opt_sticky)
         override(viewMessage);
     };
 
-    WebInspector.inspectorView.panel("console");
+    WebInspector.inspectorView._panel("console");
     InspectorTest.addSniffer(WebInspector.ConsoleView.prototype, "_showConsoleMessage", sniffer, opt_sticky);
 }
 
@@ -434,13 +434,24 @@ InspectorTest.override = function(receiver, methodName, override, opt_sticky)
 
 InspectorTest.textContentWithLineBreaks = function(node)
 {
+    function padding(currentNode)
+    {
+        var result = 0;
+        while (currentNode && currentNode !== node) {
+            if (currentNode.nodeName === "OL")
+                ++result;
+            currentNode = currentNode.parentNode;
+        }
+        return Array(result * 4 + 1).join(" ");
+    }
+
     var buffer = "";
     var currentNode = node;
     while (currentNode = currentNode.traverseNextNode(node)) {
         if (currentNode.nodeType === Node.TEXT_NODE)
             buffer += currentNode.nodeValue;
         else if (currentNode.nodeName === "LI")
-            buffer += "\n    ";
+            buffer += "\n" + padding(currentNode);
         else if (currentNode.classList.contains("console-message"))
             buffer += "\n\n";
     }
@@ -508,12 +519,12 @@ InspectorTest.TempFileMock = function(dirPath, name, callback)
 
 InspectorTest.TempFileMock.prototype = {
     /**
-     * @param {!string} data
+     * @param {!Array.<string>} strings
      * @param {!function(boolean)} callback
      */
-    write: function(data, callback)
+    write: function(strings, callback)
     {
-        this._chunks.push(data);
+        this._chunks.push.apply(this._chunks, strings);
         setTimeout(callback.bind(this, true), 0);
     },
 
@@ -565,12 +576,17 @@ InspectorTest.TempFileMock.prototype = {
 
 InspectorTest.dumpLoadedModules = function(next)
 {
+    function moduleSorter(left, right)
+    {
+        return String.naturalOrderComparator(left._descriptor.name, right._descriptor.name);
+    }
+
     InspectorTest.addResult("Loaded modules:");
     var modules = self.runtime._modules;
+    modules.sort(moduleSorter);
     for (var i = 0; i < modules.length; ++i) {
-        if (modules[i]._loaded) {
+        if (modules[i]._loaded)
             InspectorTest.addResult("    " + modules[i]._descriptor.name);
-        }
     }
     if (next)
         next();

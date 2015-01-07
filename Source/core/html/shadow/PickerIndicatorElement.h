@@ -39,7 +39,6 @@
 namespace blink {
 
 class HTMLInputElement;
-class PagePopup;
 
 class PickerIndicatorElement FINAL : public HTMLDivElement, public DateTimeChooserClient {
 public:
@@ -78,6 +77,8 @@ private:
     virtual void defaultEventHandler(Event*) OVERRIDE;
     virtual void detach(const AttachContext& = AttachContext()) OVERRIDE;
     virtual bool isPickerIndicatorElement() const OVERRIDE;
+    virtual InsertionNotificationRequest insertedInto(ContainerNode*) OVERRIDE;
+    virtual void didNotifySubtreeInsertionsToDocument() OVERRIDE;
 
     HTMLInputElement* hostInput();
 

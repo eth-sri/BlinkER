@@ -252,7 +252,6 @@
         'sources/': [
           # Cherry-pick files excluded by the broader regular expressions above.
           ['include', 'fonts/harfbuzz/FontHarfBuzz\\.cpp$'],
-          ['include', 'fonts/harfbuzz/FontPlatformDataHarfBuzz\\.cpp$'],
           ['include', 'fonts/harfbuzz/HarfBuzzFace\\.(cpp|h)$'],
           ['include', 'fonts/harfbuzz/HarfBuzzFaceSkia\\.cpp$'],
           ['include', 'fonts/harfbuzz/HarfBuzzShaper\\.(cpp|h)$'],
@@ -302,13 +301,16 @@
 
           # Use native Mac font code from core.
           ['include', '(fonts/)?mac/[^/]*Font[^/]*\\.(cpp|mm?)$'],
-          ['include', 'fonts/mac/ComplexText[^/]*\\.(cpp|h)$'],
+
+          # TODO(dro): Merge the opentype vertical data files inclusion across all platforms.
+          ['include', 'fonts/opentype/OpenTypeTypes\\.h$'],
+          ['include', 'fonts/opentype/OpenTypeVerticalData\\.(cpp|h)$'],
 
           # Cherry-pick some files that can't be included by broader regexps.
           # Some of these are used instead of Chromium platform files, see
           # the specific exclusions in the "exclude" list below.
           ['include', 'audio/mac/FFTFrameMac\\.cpp$'],
-          ['include', 'fonts/mac/ComplexTextControllerCoreText\\.mm$'],
+          ['include', 'fonts/mac/GlyphPageTreeNodeMac\\.cpp$'],
           ['include', 'mac/ColorMac\\.mm$'],
           ['include', 'mac/BlockExceptions\\.mm$'],
           ['include', 'mac/KillRingMac\\.mm$'],
@@ -331,10 +333,12 @@
           ['exclude', 'fonts/skia/FontCustomPlatformDataSkia\\.cpp$'],
 
           ['exclude', 'fonts/skia/FontCacheSkia\\.cpp$'],
-          ['exclude', 'fonts/skia/SimpleFontDataSkia\\.cpp$'],
+
+          ['include', 'fonts/skia/SimpleFontDataSkia\\.cpp$'],
 
           # Mac uses Harfbuzz.
-          ['include', 'fonts/harfbuzz/HarfBuzzFaceCoreText\\.cpp$'],
+          ['include', 'fonts/harfbuzz/FontHarfBuzz\\.cpp$'],
+          ['include', 'fonts/harfbuzz/HarfBuzzFaceCoreText\\.mm$'],
           ['include', 'fonts/harfbuzz/HarfBuzzFace\\.(cpp|h)$'],
           ['include', 'fonts/harfbuzz/HarfBuzzShaper\\.(cpp|h)$'],
 
@@ -361,9 +365,6 @@
           ['exclude', 'geometry/cg/'],
           ['exclude', 'scroll/ScrollbarThemeMac'],
 
-          # FIXME: We will eventually compile this too, but for now it's
-          # only used on mac.
-          ['exclude', 'fonts/FontPlatformData\\.cpp$'],
           ['exclude', 'fonts/harfbuzz/HarfBuzzFaceCoreText\\.cpp$'],
         ],
       }],

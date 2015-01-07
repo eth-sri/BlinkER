@@ -85,7 +85,6 @@ HTMLTextAreaElement::HTMLTextAreaElement(Document& document, HTMLFormElement* fo
     , m_isDirty(false)
     , m_valueIsUpToDate(true)
 {
-    ScriptWrappable::init(this);
 }
 
 PassRefPtrWillBeRawPtr<HTMLTextAreaElement> HTMLTextAreaElement::create(Document& document, HTMLFormElement* form)
@@ -301,7 +300,12 @@ void HTMLTextAreaElement::handleBeforeTextInsertedEvent(BeforeTextInsertedEvent*
     // If the text field has no focus, we don't need to take account of the
     // selection length. The selection is the source of text drag-and-drop in
     // that case, and nothing in the text field will be removed.
-    unsigned selectionLength = focused() ? computeLengthForSubmission(plainText(document().frame()->selection().selection().toNormalizedRange().get())) : 0;
+    unsigned selectionLength = 0;
+    if (focused()) {
+        Position start, end;
+        document().frame()->selection().selection().toNormalizedPositions(start, end);
+        selectionLength = computeLengthForSubmission(plainText(start, end));
+    }
     ASSERT(currentLength >= selectionLength);
     unsigned baseLength = currentLength - selectionLength;
     unsigned appendableLength = unsignedMaxLength > baseLength ? unsignedMaxLength - baseLength : 0;
@@ -320,7 +324,6 @@ void HTMLTextAreaElement::updateValue() const
     if (m_valueIsUpToDate)
         return;
 
-    ASSERT(renderer());
     m_value = innerEditorValue();
     const_cast<HTMLTextAreaElement*>(this)->m_valueIsUpToDate = true;
     const_cast<HTMLTextAreaElement*>(this)->notifyFormStateChanged();
@@ -378,7 +381,7 @@ void HTMLTextAreaElement::setValueCommon(const String& newValue, TextFieldEventB
     if (eventBehavior == DispatchNoEvent)
         setLastChangeWasNotUserEdit();
     updatePlaceholderVisibility(false);
-    setNeedsStyleRecalc(SubtreeStyleChange);
+    setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::ControlValue));
     m_suggestedValue = String();
     setNeedsValidityCheck();
     if (isFinishedParsingChildren()) {
@@ -444,7 +447,7 @@ void HTMLTextAreaElement::setDefaultValue(const String& defaultValue)
 int HTMLTextAreaElement::maxLength() const
 {
     bool ok;
-    int value = getAttribute(maxlengthAttr).string().toInt(&ok);
+    int value = getAttribute(maxlengthAttr).toInt(&ok);
     return ok && value >= 0 ? value : -1;
 }
 
@@ -470,7 +473,7 @@ void HTMLTextAreaElement::setSuggestedValue(const String& value)
     else
         setInnerEditorValue(m_value);
     updatePlaceholderVisibility(false);
-    setNeedsStyleRecalc(SubtreeStyleChange);
+    setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::ControlValue));
 }
 
 String HTMLTextAreaElement::validationMessage() const
@@ -492,15 +495,22 @@ String HTMLTextAreaElement::validationMessage() const
 
 bool HTMLTextAreaElement::valueMissing() const
 {
-    return willValidate() && valueMissing(value());
+    // We should not call value() for performance.
+    return willValidate() && valueMissing(0);
+}
+
+bool HTMLTextAreaElement::valueMissing(const String* value) const
+{
+    return isRequiredFormControl() && !isDisabledOrReadOnly() && (value ? *value : this->value()).isEmpty();
 }
 
 bool HTMLTextAreaElement::tooLong() const
 {
-    return willValidate() && tooLong(value(), CheckDirtyFlag);
+    // We should not call value() for performance.
+    return willValidate() && tooLong(0, CheckDirtyFlag);
 }
 
-bool HTMLTextAreaElement::tooLong(const String& value, NeedsToCheckDirtyFlag check) const
+bool HTMLTextAreaElement::tooLong(const String* value, NeedsToCheckDirtyFlag check) const
 {
     // Return false for the default value or value set by script even if it is
     // longer than maxLength.
@@ -510,12 +520,12 @@ bool HTMLTextAreaElement::tooLong(const String& value, NeedsToCheckDirtyFlag che
     int max = maxLength();
     if (max < 0)
         return false;
-    return computeLengthForSubmission(value) > static_cast<unsigned>(max);
+    return computeLengthForSubmission(value ? *value : this->value()) > static_cast<unsigned>(max);
 }
 
 bool HTMLTextAreaElement::isValidValue(const String& candidate) const
 {
-    return !valueMissing(candidate) && !tooLong(candidate, IgnoreDirtyFlag);
+    return !valueMissing(&candidate) && !tooLong(&candidate, IgnoreDirtyFlag);
 }
 
 void HTMLTextAreaElement::accessKeyAction(bool)

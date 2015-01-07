@@ -33,14 +33,15 @@
 #include "platform/geometry/FloatSize.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/Color.h"
+#include "platform/graphics/ContentLayerDelegate.h"
 #include "platform/graphics/GraphicsLayerClient.h"
 #include "platform/graphics/GraphicsLayerDebugInfo.h"
-#include "platform/graphics/OpaqueRectTrackingContentLayerDelegate.h"
 #include "platform/graphics/filters/FilterOperations.h"
 #include "platform/transforms/TransformationMatrix.h"
 #include "public/platform/WebCompositorAnimationDelegate.h"
 #include "public/platform/WebContentLayer.h"
 #include "public/platform/WebImageLayer.h"
+#include "public/platform/WebInvalidationDebugAnnotations.h"
 #include "public/platform/WebLayerClient.h"
 #include "public/platform/WebLayerScrollClient.h"
 #include "public/platform/WebNinePatchLayer.h"
@@ -58,7 +59,6 @@ class GraphicsLayerFactoryChromium;
 class Image;
 class JSONObject;
 class ScrollableArea;
-class TextStream;
 class WebCompositorAnimation;
 class WebLayer;
 
@@ -183,7 +183,7 @@ public:
 
     void setNeedsDisplay();
     // mark the given rect (in layer coords) as needing dispay. Never goes deep.
-    void setNeedsDisplayInRect(const FloatRect&);
+    void setNeedsDisplayInRect(const FloatRect&, WebInvalidationDebugAnnotations);
 
     void setContentsNeedsDisplay();
 
@@ -224,7 +224,7 @@ public:
     unsigned numLinkHighlights() { return m_linkHighlights.size(); }
     LinkHighlightClient* linkHighlight(int i) { return m_linkHighlights[i]; }
 
-    void setScrollableArea(ScrollableArea*, bool isMainFrame);
+    void setScrollableArea(ScrollableArea*, bool isViewport);
     ScrollableArea* scrollableArea() const { return m_scrollableArea; }
 
     WebContentLayer* contentLayer() const { return m_layer.get(); }
@@ -336,7 +336,7 @@ private:
 
     Vector<LinkHighlightClient*> m_linkHighlights;
 
-    OwnPtr<OpaqueRectTrackingContentLayerDelegate> m_opaqueRectTrackingContentLayerDelegate;
+    OwnPtr<ContentLayerDelegate> m_contentLayerDelegate;
 
     ScrollableArea* m_scrollableArea;
     GraphicsLayerDebugInfo m_debugInfo;

@@ -32,14 +32,14 @@ WebInspector.AdvancedSearchView = function()
     this._ignoreCaseCheckbox = this._ignoreCaseLabel.createChild("input");
     this._ignoreCaseCheckbox.setAttribute("type", "checkbox");
     this._ignoreCaseCheckbox.classList.add("search-config-checkbox");
-    this._ignoreCaseLabel.appendChild(document.createTextNode(WebInspector.UIString("Ignore case")));
+    this._ignoreCaseLabel.createTextChild(WebInspector.UIString("Ignore case"));
 
     this._regexLabel = this._searchPanelElement.createChild("label");
     this._regexLabel.classList.add("search-config-label");
     this._regexCheckbox = this._regexLabel.createChild("input");
     this._regexCheckbox.setAttribute("type", "checkbox");
     this._regexCheckbox.classList.add("search-config-checkbox");
-    this._regexLabel.appendChild(document.createTextNode(WebInspector.UIString("Regular expression")));
+    this._regexLabel.createTextChild(WebInspector.UIString("Regular expression"));
 
     this._searchStatusBarElement = this.element.createChild("div", "search-status-bar-summary");
     this._searchMessageElement = this._searchStatusBarElement.createChild("div", "search-message");
@@ -360,7 +360,7 @@ WebInspector.AdvancedSearchView.ToggleDrawerViewActionDelegate.prototype = {
             if (selection.rangeCount)
                 queryCandidate = selection.toString().replace(/\r?\n.*/, "");
 
-            WebInspector.inspectorView.showPanel("sources");
+            WebInspector.inspectorView.setCurrentPanel(WebInspector.SourcesPanel.instance());
             WebInspector.inspectorView.showViewInDrawer("sources.search");
             WebInspector.AdvancedSearchView._instance._toggle(queryCandidate);
         } else {

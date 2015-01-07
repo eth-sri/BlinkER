@@ -44,6 +44,7 @@
 #include "core/html/HTMLOptionElement.h"
 #include "core/html/forms/ColorChooser.h"
 #include "core/page/Chrome.h"
+#include "core/rendering/RenderTheme.h"
 #include "core/rendering/RenderView.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/UserGestureIndicator.h"
@@ -87,11 +88,6 @@ ColorInputType::~ColorInputType()
 void ColorInputType::countUsage()
 {
     countUsageIfVisible(UseCounter::InputTypeColor);
-}
-
-bool ColorInputType::isColorControl() const
-{
-    return true;
 }
 
 const AtomicString& ColorInputType::formControlType() const
@@ -188,11 +184,14 @@ void ColorInputType::didChooseColor(const Color& color)
         return;
     element().setValueFromRenderer(color.serialized());
     element().updateView();
-    element().dispatchFormControlChangeEvent();
+    if (!RenderTheme::theme().isModalColorChooser())
+        element().dispatchFormControlChangeEvent();
 }
 
 void ColorInputType::didEndChooser()
 {
+    if (RenderTheme::theme().isModalColorChooser())
+        element().dispatchFormControlChangeEvent();
     m_chooser.clear();
 }
 
@@ -261,6 +260,11 @@ Vector<ColorSuggestion> ColorInputType::suggestions() const
 AXObject* ColorInputType::popupRootAXObject()
 {
     return m_chooser ? m_chooser->rootAXObject() : 0;
+}
+
+ColorChooserClient* ColorInputType::colorChooserClient()
+{
+    return this;
 }
 
 } // namespace blink

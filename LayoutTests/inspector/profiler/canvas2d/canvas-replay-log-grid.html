@@ -36,10 +36,9 @@ function doSomeCanvasCalls(repeats)
 function test()
 {
     // FIXME: Remove once taken out of experiments. Also a hack below should be removed.
-    WebInspector.experimentsSettings.canvasInspection = {};
-    WebInspector.experimentsSettings.canvasInspection.isEnabled = function() { return true; };
+    Runtime.experiments.enableForTest("canvasInspection");
 
-    WebInspector.inspectorView.showPanel("profiles");
+    WebInspector.inspectorView._showPanel("profiles");
     var profilesPanel = WebInspector.panels.profiles;
     var typeRegistry = WebInspector.ProfileTypeRegistry.instance;
     var profileType = typeRegistry.canvasProfileType;

@@ -31,7 +31,7 @@
 #include "config.h"
 #include "platform/fonts/Font.h"
 
-#include "platform/NotImplemented.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/fonts/FontPlatformFeatures.h"
 #include "platform/fonts/SimpleFontData.h"
 #include "platform/fonts/harfbuzz/HarfBuzzShaper.h"
@@ -47,11 +47,6 @@
 #include <algorithm>
 
 namespace blink {
-
-bool FontPlatformFeatures::canReturnFallbackFontsForComplexText()
-{
-    return false;
-}
 
 bool FontPlatformFeatures::canExpandAroundIdeographsInComplexText()
 {
@@ -206,47 +201,43 @@ void Font::drawGlyphs(GraphicsContext* gc, const SimpleFontData* font,
 
 void Font::drawTextBlob(GraphicsContext* gc, const SkTextBlob* blob, const SkPoint& origin) const
 {
+    ASSERT(RuntimeEnabledFeatures::textBlobEnabled());
+
     // FIXME: It would be good to move this to Font.cpp, if we're sure that none
     // of the things in FontMac's setupPaint need to apply here.
     // See also paintGlyphs.
     TextDrawingModeFlags textMode = gc->textDrawingMode();
 
-    if (textMode & TextModeFill) {
-        SkPaint paint = gc->fillPaint();
-        gc->adjustTextRenderMode(&paint);
-        paint.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
-        gc->drawTextBlob(blob, origin, paint);
-    }
+    if (textMode & TextModeFill)
+        gc->drawTextBlob(blob, origin, gc->fillPaint());
 
     if ((textMode & TextModeStroke) && gc->hasStroke()) {
         SkPaint paint = gc->strokePaint();
-        gc->adjustTextRenderMode(&paint);
-        paint.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
         if (textMode & TextModeFill)
             paint.setLooper(0);
         gc->drawTextBlob(blob, origin, paint);
     }
 }
 
-void Font::drawComplexText(GraphicsContext* gc, const TextRunPaintInfo& runInfo, const FloatPoint& point) const
+float Font::drawComplexText(GraphicsContext* gc, const TextRunPaintInfo& runInfo, const FloatPoint& point) const
 {
     if (!runInfo.run.length())
-        return;
+        return 0;
 
     TextDrawingModeFlags textMode = gc->textDrawingMode();
     bool fill = textMode & TextModeFill;
     bool stroke = (textMode & TextModeStroke) && gc->hasStroke();
 
     if (!fill && !stroke)
-        return;
+        return 0;
 
     GlyphBuffer glyphBuffer;
     HarfBuzzShaper shaper(this, runInfo.run);
     shaper.setDrawRange(runInfo.from, runInfo.to);
     if (!shaper.shape(&glyphBuffer) || glyphBuffer.isEmpty())
-        return;
+        return 0;
     FloatPoint adjustedPoint = shaper.adjustStartPoint(point);
-    drawGlyphBuffer(gc, runInfo, glyphBuffer, adjustedPoint);
+    return drawGlyphBuffer(gc, runInfo, glyphBuffer, adjustedPoint);
 }
 
 void Font::drawEmphasisMarksForComplexText(GraphicsContext* context, const TextRunPaintInfo& runInfo, const AtomicString& mark, const FloatPoint& point) const
@@ -269,9 +260,9 @@ float Font::getGlyphsAndAdvancesForComplexText(const TextRunPaintInfo& runInfo, 
     return 0;
 }
 
-float Font::floatWidthForComplexText(const TextRun& run, HashSet<const SimpleFontData*>* /* fallbackFonts */, IntRectExtent* glyphBounds) const
+float Font::floatWidthForComplexText(const TextRun& run, HashSet<const SimpleFontData*>* fallbackFonts, IntRectExtent* glyphBounds) const
 {
-    HarfBuzzShaper shaper(this, run);
+    HarfBuzzShaper shaper(this, run, HarfBuzzShaper::NotForTextEmphasis, fallbackFonts);
     if (!shaper.shape())
         return 0;
 
@@ -304,8 +295,11 @@ FloatRect Font::selectionRectForComplexText(const TextRun& run,
     return shaper.selectionRect(point, height, from, to);
 }
 
-PassTextBlobPtr Font::buildTextBlob(const GlyphBuffer& glyphBuffer, float initialAdvance, const FloatRect& bounds) const
+PassTextBlobPtr Font::buildTextBlob(const GlyphBuffer& glyphBuffer, float initialAdvance,
+    const FloatRect& bounds, float& advance, bool couldUseLCD) const
 {
+    ASSERT(RuntimeEnabledFeatures::textBlobEnabled());
+
     // FIXME: Except for setupPaint, this is not specific to FontHarfBuzz.
     // FIXME: Also implement the more general full-positioning path.
     ASSERT(!glyphBuffer.hasVerticalAdvances());
@@ -333,6 +327,9 @@ PassTextBlobPtr Font::buildTextBlob(const GlyphBuffer& glyphBuffer, float initia
         fontData->platformData().setupPaint(&paint);
         paint.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
 
+        // FIXME: this should go away after the big LCD cleanup.
+        paint.setLCDRenderText(paint.isLCDRenderText() && couldUseLCD);
+
         unsigned start = i++;
         while (i < glyphBuffer.size() && glyphBuffer.fontDataAt(i) == fontData)
             i++;
@@ -350,6 +347,7 @@ PassTextBlobPtr Font::buildTextBlob(const GlyphBuffer& glyphBuffer, float initia
         }
     }
 
+    advance = x;
     return adoptRef(builder.build());
 }
 

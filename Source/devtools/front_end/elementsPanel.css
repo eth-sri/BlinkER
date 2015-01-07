@@ -73,7 +73,7 @@
 }
 
 #elements-content .CodeMirror {
-    /* Consistent with the .editing class in inspector.css */
+    /* Consistent with the .editing class in inspectorStyle.css */
     box-shadow: rgba(0, 0, 0, .5) 3px 3px 4px;
     outline: 1px solid rgb(66%, 66%, 66%) !important;
     background-color: white;
@@ -780,4 +780,16 @@ li.child-editing .styles-clipboard-only {
 @-webkit-keyframes elements-tree-element-pick-node-animation-2 {
     from { background-color: rgb(255, 210, 126); }
     to { background-color: inherit; }
+}
+
+.sidebar-separator {
+    background-color: rgb(230, 230, 230);
+    padding: 0 5px;
+    border-top: 1px solid rgb(189, 189, 189);
+    border-bottom: 1px solid rgb(189, 189, 189);
+    color: rgb(50, 50, 50);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    line-height: 16px;
 }

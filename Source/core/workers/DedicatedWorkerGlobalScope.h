@@ -42,6 +42,7 @@ class DedicatedWorkerThread;
 class WorkerThreadStartupData;
 
 class DedicatedWorkerGlobalScope FINAL : public WorkerGlobalScope {
+    DEFINE_WRAPPERTYPEINFO();
 public:
     typedef WorkerGlobalScope Base;
     static PassRefPtrWillBeRawPtr<DedicatedWorkerGlobalScope> create(DedicatedWorkerThread*, PassOwnPtrWillBeRawPtr<WorkerThreadStartupData>, double timeOrigin);
@@ -66,7 +67,7 @@ public:
     virtual void trace(Visitor*) OVERRIDE;
 
 private:
-    DedicatedWorkerGlobalScope(const KURL&, const String& userAgent, DedicatedWorkerThread*, double timeOrigin, PassOwnPtrWillBeRawPtr<WorkerClients>);
+    DedicatedWorkerGlobalScope(const KURL&, const String& userAgent, DedicatedWorkerThread*, double timeOrigin, const SecurityOrigin*, PassOwnPtrWillBeRawPtr<WorkerClients>);
 };
 
 } // namespace blink

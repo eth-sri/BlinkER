@@ -535,9 +535,10 @@ void HTMLDocumentParser::processParsedChunkFromBackgroundParser(PassOwnPtr<Parse
         ASSERT(!m_token);
     }
 
-    // Make sure any pending text nodes are emitted before returning.
+    // Make sure all required pending text nodes are emitted before returning.
+    // This leaves "script", "style" and "svg" nodes text nodes intact.
     if (!isStopped())
-        m_treeBuilder->flush();
+        m_treeBuilder->flush(FlushIfAtTextLimit);
 }
 
 void HTMLDocumentParser::pumpPendingSpeculations()
@@ -672,7 +673,7 @@ void HTMLDocumentParser::pumpTokenizer(SynchronousMode mode)
     // There should only be PendingText left since the tree-builder always flushes
     // the task queue before returning. In case that ever changes, crash.
     if (mode == ForceSynchronous)
-        m_treeBuilder->flush();
+        m_treeBuilder->flush(FlushAlways);
     RELEASE_ASSERT(!isStopped());
 
     if (session.needsYield)
@@ -780,8 +781,10 @@ void HTMLDocumentParser::startBackgroundParser()
     m_backgroundParser = WeakPtr<BackgroundHTMLParser>(reference);
 
     // TODO(oysteine): Disabled due to crbug.com/398076 until a full fix can be implemented.
-    if (RuntimeEnabledFeatures::threadedParserDataReceiverEnabled())
-        document()->loader()->attachThreadedDataReceiver(adoptPtr(new ParserDataReceiver(m_backgroundParser)));
+    if (RuntimeEnabledFeatures::threadedParserDataReceiverEnabled()) {
+        if (DocumentLoader* loader = document()->loader())
+            loader->attachThreadedDataReceiver(adoptPtr(new ParserDataReceiver(m_backgroundParser)));
+    }
 
     OwnPtr<BackgroundHTMLParser::Configuration> config = adoptPtr(new BackgroundHTMLParser::Configuration);
     config->options = m_options;
@@ -865,6 +868,8 @@ void HTMLDocumentParser::end()
 
     // Informs the the rest of WebCore that parsing is really finished (and deletes this).
     m_treeBuilder->finished();
+
+    DocumentParser::stopParsing();
 }
 
 void HTMLDocumentParser::attemptToRunDeferredScriptsAndEnd()

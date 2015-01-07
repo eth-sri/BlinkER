@@ -79,14 +79,23 @@ public:
     MOCK_CONST_METHOD0(iterations, double());
     MOCK_METHOD1(setIterations, void(double));
 
+    MOCK_CONST_METHOD0(iterationStart, double());
+    MOCK_METHOD1(setIterationStart, void(double));
+
     MOCK_CONST_METHOD0(startTime, double());
     MOCK_METHOD1(setStartTime, void(double));
 
     MOCK_CONST_METHOD0(timeOffset, double());
     MOCK_METHOD1(setTimeOffset, void(double));
 
-    MOCK_CONST_METHOD0(alternatesDirection, bool());
-    MOCK_METHOD1(setAlternatesDirection, void(bool));
+    MOCK_CONST_METHOD0(direction, Direction());
+    MOCK_METHOD1(setDirection, void(Direction));
+
+    MOCK_CONST_METHOD0(playbackRate, double());
+    MOCK_METHOD1(setPlaybackRate, void(double));
+
+    MOCK_CONST_METHOD0(fillMode, FillMode());
+    MOCK_METHOD1(setFillMode, void(FillMode));
 
     MOCK_METHOD0(delete_, void());
     ~WebCompositorAnimationMock() { delete_(); }

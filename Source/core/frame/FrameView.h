@@ -51,12 +51,13 @@ class RenderBox;
 class RenderEmbeddedObject;
 class RenderObject;
 class RenderScrollbarPart;
-class RenderStyle;
 class RenderView;
 class RenderWidget;
+struct CompositedSelectionBound;
 
 typedef unsigned long long DOMTimeStamp;
 
+// FIXME: Oilpan: move Widget (and thereby FrameView) to the heap.
 class FrameView FINAL : public ScrollView {
 public:
     friend class RenderView;
@@ -72,7 +73,12 @@ public:
     virtual void invalidateRect(const IntRect&) OVERRIDE;
     virtual void setFrameRect(const IntRect&) OVERRIDE;
 
-    LocalFrame& frame() const { return *m_frame; }
+    LocalFrame& frame() const
+    {
+        ASSERT(m_frame);
+        return *m_frame;
+    }
+
     Page* page() const;
 
     RenderView* renderView() const;
@@ -219,7 +225,7 @@ public:
     void incrementVisuallyNonEmptyPixelCount(const IntSize&);
     void setIsVisuallyNonEmpty() { m_isVisuallyNonEmpty = true; }
     void enableAutoSizeMode(const IntSize& minSize, const IntSize& maxSize);
-    void disableAutoSizeMode() { m_autoSizeInfo = 0; }
+    void disableAutoSizeMode() { m_autoSizeInfo.clear(); }
 
     void forceLayout(bool allowSubtree = false);
     void forceLayoutForPagination(const FloatSize& pageSize, const FloatSize& originalPageSize, float maximumShrinkFactor);
@@ -288,9 +294,6 @@ public:
     bool inProgrammaticScroll() const { return m_inProgrammaticScroll; }
     void setInProgrammaticScroll(bool programmaticScroll) { m_inProgrammaticScroll = programmaticScroll; }
 
-    void setHasSoftwareFilters(bool hasSoftwareFilters) { m_hasSoftwareFilters = hasSoftwareFilters; }
-    bool hasSoftwareFilters() const { return m_hasSoftwareFilters; }
-
     virtual bool isActive() const OVERRIDE;
 
     // DEPRECATED: Use viewportConstrainedVisibleContentRect() instead.
@@ -310,6 +313,13 @@ public:
     // If |m_tickmarks| is empty, the default behavior is restored.
     void setTickmarks(const Vector<IntRect>& tickmarks) { m_tickmarks = tickmarks; }
 
+    // Since the compositor can resize the viewport due to top controls and
+    // commit scroll offsets before a WebView::resize occurs, we need to adjust
+    // our scroll extents to prevent clamping the scroll offsets.
+    void setTopControlsViewportAdjustment(float);
+
+    virtual IntPoint maximumScrollPosition() const OVERRIDE;
+
     // ScrollableArea interface
     virtual void invalidateScrollbarRect(Scrollbar*, const IntRect&) OVERRIDE;
     virtual void getTickmarks(Vector<IntRect>&) const OVERRIDE;
@@ -323,12 +333,15 @@ public:
     virtual GraphicsLayer* layerForScrollCorner() const OVERRIDE;
 
 protected:
-    virtual void scrollContentsIfNeeded();
     virtual bool scrollContentsFastPath(const IntSize& scrollDelta) OVERRIDE;
     virtual void scrollContentsSlowPath(const IntRect& updateRect) OVERRIDE;
 
     virtual bool isVerticalDocument() const OVERRIDE;
     virtual bool isFlippedDocument() const OVERRIDE;
+
+    // Prevents creation of scrollbars. Used to prevent drawing two sets of
+    // overlay scrollbars in the case of the pinch viewport.
+    virtual bool scrollbarsDisabled() const OVERRIDE;
 
 private:
     explicit FrameView(LocalFrame*);
@@ -372,6 +385,7 @@ private:
 
     void updateWidgetPositionsIfNeeded();
 
+    bool wasViewportResized();
     void sendResizeEventIfNeeded();
 
     void updateScrollableAreaSet();
@@ -387,7 +401,8 @@ private:
     void didScrollTimerFired(Timer<FrameView>*);
 
     void updateLayersAndCompositingAfterScrollIfNeeded();
-    void updateFixedElementPaintInvalidationRectsAfterScroll();
+
+    static bool computeCompositedSelectionBounds(LocalFrame&, CompositedSelectionBound& start, CompositedSelectionBound& end);
     void updateCompositedSelectionBoundsIfNeeded();
 
     bool hasCustomScrollbars() const;
@@ -418,7 +433,13 @@ private:
     // FIXME: These are just "children" of the FrameView and should be RefPtr<Widget> instead.
     WillBePersistentHeapHashSet<RefPtrWillBeMember<RenderWidget> > m_widgets;
 
-    RefPtr<LocalFrame> m_frame;
+    // Oilpan: the use of a persistent back reference 'emulates' the
+    // RefPtr-cycle that is kept between the two objects non-Oilpan.
+    //
+    // That cycle is broken when a LocalFrame is detached by
+    // FrameLoader::detachFromParent(), it then clears its
+    // FrameView's m_frame reference by calling setView(nullptr).
+    RefPtrWillBePersistent<LocalFrame> m_frame;
 
     bool m_doFullPaintInvalidation;
 
@@ -480,8 +501,6 @@ private:
     OwnPtr<ViewportConstrainedObjectSet> m_viewportConstrainedObjects;
     OwnPtr<FrameViewAutoSizeInfo> m_autoSizeInfo;
 
-    bool m_hasSoftwareFilters;
-
     float m_visibleContentScaleFactor;
     IntSize m_inputEventsOffsetForEmulation;
     float m_inputEventsScaleFactorForEmulation;
@@ -494,6 +513,7 @@ private:
     Vector<IntRect> m_tickmarks;
 
     bool m_needsUpdateWidgetPositions;
+    float m_topControlsViewportAdjustment;
 };
 
 inline void FrameView::incrementVisuallyNonEmptyCharacterCount(unsigned count)

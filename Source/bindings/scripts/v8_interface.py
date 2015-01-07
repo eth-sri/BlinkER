@@ -82,16 +82,6 @@ def interface_context(interface):
         header_includes.update(v8_types.includes_for_interface(parent_interface))
     extended_attributes = interface.extended_attributes
 
-    is_audio_buffer = inherits_interface(interface.name, 'AudioBuffer')
-    if is_audio_buffer:
-        includes.add('modules/webaudio/AudioBuffer.h')
-
-    is_document = inherits_interface(interface.name, 'Document')
-    if is_document:
-        includes.update(['bindings/core/v8/ScriptController.h',
-                         'bindings/core/v8/WindowProxy.h',
-                         'core/frame/LocalFrame.h'])
-
     # [ActiveDOMObject]
     is_active_dom_object = 'ActiveDOMObject' in extended_attributes
 
@@ -102,6 +92,17 @@ def interface_context(interface):
 
     # [DependentLifetime]
     is_dependent_lifetime = 'DependentLifetime' in extended_attributes
+
+    # [Iterable]
+    iterator_method = None
+    if 'Iterable' in extended_attributes:
+        iterator_operation = IdlOperation(interface.idl_name)
+        iterator_operation.name = 'iterator'
+        iterator_operation.idl_type = IdlType('Iterator')
+        iterator_operation.extended_attributes['RaisesException'] = None
+        iterator_operation.extended_attributes['CallWith'] = 'ScriptState'
+        iterator_method = v8_methods.method_context(interface,
+                                                    iterator_operation)
 
     # [MeasureAs]
     is_measure_as = 'MeasureAs' in extended_attributes
@@ -131,14 +132,6 @@ def interface_context(interface):
     # [NotScriptWrappable]
     is_script_wrappable = 'NotScriptWrappable' not in extended_attributes
 
-    # [SpecialWrapFor]
-    if 'SpecialWrapFor' in extended_attributes:
-        special_wrap_for = extended_attribute_value_as_list(interface, 'SpecialWrapFor')
-    else:
-        special_wrap_for = []
-    for special_wrap_interface in special_wrap_for:
-        v8_types.add_includes_for_interface(special_wrap_interface)
-
     # [Custom=Wrap], [SetWrapperReferenceFrom]
     has_visit_dom_wrapper = (
         has_extended_attribute_value(interface, 'Custom', 'VisitDOMWrapper') or
@@ -146,6 +139,8 @@ def interface_context(interface):
         set_wrapper_reference_to_list)
 
     this_gc_type = gc_type(interface)
+
+    wrapper_class_id = ('NodeClassId' if inherits_interface(interface.name, 'Node') else 'ObjectClassId')
 
     context = {
         'conditional_string': conditional_string(interface),  # [Conditional]
@@ -162,14 +157,18 @@ def interface_context(interface):
         'header_includes': header_includes,
         'interface_name': interface.name,
         'is_active_dom_object': is_active_dom_object,
-        'is_audio_buffer': is_audio_buffer,
         'is_check_security': is_check_security,
         'is_dependent_lifetime': is_dependent_lifetime,
-        'is_document': is_document,
         'is_event_target': inherits_interface(interface.name, 'EventTarget'),
         'is_exception': interface.is_exception,
         'is_node': inherits_interface(interface.name, 'Node'),
         'is_script_wrappable': is_script_wrappable,
+        'iterator_method': iterator_method,
+        'lifetime': 'Dependent'
+            if (has_visit_dom_wrapper or
+                is_active_dom_object or
+                is_dependent_lifetime)
+            else 'Independent',
         'measure_as': v8_utilities.measure_as(interface),  # [MeasureAs]
         'parent_interface': parent_interface,
         'pass_cpp_type': cpp_template_type(
@@ -178,13 +177,8 @@ def interface_context(interface):
         'reachable_node_function': reachable_node_function,
         'runtime_enabled_function': runtime_enabled_function_name(interface),  # [RuntimeEnabled]
         'set_wrapper_reference_to_list': set_wrapper_reference_to_list,
-        'special_wrap_for': special_wrap_for,
         'v8_class': v8_utilities.v8_class_name(interface),
-        'wrapper_configuration': 'WrapperConfiguration::Dependent'
-            if (has_visit_dom_wrapper or
-                is_active_dom_object or
-                is_dependent_lifetime)
-            else 'WrapperConfiguration::Independent',
+        'wrapper_class_id': wrapper_class_id,
     }
 
     # Constructors
@@ -233,13 +227,29 @@ def interface_context(interface):
 
     constants = [constant_context(constant) for constant in interface.constants]
 
+    special_getter_constants = []
+    runtime_enabled_constants = []
+    constant_configuration_constants = []
+
+    for constant in constants:
+        if constant['measure_as'] or constant['deprecate_as']:
+            special_getter_constants.append(constant)
+            continue
+        if constant['runtime_enabled_function']:
+            runtime_enabled_constants.append(constant)
+            continue
+        constant_configuration_constants.append(constant)
+
     # Constants
     context.update({
+        'constant_configuration_constants': constant_configuration_constants,
         'constants': constants,
         'do_not_check_constants': 'DoNotCheckConstants' in extended_attributes,
         'has_constant_configuration': any(
             not constant['runtime_enabled_function']
             for constant in constants),
+        'runtime_enabled_constants': runtime_enabled_constants,
+        'special_getter_constants': special_getter_constants,
     })
 
     # Attributes
@@ -351,22 +361,17 @@ def interface_context(interface):
 
 # [DeprecateAs], [Reflect], [RuntimeEnabled]
 def constant_context(constant):
-    # (Blink-only) string literals are unquoted in tokenizer, must be re-quoted
-    # in C++.
-    if constant.idl_type.name == 'String':
-        value = '"%s"' % constant.value
-    else:
-        value = constant.value
-
     extended_attributes = constant.extended_attributes
     return {
         'cpp_class': extended_attributes.get('PartialInterfaceImplementedAs'),
+        'deprecate_as': v8_utilities.deprecate_as(constant),  # [DeprecateAs]
         'idl_type': constant.idl_type.name,
+        'measure_as': v8_utilities.measure_as(constant),  # [MeasureAs]
         'name': constant.name,
         # FIXME: use 'reflected_name' as correct 'name'
         'reflected_name': extended_attributes.get('Reflect', constant.name),
         'runtime_enabled_function': runtime_enabled_function_name(constant),
-        'value': value,
+        'value': constant.value,
     }
 
 
@@ -453,6 +458,13 @@ def overloads_context(overloads):
             if common_key(overload_extended_attributes, extended_attribute) is None:
                 raise ValueError('Overloads of %s have conflicting extended attribute %s'
                                  % (name, extended_attribute))
+
+    # Check and fail if overloads disagree about whether the return type
+    # is a Promise or not.
+    promise_overload_count = sum(1 for method in overloads if method.get('idl_type') == 'Promise')
+    if promise_overload_count not in (0, len(overloads)):
+        raise ValueError('Overloads of %s have conflicting Promise/non-Promise types'
+                         % (name))
 
     return {
         'deprecate_all_as': common_value(overloads, 'deprecate_as'),  # [DeprecateAs]
@@ -748,25 +760,26 @@ def resolution_tests_methods(effective_overloads):
     # • a sequence type
     # ...
     # • a dictionary
-    try:
-        idl_type, method = next((idl_type, method)
-                                for idl_type, method in idl_types_methods
-                                if (idl_type.native_array_element_type or
-                                    idl_type.is_dictionary or
-                                    idl_type.name == 'Dictionary'))
+    #
+    # FIXME:
+    # We don't strictly follow the algorithm here. The algorithm says "remove
+    # all other entries" if there is "one entry" matching, but we yield all
+    # entries to support following constructors:
+    # [constructor(sequence<DOMString> arg), constructor(Dictionary arg)]
+    # interface I { ... }
+    # (Need to check array types before objects because an array is an object)
+    for idl_type, method in idl_types_methods:
         if idl_type.native_array_element_type:
             # (We test for Array instead of generic Object to type-check.)
             # FIXME: test for Object during resolution, then have type check for
             # Array in overloaded method: http://crbug.com/262383
-            test = '%s->IsArray()' % cpp_value
-        else:
+            yield '%s->IsArray()' % cpp_value, method
+    for idl_type, method in idl_types_methods:
+        if idl_type.is_dictionary or idl_type.name == 'Dictionary':
             # FIXME: should be '{1}->IsObject() && !{1}->IsDate() && !{1}->IsRegExp()'.format(cpp_value)
             # FIXME: the IsDate and IsRegExp checks can be skipped if we've
             # already generated tests for them.
-            test = '%s->IsObject()' % cpp_value
-        yield test, method
-    except StopIteration:
-        pass
+            yield '%s->IsObject()' % cpp_value, method
 
     # (Check for exact type matches before performing automatic type conversion;
     # only needed if distinguishing between primitive types.)
@@ -869,9 +882,6 @@ def sort_and_groupby(l, key=None):
 
 # [Constructor]
 def constructor_context(interface, constructor):
-    arguments_need_try_catch = any(v8_methods.argument_needs_try_catch(constructor, argument)
-                                   for argument in constructor.arguments)
-
     # [RaisesException=Constructor]
     is_constructor_raises_exception = \
         interface.extended_attributes.get('RaisesException') == 'Constructor'
@@ -879,7 +889,6 @@ def constructor_context(interface, constructor):
     return {
         'arguments': [v8_methods.argument_context(interface, constructor, argument, index)
                       for index, argument in enumerate(constructor.arguments)],
-        'arguments_need_try_catch': arguments_need_try_catch,
         'cpp_type': cpp_template_type(
             cpp_ptr_type('RefPtr', 'RawPtr', gc_type(interface)),
             cpp_name(interface)),
@@ -889,7 +898,7 @@ def constructor_context(interface, constructor):
             is_constructor_raises_exception or
             any(argument for argument in constructor.arguments
                 if argument.idl_type.name == 'SerializedScriptValue' or
-                   argument.idl_type.may_raise_exception_on_conversion),
+                   argument.idl_type.v8_conversion_needs_exception_state),
         'is_call_with_document':
             # [ConstructorCallWith=Document]
             has_extended_attribute_value(interface,
@@ -1003,8 +1012,8 @@ def property_setter(setter):
             idl_type.is_wrapper_type,
         'idl_type': idl_type.base_type,
         'is_custom': 'Custom' in extended_attributes,
-        'has_exception_state': is_raises_exception or
-                               idl_type.is_integer_type,
+        'has_exception_state': (is_raises_exception or
+                                idl_type.v8_conversion_needs_exception_state),
         'is_raises_exception': is_raises_exception,
         'name': cpp_name(setter),
         'v8_value_to_local_cpp_value': idl_type.v8_value_to_local_cpp_value(

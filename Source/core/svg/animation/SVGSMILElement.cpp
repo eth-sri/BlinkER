@@ -80,25 +80,25 @@ inline RepeatEvent* toRepeatEvent(Event* event)
 
 static SMILEventSender& smilEndEventSender()
 {
-    DEFINE_STATIC_LOCAL(SMILEventSender, sender, ("endEvent"));
+    DEFINE_STATIC_LOCAL(SMILEventSender, sender, (EventTypeNames::endEvent));
     return sender;
 }
 
 static SMILEventSender& smilBeginEventSender()
 {
-    DEFINE_STATIC_LOCAL(SMILEventSender, sender, ("beginEvent"));
+    DEFINE_STATIC_LOCAL(SMILEventSender, sender, (EventTypeNames::beginEvent));
     return sender;
 }
 
 static SMILEventSender& smilRepeatEventSender()
 {
-    DEFINE_STATIC_LOCAL(SMILEventSender, sender, ("repeatEvent"));
+    DEFINE_STATIC_LOCAL(SMILEventSender, sender, (EventTypeNames::repeatEvent));
     return sender;
 }
 
 static SMILEventSender& smilRepeatNEventSender()
 {
-    DEFINE_STATIC_LOCAL(SMILEventSender, sender, ("repeatn"));
+    DEFINE_STATIC_LOCAL(SMILEventSender, sender, (AtomicString("repeatn", AtomicString::ConstructFromLiteral)));
     return sender;
 }
 
@@ -774,7 +774,7 @@ SMILTime SVGSMILElement::repeatCount() const
             computedRepeatCount = SMILTime::indefinite();
         } else {
             bool ok;
-            double result = value.string().toDouble(&ok);
+            double result = value.toDouble(&ok);
             if (ok && result > 0)
                 computedRepeatCount = result;
         }

@@ -258,8 +258,7 @@ Frame* FrameLoaderClientImpl::opener() const
 
 void FrameLoaderClientImpl::setOpener(Frame* opener)
 {
-    // FIXME: Temporary hack to stage converting locations that really should be Frame.
-    m_webFrame->setOpener(WebLocalFrameImpl::fromFrame(toLocalFrame(opener)));
+    m_webFrame->setOpener(WebFrame::fromFrame(opener));
 }
 
 Frame* FrameLoaderClientImpl::parent() const
@@ -296,7 +295,7 @@ void FrameLoaderClientImpl::detachedFromParent()
 {
     // Alert the client that the frame is being detached. This is the last
     // chance we have to communicate with the client.
-    RefPtr<WebLocalFrameImpl> protector(m_webFrame);
+    RefPtrWillBeRawPtr<WebLocalFrameImpl> protector(m_webFrame);
 
     WebFrameClient* client = m_webFrame->client();
     if (!client)
@@ -619,7 +618,7 @@ void FrameLoaderClientImpl::transitionToCommittedForNewPage()
     m_webFrame->createFrameView();
 }
 
-PassRefPtr<LocalFrame> FrameLoaderClientImpl::createFrame(
+PassRefPtrWillBeRawPtr<LocalFrame> FrameLoaderClientImpl::createFrame(
     const KURL& url,
     const AtomicString& name,
     const Referrer& referrer,
@@ -740,16 +739,12 @@ WebCookieJar* FrameLoaderClientImpl::cookieJar() const
 }
 
 bool FrameLoaderClientImpl::willCheckAndDispatchMessageEvent(
-    SecurityOrigin* target, MessageEvent* event) const
+    SecurityOrigin* target, MessageEvent* event, LocalFrame* sourceFrame) const
 {
     if (!m_webFrame->client())
         return false;
-
-    WebLocalFrame* source = 0;
-    if (event && event->source() && event->source()->toDOMWindow() && event->source()->toDOMWindow()->document())
-        source = WebLocalFrameImpl::fromFrame(event->source()->toDOMWindow()->document()->frame());
     return m_webFrame->client()->willCheckAndDispatchMessageEvent(
-        source, m_webFrame, WebSecurityOrigin(target), WebDOMMessageEvent(event));
+        WebLocalFrameImpl::fromFrame(sourceFrame), m_webFrame, WebSecurityOrigin(target), WebDOMMessageEvent(event));
 }
 
 void FrameLoaderClientImpl::didChangeName(const String& name)
@@ -808,6 +803,11 @@ PassOwnPtr<WebServiceWorkerProvider> FrameLoaderClientImpl::createServiceWorkerP
     if (!m_webFrame->client())
         return nullptr;
     return adoptPtr(m_webFrame->client()->createServiceWorkerProvider(m_webFrame));
+}
+
+bool FrameLoaderClientImpl::isControlledByServiceWorker()
+{
+    return m_webFrame->client() && m_webFrame->client()->isControlledByServiceWorker();
 }
 
 SharedWorkerRepositoryClient* FrameLoaderClientImpl::sharedWorkerRepositoryClient()

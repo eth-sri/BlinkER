@@ -15,10 +15,10 @@ static void {{method.name}}{{method.overload_index}}Method{{world_suffix}}(const
     }
     {% endif %}
     {% if not method.is_static %}
-    {{cpp_class}}* impl = {{v8_class}}::toNative(info.Holder());
+    {{cpp_class}}* impl = {{v8_class}}::toImpl(info.Holder());
     {% endif %}
     {% if method.is_custom_element_callbacks %}
-    CustomElementCallbackDispatcher::CallbackDeliveryScope deliveryScope;
+    CustomElementProcessingStack::CallbackDeliveryScope deliveryScope;
     {% endif %}
     {# Security checks #}
     {% if method.is_check_security_for_window %}
@@ -63,10 +63,6 @@ static void {{method.name}}{{method.overload_index}}Method{{world_suffix}}(const
 {{generate_argument_var_declaration(argument)}};
 {% endfor %}
 {
-    {% if method.arguments_need_try_catch %}
-    v8::TryCatch block;
-    V8RethrowTryCatchScope rethrow(block);
-    {% endif %}
     {% for argument in method.arguments %}
     {% if argument.default_value %}
     if (!info[{{argument.index}}]->IsUndefined()) {
@@ -84,26 +80,19 @@ static void {{method.name}}{{method.overload_index}}Method{{world_suffix}}(const
 
 {######################################}
 {% macro generate_argument_var_declaration(argument) %}
-{% if argument.is_callback_interface %}
 {# FIXME: remove EventListener special case #}
 {% if argument.idl_type == 'EventListener' %}
 RefPtr<{{argument.idl_type}}> {{argument.name}}
 {%- else %}
-OwnPtr<{{argument.idl_type}}> {{argument.name}}
-{%- endif %}{# argument.idl_type == 'EventListener' #}
-{%- elif argument.is_clamp %}{# argument.is_callback_interface #}
-{# NaN is treated as 0: http://www.w3.org/TR/WebIDL/#es-type-mapping #}
-{{argument.cpp_type}} {{argument.name}} = 0
-{%- else %}
 {{argument.cpp_type}} {{argument.name}}
-{%- endif %}
+{%- endif %}{# argument.idl_type == 'EventListener' #}
 {% endmacro %}
 
 
 {######################################}
 {% macro generate_argument(method, argument, world_suffix) %}
 {% if argument.is_optional and not argument.has_default and
-      argument.idl_type != 'Dictionary' and
+      not argument.is_dictionary and
       not argument.is_callback_interface %}
 {# Optional arguments without a default value generate an early call with
    fewer arguments if they are omitted.
@@ -143,7 +132,7 @@ if (info.Length() > {{argument.index}} && {% if argument.is_nullable %}!isUndefi
 {# Callback functions must be functions:
    http://www.w3.org/TR/WebIDL/#es-callback-function #}
 {% if argument.is_optional %}
-if (info.Length() > {{argument.index}} && !isUndefinedOrNull(info[{{argument.index}}])) {
+if (!isUndefinedOrNull(info[{{argument.index}}])) {
     if (!info[{{argument.index}}]->IsFunction()) {
         {{throw_type_error(method,
               '"The callback provided as parameter %s is not a function."' %
@@ -151,6 +140,8 @@ if (info.Length() > {{argument.index}} && !isUndefinedOrNull(info[{{argument.ind
         return;
     }
     {{argument.name}} = V8{{argument.idl_type}}::create(v8::Handle<v8::Function>::Cast(info[{{argument.index}}]), ScriptState::current(info.GetIsolate()));
+} else {
+    {{argument.name}} = nullptr;
 }
 {% else %}{# argument.is_optional #}
 if (info.Length() <= {{argument.index}} || !{% if argument.is_nullable %}(info[{{argument.index}}]->IsFunction() || info[{{argument.index}}]->IsNull()){% else %}info[{{argument.index}}]->IsFunction(){% endif %}) {
@@ -162,24 +153,6 @@ if (info.Length() <= {{argument.index}} || !{% if argument.is_nullable %}(info[{
 {{argument.name}} = {% if argument.is_nullable %}info[{{argument.index}}]->IsNull() ? nullptr : {% endif %}V8{{argument.idl_type}}::create(v8::Handle<v8::Function>::Cast(info[{{argument.index}}]), ScriptState::current(info.GetIsolate()));
 {% endif %}{# argument.is_optional #}
 {% endif %}{# argument.idl_type == 'EventListener' #}
-{% elif argument.is_clamp %}{# argument.is_callback_interface #}
-{# NaN is treated as 0: http://www.w3.org/TR/WebIDL/#es-type-mapping #}
-double {{argument.name}}NativeValue;
-{% if method.idl_type == 'Promise' %}
-TONATIVE_VOID_PROMISE_INTERNAL({{argument.name}}NativeValue, info[{{argument.index}}]->NumberValue(), info);
-{% else %}
-TONATIVE_VOID_INTERNAL({{argument.name}}NativeValue, info[{{argument.index}}]->NumberValue());
-{% endif %}
-if (!std::isnan({{argument.name}}NativeValue))
-    {# IDL type is used for clamping, for the right bounds, since different
-       IDL integer types have same internal C++ type (int or unsigned) #}
-    {{argument.name}} = clampTo<{{argument.idl_type}}>({{argument.name}}NativeValue);
-{% elif argument.idl_type == 'SerializedScriptValue' %}
-{{argument.name}} = SerializedScriptValue::create(info[{{argument.index}}], 0, 0, exceptionState, info.GetIsolate());
-if (exceptionState.hadException()) {
-    {{throw_from_exception_state(method)}};
-    return;
-}
 {% elif argument.is_variadic_wrapper_type %}
 for (int i = {{argument.index}}; i < info.Length(); ++i) {
     if (!V8{{argument.idl_type}}::hasInstance(info[i], info.GetIsolate())) {
@@ -187,8 +160,17 @@ for (int i = {{argument.index}}; i < info.Length(); ++i) {
                                    (argument.index + 1, argument.idl_type)) | indent(8)}}
         return;
     }
-    {{argument.name}}.append(V8{{argument.idl_type}}::toNative(v8::Handle<v8::Object>::Cast(info[i])));
+    {{argument.name}}.append(V8{{argument.idl_type}}::toImpl(v8::Handle<v8::Object>::Cast(info[i])));
 }
+{% elif argument.is_dictionary %}
+{# Dictionaries must have type Undefined, Null or Object:
+http://heycam.github.io/webidl/#es-dictionary #}
+if (!isUndefinedOrNull(info[{{argument.index}}]) && !info[{{argument.index}}]->IsObject()) {
+    {{throw_type_error(method, '"parameter %s (\'%s\') is not an object."' %
+                               (argument.index + 1, argument.name)) | indent}}
+    return;
+}
+{{argument.v8_value_to_local_cpp_value}};
 {% else %}{# argument.is_nullable #}
 {{argument.v8_value_to_local_cpp_value}};
 {% endif %}{# argument.is_nullable #}
@@ -212,10 +194,8 @@ if (!({{argument.enum_validation_expression}})) {
               (argument.index + 1)) | indent}}
     return;
 }
-{% elif argument.idl_type in ['Dictionary', 'Promise'] %}
-{# Dictionaries must have type Undefined, Null or Object:
-http://heycam.github.io/webidl/#es-dictionary
-We also require this for our implementation of promises, though not in spec:
+{% elif argument.idl_type == 'Promise' %}
+{# We require this for our implementation of promises, though not in spec:
 http://heycam.github.io/webidl/#es-promise #}
 if (!{{argument.name}}.isUndefinedOrNull() && !{{argument.name}}.isObject()) {
     {{throw_type_error(method, '"parameter %s (\'%s\') is not an object."' %
@@ -458,7 +438,8 @@ static void {{method.name}}MethodCallback{{world_suffix}}(const v8::FunctionCall
     {% else %}
     if (contextData && contextData->activityLogger()) {
     {% endif %}
-        Vector<v8::Handle<v8::Value> > loggerArgs = toNativeArguments<v8::Handle<v8::Value> >(info, 0);
+        ExceptionState exceptionState(ExceptionState::ExecutionContext, "{{method.name}}", "{{interface_name}}", info.Holder(), info.GetIsolate());
+        Vector<v8::Handle<v8::Value> > loggerArgs = toImplArguments<v8::Handle<v8::Value> >(info, 0, exceptionState);
         contextData->activityLogger()->logMethod("{{interface_name}}.{{method.name}}", info.Length(), loggerArgs.data());
     }
     {% endif %}
@@ -492,7 +473,7 @@ static void {{method.name}}OriginSafeMethodGetter{{world_suffix}}(const v8::Prop
         v8SetReturnValue(info, privateTemplate->GetFunction());
         return;
     }
-    {{cpp_class}}* impl = {{v8_class}}::toNative(holder);
+    {{cpp_class}}* impl = {{v8_class}}::toImpl(holder);
     if (!BindingSecurity::shouldAllowAccessToFrame(info.GetIsolate(), impl->frame(), DoNotReportSecurityError)) {
         static int sharedTemplateKey; // This address is used for a key to look up the dom template.
         v8::Handle<v8::FunctionTemplate> sharedTemplate = data->domTemplate(&sharedTemplateKey, {{cpp_class}}V8Internal::{{method.name}}MethodCallback{{world_suffix}}, v8Undefined(), {{signature}}, {{method.length}});
@@ -527,10 +508,11 @@ bool {{v8_class}}::PrivateScript::{{method.name}}Method({{method.argument_declar
         return false;
     v8::HandleScope handleScope(toIsolate(frame));
     ScriptForbiddenScope::AllowUserAgentScript script;
-    v8::Handle<v8::Context> context = toV8Context(frame, DOMWrapperWorld::privateScriptIsolatedWorld());
-    if (context.IsEmpty())
+    v8::Handle<v8::Context> contextInPrivateScript = toV8Context(frame, DOMWrapperWorld::privateScriptIsolatedWorld());
+    if (contextInPrivateScript.IsEmpty())
         return false;
-    ScriptState* scriptState = ScriptState::from(context);
+    ScriptState* scriptState = ScriptState::from(contextInPrivateScript);
+    ScriptState* scriptStateInUserScript = ScriptState::forMainWorld(frame);
     if (!scriptState->executionContext())
         return false;
 
@@ -543,35 +525,18 @@ bool {{v8_class}}::PrivateScript::{{method.name}}Method({{method.argument_declar
     {% if method.arguments %}
     v8::Handle<v8::Value> argv[] = { {{method.arguments | join(', ', 'handle')}} };
     {% else %}
-    {# Empty array initializers are illegal, and don\'t compile in MSVC. #}
+    {# Empty array initializers are illegal, and don\t compile in MSVC. #}
     v8::Handle<v8::Value> *argv = 0;
     {% endif %}
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "{{method.name}}", "{{cpp_class}}", scriptState->context()->Global(), scriptState->isolate());
-    v8::TryCatch block;
-    {% if method.idl_type == 'void' %}
-    PrivateScriptRunner::runDOMMethod(scriptState, "{{cpp_class}}", "{{method.name}}", holder, {{method.arguments | length}}, argv);
-    if (block.HasCaught()) {
-        if (!PrivateScriptRunner::rethrowExceptionInPrivateScript(scriptState->isolate(), exceptionState, block)) {
-            // FIXME: We should support more exceptions.
-            RELEASE_ASSERT_NOT_REACHED();
-        }
-        block.ReThrow();
+    v8::Handle<v8::Value> v8Value = PrivateScriptRunner::runDOMMethod(scriptState, scriptStateInUserScript, "{{cpp_class}}", "{{method.name}}", holder, {{method.arguments | length}}, argv);
+    if (v8Value.IsEmpty())
         return false;
-    }
-    {% else %}
-    v8::Handle<v8::Value> v8Value = PrivateScriptRunner::runDOMMethod(scriptState, "{{cpp_class}}", "{{method.name}}", holder, {{method.arguments | length}}, argv);
-    if (block.HasCaught()) {
-        if (!PrivateScriptRunner::rethrowExceptionInPrivateScript(scriptState->isolate(), exceptionState, block)) {
-            // FIXME: We should support more exceptions.
-            RELEASE_ASSERT_NOT_REACHED();
-        }
-        block.ReThrow();
-        return false;
-    }
+    {% if method.idl_type != 'void' %}
     {{method.private_script_v8_value_to_local_cpp_value}};
-    RELEASE_ASSERT(!exceptionState.hadException());
     *result = cppValue;
     {% endif %}
+    RELEASE_ASSERT(!exceptionState.hadException());
     return true;
 }
 {% endmacro %}
@@ -622,7 +587,11 @@ v8::Handle<v8::Object> wrapper = wrap(impl.get(), info.Holder(), info.GetIsolate
                                        if constructor.is_named_constructor else
                                        '') %}
 v8::Handle<v8::Object> wrapper = info.Holder();
-V8DOMWrapper::associateObjectWithWrapper<{{v8_class}}>(impl.release(), &{{constructor_class}}::wrapperTypeInfo, wrapper, info.GetIsolate(), {{wrapper_configuration}});
+{% if is_script_wrappable %}
+impl->associateWithWrapper(&{{constructor_class}}::wrapperTypeInfo, wrapper, info.GetIsolate());
+{% else %}
+V8DOMWrapper::associateObjectWithWrapper<{{v8_class}}>(impl.release(), &{{constructor_class}}::wrapperTypeInfo, wrapper, info.GetIsolate());
+{% endif %}
 {% endif %}
 v8SetReturnValue(info, wrapper);
 {% endmacro %}

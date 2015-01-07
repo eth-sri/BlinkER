@@ -23,6 +23,7 @@
             {
               "position": [108, 100],
               "bounds": [300, 300],
+              "drawsContent": true,
               "children": [
                 {
                   "bounds": [285, 300],
@@ -50,6 +51,7 @@
               ]
             },
             {
+              "shouldFlattenTransform": false,
               "children": [
                 {
                   "position": [108, 100],

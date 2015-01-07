@@ -25,8 +25,9 @@
 #include "config.h"
 #include "core/dom/Node.h"
 
+#include "bindings/core/v8/DOMDataStore.h"
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ScriptCallStackFactory.h"
+#include "bindings/core/v8/V8DOMWrapper.h"
 #include "core/HTMLNames.h"
 #include "core/XMLNames.h"
 #include "core/accessibility/AXObjectCache.h"
@@ -77,6 +78,7 @@
 #include "core/events/WheelEvent.h"
 #include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/Settings.h"
 #include "core/html/HTMLAnchorElement.h"
 #include "core/html/HTMLDialogElement.h"
 #include "core/html/HTMLFrameOwnerElement.h"
@@ -84,7 +86,6 @@
 #include "core/page/ContextMenuController.h"
 #include "core/page/EventHandler.h"
 #include "core/page/Page.h"
-#include "core/frame/Settings.h"
 #include "core/rendering/FlowThreadController.h"
 #include "core/rendering/RenderBox.h"
 #include "core/svg/graphics/SVGImage.h"
@@ -272,7 +273,6 @@ Node::Node(TreeScope* treeScope, ConstructionType type)
     , m_creatorAction(0)
 {
     ASSERT(m_treeScope || type == CreateDocument || type == CreateShadowRoot);
-    ScriptWrappable::init(this);
 #if !ENABLE(OILPAN)
     if (m_treeScope)
         m_treeScope->guardRef();
@@ -517,6 +517,8 @@ void Node::remove(ExceptionState& exceptionState)
 
 void Node::normalize()
 {
+    document().updateDistributionForNodeIfNeeded(this);
+
     // Go through the subtree beneath us, normalizing all nodes. This means that
     // any two adjacent text nodes are merged and any empty text nodes are removed.
 
@@ -704,66 +706,6 @@ void Node::markAncestorsWithChildNeedsDistributionRecalc()
     document().scheduleRenderTreeUpdateIfNeeded();
 }
 
-namespace {
-
-void addJsStack(TracedValue* stackFrames)
-{
-    RefPtrWillBeRawPtr<ScriptCallStack> stack = createScriptCallStack(10);
-    if (!stack)
-        return;
-    for (size_t i = 0; i < stack->size(); i++)
-        stackFrames->pushString(stack->at(i).functionName());
-}
-
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> jsonObjectForStyleInvalidation(unsigned nodeCount, const Node* rootNode)
-{
-    RefPtr<TracedValue> value = TracedValue::create();
-    value->setInteger("node_count", nodeCount);
-    value->setString("root_node", rootNode->debugName());
-    value->beginArray("js_stack");
-    addJsStack(value.get());
-    value->endArray();
-    return value;
-}
-
-} // anonymous namespace'd functions supporting traceStyleChange
-
-unsigned Node::styledSubtreeSize() const
-{
-    unsigned nodeCount = 0;
-
-    for (const Node* node = this; node; node = NodeTraversal::next(*node, this)) {
-        if (node->isTextNode() || node->isElementNode())
-            nodeCount++;
-        for (ShadowRoot* root = node->youngestShadowRoot(); root; root = root->olderShadowRoot())
-            nodeCount += root->styledSubtreeSize();
-    }
-
-    return nodeCount;
-}
-
-void Node::traceStyleChange(StyleChangeType changeType)
-{
-    static const unsigned kMinLoggedSize = 100;
-    unsigned nodeCount = styledSubtreeSize();
-    if (nodeCount < kMinLoggedSize)
-        return;
-
-    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("style.debug"),
-        "Node::setNeedsStyleRecalc",
-        "data", jsonObjectForStyleInvalidation(nodeCount, this)
-    );
-}
-
-void Node::traceStyleChangeIfNeeded(StyleChangeType changeType)
-{
-    // TRACE_EVENT_CATEGORY_GROUP_ENABLED macro loads a global static bool into our local bool.
-    bool styleTracingEnabled;
-    TRACE_EVENT_CATEGORY_GROUP_ENABLED(TRACE_DISABLED_BY_DEFAULT("style.debug"), &styleTracingEnabled);
-    if (UNLIKELY(styleTracingEnabled))
-        traceStyleChange(changeType);
-}
-
 inline void Node::setStyleChange(StyleChangeType changeType)
 {
     m_nodeFlags = (m_nodeFlags & ~StyleChangeMask) | changeType;
@@ -776,18 +718,15 @@ void Node::markAncestorsWithChildNeedsStyleRecalc()
     document().scheduleRenderTreeUpdateIfNeeded();
 }
 
-void Node::setNeedsStyleRecalc(StyleChangeType changeType)
+void Node::setNeedsStyleRecalc(StyleChangeType changeType, const StyleChangeReasonForTracing& reason)
 {
     ASSERT(changeType != NoStyleChange);
     if (!inActiveDocument())
         return;
 
     StyleChangeType existingChangeType = styleChangeType();
-    if (changeType > existingChangeType) {
+    if (changeType > existingChangeType)
         setStyleChange(changeType);
-        if (changeType >= SubtreeStyleChange)
-            traceStyleChangeIfNeeded(changeType);
-    }
 
     if (existingChangeType == NoStyleChange)
         markAncestorsWithChildNeedsStyleRecalc();
@@ -2458,7 +2397,7 @@ void Node::setCustomElementState(CustomElementState newState)
     setFlag(newState == Upgraded, CustomElementUpgradedFlag);
 
     if (oldState == NotCustomElement || newState == Upgraded)
-        setNeedsStyleRecalc(SubtreeStyleChange); // :unresolved has changed
+        setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::createWithExtraData(StyleChangeReason::PseudoClass, StyleChangeExtraData::Unresolved)); // :unresolved has changed
 }
 
 void Node::trace(Visitor* visitor)
@@ -2498,6 +2437,30 @@ unsigned Node::lengthOfContents() const
     }
     ASSERT_NOT_REACHED();
     return 0;
+}
+
+v8::Handle<v8::Object> Node::wrap(v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
+{
+    // It's possible that no one except for the new wrapper owns this object at
+    // this moment, so we have to prevent GC to collect this object until the
+    // object gets associated with the wrapper.
+    RefPtrWillBeRawPtr<Node> protect(this);
+
+    ASSERT(!DOMDataStore::containsWrapperNonTemplate(this, isolate));
+
+    const WrapperTypeInfo* wrapperType = wrapperTypeInfo();
+
+    v8::Handle<v8::Object> wrapper = V8DOMWrapper::createWrapper(creationContext, wrapperType, toScriptWrappableBase(), isolate);
+    if (UNLIKELY(wrapper.IsEmpty()))
+        return wrapper;
+
+    wrapperType->installConditionallyEnabledProperties(wrapper, isolate);
+    return associateWithWrapper(wrapperType, wrapper, isolate);
+}
+
+v8::Handle<v8::Object> Node::associateWithWrapper(const WrapperTypeInfo* wrapperType, v8::Handle<v8::Object> wrapper, v8::Isolate* isolate)
+{
+    return V8DOMWrapper::associateObjectWithWrapperNonTemplate(this, wrapperType, wrapper, isolate);
 }
 
 } // namespace blink

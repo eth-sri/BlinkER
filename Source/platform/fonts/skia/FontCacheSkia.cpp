@@ -97,7 +97,7 @@ PassRefPtr<SimpleFontData> FontCache::fallbackFontForCharacter(const FontDescrip
     }
 
     FontCache::PlatformFallbackFont fallbackFont;
-    FontCache::getFontForCharacter(c, "", &fallbackFont);
+    FontCache::getFontForCharacter(c, fontDescription.locale().ascii().data(), &fallbackFont);
     if (fallbackFont.name.isEmpty())
         return nullptr;
 
@@ -220,10 +220,10 @@ PassRefPtr<SkTypeface> FontCache::createTypeface(const FontDescription& fontDesc
 
 #if OS(WIN)
     if (s_sideloadedFonts) {
-        HashMap<String, SkTypeface*>::iterator sideloadedFont =
+        HashMap<String, RefPtr<SkTypeface> >::iterator sideloadedFont =
             s_sideloadedFonts->find(name.data());
         if (sideloadedFont != s_sideloadedFonts->end())
-            return adoptRef(sideloadedFont->value);
+            return sideloadedFont->value;
     }
 
     if (m_fontManager) {

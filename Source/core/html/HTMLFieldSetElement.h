@@ -29,10 +29,10 @@
 namespace blink {
 
 class FormAssociatedElement;
-class HTMLCollection;
 class HTMLFormControlsCollection;
 
 class HTMLFieldSetElement FINAL : public HTMLFormControlElement {
+    DEFINE_WRAPPERTYPEINFO();
 public:
     static PassRefPtrWillBeRawPtr<HTMLFieldSetElement> create(Document&, HTMLFormElement*);
     virtual void trace(Visitor*) OVERRIDE;
@@ -64,6 +64,6 @@ private:
     mutable uint64_t m_documentVersion;
 };
 
-} // namespace
+} // namespace blink
 
-#endif
+#endif // HTMLFieldSetElement_h

@@ -35,6 +35,10 @@ class HTMLMapElement;
 
 class RenderImage : public RenderReplaced {
 public:
+    // These are the paddings to use when displaying either alt text or an image.
+    static const unsigned short paddingWidth = 4;
+    static const unsigned short paddingHeight = 4;
+
     RenderImage(Element*);
     virtual ~RenderImage();
     virtual void destroy() OVERRIDE;
@@ -53,8 +57,6 @@ public:
 
     HTMLMapElement* imageMap() const;
     void areaElementFocusChanged(HTMLAreaElement*);
-
-    void highQualityRepaintTimerFired(Timer<RenderImage>*);
 
     void setIsGeneratedContent(bool generated = true) { m_isGeneratedContent = generated; }
 
@@ -78,7 +80,6 @@ protected:
 
     virtual void imageChanged(WrappedImagePtr, const IntRect* = 0) OVERRIDE;
 
-    void paintIntoRect(GraphicsContext*, const LayoutRect&);
     virtual void paint(PaintInfo&, const LayoutPoint&) OVERRIDE FINAL;
     virtual void layout() OVERRIDE;
     virtual bool updateImageLoadingPriorities() OVERRIDE FINAL;
@@ -106,8 +107,6 @@ private:
     void updateIntrinsicSizeIfNeeded(const LayoutSize&);
     // Update the size of the image to be rendered. Object-fit may cause this to be different from the CSS box's content rect.
     void updateInnerContentRect();
-
-    void paintAreaElementFocusRing(PaintInfo&);
 
     // Text to display as long as the image isn't available.
     String m_altText;

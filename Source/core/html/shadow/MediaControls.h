@@ -32,7 +32,6 @@
 
 namespace blink {
 
-class Document;
 class Event;
 
 class MediaControls FINAL : public HTMLDivElement {
@@ -59,10 +58,15 @@ public:
 
     void changedClosedCaptionsVisibility();
     void refreshClosedCaptionsButtonVisibility();
-    void closedCaptionTracksChanged();
+    void textTracksChanged();
 
     void enteredFullscreen();
     void exitedFullscreen();
+
+    void startedCasting();
+    void stoppedCasting();
+    void refreshCastButtonVisibility();
+    void showOverlayCastButton();
 
     void updateTextTrackDisplay();
 
@@ -90,6 +94,7 @@ private:
     void hideMediaControlsTimerFired(Timer<MediaControls>*);
     void startHideMediaControlsTimer();
     void stopHideMediaControlsTimer();
+    void resetHideMediaControlsTimer();
 
     void createTextTrackDisplay();
     void showTextTrackDisplay();
@@ -122,6 +127,8 @@ private:
     RawPtrWillBeMember<MediaControlVolumeSliderElement> m_volumeSlider;
     RawPtrWillBeMember<MediaControlToggleClosedCaptionsButtonElement> m_toggleClosedCaptionsButton;
     RawPtrWillBeMember<MediaControlFullscreenButtonElement> m_fullScreenButton;
+    RawPtrWillBeMember<MediaControlCastButtonElement> m_castButton;
+    RawPtrWillBeMember<MediaControlCastButtonElement> m_overlayCastButton;
     RawPtrWillBeMember<MediaControlTimeRemainingDisplayElement> m_durationDisplay;
     RawPtrWillBeMember<MediaControlPanelEnclosureElement> m_enclosure;
 

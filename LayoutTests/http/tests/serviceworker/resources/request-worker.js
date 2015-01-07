@@ -1,6 +1,15 @@
 importScripts('worker-test-harness.js');
+importScripts('test-helpers.js');
 
 var URL = 'https://www.example.com/test.html';
+
+function size(headers) {
+  var count = 0;
+  for (var header of headers) {
+    ++count;
+  }
+  return count;
+}
 
 test(function() {
     var headers = new Headers;
@@ -16,7 +25,7 @@ test(function() {
     assert_true(request.headers instanceof Headers, 'Request.headers should be Headers');
 
     // 'User-Agent' is a forbidden header.
-    assert_equals(request.headers.size, 2, 'Request.headers.size should match');
+    assert_equals(size(request.headers), 2, 'Request.headers size should match');
     // Note: detailed behavioral tests for Headers are in another test,
     // http/tests/serviceworker/headers.html.
 
@@ -96,6 +105,10 @@ test(function() {
             assert_equals(request1.mode, mode1 ? mode1 : 'cors', 'Request.mode should match');
             METHODS.forEach(function(method2) {
                 MODES.forEach(function(mode2) {
+                    // We need to construct a new request1 because as soon as it
+                    // is used in a constructor it will be flagged as 'used',
+                    // and we can no longer construct objects with it.
+                    request1 = new Request(URL, init1);
                     var init2 = {};
                     if (method2 != undefined) { init2['method'] = method2; }
                     if (mode2 != undefined) { init2['mode'] = mode2; }
@@ -131,6 +144,7 @@ test(function() {
         request1 = new Request(request1);
         assert_equals(request1.credentials, credentials1 ? credentials1 : 'omit', 'Request.credentials should match');
         CREDENTIALS.forEach(function(credentials2) {
+            request1 = new Request(URL, init1);
             var init2 = {};
             if (credentials2 != undefined) { init2['credentials'] = credentials2; }
             request2 = new Request(request1, init2);
@@ -179,31 +193,31 @@ test(function() {
          ['X-ServiceWorker-Test2', 'test2'],
          ['Content-Type', 'foo/bar']];
 
-    ['same-origin', 'cors'].forEach(function(mode) {
+   ['same-origin', 'cors'].forEach(function(mode) {
         var request = new Request(URL, {mode: mode});
         FORBIDDEN_HEADERS.forEach(function(header) {
             request.headers.append(header, 'test');
-            assert_equals(request.headers.size, 0,
+            assert_equals(size(request.headers), 0,
                           'Request.headers.append should ignore the forbidden headers');
             request.headers.set(header, 'test');
-            assert_equals(request.headers.size, 0,
+            assert_equals(size(request.headers), 0,
                           'Request.headers.set should ignore the forbidden headers');
         });
         var request = new Request(URL, {mode: mode});
-        assert_equals(request.headers.size, 0);
+        assert_equals(size(request.headers), 0);
         NON_SIMPLE_HEADERS.forEach(function(header) {
             request.headers.append(header[0], header[1]);
         });
-        assert_equals(request.headers.size, NON_SIMPLE_HEADERS.length);
+        assert_equals(size(request.headers), NON_SIMPLE_HEADERS.length);
         NON_SIMPLE_HEADERS.forEach(function(header) {
             assert_equals(request.headers.get(header[0]), header[1]);
         });
         request = new Request(URL, {mode: mode});
-        assert_equals(request.headers.size, 0);
+        assert_equals(size(request.headers), 0);
         NON_SIMPLE_HEADERS.forEach(function(header) {
             request.headers.set(header[0], header[1]);
         });
-        assert_equals(request.headers.size, NON_SIMPLE_HEADERS.length);
+        assert_equals(size(request.headers), NON_SIMPLE_HEADERS.length);
         NON_SIMPLE_HEADERS.forEach(function(header) {
             assert_equals(request.headers.get(header[0]), header[1]);
         });
@@ -217,25 +231,25 @@ test(function() {
         request.headers.set(header[0], header[1]);
         request.headers.append(header[0], header[1]);
     });
-    assert_equals(request.headers.size, 0,
+    assert_equals(size(request.headers), 0,
                   'no-cors request should only accept simple headers');
 
     SIMPLE_HEADERS.forEach(function(header) {
         request = new Request(URL, {mode: 'no-cors'});
         request.headers.append(header[0], header[1]);
-        assert_equals(request.headers.size, 1,
+        assert_equals(size(request.headers), 1,
                       'no-cors request should accept simple headers');
         request = new Request(URL, {mode: 'no-cors'});
         request.headers.set(header[0], header[1]);
-        assert_equals(request.headers.size, 1,
+        assert_equals(size(request.headers), 1,
                       'no-cors request should accept simple headers');
         request.headers.delete(header[0]);
         if (header[0] == 'Content-Type') {
             assert_equals(
-                request.headers.size, 1,
+                size(request.headers), 1,
                 'Content-Type header of no-cors request shouldn\'t be deleted');
         } else {
-            assert_equals(request.headers.size, 0);
+            assert_equals(size(request.headers), 0);
         }
     });
 
@@ -252,15 +266,15 @@ test(function() {
         }
         ['same-origin', 'cors'].forEach(function(mode) {
           request = new Request(URL, {mode: mode, headers: headers});
-          assert_equals(request.headers.size, expectedSize,
+          assert_equals(size(request.headers), expectedSize,
                         'Request should not support the forbidden headers');
         });
         request = new Request(URL, {mode: 'no-cors', headers: headers});
-        assert_equals(request.headers.size, 1,
+        assert_equals(size(request.headers), 1,
                       'No-CORS Request.headers should only support simple headers');
         ['same-origin', 'cors', 'no-cors'].forEach(function(mode) {
             request = new Request(new Request(URL, {mode: mode, headers: headers}), {mode: 'no-cors'});
-            assert_equals(request.headers.size, 1,
+            assert_equals(size(request.headers), 1,
                           'No-CORS Request.headers should only support simple headers');
         });
     });
@@ -282,3 +296,143 @@ test(function() {
                   'method should not be changed when normalized: ' + method);
   });
 }, 'Request method names are normalized');
+
+test(function() {
+    var req = new Request(URL);
+    assert_false(req.bodyUsed,
+      "Request should not be flagged as used if it has not been consumed.");
+    var req2 = new Request(req);
+    assert_true(req.bodyUsed,
+      "Request should be flagged as used if it is used as a construction " +
+      "argument of another Request.");
+    assert_false(req2.bodyUsed,
+      "Request should not be flagged as used if it has not been consumed.");
+    assert_throws(new TypeError(), function() { new Request(req); },
+      "Request cannot be constructed with a request that has been flagged as used.");
+  }, 'Request construction behavior regarding "used" body flag and exceptions.');
+
+promise_test(function() {
+  var headers = new Headers;
+  headers.set('Content-Language', 'ja');
+  var req = new Request(URL, {
+    method: 'GET',
+    headers: headers,
+    body: new Blob(['Test Blob'], {type: 'test/type'})
+  });
+  var req2 = req.clone();
+  // Change headers and of original request.
+  req.headers.set('Content-Language', 'en');
+  assert_equals(
+    req2.headers.get('Content-Language'), 'ja', 'Headers of cloned request ' +
+    'should not change when original request headers are changed.');
+
+  return req.text()
+    .then(function(text) {
+        assert_equals(text, 'Test Blob', 'Body of request should match.');
+        return req2.text();
+      })
+    .then(function(text) {
+        assert_equals(text, 'Test Blob', 'Cloned request body should match.');
+      });
+  }, 'Test clone behavior with loading content from Request.');
+
+async_test(function(t) {
+    var getContentType = function(headers) {
+        var content_type = '';
+        for (var header of headers) {
+          if (header[0] == 'content-type')
+            content_type = header[1];
+        }
+        return content_type;
+      };
+    var request =
+      new Request(URL,
+                  {
+                    method: 'POST',
+                    body: new Blob(['Test Blob'], {type: 'test/type'})
+                  });
+    assert_equals(
+      getContentType(request.headers), 'test/type',
+      'ContentType header of Request created with Blob body must be set.');
+    assert_false(request.bodyUsed,
+                 'bodyUsed must be true before calling text()');
+    request.text()
+      .then(function(result) {
+          assert_equals(result, 'Test Blob',
+                        'Creating a Request with Blob body should success.');
+
+          request = new Request(URL, {method: 'POST', body: 'Test String'});
+          assert_equals(
+            getContentType(request.headers), 'text/plain;charset=UTF-8',
+            'ContentType header of Request created with string must be set.');
+          return request.text();
+        })
+      .then(function(result) {
+          assert_equals(result, 'Test String',
+                        'Creating a Request with string body should success.');
+
+          var text = "Test ArrayBuffer";
+          var array = new Uint8Array(text.length);
+          for (var i = 0; i < text.length; ++i)
+            array[i] = text.charCodeAt(i);
+          request = new Request(URL, {method: 'POST', body: array.buffer});
+          return request.text();
+        })
+      .then(function(result) {
+          assert_equals(
+            result, 'Test ArrayBuffer',
+            'Creating a Request with ArrayBuffer body should success.');
+
+          var text = "Test ArrayBufferView";
+          var array = new Uint8Array(text.length);
+          for (var i = 0; i < text.length; ++i)
+            array[i] = text.charCodeAt(i);
+          request = new Request(URL, {method: 'POST', body: array});
+          return request.text();
+        })
+      .then(function(result) {
+          assert_equals(
+            result, 'Test ArrayBufferView',
+            'Creating a Request with ArrayBuffer body should success.');
+
+          var formData = new FormData();
+          formData.append('sample string', '1234567890');
+          formData.append('sample blob', new Blob(['blob content']));
+          formData.append('sample file',
+                          new File(['file content'], 'file.dat'));
+          request = new Request(URL, {method: 'POST', body: formData});
+          return request.text();
+        })
+      .then(function(result) {
+          var reg = new RegExp('multipart\/form-data; boundary=(.*)');
+          var regResult = reg.exec(getContentType(request.headers));
+          var boundary = regResult[1];
+          var expected_body =
+            '--' + boundary + '\r\n' +
+            'Content-Disposition: form-data; name="sample string"\r\n' +
+            '\r\n' +
+            '1234567890\r\n' +
+            '--' + boundary + '\r\n' +
+            'Content-Disposition: form-data; name="sample blob"; ' +
+            'filename="blob"\r\n' +
+            'Content-Type: application/octet-stream\r\n' +
+            '\r\n' +
+            'blob content\r\n' +
+            '--' + boundary + '\r\n' +
+            'Content-Disposition: form-data; name="sample file"; ' +
+            'filename="file.dat"\r\n' +
+            'Content-Type: application/octet-stream\r\n' +
+            '\r\n' +
+            'file content\r\n' +
+            '--' + boundary + '--\r\n';
+          assert_equals(
+            result, expected_body,
+            'Creating a Request with FormData body should success.');
+        })
+      .then(function() {
+          t.done();
+        })
+      .catch(unreached_rejection(t));
+    assert_true(request.bodyUsed,
+                'bodyUsed must be true after calling text()');
+  }, 'Request body test in ServiceWorkerGlobalScope');

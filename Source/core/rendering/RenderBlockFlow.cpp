@@ -35,6 +35,8 @@
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
+#include "core/html/HTMLDialogElement.h"
+#include "core/paint/BlockFlowPainter.h"
 #include "core/rendering/HitTestLocation.h"
 #include "core/rendering/RenderFlowThread.h"
 #include "core/rendering/RenderLayer.h"
@@ -382,6 +384,9 @@ void RenderBlockFlow::layoutBlock(bool relayoutChildren)
             setShouldInvalidateOverflowForPaint(true);
     }
 
+    if (isHTMLDialogElement(node()) && isOutOfFlowPositioned())
+        positionDialog();
+
     clearNeedsLayout();
 }
 
@@ -489,8 +494,6 @@ inline bool RenderBlockFlow::layoutBlockFlow(bool relayoutChildren, LayoutUnit &
         relayoutChildren = true;
 
     layoutPositionedObjects(relayoutChildren || isDocumentElement(), oldLeft != logicalLeft() ? ForcedLayoutAfterContainingBlockMoved : DefaultLayout);
-
-    computeRegionRangeForBlock(flowThreadContainingBlock());
 
     // Add overflow from children (unless we're multi-column, since in that case all our child overflow is clipped anyway).
     computeOverflow(oldClientAfterEdge);
@@ -865,6 +868,25 @@ void RenderBlockFlow::adjustLinePositionForPagination(RootInlineBox* lineBox, La
         if (lineBox != firstRootBox() || offsetFromLogicalTopOfFirstPage())
             setPageBreak(logicalOffset, lineHeight);
     }
+}
+
+LayoutUnit RenderBlockFlow::adjustForUnsplittableChild(RenderBox* child, LayoutUnit logicalOffset, bool includeMargins)
+{
+    bool checkColumnBreaks = view()->layoutState()->isPaginatingColumns() || flowThreadContainingBlock();
+    bool checkPageBreaks = !checkColumnBreaks && view()->layoutState()->pageLogicalHeight();
+    bool isUnsplittable = child->isUnsplittableForPagination() || (checkColumnBreaks && child->style()->columnBreakInside() == PBAVOID)
+        || (checkPageBreaks && child->style()->pageBreakInside() == PBAVOID);
+    if (!isUnsplittable)
+        return logicalOffset;
+    LayoutUnit childLogicalHeight = logicalHeightForChild(child) + (includeMargins ? marginBeforeForChild(child) + marginAfterForChild(child) : LayoutUnit());
+    LayoutUnit pageLogicalHeight = pageLogicalHeightForOffset(logicalOffset);
+    updateMinimumPageHeight(logicalOffset, childLogicalHeight);
+    if (!pageLogicalHeight || childLogicalHeight > pageLogicalHeight)
+        return logicalOffset;
+    LayoutUnit remainingLogicalHeight = pageRemainingLogicalHeightForOffset(logicalOffset, ExcludePageBoundary);
+    if (remainingLogicalHeight < childLogicalHeight)
+        return logicalOffset + remainingLogicalHeight;
+    return logicalOffset;
 }
 
 void RenderBlockFlow::rebuildFloatsFromIntruding()
@@ -2098,35 +2120,10 @@ void RenderBlockFlow::invalidatePaintForOverflow()
 
 void RenderBlockFlow::paintFloats(PaintInfo& paintInfo, const LayoutPoint& paintOffset, bool preservePhase)
 {
-    if (!m_floatingObjects)
-        return;
-
-    const FloatingObjectSet& floatingObjectSet = m_floatingObjects->set();
-    FloatingObjectSetIterator end = floatingObjectSet.end();
-    for (FloatingObjectSetIterator it = floatingObjectSet.begin(); it != end; ++it) {
-        FloatingObject* floatingObject = it->get();
-        // Only paint the object if our m_shouldPaint flag is set.
-        if (floatingObject->shouldPaint() && !floatingObject->renderer()->hasSelfPaintingLayer()) {
-            PaintInfo currentPaintInfo(paintInfo);
-            currentPaintInfo.phase = preservePhase ? paintInfo.phase : PaintPhaseBlockBackground;
-            // FIXME: LayoutPoint version of xPositionForFloatIncludingMargin would make this much cleaner.
-            LayoutPoint childPoint = flipFloatForWritingModeForChild(floatingObject, LayoutPoint(paintOffset.x() + xPositionForFloatIncludingMargin(floatingObject) - floatingObject->renderer()->x(), paintOffset.y() + yPositionForFloatIncludingMargin(floatingObject) - floatingObject->renderer()->y()));
-            floatingObject->renderer()->paint(currentPaintInfo, childPoint);
-            if (!preservePhase) {
-                currentPaintInfo.phase = PaintPhaseChildBlockBackgrounds;
-                floatingObject->renderer()->paint(currentPaintInfo, childPoint);
-                currentPaintInfo.phase = PaintPhaseFloat;
-                floatingObject->renderer()->paint(currentPaintInfo, childPoint);
-                currentPaintInfo.phase = PaintPhaseForeground;
-                floatingObject->renderer()->paint(currentPaintInfo, childPoint);
-                currentPaintInfo.phase = PaintPhaseOutline;
-                floatingObject->renderer()->paint(currentPaintInfo, childPoint);
-            }
-        }
-    }
+    BlockFlowPainter(*this).paintFloats(paintInfo, paintOffset, preservePhase);
 }
 
-void RenderBlockFlow::clipOutFloatingObjects(RenderBlock* rootBlock, const PaintInfo* paintInfo, const LayoutPoint& rootBlockPhysicalPosition, const LayoutSize& offsetFromRootBlock)
+void RenderBlockFlow::clipOutFloatingObjects(const RenderBlock* rootBlock, const PaintInfo* paintInfo, const LayoutPoint& rootBlockPhysicalPosition, const LayoutSize& offsetFromRootBlock) const
 {
     if (m_floatingObjects) {
         const FloatingObjectSet& floatingObjectSet = m_floatingObjects->set();
@@ -2735,8 +2732,8 @@ LayoutUnit RenderBlockFlow::logicalRightFloatOffsetForLine(LayoutUnit logicalTop
     return fixedOffset;
 }
 
-GapRects RenderBlockFlow::inlineSelectionGaps(RenderBlock* rootBlock, const LayoutPoint& rootBlockPhysicalPosition, const LayoutSize& offsetFromRootBlock,
-    LayoutUnit& lastLogicalTop, LayoutUnit& lastLogicalLeft, LayoutUnit& lastLogicalRight, const PaintInfo* paintInfo)
+GapRects RenderBlockFlow::inlineSelectionGaps(const RenderBlock* rootBlock, const LayoutPoint& rootBlockPhysicalPosition, const LayoutSize& offsetFromRootBlock,
+    LayoutUnit& lastLogicalTop, LayoutUnit& lastLogicalLeft, LayoutUnit& lastLogicalRight, const PaintInfo* paintInfo) const
 {
     GapRects result;
 
@@ -2808,13 +2805,13 @@ bool RenderBlockFlow::avoidsFloats() const
     return RenderBox::avoidsFloats() || !style()->hasAutoColumnCount() || !style()->hasAutoColumnWidth();
 }
 
-LayoutUnit RenderBlockFlow::logicalLeftSelectionOffset(RenderBlock* rootBlock, LayoutUnit position)
+LayoutUnit RenderBlockFlow::logicalLeftSelectionOffset(const RenderBlock* rootBlock, LayoutUnit position) const
 {
     LayoutUnit logicalLeft = logicalLeftOffsetForLine(position, false);
     if (logicalLeft == logicalLeftOffsetForContent())
         return RenderBlock::logicalLeftSelectionOffset(rootBlock, position);
 
-    RenderBlock* cb = this;
+    const RenderBlock* cb = this;
     while (cb != rootBlock) {
         logicalLeft += cb->logicalLeft();
         cb = cb->containingBlock();
@@ -2822,13 +2819,13 @@ LayoutUnit RenderBlockFlow::logicalLeftSelectionOffset(RenderBlock* rootBlock, L
     return logicalLeft;
 }
 
-LayoutUnit RenderBlockFlow::logicalRightSelectionOffset(RenderBlock* rootBlock, LayoutUnit position)
+LayoutUnit RenderBlockFlow::logicalRightSelectionOffset(const RenderBlock* rootBlock, LayoutUnit position) const
 {
     LayoutUnit logicalRight = logicalRightOffsetForLine(position, false);
     if (logicalRight == logicalRightOffsetForContent())
         return RenderBlock::logicalRightSelectionOffset(rootBlock, position);
 
-    RenderBlock* cb = this;
+    const RenderBlock* cb = this;
     while (cb != rootBlock) {
         logicalRight += cb->logicalLeft();
         cb = cb->containingBlock();
@@ -2909,6 +2906,36 @@ RenderBlockFlow::RenderBlockFlowRareData& RenderBlockFlow::ensureRareData()
 
     m_rareData = adoptPtrWillBeNoop(new RenderBlockFlowRareData(this));
     return *m_rareData;
+}
+
+void RenderBlockFlow::positionDialog()
+{
+    HTMLDialogElement* dialog = toHTMLDialogElement(node());
+    if (dialog->centeringMode() == HTMLDialogElement::NotCentered)
+        return;
+
+    bool canCenterDialog = (style()->position() == AbsolutePosition || style()->position() == FixedPosition)
+        && style()->hasAutoTopAndBottom();
+
+    if (dialog->centeringMode() == HTMLDialogElement::Centered) {
+        if (canCenterDialog)
+            setY(dialog->centeredPosition());
+        return;
+    }
+
+    ASSERT(dialog->centeringMode() == HTMLDialogElement::NeedsCentering);
+    if (!canCenterDialog) {
+        dialog->setNotCentered();
+        return;
+    }
+
+    FrameView* frameView = document().view();
+    LayoutUnit top = (style()->position() == FixedPosition) ? 0 : frameView->scrollOffset().height();
+    int visibleHeight = frameView->visibleContentRect(IncludeScrollbars).height();
+    if (height() < visibleHeight)
+        top += (visibleHeight - height()) / 2;
+    setY(top);
+    dialog->setCentered(top);
 }
 
 } // namespace blink

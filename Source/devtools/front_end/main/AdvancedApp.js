@@ -5,6 +5,7 @@
 /**
  * @constructor
  * @extends {WebInspector.App}
+ * @implements {WebInspector.ToolboxDelegate}
  */
 WebInspector.AdvancedApp = function()
 {
@@ -82,9 +83,11 @@ WebInspector.AdvancedApp.prototype = {
         if (this._toolboxWindow)
             return;
 
+        // FIXME: Remove toolbox=true and fix the check in DevToolsWindow::WebContentsCreated().
         var toolbox = (window.location.search ? "&" : "?") + "toolbox=true";
         var hash = window.location.hash;
         var url = window.location.href.replace(hash, "") + toolbox + hash;
+        url = url.replace("devtools.html", "toolbox.html");
         this._toolboxWindow = window.open(url, undefined);
     },
 
@@ -203,7 +206,7 @@ WebInspector.AdvancedApp.prototype = {
  */
 WebInspector.AdvancedApp.DeviceCounter = function()
 {
-    if (!WebInspector.experimentsSettings.devicesPanel.isEnabled() || !(WebInspector.app instanceof WebInspector.AdvancedApp)) {
+    if (!Runtime.experiments.isEnabled("devicesPanel") || !(WebInspector.app instanceof WebInspector.AdvancedApp)) {
         this._counter = null;
         return;
     }

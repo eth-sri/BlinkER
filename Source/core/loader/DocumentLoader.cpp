@@ -37,6 +37,10 @@
 #include "core/fetch/MemoryCache.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/fetch/ResourceLoader.h"
+#include "core/frame/FrameHost.h"
+#include "core/frame/LocalDOMWindow.h"
+#include "core/frame/LocalFrame.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/html/parser/TextResourceDecoder.h"
 #include "core/inspector/InspectorInstrumentation.h"
@@ -44,9 +48,6 @@
 #include "core/loader/FrameLoaderClient.h"
 #include "core/loader/UniqueIdentifier.h"
 #include "core/loader/appcache/ApplicationCacheHost.h"
-#include "core/frame/LocalDOMWindow.h"
-#include "core/frame/LocalFrame.h"
-#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/page/FrameTree.h"
 #include "core/page/Page.h"
 #include "core/frame/Settings.h"
@@ -56,6 +57,7 @@
 #include "platform/mhtml/ArchiveResource.h"
 #include "platform/mhtml/ArchiveResourceCollection.h"
 #include "platform/mhtml/MHTMLArchive.h"
+#include "platform/network/ContentSecurityPolicyResponseHeaders.h"
 #include "platform/plugins/PluginData.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityPolicy.h"
@@ -83,7 +85,7 @@ DocumentLoader::DocumentLoader(LocalFrame* frame, const ResourceRequest& req, co
     , m_replacesCurrentHistoryItem(false)
     , m_loadingMainResource(false)
     , m_timeOfLastDataReceived(0.0)
-    , m_applicationCacheHost(adoptPtr(new ApplicationCacheHost(this)))
+    , m_applicationCacheHost(ApplicationCacheHost::create(this))
 {
 }
 
@@ -104,6 +106,7 @@ DocumentLoader::~DocumentLoader()
     ASSERT(!m_frame || !isLoading());
     m_fetcher->clearDocumentLoader();
     clearMainResourceHandle();
+    m_applicationCacheHost->dispose();
 }
 
 unsigned long DocumentLoader::mainResourceIdentifier() const
@@ -177,7 +180,7 @@ void DocumentLoader::mainReceivedError(const ResourceError& error)
 // but not loads initiated by child frames' data sources -- that's the WebFrame's job.
 void DocumentLoader::stopLoading()
 {
-    RefPtr<LocalFrame> protectFrame(m_frame);
+    RefPtrWillBeRawPtr<LocalFrame> protectFrame(m_frame);
     RefPtr<DocumentLoader> protectLoader(this);
 
     // In some rare cases, calling FrameLoader::stopLoading could cause isLoading() to return false.
@@ -376,14 +379,6 @@ void DocumentLoader::willSendRequest(ResourceRequest& newRequest, const Resource
     if (newRequest.cachePolicy() == UseProtocolCachePolicy && isRedirectAfterPost(newRequest, redirectResponse))
         newRequest.setCachePolicy(ReloadBypassingCache);
 
-    // If this is a sub-frame, check for mixed content blocking against the parent frame.
-    if (Frame* parent = m_frame->tree().parent()) {
-        if (parent->isLocalFrame() && !toLocalFrame(parent)->loader().mixedContentChecker()->canFrameInsecureContent(toLocalFrame(parent)->document()->securityOrigin(), newRequest.url())) {
-            cancelMainResourceLoad(ResourceError::cancelledError(newRequest.url()));
-            return;
-        }
-    }
-
     m_request = newRequest;
 
     if (redirectResponse.isNull())
@@ -431,6 +426,20 @@ bool DocumentLoader::shouldContinueForResponse() const
     return true;
 }
 
+void DocumentLoader::cancelLoadAfterXFrameOptionsOrCSPDenied(const ResourceResponse& response)
+{
+    InspectorInstrumentation::continueAfterXFrameOptionsDenied(m_frame, this, mainResourceIdentifier(), response);
+
+    frame()->document()->enforceSandboxFlags(SandboxOrigin);
+    if (FrameOwner* owner = frame()->owner())
+        owner->dispatchLoad();
+
+    // The load event might have detached this frame. In that case, the load will already have been cancelled during detach.
+    if (frameLoader())
+        cancelMainResourceLoad(ResourceError::cancelledError(m_request.url()));
+    return;
+}
+
 void DocumentLoader::responseReceived(Resource* resource, const ResourceResponse& response)
 {
     ASSERT_UNUSED(resource, m_mainResource == resource);
@@ -448,24 +457,23 @@ void DocumentLoader::responseReceived(Resource* resource, const ResourceResponse
     HTTPHeaderMap::const_iterator it = response.httpHeaderFields().find(xFrameOptionHeader);
     if (it != response.httpHeaderFields().end()) {
         String content = it->value;
-        ASSERT(m_mainResource);
-        unsigned long identifier = mainResourceIdentifier();
-        ASSERT(identifier);
-        if (frameLoader()->shouldInterruptLoadForXFrameOptions(content, response.url(), identifier)) {
-            InspectorInstrumentation::continueAfterXFrameOptionsDenied(m_frame, this, identifier, response);
+        if (frameLoader()->shouldInterruptLoadForXFrameOptions(content, response.url(), mainResourceIdentifier())) {
             String message = "Refused to display '" + response.url().elidedString() + "' in a frame because it set 'X-Frame-Options' to '" + content + "'.";
             RefPtrWillBeRawPtr<ConsoleMessage> consoleMessage = ConsoleMessage::create(SecurityMessageSource, ErrorMessageLevel, message);
-            consoleMessage->setRequestIdentifier(identifier);
-            frame()->document()->addMessage(consoleMessage.release());
-            frame()->document()->enforceSandboxFlags(SandboxOrigin);
-            if (FrameOwner* owner = frame()->owner())
-                owner->dispatchLoad();
+            consoleMessage->setRequestIdentifier(mainResourceIdentifier());
+            frame()->document()->addConsoleMessage(consoleMessage.release());
 
-            // The load event might have detached this frame. In that case, the load will already have been cancelled during detach.
-            if (frameLoader())
-                cancelMainResourceLoad(ResourceError::cancelledError(m_request.url()));
+            cancelLoadAfterXFrameOptionsOrCSPDenied(response);
             return;
         }
+    }
+
+    m_contentSecurityPolicy = ContentSecurityPolicy::create();
+    m_contentSecurityPolicy->setOverrideURLForSelf(response.url());
+    m_contentSecurityPolicy->didReceiveHeaders(ContentSecurityPolicyResponseHeaders(response));
+    if (!m_contentSecurityPolicy->allowAncestors(m_frame, response.url())) {
+        cancelLoadAfterXFrameOptionsOrCSPDenied(response);
+        return;
     }
 
     ASSERT(!mainResourceLoader() || !mainResourceLoader()->defersLoading());
@@ -502,7 +510,7 @@ void DocumentLoader::ensureWriter(const AtomicString& mimeType, const KURL& over
     if (m_writer)
         return;
 
-    const AtomicString& encoding = overrideEncoding().isNull() ? response().textEncodingName() : overrideEncoding();
+    const AtomicString& encoding = m_frame->host()->overrideEncoding().isNull() ? response().textEncodingName() : m_frame->host()->overrideEncoding();
 
     // Prepare a DocumentInit before clearing the frame, because it may need to
     // inherit an aliased security context.
@@ -539,7 +547,7 @@ void DocumentLoader::dataReceived(Resource* resource, const char* data, int leng
 
     // Both unloading the old page and parsing the new page may execute JavaScript which destroys the datasource
     // by starting a new load, so retain temporarily.
-    RefPtr<LocalFrame> protectFrame(m_frame);
+    RefPtrWillBeRawPtr<LocalFrame> protectFrame(m_frame);
     RefPtr<DocumentLoader> protectLoader(this);
 
     m_applicationCacheHost->mainResourceDataReceived(data, length);
@@ -571,7 +579,7 @@ void DocumentLoader::appendRedirect(const KURL& url)
 void DocumentLoader::detachFromFrame()
 {
     ASSERT(m_frame);
-    RefPtr<LocalFrame> protectFrame(m_frame);
+    RefPtrWillBeRawPtr<LocalFrame> protectFrame(m_frame);
     RefPtr<DocumentLoader> protectLoader(this);
 
     // It never makes sense to have a document loader that is detached from its
@@ -736,7 +744,7 @@ void DocumentLoader::startLoadingMainResource()
 
     ResourceRequest request(m_request);
     DEFINE_STATIC_LOCAL(ResourceLoaderOptions, mainResourceLoadOptions,
-        (SniffContent, DoNotBufferData, AllowStoredCredentials, ClientRequestedCredentials, CheckContentSecurityPolicy, DocumentContext));
+        (DoNotBufferData, AllowStoredCredentials, ClientRequestedCredentials, CheckContentSecurityPolicy, DocumentContext));
     FetchRequest cachedResourceRequest(request, FetchInitiatorTypeNames::document, mainResourceLoadOptions);
     m_mainResource = m_fetcher->fetchMainResource(cachedResourceRequest, m_substituteData);
     if (!m_mainResource) {
@@ -744,7 +752,7 @@ void DocumentLoader::startLoadingMainResource()
         // If the load was aborted by clearing m_request, it's possible the ApplicationCacheHost
         // is now in a state where starting an empty load will be inconsistent. Replace it with
         // a new ApplicationCacheHost.
-        m_applicationCacheHost = adoptPtr(new ApplicationCacheHost(this));
+        m_applicationCacheHost = ApplicationCacheHost::create(this);
         maybeLoadEmpty();
         return;
     }

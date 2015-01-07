@@ -29,8 +29,10 @@
 
 #include "SkImageFilter.h"
 #include "SkMatrix44.h"
+#include "platform/TraceEvent.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/geometry/LayoutRect.h"
+#include "platform/graphics/FirstPaintInvalidationTracking.h"
 #include "platform/graphics/GraphicsLayerFactory.h"
 #include "platform/graphics/Image.h"
 #include "platform/graphics/filters/SkiaImageFilterBuilder.h"
@@ -110,8 +112,8 @@ GraphicsLayer::GraphicsLayer(GraphicsLayerClient* client)
         m_client->verifyNotPainting();
 #endif
 
-    m_opaqueRectTrackingContentLayerDelegate = adoptPtr(new OpaqueRectTrackingContentLayerDelegate(this));
-    m_layer = adoptPtr(Platform::current()->compositorSupport()->createContentLayer(m_opaqueRectTrackingContentLayerDelegate.get()));
+    m_contentLayerDelegate = adoptPtr(new ContentLayerDelegate(this));
+    m_layer = adoptPtr(Platform::current()->compositorSupport()->createContentLayer(m_contentLayerDelegate.get()));
     m_layer->layer()->setDrawsContent(m_drawsContent && m_contentsVisible);
     m_layer->layer()->setWebLayerClient(this);
     m_layer->setAutomaticallyComputeRasterScale(true);
@@ -273,6 +275,8 @@ void GraphicsLayer::paintGraphicsLayerContents(GraphicsContext& context, const I
 {
     if (!m_client)
         return;
+    if (firstPaintInvalidationTrackingEnabled())
+        m_debugInfo.clearAnnotatedInvalidateRects();
     incrementPaintCount();
     m_client->paintContents(this, context, m_paintingPhase, clip);
 }
@@ -820,7 +824,7 @@ void GraphicsLayer::setContentsOpaque(bool opaque)
 {
     m_contentsOpaque = opaque;
     m_layer->layer()->setOpaque(m_contentsOpaque);
-    m_opaqueRectTrackingContentLayerDelegate->setOpaque(m_contentsOpaque);
+    m_contentLayerDelegate->setOpaque(m_contentsOpaque);
     clearContentsLayerIfUnregistered();
     if (m_contentsLayer)
         m_contentsLayer->setOpaque(opaque);
@@ -897,10 +901,12 @@ void GraphicsLayer::setNeedsDisplay()
     }
 }
 
-void GraphicsLayer::setNeedsDisplayInRect(const FloatRect& rect)
+void GraphicsLayer::setNeedsDisplayInRect(const FloatRect& rect, WebInvalidationDebugAnnotations annotations)
 {
     if (drawsContent()) {
         m_layer->layer()->invalidateRect(rect);
+        if (firstPaintInvalidationTrackingEnabled())
+            m_debugInfo.appendAnnotatedInvalidateRect(rect, annotations);
         addRepaintRect(rect);
         for (size_t i = 0; i < m_linkHighlights.size(); ++i)
             m_linkHighlights[i]->invalidate();
@@ -924,7 +930,7 @@ void GraphicsLayer::setContentsToImage(Image* image)
             m_imageLayer = adoptPtr(Platform::current()->compositorSupport()->createImageLayer());
             registerContentsLayer(m_imageLayer->layer());
         }
-        m_imageLayer->setBitmap(nativeImage->bitmap());
+        m_imageLayer->setImageBitmap(nativeImage->bitmap());
         m_imageLayer->layer()->setOpaque(image->currentFrameKnownToBeOpaque());
         updateContentsRect();
     } else {
@@ -946,7 +952,15 @@ void GraphicsLayer::setContentsToNinePatch(Image* image, const IntRect& aperture
     RefPtr<NativeImageSkia> nativeImage = image ? image->nativeImageForCurrentFrame() : nullptr;
     if (nativeImage) {
         m_ninePatchLayer = adoptPtr(Platform::current()->compositorSupport()->createNinePatchLayer());
-        m_ninePatchLayer->setBitmap(nativeImage->bitmap(), aperture);
+        const SkBitmap& bitmap = nativeImage->bitmap();
+        int borderWidth = bitmap.width() - aperture.width();
+        int borderHeight = bitmap.height() - aperture.height();
+        WebRect border(aperture.x(), aperture.y(), borderWidth, borderHeight);
+
+        m_ninePatchLayer->setBitmap(bitmap);
+        m_ninePatchLayer->setAperture(aperture);
+        m_ninePatchLayer->setBorder(border);
+
         m_ninePatchLayer->layer()->setOpaque(image->currentFrameKnownToBeOpaque());
         registerContentsLayer(m_ninePatchLayer->layer());
     }
@@ -1011,18 +1025,16 @@ void GraphicsLayer::removeLinkHighlight(LinkHighlightClient* linkHighlight)
     updateChildList();
 }
 
-void GraphicsLayer::setScrollableArea(ScrollableArea* scrollableArea, bool isMainFrame)
+void GraphicsLayer::setScrollableArea(ScrollableArea* scrollableArea, bool isViewport)
 {
     if (m_scrollableArea == scrollableArea)
         return;
 
     m_scrollableArea = scrollableArea;
 
-    // Main frame scrolling may involve pinch zoom and gets routed through
+    // Viewport scrolling may involve pinch zoom and gets routed through
     // WebViewImpl explicitly rather than via GraphicsLayer::didScroll.
-    // TODO(bokan): With pinch virtual viewport the special case will no
-    // longer be needed, remove once old-style pinch is gone.
-    if (isMainFrame)
+    if (isViewport)
         m_layer->layer()->setScrollClient(0);
     else
         m_layer->layer()->setScrollClient(this);

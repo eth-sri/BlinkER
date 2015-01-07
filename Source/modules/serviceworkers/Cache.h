@@ -8,51 +8,60 @@
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/dom/DOMException.h"
+#include "modules/serviceworkers/CacheQueryOptions.h"
+#include "public/platform/WebServiceWorkerCache.h"
 #include "public/platform/WebServiceWorkerCacheError.h"
 #include "wtf/Forward.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/RefCounted.h"
+#include "wtf/OwnPtr.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
-#include <v8.h>
 
 namespace blink {
 
-class Dictionary;
 class Response;
 class Request;
 class ScriptState;
-class WebServiceWorkerCache;
 
-class Cache FINAL : public RefCountedWillBeGarbageCollected<Cache>, public ScriptWrappable {
+class Cache FINAL : public GarbageCollectedFinalized<Cache>, public ScriptWrappable {
+    DEFINE_WRAPPERTYPEINFO();
     WTF_MAKE_NONCOPYABLE(Cache);
 public:
-    static PassRefPtrWillBeRawPtr<Cache> fromWebServiceWorkerCache(WebServiceWorkerCache*);
+    static Cache* create(WebServiceWorkerCache*);
 
     // From Cache.idl:
-    ScriptPromise match(ScriptState*, Request*, const Dictionary& queryParams);
-    ScriptPromise match(ScriptState*, const String&, const Dictionary& queryParams);
-    ScriptPromise matchAll(ScriptState*, Request*, const Dictionary& queryParams);
-    ScriptPromise matchAll(ScriptState*, const String&, const Dictionary& queryParams);
+    ScriptPromise match(ScriptState*, Request*, const CacheQueryOptions&);
+    ScriptPromise match(ScriptState*, const String&, const CacheQueryOptions&);
+    ScriptPromise matchAll(ScriptState*, Request*, const CacheQueryOptions&);
+    ScriptPromise matchAll(ScriptState*, const String&, const CacheQueryOptions&);
     ScriptPromise add(ScriptState*, Request*);
     ScriptPromise add(ScriptState*, const String&);
     ScriptPromise addAll(ScriptState*, const Vector<ScriptValue>&);
-    ScriptPromise deleteFunction(ScriptState*, Request*, const Dictionary& queryParams);
-    ScriptPromise deleteFunction(ScriptState*, const String&, const Dictionary& queryParams);
+    ScriptPromise deleteFunction(ScriptState*, Request*, const CacheQueryOptions&);
+    ScriptPromise deleteFunction(ScriptState*, const String&, const CacheQueryOptions&);
     ScriptPromise put(ScriptState*, Request*, Response*);
     ScriptPromise put(ScriptState*, const String&, Response*);
     ScriptPromise keys(ScriptState*);
-    ScriptPromise keys(ScriptState*, Request*, const Dictionary& queryParams);
-    ScriptPromise keys(ScriptState*, const String&, const Dictionary& queryParams);
-
-    void trace(Visitor*) { }
+    ScriptPromise keys(ScriptState*, Request*, const CacheQueryOptions&);
+    ScriptPromise keys(ScriptState*, const String&, const CacheQueryOptions&);
 
     static PassRefPtrWillBeRawPtr<DOMException> domExceptionForCacheError(WebServiceWorkerCacheError);
 
-private:
-    explicit Cache(WebServiceWorkerCache* webCache);
+    void trace(Visitor*) { }
 
-    WebServiceWorkerCache const* ALLOW_UNUSED m_webCache;
+private:
+    explicit Cache(WebServiceWorkerCache*);
+
+    ScriptPromise matchImpl(ScriptState*, Request*, const CacheQueryOptions&);
+    ScriptPromise matchAllImpl(ScriptState*, Request*, const CacheQueryOptions&);
+    ScriptPromise addImpl(ScriptState*, Request*);
+    ScriptPromise addAllImpl(ScriptState*, Vector<Request*>);
+    ScriptPromise deleteImpl(ScriptState*, Request*, const CacheQueryOptions&);
+    ScriptPromise putImpl(ScriptState*, Request*, Response*);
+    ScriptPromise keysImpl(ScriptState*);
+    ScriptPromise keysImpl(ScriptState*, Request*, const CacheQueryOptions&);
+
+    OwnPtr<WebServiceWorkerCache> m_webCache;
 };
 
 } // namespace blink

@@ -154,6 +154,7 @@ public:
     virtual void setTextAreasAreResizable(bool) OVERRIDE;
     virtual void setTextAutosizingEnabled(bool) OVERRIDE;
     virtual void setAccessibilityFontScaleFactor(float) OVERRIDE;
+    virtual void setThreadedScrollingEnabled(bool) OVERRIDE;
     virtual void setTouchDragDropEnabled(bool) OVERRIDE;
     virtual void setTouchEditingEnabled(bool) OVERRIDE;
     virtual void setUnifiedTextCheckerEnabled(bool) OVERRIDE;
@@ -163,6 +164,7 @@ public:
     virtual void setUseSolidColorScrollbars(bool) OVERRIDE;
     virtual void setUseWideViewport(bool) OVERRIDE;
     virtual void setV8CacheOptions(V8CacheOptions) OVERRIDE;
+    virtual void setV8ScriptStreamingEnabled(bool) OVERRIDE;
     virtual void setValidationMessageTimerMagnification(int) OVERRIDE;
     virtual void setViewportEnabled(bool) OVERRIDE;
     virtual void setViewportMetaEnabled(bool) OVERRIDE;

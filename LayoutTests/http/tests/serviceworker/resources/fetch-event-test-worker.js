@@ -15,23 +15,30 @@ function handleNullBody(event) {
   event.respondWith(new Response(null));
 }
 
-function handleReject(event) {
-  event.respondWith(new Promise(function(resolve, reject) {
-      reject('rejected!');
-    }));
-}
-
 function handleFetch(event) {
   event.respondWith(fetch('other.html'));
 }
 
 function handleFormPost(event) {
   event.respondWith(new Promise(function(resolve) {
-      event.request.body.asText()
+      event.request.text()
         .then(function(result) {
             resolve(new Response(event.request.method + ':' + result));
           })
     }));
+}
+
+var logForMultipleRespondWith = '';
+
+function handleMultipleRespondWith(event) {
+  for (var i = 0; i < 3; ++i) {
+    logForMultipleRespondWith += '(' + i + ')';
+    try {
+      event.respondWith(new Response(logForMultipleRespondWith));
+    } catch (e) {
+      logForMultipleRespondWith += '[' + e.name + ']';
+    }
+  }
 }
 
 self.addEventListener('fetch', function(event) {
@@ -42,9 +49,9 @@ self.addEventListener('fetch', function(event) {
       { pattern: '?referrer', fn: handleReferrer },
       { pattern: '?ignore', fn: function() {} },
       { pattern: '?null', fn: handleNullBody },
-      { pattern: '?reject', fn: handleReject },
       { pattern: '?fetch', fn: handleFetch },
-      { pattern: '?form-post', fn: handleFormPost }
+      { pattern: '?form-post', fn: handleFormPost },
+      { pattern: '?multiple-respond-with', fn: handleMultipleRespondWith }
     ];
 
     var handler = null;

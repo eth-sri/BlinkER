@@ -89,7 +89,6 @@ DOMFileSystem::DOMFileSystem(ExecutionContext* context, const String& name, File
     , ActiveDOMObject(context)
     , m_numberOfPendingCallbacks(0)
 {
-    ScriptWrappable::init(this);
 }
 
 DirectoryEntry* DOMFileSystem::root()
@@ -114,7 +113,7 @@ bool DOMFileSystem::hasPendingActivity() const
     return m_numberOfPendingCallbacks;
 }
 
-void DOMFileSystem::reportError(PassOwnPtr<ErrorCallback> errorCallback, PassRefPtrWillBeRawPtr<FileError> fileError)
+void DOMFileSystem::reportError(ErrorCallback* errorCallback, PassRefPtrWillBeRawPtr<FileError> fileError)
 {
     scheduleCallback(errorCallback, fileError);
 }
@@ -123,9 +122,15 @@ namespace {
 
 class ConvertToFileWriterCallback : public FileWriterBaseCallback {
 public:
-    static PassOwnPtr<ConvertToFileWriterCallback> create(PassOwnPtr<FileWriterCallback> callback)
+    static ConvertToFileWriterCallback* create(FileWriterCallback* callback)
     {
-        return adoptPtr(new ConvertToFileWriterCallback(callback));
+        return new ConvertToFileWriterCallback(callback);
+    }
+
+    void trace(Visitor* visitor)
+    {
+        visitor->trace(m_callback);
+        FileWriterBaseCallback::trace(visitor);
     }
 
     void handleEvent(FileWriterBase* fileWriterBase)
@@ -133,16 +138,16 @@ public:
         m_callback->handleEvent(static_cast<FileWriter*>(fileWriterBase));
     }
 private:
-    ConvertToFileWriterCallback(PassOwnPtr<FileWriterCallback> callback)
+    explicit ConvertToFileWriterCallback(FileWriterCallback* callback)
         : m_callback(callback)
     {
     }
-    OwnPtr<FileWriterCallback> m_callback;
+    Member<FileWriterCallback> m_callback;
 };
 
 }
 
-void DOMFileSystem::createWriter(const FileEntry* fileEntry, PassOwnPtr<FileWriterCallback> successCallback, PassOwnPtr<ErrorCallback> errorCallback)
+void DOMFileSystem::createWriter(const FileEntry* fileEntry, FileWriterCallback* successCallback, ErrorCallback* errorCallback)
 {
     ASSERT(fileEntry);
 
@@ -152,12 +157,12 @@ void DOMFileSystem::createWriter(const FileEntry* fileEntry, PassOwnPtr<FileWrit
     }
 
     FileWriter* fileWriter = FileWriter::create(executionContext());
-    OwnPtr<FileWriterBaseCallback> conversionCallback = ConvertToFileWriterCallback::create(successCallback);
-    OwnPtr<AsyncFileSystemCallbacks> callbacks = FileWriterBaseCallbacks::create(fileWriter, conversionCallback.release(), errorCallback, m_context);
+    FileWriterBaseCallback* conversionCallback = ConvertToFileWriterCallback::create(successCallback);
+    OwnPtr<AsyncFileSystemCallbacks> callbacks = FileWriterBaseCallbacks::create(fileWriter, conversionCallback, errorCallback, m_context);
     fileSystem()->createFileWriter(createFileSystemURL(fileEntry), fileWriter, callbacks.release());
 }
 
-void DOMFileSystem::createFile(const FileEntry* fileEntry, PassOwnPtr<FileCallback> successCallback, PassOwnPtr<ErrorCallback> errorCallback)
+void DOMFileSystem::createFile(const FileEntry* fileEntry, FileCallback* successCallback, ErrorCallback* errorCallback)
 {
     KURL fileSystemURL = createFileSystemURL(fileEntry);
     if (!fileSystem()) {

@@ -208,7 +208,7 @@ void EventRacerLog::logFieldAccess(Operation::Type op, const ScriptValue &obj,
     v8::Local<v8::Object> object = v->ToObject();
     WTF::String attr(name);
     v8::Isolate *isolate = v8::Isolate::GetCurrent();
-    if (Element *elt = V8Element::toNativeWithTypeCheck(isolate, object)) {
+    if (Element *elt = V8Element::toImplWithTypeCheck(isolate, v)) {
         // If we've got an DOM Element wrapper, use "DOMNode" kind of memory
         // location in order to be able to detect potentiall conflicts with
         // |getAttribute| and |setAttribute|. Do this only for |id| and |class|
@@ -272,7 +272,7 @@ void EventRacerLog::logMemoryValue(const ScriptValue &val, int fnid) {
     } else if (v->IsObject()) {
         v8::Local<v8::Object> object = v->ToObject();
         v8::Isolate *isolate = v8::Isolate::GetCurrent();
-        if (Element *elt = V8Element::toNativeWithTypeCheck(isolate, object)) {
+        if (Element *elt = V8Element::toImplWithTypeCheck(isolate, v)) {
             logOperation(getCurrentAction(), Operation::MEMORY_VALUE,
                          m_strings[VALUE_STRINGS].putf("DOMNode[0x%x]", elt->getSerial()));
         } else {

@@ -59,9 +59,25 @@ void WebRuntimeFeatures::enableApplicationCache(bool enable)
     RuntimeEnabledFeatures::setApplicationCacheEnabled(enable);
 }
 
+
+void WebRuntimeFeatures::enableCompositedSelectionUpdate(bool enable)
+{
+    RuntimeEnabledFeatures::setCompositedSelectionUpdateEnabled(enable);
+}
+
+bool WebRuntimeFeatures::isCompositedSelectionUpdateEnabled()
+{
+    return RuntimeEnabledFeatures::compositedSelectionUpdateEnabled();
+}
+
 void WebRuntimeFeatures::enableDatabase(bool enable)
 {
     RuntimeEnabledFeatures::setDatabaseEnabled(enable);
+}
+
+void WebRuntimeFeatures::enableDecodeToYUV(bool enable)
+{
+    RuntimeEnabledFeatures::setDecodeToYUVEnabled(enable);
 }
 
 void WebRuntimeFeatures::enableDisplayList2dCanvas(bool enable)
@@ -217,11 +233,6 @@ void WebRuntimeFeatures::enableTouchIconLoading(bool enable)
     RuntimeEnabledFeatures::setTouchIconLoadingEnabled(enable);
 }
 
-void WebRuntimeFeatures::enableWebAnimationsSVG(bool enable)
-{
-    RuntimeEnabledFeatures::setWebAnimationsSVGEnabled(enable);
-}
-
 void WebRuntimeFeatures::enableWebAudio(bool enable)
 {
     RuntimeEnabledFeatures::setWebAudioEnabled(enable);
@@ -260,11 +271,6 @@ void WebRuntimeFeatures::enableOverlayFullscreenVideo(bool enable)
 void WebRuntimeFeatures::enableSharedWorker(bool enable)
 {
     RuntimeEnabledFeatures::setSharedWorkerEnabled(enable);
-}
-
-void WebRuntimeFeatures::enableTargetedStyleRecalc(bool enable)
-{
-    RuntimeEnabledFeatures::setTargetedStyleRecalcEnabled(enable);
 }
 
 void WebRuntimeFeatures::enablePreciseMemoryInfo(bool enable)

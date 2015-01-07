@@ -89,18 +89,17 @@ MediaStream* MediaStream::create(ExecutionContext* context, const MediaStreamTra
     return adoptRefCountedGarbageCollectedWillBeNoop(new MediaStream(context, audioTracks, videoTracks));
 }
 
-MediaStream* MediaStream::create(ExecutionContext* context, PassRefPtr<MediaStreamDescriptor> streamDescriptor)
+MediaStream* MediaStream::create(ExecutionContext* context, MediaStreamDescriptor* streamDescriptor)
 {
     return adoptRefCountedGarbageCollectedWillBeNoop(new MediaStream(context, streamDescriptor));
 }
 
-MediaStream::MediaStream(ExecutionContext* context, PassRefPtr<MediaStreamDescriptor> streamDescriptor)
+MediaStream::MediaStream(ExecutionContext* context, MediaStreamDescriptor* streamDescriptor)
     : ContextLifecycleObserver(context)
     , m_stopped(false)
     , m_descriptor(streamDescriptor)
     , m_scheduledEventTimer(this, &MediaStream::scheduledEventTimerFired)
 {
-    ScriptWrappable::init(this);
     m_descriptor->setClient(this);
 
     size_t numberOfAudioTracks = m_descriptor->numberOfAudioComponents();
@@ -125,8 +124,6 @@ MediaStream::MediaStream(ExecutionContext* context, const MediaStreamTrackVector
     , m_stopped(false)
     , m_scheduledEventTimer(this, &MediaStream::scheduledEventTimerFired)
 {
-    ScriptWrappable::init(this);
-
     MediaStreamComponentVector audioComponents;
     MediaStreamComponentVector videoComponents;
 
@@ -150,7 +147,6 @@ MediaStream::MediaStream(ExecutionContext* context, const MediaStreamTrackVector
 
 MediaStream::~MediaStream()
 {
-    m_descriptor->setClient(0);
 }
 
 bool MediaStream::ended() const
@@ -331,7 +327,7 @@ void MediaStream::addRemoteTrack(MediaStreamComponent* component)
 
 void MediaStream::removeRemoteTrack(MediaStreamComponent* component)
 {
-    if (ended())
+    if (m_stopped)
         return;
 
     MediaStreamTrackVector* tracks = 0;
@@ -395,7 +391,9 @@ void MediaStream::trace(Visitor* visitor)
     visitor->trace(m_audioTracks);
     visitor->trace(m_videoTracks);
     visitor->trace(m_scheduledEvents);
+    visitor->trace(m_descriptor);
     EventTargetWithInlineData::trace(visitor);
+    MediaStreamDescriptorClient::trace(visitor);
 }
 
 } // namespace blink

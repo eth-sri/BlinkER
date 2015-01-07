@@ -70,7 +70,7 @@ shouldThrow('privateScriptTest.voidMethodThrowsTypeError()');
 shouldThrow('privateScriptTest.voidMethodThrowsRangeError()');
 shouldThrow('privateScriptTest.voidMethodThrowsSyntaxError()');
 shouldThrow('privateScriptTest.voidMethodThrowsReferenceError()');
-shouldThrow('privateScriptTest.voidMethodWithStackOverflow()');
+shouldThrow('privateScriptTest.voidMethodThrowsStackOverflowError()');
 
 shouldBe('privateScriptTest.addIntegerImplementedInCPP(111, 222)', '333');
 shouldBeEqualToString('privateScriptTest.stringAttributeImplementedInCPP', 'undefined');
@@ -93,6 +93,39 @@ document.onload = function (event) {
     shouldBeUndefined('event.valueInPrivateScript');
 }
 privateScriptTest.dispatchDocumentOnload(document);
+
+var exception;
+function testThrows(expression, type, code)
+{
+    exception = undefined;
+    // Test that `expression` throws a userscript visible exception of `type`, optionally with 
+    // exception code `code`
+    try {
+        eval(expression);
+    } catch (e) {
+        exception = e;
+    }
+
+    if (type === DOMException && typeof code === "string" && code in DOMException)
+        code = DOMException[code];
+
+    if (exception === undefined) {
+        testFailed("`" + expression + "` should throw");
+    } else {
+        shouldBeType("exception", type);
+        if (code !== undefined)
+            shouldBeEqualToNumber("exception.code", code);
+    }
+}
+
+testThrows("privateScriptTest.nodeAttributeThrowsIndexSizeError", DOMException, "INDEX_SIZE_ERR");
+testThrows("privateScriptTest.nodeAttributeThrowsIndexSizeError = null", DOMException, "INDEX_SIZE_ERR");
+testThrows("privateScriptTest.voidMethodThrowsDOMSyntaxError()", DOMException, "SYNTAX_ERR");
+testThrows("privateScriptTest.voidMethodThrowsError()", Error);
+testThrows("privateScriptTest.voidMethodThrowsTypeError()", TypeError);
+testThrows("privateScriptTest.voidMethodThrowsRangeError()", RangeError);
+testThrows("privateScriptTest.voidMethodThrowsSyntaxError()", SyntaxError);
+testThrows("privateScriptTest.voidMethodThrowsReferenceError()", ReferenceError);
 
 </script>
 </body>

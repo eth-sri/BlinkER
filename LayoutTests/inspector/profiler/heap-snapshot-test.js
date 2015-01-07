@@ -411,7 +411,7 @@ InspectorTest.createHeapSnapshotMockFactories();
 
 InspectorTest.startProfilerTest = function(callback)
 {
-    WebInspector.inspectorView.showPanel("profiles");
+    WebInspector.inspectorView._showPanel("profiles");
     WebInspector.settings.showAdvancedHeapSnapshotProperties.set(true);
 
     InspectorTest.addResult("Profiler was enabled.");
@@ -687,7 +687,7 @@ InspectorTest.takeAndOpenSnapshot = function(generator, callback)
     callback = InspectorTest.safeWrap(callback);
     var snapshot = generator();
     var profileType =  WebInspector.ProfileTypeRegistry.instance.heapSnapshotProfileType;
-    function pushGeneratedSnapshot(reportProgress, callback)
+    function pushGeneratedSnapshot(reportProgress, callback2)
     {
         var profile = profileType.profileBeingRecorded();
         if (reportProgress) {
@@ -696,7 +696,7 @@ InspectorTest.takeAndOpenSnapshot = function(generator, callback)
         }
         snapshot.snapshot.typeId = "HEAP";
         profileType._addHeapSnapshotChunk({data: JSON.stringify(snapshot)});
-        setTimeout(callback, 0);
+        setTimeout(callback2, 0);
     }
     InspectorTest.override(HeapProfilerAgent, "takeHeapSnapshot", pushGeneratedSnapshot);
     InspectorTest._takeAndOpenSnapshotCallback = callback;

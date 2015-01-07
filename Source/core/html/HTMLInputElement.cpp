@@ -35,6 +35,7 @@
 #include "bindings/core/v8/V8DOMActivityLogger.h"
 #include "core/CSSPropertyNames.h"
 #include "core/HTMLNames.h"
+#include "core/InputTypeNames.h"
 #include "core/accessibility/AXObjectCache.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
@@ -129,7 +130,6 @@ HTMLInputElement::HTMLInputElement(Document& document, HTMLFormElement* form, bo
 #if ENABLE(INPUT_MULTIPLE_FIELDS_UI)
     setHasCustomStyleCallbacks();
 #endif
-    ScriptWrappable::init(this);
 }
 
 PassRefPtrWillBeRawPtr<HTMLInputElement> HTMLInputElement::create(Document& document, HTMLFormElement* form, bool createdByParser)
@@ -175,7 +175,7 @@ HTMLInputElement::~HTMLInputElement()
     setForm(0);
     // setForm(0) may register this to a document-level radio button group.
     // We should unregister it to avoid accessing a deleted object.
-    if (isRadioButton())
+    if (type() == InputTypeNames::radio)
         document().formController().radioButtonGroupScope().removeButton(this);
     if (m_hasTouchEventHandler && document().frameHost())
         document().frameHost()->eventHandlerRegistry().didRemoveEventHandler(*this, EventHandlerRegistry::TouchEvent);
@@ -241,20 +241,7 @@ bool HTMLInputElement::patternMismatch() const
 
 bool HTMLInputElement::tooLong(const String& value, NeedsToCheckDirtyFlag check) const
 {
-    // We use isTextType() instead of supportsMaxLength() because of the
-    // 'virtual' overhead.
-    if (!isTextType())
-        return false;
-    int max = maxLength();
-    if (max < 0)
-        return false;
-    if (check == CheckDirtyFlag) {
-        // Return false for the default value or a value set by a script even if
-        // it is longer than maxLength.
-        if (!hasDirtyValue() || !lastChangeWasUserEdit())
-            return false;
-    }
-    return value.length() > static_cast<unsigned>(max);
+    return m_inputType->tooLong(value, check);
 }
 
 bool HTMLInputElement::rangeUnderflow() const
@@ -386,6 +373,13 @@ void HTMLInputElement::handleFocusEvent(Element* oldFocusedElement, FocusType ty
 {
     m_inputTypeView->handleFocusEvent(oldFocusedElement, type);
     m_inputType->enableSecureTextInput();
+}
+
+void HTMLInputElement::dispatchFocusInEvent(const AtomicString& eventType, Element* oldFocusedElement, FocusType type)
+{
+    if (eventType == EventTypeNames::DOMFocusIn)
+        m_inputTypeView->handleFocusInEvent(oldFocusedElement, type);
+    HTMLFormControlElementWithState::dispatchFocusInEvent(eventType, oldFocusedElement, type);
 }
 
 void HTMLInputElement::handleBlurEvent()
@@ -594,7 +588,8 @@ void HTMLInputElement::accessKeyAction(bool sendMouseEvents)
 
 bool HTMLInputElement::isPresentationAttribute(const QualifiedName& name) const
 {
-    if (name == vspaceAttr || name == hspaceAttr || name == alignAttr || name == widthAttr || name == heightAttr || (name == borderAttr && isImageButton()))
+    // FIXME: Remove type check.
+    if (name == vspaceAttr || name == hspaceAttr || name == alignAttr || name == widthAttr || name == heightAttr || (name == borderAttr && type() == InputTypeNames::image))
         return true;
     return HTMLTextFormControlElement::isPresentationAttribute(name);
 }
@@ -616,7 +611,7 @@ void HTMLInputElement::collectStyleForPresentationAttribute(const QualifiedName&
     } else if (name == heightAttr) {
         if (m_inputType->shouldRespectHeightAndWidthAttributes())
             addHTMLLengthToStyle(style, CSSPropertyHeight, value);
-    } else if (name == borderAttr && isImageButton())
+    } else if (name == borderAttr && type() == InputTypeNames::image) // FIXME: Remove type check.
         applyBorderAttributeToStyle(value, style);
     else
         HTMLTextFormControlElement::collectStyleForPresentationAttribute(name, value, style);
@@ -660,7 +655,7 @@ void HTMLInputElement::parseAttribute(const QualifiedName& name, const AtomicStr
         // We only need to setChanged if the form is looking at the default value right now.
         if (!hasDirtyValue()) {
             updatePlaceholderVisibility(false);
-            setNeedsStyleRecalc(SubtreeStyleChange);
+            setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::fromAttribute(valueAttr));
         }
         m_needsToUpdateViewValue = true;
         setNeedsValidityCheck();
@@ -700,10 +695,10 @@ void HTMLInputElement::parseAttribute(const QualifiedName& name, const AtomicStr
         // time to relayout for this change.
         if (m_maxResults != oldResults && (m_maxResults <= 0 || oldResults <= 0))
             lazyReattachIfAttached();
-        setNeedsStyleRecalc(SubtreeStyleChange);
+        setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::fromAttribute(resultsAttr));
         UseCounter::count(document(), UseCounter::ResultsAttribute);
     } else if (name == incrementalAttr) {
-        setNeedsStyleRecalc(SubtreeStyleChange);
+        setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::fromAttribute(incrementalAttr));
         UseCounter::count(document(), UseCounter::IncrementalAttribute);
     } else if (name == minAttr) {
         m_inputTypeView->minOrMaxAttributeChanged();
@@ -843,11 +838,6 @@ bool HTMLInputElement::isTextField() const
     return m_inputType->isTextField();
 }
 
-bool HTMLInputElement::isTextType() const
-{
-    return m_inputType->isTextType();
-}
-
 void HTMLInputElement::setChecked(bool nowChecked, TextFieldEventBehavior eventBehavior)
 {
     if (checked() == nowChecked)
@@ -856,7 +846,6 @@ void HTMLInputElement::setChecked(bool nowChecked, TextFieldEventBehavior eventB
     RefPtrWillBeRawPtr<HTMLInputElement> protector(this);
     m_reflectsCheckedAttribute = false;
     m_isChecked = nowChecked;
-    setNeedsStyleRecalc(SubtreeStyleChange);
 
     if (RadioButtonGroupScope* scope = radioButtonGroupScope())
         scope->updateCheckedState(this);
@@ -885,7 +874,7 @@ void HTMLInputElement::setChecked(bool nowChecked, TextFieldEventBehavior eventB
         dispatchFormControlChangeEvent();
     }
 
-    didAffectSelector(AffectedSelectorChecked);
+    pseudoStateChanged(CSSSelector::PseudoChecked);
 }
 
 void HTMLInputElement::setIndeterminate(bool newValue)
@@ -895,7 +884,7 @@ void HTMLInputElement::setIndeterminate(bool newValue)
 
     m_isIndeterminate = newValue;
 
-    didAffectSelector(AffectedSelectorIndeterminate);
+    pseudoStateChanged(CSSSelector::PseudoIndeterminate);
 
     if (renderer() && renderer()->style()->hasAppearance())
         RenderTheme::theme().stateChanged(renderer(), CheckedControlState);
@@ -970,7 +959,7 @@ void HTMLInputElement::setSuggestedValue(const String& value)
         return;
     m_needsToUpdateViewValue = true;
     m_suggestedValue = sanitizeValue(value);
-    setNeedsStyleRecalc(SubtreeStyleChange);
+    setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::ControlValue));
     m_inputTypeView->updateView();
 }
 
@@ -998,7 +987,8 @@ void HTMLInputElement::setInnerEditorValue(const String& value)
 
 void HTMLInputElement::setValue(const String& value, ExceptionState& exceptionState, TextFieldEventBehavior eventBehavior)
 {
-    if (isFileUpload() && !value.isEmpty()) {
+    // FIXME: Remove type check.
+    if (type() == InputTypeNames::file && !value.isEmpty()) {
         exceptionState.throwDOMException(InvalidStateError, "This input element accepts a filename, which may only be programmatically set to the empty string.");
         return;
     }
@@ -1075,7 +1065,7 @@ void HTMLInputElement::setValueAsNumber(double newValue, ExceptionState& excepti
 void HTMLInputElement::setValueFromRenderer(const String& value)
 {
     // File upload controls will never use this.
-    ASSERT(!isFileUpload());
+    ASSERT(type() != InputTypeNames::file);
 
     m_suggestedValue = String();
 
@@ -1176,7 +1166,8 @@ void HTMLInputElement::defaultEventHandler(Event* evt)
     }
 
     if (m_inputTypeView->shouldSubmitImplicitly(evt)) {
-        if (isSearchField())
+        // FIXME: Remove type check.
+        if (type() == InputTypeNames::search)
             onSearch();
         // Form submission finishes editing, just as loss of focus does.
         // If there was a change, send the event now.
@@ -1406,7 +1397,8 @@ bool HTMLInputElement::matchesReadWritePseudoClass() const
 
 void HTMLInputElement::onSearch()
 {
-    ASSERT(isSearchField());
+    // FIXME: Remove type check, and static_cast.
+    ASSERT(type() == InputTypeNames::search);
     if (m_inputType)
         static_cast<SearchInputType*>(m_inputType.get())->stopSearchEventTimer();
     dispatchEvent(Event::createBubble(EventTypeNames::search));
@@ -1462,7 +1454,8 @@ void HTMLInputElement::didMoveToNewDocument(Document& oldDocument)
     if (hasImageLoader())
         imageLoader()->elementDidMoveToNewDocument();
 
-    if (isRadioButton())
+    // FIXME: Remove type check.
+    if (type() == InputTypeNames::radio)
         oldDocument.formController().radioButtonGroupScope().removeButton(this);
 
     HTMLTextFormControlElement::didMoveToNewDocument(oldDocument);
@@ -1489,9 +1482,14 @@ void HTMLInputElement::requiredAttributeChanged()
 
 void HTMLInputElement::selectColorInColorChooser(const Color& color)
 {
-    if (!m_inputType->isColorControl())
-        return;
-    static_cast<ColorInputType*>(m_inputType.get())->didChooseColor(color);
+    if (ColorChooserClient* client = m_inputType->colorChooserClient())
+        client->didChooseColor(color);
+}
+
+void HTMLInputElement::endColorChooser()
+{
+    if (ColorChooserClient* client = m_inputType->colorChooserClient())
+        client->didEndChooser();
 }
 
 HTMLElement* HTMLInputElement::list() const
@@ -1559,96 +1557,6 @@ bool HTMLInputElement::isTextButton() const
     return m_inputType->isTextButton();
 }
 
-bool HTMLInputElement::isRadioButton() const
-{
-    return m_inputType->isRadioButton();
-}
-
-bool HTMLInputElement::isSearchField() const
-{
-    return m_inputType->isSearchField();
-}
-
-bool HTMLInputElement::isInputTypeHidden() const
-{
-    return m_inputType->isHiddenType();
-}
-
-bool HTMLInputElement::isPasswordField() const
-{
-    return m_inputType->isPasswordField();
-}
-
-bool HTMLInputElement::isCheckbox() const
-{
-    return m_inputType->isCheckbox();
-}
-
-bool HTMLInputElement::isRangeControl() const
-{
-    return m_inputType->isRangeControl();
-}
-
-bool HTMLInputElement::isText() const
-{
-    return m_inputType->isTextType();
-}
-
-bool HTMLInputElement::isEmailField() const
-{
-    return m_inputType->isEmailField();
-}
-
-bool HTMLInputElement::isFileUpload() const
-{
-    return m_inputType->isFileUpload();
-}
-
-bool HTMLInputElement::isImageButton() const
-{
-    return m_inputType->isImageButton();
-}
-
-bool HTMLInputElement::isNumberField() const
-{
-    return m_inputType->isNumberField();
-}
-
-bool HTMLInputElement::isTelephoneField() const
-{
-    return m_inputType->isTelephoneField();
-}
-
-bool HTMLInputElement::isURLField() const
-{
-    return m_inputType->isURLField();
-}
-
-bool HTMLInputElement::isDateField() const
-{
-    return m_inputType->isDateField();
-}
-
-bool HTMLInputElement::isDateTimeLocalField() const
-{
-    return m_inputType->isDateTimeLocalField();
-}
-
-bool HTMLInputElement::isMonthField() const
-{
-    return m_inputType->isMonthField();
-}
-
-bool HTMLInputElement::isTimeField() const
-{
-    return m_inputType->isTimeField();
-}
-
-bool HTMLInputElement::isWeekField() const
-{
-    return m_inputType->isWeekField();
-}
-
 bool HTMLInputElement::isEnumeratable() const
 {
     return m_inputType->isEnumeratable();
@@ -1685,7 +1593,7 @@ void HTMLInputElement::parseMaxLengthAttribute(const AtomicString& value)
     m_maxLength = maxLength;
     if (oldMaxLength != maxLength)
         updateValueIfNeeded();
-    setNeedsStyleRecalc(SubtreeStyleChange);
+    setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::fromAttribute(maxlengthAttr));
     setNeedsValidityCheck();
 }
 
@@ -1704,19 +1612,22 @@ String HTMLInputElement::defaultToolTip() const
 
 bool HTMLInputElement::shouldAppearIndeterminate() const
 {
-    return m_inputType->supportsIndeterminateAppearance() && indeterminate();
+    return m_inputType->shouldAppearIndeterminate();
 }
 
 bool HTMLInputElement::isInRequiredRadioButtonGroup()
 {
-    ASSERT(isRadioButton());
+    // FIXME: Remove type check.
+    ASSERT(type() == InputTypeNames::radio);
     if (RadioButtonGroupScope* scope = radioButtonGroupScope())
         return scope->isInRequiredGroup(this);
     return false;
 }
 
-HTMLInputElement* HTMLInputElement::checkedRadioButtonForGroup() const
+HTMLInputElement* HTMLInputElement::checkedRadioButtonForGroup()
 {
+    if (checked())
+        return this;
     if (RadioButtonGroupScope* scope = radioButtonGroupScope())
         return scope->checkedButtonForGroup(name());
     return 0;
@@ -1724,7 +1635,8 @@ HTMLInputElement* HTMLInputElement::checkedRadioButtonForGroup() const
 
 RadioButtonGroupScope* HTMLInputElement::radioButtonGroupScope() const
 {
-    if (!isRadioButton())
+    // FIXME: Remove type check.
+    if (type() != InputTypeNames::radio)
         return 0;
     if (HTMLFormElement* formElement = form())
         return &formElement->radioButtonGroupScope();

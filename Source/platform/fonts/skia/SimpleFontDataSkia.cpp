@@ -45,8 +45,10 @@
 
 namespace blink {
 
+#if OS(LINUX) || OS(ANDROID)
 // This is the largest VDMX table which we'll try to load and parse.
 static const size_t maxVDMXTableSize = 1024 * 1024; // 1 MB
+#endif
 
 void SimpleFontData::platformInit()
 {
@@ -130,13 +132,6 @@ void SimpleFontData::platformInit()
     float lineGap = SkScalarToFloat(metrics.fLeading);
     m_fontMetrics.setLineGap(lineGap);
     m_fontMetrics.setLineSpacing(lroundf(ascent) + lroundf(descent) + lroundf(lineGap));
-
-    SkScalar underlineThickness, underlinePosition;
-    if (metrics.hasUnderlineThickness(&underlineThickness)
-        && metrics.hasUnderlinePosition(&underlinePosition)) {
-        m_fontMetrics.setUnderlineThickness(SkScalarToFloat(underlineThickness));
-        m_fontMetrics.setUnderlinePosition(SkScalarToFloat(-underlinePosition));
-    }
 
     if (platformData().orientation() == Vertical && !isTextOrientationFallback()) {
         static const uint32_t vheaTag = SkSetFourByteTag('v', 'h', 'e', 'a');

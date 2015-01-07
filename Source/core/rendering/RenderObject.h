@@ -32,6 +32,7 @@
 #include "core/editing/TextAffinity.h"
 #include "core/fetch/ImageResourceClient.h"
 #include "core/html/HTMLElement.h"
+#include "core/inspector/InspectorTraceEvents.h"
 #include "core/rendering/HitTestRequest.h"
 #include "core/rendering/PaintInvalidationState.h"
 #include "core/rendering/PaintPhase.h"
@@ -90,14 +91,6 @@ enum HitTestAction {
     HitTestForeground
 };
 
-// Sides used when drawing borders and outlines. The values should run clockwise from top.
-enum BoxSide {
-    BSTop,
-    BSRight,
-    BSBottom,
-    BSLeft
-};
-
 enum MarkingBehavior {
     MarkOnlyThis,
     MarkContainingBlockChain,
@@ -119,10 +112,13 @@ enum InvalidationReason {
     InvalidationBorderBoxChange,
     InvalidationBoundsChange,
     InvalidationLocationChange,
+    InvalidationBecameVisible,
+    InvalidationBecameInvisible,
     InvalidationScroll,
     InvalidationSelection,
     InvalidationLayer,
-    InvalidationPaint,
+    InvalidationRendererInsertion,
+    InvalidationRendererRemoval,
     InvalidationPaintRectangle
 };
 
@@ -780,6 +776,9 @@ public:
     FloatQuad localToContainerQuad(const FloatQuad&, const RenderLayerModelObject* paintInvalidatinoContainer, MapCoordinatesFlags = 0, bool* wasFixed = 0) const;
     FloatPoint localToContainerPoint(const FloatPoint&, const RenderLayerModelObject* paintInvalidationContainer, MapCoordinatesFlags = 0, bool* wasFixed = 0, const PaintInvalidationState* = 0) const;
 
+    // Convert a local point into the coordinate system of backing coordinates. Also returns the backing layer if needed.
+    FloatPoint localToInvalidationBackingPoint(const LayoutPoint&, RenderLayer** backingLayer = nullptr);
+
     // Return the offset from the container() renderer (excluding transforms). In multi-column layout,
     // different offsets apply at different points, so return the offset that applies to the given point.
     virtual LayoutSize offsetFromContainer(const RenderObject*, const LayoutPoint&, bool* offsetDependsOnPoint = 0) const;
@@ -787,9 +786,6 @@ public:
     LayoutSize offsetFromAncestorContainer(const RenderObject*) const;
 
     virtual void absoluteRects(Vector<IntRect>&, const LayoutPoint&) const { }
-
-    // Computes the position of the given render object in the space of |paintInvalidationContainer|.
-    LayoutPoint positionFromPaintInvalidationContainer(const RenderLayerModelObject* paintInvalidationContainer, const PaintInvalidationState* = 0) const;
 
     IntRect absoluteBoundingBoxRect() const;
     // FIXME: This function should go away eventually
@@ -866,14 +862,13 @@ public:
     // Invalidate the paint of a specific subrectangle within a given object. The rect |r| is in the object's coordinate space.
     void invalidatePaintRectangle(const LayoutRect&) const;
 
-    InvalidationReason invalidatePaintIfNeeded(const RenderLayerModelObject& paintInvalidationContainer,
-        const LayoutRect& oldBounds, const LayoutPoint& oldPositionFromPaintInvalidationContainer, const PaintInvalidationState&);
-
     // Walk the tree after layout issuing paint invalidations for renderers that have changed or moved, updating bounds that have changed, and clearing paint invalidation state.
     virtual void invalidateTreeIfNeeded(const PaintInvalidationState&);
 
     virtual void invalidatePaintForOverflow();
     void invalidatePaintForOverflowIfNeeded();
+
+    void invalidatePaintIncludingNonCompositingDescendants();
 
     bool checkForPaintInvalidation() const;
 
@@ -886,8 +881,6 @@ public:
 
     // Given a rect in the object's coordinate space, compute a rect suitable for invalidating paints of
     // that rect in the coordinate space of paintInvalidationContainer.
-    // The ViewportConstrainedPosition parameter is only meaningful when this object is RenderView.
-    // For other objects, the caller can just pass |ViewportConstraintDoesNotMatter|.
     virtual void mapRectToPaintInvalidationBacking(const RenderLayerModelObject* paintInvalidationContainer, LayoutRect&, const PaintInvalidationState*) const;
     virtual void computeFloatRectForPaintInvalidation(const RenderLayerModelObject* paintInvalidationContainer, FloatRect& paintInvalidationRect, const PaintInvalidationState*) const;
 
@@ -921,7 +914,7 @@ public:
 
     // A single rectangle that encompasses all of the selected objects within this object.  Used to determine the tightest
     // possible bounding box for the selection. The rect returned is in the coordinate space of the paint invalidation container's backing.
-    virtual LayoutRect selectionRectForPaintInvalidation(const RenderLayerModelObject* /*paintInvalidationContainer*/, bool /*clipToVisibleContent*/ = true) { return LayoutRect(); }
+    virtual LayoutRect selectionRectForPaintInvalidation(const RenderLayerModelObject* /*paintInvalidationContainer*/) const { return LayoutRect(); }
 
     virtual bool canBeSelectionLeaf() const { return false; }
     bool hasSelectedChildren() const { return selectionState() != SelectionNone; }
@@ -1000,7 +993,7 @@ public:
 
     bool createsGroup() const { return isTransparent() || hasMask() || hasFilter() || hasBlendMode(); }
 
-    virtual void addFocusRingRects(Vector<IntRect>&, const LayoutPoint& /* additionalOffset */, const RenderLayerModelObject* /* paintContainer */ = 0) const { };
+    virtual void addFocusRingRects(Vector<LayoutRect>&, const LayoutPoint& additionalOffset, const RenderLayerModelObject* paintContainer) const { }
 
     // Compute a list of hit-test rectangles per layer rooted at this renderer.
     virtual void computeLayerHitTestRects(LayerHitTestRects&) const;
@@ -1012,14 +1005,17 @@ public:
 
     bool isRelayoutBoundaryForInspector() const;
 
+    // The previous paint invalidation rect in the object's previous paint backing.
     const LayoutRect& previousPaintInvalidationRect() const { return m_previousPaintInvalidationRect; }
     void setPreviousPaintInvalidationRect(const LayoutRect& rect) { m_previousPaintInvalidationRect = rect; }
 
-    const LayoutPoint& previousPositionFromPaintInvalidationContainer() const { return m_previousPositionFromPaintInvalidationContainer; }
-    void setPreviousPositionFromPaintInvalidationContainer(const LayoutPoint& location) { m_previousPositionFromPaintInvalidationContainer = location; }
+    // The previous position of the top-left corner of the object in its previous paint backing.
+    const LayoutPoint& previousPositionFromPaintInvalidationBacking() const { return m_previousPositionFromPaintInvalidationBacking; }
+    void setPreviousPositionFromPaintInvalidationBacking(const LayoutPoint& positionFromPaintInvalidationBacking) { m_previousPositionFromPaintInvalidationBacking = positionFromPaintInvalidationBacking; }
 
-    bool shouldDoFullPaintInvalidation() const { return m_bitfields.shouldDoFullPaintInvalidation(); }
+    bool shouldDoFullPaintInvalidation() const { return m_bitfields.fullPaintInvalidationReason() != InvalidationNone; }
     void setShouldDoFullPaintInvalidation(bool, MarkingBehavior = MarkContainingBlockChain);
+    void setShouldDoFullPaintInvalidationWithReason(InvalidationReason, MarkingBehavior = MarkContainingBlockChain);
 
     bool shouldInvalidateOverflowForPaint() const { return m_bitfields.shouldInvalidateOverflowForPaint(); }
 
@@ -1076,8 +1072,7 @@ public:
     void setNeedsOverflowRecalcAfterStyleChange();
     void markContainingBlocksForOverflowRecalc();
 
-    // FIXME: This is temporary for cases that setShouldDoFullPaintInvalidation(true) doesn't work yet.
-    void doNotUseInvalidatePaintForWholeRendererSynchronously() const { invalidatePaintForWholeRenderer(); }
+    virtual LayoutRect viewRect() const;
 
 protected:
     inline bool layerCreationAllowedForSubtree() const;
@@ -1091,22 +1086,10 @@ protected:
     void propagateStyleToAnonymousChildren(bool blockChildrenOnly = false);
     virtual void updateAnonymousChildStyle(const RenderObject* child, RenderStyle* style) const { }
 
-    void drawLineForBoxSide(GraphicsContext*, int x1, int y1, int x2, int y2, BoxSide,
-                            Color, EBorderStyle, int adjbw1, int adjbw2, bool antialias = false);
-    void drawDashedOrDottedBoxSide(GraphicsContext*, int x1, int y1, int x2, int y2,
-        BoxSide, Color, int thickness, EBorderStyle, bool antialias);
-    void drawDoubleBoxSide(GraphicsContext*, int x1, int y1, int x2, int y2,
-        int length, BoxSide, Color, int thickness, int adjacentWidth1, int adjacentWidth2, bool antialias);
-    void drawRidgeOrGrooveBoxSide(GraphicsContext*, int x1, int y1, int x2, int y2,
-        BoxSide, Color, EBorderStyle, int adjacentWidth1, int adjacentWidth2, bool antialias);
-    void drawSolidBoxSide(GraphicsContext*, int x1, int y1, int x2, int y2,
-        BoxSide, Color, int adjacentWidth1, int adjacentWidth2, bool antialias);
-
-    void paintFocusRing(PaintInfo&, const LayoutPoint&, RenderStyle*);
+public:
     void paintOutline(PaintInfo&, const LayoutRect&);
-    void addChildFocusRingRects(Vector<IntRect>&, const LayoutPoint& additionalOffset, const RenderLayerModelObject* paintContainer) const;
-
-    virtual LayoutRect viewRect() const;
+protected:
+    void addChildFocusRingRects(Vector<LayoutRect>&, const LayoutPoint& additionalOffset, const RenderLayerModelObject* paintContainer) const;
 
     void clearLayoutRootIfNeeded() const;
     virtual void willBeDestroyed();
@@ -1132,9 +1115,9 @@ protected:
     virtual void computeSelfHitTestRects(Vector<LayoutRect>&, const LayoutPoint& layerOffset) const { };
 
     virtual InvalidationReason getPaintInvalidationReason(const RenderLayerModelObject& paintInvalidationContainer,
-        const LayoutRect& oldBounds, const LayoutPoint& oldPositionFromPaintInvalidationContainer,
-        const LayoutRect& newBounds, const LayoutPoint& newPositionFromPaintInvalidationContainer);
-    virtual void incrementallyInvalidatePaint(const RenderLayerModelObject& paintInvalidationContainer, const LayoutRect& oldBounds, const LayoutRect& newBounds, const LayoutPoint& positionFromPaintInvalidationContainer);
+        const LayoutRect& oldPaintInvalidationRect, const LayoutPoint& oldPositionFromPaintInvalidationBacking,
+        const LayoutRect& newPaintInvalidationRect, const LayoutPoint& newPositionFromPaintInvalidationBacking);
+    virtual void incrementallyInvalidatePaint(const RenderLayerModelObject& paintInvalidationContainer, const LayoutRect& oldBounds, const LayoutRect& newBounds, const LayoutPoint& positionFromPaintInvalidationBacking);
     void fullyInvalidatePaint(const RenderLayerModelObject& paintInvalidationContainer, InvalidationReason, const LayoutRect& oldBounds, const LayoutRect& newBounds);
 
 #if ENABLE(ASSERT)
@@ -1145,10 +1128,11 @@ protected:
     }
 #endif
 
+    void invalidatePaintOfSubtreesIfNeeded(const PaintInvalidationState&);
+    virtual InvalidationReason invalidatePaintIfNeeded(const PaintInvalidationState&, const RenderLayerModelObject& paintInvalidationContainer);
+
 private:
-    // Invalidate the paint of the entire object. This is only used when a renderer is to be removed.
-    // For other cases, the caller should call setShouldDoFullPaintInvalidation() instead.
-    void invalidatePaintForWholeRenderer() const;
+    void invalidatePaintIncludingNonCompositingDescendantsInternal(const RenderLayerModelObject* repaintContainer);
 
     const RenderLayerModelObject* enclosingCompositedContainer() const;
 
@@ -1213,7 +1197,6 @@ private:
     public:
         RenderObjectBitfields(Node* node)
             : m_selfNeedsLayout(false)
-            , m_shouldDoFullPaintInvalidation(false)
             , m_shouldInvalidateOverflowForPaint(false)
             , m_shouldDoFullPaintInvalidationIfSelfPaintingLayer(false)
             // FIXME: We should remove mayNeedPaintInvalidation once we are able to
@@ -1252,12 +1235,12 @@ private:
             , m_selectionState(SelectionNone)
             , m_flowThreadState(NotInsideFlowThread)
             , m_boxDecorationBackgroundState(NoBoxDecorationBackground)
+            , m_fullPaintInvalidationReason(InvalidationNone)
         {
         }
 
-        // 32 bits have been used in the first word, and 11 in the second.
+        // 32 bits have been used in the first word, and 14 in the second.
         ADD_BOOLEAN_BITFIELD(selfNeedsLayout, SelfNeedsLayout);
-        ADD_BOOLEAN_BITFIELD(shouldDoFullPaintInvalidation, ShouldDoFullPaintInvalidation);
         ADD_BOOLEAN_BITFIELD(shouldInvalidateOverflowForPaint, ShouldInvalidateOverflowForPaint);
         ADD_BOOLEAN_BITFIELD(shouldDoFullPaintInvalidationIfSelfPaintingLayer, ShouldDoFullPaintInvalidationIfSelfPaintingLayer);
         ADD_BOOLEAN_BITFIELD(mayNeedPaintInvalidation, MayNeedPaintInvalidation);
@@ -1305,6 +1288,7 @@ private:
         unsigned m_selectionState : 3; // SelectionState
         unsigned m_flowThreadState : 2; // FlowThreadState
         unsigned m_boxDecorationBackgroundState : 2; // BoxDecorationBackgroundState
+        unsigned m_fullPaintInvalidationReason : 4; // InvalidationReason
 
     public:
         bool isOutOfFlowPositioned() const { return m_positionedState == IsOutOfFlowPositioned; }
@@ -1326,6 +1310,9 @@ private:
 
         ALWAYS_INLINE BoxDecorationBackgroundState boxDecorationBackgroundState() const { return static_cast<BoxDecorationBackgroundState>(m_boxDecorationBackgroundState); }
         ALWAYS_INLINE void setBoxDecorationBackgroundState(BoxDecorationBackgroundState s) { m_boxDecorationBackgroundState = s; }
+
+        InvalidationReason fullPaintInvalidationReason() const { return static_cast<InvalidationReason>(m_fullPaintInvalidationReason); }
+        void setFullPaintInvalidationReason(InvalidationReason reason) { m_fullPaintInvalidationReason = reason; }
     };
 
 #undef ADD_BOOLEAN_BITFIELD
@@ -1350,9 +1337,9 @@ private:
     // This stores the paint invalidation rect from the previous layout.
     LayoutRect m_previousPaintInvalidationRect;
 
-    // This stores the position in the paint invalidation container's coordinate.
+    // This stores the position in the paint invalidation backing's coordinate.
     // It is used to detect renderer shifts that forces a full invalidation.
-    LayoutPoint m_previousPositionFromPaintInvalidationContainer;
+    LayoutPoint m_previousPositionFromPaintInvalidationBacking;
 
     static unsigned s_instanceCount;
 };
@@ -1406,6 +1393,11 @@ inline bool RenderObject::isBeforeOrAfterContent() const
 // setNeedsLayoutAndFullPaintInvalidation() does. Otherwise the two methods are identical.
 inline void RenderObject::setNeedsLayout(MarkingBehavior markParents, SubtreeLayoutScope* layouter)
 {
+    TRACE_EVENT_INSTANT1(
+        TRACE_DISABLED_BY_DEFAULT("devtools.timeline.invalidationTracking"),
+        "LayoutInvalidationTracking",
+        "data",
+        InspectorLayoutInvalidationTrackingEvent::data(this));
     ASSERT(!isSetNeedsLayoutForbidden());
     bool alreadyNeededLayout = m_bitfields.selfNeedsLayout();
     setSelfNeedsLayout(true);
@@ -1547,6 +1539,12 @@ inline void adjustFloatRectForAbsoluteZoom(FloatRect& rect, RenderObject& render
     float zoom = renderer.style()->effectiveZoom();
     if (zoom != 1)
         rect.scale(1 / zoom, 1 / zoom);
+}
+
+inline double adjustScrollForAbsoluteZoom(int value, RenderObject& renderer)
+{
+    ASSERT(renderer.style());
+    return adjustScrollForAbsoluteZoom(value, *renderer.style());
 }
 
 #define DEFINE_RENDER_OBJECT_TYPE_CASTS(thisType, predicate) \

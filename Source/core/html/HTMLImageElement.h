@@ -34,9 +34,9 @@ namespace blink {
 
 class HTMLFormElement;
 class ImageCandidate;
-class MediaQueryList;
 
 class HTMLImageElement FINAL : public HTMLElement, public CanvasImageSource {
+    DEFINE_WRAPPERTYPEINFO();
 public:
     class ViewportChangeListener;
 
@@ -153,6 +153,6 @@ private:
     unsigned m_effectiveSizeViewportDependant : 1;
 };
 
-} //namespace
+} // namespace blink
 
-#endif
+#endif // HTMLImageElement_h

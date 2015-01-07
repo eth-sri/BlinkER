@@ -37,7 +37,6 @@ class ExceptionState;
 class FileList;
 class HTMLDataListElement;
 class HTMLImageLoader;
-class HTMLOptionElement;
 class InputType;
 class InputTypeView;
 class KURL;
@@ -46,6 +45,7 @@ class RadioButtonGroupScope;
 struct DateTimeChooserParameters;
 
 class HTMLInputElement : public HTMLTextFormControlElement {
+    DEFINE_WRAPPERTYPEINFO();
 public:
     static PassRefPtrWillBeRawPtr<HTMLInputElement> create(Document&, HTMLFormElement*, bool createdByParser);
     virtual ~HTMLInputElement();
@@ -84,33 +84,11 @@ public:
     // stepUp()/stepDown() for user-interaction.
     bool isSteppable() const;
 
+    // Returns true if the type is button, reset, or submit.
     bool isTextButton() const;
-
-    bool isRadioButton() const;
+    // Returns true if the type is email, number, password, search, tel, text,
+    // or url.
     bool isTextField() const;
-    bool isSearchField() const;
-    bool isInputTypeHidden() const;
-    bool isPasswordField() const;
-    bool isCheckbox() const;
-    bool isRangeControl() const;
-
-    // FIXME: It's highly likely that any call site calling this function should instead
-    // be using a different one. Many input elements behave like text fields, and in addition
-    // any unknown input type is treated as text. Consider, for example, isTextField or
-    // isTextField && !isPasswordField.
-    bool isText() const;
-
-    bool isEmailField() const;
-    bool isFileUpload() const;
-    bool isImageButton() const;
-    bool isNumberField() const;
-    bool isTelephoneField() const;
-    bool isURLField() const;
-    bool isDateField() const;
-    bool isDateTimeLocalField() const;
-    bool isMonthField() const;
-    bool isTimeField() const;
-    bool isWeekField() const;
 
     bool checked() const { return m_isChecked; }
     void setChecked(bool, TextFieldEventBehavior = DispatchNoEvent);
@@ -219,7 +197,7 @@ public:
     bool hasValidDataListOptions() const;
     void listAttributeTargetChanged();
 
-    HTMLInputElement* checkedRadioButtonForGroup() const;
+    HTMLInputElement* checkedRadioButtonForGroup();
     bool isInRequiredRadioButtonGroup();
 
     // Functions for InputType classes.
@@ -233,6 +211,7 @@ public:
 
     // For test purposes.
     void selectColorInColorChooser(const Color&);
+    void endColorChooser();
 
     String defaultToolTip() const;
 
@@ -336,7 +315,6 @@ private:
     virtual bool isInRange() const OVERRIDE FINAL;
     virtual bool isOutOfRange() const OVERRIDE FINAL;
 
-    bool isTextType() const;
     bool tooLong(const String&, NeedsToCheckDirtyFlag) const;
 
     virtual bool supportsPlaceholder() const OVERRIDE FINAL;
@@ -345,6 +323,7 @@ private:
     virtual bool isEmptySuggestedValue() const OVERRIDE FINAL { return suggestedValue().isEmpty(); }
     virtual void handleFocusEvent(Element* oldFocusedElement, FocusType) OVERRIDE FINAL;
     virtual void handleBlurEvent() OVERRIDE FINAL;
+    virtual void dispatchFocusInEvent(const AtomicString& eventType, Element* oldFocusedElement, FocusType) OVERRIDE FINAL;
 
     virtual bool isOptionalFormControl() const OVERRIDE FINAL { return !isRequiredFormControl(); }
     virtual bool isRequiredFormControl() const OVERRIDE FINAL;
@@ -398,5 +377,6 @@ private:
     OwnPtrWillBeMember<ListAttributeTargetObserver> m_listAttributeTargetObserver;
 };
 
-} //namespace
-#endif
+} // namespace blink
+
+#endif // HTMLInputElement_h

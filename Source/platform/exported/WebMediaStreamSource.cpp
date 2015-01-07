@@ -69,7 +69,7 @@ void WebMediaStreamSource::ExtraData::setOwner(MediaStreamSource* owner)
     m_owner = owner;
 }
 
-WebMediaStreamSource::WebMediaStreamSource(const PassRefPtr<MediaStreamSource>& mediaStreamSource)
+WebMediaStreamSource::WebMediaStreamSource(MediaStreamSource* mediaStreamSource)
     : m_private(mediaStreamSource)
 {
 }
@@ -88,11 +88,6 @@ void WebMediaStreamSource::assign(const WebMediaStreamSource& other)
 void WebMediaStreamSource::reset()
 {
     m_private.reset();
-}
-
-WebMediaStreamSource::operator PassRefPtr<MediaStreamSource>() const
-{
-    return m_private.get();
 }
 
 WebMediaStreamSource::operator MediaStreamSource*() const
@@ -166,11 +161,11 @@ bool WebMediaStreamSource::requiresAudioConsumer() const
     return m_private->requiresAudioConsumer();
 }
 
-class ConsumerWrapper : public AudioDestinationConsumer {
+class ConsumerWrapper FINAL : public AudioDestinationConsumer {
 public:
-    static PassRefPtr<ConsumerWrapper> create(WebAudioDestinationConsumer* consumer)
+    static ConsumerWrapper* create(WebAudioDestinationConsumer* consumer)
     {
-        return adoptRef(new ConsumerWrapper(consumer));
+        return new ConsumerWrapper(consumer);
     }
 
     virtual void setFormat(size_t numberOfChannels, float sampleRate) OVERRIDE;
@@ -217,8 +212,8 @@ bool WebMediaStreamSource::removeAudioConsumer(WebAudioDestinationConsumer* cons
     ASSERT(isMainThread());
     ASSERT(!m_private.isNull() && consumer);
 
-    const Vector<RefPtr<AudioDestinationConsumer> >& consumers = m_private->audioConsumers();
-    for (Vector<RefPtr<AudioDestinationConsumer> >::const_iterator it = consumers.begin(); it != consumers.end(); ++it) {
+    const HeapHashSet<Member<AudioDestinationConsumer> >& consumers = m_private->audioConsumers();
+    for (HeapHashSet<Member<AudioDestinationConsumer> >::const_iterator it = consumers.begin(); it != consumers.end(); ++it) {
         ConsumerWrapper* wrapper = static_cast<ConsumerWrapper*>(it->get());
         if (wrapper->consumer() == consumer) {
             m_private->removeAudioConsumer(wrapper);

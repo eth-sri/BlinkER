@@ -73,6 +73,10 @@ WebInspector.SourcesPanel = function(workspaceForTest)
     this._updateDebugSidebarResizeWidget();
     this._splitView.installResizer(this._debugSidebarResizeWidgetElement);
 
+    // FIXME: This is a temporary solution which should be removed as soon as the documentation module is released from experiment.
+    if (Runtime.experiments.isEnabled("documentation"))
+        self.runtime.loadModule("documentation");
+
     this.sidebarPanes = {};
     this.sidebarPanes.threads = new WebInspector.ThreadsSidebarPane();
     this.sidebarPanes.watchExpressions = new WebInspector.WatchExpressionsSidebarPane();
@@ -110,6 +114,8 @@ WebInspector.SourcesPanel = function(workspaceForTest)
 }
 
 WebInspector.SourcesPanel.minToolbarWidth = 215;
+
+WebInspector.SourcesPanel._infobarSymbol = Symbol("infobar");
 
 WebInspector.SourcesPanel.prototype = {
     /**
@@ -308,7 +314,7 @@ WebInspector.SourcesPanel.prototype = {
 
     /**
      * @param {!WebInspector.UISourceCode} uiSourceCode
-     * @param {number=} lineNumber
+     * @param {number=} lineNumber 0-based
      * @param {number=} columnNumber
      * @param {boolean=} forceShowInPanel
      */
@@ -320,7 +326,7 @@ WebInspector.SourcesPanel.prototype = {
 
     _showEditor: function(forceShowInPanel)
     {
-        WebInspector.inspectorView.showPanel("sources");
+        WebInspector.inspectorView.setCurrentPanel(this);
     },
 
     /**
@@ -476,7 +482,130 @@ WebInspector.SourcesPanel.prototype = {
     {
         var uiSourceCode = /** @type {!WebInspector.UISourceCode} */ (event.data);
         this._editorChanged(uiSourceCode);
-   },
+        if (Runtime.experiments.isEnabled("suggestUsingWorkspace")) {
+            if (this._editorSelectedTimer)
+                clearTimeout(this._editorSelectedTimer);
+            this._editorSelectedTimer = setTimeout(this._updateSuggestedMappingInfobar.bind(this, uiSourceCode), 3000);
+        }
+    },
+
+    /**
+     * @param {!WebInspector.UISourceCode} uiSourceCode
+     */
+    _updateSuggestedMappingInfobar: function(uiSourceCode)
+    {
+        if (!this.isShowing())
+            return;
+        if (uiSourceCode[WebInspector.SourcesPanel._infobarSymbol])
+            return;
+
+        // First try mapping filesystem -> network.
+        var uiSourceCodeFrame = this._sourcesView.viewForFile(uiSourceCode);
+        if (uiSourceCode.project().type() === WebInspector.projectTypes.FileSystem) {
+            var hasMappings = !!uiSourceCode.url;
+            if (hasMappings)
+                return;
+
+            var targets = WebInspector.targetManager.targets();
+            for (var i = 0; i < targets.length; ++i)
+                targets[i].resourceTreeModel.forAllResources(matchResource.bind(this));
+        }
+
+        /**
+         * @param {!WebInspector.Resource} resource
+         * @return {boolean}
+         * @this {WebInspector.SourcesPanel}
+         */
+        function matchResource(resource)
+        {
+            if (resource.contentURL().endsWith(uiSourceCode.name())) {
+                createMappingInfobar.call(this, false);
+                return true;
+            }
+            return false;
+        }
+
+        // Then map network -> filesystem.
+        if (uiSourceCode.project().type() === WebInspector.projectTypes.Network || uiSourceCode.project().type() === WebInspector.projectTypes.ContentScripts) {
+            if (this._workspace.uiSourceCodeForURL(uiSourceCode.url) !== uiSourceCode)
+                return;
+
+            var filesystemProjects = this._workspace.projectsForType(WebInspector.projectTypes.FileSystem);
+            for (var i = 0; i < filesystemProjects.length; ++i) {
+                var name = uiSourceCode.name();
+                var fsUiSourceCodes = filesystemProjects[i].uiSourceCodes();
+                for (var j = 0; j < fsUiSourceCodes.length; ++j) {
+                    if (fsUiSourceCodes[j].name() === name) {
+                        createMappingInfobar.call(this, true);
+                        return;
+                    }
+                }
+            }
+
+            // There are no matching filesystems. Suggest adding a filesystem in case of localhost.
+            var originURL = uiSourceCode.originURL().asParsedURL();
+            if (originURL && originURL.host === "localhost")
+                createWorkspaceInfobar();
+        }
+
+        /**
+         * @param {boolean} isNetwork
+         * @this {WebInspector.SourcesPanel}
+         */
+        function createMappingInfobar(isNetwork)
+        {
+            var title;
+            if (isNetwork)
+                title = WebInspector.UIString("Map network resource '%s' to workspace?", uiSourceCode.originURL());
+            else
+                title = WebInspector.UIString("Map workspace resource '%s' to network?", uiSourceCode.path());
+
+            var infobar = new WebInspector.UISourceCodeFrame.Infobar(WebInspector.UISourceCodeFrame.Infobar.Level.Info, title);
+            infobar.createDetailsRowMessage(WebInspector.UIString("You can map files in your workspace to the ones loaded over the network. As a result, changes made in DevTools will be persisted to disk."));
+            infobar.createDetailsRowMessage(WebInspector.UIString("Use context menu to establish the mapping at any time."));
+            var actionLink = infobar.createDetailsRowMessage("").createChild("a");
+            actionLink.href = "";
+            actionLink.onclick = establishTheMapping.bind(this);
+            actionLink.textContent = WebInspector.UIString("Establish the mapping now...");
+            appendInfobar(infobar);
+        }
+
+        /**
+         * @param {?Event} event
+         * @this {WebInspector.SourcesPanel}
+         */
+        function establishTheMapping(event)
+        {
+            event.consume(true);
+            if (uiSourceCode.project().type() === WebInspector.projectTypes.FileSystem)
+                this._mapFileSystemToNetwork(uiSourceCode);
+            else
+                this._mapNetworkToFileSystem(uiSourceCode);
+        }
+
+        function createWorkspaceInfobar()
+        {
+            var infobar = new WebInspector.UISourceCodeFrame.Infobar(WebInspector.UISourceCodeFrame.Infobar.Level.Info, WebInspector.UIString("Serving from the file system? Add your files into the workspace."));
+            infobar.createDetailsRowMessage(WebInspector.UIString("If you add files into your DevTools workspace, your changes will be persisted to disk."));
+            infobar.createDetailsRowMessage(WebInspector.UIString("To add a folder into the workspace, drag and drop it into the Sources panel."));
+            appendInfobar(infobar);
+        }
+
+        /**
+         * @param {!WebInspector.UISourceCodeFrame.Infobar} infobar
+         */
+        function appendInfobar(infobar)
+        {
+            infobar.createDetailsRowMessage("").createChild("br");
+            var rowElement = infobar.createDetailsRowMessage(WebInspector.UIString("For more information on workspaces, refer to the "));
+            var a = rowElement.createChild("a");
+            a.textContent = "workspaces documentation";
+            a.href = "https://developer.chrome.com/devtools/docs/workspaces";
+            rowElement.createTextChild(".");
+            uiSourceCode[WebInspector.SourcesPanel._infobarSymbol] = infobar;
+            uiSourceCodeFrame.attachInfobars([infobar]);
+        }
+    },
 
     /**
      * @param {!WebInspector.Event} event
@@ -872,13 +1001,14 @@ WebInspector.SourcesPanel.prototype = {
             return;
 
         var uiSourceCode = /** @type {!WebInspector.UISourceCode} */ (target);
-        var project = uiSourceCode.project();
-        if (project.type() !== WebInspector.projectTypes.FileSystem)
+        var projectType = uiSourceCode.project().type();
+        if (projectType !== WebInspector.projectTypes.FileSystem)
             contextMenu.appendItem(WebInspector.UIString(WebInspector.useLowerCaseMenuTitles() ? "Local modifications\u2026" : "Local Modifications\u2026"), this._showLocalHistory.bind(this, uiSourceCode));
         this._appendUISourceCodeMappingItems(contextMenu, uiSourceCode);
 
-        if (uiSourceCode.contentType() === WebInspector.resourceTypes.Script && project.type() !== WebInspector.projectTypes.Snippets)
-            this.sidebarPanes.callstack.appendBlackboxURLContextMenuItems(contextMenu, uiSourceCode.url);
+        var contentType = uiSourceCode.contentType();
+        if ((contentType === WebInspector.resourceTypes.Script || contentType === WebInspector.resourceTypes.Document) && projectType !== WebInspector.projectTypes.Snippets)
+            this.sidebarPanes.callstack.appendBlackboxURLContextMenuItems(contextMenu, uiSourceCode.url, projectType === WebInspector.projectTypes.ContentScripts);
 
         if (!event.target.isSelfOrDescendant(this.editorView.sidebarElement())) {
             contextMenu.appendSeparator();
@@ -918,7 +1048,7 @@ WebInspector.SourcesPanel.prototype = {
         if (!currentExecutionContext)
             return;
 
-        currentExecutionContext.evaluate("window", "", false, true, false, false, didGetGlobalObject.bind(null, currentExecutionContext.target()));
+        currentExecutionContext.evaluate("this", "", false, true, false, false, didGetGlobalObject.bind(null, currentExecutionContext.target()));
         /**
          * @param {!WebInspector.Target} target
          * @param {?WebInspector.RemoteObject} global
@@ -1121,7 +1251,8 @@ WebInspector.SourcesPanel.prototype = {
     {
         if (!this._sidebarPaneStack)
             return;
-        this._sidebarPaneStack.togglePaneHidden(this.sidebarPanes.threads, WebInspector.targetManager.targets().length < 2);
+        // FIXME(413886): We could remove worker frontend check here once we support explicit threads and do not send main thread for service/shared workers to frontend.
+        this._sidebarPaneStack.togglePaneHidden(this.sidebarPanes.threads, WebInspector.targetManager.targets().length < 2 || WebInspector.isWorkerFrontend());
     },
 
     __proto__: WebInspector.Panel.prototype
@@ -1204,7 +1335,7 @@ WebInspector.SourcesPanel.ContextMenuProvider.prototype = {
      */
     appendApplicableItems: function(event, contextMenu, target)
     {
-        WebInspector.inspectorView.panel("sources").appendApplicableItems(event, contextMenu, target);
+        WebInspector.SourcesPanel.instance().appendApplicableItems(event, contextMenu, target);
     }
 }
 
@@ -1219,11 +1350,15 @@ WebInspector.SourcesPanel.UILocationRevealer = function()
 WebInspector.SourcesPanel.UILocationRevealer.prototype = {
     /**
      * @param {!Object} uiLocation
+     * @return {!Promise}
      */
     reveal: function(uiLocation)
     {
-        if (uiLocation instanceof WebInspector.UILocation)
-            /** @type {!WebInspector.SourcesPanel} */ (WebInspector.inspectorView.panel("sources")).showUILocation(uiLocation);
+        if (uiLocation instanceof WebInspector.UILocation) {
+            WebInspector.SourcesPanel.instance().showUILocation(uiLocation);
+            return Promise.resolve();
+        }
+        return Promise.rejectWithError("Internal error: not a ui location");
     }
 }
 
@@ -1238,11 +1373,35 @@ WebInspector.SourcesPanel.UISourceCodeRevealer = function()
 WebInspector.SourcesPanel.UISourceCodeRevealer.prototype = {
     /**
      * @param {!Object} uiSourceCode
+     * @return {!Promise}
      */
     reveal: function(uiSourceCode)
     {
-        if (uiSourceCode instanceof WebInspector.UISourceCode)
-            /** @type {!WebInspector.SourcesPanel} */ (WebInspector.inspectorView.panel("sources")).showUISourceCode(uiSourceCode);
+        if (uiSourceCode instanceof WebInspector.UISourceCode) {
+            WebInspector.SourcesPanel.instance().showUISourceCode(uiSourceCode);
+            return Promise.resolve();
+        }
+        return Promise.rejectWithError("Internal error: not a ui source code");
+    }
+}
+
+/**
+ * @constructor
+ * @implements {WebInspector.Revealer}
+ */
+WebInspector.SourcesPanel.DebuggerPausedDetailsRevealer = function()
+{
+}
+
+WebInspector.SourcesPanel.DebuggerPausedDetailsRevealer.prototype = {
+    /**
+     * @param {!Object} object
+     * @return {!Promise}
+     */
+    reveal: function(object)
+    {
+        WebInspector.inspectorView.setCurrentPanel(WebInspector.SourcesPanel.instance());
+        return Promise.resolve();
     }
 }
 
@@ -1258,9 +1417,8 @@ WebInspector.SourcesPanel.ShowGoToSourceDialogActionDelegate.prototype = {
      */
     handleAction: function()
     {
-        var panel = /** @type {?WebInspector.SourcesPanel} */ (WebInspector.inspectorView.showPanel("sources"));
-        if (!panel)
-            return false;
+        var panel = WebInspector.SourcesPanel.instance();
+        WebInspector.inspectorView.setCurrentPanel(panel);
         panel.showGoToSourceDialog();
         return true;
     }
@@ -1342,10 +1500,37 @@ WebInspector.SourcesPanel.TogglePauseActionDelegate.prototype = {
      */
     handleAction: function()
     {
-        var panel = /** @type {?WebInspector.SourcesPanel} */ (WebInspector.inspectorView.showPanel("sources"));
-        if (!panel)
-            return false;
+        var panel = WebInspector.SourcesPanel.instance();
+        WebInspector.inspectorView.setCurrentPanel(panel);
         panel.togglePause();
         return true;
+    }
+}
+
+/**
+ * @return {!WebInspector.SourcesPanel}
+ */
+WebInspector.SourcesPanel.instance = function()
+{
+    if (!WebInspector.SourcesPanel._instanceObject)
+        WebInspector.SourcesPanel._instanceObject = new WebInspector.SourcesPanel();
+    return WebInspector.SourcesPanel._instanceObject;
+}
+
+/**
+ * @constructor
+ * @implements {WebInspector.PanelFactory}
+ */
+WebInspector.SourcesPanelFactory = function()
+{
+}
+
+WebInspector.SourcesPanelFactory.prototype = {
+    /**
+     * @return {!WebInspector.Panel}
+     */
+    createPanel: function()
+    {
+        return WebInspector.SourcesPanel.instance();
     }
 }

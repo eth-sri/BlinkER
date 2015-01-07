@@ -18,10 +18,10 @@
  */
 
 #include "config.h"
-
 #include "core/svg/SVGFEDropShadowElement.h"
 
 #include "core/SVGNames.h"
+#include "core/rendering/RenderObject.h"
 #include "core/rendering/style/RenderStyle.h"
 #include "core/rendering/style/SVGRenderStyle.h"
 #include "core/svg/SVGParserUtilities.h"
@@ -36,8 +36,6 @@ inline SVGFEDropShadowElement::SVGFEDropShadowElement(Document& document)
     , m_stdDeviation(SVGAnimatedNumberOptionalNumber::create(this, SVGNames::stdDeviationAttr, 2, 2))
     , m_in1(SVGAnimatedString::create(this, SVGNames::inAttr, SVGString::create()))
 {
-    ScriptWrappable::init(this);
-
     addToPropertyMap(m_dx);
     addToPropertyMap(m_dy);
     addToPropertyMap(m_stdDeviation);
@@ -114,4 +112,4 @@ PassRefPtr<FilterEffect> SVGFEDropShadowElement::build(SVGFilterBuilder* filterB
     return effect.release();
 }
 
-}
+} // namespace blink

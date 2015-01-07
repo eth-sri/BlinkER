@@ -33,6 +33,7 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptEventListener.h"
+#include "core/InputTypeNames.h"
 #include "core/dom/Attr.h"
 #include "core/dom/CharacterData.h"
 #include "core/dom/ContainerNode.h"
@@ -535,10 +536,13 @@ bool InspectorDOMAgent::enabled() const
     return m_state->getBoolean(DOMAgentState::domAgentEnabled);
 }
 
-void InspectorDOMAgent::disable(ErrorString*)
+void InspectorDOMAgent::disable(ErrorString* errorString)
 {
-    if (!enabled())
+    if (!enabled()) {
+        if (errorString)
+            *errorString = "DOM agent hasn't been enabled";
         return;
+    }
     m_state->setBoolean(DOMAgentState::domAgentEnabled, false);
     reset();
     if (m_listener)
@@ -1451,7 +1455,7 @@ void InspectorDOMAgent::setFileInputFiles(ErrorString* errorString, int nodeId, 
     Node* node = assertNode(errorString, nodeId);
     if (!node)
         return;
-    if (!isHTMLInputElement(*node) || !toHTMLInputElement(*node).isFileUpload()) {
+    if (!isHTMLInputElement(*node) || toHTMLInputElement(*node).type() != InputTypeNames::file) {
         *errorString = "Node is not a file input element";
         return;
     }
@@ -1718,13 +1722,15 @@ PassRefPtr<TypeBuilder::DOM::EventListener> InspectorDOMAgent::buildObjectForEve
     String sourceName;
     String scriptId;
     int lineNumber;
-    if (!eventListenerHandlerLocation(&node->document(), eventListener.get(), sourceName, scriptId, lineNumber))
+    int columnNumber;
+    if (!eventListenerHandlerLocation(&node->document(), eventListener.get(), sourceName, scriptId, lineNumber, columnNumber))
         return nullptr;
 
     Document& document = node->document();
     RefPtr<TypeBuilder::Debugger::Location> location = TypeBuilder::Debugger::Location::create()
         .setScriptId(scriptId)
         .setLineNumber(lineNumber);
+    location->setColumnNumber(columnNumber);
     RefPtr<TypeBuilder::DOM::EventListener> value = TypeBuilder::DOM::EventListener::create()
         .setType(eventType)
         .setUseCapture(registeredEventListener.useCapture)

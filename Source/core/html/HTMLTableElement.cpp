@@ -60,7 +60,6 @@ inline HTMLTableElement::HTMLTableElement(Document& document)
     , m_rulesAttr(UnsetRules)
     , m_padding(1)
 {
-    ScriptWrappable::init(this);
 }
 
 DEFINE_NODE_FACTORY(HTMLTableElement)
@@ -243,7 +242,7 @@ void HTMLTableElement::setNeedsTableStyleRecalc() const
 {
     Element* element = ElementTraversal::next(*this, this);
     while (element) {
-        element->setNeedsStyleRecalc(LocalStyleChange);
+        element->setNeedsStyleRecalc(LocalStyleChange, StyleChangeReasonForTracing::fromAttribute(rulesAttr));
         if (isHTMLTableCellElement(*element))
             element = ElementTraversal::nextSkippingChildren(*element, this);
         else

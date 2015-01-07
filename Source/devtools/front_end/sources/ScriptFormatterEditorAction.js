@@ -121,7 +121,7 @@ WebInspector.FormatterProjectDelegate.prototype = {
     _addFormatted: function(name, sourceURL, contentType, content)
     {
         var contentProvider = new WebInspector.StaticContentProvider(contentType, content);
-        return this.addContentProvider(sourceURL, name + ":formatted", "deobfuscated:" + sourceURL, contentProvider);
+        return this.addContentProvider(sourceURL, name + ":formatted", sourceURL, "deobfuscated:" + sourceURL, contentProvider);
     },
 
     /**
@@ -353,7 +353,7 @@ WebInspector.ScriptFormatterEditorAction.prototype = {
          */
         function isInlineScript(script)
         {
-            return script.isInlineScript();
+            return script.isInlineScript() && !script.hasSourceURL;
         }
 
         if (uiSourceCode.contentType() === WebInspector.resourceTypes.Document) {
@@ -394,7 +394,8 @@ WebInspector.ScriptFormatterEditorAction.prototype = {
         function contentLoaded(content)
         {
             var formatter = WebInspector.Formatter.createFormatter(uiSourceCode.contentType());
-            formatter.formatContent(uiSourceCode.highlighterType(), content || "", innerCallback.bind(this));
+            var highlighterType = WebInspector.SourcesView.uiSourceCodeHighlighterType(uiSourceCode);
+            formatter.formatContent(highlighterType, content || "", innerCallback.bind(this));
         }
 
         /**

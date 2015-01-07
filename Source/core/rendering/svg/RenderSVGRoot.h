@@ -24,7 +24,6 @@
 #define RenderSVGRoot_h
 
 #include "core/rendering/RenderReplaced.h"
-#include "platform/geometry/FloatRect.h"
 
 namespace blink {
 
@@ -41,15 +40,9 @@ public:
 
     virtual void computeIntrinsicRatioInformation(FloatSize& intrinsicSize, double& intrinsicRatio) const OVERRIDE;
 
-    RenderObject* firstChild() const { ASSERT(children() == virtualChildren()); return children()->firstChild(); }
-    RenderObject* lastChild() const { ASSERT(children() == virtualChildren()); return children()->lastChild(); }
-
     // If you have a RenderSVGRoot, use firstChild or lastChild instead.
     void slowFirstChild() const WTF_DELETED_FUNCTION;
     void slowLastChild() const WTF_DELETED_FUNCTION;
-
-    const RenderObjectChildList* children() const { return &m_children; }
-    RenderObjectChildList* children() { return &m_children; }
 
     bool isLayoutSizeChanged() const { return m_isLayoutSizeChanged; }
     virtual void setNeedsBoundariesUpdate() OVERRIDE { m_needsBoundariesOrTransformUpdate = true; }
@@ -68,8 +61,15 @@ public:
 
     // localToBorderBoxTransform maps local SVG viewport coordinates to local CSS box coordinates.
     const AffineTransform& localToBorderBoxTransform() const { return m_localToBorderBoxTransform; }
+    bool shouldApplyViewportClip() const;
 
 private:
+    RenderObject* firstChild() const { ASSERT(children() == virtualChildren()); return children()->firstChild(); }
+    RenderObject* lastChild() const { ASSERT(children() == virtualChildren()); return children()->lastChild(); }
+
+    const RenderObjectChildList* children() const { return &m_children; }
+    RenderObjectChildList* children() { return &m_children; }
+
     virtual RenderObjectChildList* virtualChildren() OVERRIDE { return children(); }
     virtual const RenderObjectChildList* virtualChildren() const OVERRIDE { return children(); }
 
@@ -109,7 +109,6 @@ private:
     virtual bool canBeSelectionLeaf() const OVERRIDE { return false; }
     virtual bool canHaveChildren() const OVERRIDE { return true; }
 
-    bool shouldApplyViewportClip() const;
     void updateCachedBoundaries();
     void buildLocalToBorderBoxTransform();
 

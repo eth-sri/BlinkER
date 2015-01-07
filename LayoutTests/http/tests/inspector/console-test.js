@@ -3,7 +3,7 @@ var initialize_ConsoleTest = function() {
 
 InspectorTest.showConsolePanel = function()
 {
-    WebInspector.inspectorView.showPanel("console");
+    WebInspector.inspectorView._showPanel("console");
 }
 
 InspectorTest.prepareConsoleMessageText = function(messageElement, consoleMessage)
@@ -17,6 +17,10 @@ InspectorTest.prepareConsoleMessageText = function(messageElement, consoleMessag
     var functionName = consoleMessage && consoleMessage.stackTrace && consoleMessage.stackTrace[0] && consoleMessage.stackTrace[0].functionName || "";
     if (functionName.indexOf("InjectedScript") !== -1)
         messageText = messageText.replace(/\bVM:\d+/, ""); // Only first replace.
+    if (messageText.startsWith("Navigated to")) {
+        var fileName = messageText.split(" ").pop().split("/").pop();
+        messageText = "Navigated to " + fileName;
+    }
     // The message might be extremely long in case of dumping stack overflow message.
     messageText = messageText.substring(0, 1024);
     return messageText;
@@ -38,7 +42,7 @@ InspectorTest.fixConsoleViewportDimensions = function(width, height)
 
 InspectorTest.dumpConsoleMessages = function(printOriginatingCommand, dumpClassNames, formatter)
 {
-    WebInspector.inspectorView.panel("console");
+    WebInspector.inspectorView._panel("console");
     formatter = formatter || InspectorTest.prepareConsoleMessageText;
     var result = [];
     InspectorTest.disableConsoleViewport();
@@ -102,7 +106,7 @@ InspectorTest.dumpConsoleTableMessage = function(viewMessage, forceInvalidate)
 
 InspectorTest.dumpConsoleMessagesWithStyles = function(sortMessages)
 {
-    WebInspector.inspectorView.panel("console");
+    WebInspector.inspectorView._panel("console");
     var result = [];
     var messageViews = WebInspector.ConsolePanel._view()._visibleViewMessages;
     for (var i = 0; i < messageViews.length; ++i) {
@@ -116,7 +120,7 @@ InspectorTest.dumpConsoleMessagesWithStyles = function(sortMessages)
 }
 
 InspectorTest.dumpConsoleMessagesWithClasses = function(sortMessages) {
-    WebInspector.inspectorView.panel("console");
+    WebInspector.inspectorView._panel("console");
     var result = [];
     var messageViews = WebInspector.ConsolePanel._view()._visibleViewMessages;
     for (var i = 0; i < messageViews.length; ++i) {
@@ -130,48 +134,41 @@ InspectorTest.dumpConsoleMessagesWithClasses = function(sortMessages) {
         InspectorTest.addResult(result[i]);
 }
 
-InspectorTest.expandConsoleMessages = function(callback)
+InspectorTest.expandConsoleMessages = function(callback, deepFilter)
 {
-    WebInspector.inspectorView.panel("console");
+    WebInspector.inspectorView._panel("console");
     var messageViews = WebInspector.ConsolePanel._view()._visibleViewMessages;
-    for (var i = 0; i < messageViews.length; ++i) {
-        var message = messageViews[i].consoleMessage();
-        var element = messageViews[i].contentElement();
-        var node = element;
-        while (node) {
-            if (node.treeElementForTest)
-                node.treeElementForTest.expand();
-            if (node._section) {
-                message.section = node._section;
-                node._section.expanded = true;
-            }
-            node = node.traverseNextNode(element);
-        }
-    }
-    if (callback)
-        InspectorTest.runAfterPendingDispatches(callback);
-}
 
-InspectorTest.expandConsoleTreeElements = function(constructorClass, callback)
-{
-    WebInspector.inspectorView.panel("console");
-    var messageViews = WebInspector.ConsolePanel._view()._visibleViewMessages;
-    for (var i = 0; i < messageViews.length; ++i) {
-        var element = messageViews[i].contentElement();
-        for (var node = element; node; node = node.traverseNextNode(element)) {
-            if (!node._section)
-                continue;
-            var treeElements = node._section.propertiesTreeOutline.children;
-            for (var j = 0; j < treeElements.length; ++j) {
-                for (var treeElement = treeElements[j]; treeElement; treeElement = treeElement.traverseNextTreeElement(false, null, false)) {
-                    if (treeElement instanceof constructorClass)
-                        treeElement.expand();
+    // Initiate round-trips to fetch necessary data for further rendering.
+    for (var i = 0; i < messageViews.length; ++i)
+        messageViews[i].contentElement();
+
+    InspectorTest.runAfterPendingDispatches(expandTreeElements);
+
+    function expandTreeElements()
+    {
+        for (var i = 0; i < messageViews.length; ++i) {
+            var element = messageViews[i].contentElement();
+            for (var node = element; node; node = node.traverseNextNode(element)) {
+                if (node.treeElementForTest)
+                    node.treeElementForTest.expand();
+                if (!node._section)
+                    continue;
+                node._section.expanded = true;
+
+                if (!deepFilter)
+                    continue;
+                var treeElements = node._section.propertiesTreeOutline.children;
+                for (var j = 0; j < treeElements.length; ++j) {
+                    for (var treeElement = treeElements[j]; treeElement; treeElement = treeElement.traverseNextTreeElement(false, null, false)) {
+                        if (deepFilter(treeElement))
+                            treeElement.expand();
+                    }
                 }
             }
         }
-    }
-    if (callback)
         InspectorTest.runAfterPendingDispatches(callback);
+    }
 }
 
 InspectorTest.waitForRemoteObjectsConsoleMessages = function(callback)
@@ -184,7 +181,7 @@ InspectorTest.waitForRemoteObjectsConsoleMessages = function(callback)
 
 InspectorTest.checkConsoleMessagesDontHaveParameters = function()
 {
-    WebInspector.inspectorView.panel("console");
+    WebInspector.inspectorView._panel("console");
     var messageViews = WebInspector.ConsolePanel._view()._visibleViewMessages;
     for (var i = 0; i < messageViews.length; ++i) {
         var m = messageViews[i].consoleMessage();
@@ -220,7 +217,7 @@ InspectorTest.waitUntilNthMessageReceived = function(count, callback)
 
 InspectorTest.changeExecutionContext = function(namePrefix)
 {
-    WebInspector.inspectorView.panel("console");
+    WebInspector.inspectorView._panel("console");
     var selector = WebInspector.ConsolePanel._view()._executionContextSelector._selectElement;
     var option = selector.firstChild;
     while (option) {

@@ -42,13 +42,9 @@
 namespace blink {
 
 class AtomicHTMLToken;
-class Document;
 class DocumentFragment;
 class Element;
-class LocalFrame;
-class HTMLToken;
 class HTMLDocument;
-class Node;
 class HTMLDocumentParser;
 
 class HTMLTreeBuilder FINAL : public NoBaseWillBeGarbageCollectedFinalized<HTMLTreeBuilder> {
@@ -82,8 +78,9 @@ public:
     // Done, close any open tags, etc.
     void finished();
 
-    // Synchronously empty any queues, possibly creating more DOM nodes.
-    void flush() { m_tree.flush(); }
+    // Synchronously flush pending text and queued tasks, possibly creating more DOM nodes.
+    // Flushing pending text depends on |mode|.
+    void flush(FlushMode mode) { m_tree.flush(mode); }
 
     void setShouldSkipLeadingNewline(bool shouldSkip) { m_shouldSkipLeadingNewline = shouldSkip; }
 

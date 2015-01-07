@@ -34,28 +34,18 @@
 
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/custom/V8ArrayBufferCustom.h"
 #include "core/dom/ExceptionCode.h"
+#include "modules/webaudio/AudioContext.h"
 #include "platform/audio/AudioBus.h"
 #include "platform/audio/AudioFileReader.h"
-#include "modules/webaudio/AudioContext.h"
+#include "platform/audio/AudioUtilities.h"
 
 namespace blink {
 
-float AudioBuffer::minAllowedSampleRate()
-{
-    // crbug.com/344375
-    return 3000;
-}
-
-float AudioBuffer::maxAllowedSampleRate()
-{
-    // Windows can support up to this rate.
-    return 192000;
-}
-
 AudioBuffer* AudioBuffer::create(unsigned numberOfChannels, size_t numberOfFrames, float sampleRate)
 {
-    if (sampleRate < minAllowedSampleRate() || sampleRate > maxAllowedSampleRate() || numberOfChannels > AudioContext::maxNumberOfChannels() || !numberOfChannels || !numberOfFrames)
+    if (!AudioUtilities::isValidAudioBufferSampleRate(sampleRate) || numberOfChannels > AudioContext::maxNumberOfChannels() || !numberOfChannels || !numberOfFrames)
         return 0;
 
     AudioBuffer* buffer = new AudioBuffer(numberOfChannels, numberOfFrames, sampleRate);
@@ -80,15 +70,15 @@ AudioBuffer* AudioBuffer::create(unsigned numberOfChannels, size_t numberOfFrame
         return 0;
     }
 
-    if (sampleRate < AudioBuffer::minAllowedSampleRate() || sampleRate > AudioBuffer::maxAllowedSampleRate()) {
+    if (!AudioUtilities::isValidAudioBufferSampleRate(sampleRate)) {
         exceptionState.throwDOMException(
             NotSupportedError,
             ExceptionMessages::indexOutsideRange(
                 "sample rate",
                 sampleRate,
-                AudioBuffer::minAllowedSampleRate(),
+                AudioUtilities::minAudioBufferSampleRate(),
                 ExceptionMessages::InclusiveBound,
-                AudioBuffer::maxAllowedSampleRate(),
+                AudioUtilities::maxAudioBufferSampleRate(),
                 ExceptionMessages::InclusiveBound));
         return 0;
     }
@@ -149,7 +139,6 @@ AudioBuffer::AudioBuffer(unsigned numberOfChannels, size_t numberOfFrames, float
     : m_sampleRate(sampleRate)
     , m_length(numberOfFrames)
 {
-    ScriptWrappable::init(this);
     m_channels.reserveCapacity(numberOfChannels);
 
     for (unsigned i = 0; i < numberOfChannels; ++i) {
@@ -169,7 +158,6 @@ AudioBuffer::AudioBuffer(AudioBus* bus)
     : m_sampleRate(bus->sampleRate())
     , m_length(bus->length())
 {
-    ScriptWrappable::init(this);
     // Copy audio data from the bus to the Float32Arrays we manage.
     unsigned numberOfChannels = bus->numberOfChannels();
     m_channels.reserveCapacity(numberOfChannels);
@@ -211,6 +199,23 @@ void AudioBuffer::zero()
         if (getChannelData(i))
             getChannelData(i)->zeroRange(0, length());
     }
+}
+
+v8::Handle<v8::Object> AudioBuffer::associateWithWrapper(const WrapperTypeInfo* wrapperType, v8::Handle<v8::Object> wrapper, v8::Isolate* isolate)
+{
+    ScriptWrappable::associateWithWrapper(wrapperType, wrapper, isolate);
+
+    if (!wrapper.IsEmpty()) {
+        // We only setDeallocationObservers on array buffers that are held by
+        // some object in the V8 heap, not in the ArrayBuffer constructor
+        // itself. This is because V8 GC only cares about memory it can free on
+        // GC, and until the object is exposed to JavaScript, V8 GC doesn't
+        // affect it.
+        for (unsigned i = 0, n = numberOfChannels(); i < n; ++i) {
+            getChannelData(i)->buffer()->setDeallocationObserver(V8ArrayBufferDeallocationObserver::instanceTemplate());
+        }
+    }
+    return wrapper;
 }
 
 } // namespace blink

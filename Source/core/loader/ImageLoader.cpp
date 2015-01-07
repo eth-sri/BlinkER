@@ -41,6 +41,7 @@
 #include "core/rendering/RenderImage.h"
 #include "core/rendering/RenderVideo.h"
 #include "core/rendering/svg/RenderSVGImage.h"
+#include "platform/Logging.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/WebURLRequest.h"
 
@@ -140,10 +141,14 @@ ImageLoader::ImageLoader(Element* element)
     , m_elementIsProtected(false)
     , m_highPriorityClientCount(0)
 {
+    WTF_LOG(Timers, "new ImageLoader %p", this);
 }
 
 ImageLoader::~ImageLoader()
 {
+    WTF_LOG(Timers, "~ImageLoader %p; m_hasPendingLoadEvent=%d, m_hasPendingErrorEvent=%d",
+        this, m_hasPendingLoadEvent, m_hasPendingErrorEvent);
+
     if (m_pendingTask)
         m_pendingTask->clearLoader();
 
@@ -242,6 +247,11 @@ inline void ImageLoader::enqueueImageLoadingMicroTask(UpdateFromElementBehavior 
 
 void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior, UpdateFromElementBehavior updateBehavior)
 {
+    // FIXME: According to
+    // http://www.whatwg.org/specs/web-apps/current-work/multipage/embedded-content.html#the-img-element:the-img-element-55
+    // When "update image" is called due to environment changes and the load fails, onerror should not be called.
+    // That is currently not the case.
+    //
     // We don't need to call clearLoader here: Either we were called from the
     // task, or our caller updateFromElement cleared the task's loader (and set
     // m_pendingTask to null).
@@ -265,7 +275,7 @@ void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior, Up
             resourceLoaderOptions.mixedContentBlockingTreatment = TreatAsActiveContent;
             resourceRequest.setRequestContext(WebURLRequest::RequestContextImageSet);
         }
-        FetchRequest request(ResourceRequest(url), element()->localName(), resourceLoaderOptions);
+        FetchRequest request(resourceRequest, element()->localName(), resourceLoaderOptions);
         configureRequest(request, bypassBehavior, *m_element);
 
         if (m_loadingImageDocument)
@@ -379,6 +389,9 @@ bool ImageLoader::shouldLoadImmediately(const KURL& url, LoadType loadType) cons
 
 void ImageLoader::notifyFinished(Resource* resource)
 {
+    WTF_LOG(Timers, "ImageLoader::notifyFinished %p; m_hasPendingLoadEvent=%d",
+        this, m_hasPendingLoadEvent);
+
     ASSERT(m_failedLoadURL.isEmpty());
     ASSERT(resource == m_image.get());
 
@@ -475,6 +488,7 @@ void ImageLoader::timerFired(Timer<ImageLoader>*)
 
 void ImageLoader::dispatchPendingEvent(ImageEventSender* eventSender)
 {
+    WTF_LOG(Timers, "ImageLoader::dispatchPendingEvent %p", this);
     ASSERT(eventSender == &loadEventSender() || eventSender == &errorEventSender());
     const AtomicString& eventType = eventSender->eventType();
     if (eventType == EventTypeNames::load)

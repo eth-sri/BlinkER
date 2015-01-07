@@ -100,6 +100,7 @@ class FilterOperations;
 
 class AppliedTextDecoration;
 class BorderData;
+struct BorderEdge;
 class CounterContent;
 class Font;
 class FontMetrics;
@@ -225,7 +226,6 @@ protected:
                 && pseudoBits == other.pseudoBits
                 && unicodeBidi == other.unicodeBidi
                 && explicitInheritance == other.explicitInheritance
-                && currentColor == other.currentColor
                 && unique == other.unique
                 && emptyState == other.emptyState
                 && firstChildState == other.firstChildState
@@ -259,7 +259,6 @@ protected:
         unsigned styleType : 6; // PseudoId
         unsigned pseudoBits : 8;
         unsigned explicitInheritance : 1; // Explicitly inherits a non-inherited property
-        unsigned currentColor : 1; // At least one color has the value 'currentColor'
         unsigned unique : 1; // Style can not be shared.
 
         unsigned emptyState : 1;
@@ -273,7 +272,7 @@ protected:
 
         unsigned isLink : 1;
         // If you add more style bits here, you will also need to update RenderStyle::copyNonInheritedFrom()
-        // 63 bits
+        // 62 bits
     } noninherited_flags;
 
 // !END SYNC!
@@ -315,7 +314,6 @@ protected:
         noninherited_flags.styleType = NOPSEUDO;
         noninherited_flags.pseudoBits = 0;
         noninherited_flags.explicitInheritance = false;
-        noninherited_flags.currentColor = false;
         noninherited_flags.unique = false;
         noninherited_flags.emptyState = false;
         noninherited_flags.firstChildState = false;
@@ -1537,10 +1535,10 @@ public:
     void setHasExplicitlyInheritedProperties() { noninherited_flags.explicitInheritance = true; }
     bool hasExplicitlyInheritedProperties() const { return noninherited_flags.explicitInheritance; }
 
-    void setHasCurrentColor() { noninherited_flags.currentColor = true; }
-    bool hasCurrentColor() const { return noninherited_flags.currentColor; }
-
     bool hasBoxDecorations() const { return hasBorder() || hasBorderRadius() || hasOutline() || hasAppearance() || boxShadow() || hasFilter(); }
+
+    bool borderObscuresBackground() const;
+    void getBorderEdgeInfo(BorderEdge edges[], bool includeLogicalLeftEdge = true, bool includeLogicalRightEdge = true) const;
 
     // Initial values for all the properties
     static EBorderCollapse initialBorderCollapse() { return BSEPARATE; }
@@ -1817,7 +1815,6 @@ private:
     bool diffNeedsFullLayout(const RenderStyle& other) const;
     bool diffNeedsPaintInvalidationLayer(const RenderStyle& other) const;
     bool diffNeedsPaintInvalidationObject(const RenderStyle& other) const;
-    bool diffNeedsRecompositeLayer(const RenderStyle& other) const;
     void updatePropertySpecificDifferences(const RenderStyle& other, StyleDifference&) const;
 };
 
@@ -1857,6 +1854,22 @@ inline double adjustDoubleForAbsoluteZoom(double value, const RenderStyle& style
 inline LayoutUnit adjustLayoutUnitForAbsoluteZoom(LayoutUnit value, const RenderStyle& style)
 {
     return value / style.effectiveZoom();
+}
+
+// Since we don't currently persist fractional scroll offsets (crbug.com/414283),
+// we should round our return value to reflect the actual precision we have under
+// the range of typical zoom values. This avoids surprising issues with scroll
+// values not quite round-tripping exactly.
+inline double adjustScrollForAbsoluteZoom(int scrollOffset, float zoomFactor)
+{
+    double result = scrollOffset / zoomFactor;
+    const double kScale = 10000; // 4 decimal places of accuracy
+    return lround(result * kScale) / kScale;
+}
+
+inline double adjustScrollForAbsoluteZoom(int scrollOffset, const RenderStyle& style)
+{
+    return adjustScrollForAbsoluteZoom(scrollOffset, style.effectiveZoom());
 }
 
 inline bool RenderStyle::setZoom(float f)

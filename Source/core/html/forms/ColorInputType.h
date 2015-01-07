@@ -51,11 +51,11 @@ public:
     virtual Color currentColor() OVERRIDE;
     virtual bool shouldShowSuggestions() const OVERRIDE;
     virtual Vector<ColorSuggestion> suggestions() const OVERRIDE;
+    ColorChooserClient* colorChooserClient() OVERRIDE;
 
 private:
     ColorInputType(HTMLInputElement& element) : BaseClickableWithKeyInputType(element) { }
     virtual void countUsage() OVERRIDE;
-    virtual bool isColorControl() const OVERRIDE;
     virtual const AtomicString& formControlType() const OVERRIDE;
     virtual bool supportsRequired() const OVERRIDE;
     virtual String fallbackValue() const OVERRIDE;

@@ -41,6 +41,7 @@
 #include "core/loader/FrameLoaderClient.h"
 #include "core/page/EventHandler.h"
 #include "core/page/Page.h"
+#include "core/page/scrolling/ScrollingCoordinator.h"
 #include "core/plugins/PluginView.h"
 #include "core/rendering/RenderBlockFlow.h"
 #include "core/rendering/RenderEmbeddedObject.h"
@@ -69,7 +70,6 @@ HTMLPlugInElement::HTMLPlugInElement(const QualifiedName& tagName, Document& doc
     , m_shouldPreferPlugInsForImages(preferPlugInsForImagesOption == ShouldPreferPlugInsForImages)
     , m_usePlaceholderContent(false)
 {
-    setHasCustomStyleCallbacks();
 }
 
 HTMLPlugInElement::~HTMLPlugInElement()
@@ -244,13 +244,6 @@ RenderObject* HTMLPlugInElement::createRenderer(RenderStyle* style)
     return new RenderEmbeddedObject(this);
 }
 
-void HTMLPlugInElement::willRecalcStyle(StyleRecalcChange)
-{
-    // FIXME: Why is this necessary? Manual re-attach is almost always wrong.
-    if (!useFallbackContent() && !usePlaceholderContent() && needsWidgetUpdate() && renderer() && !isImageType())
-        reattach();
-}
-
 void HTMLPlugInElement::finishParsingChildren()
 {
     HTMLFrameOwnerElement::finishParsingChildren();
@@ -259,7 +252,7 @@ void HTMLPlugInElement::finishParsingChildren()
 
     setNeedsWidgetUpdate(true);
     if (inDocument())
-        setNeedsStyleRecalc(SubtreeStyleChange);
+        lazyReattachIfNeeded();
 }
 
 void HTMLPlugInElement::resetInstance()
@@ -503,6 +496,11 @@ bool HTMLPlugInElement::loadPlugin(const KURL& url, const String& mimeType, cons
     }
     document().setContainsPlugins();
     scheduleSVGFilterLayerUpdateHack();
+    // Make sure any input event handlers introduced by the plugin are taken into account.
+    if (Page* page = document().frame()->page()) {
+        if (ScrollingCoordinator* scrollingCoordinator = page->scrollingCoordinator())
+            scrollingCoordinator->notifyLayoutUpdated();
+    }
     return true;
 }
 
@@ -590,6 +588,12 @@ void HTMLPlugInElement::setUsePlaceholderContent(bool use)
         m_usePlaceholderContent = use;
         lazyReattachIfAttached();
     }
+}
+
+void HTMLPlugInElement::lazyReattachIfNeeded()
+{
+    if (!useFallbackContent() && !usePlaceholderContent() && needsWidgetUpdate() && renderer() && !isImageType())
+        lazyReattachIfAttached();
 }
 
 }
