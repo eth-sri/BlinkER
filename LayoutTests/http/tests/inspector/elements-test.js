@@ -1,4 +1,14 @@
+function getInspectorHighlightJSON(nodeId, opt_frameId)
+{
+    var doc = document;
+    if (opt_frameId)
+        doc = document.getElementById(opt_frameId).contentDocument;
+    return window.internals.inspectorHighlightJSON(doc.getElementById(nodeId));
+}
+
 var initialize_ElementTest = function() {
+
+InspectorTest.preloadPanel("elements");
 
 InspectorTest.findNode = function(matchFunction, callback)
 {
@@ -134,9 +144,18 @@ InspectorTest.waitForStylesForClass = function(classValue, callback, requireRebu
     waitForStylesRebuild(nodeWithClass, callback, requireRebuild);
 }
 
+InspectorTest.waitForSelectorCommitted = function(callback)
+{
+    InspectorTest.addSniffer(WebInspector.StylePropertiesSection.prototype, "_editingSelectorCommittedForTest", callback);
+}
+
+InspectorTest.waitForStyleApplied = function(callback)
+{
+    InspectorTest.addSniffer(WebInspector.StylePropertyTreeElement.prototype, "styleTextAppliedForTest", callback);
+}
+
 InspectorTest.selectNodeAndWaitForStyles = function(idValue, callback)
 {
-    WebInspector.inspectorView._showPanel("elements");
 
     callback = InspectorTest.safeWrap(callback);
 
@@ -252,69 +271,50 @@ InspectorTest.toggleMatchedStyleProperty = function(propertyName, checked)
 
 InspectorTest.expandAndDumpSelectedElementEventListeners = function(callback)
 {
-    InspectorTest.expandSelectedElementEventListeners(function() {
-        InspectorTest.dumpSelectedElementEventListeners(callback);
-    });
-}
+    InspectorTest.addSniffer(WebInspector.EventListenersSidebarPane.prototype, "_onEventListeners", listenersArrived);
 
-InspectorTest.expandSelectedElementEventListeners = function(callback)
-{
     var sidebarPane = WebInspector.panels.elements.sidebarPanes.eventListeners;
     sidebarPane.expand();
-
-    InspectorTest.runAfterPendingDispatches(function() {
-        InspectorTest.expandSelectedElementEventListenersSubsections(callback);
-    });
-}
-
-InspectorTest.expandSelectedElementEventListenersSubsections = function(callback)
-{
     var eventListenerSections = WebInspector.panels.elements.sidebarPanes.eventListeners.sections;
     for (var i = 0; i < eventListenerSections.length; ++i)
         eventListenerSections[i].expand();
 
-    // Multiple sections may expand.
-    InspectorTest.runAfterPendingDispatches(function() {
-        InspectorTest.expandSelectedElementEventListenersEventBars(callback);
-    });
-}
-
-InspectorTest.expandSelectedElementEventListenersEventBars = function(callback)
-{
-    var eventListenerSections = WebInspector.panels.elements.sidebarPanes.eventListeners.sections;
-    for (var i = 0; i < eventListenerSections.length; ++i) {
-        var eventBarChildren = eventListenerSections[i]._eventBars.children;
-        for (var j = 0; j < eventBarChildren.length; ++j)
-            eventBarChildren[j]._section.expand();
+    function listenersArrived()
+    {
+        var eventListenerSections = WebInspector.panels.elements.sidebarPanes.eventListeners.sections;
+        for (var i = 0; i < eventListenerSections.length; ++i) {
+            var eventType = eventListenerSections[i]._title;
+            var eventBarChildren = eventListenerSections[i]._eventBars.children;
+            for (var j = 0; j < eventBarChildren.length; ++j) {
+                var objectPropertiesSection = eventBarChildren[j]._section;
+                objectPropertiesSection.expand();
+            }
+        }
+        InspectorTest.runAfterPendingDispatches(objectsExpanded);
     }
 
-    // Multiple sections may expand.
-    InspectorTest.runAfterPendingDispatches(callback);
-}
+    function objectsExpanded()
+    {
+        var eventListenerSections = WebInspector.panels.elements.sidebarPanes.eventListeners.sections;
+        for (var i = 0; i < eventListenerSections.length; ++i) {
+            var eventType = eventListenerSections[i]._title;
+            InspectorTest.addResult("");
+            InspectorTest.addResult("======== " + eventType + " ========");
+            var eventBarChildren = eventListenerSections[i]._eventBars.children;
+            for (var j = 0; j < eventBarChildren.length; ++j) {
+                var objectPropertiesSection = eventBarChildren[j]._section;
+                InspectorTest.dumpObjectPropertySection(objectPropertiesSection, {
+                    sourceName: formatSourceNameProperty
+                });
+            }
+        }
+        callback();
+    }
 
-InspectorTest.dumpSelectedElementEventListeners = function(callback)
-{
     function formatSourceNameProperty(value)
     {
         return "[clipped-for-test]/" + value.replace(/(.*?\/)LayoutTests/, "LayoutTests");
     }
-
-    var eventListenerSections = WebInspector.panels.elements.sidebarPanes.eventListeners.sections;
-    for (var i = 0; i < eventListenerSections.length; ++i) {
-        var section = eventListenerSections[i];
-        var eventType = section._title;
-        InspectorTest.addResult("");
-        InspectorTest.addResult("======== " + eventType + " ========");
-        var eventBarChildren = section._eventBars.children;
-        for (var j = 0; j < eventBarChildren.length; ++j) {
-            var objectPropertiesSection = eventBarChildren[j]._section;
-            InspectorTest.dumpObjectPropertySection(objectPropertiesSection, {
-                sourceName: formatSourceNameProperty
-            });
-        }
-    }
-
-    callback();
 }
 
 InspectorTest.dumpObjectPropertySection = function(section, formatters)
@@ -526,7 +526,6 @@ InspectorTest.expandElementsTree = function(callback)
         // Make all promises succeed.
         setTimeout(callback.bind(null, expandedSomething));
     }
-    WebInspector.inspectorView._showPanel("elements");
     InspectorTest.findNode(function() { return false; }, onAllNodesAvailable);
 };
 
@@ -739,7 +738,7 @@ InspectorTest.dumpBreadcrumb = function(message)
     if (message)
         InspectorTest.addResult(message + ":");
     var result = [];
-    var crumbs = WebInspector.inspectorView._panel("elements").crumbsElement;
+    var crumbs = WebInspector.panels.elements._breadcrumbs.crumbsElement;
     var crumb = crumbs.lastChild;
     while (crumb) {
         result.unshift(crumb.textContent);
@@ -775,27 +774,18 @@ function onBlankSection(selector, callback)
     if (typeof selector === "string")
         section._selectorElement.textContent = selector;
     section._selectorElement.dispatchEvent(InspectorTest.createKeyEvent("Enter"));
-    InspectorTest.runAfterPendingDispatches(callback.bind(null, section));
+    InspectorTest.waitForSelectorCommitted(callback.bind(null, section));
 }
 
-InspectorTest.dumpInspectorHighlight = function(node, callback)
+InspectorTest.dumpInspectorHighlightJSON = function(nodeId, callback, opt_frameId)
 {
-    node.boxModel(function(boxModel) {
-        var rectNames = ["margin", "border", "padding", "content"];
-        for (var i = 0; i < rectNames.length; i++) {
-            var rect = boxModel[rectNames[i]];
-            InspectorTest.addResult(rectNames[i] + " rect is " + (rect[4] - rect[0]) + " x " + (rect[5] - rect[1]) + " at (" + rect[0] + ", " + rect[1] + ")");
-        }
+    function innerCallback(result)
+    {
+        InspectorTest.addResult(nodeId + ": " + result.description);
         callback();
-   });
-}
-
-InspectorTest.dumpInspectorHighlightShape = function(node, callback)
-{
-    node.boxModel(function(shapes) {
-        InspectorTest.addResult(JSON.stringify(shapes.shapeOutside.shape));
-        callback();
-    });
+    }
+    opt_frameId = opt_frameId || "";
+    InspectorTest.evaluateInPage("getInspectorHighlightJSON(\"" + nodeId + "\", \"" + opt_frameId + "\")", innerCallback);
 }
 
 };

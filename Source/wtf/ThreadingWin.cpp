@@ -95,7 +95,6 @@
 #include "wtf/MathExtras.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
-#include "wtf/ThreadFunctionInvocation.h"
 #include "wtf/ThreadSpecific.h"
 #include "wtf/ThreadingPrimitives.h"
 #include "wtf/WTFThreadData.h"
@@ -140,10 +139,14 @@ void initializeThreading()
     // StringImpl::empty() does not construct its static string in a threadsafe fashion,
     // so ensure it has been initialized from here.
     StringImpl::empty();
+    StringImpl::empty16Bit();
     atomicallyInitializedStaticMutex = new Mutex;
     wtfThreadData();
     s_dtoaP5Mutex = new Mutex;
     initializeDates();
+    // Force initialization of static DoubleToStringConverter converter variable
+    // inside EcmaScriptConverter function while we are in single thread mode.
+    double_conversion::DoubleToStringConverter::EcmaScriptConverter();
 }
 
 ThreadIdentifier currentThread()

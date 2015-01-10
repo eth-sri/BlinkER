@@ -32,6 +32,7 @@
 #include "core/html/canvas/EXTFragDepth.h"
 #include "core/html/canvas/EXTShaderTextureLOD.h"
 #include "core/html/canvas/EXTTextureFilterAnisotropic.h"
+#include "core/html/canvas/EXTsRGB.h"
 #include "core/html/canvas/OESElementIndexUint.h"
 #include "core/html/canvas/OESStandardDerivatives.h"
 #include "core/html/canvas/OESTextureFloat.h"
@@ -55,7 +56,6 @@
 #include "core/frame/Settings.h"
 #include "core/rendering/RenderBox.h"
 #include "platform/CheckedInt.h"
-#include "platform/NotImplemented.h"
 #include "platform/graphics/gpu/DrawingBuffer.h"
 #include "public/platform/Platform.h"
 
@@ -127,6 +127,7 @@ void WebGLRenderingContext::registerContextExtensions()
     registerExtension<EXTBlendMinMax>(m_extBlendMinMax);
     registerExtension<EXTFragDepth>(m_extFragDepth);
     registerExtension<EXTShaderTextureLOD>(m_extShaderTextureLOD);
+    registerExtension<EXTsRGB>(m_extsRGB);
     registerExtension<EXTTextureFilterAnisotropic>(m_extTextureFilterAnisotropic, ApprovedExtension, bothPrefixes);
     registerExtension<OESElementIndexUint>(m_oesElementIndexUint);
     registerExtension<OESStandardDerivatives>(m_oesStandardDerivatives);
@@ -152,6 +153,7 @@ void WebGLRenderingContext::trace(Visitor* visitor)
     visitor->trace(m_extBlendMinMax);
     visitor->trace(m_extFragDepth);
     visitor->trace(m_extShaderTextureLOD);
+    visitor->trace(m_extsRGB);
     visitor->trace(m_extTextureFilterAnisotropic);
     visitor->trace(m_oesTextureFloat);
     visitor->trace(m_oesTextureFloatLinear);

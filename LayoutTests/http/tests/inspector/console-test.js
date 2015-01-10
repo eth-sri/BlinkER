@@ -1,14 +1,46 @@
 var initialize_ConsoleTest = function() {
 
+InspectorTest.preloadPanel("console");
 
-InspectorTest.showConsolePanel = function()
+InspectorTest.evaluateInConsole = function(code, callback)
 {
-    WebInspector.inspectorView._showPanel("console");
+    callback = InspectorTest.safeWrap(callback);
+
+    var consoleView = WebInspector.ConsolePanel._view();
+    consoleView.visible = true;
+    consoleView._prompt.text = code;
+    var event = document.createEvent("KeyboardEvent");
+    event.initKeyboardEvent("keydown", true, true, null, "Enter", "");
+    consoleView._prompt.proxyElement.dispatchEvent(event);
+    InspectorTest.addConsoleViewSniffer(function(commandResult) {
+        callback(commandResult.toMessageElement().deepTextContent());
+    });
+}
+
+InspectorTest.addConsoleViewSniffer = function(override, opt_sticky)
+{
+    var sniffer = function (viewMessage) {
+        override(viewMessage);
+    };
+
+    InspectorTest.addSniffer(WebInspector.ConsoleView.prototype, "_consoleMessageAddedForTest", sniffer, opt_sticky);
+}
+
+InspectorTest.evaluateInConsoleAndDump = function(code, callback)
+{
+    callback = InspectorTest.safeWrap(callback);
+
+    function mycallback(text)
+    {
+        InspectorTest.addResult(code + " = " + text);
+        callback(text);
+    }
+    InspectorTest.evaluateInConsole(code, mycallback);
 }
 
 InspectorTest.prepareConsoleMessageText = function(messageElement, consoleMessage)
 {
-    var messageText = messageElement.textContent.replace(/\u200b/g, "");
+    var messageText = messageElement.deepTextContent().replace(/\u200b/g, "");
     // Replace scriptIds with generic scriptId string to avoid flakiness.
     messageText = messageText.replace(/VM\d+/g, "VM");
     // Strip out InjectedScript line numbers from stack traces to avoid rebaselining each time InjectedScriptSource is edited.
@@ -40,13 +72,26 @@ InspectorTest.fixConsoleViewportDimensions = function(width, height)
     viewport.invalidate();
 }
 
+InspectorTest.consoleMessagesCount = function()
+{
+    var consoleView = WebInspector.ConsolePanel._view();
+    return consoleView._consoleMessages.length;
+}
+
 InspectorTest.dumpConsoleMessages = function(printOriginatingCommand, dumpClassNames, formatter)
 {
-    WebInspector.inspectorView._panel("console");
+    InspectorTest.addResults(InspectorTest.dumpConsoleMessagesIntoArray(printOriginatingCommand, dumpClassNames, formatter));
+}
+
+InspectorTest.dumpConsoleMessagesIntoArray = function(printOriginatingCommand, dumpClassNames, formatter)
+{
     formatter = formatter || InspectorTest.prepareConsoleMessageText;
     var result = [];
     InspectorTest.disableConsoleViewport();
-    var viewMessages = WebInspector.ConsolePanel._view()._visibleViewMessages;
+    var consoleView = WebInspector.ConsolePanel._view();
+    if (consoleView._needsFullUpdate)
+        consoleView._updateMessageList();
+    var viewMessages = consoleView._visibleViewMessages;
     for (var i = 0; i < viewMessages.length; ++i) {
         var uiMessage = viewMessages[i];
         var message = uiMessage.consoleMessage();
@@ -60,21 +105,21 @@ InspectorTest.dumpConsoleMessages = function(printOriginatingCommand, dumpClassN
             }
         }
 
-        if (InspectorTest.dumpConsoleTableMessage(uiMessage, false)) {
+        if (InspectorTest.dumpConsoleTableMessage(uiMessage, false, result)) {
             if (dumpClassNames)
-                InspectorTest.addResult(classNames.join(" > "));
+                result.push(classNames.join(" > "));
         } else {
             var messageText = formatter(element, message);
-            InspectorTest.addResult(messageText + (dumpClassNames ? " " + classNames.join(" > ") : ""));
+            result.push(messageText + (dumpClassNames ? " " + classNames.join(" > ") : ""));
         }
 
         if (printOriginatingCommand && uiMessage.consoleMessage().originatingMessage())
-            InspectorTest.addResult("Originating from: " + uiMessage.consoleMessage().originatingMessage().messageText);
+            result.push("Originating from: " + uiMessage.consoleMessage().originatingMessage().messageText);
     }
     return result;
 }
 
-InspectorTest.dumpConsoleTableMessage = function(viewMessage, forceInvalidate)
+InspectorTest.dumpConsoleTableMessage = function(viewMessage, forceInvalidate, results)
 {
     if (forceInvalidate)
         WebInspector.ConsolePanel._view()._viewport.invalidate();
@@ -87,7 +132,7 @@ InspectorTest.dumpConsoleTableMessage = function(viewMessage, forceInvalidate)
     for (var i = 0; i < headers.length; i++)
         headerLine += headers[i].textContent + " | ";
 
-    InspectorTest.addResult("HEADER " + headerLine);
+    addResult("HEADER " + headerLine);
 
     var rows = table.querySelectorAll(".data-container tr");
 
@@ -99,14 +144,22 @@ InspectorTest.dumpConsoleTableMessage = function(viewMessage, forceInvalidate)
             rowLine += items[j].textContent + " | ";
 
         if (rowLine.trim())
-            InspectorTest.addResult("ROW " + rowLine);
+            addResult("ROW " + rowLine);
     }
+
+    function addResult(x)
+    {
+        if (results)
+            results.push(x);
+        else
+            InspectorTest.addResult(x);
+    }
+
     return true;
 }
 
 InspectorTest.dumpConsoleMessagesWithStyles = function(sortMessages)
 {
-    WebInspector.inspectorView._panel("console");
     var result = [];
     var messageViews = WebInspector.ConsolePanel._view()._visibleViewMessages;
     for (var i = 0; i < messageViews.length; ++i) {
@@ -120,7 +173,6 @@ InspectorTest.dumpConsoleMessagesWithStyles = function(sortMessages)
 }
 
 InspectorTest.dumpConsoleMessagesWithClasses = function(sortMessages) {
-    WebInspector.inspectorView._panel("console");
     var result = [];
     var messageViews = WebInspector.ConsolePanel._view()._visibleViewMessages;
     for (var i = 0; i < messageViews.length; ++i) {
@@ -134,9 +186,8 @@ InspectorTest.dumpConsoleMessagesWithClasses = function(sortMessages) {
         InspectorTest.addResult(result[i]);
 }
 
-InspectorTest.expandConsoleMessages = function(callback, deepFilter)
+InspectorTest.expandConsoleMessages = function(callback, deepFilter, sectionFilter)
 {
-    WebInspector.inspectorView._panel("console");
     var messageViews = WebInspector.ConsolePanel._view()._visibleViewMessages;
 
     // Initiate round-trips to fetch necessary data for further rendering.
@@ -153,6 +204,8 @@ InspectorTest.expandConsoleMessages = function(callback, deepFilter)
                 if (node.treeElementForTest)
                     node.treeElementForTest.expand();
                 if (!node._section)
+                    continue;
+                if (sectionFilter && !sectionFilter(node._section))
                     continue;
                 node._section.expanded = true;
 
@@ -181,7 +234,6 @@ InspectorTest.waitForRemoteObjectsConsoleMessages = function(callback)
 
 InspectorTest.checkConsoleMessagesDontHaveParameters = function()
 {
-    WebInspector.inspectorView._panel("console");
     var messageViews = WebInspector.ConsolePanel._view()._visibleViewMessages;
     for (var i = 0; i < messageViews.length; ++i) {
         var m = messageViews[i].consoleMessage();
@@ -217,7 +269,6 @@ InspectorTest.waitUntilNthMessageReceived = function(count, callback)
 
 InspectorTest.changeExecutionContext = function(namePrefix)
 {
-    WebInspector.inspectorView._panel("console");
     var selector = WebInspector.ConsolePanel._view()._executionContextSelector._selectElement;
     var option = selector.firstChild;
     while (option) {

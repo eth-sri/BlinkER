@@ -166,7 +166,7 @@ WebInspector.CodeMirrorCSSLoadView = function()
     WebInspector.VBox.call(this);
     this.element.classList.add("hidden");
     this.registerRequiredCSS("cm/codemirror.css");
-    this.registerRequiredCSS("cmdevtools.css");
+    this.registerRequiredCSS("source_frame/cmdevtools.css");
     this.element.appendChild(WebInspector.CodeMirrorUtils.createThemeStyle());
 }
 
@@ -184,7 +184,7 @@ WebInspector.CodeMirrorUtils.createThemeStyle = function()
     var backgroundColorRule = backgroundColor ? ".CodeMirror .CodeMirror-selected { background-color: " + backgroundColor + ";}" : "";
     var foregroundColor = InspectorFrontendHost.getSelectionForegroundColor();
     var foregroundColorRule = foregroundColor ? ".CodeMirror .CodeMirror-selectedtext:not(.CodeMirror-persist-highlight) { color: " + foregroundColor + "!important;}" : "";
-    var style = document.createElement("style");
+    var style = createElement("style");
     if (foregroundColorRule || backgroundColorRule)
         style.textContent = backgroundColorRule + foregroundColorRule;
     return style;

@@ -15,7 +15,7 @@
 #include "bindings/core/v8/V8HiddenValue.h"
 #include "bindings/core/v8/V8ObjectConstructor.h"
 #include "bindings/core/v8/V8TestInterfaceEmpty.h"
-#include "bindings/core/v8/custom/V8Uint8ArrayCustom.h"
+#include "bindings/core/v8/V8Uint8Array.h"
 #include "core/dom/ContextFeatures.h"
 #include "core/dom/Document.h"
 #include "core/frame/LocalDOMWindow.h"
@@ -27,7 +27,7 @@
 
 namespace blink {
 
-const WrapperTypeInfo V8TestInterfaceEventConstructor::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceEventConstructor::domTemplate, V8TestInterfaceEventConstructor::refObject, V8TestInterfaceEventConstructor::derefObject, V8TestInterfaceEventConstructor::createPersistentHandle, 0, 0, 0, V8TestInterfaceEventConstructor::installConditionallyEnabledMethods, V8TestInterfaceEventConstructor::installConditionallyEnabledProperties, &V8Event::wrapperTypeInfo, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::Independent, WrapperTypeInfo::WillBeGarbageCollectedObject };
+const WrapperTypeInfo V8TestInterfaceEventConstructor::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceEventConstructor::domTemplate, V8TestInterfaceEventConstructor::refObject, V8TestInterfaceEventConstructor::derefObject, V8TestInterfaceEventConstructor::trace, 0, 0, 0, V8TestInterfaceEventConstructor::installConditionallyEnabledMethods, V8TestInterfaceEventConstructor::installConditionallyEnabledProperties, &V8Event::wrapperTypeInfo, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::Independent, WrapperTypeInfo::WillBeGarbageCollectedObject };
 
 // This static member must be declared by DEFINE_WRAPPERTYPEINFO in TestInterfaceEventConstructor.h.
 // For details, see the comment of DEFINE_WRAPPERTYPEINFO in
@@ -110,7 +110,7 @@ static void initializedByEventConstructorReadonlyUint8ArrayAttributeAttributeGet
 {
     v8::Handle<v8::Object> holder = info.Holder();
     TestInterfaceEventConstructor* impl = V8TestInterfaceEventConstructor::toImpl(holder);
-    RefPtr<Uint8Array> cppValue(impl->initializedByEventConstructorReadonlyUint8ArrayAttribute());
+    RefPtr<DOMUint8Array> cppValue(impl->initializedByEventConstructorReadonlyUint8ArrayAttribute());
     if (cppValue && DOMDataStore::setReturnValueFromWrapper<V8Uint8Array>(info.GetReturnValue(), cppValue.get()))
         return;
     v8::Handle<v8::Value> wrapper = toV8(cppValue.get(), holder, info.GetIsolate());
@@ -193,7 +193,7 @@ static void deprecatedInitializedByEventConstructorReadonlyStringAttributeAttrib
 static void deprecatedInitializedByEventConstructorReadonlyStringAttributeAttributeGetterCallback(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMGetter");
-    UseCounter::countDeprecation(callingExecutionContext(info.GetIsolate()), UseCounter::initializedByEventConstructorReadonlyStringAttribute);
+    UseCounter::countDeprecationIfNotPrivateScript(info.GetIsolate(), callingExecutionContext(info.GetIsolate()), UseCounter::initializedByEventConstructorReadonlyStringAttribute);
     TestInterfaceEventConstructorV8Internal::deprecatedInitializedByEventConstructorReadonlyStringAttributeAttributeGetter(info);
     TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
@@ -222,7 +222,7 @@ static void deprecatedImplementedAsInitializedByEventConstructorReadonlyStringAt
 static void deprecatedImplementedAsInitializedByEventConstructorReadonlyStringAttributeAttributeGetterCallback(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMGetter");
-    UseCounter::countDeprecation(callingExecutionContext(info.GetIsolate()), UseCounter::initializedByEventConstructorReadonlyStringAttribute);
+    UseCounter::countDeprecationIfNotPrivateScript(info.GetIsolate(), callingExecutionContext(info.GetIsolate()), UseCounter::initializedByEventConstructorReadonlyStringAttribute);
     TestInterfaceEventConstructorV8Internal::deprecatedImplementedAsInitializedByEventConstructorReadonlyStringAttributeAttributeGetter(info);
     TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
@@ -254,7 +254,7 @@ static void constructor(const v8::FunctionCallbackInfo<v8::Value>& info)
         return;
     if (DOMWrapperWorld::current(info.GetIsolate()).isIsolatedWorld()) {
         if (!initializedByEventConstructorReadonlyAnyAttribute.IsEmpty())
-            event->setSerializedInitializedByEventConstructorReadonlyAnyAttribute(SerializedScriptValue::createAndSwallowExceptions(initializedByEventConstructorReadonlyAnyAttribute, info.GetIsolate()));
+            event->setSerializedInitializedByEventConstructorReadonlyAnyAttribute(SerializedScriptValue::createAndSwallowExceptions(info.GetIsolate(), initializedByEventConstructorReadonlyAnyAttribute));
     }
 
     v8::Handle<v8::Object> wrapper = info.Holder();
@@ -301,7 +301,7 @@ bool initializeTestInterfaceEventConstructor(TestInterfaceEventConstructorInit& 
         return false;
     if (DictionaryHelper::convert(options, conversionContext.setConversionType("DOMString", false), "deprecatedInitializedByEventConstructorReadonlyStringAttribute", eventInit.deprecatedInitializedByEventConstructorReadonlyStringAttribute)) {
         if (options.hasProperty("deprecatedInitializedByEventConstructorReadonlyStringAttribute"))
-            UseCounter::countDeprecation(callingExecutionContext(info.GetIsolate()), UseCounter::initializedByEventConstructorReadonlyStringAttribute);
+            UseCounter::countDeprecationIfNotPrivateScript(info.GetIsolate(), callingExecutionContext(info.GetIsolate()), UseCounter::initializedByEventConstructorReadonlyStringAttribute);
     } else {
         return false;
     }
@@ -309,7 +309,7 @@ bool initializeTestInterfaceEventConstructor(TestInterfaceEventConstructorInit& 
         return false;
     if (DictionaryHelper::convert(options, conversionContext.setConversionType("DOMString", false), "deprecatedImplementedAsInitializedByEventConstructorReadonlyStringAttribute", eventInit.deprecatedImplementedAsName)) {
         if (options.hasProperty("deprecatedImplementedAsInitializedByEventConstructorReadonlyStringAttribute"))
-            UseCounter::countDeprecation(callingExecutionContext(info.GetIsolate()), UseCounter::initializedByEventConstructorReadonlyStringAttribute);
+            UseCounter::countDeprecationIfNotPrivateScript(info.GetIsolate(), callingExecutionContext(info.GetIsolate()), UseCounter::initializedByEventConstructorReadonlyStringAttribute);
     } else {
         return false;
     }
@@ -344,8 +344,10 @@ static void installV8TestInterfaceEventConstructorTemplate(v8::Handle<v8::Functi
         isolate);
     functionTemplate->SetCallHandler(V8TestInterfaceEventConstructor::constructorCallback);
     functionTemplate->SetLength(1);
-    v8::Local<v8::ObjectTemplate> instanceTemplate ALLOW_UNUSED = functionTemplate->InstanceTemplate();
-    v8::Local<v8::ObjectTemplate> prototypeTemplate ALLOW_UNUSED = functionTemplate->PrototypeTemplate();
+    v8::Local<v8::ObjectTemplate> instanceTemplate = functionTemplate->InstanceTemplate();
+    ALLOW_UNUSED_LOCAL(instanceTemplate);
+    v8::Local<v8::ObjectTemplate> prototypeTemplate = functionTemplate->PrototypeTemplate();
+    ALLOW_UNUSED_LOCAL(prototypeTemplate);
 
     // Custom toString template
     functionTemplate->Set(v8AtomicString(isolate, "toString"), V8PerIsolateData::from(isolate)->toStringTemplate());
@@ -371,28 +373,17 @@ TestInterfaceEventConstructor* V8TestInterfaceEventConstructor::toImplWithTypeCh
     return hasInstance(value, isolate) ? blink::toScriptWrappableBase(v8::Handle<v8::Object>::Cast(value))->toImpl<TestInterfaceEventConstructor>() : 0;
 }
 
-
-void V8TestInterfaceEventConstructor::refObject(ScriptWrappableBase* internalPointer)
+void V8TestInterfaceEventConstructor::refObject(ScriptWrappableBase* scriptWrappableBase)
 {
 #if !ENABLE(OILPAN)
-    internalPointer->toImpl<TestInterfaceEventConstructor>()->ref();
+    scriptWrappableBase->toImpl<TestInterfaceEventConstructor>()->ref();
 #endif
 }
 
-void V8TestInterfaceEventConstructor::derefObject(ScriptWrappableBase* internalPointer)
+void V8TestInterfaceEventConstructor::derefObject(ScriptWrappableBase* scriptWrappableBase)
 {
 #if !ENABLE(OILPAN)
-    internalPointer->toImpl<TestInterfaceEventConstructor>()->deref();
-#endif
-}
-
-WrapperPersistentNode* V8TestInterfaceEventConstructor::createPersistentHandle(ScriptWrappableBase* internalPointer)
-{
-#if ENABLE(OILPAN)
-    return WrapperPersistent<TestInterfaceEventConstructor>::create(internalPointer->toImpl<TestInterfaceEventConstructor>());
-#else
-    ASSERT_NOT_REACHED();
-    return 0;
+    scriptWrappableBase->toImpl<TestInterfaceEventConstructor>()->deref();
 #endif
 }
 

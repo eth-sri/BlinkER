@@ -13,20 +13,17 @@ function test()
 
         function testCreateElementsPanel(next)
         {
-            WebInspector.inspectorView._panel("elements");
-            InspectorTest.dumpLoadedModules(next);
+            WebInspector.inspectorView.panel("elements").then(InspectorTest.dumpLoadedModules.bind(InspectorTest, next));
         },
 
         function testCreateNetworkPanel(next)
         {
-            WebInspector.inspectorView._panel("network");
-            InspectorTest.dumpLoadedModules(next);
+            WebInspector.inspectorView.panel("network").then(InspectorTest.dumpLoadedModules.bind(InspectorTest, next));
         },
 
         function testShowSourcesPanel(next)
         {
-            WebInspector.inspectorView._showPanel("sources");
-            InspectorTest.dumpLoadedModules(next);
+            WebInspector.inspectorView.panel("sources").then(InspectorTest.dumpLoadedModules.bind(InspectorTest, next));
         },
 
         function testOpenUISourceCode(next)

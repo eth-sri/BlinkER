@@ -37,8 +37,7 @@
 WebInspector.ElementsPanel = function()
 {
     WebInspector.Panel.call(this, "elements");
-    this.registerRequiredCSS("elementsPanel.css");
-    this.setHideOnDetach();
+    this.registerRequiredCSS("elements/elementsPanel.css");
 
     this._splitView = new WebInspector.SplitView(true, true, "elementsPanelSplitViewState", 325, 325);
     this._splitView.addEventListener(WebInspector.SplitView.Events.SidebarSizeChanged, this._updateTreeOutlineVisibleWidth.bind(this));
@@ -49,21 +48,20 @@ WebInspector.ElementsPanel = function()
     this._searchableView.show(this._splitView.mainElement());
     var stackElement = this._searchableView.element;
 
-    this.contentElement = stackElement.createChild("div");
-    this.contentElement.id = "elements-content";
-    this.contentElement.classList.add("outline-disclosure");
-    this.contentElement.classList.add("source-code");
-    if (!WebInspector.settings.domWordWrap.get())
-        this.contentElement.classList.add("nowrap");
+    this._contentElement = stackElement.createChild("div");
+    this._contentElement.id = "elements-content";
+    // FIXME: crbug.com/425984
+    if (WebInspector.settings.domWordWrap.get())
+        this._contentElement.classList.add("elements-wrap");
     WebInspector.settings.domWordWrap.addChangeListener(this._domWordWrapSettingChanged.bind(this));
 
     this._splitView.sidebarElement().addEventListener("contextmenu", this._sidebarContextMenuEventFired.bind(this), false);
 
     var crumbsContainer = stackElement.createChild("div");
     crumbsContainer.id = "elements-crumbs";
-    this.crumbsElement = crumbsContainer.createChild("div", "crumbs");
-    this.crumbsElement.addEventListener("mousemove", this._mouseMovedInCrumbs.bind(this), false);
-    this.crumbsElement.addEventListener("mouseout", this._mouseMovedOutOfCrumbs.bind(this), false);
+    this._breadcrumbs = new WebInspector.ElementsBreadcrumbs();
+    this._breadcrumbs.show(crumbsContainer);
+    this._breadcrumbs.addEventListener(WebInspector.ElementsBreadcrumbs.Events.NodeSelected, this._crumbNodeSelected, this);
 
     this.sidebarPanes = {};
     this.sidebarPanes.platformFonts = new WebInspector.PlatformFontsSidebarPane();
@@ -72,9 +70,9 @@ WebInspector.ElementsPanel = function()
     this.sidebarPanes.styles.addEventListener(WebInspector.StylesSidebarPane.Events.SelectorEditingStarted, this._onEditingSelectorStarted.bind(this));
     this.sidebarPanes.styles.addEventListener(WebInspector.StylesSidebarPane.Events.SelectorEditingEnded, this._onEditingSelectorEnded.bind(this));
 
-    this._matchedStylesFilterBoxContainer = document.createElement("div");
+    this._matchedStylesFilterBoxContainer = createElement("div");
     this._matchedStylesFilterBoxContainer.className = "sidebar-pane-filter-box";
-    this._computedStylesFilterBoxContainer = document.createElement("div");
+    this._computedStylesFilterBoxContainer = createElement("div");
     this._computedStylesFilterBoxContainer.className = "sidebar-pane-filter-box";
     this.sidebarPanes.styles.setFilterBoxContainers(this._matchedStylesFilterBoxContainer, this._computedStylesFilterBoxContainer);
 
@@ -82,17 +80,7 @@ WebInspector.ElementsPanel = function()
     this.sidebarPanes.properties = new WebInspector.PropertiesSidebarPane();
     this.sidebarPanes.domBreakpoints = WebInspector.domBreakpointsSidebarPane.createProxy(this);
     this.sidebarPanes.eventListeners = new WebInspector.EventListenersSidebarPane();
-
-    this.sidebarPanes.styles.addEventListener(WebInspector.SidebarPane.EventTypes.wasShown, this.updateStyles.bind(this, false));
-    this.sidebarPanes.metrics.addEventListener(WebInspector.SidebarPane.EventTypes.wasShown, this.updateMetrics.bind(this));
-    this.sidebarPanes.platformFonts.addEventListener(WebInspector.SidebarPane.EventTypes.wasShown, this.updatePlatformFonts.bind(this));
-    this.sidebarPanes.properties.addEventListener(WebInspector.SidebarPane.EventTypes.wasShown, this.updateProperties.bind(this));
-    this.sidebarPanes.eventListeners.addEventListener(WebInspector.SidebarPane.EventTypes.wasShown, this.updateEventListeners.bind(this));
-
-    this.sidebarPanes.styles.addEventListener("style edited", this._stylesPaneEdited, this);
-    this.sidebarPanes.styles.addEventListener("style property toggled", this._stylesPaneEdited, this);
-    this.sidebarPanes.metrics.addEventListener("metrics edited", this._metricsPaneEdited, this);
-    this._extensionSidebarPanes = [];
+    this.sidebarPanes.animations = new WebInspector.AnimationsSidebarPane(this.sidebarPanes.styles);
 
     WebInspector.dockController.addEventListener(WebInspector.DockController.Events.DockSideChanged, this._dockSideChanged.bind(this));
     WebInspector.settings.splitVerticallyWhenDockedToRight.addChangeListener(this._dockSideChanged.bind(this));
@@ -109,6 +97,7 @@ WebInspector.ElementsPanel = function()
     WebInspector.settings.showUAShadowDOM.addChangeListener(this._showUAShadowDOMChanged.bind(this));
     WebInspector.targetManager.addModelListener(WebInspector.DOMModel, WebInspector.DOMModel.Events.DocumentUpdated, this._documentUpdatedEvent, this);
     WebInspector.targetManager.addModelListener(WebInspector.CSSStyleModel, WebInspector.CSSStyleModel.Events.ModelWasEnabled, this._updateSidebars, this);
+    WebInspector.extensionServer.addEventListener(WebInspector.ExtensionServer.Events.SidebarPaneAdded, this._extensionSidebarPaneAdded, this);
 }
 
 WebInspector.ElementsPanel.prototype = {
@@ -130,6 +119,7 @@ WebInspector.ElementsPanel.prototype = {
     targetAdded: function(target)
     {
         var treeOutline = new WebInspector.ElementsTreeOutline(target, true, true, this._setPseudoClassForNode.bind(this));
+        treeOutline.setWordWrap(WebInspector.settings.domWordWrap.get());
         treeOutline.wireToDOMModel();
         treeOutline.addEventListener(WebInspector.ElementsTreeOutline.Events.SelectedNodeChanged, this._selectedNodeChanged, this);
         treeOutline.addEventListener(WebInspector.ElementsTreeOutline.Events.NodePicked, this._onNodePicked, this);
@@ -173,7 +163,7 @@ WebInspector.ElementsPanel.prototype = {
             this._treeOutlines[i].setVisibleWidth(width);
             this._treeOutlines[i].updateSelection();
         }
-        this.updateBreadcrumbSizes();
+        this._breadcrumbs.updateSizes();
     },
 
     /**
@@ -197,11 +187,11 @@ WebInspector.ElementsPanel.prototype = {
         for (var i = 0; i < this._treeOutlines.length; ++i) {
             var treeOutline = this._treeOutlines[i];
             // Attach heavy component lazily
-            if (treeOutline.element.parentElement !== this.contentElement)
-                this.contentElement.appendChild(treeOutline.element);
+            if (treeOutline.element.parentElement !== this._contentElement)
+                this._contentElement.appendChild(treeOutline.element);
         }
         WebInspector.Panel.prototype.wasShown.call(this);
-        this.updateBreadcrumb();
+        this._breadcrumbs.update();
 
         for (var i = 0; i < this._treeOutlines.length; ++i) {
             var treeOutline = this._treeOutlines[i];
@@ -224,7 +214,7 @@ WebInspector.ElementsPanel.prototype = {
             treeOutline.domModel().hideDOMNodeHighlight();
             treeOutline.setVisible(false);
             // Detach heavy component on hide
-            this.contentElement.removeChild(treeOutline.element);
+            this._contentElement.removeChild(treeOutline.element);
         }
         this._popoverHelper.hidePopover();
         WebInspector.Panel.prototype.willHide.call(this);
@@ -246,8 +236,8 @@ WebInspector.ElementsPanel.prototype = {
             return;
 
         this._treeOutlineForNode(node).updateOpenCloseTags(node);
-        this._metricsPaneEdited();
-        this._stylesPaneEdited();
+
+        this._updateCSSSidebars();
 
         WebInspector.notifications.dispatchEventToListeners(WebInspector.UserMetrics.UserAction, {
             action: WebInspector.UserMetrics.UserActionNames.ForcedElementState,
@@ -281,7 +271,7 @@ WebInspector.ElementsPanel.prototype = {
         if (!selectedNode && this._lastValidSelectedNode)
             this._selectedPathOnReset = this._lastValidSelectedNode.path();
 
-        this.updateBreadcrumb(false);
+        this._breadcrumbs.setSelectedNode(selectedNode);
 
         this._updateSidebars();
 
@@ -294,14 +284,10 @@ WebInspector.ElementsPanel.prototype = {
 
     _updateSidebars: function()
     {
-        for (var pane in this.sidebarPanes)
-           this.sidebarPanes[pane].needsUpdate = true;
-
-        this.updateStyles(true);
-        this.updateMetrics();
-        this.updatePlatformFonts();
-        this.updateProperties();
-        this.updateEventListeners();
+        this._updateCSSSidebars();
+        this.sidebarPanes.properties.setNode(this.selectedDOMNode());
+        this.sidebarPanes.eventListeners.setNode(this.selectedDOMNode());
+        this.sidebarPanes.animations.setNode(this.selectedDOMNode());
     },
 
     _reset: function()
@@ -394,12 +380,13 @@ WebInspector.ElementsPanel.prototype = {
     },
 
     /**
-     * @param {string} query
+     * @param {!WebInspector.SearchableView.SearchConfig} searchConfig
      * @param {boolean} shouldJump
      * @param {boolean=} jumpBackwards
      */
-    performSearch: function(query, shouldJump, jumpBackwards)
+    performSearch: function(searchConfig, shouldJump, jumpBackwards)
     {
+        var query = searchConfig.query;
         // Call searchCanceled since it will reset everything we need before doing a new search.
         this.searchCanceled();
 
@@ -442,10 +429,10 @@ WebInspector.ElementsPanel.prototype = {
 
     _domWordWrapSettingChanged: function(event)
     {
-        if (event.data)
-            this.contentElement.classList.remove("nowrap");
-        else
-            this.contentElement.classList.add("nowrap");
+        // FIXME: crbug.com/425984
+        this._contentElement.classList.toggle("elements-wrap", event.data);
+        for (var i = 0; i < this._treeOutlines.length; ++i)
+            this._treeOutlines[i].setWordWrap(/** @type {boolean} */ (event.data));
 
         var selectedNode = this.selectedDOMNode();
         if (!selectedNode)
@@ -484,7 +471,7 @@ WebInspector.ElementsPanel.prototype = {
                 continue;
 
             var resource = this._treeOutlines[i].target().resourceTreeModel.resourceForURL(anchor.href);
-            if (!resource || resource.type !== WebInspector.resourceTypes.Image)
+            if (!resource || resource.resourceType() !== WebInspector.resourceTypes.Image)
                 return;
             anchor.removeAttribute("title");
             return anchor;
@@ -576,6 +563,22 @@ WebInspector.ElementsPanel.prototype = {
         this._jumpToSearchResult(this._currentSearchResultIndex - 1);
     },
 
+    /**
+     * @return {boolean}
+     */
+    supportsCaseSensitiveSearch: function()
+    {
+        return false;
+    },
+
+    /**
+     * @return {boolean}
+     */
+    supportsRegexSearch: function()
+    {
+        return false;
+    },
+
     _highlightCurrentSearchResult: function()
     {
         var index = this._currentSearchResultIndex;
@@ -661,478 +664,28 @@ WebInspector.ElementsPanel.prototype = {
      */
     _updateBreadcrumbIfNeeded: function(event)
     {
-        var nodes = /** @type {!Array.<!WebInspector.DOMNode>} */ (event.data || []);
-        if (!nodes.length)
-            return;
-
-        var crumbs = this.crumbsElement;
-        for (var crumb = crumbs.firstChild; crumb; crumb = crumb.nextSibling) {
-            if (nodes.indexOf(crumb.representedObject) !== -1) {
-                this.updateBreadcrumb(true);
-                return;
-            }
-        }
-    },
-
-    _stylesPaneEdited: function()
-    {
-        // Once styles are edited, the Metrics pane should be updated.
-        this.sidebarPanes.metrics.needsUpdate = true;
-        this.updateMetrics();
-        this.sidebarPanes.platformFonts.needsUpdate = true;
-        this.updatePlatformFonts();
-    },
-
-    _metricsPaneEdited: function()
-    {
-        // Once metrics are edited, the Styles pane should be updated.
-        this.sidebarPanes.styles.needsUpdate = true;
-        this.updateStyles(true);
-    },
-
-    _mouseMovedInCrumbs: function(event)
-    {
-        var nodeUnderMouse = document.elementFromPoint(event.pageX, event.pageY);
-        var crumbElement = nodeUnderMouse.enclosingNodeOrSelfWithClass("crumb");
-        var node = /** @type {?WebInspector.DOMNode} */ (crumbElement ? crumbElement.representedObject : null);
-        if (node)
-            node.highlight();
-    },
-
-    _mouseMovedOutOfCrumbs: function(event)
-    {
-        var nodeUnderMouse = document.elementFromPoint(event.pageX, event.pageY);
-        if (nodeUnderMouse && nodeUnderMouse.isDescendant(this.crumbsElement))
-            return;
-
-        for (var i = 0; i < this._treeOutlines.length; ++i)
-            this._treeOutlines[i].domModel().hideDOMNodeHighlight();
+        var nodes = /** @type {!Array.<!WebInspector.DOMNode>} */ (event.data);
+        this._breadcrumbs.updateNodes(nodes);
     },
 
     /**
-     * @param {boolean=} forceUpdate
+     * @param {!WebInspector.Event} event
      */
-    updateBreadcrumb: function(forceUpdate)
+    _crumbNodeSelected: function(event)
     {
-        if (!this.isShowing())
-            return;
-
-        var crumbs = this.crumbsElement;
-
-        var handled = false;
-        var crumb = crumbs.firstChild;
-        while (crumb) {
-            if (crumb.representedObject === this.selectedDOMNode()) {
-                crumb.classList.add("selected");
-                handled = true;
-            } else {
-                crumb.classList.remove("selected");
-            }
-
-            crumb = crumb.nextSibling;
-        }
-
-        if (handled && !forceUpdate) {
-            // We don't need to rebuild the crumbs, but we need to adjust sizes
-            // to reflect the new focused or root node.
-            this.updateBreadcrumbSizes();
-            return;
-        }
-
-        crumbs.removeChildren();
-
-        var panel = this;
-
-        function selectCrumbFunction(event)
-        {
-            var crumb = event.currentTarget;
-            if (crumb.classList.contains("collapsed")) {
-                // Clicking a collapsed crumb will expose the hidden crumbs.
-                if (crumb === panel.crumbsElement.firstChild) {
-                    // If the focused crumb is the first child, pick the farthest crumb
-                    // that is still hidden. This allows the user to expose every crumb.
-                    var currentCrumb = crumb;
-                    while (currentCrumb) {
-                        var hidden = currentCrumb.classList.contains("hidden");
-                        var collapsed = currentCrumb.classList.contains("collapsed");
-                        if (!hidden && !collapsed)
-                            break;
-                        crumb = currentCrumb;
-                        currentCrumb = currentCrumb.nextSibling;
-                    }
-                }
-
-                panel.updateBreadcrumbSizes(crumb);
-            } else
-                panel.selectDOMNode(crumb.representedObject, true);
-
-            event.preventDefault();
-        }
-
-        for (var current = this.selectedDOMNode(); current; current = current.parentNode) {
-            if (current.nodeType() === Node.DOCUMENT_NODE)
-                continue;
-
-            crumb = document.createElement("span");
-            crumb.className = "crumb";
-            crumb.representedObject = current;
-            crumb.addEventListener("mousedown", selectCrumbFunction, false);
-
-            var crumbTitle = "";
-            switch (current.nodeType()) {
-                case Node.ELEMENT_NODE:
-                    if (current.pseudoType())
-                        crumbTitle = "::" + current.pseudoType();
-                    else
-                        WebInspector.DOMPresentationUtils.decorateNodeLabel(current, crumb);
-                    break;
-
-                case Node.TEXT_NODE:
-                    crumbTitle = WebInspector.UIString("(text)");
-                    break;
-
-                case Node.COMMENT_NODE:
-                    crumbTitle = "<!-->";
-                    break;
-
-                case Node.DOCUMENT_TYPE_NODE:
-                    crumbTitle = "<!DOCTYPE>";
-                    break;
-
-                case Node.DOCUMENT_FRAGMENT_NODE:
-                  crumbTitle = current.shadowRootType() ? "#shadow-root" : current.nodeNameInCorrectCase();
-                  break;
-
-                default:
-                    crumbTitle = current.nodeNameInCorrectCase();
-            }
-
-            if (!crumb.childNodes.length) {
-                var nameElement = document.createElement("span");
-                nameElement.textContent = crumbTitle;
-                crumb.appendChild(nameElement);
-                crumb.title = crumbTitle;
-            }
-
-            if (current === this.selectedDOMNode())
-                crumb.classList.add("selected");
-            crumbs.insertBefore(crumb, crumbs.firstChild);
-        }
-
-        this.updateBreadcrumbSizes();
+        var node = /** @type {!WebInspector.DOMNode} */ (event.data);
+        this.selectDOMNode(node, true);
     },
 
-    /**
-     * @param {!Element=} focusedCrumb
-     */
-    updateBreadcrumbSizes: function(focusedCrumb)
+    _updateCSSSidebars: function()
     {
-        if (!this.isShowing())
+        var selectedDOMNode = this.selectedDOMNode();
+        if (!selectedDOMNode || !selectedDOMNode.target().cssModel.isEnabled())
             return;
 
-        var crumbs = this.crumbsElement;
-        if (!crumbs.firstChild)
-            return;
-
-        var selectedIndex = 0;
-        var focusedIndex = 0;
-        var selectedCrumb;
-
-        // Reset crumb styles.
-        for (var i = 0; i < crumbs.childNodes.length; ++i) {
-            var crumb = crumbs.childNodes[i];
-            // Find the selected crumb and index.
-            if (!selectedCrumb && crumb.classList.contains("selected")) {
-                selectedCrumb = crumb;
-                selectedIndex = i;
-            }
-
-            // Find the focused crumb index.
-            if (crumb === focusedCrumb)
-                focusedIndex = i;
-
-            crumb.classList.remove("compact", "collapsed", "hidden");
-        }
-
-        // Layout 1: Measure total and normal crumb sizes
-        var contentElementWidth = this.contentElement.offsetWidth;
-        var normalSizes = [];
-        for (var i = 0; i < crumbs.childNodes.length; ++i) {
-            var crumb = crumbs.childNodes[i];
-            normalSizes[i] = crumb.offsetWidth;
-        }
-
-        // Layout 2: Measure collapsed crumb sizes
-        var compactSizes = [];
-        for (var i = 0; i < crumbs.childNodes.length; ++i) {
-            var crumb = crumbs.childNodes[i];
-            crumb.classList.add("compact");
-        }
-        for (var i = 0; i < crumbs.childNodes.length; ++i) {
-            var crumb = crumbs.childNodes[i];
-            compactSizes[i] = crumb.offsetWidth;
-        }
-
-        // Layout 3: Measure collapsed crumb size
-        crumbs.firstChild.classList.add("collapsed");
-        var collapsedSize = crumbs.firstChild.offsetWidth;
-
-        // Clean up.
-        for (var i = 0; i < crumbs.childNodes.length; ++i) {
-            var crumb = crumbs.childNodes[i];
-            crumb.classList.remove("compact", "collapsed");
-        }
-
-        function crumbsAreSmallerThanContainer()
-        {
-            var totalSize = 0;
-            for (var i = 0; i < crumbs.childNodes.length; ++i) {
-                var crumb = crumbs.childNodes[i];
-                if (crumb.classList.contains("hidden"))
-                    continue;
-                if (crumb.classList.contains("collapsed")) {
-                    totalSize += collapsedSize;
-                    continue;
-                }
-                totalSize += crumb.classList.contains("compact") ? compactSizes[i] : normalSizes[i];
-            }
-            const rightPadding = 10;
-            return totalSize + rightPadding < contentElementWidth;
-        }
-
-        if (crumbsAreSmallerThanContainer())
-            return; // No need to compact the crumbs, they all fit at full size.
-
-        var BothSides = 0;
-        var AncestorSide = -1;
-        var ChildSide = 1;
-
-        /**
-         * @param {function(!Element)} shrinkingFunction
-         * @param {number} direction
-         */
-        function makeCrumbsSmaller(shrinkingFunction, direction)
-        {
-            var significantCrumb = focusedCrumb || selectedCrumb;
-            var significantIndex = significantCrumb === selectedCrumb ? selectedIndex : focusedIndex;
-
-            function shrinkCrumbAtIndex(index)
-            {
-                var shrinkCrumb = crumbs.childNodes[index];
-                if (shrinkCrumb && shrinkCrumb !== significantCrumb)
-                    shrinkingFunction(shrinkCrumb);
-                if (crumbsAreSmallerThanContainer())
-                    return true; // No need to compact the crumbs more.
-                return false;
-            }
-
-            // Shrink crumbs one at a time by applying the shrinkingFunction until the crumbs
-            // fit in the container or we run out of crumbs to shrink.
-            if (direction) {
-                // Crumbs are shrunk on only one side (based on direction) of the signifcant crumb.
-                var index = (direction > 0 ? 0 : crumbs.childNodes.length - 1);
-                while (index !== significantIndex) {
-                    if (shrinkCrumbAtIndex(index))
-                        return true;
-                    index += (direction > 0 ? 1 : -1);
-                }
-            } else {
-                // Crumbs are shrunk in order of descending distance from the signifcant crumb,
-                // with a tie going to child crumbs.
-                var startIndex = 0;
-                var endIndex = crumbs.childNodes.length - 1;
-                while (startIndex != significantIndex || endIndex != significantIndex) {
-                    var startDistance = significantIndex - startIndex;
-                    var endDistance = endIndex - significantIndex;
-                    if (startDistance >= endDistance)
-                        var index = startIndex++;
-                    else
-                        var index = endIndex--;
-                    if (shrinkCrumbAtIndex(index))
-                        return true;
-                }
-            }
-
-            // We are not small enough yet, return false so the caller knows.
-            return false;
-        }
-
-        function coalesceCollapsedCrumbs()
-        {
-            var crumb = crumbs.firstChild;
-            var collapsedRun = false;
-            var newStartNeeded = false;
-            var newEndNeeded = false;
-            while (crumb) {
-                var hidden = crumb.classList.contains("hidden");
-                if (!hidden) {
-                    var collapsed = crumb.classList.contains("collapsed");
-                    if (collapsedRun && collapsed) {
-                        crumb.classList.add("hidden");
-                        crumb.classList.remove("compact");
-                        crumb.classList.remove("collapsed");
-
-                        if (crumb.classList.contains("start")) {
-                            crumb.classList.remove("start");
-                            newStartNeeded = true;
-                        }
-
-                        if (crumb.classList.contains("end")) {
-                            crumb.classList.remove("end");
-                            newEndNeeded = true;
-                        }
-
-                        continue;
-                    }
-
-                    collapsedRun = collapsed;
-
-                    if (newEndNeeded) {
-                        newEndNeeded = false;
-                        crumb.classList.add("end");
-                    }
-                } else
-                    collapsedRun = true;
-                crumb = crumb.nextSibling;
-            }
-
-            if (newStartNeeded) {
-                crumb = crumbs.lastChild;
-                while (crumb) {
-                    if (!crumb.classList.contains("hidden")) {
-                        crumb.classList.add("start");
-                        break;
-                    }
-                    crumb = crumb.previousSibling;
-                }
-            }
-        }
-
-        /**
-         * @param {!Element} crumb
-         */
-        function compact(crumb)
-        {
-            if (crumb.classList.contains("hidden"))
-                return;
-            crumb.classList.add("compact");
-        }
-
-        /**
-         * @param {!Element} crumb
-         * @param {boolean=} dontCoalesce
-         */
-        function collapse(crumb, dontCoalesce)
-        {
-            if (crumb.classList.contains("hidden"))
-                return;
-            crumb.classList.add("collapsed");
-            crumb.classList.remove("compact");
-            if (!dontCoalesce)
-                coalesceCollapsedCrumbs();
-        }
-
-        if (!focusedCrumb) {
-            // When not focused on a crumb we can be biased and collapse less important
-            // crumbs that the user might not care much about.
-
-            // Compact child crumbs.
-            if (makeCrumbsSmaller(compact, ChildSide))
-                return;
-
-            // Collapse child crumbs.
-            if (makeCrumbsSmaller(collapse, ChildSide))
-                return;
-        }
-
-        // Compact ancestor crumbs, or from both sides if focused.
-        if (makeCrumbsSmaller(compact, focusedCrumb ? BothSides : AncestorSide))
-            return;
-
-        // Collapse ancestor crumbs, or from both sides if focused.
-        if (makeCrumbsSmaller(collapse, focusedCrumb ? BothSides : AncestorSide))
-            return;
-
-        if (!selectedCrumb)
-            return;
-
-        // Compact the selected crumb.
-        compact(selectedCrumb);
-        if (crumbsAreSmallerThanContainer())
-            return;
-
-        // Collapse the selected crumb as a last resort. Pass true to prevent coalescing.
-        collapse(selectedCrumb, true);
-    },
-
-    /**
-     * @return {boolean}
-     */
-    _cssModelEnabledForSelectedNode: function()
-    {
-        if (!this.selectedDOMNode())
-            return true;
-        return this.selectedDOMNode().target().cssModel.isEnabled();
-    },
-
-    /**
-     * @param {boolean=} forceUpdate
-     */
-    updateStyles: function(forceUpdate)
-    {
-        if (!this._cssModelEnabledForSelectedNode())
-            return;
-        var stylesSidebarPane = this.sidebarPanes.styles;
-        var computedStylePane = this.sidebarPanes.computedStyle;
-        if ((!stylesSidebarPane.isShowing() && !computedStylePane.isShowing()) || !stylesSidebarPane.needsUpdate)
-            return;
-
-        stylesSidebarPane.update(this.selectedDOMNode(), forceUpdate);
-        stylesSidebarPane.needsUpdate = false;
-    },
-
-    updateMetrics: function()
-    {
-        if (!this._cssModelEnabledForSelectedNode())
-            return;
-        var metricsSidebarPane = this.sidebarPanes.metrics;
-        if (!metricsSidebarPane.isShowing() || !metricsSidebarPane.needsUpdate)
-            return;
-
-        metricsSidebarPane.update(this.selectedDOMNode());
-        metricsSidebarPane.needsUpdate = false;
-    },
-
-    updatePlatformFonts: function()
-    {
-        if (!this._cssModelEnabledForSelectedNode())
-            return;
-        var platformFontsSidebar = this.sidebarPanes.platformFonts;
-        if (!platformFontsSidebar.isShowing() || !platformFontsSidebar.needsUpdate)
-            return;
-
-        platformFontsSidebar.update(this.selectedDOMNode());
-        platformFontsSidebar.needsUpdate = false;
-    },
-
-    updateProperties: function()
-    {
-        var propertiesSidebarPane = this.sidebarPanes.properties;
-        if (!propertiesSidebarPane.isShowing() || !propertiesSidebarPane.needsUpdate)
-            return;
-
-        propertiesSidebarPane.update(this.selectedDOMNode());
-        propertiesSidebarPane.needsUpdate = false;
-    },
-
-    updateEventListeners: function()
-    {
-        var eventListenersSidebarPane = this.sidebarPanes.eventListeners;
-        if (!eventListenersSidebarPane.isShowing() || !eventListenersSidebarPane.needsUpdate)
-            return;
-
-        eventListenersSidebarPane.update(this.selectedDOMNode());
-        eventListenersSidebarPane.needsUpdate = false;
+        this.sidebarPanes.styles.update(selectedDOMNode, true);
+        this.sidebarPanes.metrics.setNode(selectedDOMNode);
+        this.sidebarPanes.platformFonts.setNode(selectedDOMNode);
     },
 
     /**
@@ -1330,9 +883,9 @@ WebInspector.ElementsPanel.prototype = {
         computedPane.bodyElement.classList.add("metrics-and-computed");
         this.sidebarPanes.computedStyle.setExpandCallback(expandComputed);
 
-        var matchedStylePanesWrapper = document.createElement("div");
+        var matchedStylePanesWrapper = createElement("div");
         matchedStylePanesWrapper.className = "style-panes-wrapper";
-        var computedStylePanesWrapper = document.createElement("div");
+        var computedStylePanesWrapper = createElement("div");
         computedStylePanesWrapper.className = "style-panes-wrapper";
 
         /**
@@ -1417,23 +970,36 @@ WebInspector.ElementsPanel.prototype = {
         this.sidebarPaneView.addPane(this.sidebarPanes.eventListeners);
         this.sidebarPaneView.addPane(this.sidebarPanes.domBreakpoints);
         this.sidebarPaneView.addPane(this.sidebarPanes.properties);
+        if (Runtime.experiments.isEnabled("animationInspection"))
+            this.sidebarPaneView.addPane(this.sidebarPanes.animations);
         this._extensionSidebarPanesContainer = this.sidebarPaneView;
 
-        for (var i = 0; i < this._extensionSidebarPanes.length; ++i)
-            this._extensionSidebarPanesContainer.addPane(this._extensionSidebarPanes[i]);
+        var extensionSidebarPanes = WebInspector.extensionServer.sidebarPanes();
+        for (var i = 0; i < extensionSidebarPanes.length; ++i)
+            this._addExtensionSidebarPane(extensionSidebarPanes[i]);
 
         this.sidebarPaneView.show(this._splitView.sidebarElement());
         this.sidebarPanes.styles.expand();
     },
 
     /**
-     * @param {string} id
-     * @param {!WebInspector.SidebarPane} pane
+     * @param {!WebInspector.Event} event
      */
-    addExtensionSidebarPane: function(id, pane)
+    _extensionSidebarPaneAdded: function(event)
     {
-        this._extensionSidebarPanes.push(pane);
-        this._extensionSidebarPanesContainer.addPane(pane);
+        var pane = /** @type {!WebInspector.ExtensionSidebarPane} */ (event.data);
+        this._addExtensionSidebarPane(pane);
+    },
+
+    /**
+     * @param {!WebInspector.ExtensionSidebarPane} pane
+     */
+    _addExtensionSidebarPane: function(pane)
+    {
+        if (pane.panelName() === this.name) {
+            this.setHideOnDetach();
+            this._extensionSidebarPanesContainer.addPane(pane);
+        }
     },
 
     __proto__: WebInspector.Panel.prototype
@@ -1506,6 +1072,11 @@ WebInspector.ElementsPanel.DOMNodeRevealer.prototype = {
             }
         }
     }
+}
+
+WebInspector.ElementsPanel.show = function()
+{
+    WebInspector.inspectorView.setCurrentPanel(WebInspector.ElementsPanel.instance());
 }
 
 /**

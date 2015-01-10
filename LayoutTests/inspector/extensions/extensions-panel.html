@@ -1,8 +1,11 @@
 <html>
 <head>
 <script src="../../http/tests/inspector/inspector-test.js"></script>
-<script src="../../http/tests/inspector/extensions-test.js"></script>
 <script src="../../http/tests/inspector/console-test.js"></script>
+<script src="../../http/tests/inspector/network-test.js"></script>
+<script src="../../http/tests/inspector/sources-test.js"></script>
+<script src="../../http/tests/inspector/resources-test.js"></script>
+<script src="../../http/tests/inspector/extensions-test.js"></script>
 <script type="text/javascript">
 function logMessage()
 {
@@ -45,7 +48,6 @@ function initialize_extensionsPanelTest()
 
     InspectorTest.clickOnURL = function()
     {
-        WebInspector.inspectorView._showPanel("console");
         InspectorTest.disableConsoleViewport();
         var xpathResult = document.evaluate("//a[starts-with(., 'extensions-panel.html')]", WebInspector.ConsolePanel._view()._viewport.element, null, XPathResult.ANY_UNORDERED_NODE_TYPE, null);
         var click = document.createEvent("MouseEvent");
@@ -62,9 +64,9 @@ function initialize_extensionsPanelTest()
         }
         InspectorTest.recordNetwork();
 
-        InspectorTest.addSniffer(WebInspector.inspectorView._panel("sources"), "showUILocation", showUILocationHook, true);
-        InspectorTest.addSniffer(WebInspector.inspectorView._panel("resources"), "showResource", showResourceHook, true);
-        InspectorTest.addSniffer(WebInspector.inspectorView._panel("network"), "revealAndHighlightRequest", showRequestHook, true);
+        InspectorTest.addSniffer(WebInspector.panels.sources, "showUILocation", showUILocationHook, true);
+        InspectorTest.addSniffer(WebInspector.panels.resources, "showResource", showResourceHook, true);
+        InspectorTest.addSniffer(WebInspector.panels.network, "revealAndHighlightRequest", showRequestHook, true);
 
         function showUILocationHook(uiLocation)
         {
@@ -85,7 +87,7 @@ function initialize_extensionsPanelTest()
     InspectorTest.switchToLastPanel = function()
     {
         var lastPanelName = WebInspector.inspectorView._tabbedPane._tabs.peekLast().id;
-        WebInspector.inspectorView._showPanel(lastPanelName);
+        return WebInspector.inspectorView.showPanel(lastPanelName);
     }
 }
 
@@ -227,7 +229,9 @@ function extension_testStatusBarButtons(nextTest)
             output("button2 clicked");
             nextTest();
         });
-        evaluateOnFrontend("InspectorTest.showPanel('extension'); InspectorTest.clickButton(1); InspectorTest.clickButton(0);", updateButtons);
+        // First we click on button2 (that is [1] in array). But it is disabled, so this should be a noop. Then we click on button1.
+        // button1 click updates buttons. and clicks button2.
+        evaluateOnFrontend("InspectorTest.showPanel('extension').then(function() { InspectorTest.clickButton(1); InspectorTest.clickButton(0); })");
     }
 
     webInspector.panels.create("Buttons Panel", basePath + "extension-panel.png", basePath + "non-existent.html", onPanelCreated);

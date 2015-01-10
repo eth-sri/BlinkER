@@ -49,7 +49,7 @@ const double MaxRate = 1024;
 
 AudioBufferSourceNode* AudioBufferSourceNode::create(AudioContext* context, float sampleRate)
 {
-    return adoptRefCountedGarbageCollectedWillBeNoop(new AudioBufferSourceNode(context, sampleRate));
+    return new AudioBufferSourceNode(context, sampleRate);
 }
 
 AudioBufferSourceNode::AudioBufferSourceNode(AudioContext* context, float sampleRate)
@@ -236,7 +236,7 @@ bool AudioBufferSourceNode::renderFromBuffer(AudioBus* bus, unsigned destination
     double pitchRate = totalPitchRate();
 
     // Sanity check that our playback rate isn't larger than the loop size.
-    if (pitchRate >= virtualDeltaFrames)
+    if (pitchRate > virtualDeltaFrames)
         return false;
 
     // Get local copy.

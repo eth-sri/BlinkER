@@ -58,14 +58,16 @@ class IDBRequest
     , public ActiveDOMObject {
     DEFINE_EVENT_TARGET_REFCOUNTING_WILL_BE_REMOVED(RefCountedGarbageCollected<IDBRequest>);
     DEFINE_WRAPPERTYPEINFO();
+    USING_PRE_FINALIZER(IDBRequest, dispose);
     WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(IDBRequest);
 public:
     static IDBRequest* create(ScriptState*, IDBAny* source, IDBTransaction*);
     virtual ~IDBRequest();
-    virtual void trace(Visitor*) OVERRIDE;
+    virtual void trace(Visitor*) override;
 
+    ScriptState* scriptState() { return m_scriptState.get(); }
     ScriptValue result(ExceptionState&);
-    PassRefPtrWillBeRawPtr<DOMError> error(ExceptionState&) const;
+    DOMError* error(ExceptionState&) const;
     ScriptValue source() const;
     IDBTransaction* transaction() const { return m_transaction.get(); }
 
@@ -92,7 +94,7 @@ public:
     void setPendingCursor(IDBCursor*);
     void abort();
 
-    virtual void onError(PassRefPtrWillBeRawPtr<DOMError>);
+    virtual void onError(DOMError*);
     virtual void onSuccess(const Vector<String>&);
     virtual void onSuccess(PassOwnPtr<WebIDBCursor>, IDBKey*, IDBKey* primaryKey, PassRefPtr<SharedBuffer>, PassOwnPtr<Vector<WebBlobInfo> >);
     virtual void onSuccess(IDBKey*);
@@ -108,16 +110,16 @@ public:
     virtual void onSuccess(PassOwnPtr<WebIDBDatabase>, const IDBDatabaseMetadata&) { ASSERT_NOT_REACHED(); }
 
     // ActiveDOMObject
-    virtual bool hasPendingActivity() const OVERRIDE FINAL;
-    virtual void stop() OVERRIDE FINAL;
+    virtual bool hasPendingActivity() const override final;
+    virtual void stop() override final;
 
     // EventTarget
-    virtual const AtomicString& interfaceName() const OVERRIDE;
-    virtual ExecutionContext* executionContext() const OVERRIDE FINAL;
-    virtual void uncaughtExceptionInEventHandler() OVERRIDE FINAL;
+    virtual const AtomicString& interfaceName() const override;
+    virtual ExecutionContext* executionContext() const override final;
+    virtual void uncaughtExceptionInEventHandler() override final;
 
     using EventTarget::dispatchEvent;
-    virtual bool dispatchEvent(PassRefPtrWillBeRawPtr<Event>) OVERRIDE;
+    virtual bool dispatchEvent(PassRefPtrWillBeRawPtr<Event>) override;
 
     // Called by a version change transaction that has finished to set this
     // request back from DONE (following "upgradeneeded") back to PENDING (for
@@ -133,7 +135,6 @@ protected:
     virtual bool shouldEnqueueEvent() const;
     void onSuccessInternal(IDBAny*);
     void setResult(IDBAny*);
-    ScriptState* scriptState() { return m_scriptState.get(); }
 
     bool m_contextStopped;
     Member<IDBTransaction> m_transaction;
@@ -141,13 +142,15 @@ protected:
     bool m_requestAborted; // May be aborted by transaction then receive async onsuccess; ignore vs. assert.
 
 private:
+    void dispose();
     void setResultCursor(IDBCursor*, IDBKey*, IDBKey* primaryKey, PassRefPtr<SharedBuffer> value, PassOwnPtr<Vector<WebBlobInfo> >);
+    void setBlobInfo(PassOwnPtr<Vector<WebBlobInfo>>);
     void handleBlobAcks();
 
     RefPtr<ScriptState> m_scriptState;
     Member<IDBAny> m_source;
     Member<IDBAny> m_result;
-    RefPtrWillBeMember<DOMError> m_error;
+    Member<DOMError> m_error;
 
     bool m_hasPendingActivity;
     WillBeHeapVector<RefPtrWillBeMember<Event> > m_enqueuedEvents;

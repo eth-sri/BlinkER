@@ -95,7 +95,7 @@ public:
         }
     }
 
-    virtual void run() OVERRIDE
+    virtual void run() override
     {
         if (m_loader) {
             if (m_log && m_startAction && !m_log->hasAction()) {
@@ -271,6 +271,7 @@ void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior, Up
         // Unlike raw <img>, we block mixed content inside of <picture> or <img srcset>.
         ResourceLoaderOptions resourceLoaderOptions = ResourceFetcher::defaultResourceOptions();
         ResourceRequest resourceRequest(url);
+        resourceRequest.setFetchCredentialsMode(WebURLRequest::FetchCredentialsModeSameOrigin);
         if (isHTMLPictureElement(element()->parentNode()) || !element()->fastGetAttribute(HTMLNames::srcsetAttr).isNull()) {
             resourceLoaderOptions.mixedContentBlockingTreatment = TreatAsActiveContent;
             resourceRequest.setRequestContext(WebURLRequest::RequestContextImageSet);
@@ -383,7 +384,7 @@ bool ImageLoader::shouldLoadImmediately(const KURL& url, LoadType loadType) cons
         || isHTMLObjectElement(m_element)
         || isHTMLEmbedElement(m_element)
         || url.protocolIsData()
-        || memoryCache()->resourceForURL(url)
+        || memoryCache()->resourceForURL(url, m_element->document().fetcher()->getCacheIdentifier())
         || loadType == ForceLoadImmediately);
 }
 

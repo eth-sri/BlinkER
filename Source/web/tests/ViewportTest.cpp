@@ -58,6 +58,7 @@
 namespace {
 
 using blink::FrameTestHelpers::runPendingTasks;
+using blink::FrameTestHelpers::UseMockScrollbarSettings;
 using namespace blink;
 
 class ViewportTest : public testing::Test {
@@ -91,22 +92,6 @@ protected:
 
     std::string m_baseURL;
     std::string m_chromeURL;
-};
-
-class UseMockScrollbarSettings {
-public:
-    UseMockScrollbarSettings()
-    {
-        Settings::setMockScrollbarsEnabled(true);
-        RuntimeEnabledFeatures::setOverlayScrollbarsEnabled(true);
-        EXPECT_TRUE(ScrollbarTheme::theme()->usesOverlayScrollbars());
-    }
-
-    ~UseMockScrollbarSettings()
-    {
-        Settings::setMockScrollbarsEnabled(false);
-        RuntimeEnabledFeatures::setOverlayScrollbarsEnabled(false);
-    }
 };
 
 static void setViewportSettings(WebSettings* settings)
@@ -2959,6 +2944,21 @@ TEST_F(ViewportTest, viewportTriggersGpuRasterization)
 
     registerMockedHttpURLLoad("viewport/viewport-gpu-rasterization-expanded-heuristics.html");
     webViewHelper.initializeAndLoad(m_baseURL + "viewport/viewport-gpu-rasterization-expanded-heuristics.html", true, 0, 0, setViewportSettings);
+    webViewHelper.webView()->resize(WebSize(640, 480));
+    EXPECT_TRUE(webViewHelper.webViewImpl()->matchesHeuristicsForGpuRasterizationForTesting());
+
+    registerMockedHttpURLLoad("viewport/viewport-gpu-rasterization-device-width-minimum-scale-1.5.html");
+    webViewHelper.initializeAndLoad(m_baseURL + "viewport/viewport-gpu-rasterization-device-width-minimum-scale-1.5.html", true, 0, 0, setViewportSettings);
+    webViewHelper.webView()->resize(WebSize(640, 480));
+    EXPECT_TRUE(webViewHelper.webViewImpl()->matchesHeuristicsForGpuRasterizationForTesting());
+
+    registerMockedHttpURLLoad("viewport/viewport-gpu-rasterization-device-width-minimum-scale-0.5.html");
+    webViewHelper.initializeAndLoad(m_baseURL + "viewport/viewport-gpu-rasterization-device-width-minimum-scale-0.5.html", true, 0, 0, setViewportSettings);
+    webViewHelper.webView()->resize(WebSize(640, 480));
+    EXPECT_FALSE(webViewHelper.webViewImpl()->matchesHeuristicsForGpuRasterizationForTesting());
+
+    registerMockedHttpURLLoad("viewport/viewport-gpu-rasterization-device-width-non-user-scalable.html");
+    webViewHelper.initializeAndLoad(m_baseURL + "viewport/viewport-gpu-rasterization-device-width-non-user-scalable.html", true, 0, 0, setViewportSettings);
     webViewHelper.webView()->resize(WebSize(640, 480));
     EXPECT_TRUE(webViewHelper.webViewImpl()->matchesHeuristicsForGpuRasterizationForTesting());
 

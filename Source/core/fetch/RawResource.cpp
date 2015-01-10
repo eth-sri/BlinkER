@@ -38,7 +38,7 @@ RawResource::RawResource(const ResourceRequest& resourceRequest, Type type)
 {
 }
 
-void RawResource::appendData(const char* data, int length)
+void RawResource::appendData(const char* data, unsigned length)
 {
     Resource::appendData(data, length);
 
@@ -57,15 +57,12 @@ void RawResource::didAddClient(ResourceClient* c)
     // so a protector is necessary.
     ResourcePtr<RawResource> protect(this);
     RawResourceClient* client = static_cast<RawResourceClient*>(c);
-    size_t redirectCount = redirectChain().size();
-    for (size_t i = 0; i < redirectCount; i++) {
-        RedirectPair redirect = redirectChain()[i];
+    for (const auto& redirect : redirectChain()) {
         ResourceRequest request(redirect.m_request);
         client->redirectReceived(this, request, redirect.m_redirectResponse);
         if (!hasClient(c))
             return;
     }
-    ASSERT(redirectCount == redirectChain().size());
 
     if (!m_response.isNull())
         client->responseReceived(this, m_response);
@@ -78,15 +75,15 @@ void RawResource::didAddClient(ResourceClient* c)
     Resource::didAddClient(client);
 }
 
-void RawResource::willSendRequest(ResourceRequest& request, const ResourceResponse& response)
+void RawResource::willFollowRedirect(ResourceRequest& newRequest, const ResourceResponse& redirectResponse)
 {
     ResourcePtr<RawResource> protect(this);
-    if (!response.isNull()) {
+    if (!redirectResponse.isNull()) {
         ResourceClientWalker<RawResourceClient> w(m_clients);
         while (RawResourceClient* c = w.next())
-            c->redirectReceived(this, request, response);
+            c->redirectReceived(this, newRequest, redirectResponse);
     }
-    Resource::willSendRequest(request, response);
+    Resource::willFollowRedirect(newRequest, redirectResponse);
 }
 
 void RawResource::updateRequest(const ResourceRequest& request)
@@ -173,17 +170,15 @@ bool RawResource::canReuse(const ResourceRequest& newRequest) const
     const HTTPHeaderMap& newHeaders = newRequest.httpHeaderFields();
     const HTTPHeaderMap& oldHeaders = m_resourceRequest.httpHeaderFields();
 
-    HTTPHeaderMap::const_iterator end = newHeaders.end();
-    for (HTTPHeaderMap::const_iterator i = newHeaders.begin(); i != end; ++i) {
-        AtomicString headerName = i->key;
-        if (!shouldIgnoreHeaderForCacheReuse(headerName) && i->value != oldHeaders.get(headerName))
+    for (const auto& header : newHeaders) {
+        AtomicString headerName = header.key;
+        if (!shouldIgnoreHeaderForCacheReuse(headerName) && header.value != oldHeaders.get(headerName))
             return false;
     }
 
-    end = oldHeaders.end();
-    for (HTTPHeaderMap::const_iterator i = oldHeaders.begin(); i != end; ++i) {
-        AtomicString headerName = i->key;
-        if (!shouldIgnoreHeaderForCacheReuse(headerName) && i->value != newHeaders.get(headerName))
+    for (const auto& header : oldHeaders) {
+        AtomicString headerName = header.key;
+        if (!shouldIgnoreHeaderForCacheReuse(headerName) && header.value != newHeaders.get(headerName))
             return false;
     }
 

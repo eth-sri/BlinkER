@@ -27,6 +27,7 @@
 
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ScriptEventListener.h"
+#include "bindings/core/v8/UnionTypesCore.h"
 #include "bindings/core/v8/V8DOMActivityLogger.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Attribute.h"
@@ -107,6 +108,16 @@ void HTMLFormElement::trace(Visitor* visitor)
     visitor->trace(m_pendingAutocompleteEventsQueue);
 #endif
     HTMLElement::trace(visitor);
+}
+
+bool HTMLFormElement::matchesValidityPseudoClasses() const
+{
+    return true;
+}
+
+bool HTMLFormElement::isValidElement()
+{
+    return !checkInvalidControlsAndCollectUnhandled(0, CheckValidityDispatchNoEvent);
 }
 
 bool HTMLFormElement::rendererIsNeeded(const RenderStyle& style)
@@ -263,24 +274,16 @@ static inline HTMLFormControlElement* submitElementFromEvent(const Event* event)
     return 0;
 }
 
-bool HTMLFormElement::validateInteractively(Event* event)
+bool HTMLFormElement::validateInteractively()
 {
-    ASSERT(event);
-    if (!document().page() || noValidate())
-        return true;
-
-    HTMLFormControlElement* submitElement = submitElementFromEvent(event);
-    if (submitElement && submitElement->formNoValidate())
-        return true;
-
     const FormAssociatedElement::List& elements = associatedElements();
     for (unsigned i = 0; i < elements.size(); ++i) {
         if (elements[i]->isFormControlElement())
             toHTMLFormControlElement(elements[i])->hideVisibleValidationMessage();
     }
 
-    WillBeHeapVector<RefPtrWillBeMember<FormAssociatedElement> > unhandledInvalidControls;
-    if (!checkInvalidControlsAndCollectUnhandled(&unhandledInvalidControls))
+    WillBeHeapVector<RefPtrWillBeMember<HTMLFormControlElement> > unhandledInvalidControls;
+    if (!checkInvalidControlsAndCollectUnhandled(&unhandledInvalidControls, CheckValidityDispatchInvalidEvent))
         return true;
     // Because the form has invalid controls, we abort the form submission and
     // show a validation message on a focusable form control.
@@ -292,25 +295,20 @@ bool HTMLFormElement::validateInteractively(Event* event)
     RefPtrWillBeRawPtr<HTMLFormElement> protector(this);
     // Focus on the first focusable control and show a validation message.
     for (unsigned i = 0; i < unhandledInvalidControls.size(); ++i) {
-        FormAssociatedElement* unhandledAssociatedElement = unhandledInvalidControls[i].get();
-        HTMLElement* unhandled = toHTMLElement(unhandledAssociatedElement);
-        if (unhandled->isFocusable() && unhandled->inDocument()) {
-            unhandled->scrollIntoViewIfNeeded(false);
-            unhandled->focus();
-            if (unhandled->isFormControlElement())
-                toHTMLFormControlElement(unhandled)->updateVisibleValidationMessage();
+        HTMLFormControlElement* unhandled = unhandledInvalidControls[i].get();
+        if (unhandled->isFocusable()) {
+            unhandled->showValidationMessage();
             break;
         }
     }
     // Warn about all of unfocusable controls.
     if (document().frame()) {
         for (unsigned i = 0; i < unhandledInvalidControls.size(); ++i) {
-            FormAssociatedElement* unhandledAssociatedElement = unhandledInvalidControls[i].get();
-            HTMLElement* unhandled = toHTMLElement(unhandledAssociatedElement);
-            if (unhandled->isFocusable() && unhandled->inDocument())
+            HTMLFormControlElement* unhandled = unhandledInvalidControls[i].get();
+            if (unhandled->isFocusable())
                 continue;
             String message("An invalid form control with name='%name' is not focusable.");
-            message.replace("%name", unhandledAssociatedElement->name());
+            message.replace("%name", unhandled->name());
             document().addConsoleMessage(ConsoleMessage::create(RenderingMessageSource, ErrorMessageLevel, message));
         }
     }
@@ -324,8 +322,14 @@ void HTMLFormElement::prepareForSubmission(Event* event)
     if (!frame || m_isSubmittingOrInUserJSSubmitEvent)
         return;
 
+    bool skipValidation = !document().page() || noValidate();
+    ASSERT(event);
+    HTMLFormControlElement* submitElement = submitElementFromEvent(event);
+    if (submitElement && submitElement->formNoValidate())
+        skipValidation = true;
+
     // Interactive validation must be done before dispatching the submit event.
-    if (!validateInteractively(event))
+    if (!skipValidation && !validateInteractively())
         return;
 
     m_isSubmittingOrInUserJSSubmitEvent = true;
@@ -449,9 +453,6 @@ void HTMLFormElement::scheduleFormSubmission(PassRefPtrWillBeRawPtr<FormSubmissi
     } else {
         UseCounter::count(document(), UseCounter::FormsSubmitted);
     }
-
-    submission->setReferrer(Referrer(document().outgoingReferrer(), document().referrerPolicy()));
-    submission->setOrigin(document().outgoingOrigin());
 
     targetFrame->navigationScheduler().scheduleFormSubmission(submission);
 }
@@ -615,12 +616,12 @@ PassRefPtrWillBeRawPtr<HTMLFormControlsCollection> HTMLFormElement::elements()
 void HTMLFormElement::collectAssociatedElements(Node& root, FormAssociatedElement::List& elements) const
 {
     elements.clear();
-    for (HTMLElement* element = Traversal<HTMLElement>::firstWithin(root); element; element = Traversal<HTMLElement>::next(*element)) {
+    for (HTMLElement& element : Traversal<HTMLElement>::startsAfter(root)) {
         FormAssociatedElement* associatedElement = 0;
-        if (element->isFormControlElement())
-            associatedElement = toHTMLFormControlElement(element);
-        else if (isHTMLObjectElement(*element))
-            associatedElement = toHTMLObjectElement(element);
+        if (element.isFormControlElement())
+            associatedElement = toHTMLFormControlElement(&element);
+        else if (isHTMLObjectElement(element))
+            associatedElement = toHTMLObjectElement(&element);
         else
             continue;
         if (associatedElement->form()== this)
@@ -649,9 +650,9 @@ const FormAssociatedElement::List& HTMLFormElement::associatedElements() const
 void HTMLFormElement::collectImageElements(Node& root, WillBeHeapVector<RawPtrWillBeMember<HTMLImageElement> >& elements)
 {
     elements.clear();
-    for (HTMLImageElement* image = Traversal<HTMLImageElement>::firstWithin(root); image; image = Traversal<HTMLImageElement>::next(*image)) {
-        if (image->formOwner() == this)
-            elements.append(image);
+    for (HTMLImageElement& image : Traversal<HTMLImageElement>::startsAfter(root)) {
+        if (image.formOwner() == this)
+            elements.append(&image);
     }
 }
 
@@ -716,12 +717,21 @@ HTMLFormControlElement* HTMLFormElement::defaultButton() const
     return 0;
 }
 
-bool HTMLFormElement::checkValidity()
+void HTMLFormElement::setNeedsValidityCheck()
 {
-    return !checkInvalidControlsAndCollectUnhandled(0);
+    // For now unconditionally order style recalculation, which triggers
+    // validity recalculation. In the near future, implement validity cache and
+    // recalculate style only if it changed.
+    pseudoStateChanged(CSSSelector::PseudoValid);
+    pseudoStateChanged(CSSSelector::PseudoInvalid);
 }
 
-bool HTMLFormElement::checkInvalidControlsAndCollectUnhandled(WillBeHeapVector<RefPtrWillBeMember<FormAssociatedElement> >* unhandledInvalidControls)
+bool HTMLFormElement::checkValidity()
+{
+    return !checkInvalidControlsAndCollectUnhandled(0, CheckValidityDispatchInvalidEvent);
+}
+
+bool HTMLFormElement::checkInvalidControlsAndCollectUnhandled(WillBeHeapVector<RefPtrWillBeMember<HTMLFormControlElement> >* unhandledInvalidControls, CheckValidityEventBehavior eventBehavior)
 {
     RefPtrWillBeRawPtr<HTMLFormElement> protector(this);
     // Copy associatedElements because event handlers called from
@@ -735,11 +745,16 @@ bool HTMLFormElement::checkInvalidControlsAndCollectUnhandled(WillBeHeapVector<R
     for (unsigned i = 0; i < elements.size(); ++i) {
         if (elements[i]->form() == this && elements[i]->isFormControlElement()) {
             HTMLFormControlElement* control = toHTMLFormControlElement(elements[i].get());
-            if (!control->checkValidity(unhandledInvalidControls) && control->formOwner() == this)
+            if (!control->checkValidity(unhandledInvalidControls, eventBehavior) && control->formOwner() == this)
                 hasInvalidControls = true;
         }
     }
     return hasInvalidControls;
+}
+
+bool HTMLFormElement::reportValidity()
+{
+    return validateInteractively();
 }
 
 Element* HTMLFormElement::elementFromPastNamesMap(const AtomicString& pastName)
@@ -816,7 +831,7 @@ void HTMLFormElement::copyNonAttributePropertiesFromElement(const Element& sourc
     HTMLElement::copyNonAttributePropertiesFromElement(source);
 }
 
-void HTMLFormElement::anonymousNamedGetter(const AtomicString& name, RefPtrWillBeRawPtr<RadioNodeList>& returnValue0, RefPtrWillBeRawPtr<Element>& returnValue1)
+void HTMLFormElement::anonymousNamedGetter(const AtomicString& name, RadioNodeListOrElement& returnValue)
 {
     // Call getNamedElements twice, first time check if it has a value
     // and let HTMLFormElement update its cache.
@@ -835,12 +850,12 @@ void HTMLFormElement::anonymousNamedGetter(const AtomicString& name, RefPtrWillB
     ASSERT(!elements.isEmpty());
 
     if (elements.size() == 1) {
-        returnValue1 = elements.at(0);
+        returnValue.setElement(elements.at(0));
         return;
     }
 
     bool onlyMatchImg = !elements.isEmpty() && isHTMLImageElement(*elements.first());
-    returnValue0 = radioNodeList(name, onlyMatchImg);
+    returnValue.setRadioNodeList(radioNodeList(name, onlyMatchImg));
 }
 
 void HTMLFormElement::setDemoted(bool demoted)

@@ -1,4 +1,5 @@
-importScripts('worker-test-harness.js');
+importScripts('worker-testharness.js');
+importScripts('../../resources/testharness-helpers.js');
 
 var test_cache_list =
   ['', 'example', 'Another cache name', 'A', 'a', 'ex ample'];
@@ -14,7 +15,7 @@ promise_test(function(test) {
         })
       .then(function() {
           return Promise.all(test_cache_list.map(function(key) {
-              return self.caches.create(key);
+              return self.caches.open(key);
             }));
         })
 

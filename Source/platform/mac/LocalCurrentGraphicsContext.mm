@@ -29,7 +29,9 @@ namespace blink {
 
 LocalCurrentGraphicsContext::LocalCurrentGraphicsContext(GraphicsContext* graphicsContext, IntRect dirtyRect)
     : m_didSetGraphicsContext(false)
-    , m_skiaBitLocker(graphicsContext->canvas(), ThemeMac::inflateRectForAA(dirtyRect))
+    , m_skiaBitLocker(graphicsContext->canvas(),
+                      ThemeMac::inflateRectForAA(dirtyRect),
+                      graphicsContext->deviceScaleFactor())
 {
     m_savedGraphicsContext = graphicsContext;
     graphicsContext->save();
@@ -63,11 +65,6 @@ CGContextRef LocalCurrentGraphicsContext::cgContext()
     CGContextRef cgContext = m_skiaBitLocker.cgContext();
 
     return cgContext;
-}
-
-ContextContainer::ContextContainer(GraphicsContext* graphicsContext) 
-    : m_skiaBitLocker(graphicsContext->canvas())
-{
 }
 
 }

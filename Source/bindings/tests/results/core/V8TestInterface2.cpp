@@ -24,7 +24,7 @@
 
 namespace blink {
 
-const WrapperTypeInfo V8TestInterface2::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterface2::domTemplate, V8TestInterface2::refObject, V8TestInterface2::derefObject, V8TestInterface2::createPersistentHandle, 0, 0, V8TestInterface2::visitDOMWrapper, V8TestInterface2::installConditionallyEnabledMethods, V8TestInterface2::installConditionallyEnabledProperties, 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::Dependent, WrapperTypeInfo::RefCountedObject };
+const WrapperTypeInfo V8TestInterface2::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterface2::domTemplate, V8TestInterface2::refObject, V8TestInterface2::derefObject, V8TestInterface2::trace, 0, 0, V8TestInterface2::visitDOMWrapper, V8TestInterface2::installConditionallyEnabledMethods, V8TestInterface2::installConditionallyEnabledProperties, 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::Dependent, WrapperTypeInfo::RefCountedObject };
 
 // This static member must be declared by DEFINE_WRAPPERTYPEINFO in TestInterface2.h.
 // For details, see the comment of DEFINE_WRAPPERTYPEINFO in
@@ -412,16 +412,16 @@ static void namedPropertyEnumeratorCallback(const v8::PropertyCallbackInfo<v8::A
 
 } // namespace TestInterface2V8Internal
 
-void V8TestInterface2::visitDOMWrapper(ScriptWrappableBase* internalPointer, const v8::Persistent<v8::Object>& wrapper, v8::Isolate* isolate)
+void V8TestInterface2::visitDOMWrapper(ScriptWrappableBase* scriptWrappableBase, const v8::Persistent<v8::Object>& wrapper, v8::Isolate* isolate)
 {
-    TestInterface2* impl = internalPointer->toImpl<TestInterface2>();
+    TestInterface2* impl = scriptWrappableBase->toImpl<TestInterface2>();
     // The ownerNode() method may return a reference or a pointer.
     if (Node* owner = WTF::getPtr(impl->ownerNode())) {
-        Node* root = V8GCController::opaqueRootForGC(owner, isolate);
+        Node* root = V8GCController::opaqueRootForGC(isolate, owner);
         isolate->SetReferenceFromGroup(v8::UniqueId(reinterpret_cast<intptr_t>(root)), wrapper);
         return;
     }
-    setObjectGroup(internalPointer, wrapper, isolate);
+    setObjectGroup(scriptWrappableBase, wrapper, isolate);
 }
 
 static const V8DOMConfiguration::MethodConfiguration V8TestInterface2Methods[] = {
@@ -463,8 +463,10 @@ static void installV8TestInterface2Template(v8::Handle<v8::FunctionTemplate> fun
         isolate);
     functionTemplate->SetCallHandler(V8TestInterface2::constructorCallback);
     functionTemplate->SetLength(0);
-    v8::Local<v8::ObjectTemplate> instanceTemplate ALLOW_UNUSED = functionTemplate->InstanceTemplate();
-    v8::Local<v8::ObjectTemplate> prototypeTemplate ALLOW_UNUSED = functionTemplate->PrototypeTemplate();
+    v8::Local<v8::ObjectTemplate> instanceTemplate = functionTemplate->InstanceTemplate();
+    ALLOW_UNUSED_LOCAL(instanceTemplate);
+    v8::Local<v8::ObjectTemplate> prototypeTemplate = functionTemplate->PrototypeTemplate();
+    ALLOW_UNUSED_LOCAL(prototypeTemplate);
     if (RuntimeEnabledFeatures::featureNameEnabled()) {
         static const V8DOMConfiguration::ConstantConfiguration constantConfiguration = {"CONST_VALUE_1", 1, 0, 0, V8DOMConfiguration::ConstantTypeUnsignedShort};
         V8DOMConfiguration::installConstants(functionTemplate, prototypeTemplate, &constantConfiguration, 1, isolate);
@@ -497,21 +499,14 @@ TestInterface2* V8TestInterface2::toImplWithTypeCheck(v8::Isolate* isolate, v8::
     return hasInstance(value, isolate) ? blink::toScriptWrappableBase(v8::Handle<v8::Object>::Cast(value))->toImpl<TestInterface2>() : 0;
 }
 
-
-void V8TestInterface2::refObject(ScriptWrappableBase* internalPointer)
+void V8TestInterface2::refObject(ScriptWrappableBase* scriptWrappableBase)
 {
-    internalPointer->toImpl<TestInterface2>()->ref();
+    scriptWrappableBase->toImpl<TestInterface2>()->ref();
 }
 
-void V8TestInterface2::derefObject(ScriptWrappableBase* internalPointer)
+void V8TestInterface2::derefObject(ScriptWrappableBase* scriptWrappableBase)
 {
-    internalPointer->toImpl<TestInterface2>()->deref();
-}
-
-WrapperPersistentNode* V8TestInterface2::createPersistentHandle(ScriptWrappableBase* internalPointer)
-{
-    ASSERT_NOT_REACHED();
-    return 0;
+    scriptWrappableBase->toImpl<TestInterface2>()->deref();
 }
 
 template<>

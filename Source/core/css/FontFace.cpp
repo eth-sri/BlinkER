@@ -47,6 +47,8 @@
 #include "core/css/StylePropertySet.h"
 #include "core/css/StyleRule.h"
 #include "core/css/parser/CSSParser.h"
+#include "core/dom/DOMArrayBuffer.h"
+#include "core/dom/DOMArrayBufferView.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
@@ -54,11 +56,9 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
-#include "core/svg/SVGFontFaceElement.h"
-#include "core/svg/SVGFontFaceSource.h"
-#include "core/svg/SVGRemoteFontFaceSource.h"
 #include "platform/FontFamilyNames.h"
 #include "platform/SharedBuffer.h"
+#include "wtf/ArrayBufferView.h"
 
 namespace blink {
 
@@ -80,14 +80,14 @@ PassRefPtrWillBeRawPtr<FontFace> FontFace::create(ExecutionContext* context, con
     return fontFace.release();
 }
 
-PassRefPtrWillBeRawPtr<FontFace> FontFace::create(ExecutionContext* context, const AtomicString& family, PassRefPtr<ArrayBuffer> source, const FontFaceDescriptors& descriptors)
+PassRefPtrWillBeRawPtr<FontFace> FontFace::create(ExecutionContext* context, const AtomicString& family, PassRefPtr<DOMArrayBuffer> source, const FontFaceDescriptors& descriptors)
 {
     RefPtrWillBeRawPtr<FontFace> fontFace = adoptRefWillBeNoop(new FontFace(context, family, descriptors));
     fontFace->initCSSFontFace(static_cast<const unsigned char*>(source->data()), source->byteLength());
     return fontFace.release();
 }
 
-PassRefPtrWillBeRawPtr<FontFace> FontFace::create(ExecutionContext* context, const AtomicString& family, PassRefPtr<ArrayBufferView> source, const FontFaceDescriptors& descriptors)
+PassRefPtrWillBeRawPtr<FontFace> FontFace::create(ExecutionContext* context, const AtomicString& family, PassRefPtr<DOMArrayBufferView> source, const FontFaceDescriptors& descriptors)
 {
     RefPtrWillBeRawPtr<FontFace> fontFace = adoptRefWillBeNoop(new FontFace(context, family, descriptors));
     fontFace->initCSSFontFace(static_cast<const unsigned char*>(source->baseAddress()), source->byteLength());
@@ -509,48 +509,23 @@ void FontFace::initCSSFontFace(Document* document, PassRefPtrWillBeRawPtr<CSSVal
     CSSValueList* srcList = toCSSValueList(src.get());
     int srcLength = srcList->length();
 
-    bool foundSVGFont = false;
-
     for (int i = 0; i < srcLength; i++) {
         // An item in the list either specifies a string (local font name) or a URL (remote font to download).
         CSSFontFaceSrcValue* item = toCSSFontFaceSrcValue(srcList->item(i));
         OwnPtrWillBeRawPtr<CSSFontFaceSource> source = nullptr;
 
-#if ENABLE(SVG_FONTS)
-        foundSVGFont = item->isSVGFontFaceSrc() || item->svgFontFaceElement();
-#endif
         if (!item->isLocal()) {
             Settings* settings = document ? document->frame() ? document->frame()->settings() : 0 : 0;
-            bool allowDownloading = foundSVGFont || (settings && settings->downloadableBinaryFontsEnabled());
+            bool allowDownloading = settings && settings->downloadableBinaryFontsEnabled();
             if (allowDownloading && item->isSupportedFormat() && document) {
                 FontResource* fetched = item->fetch(document);
                 if (fetched) {
                     FontLoader* fontLoader = document->styleEngine()->fontSelector()->fontLoader();
-
-#if ENABLE(SVG_FONTS)
-                    if (foundSVGFont) {
-                        source = adoptPtrWillBeNoop(new SVGRemoteFontFaceSource(item->resource(), fetched, fontLoader));
-                    } else
-#endif
-                    {
-                        source = adoptPtrWillBeNoop(new RemoteFontFaceSource(fetched, fontLoader));
-                    }
+                    source = adoptPtrWillBeNoop(new RemoteFontFaceSource(fetched, fontLoader));
                 }
             }
         } else {
-#if ENABLE(SVG_FONTS)
-            if (item->svgFontFaceElement()) {
-                RefPtrWillBeRawPtr<SVGFontFaceElement> fontfaceElement = item->svgFontFaceElement();
-                // SVGFontFaceSource assumes that it is the case where <font-face> element resides in the same document.
-                // We put a RELEASE_ASSERT here as it will cause UAF if the assumption is false.
-                RELEASE_ASSERT(fontfaceElement->inDocument());
-                RELEASE_ASSERT(fontfaceElement->document() == document);
-                source = adoptPtrWillBeNoop(new SVGFontFaceSource(fontfaceElement.get()));
-            } else
-#endif
-            {
-                source = adoptPtrWillBeNoop(new LocalFontFaceSource(item->resource()));
-            }
+            source = adoptPtrWillBeNoop(new LocalFontFaceSource(item->resource()));
         }
 
         if (source)

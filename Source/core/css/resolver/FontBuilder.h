@@ -41,17 +41,14 @@ class FontBuilder {
     STACK_ALLOCATED();
     WTF_MAKE_NONCOPYABLE(FontBuilder);
 public:
-    FontBuilder();
+    FontBuilder(const Document&);
 
-    // FIXME: The name is probably wrong, but matches StyleResolverState callsite for consistency.
-    void initForStyleResolve(const Document&, RenderStyle*);
-
+    void setStyle(RenderStyle* style) { m_style = style; }
     void setInitial(float effectiveZoom);
 
     void didChangeFontParameters(bool);
 
     void inheritFrom(const FontDescription&);
-    void fromSystemFont(CSSValueID, float effectiveZoom);
 
     FontFamily standardFontFamily() const;
     AtomicString standardFontFamilyName() const;
@@ -107,7 +104,7 @@ private:
 
     float getComputedSizeFromSpecifiedSize(FontDescription&, float effectiveZoom, float specifiedSize);
 
-    RawPtrWillBeMember<const Document> m_document;
+    const Document& m_document;
     // FIXME: This member is here on a short-term lease. The plan is to remove
     // any notion of RenderStyle from here, allowing FontBuilder to build Font objects
     // directly, rather than as a byproduct of calling RenderStyle::setFontDescription.

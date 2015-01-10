@@ -6,7 +6,6 @@
 <script>
 function test()
 {
-    WebInspector.inspectorView._panel("network")._networkLogView._reset();
     WebInspector.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.CachedResourcesLoaded, step2);
     WebInspector.resourceTreeModel._fetchResourceTree();
 
@@ -14,7 +13,7 @@ function test()
     {
         function format(resource)
         {
-            return resource.type.name() + " " + resource.mimeType + " " + resource.url;
+            return resource.resourceType().name() + " " + resource.mimeType + " " + resource.url;
         }
 
         InspectorTest.dumpResources(format);

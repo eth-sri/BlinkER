@@ -1,4 +1,5 @@
-importScripts('worker-test-harness.js');
+importScripts('worker-testharness.js');
+importScripts('../../resources/testharness-helpers.js');
 importScripts('test-helpers.js');
 
 var URL = 'https://www.example.com/test.html';
@@ -68,6 +69,15 @@ test(function() {
     assert_equals(request2.headers.getAll('X-ServiceWorker-Foo')[1], 'foo2',
                   'Request.headers should match');
     assert_equals(request2.headers.getAll('X-ServiceWorker-Bar')[0], 'bar',
+                  'Request.headers should match');
+    var request3 = new Request(URL, {headers: [['X-ServiceWorker-Foo', 'foo1'],
+                                               ['X-ServiceWorker-Foo', 'foo2'],
+                                               ['X-ServiceWorker-Bar', 'bar']]});
+    assert_equals(request3.headers.getAll('X-ServiceWorker-Foo')[0], 'foo1',
+                  'Request.headers should match');
+    assert_equals(request3.headers.getAll('X-ServiceWorker-Foo')[1], 'foo2',
+                  'Request.headers should match');
+    assert_equals(request3.headers.getAll('X-ServiceWorker-Bar')[0], 'bar',
                   'Request.headers should match');
 }, 'Request header test in ServiceWorkerGlobalScope');
 

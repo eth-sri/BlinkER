@@ -46,7 +46,7 @@ class ScriptStreamer;
 // A ResourcePtr alone does not prevent the underlying Resource
 // from purging its data buffer. This class holds a dummy client open for its
 // lifetime in order to guarantee that the data buffer will not be purged.
-class PendingScript FINAL : public ResourceOwner<ScriptResource> {
+class PendingScript final : public ResourceOwner<ScriptResource> {
     ALLOW_ONLY_INLINE_ALLOCATION();
 public:
     enum Type {
@@ -55,49 +55,12 @@ public:
         Async
     };
 
-    PendingScript()
-        : m_watchingForLoad(false)
-        , m_startingPosition(TextPosition::belowRangePosition())
-        , m_asyncEventAction(NULL)
-    {
-    }
-
-    PendingScript(Element* element, ScriptResource* resource)
-        : m_watchingForLoad(false)
-        , m_element(element)
-        , m_asyncEventAction(NULL)
-    {
-        setScriptResource(resource);
-    }
-
-    PendingScript(const PendingScript& other)
-        : ResourceOwner(other)
-        , m_watchingForLoad(other.m_watchingForLoad)
-        , m_element(other.m_element)
-        , m_startingPosition(other.m_startingPosition)
-        , m_streamer(other.m_streamer)
-        , m_log(other.m_log)
-        , m_asyncEventAction(other.m_asyncEventAction)
-    {
-        setScriptResource(other.resource());
-    }
-
+    PendingScript();
+    PendingScript(Element*, ScriptResource*);
+    PendingScript(const PendingScript&);
     ~PendingScript();
 
-    PendingScript& operator=(const PendingScript& other)
-    {
-        if (this == &other)
-            return *this;
-
-        m_watchingForLoad = other.m_watchingForLoad;
-        m_element = other.m_element;
-        m_startingPosition = other.m_startingPosition;
-        m_streamer = other.m_streamer;
-        m_log = other.m_log;
-        m_asyncEventAction = other.m_asyncEventAction;
-        this->ResourceOwner<ScriptResource, ScriptResourceClient>::operator=(other);
-        return *this;
-    }
+    PendingScript& operator=(const PendingScript&);
 
     TextPosition startingPosition() const { return m_startingPosition; }
     void setStartingPosition(const TextPosition& position) { m_startingPosition = position; }
@@ -125,12 +88,7 @@ public:
 
     ScriptSourceCode getSource(const KURL& documentURL, bool& errorOccurred) const;
 
-    void setStreamer(PassRefPtr<ScriptStreamer> streamer)
-    {
-        ASSERT(!m_streamer);
-        ASSERT(!m_watchingForLoad);
-        m_streamer = streamer;
-    }
+    void setStreamer(PassRefPtr<ScriptStreamer>);
 
     bool isReady() const;
 
@@ -138,11 +96,13 @@ private:
     bool m_watchingForLoad;
     RefPtrWillBeMember<Element> m_element;
     TextPosition m_startingPosition; // Only used for inline script tags.
+
     RefPtr<ScriptStreamer> m_streamer;
+
     RefPtr<EventRacerLog> m_log;
     EventAction *m_asyncEventAction;
 };
 
-}
+} // namespace blink
 
-#endif
+#endif // PendingScript_h

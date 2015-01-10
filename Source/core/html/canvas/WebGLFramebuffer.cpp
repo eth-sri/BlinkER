@@ -39,26 +39,26 @@ namespace {
         return object ? object->object() : 0;
     }
 
-    class WebGLRenderbufferAttachment FINAL : public WebGLFramebuffer::WebGLAttachment {
+    class WebGLRenderbufferAttachment final : public WebGLFramebuffer::WebGLAttachment {
     public:
         static PassRefPtrWillBeRawPtr<WebGLFramebuffer::WebGLAttachment> create(WebGLRenderbuffer*);
 
-        virtual void trace(Visitor*) OVERRIDE;
+        virtual void trace(Visitor*) override;
 
     private:
         explicit WebGLRenderbufferAttachment(WebGLRenderbuffer*);
         WebGLRenderbufferAttachment() { }
 
-        virtual GLsizei width() const OVERRIDE;
-        virtual GLsizei height() const OVERRIDE;
-        virtual GLenum format() const OVERRIDE;
-        virtual GLenum type() const OVERRIDE;
-        virtual WebGLSharedObject* object() const OVERRIDE;
-        virtual bool isSharedObject(WebGLSharedObject*) const OVERRIDE;
-        virtual bool valid() const OVERRIDE;
-        virtual void onDetached(blink::WebGraphicsContext3D*) OVERRIDE;
-        virtual void attach(blink::WebGraphicsContext3D*, GLenum attachment) OVERRIDE;
-        virtual void unattach(blink::WebGraphicsContext3D*, GLenum attachment) OVERRIDE;
+        virtual GLsizei width() const override;
+        virtual GLsizei height() const override;
+        virtual GLenum format() const override;
+        virtual GLenum type() const override;
+        virtual WebGLSharedObject* object() const override;
+        virtual bool isSharedObject(WebGLSharedObject*) const override;
+        virtual bool valid() const override;
+        virtual void onDetached(blink::WebGraphicsContext3D*) override;
+        virtual void attach(blink::WebGraphicsContext3D*, GLenum attachment) override;
+        virtual void unattach(blink::WebGraphicsContext3D*, GLenum attachment) override;
 
         RefPtrWillBeMember<WebGLRenderbuffer> m_renderbuffer;
     };
@@ -147,26 +147,26 @@ namespace {
         return 0;
     }
 
-    class WebGLTextureAttachment FINAL : public WebGLFramebuffer::WebGLAttachment {
+    class WebGLTextureAttachment final : public WebGLFramebuffer::WebGLAttachment {
     public:
         static PassRefPtrWillBeRawPtr<WebGLFramebuffer::WebGLAttachment> create(WebGLTexture*, GLenum target, GLint level);
 
-        virtual void trace(Visitor*) OVERRIDE;
+        virtual void trace(Visitor*) override;
 
     private:
         WebGLTextureAttachment(WebGLTexture*, GLenum target, GLint level);
         WebGLTextureAttachment() { }
 
-        virtual GLsizei width() const OVERRIDE;
-        virtual GLsizei height() const OVERRIDE;
-        virtual GLenum format() const OVERRIDE;
-        virtual GLenum type() const OVERRIDE;
-        virtual WebGLSharedObject* object() const OVERRIDE;
-        virtual bool isSharedObject(WebGLSharedObject*) const OVERRIDE;
-        virtual bool valid() const OVERRIDE;
-        virtual void onDetached(blink::WebGraphicsContext3D*) OVERRIDE;
-        virtual void attach(blink::WebGraphicsContext3D*, GLenum attachment) OVERRIDE;
-        virtual void unattach(blink::WebGraphicsContext3D*, GLenum attachment) OVERRIDE;
+        virtual GLsizei width() const override;
+        virtual GLsizei height() const override;
+        virtual GLenum format() const override;
+        virtual GLenum type() const override;
+        virtual WebGLSharedObject* object() const override;
+        virtual bool isSharedObject(WebGLSharedObject*) const override;
+        virtual bool valid() const override;
+        virtual void onDetached(blink::WebGraphicsContext3D*) override;
+        virtual void attach(blink::WebGraphicsContext3D*, GLenum attachment) override;
+        virtual void unattach(blink::WebGraphicsContext3D*, GLenum attachment) override;
 
         RefPtrWillBeMember<WebGLTexture> m_texture;
         GLenum m_target;
@@ -253,6 +253,7 @@ namespace {
         case GL_RGBA4:
         case GL_RGB5_A1:
         case GL_RGB565:
+        case GL_SRGB8_ALPHA8_EXT:
             return true;
         default:
             return false;
@@ -392,7 +393,8 @@ bool WebGLFramebuffer::isAttachmentComplete(WebGLAttachment* attachedObject, GLe
             }
         } else if (object->isTexture()) {
             GLenum type = attachedObject->type();
-            if (internalformat != GL_RGBA && internalformat != GL_RGB) {
+            if (internalformat != GL_RGBA && internalformat != GL_RGB
+                && !(internalformat == GL_SRGB_ALPHA_EXT && context()->extensionEnabled(EXTsRGBName))) {
                 *reason = "the internalformat of the attached texture is not color-renderable";
                 return false;
             }

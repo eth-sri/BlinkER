@@ -1,5 +1,7 @@
 var initialize_Timeline = function() {
 
+InspectorTest.preloadPanel("timeline");
+
 // Scrub values when printing out these properties in the record or data field.
 InspectorTest.timelinePropertyFormatters = {
     children: "formatAsTypeName",
@@ -31,8 +33,17 @@ InspectorTest.timelinePropertyFormatters = {
     thread: "formatAsTypeName"
 };
 
+InspectorTest.switchTimelineToWaterfallMode = function()
+{
+    if (!Runtime.experiments.isEnabled("timelineOnTraceEvents"))
+        return;
+    if (WebInspector.panels.timeline._flameChartToggleButton.toggled)
+        WebInspector.panels.timeline._flameChartToggleButton.element.click();
+}
+
 InspectorTest.timelinePresentationModel = function()
 {
+    InspectorTest.switchTimelineToWaterfallMode();
     return WebInspector.panels.timeline._currentViews[0]._presentationModel;
 }
 
@@ -53,7 +64,7 @@ InspectorTest.timelineUIUtils = function()
 
 InspectorTest.startTimeline = function(callback)
 {
-    var panel = WebInspector.inspectorView._panel("timeline");
+    var panel = WebInspector.panels.timeline;
     function onRecordingStarted()
     {
         panel._model.removeEventListener(WebInspector.TimelineModel.Events.RecordingStarted, onRecordingStarted, this)
@@ -65,7 +76,7 @@ InspectorTest.startTimeline = function(callback)
 
 InspectorTest.stopTimeline = function(callback)
 {
-    var panel = WebInspector.inspectorView._panel("timeline");
+    var panel = WebInspector.panels.timeline;
     function didStop()
     {
         panel._model.removeEventListener(WebInspector.TimelineModel.Events.RecordingStopped, didStop, this)
@@ -105,7 +116,7 @@ InspectorTest.invokeAsyncWithTimeline = function(functionName, doneCallback)
 
 InspectorTest.loadTimelineRecords = function(records)
 {
-    var model = WebInspector.inspectorView._showPanel("timeline")._model;
+    var model = WebInspector.panels.timeline._model;
     model.reset();
     records.forEach(model._addRecord, model);
 }
@@ -269,13 +280,23 @@ InspectorTest.printTimelineRecordProperties = function(record)
 
 InspectorTest.findFirstTimelineRecord = function(type)
 {
+    return InspectorTest.findTimelineRecord(type, 0);
+}
+
+// Find the (n+1)th timeline record of a specific type.
+InspectorTest.findTimelineRecord = function(type, n)
+{
     var result;
     function findByType(record)
     {
         if (record.type() !== type)
             return false;
-        result = record;
-        return true;
+        if (n === 0) {
+            result = record;
+            return true;
+        }
+        n--;
+        return false;
     }
     InspectorTest.timelineModel().forAllRecords(findByType);
     return result;

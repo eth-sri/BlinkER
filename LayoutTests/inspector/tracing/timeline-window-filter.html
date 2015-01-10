@@ -9,10 +9,10 @@ function test()
 {
     var timelineData = InspectorTest.timelineData();
 
-    WebInspector.inspectorView._showPanel("timeline");
     var timeline = WebInspector.panels.timeline;
     var overviewPane = timeline._overviewPane;
     var model = timeline._model;
+    InspectorTest.switchTimelineToWaterfallMode();
 
     function createFileReader(file, delegate)
     {

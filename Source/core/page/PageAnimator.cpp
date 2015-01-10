@@ -16,7 +16,7 @@
 
 namespace blink {
 
-PageAnimator::PageAnimator(Page* page)
+PageAnimator::PageAnimator(Page& page)
     : m_page(page)
     , m_animationFramePending(false)
     , m_servicingAnimations(false)
@@ -24,12 +24,23 @@ PageAnimator::PageAnimator(Page* page)
 {
 }
 
+PassRefPtrWillBeRawPtr<PageAnimator> PageAnimator::create(Page& page)
+{
+    return adoptRefWillBeNoop(new PageAnimator(page));
+}
+
+void PageAnimator::trace(Visitor* visitor)
+{
+    visitor->trace(m_page);
+}
+
 void PageAnimator::serviceScriptedAnimations(double monotonicAnimationStartTime)
 {
+    RefPtrWillBeRawPtr<PageAnimator> protector(this);
     m_animationFramePending = false;
     TemporaryChange<bool> servicing(m_servicingAnimations, true);
 
-    WillBeHeapVector<RefPtrWillBeMember<Document> > documents;
+    WillBeHeapVector<RefPtrWillBeMember<Document>> documents;
     for (Frame* frame = m_page->mainFrame(); frame; frame = frame->tree().traverseNext()) {
         if (frame->isLocalFrame())
             documents.append(toLocalFrame(frame)->document());
@@ -40,8 +51,8 @@ void PageAnimator::serviceScriptedAnimations(double monotonicAnimationStartTime)
             documents[i]->view()->serviceScrollAnimations(monotonicAnimationStartTime);
 
             if (const FrameView::ScrollableAreaSet* scrollableAreas = documents[i]->view()->scrollableAreas()) {
-                for (FrameView::ScrollableAreaSet::iterator it = scrollableAreas->begin(); it != scrollableAreas->end(); ++it)
-                    (*it)->serviceScrollAnimations(monotonicAnimationStartTime);
+                for (ScrollableArea* scrollableArea : *scrollableAreas)
+                    scrollableArea->serviceScrollAnimations(monotonicAnimationStartTime);
             }
         }
     }
@@ -65,7 +76,7 @@ void PageAnimator::scheduleVisualUpdate()
 
 void PageAnimator::updateLayoutAndStyleForPainting(LocalFrame* rootFrame)
 {
-    RefPtr<FrameView> view = rootFrame->view();
+    RefPtrWillBeRawPtr<FrameView> view = rootFrame->view();
 
     TemporaryChange<bool> servicing(m_updatingLayoutAndStyleForPainting, true);
 

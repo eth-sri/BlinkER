@@ -50,6 +50,7 @@
 #include "platform/graphics/GraphicsContextStateSaver.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/RecordingImageBufferSurface.h"
+#include "platform/graphics/StaticBitmapImage.h"
 #include "platform/graphics/UnacceleratedImageBufferSurface.h"
 #include "platform/graphics/gpu/WebGLImageBufferSurface.h"
 #include "platform/transforms/AffineTransform.h"
@@ -167,7 +168,8 @@ CanvasRenderingContext* HTMLCanvasElement::getContext(const String& type, Canvas
             return 0;
         if (!m_context) {
             blink::Platform::current()->histogramEnumeration("Canvas.ContextType", Context2d, ContextTypeCount);
-            m_context = CanvasRenderingContext2D::create(this, static_cast<Canvas2DContextAttributes*>(attrs), document().inQuirksMode());
+
+            m_context = CanvasRenderingContext2D::create(this, static_cast<Canvas2DContextAttributes*>(attrs), document());
             setNeedsCompositingUpdate();
         }
         return m_context.get();
@@ -306,7 +308,7 @@ void HTMLCanvasElement::reset()
                     renderBox()->contentChanged(CanvasChanged);
             }
             if (hadImageBuffer)
-                renderer->setShouldDoFullPaintInvalidation(true);
+                renderer->setShouldDoFullPaintInvalidation();
         }
     }
 
@@ -472,6 +474,61 @@ bool HTMLCanvasElement::shouldAccelerate(const IntSize& size) const
     return true;
 }
 
+class UnacceleratedSurfaceFactory : public RecordingImageBufferFallbackSurfaceFactory {
+public:
+    virtual PassOwnPtr<ImageBufferSurface> createSurface(const IntSize& size, OpacityMode opacityMode)
+    {
+        return adoptPtr(new UnacceleratedImageBufferSurface(size, opacityMode));
+    }
+
+    virtual ~UnacceleratedSurfaceFactory() { }
+};
+
+class Accelerated2dSurfaceFactory : public RecordingImageBufferFallbackSurfaceFactory {
+public:
+    Accelerated2dSurfaceFactory(int msaaSampleCount) : m_msaaSampleCount(msaaSampleCount) { }
+
+    virtual PassOwnPtr<ImageBufferSurface> createSurface(const IntSize& size, OpacityMode opacityMode)
+    {
+        OwnPtr<ImageBufferSurface> surface = adoptPtr(new Canvas2DImageBufferSurface(size, opacityMode, m_msaaSampleCount));
+        if (surface->isValid())
+            return surface.release();
+        return adoptPtr(new UnacceleratedImageBufferSurface(size, opacityMode));
+    }
+
+    virtual ~Accelerated2dSurfaceFactory() { }
+private:
+    int m_msaaSampleCount;
+};
+
+PassOwnPtr<RecordingImageBufferFallbackSurfaceFactory> HTMLCanvasElement::createSurfaceFactory(const IntSize& deviceSize, int* msaaSampleCount) const
+{
+    *msaaSampleCount = 0;
+    OwnPtr<RecordingImageBufferFallbackSurfaceFactory> surfaceFactory;
+    if (shouldAccelerate(deviceSize)) {
+        if (document().settings())
+            *msaaSampleCount = document().settings()->accelerated2dCanvasMSAASampleCount();
+        surfaceFactory = adoptPtr(new Accelerated2dSurfaceFactory(*msaaSampleCount));
+    } else {
+        surfaceFactory = adoptPtr(new UnacceleratedSurfaceFactory());
+    }
+    return surfaceFactory.release();
+}
+
+bool HTMLCanvasElement::shouldUseDisplayList(const IntSize& deviceSize)
+{
+    if (RuntimeEnabledFeatures::forceDisplayList2dCanvasEnabled())
+        return true;
+
+    if (!RuntimeEnabledFeatures::displayList2dCanvasEnabled())
+        return false;
+
+    if (shouldAccelerate(deviceSize))
+        return false;
+
+    return true;
+}
+
 PassOwnPtr<ImageBufferSurface> HTMLCanvasElement::createImageBufferSurface(const IntSize& deviceSize, int* msaaSampleCount)
 {
     OpacityMode opacityMode = !m_context || m_context->hasAlpha() ? NonOpaque : Opaque;
@@ -485,25 +542,20 @@ PassOwnPtr<ImageBufferSurface> HTMLCanvasElement::createImageBufferSurface(const
         // FIXME: Actually, avoid setting m_accelerationDisabled at all when
         // doing GPU-based rasterization.
         if (m_accelerationDisabled)
-            return adoptPtr(new UnacceleratedImageBufferSurface(size(), opacityMode));
-        return adoptPtr(new WebGLImageBufferSurface(size(), opacityMode));
+            return adoptPtr(new UnacceleratedImageBufferSurface(deviceSize, opacityMode));
+        return adoptPtr(new WebGLImageBufferSurface(deviceSize, opacityMode));
     }
 
-    if (RuntimeEnabledFeatures::displayList2dCanvasEnabled()) {
-        OwnPtr<ImageBufferSurface> surface = adoptPtr(new RecordingImageBufferSurface(size(), opacityMode));
+    OwnPtr<RecordingImageBufferFallbackSurfaceFactory> surfaceFactory = createSurfaceFactory(deviceSize, msaaSampleCount);
+
+    if (shouldUseDisplayList(deviceSize)) {
+        OwnPtr<ImageBufferSurface> surface = adoptPtr(new RecordingImageBufferSurface(deviceSize, surfaceFactory.release(), opacityMode));
         if (surface->isValid())
             return surface.release();
+        surfaceFactory = createSurfaceFactory(deviceSize, msaaSampleCount); // recreate because old previous one was released
     }
 
-    if (shouldAccelerate(deviceSize)) {
-        if (document().settings())
-            *msaaSampleCount = document().settings()->accelerated2dCanvasMSAASampleCount();
-        OwnPtr<ImageBufferSurface> surface = adoptPtr(new Canvas2DImageBufferSurface(size(), opacityMode, *msaaSampleCount));
-        if (surface->isValid())
-            return surface.release();
-    }
-
-    return adoptPtr(new UnacceleratedImageBufferSurface(size(), opacityMode));
+    return surfaceFactory->createSurface(deviceSize, opacityMode);
 }
 
 void HTMLCanvasElement::createImageBuffer()
@@ -731,18 +783,25 @@ PassRefPtr<Image> HTMLCanvasElement::getSourceImageForCanvas(SourceImageMode mod
         return nullptr;
     }
 
-    if (mode == CopySourceImageIfVolatile) {
-        *status = NormalSourceImageStatus;
-        return copiedImage();
-    }
-
     if (m_context && m_context->is3d()) {
         m_context->paintRenderingResultsToCanvas();
         *status = ExternalSourceImageStatus;
-    } else {
-        *status = NormalSourceImageStatus;
+
+        // can't create SkImage from WebGLImageBufferSurface (contains only SkBitmap)
+        return m_imageBuffer->copyImage(DontCopyBackingStore, Unscaled);
     }
-    return m_imageBuffer->copyImage(DontCopyBackingStore, Unscaled);
+
+    RefPtr<SkImage> image = m_imageBuffer->newImageSnapshot();
+    if (image) {
+        *status = NormalSourceImageStatus;
+
+        return StaticBitmapImage::create(image.release());
+    }
+
+
+    *status = InvalidSourceImageStatus;
+
+    return nullptr;
 }
 
 bool HTMLCanvasElement::wouldTaintOrigin(SecurityOrigin*) const

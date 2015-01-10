@@ -77,12 +77,12 @@ enum WebAXRole {
     WebAXRoleApplication,
     WebAXRoleArticle,
     WebAXRoleBanner,
+    WebAXRoleBlockquote,
     WebAXRoleBrowser,
     WebAXRoleBusyIndicator,
     WebAXRoleButton,
     WebAXRoleCanvas,
     WebAXRoleCell,
-    WebAXRoleCheckBoxMenuItem,
     WebAXRoleCheckBox,
     WebAXRoleColorWell,
     WebAXRoleColumnHeader,
@@ -94,6 +94,7 @@ enum WebAXRole {
     WebAXRoleDateTime,
     WebAXRoleDefinition,
     WebAXRoleDescriptionListDetail,
+    WebAXRoleDescriptionList,
     WebAXRoleDescriptionListTerm,
     WebAXRoleDetails,
     WebAXRoleDialog,
@@ -138,15 +139,19 @@ enum WebAXRole {
     WebAXRoleMenuBar,
     WebAXRoleMenuButton,
     WebAXRoleMenuItem,
+    WebAXRoleMenuItemCheckBox,
+    WebAXRoleMenuItemRadio,
     WebAXRoleMenuListOption,
     WebAXRoleMenuListPopup,
     WebAXRoleMenu,
+    WebAXRoleMeter,
     WebAXRoleNavigation,
     WebAXRoleNone,
     WebAXRoleNote,
     WebAXRoleOutline,
     WebAXRoleParagraph,
     WebAXRolePopUpButton,
+    WebAXRolePre,
     WebAXRolePresentational,
     WebAXRoleProgressIndicator,
     WebAXRoleRadioButton,
@@ -198,7 +203,6 @@ enum WebAXRole {
 enum WebAXState {
     WebAXStateBusy,
     WebAXStateChecked,
-    WebAXStateCollapsed,
     WebAXStateEnabled,
     WebAXStateExpanded,
     WebAXStateFocusable,
@@ -226,6 +230,15 @@ enum WebAXTextDirection {
     WebAXTextDirectionRL,
     WebAXTextDirectionTB,
     WebAXTextDirectionBT
+};
+
+// Expanded State.
+// These values must match blink::AccessibilityExpanded values.
+// Enforced in AssertMatchingEnums.cpp.
+enum WebAXExpanded {
+    WebAXExpandedUndefined = 0,
+    WebAXExpandedCollapsed,
+    WebAXExpandedExpanded
 };
 
 } // namespace blink

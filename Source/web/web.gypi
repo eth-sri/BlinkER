@@ -71,6 +71,8 @@
       'PageScaleConstraintsSet.h',
       'PageWidgetDelegate.cpp',
       'PageWidgetDelegate.h',
+      'PluginPlaceholderImpl.cpp',
+      'PluginPlaceholderImpl.h',
       'PopupContainer.cpp',
       'PopupContainer.h',
       'PopupContainerClient.h',
@@ -98,6 +100,8 @@
       'StorageClientImpl.h',
       'StorageQuotaClientImpl.cpp',
       'StorageQuotaClientImpl.h',
+      'SuspendableScriptExecutor.cpp',
+      'SuspendableScriptExecutor.h',
       'TextFinder.cpp',
       'TextFinder.h',
       'UserMediaClientImpl.cpp',
@@ -215,6 +219,7 @@
       'WebScopedWindowFocusAllowedIndicator.cpp',
       'WebScriptBindings.cpp',
       'WebScriptController.cpp',
+      'WebScriptSource.cpp',
       'WebScrollbarThemePainter.cpp',
       'WebSearchableFormData.cpp',
       'WebSecurityOrigin.cpp',
@@ -263,8 +268,10 @@
     ],
     'web_unittest_files': [
       'ExternalPopupMenuTest.cpp',
+      'PluginPlaceholderImplTest.cpp',
       'PopupContainerTest.cpp',
       'PopupMenuTest.cpp',
+      'WebDragDataTest.cpp',
       'WebNodeTest.cpp',
       # FIXME: Move the tests from web/tests/ to appropriate places.
       # crbug.com/353585

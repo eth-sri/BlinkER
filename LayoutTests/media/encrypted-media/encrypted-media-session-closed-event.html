@@ -12,7 +12,9 @@
             async_test(function(test)
             {
                 var mediaKeySession;
-                MediaKeys.create('org.w3.clearkey').then(function(mediaKeys) {
+                navigator.requestMediaKeySystemAccess('org.w3.clearkey').then(function(access) {
+                    return access.createMediaKeys();
+                }).then(function(mediaKeys) {
                     var initDataType = getInitDataType();
                     mediaKeySession = mediaKeys.createSession();
                     return mediaKeySession.generateRequest(initDataType, getInitData(initDataType));
@@ -31,7 +33,7 @@
 
                     // release() should result in the closed promise being
                     // fulfilled.
-                    return mediaKeySession.release();
+                    return mediaKeySession.close();
                 }).catch(function(error) {
                     forceTestFailureFromPromise(test, error);
                 });

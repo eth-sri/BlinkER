@@ -29,11 +29,12 @@
  */
 
 #include "config.h"
-
 #include "modules/websockets/DOMWebSocket.h"
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptController.h"
+#include "core/dom/DOMArrayBuffer.h"
+#include "core/dom/DOMArrayBufferView.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
@@ -52,8 +53,6 @@
 #include "platform/weborigin/KnownPorts.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/Platform.h"
-#include "wtf/ArrayBuffer.h"
-#include "wtf/ArrayBufferView.h"
 #include "wtf/Assertions.h"
 #include "wtf/HashSet.h"
 #include "wtf/PassOwnPtr.h"
@@ -260,7 +259,7 @@ DOMWebSocket* DOMWebSocket::create(ExecutionContext* context, const String& url,
         return nullptr;
     }
 
-    DOMWebSocket* webSocket(adoptRefCountedGarbageCollectedWillBeNoop(new DOMWebSocket(context)));
+    DOMWebSocket* webSocket = new DOMWebSocket(context);
     webSocket->suspendIfNeeded();
 
     webSocket->connect(url, protocols, exceptionState);
@@ -392,10 +391,10 @@ void DOMWebSocket::send(const String& message, ExceptionState& exceptionState)
     m_channel->send(message);
 }
 
-void DOMWebSocket::send(ArrayBuffer* binaryData, ExceptionState& exceptionState)
+void DOMWebSocket::send(DOMArrayBuffer* binaryData, ExceptionState& exceptionState)
 {
     WTF_LOG(Network, "WebSocket %p send() Sending ArrayBuffer %p", this, binaryData);
-    ASSERT(binaryData);
+    ASSERT(binaryData && binaryData->buffer());
     if (m_state == CONNECTING) {
         setInvalidStateErrorForSendMethod(exceptionState);
         return;
@@ -407,10 +406,10 @@ void DOMWebSocket::send(ArrayBuffer* binaryData, ExceptionState& exceptionState)
     Platform::current()->histogramEnumeration("WebCore.WebSocket.SendType", WebSocketSendTypeArrayBuffer, WebSocketSendTypeMax);
     ASSERT(m_channel);
     m_bufferedAmount += binaryData->byteLength();
-    m_channel->send(*binaryData, 0, binaryData->byteLength());
+    m_channel->send(*binaryData->buffer(), 0, binaryData->byteLength());
 }
 
-void DOMWebSocket::send(ArrayBufferView* arrayBufferView, ExceptionState& exceptionState)
+void DOMWebSocket::send(DOMArrayBufferView* arrayBufferView, ExceptionState& exceptionState)
 {
     WTF_LOG(Network, "WebSocket %p send() Sending ArrayBufferView %p", this, arrayBufferView);
     ASSERT(arrayBufferView);
@@ -425,7 +424,7 @@ void DOMWebSocket::send(ArrayBufferView* arrayBufferView, ExceptionState& except
     Platform::current()->histogramEnumeration("WebCore.WebSocket.SendType", WebSocketSendTypeArrayBufferView, WebSocketSendTypeMax);
     ASSERT(m_channel);
     m_bufferedAmount += arrayBufferView->byteLength();
-    RefPtr<ArrayBuffer> arrayBuffer(arrayBufferView->buffer());
+    RefPtr<ArrayBuffer> arrayBuffer(arrayBufferView->view()->buffer());
     m_channel->send(*arrayBuffer, arrayBufferView->byteOffset(), arrayBufferView->byteLength());
 }
 
@@ -599,17 +598,17 @@ void DOMWebSocket::didConnect(const String& subprotocol, const String& extension
     m_eventQueue->dispatch(Event::create(EventTypeNames::open));
 }
 
-void DOMWebSocket::didReceiveMessage(const String& msg)
+void DOMWebSocket::didReceiveTextMessage(const String& msg)
 {
-    WTF_LOG(Network, "WebSocket %p didReceiveMessage() Text message '%s'", this, msg.utf8().data());
+    WTF_LOG(Network, "WebSocket %p didReceiveTextMessage() Text message '%s'", this, msg.utf8().data());
     if (m_state != OPEN)
         return;
     m_eventQueue->dispatch(MessageEvent::create(msg, SecurityOrigin::create(m_url)->toString()));
 }
 
-void DOMWebSocket::didReceiveBinaryData(PassOwnPtr<Vector<char> > binaryData)
+void DOMWebSocket::didReceiveBinaryMessage(PassOwnPtr<Vector<char> > binaryData)
 {
-    WTF_LOG(Network, "WebSocket %p didReceiveBinaryData() %lu byte binary message", this, static_cast<unsigned long>(binaryData->size()));
+    WTF_LOG(Network, "WebSocket %p didReceiveBinaryMessage() %lu byte binary message", this, static_cast<unsigned long>(binaryData->size()));
     switch (m_binaryType) {
     case BinaryTypeBlob: {
         size_t size = binaryData->size();
@@ -617,13 +616,13 @@ void DOMWebSocket::didReceiveBinaryData(PassOwnPtr<Vector<char> > binaryData)
         binaryData->swap(*rawData->mutableData());
         OwnPtr<BlobData> blobData = BlobData::create();
         blobData->appendData(rawData.release(), 0, BlobDataItem::toEndOfFile);
-        RefPtrWillBeRawPtr<Blob> blob = Blob::create(BlobDataHandle::create(blobData.release(), size));
-        m_eventQueue->dispatch(MessageEvent::create(blob.release(), SecurityOrigin::create(m_url)->toString()));
+        Blob* blob = Blob::create(BlobDataHandle::create(blobData.release(), size));
+        m_eventQueue->dispatch(MessageEvent::create(blob, SecurityOrigin::create(m_url)->toString()));
         break;
     }
 
     case BinaryTypeArrayBuffer:
-        RefPtr<ArrayBuffer> arrayBuffer = ArrayBuffer::create(binaryData->data(), binaryData->size());
+        RefPtr<DOMArrayBuffer> arrayBuffer = DOMArrayBuffer::create(binaryData->data(), binaryData->size());
         if (!arrayBuffer) {
             // Failed to allocate an ArrayBuffer. We need to crash the renderer
             // since there's no way defined in the spec to tell this to the
@@ -635,9 +634,9 @@ void DOMWebSocket::didReceiveBinaryData(PassOwnPtr<Vector<char> > binaryData)
     }
 }
 
-void DOMWebSocket::didReceiveMessageError()
+void DOMWebSocket::didError()
 {
-    WTF_LOG(Network, "WebSocket %p didReceiveMessageError()", this);
+    WTF_LOG(Network, "WebSocket %p didError()", this);
     m_state = CLOSED;
     m_eventQueue->dispatch(Event::create(EventTypeNames::error));
 }

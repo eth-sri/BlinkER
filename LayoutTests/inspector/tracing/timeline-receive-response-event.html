@@ -19,8 +19,8 @@ function performActions(callback)
 
 function test()
 {
-    WebInspector.inspectorView._showPanel("timeline");
-    WebInspector.inspectorView._panel("timeline")._model._currentTarget = WebInspector.targetManager.mainTarget();
+    WebInspector.TimelinePanel.show();
+    WebInspector.panels.timeline._model._currentTarget = WebInspector.targetManager.mainTarget();
     InspectorTest.invokeAsyncWithTimeline("performActions", finish);
 
     function finish()
@@ -47,7 +47,7 @@ function test()
                     dumpFormattedRecord(presentationRecord.presentationChildren()[i], childPrefix);
             }
         }
-        var records = WebInspector.panels.timeline._currentViews[0]._rootRecord().presentationChildren();
+        var records = InspectorTest.timelinePresentationModel().rootRecord().presentationChildren();
         for (var i = 0; i < records.length; ++i)
             dumpFormattedRecord(records[i]);
         InspectorTest.completeTest();

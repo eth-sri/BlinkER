@@ -61,7 +61,6 @@
 #include "platform/exported/WrappedResourceRequest.h"
 #include "platform/exported/WrappedResourceResponse.h"
 #include "platform/network/HTTPParsers.h"
-#include "platform/network/SocketStreamHandleInternal.h"
 #include "platform/plugins/PluginData.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebApplicationCacheHost.h"
@@ -69,7 +68,6 @@
 #include "public/platform/WebRTCPeerConnectionHandler.h"
 #include "public/platform/WebServiceWorkerProvider.h"
 #include "public/platform/WebServiceWorkerProviderClient.h"
-#include "public/platform/WebSocketStreamHandle.h"
 #include "public/platform/WebURL.h"
 #include "public/platform/WebURLError.h"
 #include "public/platform/WebVector.h"
@@ -83,9 +81,11 @@
 #include "public/web/WebPermissionClient.h"
 #include "public/web/WebPlugin.h"
 #include "public/web/WebPluginParams.h"
+#include "public/web/WebPluginPlaceholder.h"
 #include "public/web/WebSecurityOrigin.h"
 #include "public/web/WebViewClient.h"
 #include "web/EventRacerLogClientImpl.h"
+#include "web/PluginPlaceholderImpl.h"
 #include "web/SharedWorkerRepositoryClientImpl.h"
 #include "web/WebDataSourceImpl.h"
 #include "web/WebDevToolsAgentPrivate.h"
@@ -119,8 +119,7 @@ void FrameLoaderClientImpl::dispatchDidClearWindowObjectInMainWorld()
             DeviceOrientationController::from(*document);
             if (RuntimeEnabledFeatures::deviceLightEnabled())
                 DeviceLightController::from(*document);
-            if (RuntimeEnabledFeatures::gamepadEnabled())
-                NavigatorGamepad::from(*document);
+            NavigatorGamepad::from(*document);
             if (RuntimeEnabledFeatures::serviceWorkerEnabled())
                 NavigatorServiceWorker::from(*document);
         }
@@ -291,7 +290,7 @@ Frame* FrameLoaderClientImpl::lastChild() const
     return toCoreFrame(m_webFrame->lastChild());
 }
 
-void FrameLoaderClientImpl::detachedFromParent()
+void FrameLoaderClientImpl::detached()
 {
     // Alert the client that the frame is being detached. This is the last
     // chance we have to communicate with the client.
@@ -621,11 +620,9 @@ void FrameLoaderClientImpl::transitionToCommittedForNewPage()
 PassRefPtrWillBeRawPtr<LocalFrame> FrameLoaderClientImpl::createFrame(
     const KURL& url,
     const AtomicString& name,
-    const Referrer& referrer,
     HTMLFrameOwnerElement* ownerElement)
 {
-    FrameLoadRequest frameRequest(m_webFrame->frame()->document(),
-        ResourceRequest(url, referrer), name);
+    FrameLoadRequest frameRequest(m_webFrame->frame()->document(), url, name);
     return m_webFrame->createChildFrame(frameRequest, ownerElement);
 }
 
@@ -637,7 +634,33 @@ bool FrameLoaderClientImpl::canCreatePluginWithoutRenderer(const String& mimeTyp
     return m_webFrame->client()->canCreatePluginWithoutRenderer(mimeType);
 }
 
-PassRefPtr<Widget> FrameLoaderClientImpl::createPlugin(
+PassOwnPtrWillBeRawPtr<PluginPlaceholder> FrameLoaderClientImpl::createPluginPlaceholder(
+    Document& document,
+    const KURL& url,
+    const Vector<String>& paramNames,
+    const Vector<String>& paramValues,
+    const String& mimeType,
+    bool loadManually)
+{
+    if (!m_webFrame->client())
+        return nullptr;
+
+    WebPluginParams params;
+    params.url = url;
+    params.mimeType = mimeType;
+    params.attributeNames = paramNames;
+    params.attributeValues = paramValues;
+    params.loadManually = loadManually;
+
+    OwnPtr<WebPluginPlaceholder> webPluginPlaceholder = adoptPtr(
+        m_webFrame->client()->createPluginPlaceholder(m_webFrame, params));
+    if (!webPluginPlaceholder)
+        return nullptr;
+
+    return PluginPlaceholderImpl::create(webPluginPlaceholder.release(), document);
+}
+
+PassRefPtrWillBeRawPtr<Widget> FrameLoaderClientImpl::createPlugin(
     HTMLPlugInElement* element,
     const KURL& url,
     const Vector<String>& paramNames,
@@ -661,19 +684,27 @@ PassRefPtr<Widget> FrameLoaderClientImpl::createPlugin(
         return nullptr;
 
     // The container takes ownership of the WebPlugin.
-    RefPtr<WebPluginContainerImpl> container =
+    RefPtrWillBeRawPtr<WebPluginContainerImpl> container =
         WebPluginContainerImpl::create(element, webPlugin);
 
-    if (!webPlugin->initialize(container.get()))
+    if (!webPlugin->initialize(container.get())) {
+#if ENABLE(OILPAN)
+        container->dispose();
+#endif
         return nullptr;
+    }
 
-    if (policy != AllowDetachedPlugin && !element->renderer())
+    if (policy != AllowDetachedPlugin && !element->renderer()) {
+#if ENABLE(OILPAN)
+        container->dispose();
+#endif
         return nullptr;
+    }
 
     return container;
 }
 
-PassRefPtr<Widget> FrameLoaderClientImpl::createJavaAppletWidget(
+PassRefPtrWillBeRawPtr<Widget> FrameLoaderClientImpl::createJavaAppletWidget(
     HTMLAppletElement* element,
     const KURL& /* baseURL */,
     const Vector<String>& paramNames,
@@ -754,11 +785,6 @@ void FrameLoaderClientImpl::didChangeName(const String& name)
     m_webFrame->client()->didChangeName(m_webFrame, name);
 }
 
-void FrameLoaderClientImpl::dispatchWillOpenSocketStream(SocketStreamHandle* handle)
-{
-    m_webFrame->client()->willOpenSocketStream(SocketStreamHandleInternal::toWebSocketStreamHandle(handle));
-}
-
 void FrameLoaderClientImpl::dispatchWillOpenWebSocket(WebSocketHandle* handle)
 {
     m_webFrame->client()->willOpenWebSocket(handle);
@@ -805,9 +831,16 @@ PassOwnPtr<WebServiceWorkerProvider> FrameLoaderClientImpl::createServiceWorkerP
     return adoptPtr(m_webFrame->client()->createServiceWorkerProvider(m_webFrame));
 }
 
-bool FrameLoaderClientImpl::isControlledByServiceWorker()
+bool FrameLoaderClientImpl::isControlledByServiceWorker(DocumentLoader& loader)
 {
-    return m_webFrame->client() && m_webFrame->client()->isControlledByServiceWorker();
+    return m_webFrame->client() && m_webFrame->client()->isControlledByServiceWorker(*WebDataSourceImpl::fromDocumentLoader(&loader));
+}
+
+int64_t FrameLoaderClientImpl::serviceWorkerID(DocumentLoader& loader)
+{
+    if (!m_webFrame->client())
+        return -1;
+    return m_webFrame->client()->serviceWorkerID(*WebDataSourceImpl::fromDocumentLoader(&loader));
 }
 
 SharedWorkerRepositoryClient* FrameLoaderClientImpl::sharedWorkerRepositoryClient()

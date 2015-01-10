@@ -24,7 +24,6 @@
  */
 
 #include "config.h"
-
 #include "platform/graphics/GraphicsLayer.h"
 
 #include "SkImageFilter.h"
@@ -442,16 +441,14 @@ void GraphicsLayer::resetTrackedPaintInvalidations()
 void GraphicsLayer::addRepaintRect(const FloatRect& repaintRect)
 {
     if (m_client->isTrackingPaintInvalidations()) {
-        FloatRect largestRepaintRect(FloatPoint(), m_size);
-        largestRepaintRect.intersect(repaintRect);
         RepaintMap::iterator repaintIt = repaintRectMap().find(this);
         if (repaintIt == repaintRectMap().end()) {
             Vector<FloatRect> repaintRects;
-            repaintRects.append(largestRepaintRect);
+            repaintRects.append(repaintRect);
             repaintRectMap().set(this, repaintRects);
         } else {
             Vector<FloatRect>& repaintRects = repaintIt->value;
-            repaintRects.append(largestRepaintRect);
+            repaintRects.append(repaintRect);
         }
     }
 }
@@ -901,12 +898,12 @@ void GraphicsLayer::setNeedsDisplay()
     }
 }
 
-void GraphicsLayer::setNeedsDisplayInRect(const FloatRect& rect, WebInvalidationDebugAnnotations annotations)
+void GraphicsLayer::setNeedsDisplayInRect(const IntRect& rect, PaintInvalidationReason invalidationReason)
 {
     if (drawsContent()) {
         m_layer->layer()->invalidateRect(rect);
         if (firstPaintInvalidationTrackingEnabled())
-            m_debugInfo.appendAnnotatedInvalidateRect(rect, annotations);
+            m_debugInfo.appendAnnotatedInvalidateRect(rect, invalidationReason);
         addRepaintRect(rect);
         for (size_t i = 0; i < m_linkHighlights.size(); ++i)
             m_linkHighlights[i]->invalidate();
@@ -1046,21 +1043,23 @@ void GraphicsLayer::paint(GraphicsContext& context, const IntRect& clip)
 }
 
 
-void GraphicsLayer::notifyAnimationStarted(double monotonicTime, WebCompositorAnimation::TargetProperty)
+void GraphicsLayer::notifyAnimationStarted(double monotonicTime, int group)
 {
     if (m_client)
-        m_client->notifyAnimationStarted(this, monotonicTime);
+        m_client->notifyAnimationStarted(this, monotonicTime, group);
 }
 
-void GraphicsLayer::notifyAnimationFinished(double, WebCompositorAnimation::TargetProperty)
+void GraphicsLayer::notifyAnimationFinished(double, int)
 {
-    // Do nothing.
 }
 
 void GraphicsLayer::didScroll()
 {
-    if (m_scrollableArea)
-        m_scrollableArea->scrollToOffsetWithoutAnimation(m_scrollableArea->minimumScrollPosition() + toIntSize(m_layer->layer()->scrollPosition()));
+    if (m_scrollableArea) {
+        DoublePoint newPosition = m_scrollableArea->minimumScrollPosition() + toDoubleSize(m_layer->layer()->scrollPositionDouble());
+        // FIXME: Remove the toFloatPoint(). crbug.com/414283.
+        m_scrollableArea->scrollToOffsetWithoutAnimation(toFloatPoint(newPosition));
+    }
 }
 
 } // namespace blink

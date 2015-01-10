@@ -30,7 +30,6 @@
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/modules/v8/IDBBindingUtilities.h"
 #include "core/dom/ExceptionCode.h"
-#include "core/dom/ExecutionContext.h"
 #include "core/inspector/ScriptCallStack.h"
 #include "modules/IndexedDBNames.h"
 #include "modules/indexeddb/IDBAny.h"
@@ -72,6 +71,11 @@ IDBCursor::IDBCursor(PassOwnPtr<WebIDBCursor> backend, WebIDBCursorDirection dir
 }
 
 IDBCursor::~IDBCursor()
+{
+    ASSERT(!m_blobInfo || m_blobInfo->size() == 0);
+}
+
+void IDBCursor::dispose()
 {
     handleBlobAcks();
 }
@@ -327,6 +331,8 @@ void IDBCursor::setValueReady(IDBKey* key, IDBKey* primaryKey, PassRefPtr<Shared
         handleBlobAcks();
         m_blobInfo = blobInfo;
         m_valueDirty = true;
+        if (m_blobInfo && m_blobInfo->size() > 0)
+            ThreadState::current()->registerPreFinalizer(*this);
     }
 
     m_gotValue = true;
@@ -353,6 +359,7 @@ void IDBCursor::handleBlobAcks()
         ASSERT(m_request);
         m_transaction->db()->ackReceivedBlobs(m_blobInfo.get());
         m_blobInfo.clear();
+        ThreadState::current()->unregisterPreFinalizer(*this);
     }
 }
 

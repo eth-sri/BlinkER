@@ -29,6 +29,7 @@
 
 #include "SkMatrix44.h"
 #include "core/dom/Node.h"
+#include "core/dom/NodeRenderingTraversal.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/rendering/RenderLayer.h"
@@ -110,25 +111,11 @@ RenderLayer* LinkHighlight::computeEnclosingCompositingLayer()
     if (!m_node || !m_node->renderer())
         return 0;
 
-    // Find the nearest enclosing composited layer and attach to it. We may need to cross frame boundaries
-    // to find a suitable layer.
-    RenderObject* renderer = m_node->renderer();
-    RenderLayer* renderLayer;
-    do {
-        renderLayer = renderer->enclosingLayer()->enclosingLayerForPaintInvalidation();
-        if (!renderLayer) {
-            renderer = renderer->frame()->ownerRenderer();
-            if (!renderer)
-                return 0;
-        }
-    } while (!renderLayer);
+    RenderLayer* renderLayer = m_node->renderer()->enclosingLayer()->enclosingLayerForPaintInvalidationCrossingFrameBoundaries();
 
     ASSERT(renderLayer->compositingState() != NotComposited);
 
-    GraphicsLayer* newGraphicsLayer = renderLayer->graphicsLayerBacking();
-    if (!newGraphicsLayer->drawsContent()) {
-        newGraphicsLayer = renderLayer->graphicsLayerBackingForScrolling();
-    }
+    GraphicsLayer* newGraphicsLayer = renderLayer->graphicsLayerBackingForScrolling();
 
     m_clipLayer->setTransform(SkMatrix44(SkMatrix44::kIdentity_Constructor));
 
@@ -180,18 +167,23 @@ static void addQuadToPath(const FloatQuad& quad, Path& path)
     path.closeSubpath();
 }
 
-void LinkHighlight::computeQuads(RenderObject& renderer, Vector<FloatQuad>& outQuads) const
+void LinkHighlight::computeQuads(const Node& node, Vector<FloatQuad>& outQuads) const
 {
+    if (!node.renderer())
+        return;
+
+    RenderObject* renderer = node.renderer();
+
     // For inline elements, absoluteQuads will return a line box based on the line-height
     // and font metrics, which is technically incorrect as replaced elements like images
     // should use their intristic height and expand the linebox  as needed. To get an
     // appropriately sized highlight we descend into the children and have them add their
     // boxes.
-    if (renderer.isRenderInline()) {
-        for (RenderObject* child = renderer.slowFirstChild(); child; child = child->nextSibling())
+    if (renderer->isRenderInline()) {
+        for (Node* child = NodeRenderingTraversal::firstChild(&node); child; child = NodeRenderingTraversal::nextSibling(child))
             computeQuads(*child, outQuads);
     } else {
-        renderer.absoluteQuads(outQuads);
+        renderer->absoluteQuads(outQuads);
     }
 }
 
@@ -204,7 +196,7 @@ bool LinkHighlight::computeHighlightLayerPathAndPosition(RenderLayer* compositin
 
     // Get quads for node in absolute coordinates.
     Vector<FloatQuad> quads;
-    computeQuads(*m_node->renderer(), quads);
+    computeQuads(*m_node, quads);
     ASSERT(quads.size());
 
     // Adjust for offset between target graphics layer and the node's renderer.
@@ -306,11 +298,11 @@ void LinkHighlight::clearGraphicsLayerLinkHighlightPointer()
     }
 }
 
-void LinkHighlight::notifyAnimationStarted(double, WebCompositorAnimation::TargetProperty)
+void LinkHighlight::notifyAnimationStarted(double, int)
 {
 }
 
-void LinkHighlight::notifyAnimationFinished(double, WebCompositorAnimation::TargetProperty)
+void LinkHighlight::notifyAnimationFinished(double, int)
 {
     // Since WebViewImpl may hang on to us for a while, make sure we
     // release resources as soon as possible.

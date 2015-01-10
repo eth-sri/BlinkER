@@ -12,7 +12,6 @@ function test()
         return;
     }
 
-    WebInspector.inspectorView._showPanel("elements");
     InspectorTest.selectNodeAndWaitForStyles("inspected", step1);
     InspectorTest.addSniffer(WebInspector.UISourceCode.prototype, "addRevision", revisionAdded);
 
@@ -21,7 +20,6 @@ function test()
 
     function step1()
     {
-        // Click "Add new rule".
         InspectorTest.addNewRule("foo, div#inspected, bar", step2);
     }
 
@@ -33,8 +31,8 @@ function test()
         textInputController.insertText("color");
         eventSender.keyDown(":");
         textInputController.insertText("maroon");
+        InspectorTest.waitForStyleApplied(step3);
         eventSender.keyDown(";");
-        InspectorTest.runAfterPendingDispatches(step3);
     }
 
     function step3() {
@@ -43,7 +41,6 @@ function test()
 
     function step4()
     {
-        // Click "Add new rule".
         InspectorTest.addNewRule(null, onRuleAdded);
 
         function onRuleAdded()

@@ -43,19 +43,36 @@ public:
 
     {% endif %}
     static bool hasInstance(v8::Handle<v8::Value>, v8::Isolate*);
+    {% if is_array_buffer_or_view %}
+    static {{cpp_class}}* toImpl(v8::Handle<v8::Object> object);
+    {% else %}
     static v8::Handle<v8::Object> findInstanceInPrototypeChain(v8::Handle<v8::Value>, v8::Isolate*);
     static v8::Handle<v8::FunctionTemplate> domTemplate(v8::Isolate*);
     static {{cpp_class}}* toImpl(v8::Handle<v8::Object> object)
     {
         return blink::toScriptWrappableBase(object)->toImpl<{{cpp_class}}>();
     }
+    {% endif %}
     static {{cpp_class}}* toImplWithTypeCheck(v8::Isolate*, v8::Handle<v8::Value>);
+    {% if has_partial_interface %}
+    static WrapperTypeInfo wrapperTypeInfo;
+    {% else %}
     static const WrapperTypeInfo wrapperTypeInfo;
-    static void refObject(ScriptWrappableBase* internalPointer);
-    static void derefObject(ScriptWrappableBase* internalPointer);
-    static WrapperPersistentNode* createPersistentHandle(ScriptWrappableBase* internalPointer);
+    {% endif %}
+    static void refObject(ScriptWrappableBase*);
+    static void derefObject(ScriptWrappableBase*);
+    static void trace(Visitor* visitor, ScriptWrappableBase* scriptWrappableBase)
+    {
+        {% if gc_type == 'GarbageCollectedObject' %}
+        visitor->trace(scriptWrappableBase->toImpl<{{cpp_class}}>());
+        {% elif gc_type == 'WillBeGarbageCollectedObject' %}
+#if ENABLE(OILPAN)
+        visitor->trace(scriptWrappableBase->toImpl<{{cpp_class}}>());
+#endif
+        {% endif %}
+    }
     {% if has_visit_dom_wrapper %}
-    static void visitDOMWrapper(ScriptWrappableBase* internalPointer, const v8::Persistent<v8::Object>&, v8::Isolate*);
+    static void visitDOMWrapper(ScriptWrappableBase*, const v8::Persistent<v8::Object>&, v8::Isolate*);
     {% endif %}
     {% if is_active_dom_object %}
     static ActiveDOMObject* toActiveDOMObject(v8::Handle<v8::Object>);
@@ -134,19 +151,7 @@ public:
        FIXME: Remove this internal field, and share one field for either:
        * a persistent handle (if the object is in oilpan) or
        * a C++ pointer to the DOM object (if the object is not in oilpan) #}
-    {% if gc_type == 'GarbageCollectedObject' %}
-    static const int persistentHandleIndex = v8DefaultWrapperInternalFieldCount + {{custom_internal_field_counter}};
-    static const int internalFieldCount = v8DefaultWrapperInternalFieldCount + {{custom_internal_field_counter}} + 1;
-    {% elif gc_type == 'WillBeGarbageCollectedObject' %}
-#if ENABLE(OILPAN)
-    static const int persistentHandleIndex = v8DefaultWrapperInternalFieldCount + {{custom_internal_field_counter}};
-    static const int internalFieldCount = v8DefaultWrapperInternalFieldCount + {{custom_internal_field_counter}} + 1;
-#else
     static const int internalFieldCount = v8DefaultWrapperInternalFieldCount + {{custom_internal_field_counter}};
-#endif
-    {% elif gc_type == 'RefCountedObject' %}
-    static const int internalFieldCount = v8DefaultWrapperInternalFieldCount + {{custom_internal_field_counter}};
-    {% endif %}
     {# End custom internal fields #}
     static inline ScriptWrappableBase* toScriptWrappableBase({{cpp_class}}* impl)
     {
@@ -162,58 +167,59 @@ public:
     static void installConditionallyEnabledMethods(v8::Handle<v8::Object>, v8::Isolate*){% if conditionally_enabled_methods %};
     {% else %} { }
     {% endif %}
+    {% if has_partial_interface %}
+    static void updateWrapperTypeInfo(InstallTemplateFunction, InstallConditionallyEnabledMethodsFunction);
+    static void install{{v8_class}}Template(v8::Handle<v8::FunctionTemplate>, v8::Isolate*);
+    {% for method in methods if method.overloads and method.overloads.has_partial_overloads %}
+    static void register{{method.name | blink_capitalize}}MethodForPartialInterface(void (*)(const v8::FunctionCallbackInfo<v8::Value>&));
+    {% endfor %}
+    {% endif %}
     {% if not has_custom_to_v8 and not is_script_wrappable %}
 
 private:
     friend v8::Handle<v8::Object> wrap({{cpp_class}}*, v8::Handle<v8::Object> creationContext, v8::Isolate*);
     static v8::Handle<v8::Object> createWrapper({{pass_cpp_type}}, v8::Handle<v8::Object> creationContext, v8::Isolate*);
     {% endif %}
+    {% if has_partial_interface %}
+
+private:
+    static InstallTemplateFunction install{{v8_class}}TemplateFunction;
+    {% endif %}
 };
 
 {% if has_custom_to_v8 %}
-class {{cpp_class}};
 v8::Handle<v8::Value> toV8({{cpp_class}}*, v8::Handle<v8::Object> creationContext, v8::Isolate*);
 
-template<class CallbackInfo>
+template<typename CallbackInfo>
 inline void v8SetReturnValue(const CallbackInfo& callbackInfo, {{cpp_class}}* impl)
 {
     v8SetReturnValue(callbackInfo, toV8(impl, callbackInfo.Holder(), callbackInfo.GetIsolate()));
 }
 
-template<class CallbackInfo>
+template<typename CallbackInfo>
 inline void v8SetReturnValueForMainWorld(const CallbackInfo& callbackInfo, {{cpp_class}}* impl)
 {
      v8SetReturnValue(callbackInfo, toV8(impl, callbackInfo.Holder(), callbackInfo.GetIsolate()));
 }
 
-template<class CallbackInfo, class Wrappable>
-inline void v8SetReturnValueFast(const CallbackInfo& callbackInfo, {{cpp_class}}* impl, Wrappable*)
+template<typename CallbackInfo>
+inline void v8SetReturnValueFast(const CallbackInfo& callbackInfo, {{cpp_class}}* impl, const ScriptWrappable*)
 {
      v8SetReturnValue(callbackInfo, toV8(impl, callbackInfo.Holder(), callbackInfo.GetIsolate()));
 }
-{% else %}{# has_custom_to_v8 #}
-{% if is_script_wrappable %}
-inline v8::Handle<v8::Object> wrap({{cpp_class}}* impl, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
-{
-    return impl->wrap(creationContext, isolate);
-}
-{% else %}
+
+{% elif not is_script_wrappable %}
 v8::Handle<v8::Object> wrap({{cpp_class}}* impl, v8::Handle<v8::Object> creationContext, v8::Isolate*);
-{% endif %}
 
 inline v8::Handle<v8::Value> toV8({{cpp_class}}* impl, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
 {
     if (UNLIKELY(!impl))
         return v8::Null(isolate);
-    v8::Handle<v8::Value> wrapper = DOMDataStore::getWrapper<{{v8_class}}>(impl, isolate);
+    v8::Handle<v8::Value> wrapper = DOMDataStore::getWrapperNonTemplate(impl, isolate);
     if (!wrapper.IsEmpty())
         return wrapper;
 
-{% if is_script_wrappable %}
-    return impl->wrap(creationContext, isolate);
-{% else %}
     return wrap(impl, creationContext, isolate);
-{% endif %}
 }
 
 template<typename CallbackInfo>
@@ -223,7 +229,7 @@ inline void v8SetReturnValue(const CallbackInfo& callbackInfo, {{cpp_class}}* im
         v8SetReturnValueNull(callbackInfo);
         return;
     }
-    if (DOMDataStore::setReturnValueFromWrapper<{{v8_class}}>(callbackInfo.GetReturnValue(), impl))
+    if (DOMDataStore::setReturnValueNonTemplate(callbackInfo.GetReturnValue(), impl))
         return;
     v8::Handle<v8::Object> wrapper = wrap(impl, callbackInfo.Holder(), callbackInfo.GetIsolate());
     v8SetReturnValue(callbackInfo, wrapper);
@@ -243,7 +249,7 @@ inline void v8SetReturnValueForMainWorld(const CallbackInfo& callbackInfo, {{cpp
     v8SetReturnValue(callbackInfo, wrapper);
 }
 
-template<class CallbackInfo, class Wrappable>
+template<typename CallbackInfo, class Wrappable>
 inline void v8SetReturnValueFast(const CallbackInfo& callbackInfo, {{cpp_class}}* impl, Wrappable* wrappable)
 {
     if (UNLIKELY(!impl)) {
@@ -255,31 +261,8 @@ inline void v8SetReturnValueFast(const CallbackInfo& callbackInfo, {{cpp_class}}
     v8::Handle<v8::Object> wrapper = wrap(impl, callbackInfo.Holder(), callbackInfo.GetIsolate());
     v8SetReturnValue(callbackInfo, wrapper);
 }
+
 {% endif %}{# has_custom_to_v8 #}
-
-inline v8::Handle<v8::Value> toV8({{pass_cpp_type}} impl, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
-{
-    return toV8(impl.get(), creationContext, isolate);
-}
-
-template<class CallbackInfo>
-inline void v8SetReturnValue(const CallbackInfo& callbackInfo, {{pass_cpp_type}} impl)
-{
-    v8SetReturnValue(callbackInfo, impl.get());
-}
-
-template<class CallbackInfo>
-inline void v8SetReturnValueForMainWorld(const CallbackInfo& callbackInfo, {{pass_cpp_type}} impl)
-{
-    v8SetReturnValueForMainWorld(callbackInfo, impl.get());
-}
-
-template<class CallbackInfo, class Wrappable>
-inline void v8SetReturnValueFast(const CallbackInfo& callbackInfo, {{pass_cpp_type}} impl, Wrappable* wrappable)
-{
-    v8SetReturnValueFast(callbackInfo, impl.get(), wrappable);
-}
-
 {% if has_event_constructor %}
 bool initialize{{cpp_class}}({{cpp_class}}Init&, const Dictionary&, ExceptionState&, const v8::FunctionCallbackInfo<v8::Value>& info, const String& = "");
 

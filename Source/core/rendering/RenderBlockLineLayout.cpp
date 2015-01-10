@@ -54,22 +54,31 @@ using namespace WTF::Unicode;
 
 static inline InlineBox* createInlineBoxForRenderer(RenderObject* obj, bool isRootLineBox, bool isOnlyRun = false)
 {
+    // Callers should handle text themselves.
+    ASSERT(!obj->isText());
+
     if (isRootLineBox)
         return toRenderBlockFlow(obj)->createAndAppendRootInlineBox();
-
-    if (obj->isText()) {
-        InlineTextBox* textBox = toRenderText(obj)->createInlineTextBox();
-        // We only treat a box as text for a <br> if we are on a line by ourself or in strict mode
-        // (Note the use of strict mode.  In "almost strict" mode, we don't treat the box for <br> as text.)
-        if (obj->isBR())
-            textBox->setIsText(isOnlyRun || obj->document().inNoQuirksMode());
-        return textBox;
-    }
 
     if (obj->isBox())
         return toRenderBox(obj)->createInlineBox();
 
     return toRenderInline(obj)->createAndAppendInlineFlowBox();
+}
+
+static inline InlineTextBox* createInlineBoxForText(BidiRun& run, bool isOnlyRun)
+{
+    ASSERT(run.m_object->isText());
+    RenderText* text = toRenderText(run.m_object);
+    InlineTextBox* textBox = text->createInlineTextBox(run.m_start, run.m_stop - run.m_start);
+    // We only treat a box as text for a <br> if we are on a line by ourself or in strict mode
+    // (Note the use of strict mode.  In "almost strict" mode, we don't treat the box for <br> as text.)
+    if (text->isBR())
+        textBox->setIsText(isOnlyRun || text->document().inNoQuirksMode());
+    textBox->setDirOverride(run.dirOverride(text->style()->rtlOrdering() == VisualOrder));
+    if (run.m_hasHyphen)
+        textBox->setHasHyphen(true);
+    return textBox;
 }
 
 static inline void dirtyLineBoxesForRenderer(RenderObject* o, bool fullLayout)
@@ -199,7 +208,11 @@ RootInlineBox* RenderBlockFlow::constructLine(BidiRunList<BidiRun>& bidiRuns, co
         if (lineInfo.isEmpty())
             continue;
 
-        InlineBox* box = createInlineBoxForRenderer(r->m_object, false, isOnlyRun);
+        InlineBox* box;
+        if (r->m_object->isText())
+            box = createInlineBoxForText(*r, isOnlyRun);
+        else
+            box = createInlineBoxForRenderer(r->m_object, false, isOnlyRun);
         r->m_box = box;
 
         ASSERT(box);
@@ -221,17 +234,9 @@ RootInlineBox* RenderBlockFlow::constructLine(BidiRunList<BidiRun>& bidiRuns, co
             parentBox->addToLine(box);
         }
 
-        bool visuallyOrdered = r->m_object->style()->rtlOrdering() == VisualOrder;
         box->setBidiLevel(r->level());
 
         if (box->isInlineTextBox()) {
-            InlineTextBox* text = toInlineTextBox(box);
-            text->setStart(r->m_start);
-            text->setLen(r->m_stop - r->m_start);
-            text->setDirOverride(r->dirOverride(visuallyOrdered));
-            if (r->m_hasHyphen)
-                text->setHasHyphen(true);
-
             if (AXObjectCache* cache = document().existingAXObjectCache())
                 cache->inlineTextBoxesUpdated(r->m_object);
         }
@@ -1065,9 +1070,8 @@ void RenderBlockFlow::markDirtyFloatsForPaintInvalidation(Vector<FloatWithRect>&
     for (size_t i = 0; i < floatCount; ++i) {
         if (!floats[i].everHadLayout) {
             RenderBox* f = floats[i].object;
-            if (!f->x() && !f->y() && f->checkForPaintInvalidation()) {
-                f->setShouldDoFullPaintInvalidation(true);
-            }
+            if (!f->x() && !f->y())
+                f->setShouldDoFullPaintInvalidation();
         }
     }
 }
@@ -1163,10 +1167,14 @@ static inline void stripTrailingSpace(float& inlineMax, float& inlineMin, Render
 {
     if (trailingSpaceChild && trailingSpaceChild->isText()) {
         // Collapse away the trailing space at the end of a block.
-        RenderText* t = toRenderText(trailingSpaceChild);
+        RenderText* text = toRenderText(trailingSpaceChild);
+        bool useComplexCodePath = !text->canUseSimpleFontCodePath();
         const UChar space = ' ';
-        const Font& font = t->style()->font(); // FIXME: This ignores first-line.
-        float spaceWidth = font.width(constructTextRun(t, font, &space, 1, t->style(), LTR));
+        const Font& font = text->style()->font(); // FIXME: This ignores first-line.
+        TextRun run = constructTextRun(text, font, &space, 1, text->style(), LTR);
+        if (useComplexCodePath)
+            run.setUseComplexCodePath(true);
+        float spaceWidth = font.width(run);
         inlineMax -= spaceWidth + font.fontDescription().wordSpacing();
         if (inlineMin > inlineMax)
             inlineMin = inlineMax;
@@ -1513,7 +1521,7 @@ void RenderBlockFlow::layoutInlineChildren(bool relayoutChildren, LayoutUnit& pa
     if (isFullLayout) {
         // Ensure the old line boxes will be erased.
         if (firstLineBox())
-            setShouldDoFullPaintInvalidation(true);
+            setShouldDoFullPaintInvalidation();
         lineBoxes()->deleteLineBoxes();
     }
 
@@ -1601,7 +1609,7 @@ void RenderBlockFlow::layoutInlineChildren(bool relayoutChildren, LayoutUnit& pa
 
     // Ensure the new line boxes will be painted.
     if (isFullLayout && firstLineBox())
-        setShouldDoFullPaintInvalidation(true);
+        setShouldDoFullPaintInvalidation();
 }
 
 void RenderBlockFlow::checkFloatsInCleanLine(RootInlineBox* line, Vector<FloatWithRect>& floats, size_t& floatIndex, bool& encounteredNewFloat, bool& dirtiedByFloat)
@@ -1680,7 +1688,7 @@ RootInlineBox* RenderBlockFlow::determineStartPosition(LineLayoutState& layoutSt
         // If we encountered a new float and have inline children, mark ourself to force us to issue paint invalidations.
         if (layoutState.hasInlineChild() && !selfNeedsLayout()) {
             setNeedsLayoutAndFullPaintInvalidation(MarkOnlyThis);
-            setShouldDoFullPaintInvalidation(true);
+            setShouldDoFullPaintInvalidation();
         }
 
         // FIXME: This should just call deleteLineBoxTree, but that causes

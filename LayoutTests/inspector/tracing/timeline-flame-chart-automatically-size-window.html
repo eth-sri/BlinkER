@@ -1,16 +1,16 @@
 <html>
 <head>
 <script src="../../http/tests/inspector/inspector-test.js"></script>
+<script src="../../http/tests/inspector/console-test.js"></script>
 <script src="../../http/tests/inspector/timeline-test.js"></script>
 <script src="resources/timeline-data.js"></script>
 <script>
 
 function test()
 {
-    WebInspector.inspectorView._showPanel("network");
     var timelineData = InspectorTest.timelineData();
 
-    var timeline = WebInspector.inspectorView._showPanel("timeline");
+    var timeline = WebInspector.panels.timeline;
     timeline._overviewModeSetting.set(WebInspector.TimelinePanel.OverviewMode.Frames);
     timeline._flameChartEnabledSetting.set(true);
     timeline._onModeChanged();

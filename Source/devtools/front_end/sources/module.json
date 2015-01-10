@@ -183,7 +183,10 @@
             "settingType": "checkbox"
         }
     ],
-    "dependencies": ["source_frame"],
+    "dependencies": [
+        "source_frame",
+        "extensions"
+    ],
     "scripts": [
         "jsdifflib.js",
         "Placard.js",
@@ -212,9 +215,17 @@
         "AdvancedSearchView.js",
         "FileBasedSearchResultsPane.js",
         "SourcesSearchScope.js",
-        "SourcesPanel.js"
+        "SourcesPanel.js",
+        "WorkspaceMappingTip.js"
     ],
     "skip_compilation": [
         "jsdifflib.js"
+    ],
+    "stylesheets": [
+        "filteredItemSelectionDialog.css",
+        "navigatorView.css",
+        "revisionHistory.css",
+        "sourcesPanel.css",
+        "sourcesView.css"
     ]
 }

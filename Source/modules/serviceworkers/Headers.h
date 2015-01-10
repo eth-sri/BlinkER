@@ -16,10 +16,9 @@ namespace blink {
 class Dictionary;
 class ExceptionState;
 class Iterator;
-class ScriptValue;
 
 // http://fetch.spec.whatwg.org/#headers-class
-class Headers FINAL : public GarbageCollected<Headers>, public ScriptWrappable {
+class Headers final : public GarbageCollected<Headers>, public ScriptWrappable {
     DEFINE_WRAPPERTYPEINFO();
 public:
     enum Guard { ImmutableGuard, RequestGuard, RequestNoCORSGuard, ResponseGuard, NoneGuard };
@@ -27,6 +26,7 @@ public:
     static Headers* create();
     static Headers* create(ExceptionState&);
     static Headers* create(const Headers*, ExceptionState&);
+    static Headers* create(const Vector<Vector<String> >&, ExceptionState&);
     static Headers* create(const Dictionary&, ExceptionState&);
 
     // Shares the FetchHeaderList. Called when creating a Request or Response.
@@ -50,6 +50,7 @@ public:
 
     // These methods should only be called when size() would return 0.
     void fillWith(const Headers*, ExceptionState&);
+    void fillWith(const Vector<Vector<String> >&, ExceptionState&);
     void fillWith(const Dictionary&, ExceptionState&);
 
     FetchHeaderList* headerList() const { return m_headerList; }

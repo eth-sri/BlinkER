@@ -9,30 +9,39 @@
 
 namespace blink {
 
+class Event;
 class RemoteFrameClient;
 class RemoteFrameView;
 
 class RemoteFrame: public Frame {
 public:
     static PassRefPtrWillBeRawPtr<RemoteFrame> create(RemoteFrameClient*, FrameHost*, FrameOwner*);
-    virtual bool isRemoteFrame() const OVERRIDE { return true; }
 
     virtual ~RemoteFrame();
 
-    virtual void navigate(Document& originDocument, const KURL&, const Referrer&, bool lockBackForwardList) OVERRIDE;
-    virtual void detach() OVERRIDE;
+    // Frame overrides:
+    void trace(Visitor*) override;
+    virtual bool isRemoteFrame() const override { return true; }
+    virtual LocalDOMWindow* domWindow() const override { return 0; }
+    virtual void navigate(Document& originDocument, const KURL&, bool lockBackForwardList) override;
+    virtual void detach() override;
 
-    void setView(PassRefPtr<RemoteFrameView>);
+    // FIXME: Remove this method once we have input routing in the browser
+    // process. See http://crbug.com/339659.
+    void forwardInputEvent(Event*);
+
+    void setView(PassRefPtrWillBeRawPtr<RemoteFrameView>);
     void createView();
 
     RemoteFrameView* view() const;
+
 
 private:
     RemoteFrame(RemoteFrameClient*, FrameHost*, FrameOwner*);
 
     RemoteFrameClient* remoteFrameClient() const;
 
-    RefPtr<RemoteFrameView> m_view;
+    RefPtrWillBeMember<RemoteFrameView> m_view;
 };
 
 inline RemoteFrameView* RemoteFrame::view() const

@@ -21,13 +21,15 @@ function test()
 
     function initSizes()
     {
-        canvas = InspectorTest.layers3DView._canvasElement;
+        canvas = WebInspector.panels.layers._layers3DView._canvasElement;
         var canvasWidth = canvas.offsetWidth;
         var canvasHeight = canvas.offsetHeight;
         var rootWidth = contentRoot.width();
         var rootHeight = contentRoot.height();
-        var scaleX = rootWidth / canvasWidth;
-        var scaleY = rootHeight / canvasHeight;
+        var paddingX = canvasWidth * 0.1;
+        var paddingY = canvasHeight * 0.1;
+        var scaleX = rootWidth / (canvasWidth - paddingX);
+        var scaleY = rootHeight / (canvasHeight - paddingY);
         var resultScale = Math.max(scaleX, scaleY);
         var width = canvasWidth * resultScale;
         var height = canvasHeight * resultScale;
@@ -50,7 +52,8 @@ function test()
 
         function checkLayer(layerInfo)
         {
-            if (InspectorTest.layers3DView._lastActiveObject[type] && layerInfo.layer.id() === InspectorTest.layers3DView._lastActiveObject[type].layer.id())
+            var l3dview = WebInspector.panels.layers._layers3DView;
+            if (l3dview._lastActiveObject[type] && layerInfo.layer.id() === l3dview._lastActiveObject[type].layer.id())
                 outlined = layerInfo.name;
         }
 
@@ -94,14 +97,13 @@ function test()
         InspectorTest.completeTest();
     }
 
-    WebInspector.inspectorView._showPanel("layers");
     InspectorTest.requestLayers(onGotLayers);
 }
 </script>
 </head>
 <body onload="runTest()" style="height:500px;width:500px;">
-<div id="a" style="-webkit-transform:translateZ(0px) translateY(60px) rotateZ(45deg);width:300px;height:300px;margin-left:100px;">
-    <div id="b" style="-webkit-transform:translateX(0px) translateY(0px) translateZ(0px) rotateX(45deg) rotateY(45deg);width:300px;height:300px;"></div>
+<div id="a" style="transform:translateZ(0px) translateY(60px) rotateZ(45deg);width:300px;height:300px;margin-left:100px;">
+    <div id="b" style="transform:translateX(0px) translateY(0px) translateZ(0px) rotateX(45deg) rotateY(45deg);width:300px;height:300px;"></div>
 </div>
 </body>
 </html>

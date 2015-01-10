@@ -50,6 +50,7 @@ WebInspector.ViewportDataGrid.prototype = {
         if (this._stickToBottom && this._atBottom)
             this._scrollContainer.scrollTop = this._scrollContainer.scrollHeight - this._scrollContainer.clientHeight;
         this.scheduleUpdate();
+        WebInspector.DataGrid.prototype.onResize.call(this);
     },
 
     /**
@@ -166,7 +167,7 @@ WebInspector.ViewportDataGrid.prototype = {
 
         for (var i = 0; i < this._visibleNodes.length; ++i) {
             var oldNode = this._visibleNodes[i];
-            if (!visibleNodesSet.contains(oldNode)) {
+            if (!visibleNodesSet.has(oldNode)) {
                 var element = oldNode.element();
                 if (element === this._wheelTarget)
                     this._hiddenWheelTarget = oldNode.abandonElement();

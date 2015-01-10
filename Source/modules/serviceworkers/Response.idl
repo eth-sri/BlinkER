@@ -8,7 +8,7 @@ enum ResponseType { "basic", "cors", "default", "error", "opaque" };
 
 [
     // FIXME: Add ctors for FormData and URLSearchParams response bodies.
-    Constructor(ScalarValueString body, optional Dictionary responseInitDict),
+    Constructor(USVString body, optional Dictionary responseInitDict),
     Constructor(Blob? body, optional Dictionary responseInitDict),
     Constructor(ArrayBuffer input, optional Dictionary requestInitDict),
     Constructor(ArrayBufferView input, optional Dictionary requestInitDict),
@@ -18,10 +18,11 @@ enum ResponseType { "basic", "cors", "default", "error", "opaque" };
     RaisesException=Constructor,
     ActiveDOMObject,
     GarbageCollected,
+    TypeChecking=Interface,
 ] interface Response {
     // FIXME: Implement redirect().
     readonly attribute ResponseType type;
-    readonly attribute ScalarValueString url;
+    readonly attribute USVString url;
     readonly attribute unsigned short status;
     readonly attribute ByteString statusText;
     readonly attribute Headers headers;

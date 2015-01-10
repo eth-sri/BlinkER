@@ -29,6 +29,7 @@
 #include "core/workers/WorkerThread.h"
 
 #include "bindings/core/v8/ScriptSourceCode.h"
+#include "bindings/core/v8/V8Initializer.h"
 #include "core/dom/Microtask.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/WorkerInspectorController.h"
@@ -53,15 +54,16 @@
 namespace blink {
 
 namespace {
-const int64 kShortIdleHandlerDelayMs = 1000;
-const int64 kLongIdleHandlerDelayMs = 10*1000;
+const int64_t kShortIdleHandlerDelayMs = 1000;
+const int64_t kLongIdleHandlerDelayMs = 10*1000;
 
 class MicrotaskRunner : public WebThread::TaskObserver {
 public:
-    virtual void willProcessTask() OVERRIDE { }
-    virtual void didProcessTask() OVERRIDE
+    virtual void willProcessTask() override { }
+    virtual void didProcessTask() override
     {
         Microtask::performCheckpoint();
+        V8Initializer::reportRejectedPromises();
     }
 };
 
@@ -85,7 +87,7 @@ unsigned WorkerThread::workerThreadCount()
     return workerThreads().size();
 }
 
-class WorkerThreadCancelableTask FINAL : public ExecutionContextTask {
+class WorkerThreadCancelableTask final : public ExecutionContextTask {
     WTF_MAKE_NONCOPYABLE(WorkerThreadCancelableTask); WTF_MAKE_FAST_ALLOCATED;
 public:
     static PassOwnPtr<WorkerThreadCancelableTask> create(const Closure& closure)
@@ -93,7 +95,7 @@ public:
         return adoptPtr(new WorkerThreadCancelableTask(closure));
     }
 
-    virtual void performTask(ExecutionContext*) OVERRIDE
+    virtual void performTask(ExecutionContext*) override
     {
         if (!m_taskCanceled)
             m_closure();
@@ -117,7 +119,7 @@ public:
         : m_workerThread(workerThread)
         , m_nextFireTime(0.0)
         , m_running(false)
-        , m_lastQueuedTask(0)
+        , m_lastQueuedTask(nullptr)
     { }
 
     typedef void (*SharedTimerFunction)();
@@ -134,7 +136,7 @@ public:
 
         // See BlinkPlatformImpl::setSharedTimerFireInterval for explanation of
         // why ceil is used in the interval calculation.
-        int64 delay = static_cast<int64>(ceil(interval * 1000));
+        int64_t delay = static_cast<int64_t>(ceil(interval * 1000));
 
         if (delay < 0) {
             delay = 0;
@@ -155,8 +157,6 @@ public:
     virtual void stop()
     {
         m_running = false;
-        if (m_lastQueuedTask)
-            m_lastQueuedTask->cancelTask();
         m_lastQueuedTask = 0;
     }
 
@@ -190,7 +190,7 @@ public:
 
     virtual ~WorkerThreadTask() { }
 
-    virtual void run() OVERRIDE
+    virtual void run() override
     {
         WorkerGlobalScope* workerGlobalScope = m_workerThread.workerGlobalScope();
         // Tasks could be put on the message loop after the cleanup task,
@@ -223,13 +223,13 @@ private:
     bool m_isInstrumented;
 };
 
-class RunDebuggerQueueTask FINAL : public ExecutionContextTask {
+class RunDebuggerQueueTask final : public ExecutionContextTask {
 public:
     static PassOwnPtr<RunDebuggerQueueTask> create(WorkerThread* thread)
     {
         return adoptPtr(new RunDebuggerQueueTask(thread));
     }
-    virtual void performTask(ExecutionContext* context) OVERRIDE
+    virtual void performTask(ExecutionContext* context) override
     {
         ASSERT(context->isWorkerGlobalScope());
         m_thread->runDebuggerTask(WorkerThread::DontWaitForMessage);
@@ -321,6 +321,7 @@ void WorkerThread::initialize()
         script->initializeContextIfNeeded();
     InspectorInstrumentation::willEvaluateWorkerScript(workerGlobalScope(), startMode);
     script->evaluate(ScriptSourceCode(sourceCode, scriptURL));
+    m_workerGlobalScope->didEvaluateWorkerScript();
 
     postInitialize();
 
@@ -449,11 +450,11 @@ void WorkerThread::terminateAndWaitForAllWorkers()
     // Keep this lock to prevent WorkerThread instances from being destroyed.
     MutexLocker lock(threadSetMutex());
     HashSet<WorkerThread*> threads = workerThreads();
-    for (HashSet<WorkerThread*>::iterator itr = threads.begin(); itr != threads.end(); ++itr)
-        (*itr)->stopInShutdownSequence();
+    for (WorkerThread* thread : threads)
+        thread->stopInShutdownSequence();
 
-    for (HashSet<WorkerThread*>::iterator itr = threads.begin(); itr != threads.end(); ++itr)
-        (*itr)->terminationEvent()->wait();
+    for (WorkerThread* thread : threads)
+        thread->terminationEvent()->wait();
 }
 
 bool WorkerThread::isCurrentThread() const
@@ -464,7 +465,7 @@ bool WorkerThread::isCurrentThread() const
 void WorkerThread::idleHandler()
 {
     ASSERT(m_workerGlobalScope.get());
-    int64 delay = kLongIdleHandlerDelayMs;
+    int64_t delay = kLongIdleHandlerDelayMs;
 
     // Do a script engine idle notification if the next event is distant enough.
     const double kMinIdleTimespan = 0.3;

@@ -11,10 +11,11 @@ function extensionFunctions()
 
 var initialize_ExtensionsTest = function()
 {
-WebInspector.ExtensionServerProxy._ensureExtensionServer();
 
-window.buildPlatformExtensionAPI = function(extensionInfo)
+WebInspector.extensionServer._overridePlatformExtensionAPIForTest = function(extensionInfo)
 {
+    WebInspector.extensionServer._registerHandler("evaluateForTestInFrontEnd", onEvaluate);
+
     function platformExtensionAPI(coreAPI)
     {
         window.webInspector = coreAPI;
@@ -30,7 +31,11 @@ InspectorTest._replyToExtension = function(requestId, port)
 
 function onEvaluate(message, port)
 {
-    var reply = WebInspector.extensionServer._dispatchCallback.bind(WebInspector.extensionServer, message.requestId, port);
+    function reply(param)
+    {
+        WebInspector.extensionServer._dispatchCallback(message.requestId, port, param);
+    }
+
     try {
         eval(message.expression);
     } catch (e) {
@@ -39,13 +44,11 @@ function onEvaluate(message, port)
     }
 }
 
-WebInspector.extensionServer._registerHandler("evaluateForTestInFrontEnd", onEvaluate);
-
 InspectorTest.showPanel = function(panelId)
 {
     if (panelId === "extension")
         panelId = WebInspector.inspectorView._tabbedPane._tabs[WebInspector.inspectorView._tabbedPane._tabs.length - 1].id;
-    WebInspector.inspectorView._showPanel(panelId);
+    return WebInspector.inspectorView.showPanel(panelId);
 }
 
 InspectorTest.runExtensionTests = function()
@@ -59,6 +62,7 @@ InspectorTest.runExtensionTests = function()
             pageURL.replace(/\/inspector\/extensions\/[^/]*$/, "/http/tests")) +
             "/inspector/resources/extension-main.html";
         WebInspector.addExtensions([{ startPage: extensionURL, name: "test extension", exposeWebInspectorNamespace: true }]);
+        WebInspector.extensionServer.initializeExtensions();
     });
 }
 
@@ -66,7 +70,7 @@ InspectorTest.runExtensionTests = function()
 
 function extension_showPanel(panelId, callback)
 {
-    evaluateOnFrontend("InspectorTest.showPanel(unescape('" + escape(panelId) + "')); reply();", callback);
+    evaluateOnFrontend("InspectorTest.showPanel(unescape('" + escape(panelId) + "')).then(function() { reply(); });", callback);
 }
 
 var test = function()

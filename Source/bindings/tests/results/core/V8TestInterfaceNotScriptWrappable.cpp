@@ -21,7 +21,7 @@
 
 namespace blink {
 
-const WrapperTypeInfo V8TestInterfaceNotScriptWrappable::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceNotScriptWrappable::domTemplate, V8TestInterfaceNotScriptWrappable::refObject, V8TestInterfaceNotScriptWrappable::derefObject, V8TestInterfaceNotScriptWrappable::createPersistentHandle, 0, 0, 0, V8TestInterfaceNotScriptWrappable::installConditionallyEnabledMethods, V8TestInterfaceNotScriptWrappable::installConditionallyEnabledProperties, 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::Independent, WrapperTypeInfo::RefCountedObject };
+const WrapperTypeInfo V8TestInterfaceNotScriptWrappable::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceNotScriptWrappable::domTemplate, V8TestInterfaceNotScriptWrappable::refObject, V8TestInterfaceNotScriptWrappable::derefObject, V8TestInterfaceNotScriptWrappable::trace, 0, 0, 0, V8TestInterfaceNotScriptWrappable::installConditionallyEnabledMethods, V8TestInterfaceNotScriptWrappable::installConditionallyEnabledProperties, 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::Independent, WrapperTypeInfo::RefCountedObject };
 
 namespace TestInterfaceNotScriptWrappableV8Internal {
 
@@ -57,7 +57,7 @@ static void attr1AttributeSetterCallback(v8::Local<v8::String>, v8::Local<v8::Va
 static void funcMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     if (UNLIKELY(info.Length() < 1)) {
-        V8ThrowException::throwException(createMinimumArityTypeErrorForMethod("func", "TestInterfaceNotScriptWrappable", 1, info.Length(), info.GetIsolate()), info.GetIsolate());
+        V8ThrowException::throwException(createMinimumArityTypeErrorForMethod(info.GetIsolate(), "func", "TestInterfaceNotScriptWrappable", 1, info.Length()), info.GetIsolate());
         return;
     }
     TestInterfaceNotScriptWrappable* impl = V8TestInterfaceNotScriptWrappable::toImpl(info.Holder());
@@ -95,8 +95,10 @@ static void installV8TestInterfaceNotScriptWrappableTemplate(v8::Handle<v8::Func
         0, 0,
         V8TestInterfaceNotScriptWrappableMethods, WTF_ARRAY_LENGTH(V8TestInterfaceNotScriptWrappableMethods),
         isolate);
-    v8::Local<v8::ObjectTemplate> instanceTemplate ALLOW_UNUSED = functionTemplate->InstanceTemplate();
-    v8::Local<v8::ObjectTemplate> prototypeTemplate ALLOW_UNUSED = functionTemplate->PrototypeTemplate();
+    v8::Local<v8::ObjectTemplate> instanceTemplate = functionTemplate->InstanceTemplate();
+    ALLOW_UNUSED_LOCAL(instanceTemplate);
+    v8::Local<v8::ObjectTemplate> prototypeTemplate = functionTemplate->PrototypeTemplate();
+    ALLOW_UNUSED_LOCAL(prototypeTemplate);
 
     // Custom toString template
     functionTemplate->Set(v8AtomicString(isolate, "toString"), V8PerIsolateData::from(isolate)->toStringTemplate());
@@ -143,21 +145,14 @@ v8::Handle<v8::Object> V8TestInterfaceNotScriptWrappable::createWrapper(PassRefP
     return wrapper;
 }
 
-
-void V8TestInterfaceNotScriptWrappable::refObject(ScriptWrappableBase* internalPointer)
+void V8TestInterfaceNotScriptWrappable::refObject(ScriptWrappableBase* scriptWrappableBase)
 {
-    internalPointer->toImpl<TestInterfaceNotScriptWrappable>()->ref();
+    scriptWrappableBase->toImpl<TestInterfaceNotScriptWrappable>()->ref();
 }
 
-void V8TestInterfaceNotScriptWrappable::derefObject(ScriptWrappableBase* internalPointer)
+void V8TestInterfaceNotScriptWrappable::derefObject(ScriptWrappableBase* scriptWrappableBase)
 {
-    internalPointer->toImpl<TestInterfaceNotScriptWrappable>()->deref();
-}
-
-WrapperPersistentNode* V8TestInterfaceNotScriptWrappable::createPersistentHandle(ScriptWrappableBase* internalPointer)
-{
-    ASSERT_NOT_REACHED();
-    return 0;
+    scriptWrappableBase->toImpl<TestInterfaceNotScriptWrappable>()->deref();
 }
 
 template<>

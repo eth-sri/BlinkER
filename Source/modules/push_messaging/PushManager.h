@@ -7,15 +7,13 @@
 
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
-#include "wtf/text/WTFString.h"
 
 namespace blink {
 
-class ExecutionContext;
 class ScriptPromise;
 class ScriptState;
 
-class PushManager FINAL : public GarbageCollected<PushManager>, public ScriptWrappable {
+class PushManager final : public GarbageCollected<PushManager>, public ScriptWrappable {
     DEFINE_WRAPPERTYPEINFO();
 public:
     static PushManager* create()
@@ -23,7 +21,8 @@ public:
         return new PushManager();
     }
 
-    ScriptPromise registerPushMessaging(ScriptState*, const String& senderId);
+    ScriptPromise registerPushMessaging(ScriptState*);
+    ScriptPromise hasPermission(ScriptState*);
 
     void trace(Visitor*) { }
 

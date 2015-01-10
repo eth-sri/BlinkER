@@ -8,6 +8,7 @@
 #include "core/frame/RemoteFrameClient.h"
 #include "core/frame/RemoteFrameView.h"
 #include "core/html/HTMLFrameOwnerElement.h"
+#include "platform/weborigin/SecurityPolicy.h"
 
 namespace blink {
 
@@ -26,25 +27,44 @@ RemoteFrame::~RemoteFrame()
     setView(nullptr);
 }
 
-void RemoteFrame::navigate(Document&, const KURL& url, const Referrer& referrer, bool lockBackForwardList)
+void RemoteFrame::trace(Visitor* visitor)
 {
-    remoteFrameClient()->navigate(ResourceRequest(url, referrer), lockBackForwardList);
+    visitor->trace(m_view);
+    Frame::trace(visitor);
+}
+
+void RemoteFrame::navigate(Document& originDocument, const KURL& url, bool lockBackForwardList)
+{
+    // The process where this frame actually lives won't have sufficient information to determine
+    // correct referrer, since it won't have access to the originDocument. Set it now.
+    ResourceRequest request(url);
+    request.setHTTPReferrer(SecurityPolicy::generateReferrer(originDocument.referrerPolicy(), url, originDocument.outgoingReferrer()));
+    remoteFrameClient()->navigate(request, lockBackForwardList);
 }
 
 void RemoteFrame::detach()
 {
     detachChildren();
-    m_host = nullptr;
+    if (!client())
+        return;
+    Frame::detach();
 }
 
-void RemoteFrame::setView(PassRefPtr<RemoteFrameView> view)
+void RemoteFrame::forwardInputEvent(Event* event)
 {
+    remoteFrameClient()->forwardInputEvent(event);
+}
+
+void RemoteFrame::setView(PassRefPtrWillBeRawPtr<RemoteFrameView> view)
+{
+    // Oilpan: as RemoteFrameView performs no finalization actions,
+    // no explicit dispose() of it needed here. (cf. FrameView::dispose().)
     m_view = view;
 }
 
 void RemoteFrame::createView()
 {
-    RefPtr<RemoteFrameView> view = RemoteFrameView::create(this);
+    RefPtrWillBeRawPtr<RemoteFrameView> view = RemoteFrameView::create(this);
     setView(view);
 
     if (ownerRenderer()) {

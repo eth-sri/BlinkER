@@ -3,7 +3,6 @@ function initialize_EditorTests()
 
 InspectorTest.createTestEditor = function(clientHeight, textEditorDelegate)
 {
-    runtime.loadModule("source_frame");
     var textEditor = new WebInspector.CodeMirrorTextEditor("", textEditorDelegate || new WebInspector.TextEditorDelegate());
     clientHeight = clientHeight || 100;
     textEditor.element.style.height = clientHeight + "px";
@@ -152,7 +151,7 @@ InspectorTest.fakeKeyEvent = function(editor, originalCode, modifiers, callback)
     } else if (originalCode === "\"") {
         code = 222;
         modifiers.push("shiftKey");
-        charCode = 0;
+        charCode = 34;
     } else if (originalCode === "(") {
         code = "9".charCodeAt(0);
         modifiers.push("shiftKey");

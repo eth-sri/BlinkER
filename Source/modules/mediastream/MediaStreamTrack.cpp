@@ -43,7 +43,7 @@ namespace blink {
 
 MediaStreamTrack* MediaStreamTrack::create(ExecutionContext* context, MediaStreamComponent* component)
 {
-    MediaStreamTrack* track = adoptRefCountedGarbageCollectedWillBeNoop(new MediaStreamTrack(context, component));
+    MediaStreamTrack* track = new MediaStreamTrack(context, component);
     track->suspendIfNeeded();
     return track;
 }
@@ -60,6 +60,7 @@ MediaStreamTrack::MediaStreamTrack(ExecutionContext* context, MediaStreamCompone
 
 MediaStreamTrack::~MediaStreamTrack()
 {
+    m_component->source()->removeObserver(this);
 }
 
 String MediaStreamTrack::kind() const
@@ -109,6 +110,16 @@ bool MediaStreamTrack::muted() const
     return m_component->muted();
 }
 
+bool MediaStreamTrack::remote() const
+{
+    return m_component->source()->remote();
+}
+
+bool MediaStreamTrack::readonly() const
+{
+    return m_component->source()->readonly();
+}
+
 String MediaStreamTrack::readyState() const
 {
     if (ended())
@@ -152,9 +163,9 @@ void MediaStreamTrack::stopTrack(ExceptionState& exceptionState)
 
 MediaStreamTrack* MediaStreamTrack::clone(ExecutionContext* context)
 {
-    MediaStreamComponent* clonedComponent = MediaStreamComponent::create(component()->source());
-    MediaStreamTrack* clonedTrack = MediaStreamTrack::create(context, clonedComponent);
-    MediaStreamCenter::instance().didCreateMediaStreamTrack(clonedComponent);
+    RefPtr<MediaStreamComponent> clonedComponent = MediaStreamComponent::create(component()->source());
+    MediaStreamTrack* clonedTrack = MediaStreamTrack::create(context, clonedComponent.get());
+    MediaStreamCenter::instance().didCreateMediaStreamTrack(clonedComponent.get());
     return clonedTrack;
 }
 
@@ -237,9 +248,7 @@ ExecutionContext* MediaStreamTrack::executionContext() const
 void MediaStreamTrack::trace(Visitor* visitor)
 {
     visitor->trace(m_registeredMediaStreams);
-    visitor->trace(m_component);
     EventTargetWithInlineData::trace(visitor);
-    MediaStreamSource::Observer::trace(visitor);
 }
 
 } // namespace blink

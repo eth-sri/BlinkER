@@ -46,6 +46,8 @@ public:
         visitor->trace(m_paintInvalidationContainer);
     }
 
+    RenderObject* object() const { return m_object.get(); }
+
 protected:
     RawPtrWillBeMember<RenderObject> m_object;
     RawPtrWillBeMember<const RenderLayerModelObject> m_paintInvalidationContainer;
@@ -53,7 +55,7 @@ protected:
 };
 
 // This struct is used when the selection changes to cache the old and new state of the selection for each RenderObject.
-class RenderSelectionInfo FINAL : public RenderSelectionInfoBase {
+class RenderSelectionInfo final : public RenderSelectionInfoBase {
 public:
     RenderSelectionInfo(RenderObject* o)
         : RenderSelectionInfoBase(o)
@@ -70,7 +72,7 @@ public:
 
     void invalidatePaint()
     {
-        m_object->invalidatePaintUsingContainer(m_paintInvalidationContainer, enclosingIntRect(m_rect), InvalidationSelection);
+        m_object->invalidatePaintUsingContainer(m_paintInvalidationContainer, enclosingIntRect(m_rect), PaintInvalidationSelection);
     }
 
     LayoutRect absoluteSelectionRect() const
@@ -96,7 +98,7 @@ private:
 };
 
 // This struct is used when the selection changes to cache the old and new state of the selection for each RenderBlock.
-class RenderBlockSelectionInfo FINAL : public RenderSelectionInfoBase {
+class RenderBlockSelectionInfo final : public RenderSelectionInfoBase {
 public:
     RenderBlockSelectionInfo(RenderBlock* b)
         : RenderSelectionInfoBase(b)
@@ -115,7 +117,7 @@ public:
         // paintInvalidationContainer as the render object. Find out why it does that and fix.
         if (m_paintInvalidationContainer && m_paintInvalidationContainer->layer()->groupedMapping())
             RenderLayer::mapRectToPaintBackingCoordinates(m_paintInvalidationContainer, paintInvalidationRect);
-        m_object->invalidatePaintUsingContainer(m_paintInvalidationContainer, enclosingIntRect(paintInvalidationRect), InvalidationSelection);
+        m_object->invalidatePaintUsingContainer(m_paintInvalidationContainer, enclosingIntRect(paintInvalidationRect), PaintInvalidationSelection);
     }
 
     bool hasChangedFrom(const RenderBlockSelectionInfo& other) const

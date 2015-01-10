@@ -60,25 +60,18 @@ private:
     FontDescription m_fontDescription;
 };
 
-FontBuilder::FontBuilder()
-    : m_document(nullptr)
-    , m_style(0)
+FontBuilder::FontBuilder(const Document& document)
+    : m_document(document)
+    , m_style(nullptr)
     , m_fontDirty(false)
 {
-}
-
-void FontBuilder::initForStyleResolve(const Document& document, RenderStyle* style)
-{
     ASSERT(document.frame());
-    m_document = &document;
-    m_style = style;
-    m_fontDirty = false;
 }
 
 void FontBuilder::setInitial(float effectiveZoom)
 {
-    ASSERT(m_document && m_document->settings());
-    if (!m_document || !m_document->settings())
+    ASSERT(m_document.settings());
+    if (!m_document.settings())
         return;
 
     FontDescriptionChangeScope scope(this);
@@ -100,28 +93,6 @@ void FontBuilder::didChangeFontParameters(bool changed)
     m_fontDirty |= changed;
 }
 
-void FontBuilder::fromSystemFont(CSSValueID valueId, float effectiveZoom)
-{
-    FontDescriptionChangeScope scope(this);
-
-    FontDescription fontDescription;
-    RenderTheme::theme().systemFont(valueId, fontDescription);
-
-    // Double-check and see if the theme did anything. If not, don't bother updating the font.
-    if (!fontDescription.isAbsoluteSize())
-        return;
-
-    // Make sure the rendering mode and printer font settings are updated.
-    const Settings* settings = m_document->settings();
-    ASSERT(settings); // If we're doing style resolution, this document should always be in a frame and thus have settings
-    if (!settings)
-        return;
-
-    // Handle the zoom factor.
-    fontDescription.setComputedSize(getComputedSizeFromSpecifiedSize(fontDescription, effectiveZoom, fontDescription.specifiedSize()));
-    scope.set(fontDescription);
-}
-
 FontFamily FontBuilder::standardFontFamily() const
 {
     FontFamily family;
@@ -131,8 +102,7 @@ FontFamily FontBuilder::standardFontFamily() const
 
 AtomicString FontBuilder::standardFontFamilyName() const
 {
-    ASSERT(m_document);
-    Settings* settings = m_document->settings();
+    Settings* settings = m_document.settings();
     if (settings)
         return settings->genericFontFamilySettings().standard();
     return AtomicString();
@@ -265,7 +235,7 @@ void FontBuilder::setSize(FontDescription& fontDescription, const FontDescriptio
     float specifiedSize = size.value;
 
     if (!specifiedSize && size.keyword)
-        specifiedSize = FontSize::fontSizeForKeyword(m_document, size.keyword, fontDescription.fixedPitchFontType());
+        specifiedSize = FontSize::fontSizeForKeyword(&m_document, size.keyword, fontDescription.fixedPitchFontType());
 
     if (specifiedSize < 0)
         return;
@@ -283,10 +253,10 @@ float FontBuilder::getComputedSizeFromSpecifiedSize(FontDescription& fontDescrip
 {
     float zoomFactor = effectiveZoom;
     // FIXME: Why is this here!!!!?!
-    if (LocalFrame* frame = m_document->frame())
+    if (LocalFrame* frame = m_document.frame())
         zoomFactor *= frame->textZoomFactor();
 
-    return FontSize::getComputedSizeFromSpecifiedSize(m_document, zoomFactor, fontDescription.isAbsoluteSize(), specifiedSize);
+    return FontSize::getComputedSizeFromSpecifiedSize(&m_document, zoomFactor, fontDescription.isAbsoluteSize(), specifiedSize);
 }
 
 static void getFontAndGlyphOrientation(const RenderStyle* style, FontOrientation& fontOrientation, NonCJKGlyphOrientation& glyphOrientation)
@@ -365,9 +335,9 @@ void FontBuilder::checkForGenericFamilyChange(RenderStyle* style, const RenderSt
     // multiplying by our scale factor.
     float size;
     if (scope.fontDescription().keywordSize()) {
-        size = FontSize::fontSizeForKeyword(m_document, scope.fontDescription().keywordSize(), scope.fontDescription().fixedPitchFontType());
+        size = FontSize::fontSizeForKeyword(&m_document, scope.fontDescription().keywordSize(), scope.fontDescription().fixedPitchFontType());
     } else {
-        Settings* settings = m_document->settings();
+        Settings* settings = m_document.settings();
         float fixedScaleFactor = (settings && settings->defaultFixedFontSize() && settings->defaultFontSize())
             ? static_cast<float>(settings->defaultFixedFontSize()) / settings->defaultFontSize()
             : 1;

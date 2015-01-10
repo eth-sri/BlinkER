@@ -48,7 +48,7 @@ namespace blink {
 
 IDBRequest* IDBRequest::create(ScriptState* scriptState, IDBAny* source, IDBTransaction* transaction)
 {
-    IDBRequest* request = adoptRefCountedGarbageCollectedWillBeNoop(new IDBRequest(scriptState, source, transaction));
+    IDBRequest* request = new IDBRequest(scriptState, source, transaction);
     request->suspendIfNeeded();
     // Requests associated with IDBFactory (open/deleteDatabase/getDatabaseNames) are not associated with transactions.
     if (transaction)
@@ -77,6 +77,11 @@ IDBRequest::IDBRequest(ScriptState* scriptState, IDBAny* source, IDBTransaction*
 IDBRequest::~IDBRequest()
 {
     ASSERT(m_readyState == DONE || m_readyState == EarlyDeath || !executionContext());
+    ASSERT(!m_blobInfo || m_blobInfo->size() == 0);
+}
+
+void IDBRequest::dispose()
+{
     handleBlobAcks();
 }
 
@@ -109,7 +114,7 @@ ScriptValue IDBRequest::result(ExceptionState& exceptionState)
     return value;
 }
 
-PassRefPtrWillBeRawPtr<DOMError> IDBRequest::error(ExceptionState& exceptionState) const
+DOMError* IDBRequest::error(ExceptionState& exceptionState) const
 {
     if (m_readyState != DONE) {
         exceptionState.throwDOMException(InvalidStateError, IDBDatabase::requestNotFinishedErrorMessage);
@@ -199,10 +204,17 @@ void IDBRequest::setResultCursor(IDBCursor* cursor, IDBKey* key, IDBKey* primary
     m_cursorKey = key;
     m_cursorPrimaryKey = primaryKey;
     m_cursorValue = value;
-    ASSERT(!m_blobInfo.get());
-    m_blobInfo = blobInfo;
+    setBlobInfo(blobInfo);
 
     onSuccessInternal(IDBAny::create(cursor));
+}
+
+void IDBRequest::setBlobInfo(PassOwnPtr<Vector<WebBlobInfo>> blobInfo)
+{
+    ASSERT(!m_blobInfo);
+    m_blobInfo = blobInfo;
+    if (m_blobInfo && m_blobInfo->size() > 0)
+        ThreadState::current()->registerPreFinalizer(*this);
 }
 
 void IDBRequest::handleBlobAcks()
@@ -210,6 +222,7 @@ void IDBRequest::handleBlobAcks()
     if (m_blobInfo.get() && m_blobInfo->size()) {
         m_transaction->db()->ackReceivedBlobs(m_blobInfo.get());
         m_blobInfo.clear();
+        ThreadState::current()->unregisterPreFinalizer(*this);
     }
 }
 
@@ -225,7 +238,7 @@ bool IDBRequest::shouldEnqueueEvent() const
     return true;
 }
 
-void IDBRequest::onError(PassRefPtrWillBeRawPtr<DOMError> error)
+void IDBRequest::onError(DOMError* error)
 {
     IDB_TRACE("IDBRequest::onError()");
     if (!shouldEnqueueEvent())
@@ -296,8 +309,7 @@ void IDBRequest::onSuccess(PassRefPtr<SharedBuffer> valueBuffer, PassOwnPtr<Vect
         m_pendingCursor.clear();
     }
 
-    ASSERT(!m_blobInfo.get());
-    m_blobInfo = blobInfo;
+    setBlobInfo(blobInfo);
     onSuccessInternal(IDBAny::create(valueBuffer, m_blobInfo.get()));
 }
 
@@ -324,8 +336,7 @@ void IDBRequest::onSuccess(PassRefPtr<SharedBuffer> prpValueBuffer, PassOwnPtr<V
 
     RefPtr<SharedBuffer> valueBuffer = prpValueBuffer;
     IDBKey* primaryKey = prpPrimaryKey;
-    ASSERT(!m_blobInfo.get());
-    m_blobInfo = blobInfo;
+    setBlobInfo(blobInfo);
 
 #if ENABLE(ASSERT)
     assertPrimaryKeyValidOrInjectable(m_scriptState.get(), valueBuffer, m_blobInfo.get(), primaryKey, keyPath);
@@ -447,8 +458,11 @@ bool IDBRequest::dispatchEvent(PassRefPtrWillBeRawPtr<Event> event)
     IDBCursor* cursorToNotify = 0;
     if (event->type() == EventTypeNames::success) {
         cursorToNotify = getResultCursor();
-        if (cursorToNotify)
+        if (cursorToNotify) {
+            if (m_blobInfo && m_blobInfo->size() > 0)
+                ThreadState::current()->unregisterPreFinalizer(*this);
             cursorToNotify->setValueReady(m_cursorKey.release(), m_cursorPrimaryKey.release(), m_cursorValue.release(), m_blobInfo.release());
+        }
     }
 
     if (event->type() == EventTypeNames::upgradeneeded) {

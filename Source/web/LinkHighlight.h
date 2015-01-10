@@ -42,12 +42,10 @@ namespace blink {
 class DisplayList;
 class Node;
 class RenderLayer;
-class RenderObject;
-struct WebFloatRect;
 struct WebRect;
 class WebViewImpl;
 
-class LinkHighlight FINAL : public WebContentLayerClient, public WebCompositorAnimationDelegate, blink::LinkHighlightClient {
+class LinkHighlight final : public WebContentLayerClient, public WebCompositorAnimationDelegate, blink::LinkHighlightClient {
 public:
     static PassOwnPtr<LinkHighlight> create(Node*, WebViewImpl*);
     virtual ~LinkHighlight();
@@ -58,16 +56,16 @@ public:
     void updateGeometry();
 
     // WebContentLayerClient implementation.
-    virtual void paintContents(WebCanvas*, const WebRect& clipRect, bool canPaintLCDText, WebContentLayerClient::GraphicsContextStatus) OVERRIDE;
+    virtual void paintContents(WebCanvas*, const WebRect& clipRect, bool canPaintLCDText, WebContentLayerClient::GraphicsContextStatus) override;
 
     // WebCompositorAnimationDelegate implementation.
-    virtual void notifyAnimationStarted(double monotonicTime, blink::WebCompositorAnimation::TargetProperty) OVERRIDE;
-    virtual void notifyAnimationFinished(double monotonicTime, blink::WebCompositorAnimation::TargetProperty) OVERRIDE;
+    virtual void notifyAnimationStarted(double monotonicTime, int group) override;
+    virtual void notifyAnimationFinished(double monotonicTime, int group) override;
 
     // LinkHighlightClient inplementation.
-    virtual void invalidate() OVERRIDE;
-    virtual WebLayer* layer() OVERRIDE;
-    virtual void clearCurrentGraphicsLayer() OVERRIDE;
+    virtual void invalidate() override;
+    virtual WebLayer* layer() override;
+    virtual void clearCurrentGraphicsLayer() override;
 
     GraphicsLayer* currentGraphicsLayerForTesting() const { return m_currentGraphicsLayer; }
 
@@ -75,7 +73,7 @@ private:
     LinkHighlight(Node*, WebViewImpl*);
 
     void releaseResources();
-    void computeQuads(RenderObject&, WTF::Vector<FloatQuad>&) const;
+    void computeQuads(const Node&, WTF::Vector<FloatQuad>&) const;
 
     RenderLayer* computeEnclosingCompositingLayer();
     void clearGraphicsLayerLinkHighlightPointer();

@@ -47,7 +47,7 @@ class ExceptionState;
 class MediaStreamDescriptor;
 class UserMediaController;
 
-class UserMediaRequest FINAL : public GarbageCollectedFinalized<UserMediaRequest>, public ContextLifecycleObserver {
+class UserMediaRequest final : public GarbageCollectedFinalized<UserMediaRequest>, public ContextLifecycleObserver {
 public:
     static UserMediaRequest* create(ExecutionContext*, UserMediaController*, const Dictionary& options, NavigatorUserMediaSuccessCallback*, NavigatorUserMediaErrorCallback*, ExceptionState&);
     virtual ~UserMediaRequest();
@@ -58,7 +58,7 @@ public:
 
     void start();
 
-    void succeed(MediaStreamDescriptor*);
+    void succeed(PassRefPtr<MediaStreamDescriptor>);
     void failPermissionDenied(const String& message);
     void failConstraint(const String& constraintName, const String& message);
     void failUASpecific(const String& name, const String& message, const String& constraintName);
@@ -69,7 +69,7 @@ public:
     WebMediaConstraints videoConstraints() const;
 
     // ContextLifecycleObserver
-    virtual void contextDestroyed() OVERRIDE;
+    virtual void contextDestroyed() override;
 
     void trace(Visitor*);
 

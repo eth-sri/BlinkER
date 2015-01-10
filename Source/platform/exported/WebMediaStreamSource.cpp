@@ -69,7 +69,7 @@ void WebMediaStreamSource::ExtraData::setOwner(MediaStreamSource* owner)
     m_owner = owner;
 }
 
-WebMediaStreamSource::WebMediaStreamSource(MediaStreamSource* mediaStreamSource)
+WebMediaStreamSource::WebMediaStreamSource(const PassRefPtr<MediaStreamSource>& mediaStreamSource)
     : m_private(mediaStreamSource)
 {
 }
@@ -90,6 +90,11 @@ void WebMediaStreamSource::reset()
     m_private.reset();
 }
 
+WebMediaStreamSource::operator PassRefPtr<MediaStreamSource>() const
+{
+    return m_private.get();
+}
+
 WebMediaStreamSource::operator MediaStreamSource*() const
 {
     return m_private.get();
@@ -97,7 +102,12 @@ WebMediaStreamSource::operator MediaStreamSource*() const
 
 void WebMediaStreamSource::initialize(const WebString& id, Type type, const WebString& name)
 {
-    m_private = MediaStreamSource::create(id, static_cast<MediaStreamSource::Type>(type), name);
+    m_private = MediaStreamSource::create(id, static_cast<MediaStreamSource::Type>(type), name, false, true);
+}
+
+void WebMediaStreamSource::initialize(const WebString& id, Type type, const WebString& name, bool remote, bool readonly)
+{
+    m_private = MediaStreamSource::create(id, static_cast<MediaStreamSource::Type>(type), name, remote, readonly);
 }
 
 WebString WebMediaStreamSource::id() const
@@ -161,15 +171,15 @@ bool WebMediaStreamSource::requiresAudioConsumer() const
     return m_private->requiresAudioConsumer();
 }
 
-class ConsumerWrapper FINAL : public AudioDestinationConsumer {
+class ConsumerWrapper final : public AudioDestinationConsumer {
 public:
     static ConsumerWrapper* create(WebAudioDestinationConsumer* consumer)
     {
         return new ConsumerWrapper(consumer);
     }
 
-    virtual void setFormat(size_t numberOfChannels, float sampleRate) OVERRIDE;
-    virtual void consumeAudio(AudioBus*, size_t numberOfFrames) OVERRIDE;
+    virtual void setFormat(size_t numberOfChannels, float sampleRate) override;
+    virtual void consumeAudio(AudioBus*, size_t numberOfFrames) override;
 
     WebAudioDestinationConsumer* consumer() { return m_consumer; }
 

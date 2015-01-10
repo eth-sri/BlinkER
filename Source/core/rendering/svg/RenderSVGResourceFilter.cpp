@@ -22,15 +22,11 @@
  */
 
 #include "config.h"
-
 #include "core/rendering/svg/RenderSVGResourceFilter.h"
 
 #include "core/dom/ElementTraversal.h"
-#include "core/frame/Settings.h"
-#include "core/rendering/svg/RenderSVGResourceFilterPrimitive.h"
-#include "core/rendering/svg/SVGRenderingContext.h"
 #include "core/svg/SVGFilterPrimitiveStandardAttributes.h"
-#include "platform/graphics/UnacceleratedImageBufferSurface.h"
+#include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/filters/SkiaImageFilterBuilder.h"
 #include "platform/graphics/filters/SourceAlpha.h"
 #include "platform/graphics/filters/SourceGraphic.h"
@@ -104,6 +100,7 @@ PassRefPtr<SVGFilterBuilder> RenderSVGResourceFilter::buildPrimitives(SVGFilter*
 static void beginDeferredFilter(GraphicsContext* context, FilterData* filterData)
 {
     context->beginRecording(filterData->boundaries);
+    context->setShouldSmoothFonts(false);
     // We pass the boundaries to SkPictureImageFilter so it knows the
     // world-space position of the filter primitives. It gets them
     // from the DisplayList, which also applies the inverse translate
@@ -183,11 +180,10 @@ static void drawDeferredFilter(GraphicsContext* context, FilterData* filterData,
     context->restore();
 }
 
-bool RenderSVGResourceFilter::applyResource(RenderObject* object, RenderStyle*, GraphicsContext*& context, unsigned short resourceMode)
+bool RenderSVGResourceFilter::prepareEffect(RenderObject* object, GraphicsContext*& context)
 {
     ASSERT(object);
     ASSERT(context);
-    ASSERT_UNUSED(resourceMode, resourceMode == ApplyToDefaultMode);
 
     clearInvalidationMask();
 
@@ -231,7 +227,7 @@ bool RenderSVGResourceFilter::applyResource(RenderObject* object, RenderStyle*, 
     return true;
 }
 
-void RenderSVGResourceFilter::postApplyResource(RenderObject* object, GraphicsContext*& context)
+void RenderSVGResourceFilter::finishEffect(RenderObject* object, GraphicsContext*& context)
 {
     ASSERT(object);
     ASSERT(context);

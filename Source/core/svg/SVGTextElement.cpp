@@ -19,10 +19,8 @@
  */
 
 #include "config.h"
-
 #include "core/svg/SVGTextElement.h"
 
-#include "core/rendering/svg/RenderSVGResource.h"
 #include "core/rendering/svg/RenderSVGText.h"
 
 namespace blink {
@@ -53,7 +51,7 @@ AffineTransform SVGTextElement::animatedLocalTransform() const
         transform()->currentValue()->concatenate(matrix);
     }
 
-    const AffineTransform* transform = const_cast<SVGTextElement*>(this)->supplementalTransform();
+    const AffineTransform* transform = const_cast<SVGTextElement*>(this)->animateMotionTransform();
     if (transform)
         return *transform * matrix;
     return matrix;

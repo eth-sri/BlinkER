@@ -1,11 +1,13 @@
 var initialize_DebuggerTest = function() {
 
+InspectorTest.preloadPanel("sources");
+
 InspectorTest.startDebuggerTest = function(callback, quiet)
 {
     console.assert(WebInspector.debuggerModel.debuggerEnabled(), "Debugger has to be enabled");
     if (quiet !== undefined)
         InspectorTest._quiet = quiet;
-    WebInspector.inspectorView._showPanel("sources");
+    WebInspector.SourcesPanel.show();
 
     InspectorTest.addSniffer(WebInspector.debuggerModel, "_pausedScript", InspectorTest._pausedScript, true);
     InspectorTest.addSniffer(WebInspector.debuggerModel, "_resumedScript", InspectorTest._resumedScript, true);
@@ -40,7 +42,7 @@ InspectorTest.runDebuggerTestSuite = function(testSuite)
 
 InspectorTest.runTestFunction = function()
 {
-    InspectorTest.evaluateInConsole("setTimeout(testFunction, 0)");
+    InspectorTest.evaluateInPage("setTimeout(testFunction, 0)");
     InspectorTest.addResult("Set timer for test function.");
 };
 
@@ -290,7 +292,7 @@ InspectorTest._resumedScript = function()
 
 InspectorTest.showUISourceCode = function(uiSourceCode, callback)
 {
-    var panel = WebInspector.inspectorView._showPanel("sources");
+    var panel = WebInspector.panels.sources;
     panel.showUISourceCode(uiSourceCode);
     var sourceFrame = panel.visibleView;
     if (sourceFrame.loaded)
@@ -306,7 +308,7 @@ InspectorTest.showScriptSource = function(scriptName, callback)
 
 InspectorTest.waitForScriptSource = function(scriptName, callback)
 {
-    var panel = WebInspector.inspectorView._showPanel("sources");
+    var panel = WebInspector.panels.sources;
     var uiSourceCodes = panel._workspace.uiSourceCodes();
     for (var i = 0; i < uiSourceCodes.length; ++i) {
         if (uiSourceCodes[i].name() === scriptName) {

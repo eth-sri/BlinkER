@@ -10,10 +10,8 @@
 #include "core/fetch/FetchUtils.h"
 #include "core/fetch/ResourceLoaderOptions.h"
 #include "core/loader/ThreadableLoader.h"
-#include "core/xml/XMLHttpRequest.h"
 #include "modules/serviceworkers/FetchManager.h"
 #include "modules/serviceworkers/RequestInit.h"
-#include "platform/NotImplemented.h"
 #include "platform/network/HTTPParsers.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/weborigin/Referrer.h"
@@ -68,7 +66,7 @@ Request* Request::createRequestWithRequestData(ExecutionContext* context, FetchR
         }
         // FIXME: "2. Add case correction as in XMLHttpRequest?"
         // "3. Set |request|'s method to |method|."
-        request->setMethod(XMLHttpRequest::uppercaseKnownHTTPMethod(AtomicString(init.method)));
+        request->setMethod(FetchUtils::normalizeMethod(AtomicString(init.method)));
     }
     // "12. Let |r| be a new Request object associated with |request|, Headers
     // object."
@@ -299,7 +297,7 @@ Request* Request::clone() const
     return Request::create(*this);
 }
 
-void Request::populateWebServiceWorkerRequest(WebServiceWorkerRequest& webRequest)
+void Request::populateWebServiceWorkerRequest(WebServiceWorkerRequest& webRequest) const
 {
     webRequest.setMethod(method());
     webRequest.setURL(m_request->url());

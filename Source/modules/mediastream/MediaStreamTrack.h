@@ -40,14 +40,14 @@ class ExceptionState;
 class MediaStreamComponent;
 class MediaStreamTrackSourcesCallback;
 
-class MediaStreamTrack FINAL
+class MediaStreamTrack final
     : public RefCountedGarbageCollectedWillBeGarbageCollectedFinalized<MediaStreamTrack>
     , public ActiveDOMObject
     , public EventTargetWithInlineData
     , public MediaStreamSource::Observer {
     DEFINE_EVENT_TARGET_REFCOUNTING_WILL_BE_REMOVED(RefCountedGarbageCollectedWillBeGarbageCollectedFinalized<MediaStreamTrack>);
     DEFINE_WRAPPERTYPEINFO();
-    USING_GARBAGE_COLLECTED_MIXIN(MediaStreamTrack);
+    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(MediaStreamTrack);
 public:
     static MediaStreamTrack* create(ExecutionContext*, MediaStreamComponent*);
     virtual ~MediaStreamTrack();
@@ -55,6 +55,8 @@ public:
     String kind() const;
     String id() const;
     String label() const;
+    bool remote() const;
+    bool readonly() const;
 
     bool enabled() const;
     void setEnabled(bool);
@@ -78,21 +80,21 @@ public:
     void unregisterMediaStream(MediaStream*);
 
     // EventTarget
-    virtual const AtomicString& interfaceName() const OVERRIDE;
-    virtual ExecutionContext* executionContext() const OVERRIDE;
+    virtual const AtomicString& interfaceName() const override;
+    virtual ExecutionContext* executionContext() const override;
 
     // ActiveDOMObject
-    virtual void stop() OVERRIDE;
+    virtual void stop() override;
 
     PassOwnPtr<AudioSourceProvider> createWebAudioSource();
 
-    virtual void trace(Visitor*) OVERRIDE;
+    virtual void trace(Visitor*) override;
 
 private:
     MediaStreamTrack(ExecutionContext*, MediaStreamComponent*);
 
     // MediaStreamSourceObserver
-    virtual void sourceChangedState() OVERRIDE;
+    virtual void sourceChangedState() override;
 
     void propagateTrackEnded();
 
@@ -100,7 +102,7 @@ private:
     HeapHashSet<Member<MediaStream> > m_registeredMediaStreams;
     bool m_isIteratingRegisteredMediaStreams;
     bool m_stopped;
-    Member<MediaStreamComponent> m_component;
+    RefPtr<MediaStreamComponent> m_component;
 };
 
 typedef HeapVector<Member<MediaStreamTrack> > MediaStreamTrackVector;

@@ -66,7 +66,7 @@ enum GraphicsLayerUpdateScope {
 //
 // Currently (Oct. 2013) there is one CompositedLayerMapping for each RenderLayer,
 // but this is likely to evolve soon.
-class CompositedLayerMapping FINAL : public GraphicsLayerClient {
+class CompositedLayerMapping final : public GraphicsLayerClient {
     WTF_MAKE_NONCOPYABLE(CompositedLayerMapping); WTF_MAKE_FAST_ALLOCATED;
 public:
     explicit CompositedLayerMapping(RenderLayer&);
@@ -132,7 +132,12 @@ public:
     void setSquashingContentsNeedDisplay();
     void setContentsNeedDisplay();
     // r is in the coordinate space of the layer's render object
-    void setContentsNeedDisplayInRect(const LayoutRect&, WebInvalidationDebugAnnotations);
+    void setContentsNeedDisplayInRect(const LayoutRect&, PaintInvalidationReason);
+
+    void setScrollingContentsNeedDisplay();
+    // FIXME: Temporarily the rect is in the coordinate space of the scrolling container layer.
+    // Will make it in the coordinate space of the scrolling contents layer. crbug.com/416539.
+    void setScrollingContentsNeedDisplayInRect(const LayoutRect&, PaintInvalidationReason);
 
     // Notification from the renderer that its content changed.
     void contentChanged(ContentChangeType);
@@ -152,12 +157,12 @@ public:
     void updateShouldFlattenTransform();
 
     // GraphicsLayerClient interface
-    virtual void notifyAnimationStarted(const GraphicsLayer*, double monotonicTime) OVERRIDE;
-    virtual void paintContents(const GraphicsLayer*, GraphicsContext&, GraphicsLayerPaintingPhase, const IntRect& clip) OVERRIDE;
-    virtual bool isTrackingPaintInvalidations() const OVERRIDE;
+    virtual void notifyAnimationStarted(const GraphicsLayer*, double monotonicTime, int group) override;
+    virtual void paintContents(const GraphicsLayer*, GraphicsContext&, GraphicsLayerPaintingPhase, const IntRect& clip) override;
+    virtual bool isTrackingPaintInvalidations() const override;
 
 #if ENABLE(ASSERT)
-    virtual void verifyNotPainting() OVERRIDE;
+    virtual void verifyNotPainting() override;
 #endif
 
     LayoutRect contentsBox() const;
@@ -192,7 +197,7 @@ public:
     void assertNeedsToUpdateGraphicsLayerBitsCleared() {  ASSERT(m_pendingUpdateScope == GraphicsLayerUpdateNone); }
 #endif
 
-    virtual String debugName(const GraphicsLayer*) OVERRIDE;
+    virtual String debugName(const GraphicsLayer*) override;
 
     LayoutSize contentOffsetInCompositingLayer() const;
 
@@ -202,12 +207,12 @@ public:
     }
 
     // If there is a squashed layer painting into this CLM that is an ancestor of the given RenderObject, return it. Otherwise return 0.
-    const GraphicsLayerPaintInfo* containingSquashedLayer(const RenderObject*);
+    const GraphicsLayerPaintInfo* containingSquashedLayer(const RenderObject*, unsigned maxSquashedLayerIndex);
 
     void updateScrollingBlockSelection();
 
 private:
-    static const GraphicsLayerPaintInfo* containingSquashedLayer(const RenderObject*,  const Vector<GraphicsLayerPaintInfo>& layers);
+    static const GraphicsLayerPaintInfo* containingSquashedLayer(const RenderObject*,  const Vector<GraphicsLayerPaintInfo>& layers, unsigned maxSquashedLayerIndex);
 
     // Helper methods to updateGraphicsLayerGeometry:
     void computeGraphicsLayerParentLocation(const RenderLayer* compositingContainer, const IntRect& ancestorCompositingBounds, IntPoint& graphicsLayerParentLocation);
@@ -284,7 +289,7 @@ private:
     void updateBackgroundColor();
     void updateContentsRect();
     void updateContentsOffsetInCompositingLayer(const IntPoint& snappedOffsetFromCompositedAncestor, const IntPoint& graphicsLayerParentLocation);
-    void updateAfterWidgetResize();
+    void updateAfterPartResize();
     void updateCompositingReasons();
 
     static bool hasVisibleNonCompositingDescendant(RenderLayer* parent);

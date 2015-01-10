@@ -186,10 +186,7 @@ void HTMLTextFormControlElement::setSelectionDirection(const String& direction)
 void HTMLTextFormControlElement::select()
 {
     document().updateLayoutIgnorePendingStylesheets();
-    RefPtrWillBeRawPtr<HTMLTextFormControlElement> protector(this);
-    if (isFocusable())
-        document().page()->focusController().setFocusedElement(this, document().frame());
-    setSelectionRange(0, std::numeric_limits<int>::max(), SelectionHasNoDirection, ChangeSelection);
+    setSelectionRange(0, std::numeric_limits<int>::max(), SelectionHasNoDirection, isFocusable() ? ChangeSelectionAndFocus : NotChangeSelection);
 }
 
 bool HTMLTextFormControlElement::shouldDispatchFormControlChangeEvent(String& oldValue, String& newValue)
@@ -293,22 +290,22 @@ static Position positionForIndex(HTMLElement* innerEditor, int index)
     }
     int remainingCharactersToMoveForward = index;
     Node* lastBrOrText = innerEditor;
-    for (Node* node = NodeTraversal::next(*innerEditor, innerEditor); node; node = NodeTraversal::next(*node, innerEditor)) {
+    for (Node& node : NodeTraversal::descendantsOf(*innerEditor)) {
         ASSERT(remainingCharactersToMoveForward >= 0);
-        if (node->hasTagName(brTag)) {
+        if (node.hasTagName(brTag)) {
             if (remainingCharactersToMoveForward == 0)
-                return positionBeforeNode(node);
+                return positionBeforeNode(&node);
             --remainingCharactersToMoveForward;
-            lastBrOrText = node;
+            lastBrOrText = &node;
             continue;
         }
 
-        if (node->isTextNode()) {
-            Text& text = toText(*node);
+        if (node.isTextNode()) {
+            Text& text = toText(node);
             if (remainingCharactersToMoveForward < static_cast<int>(text.length()))
                 return Position(&text, remainingCharactersToMoveForward);
             remainingCharactersToMoveForward -= text.length();
-            lastBrOrText = node;
+            lastBrOrText = &node;
             continue;
         }
 
@@ -359,12 +356,12 @@ void HTMLTextFormControlElement::setSelectionRange(int start, int end, TextField
     start = std::min(std::max(start, 0), end);
     cacheSelection(start, end, direction);
 
+    if (selectionOption == NotChangeSelection || (selectionOption == ChangeSelectionIfFocused && document().focusedElement() != this))
+        return;
+
     LocalFrame* frame = document().frame();
     HTMLElement* innerEditor = innerEditorElement();
     if (!frame || !innerEditor)
-        return;
-
-    if (selectionOption == NotChangeSelection && document().focusedElement() != this)
         return;
 
     Position startPosition = positionForIndex(innerEditor, start);
@@ -386,7 +383,7 @@ void HTMLTextFormControlElement::setSelectionRange(int start, int end, TextField
         newSelection.setWithoutValidation(startPosition, endPosition);
     newSelection.setIsDirectional(direction != SelectionHasNoDirection);
 
-    frame->selection().setSelection(newSelection, FrameSelection::CloseTyping | FrameSelection::ClearTypingStyle | FrameSelection::DoNotSetFocus);
+    frame->selection().setSelection(newSelection, FrameSelection::CloseTyping | FrameSelection::ClearTypingStyle | (selectionOption == ChangeSelectionAndFocus ? 0 : FrameSelection::DoNotSetFocus));
 }
 
 VisiblePosition HTMLTextFormControlElement::visiblePositionForIndex(int index) const
@@ -523,16 +520,16 @@ PassRefPtrWillBeRawPtr<Range> HTMLTextFormControlElement::selection() const
     int offset = 0;
     Node* startNode = 0;
     Node* endNode = 0;
-    for (Node* node = innerText->firstChild(); node; node = NodeTraversal::next(*node, innerText)) {
-        ASSERT(!node->hasChildren());
-        ASSERT(node->isTextNode() || isHTMLBRElement(*node));
-        int length = node->isTextNode() ? lastOffsetInNode(node) : 1;
+    for (Node& node : NodeTraversal::descendantsOf(*innerText)) {
+        ASSERT(!node.hasChildren());
+        ASSERT(node.isTextNode() || isHTMLBRElement(node));
+        int length = node.isTextNode() ? lastOffsetInNode(&node) : 1;
 
         if (offset <= start && start <= offset + length)
-            setContainerAndOffsetForRange(node, start - offset, startNode, start);
+            setContainerAndOffsetForRange(&node, start - offset, startNode, start);
 
         if (offset <= end && end <= offset + length) {
-            setContainerAndOffsetForRange(node, end - offset, endNode, end);
+            setContainerAndOffsetForRange(&node, end - offset, endNode, end);
             break;
         }
 
@@ -590,7 +587,7 @@ void HTMLTextFormControlElement::setInnerEditorValue(const String& value)
     if (textIsChanged || !innerEditorElement()->hasChildren()) {
         if (textIsChanged && renderer()) {
             if (AXObjectCache* cache = document().existingAXObjectCache())
-                cache->postNotification(this, AXObjectCache::AXValueChanged, false);
+                cache->handleTextFormControlChanged(this);
         }
         innerEditorElement()->setInnerText(value, ASSERT_NO_EXCEPTION);
 
@@ -616,11 +613,11 @@ String HTMLTextFormControlElement::innerEditorValue() const
         return emptyString();
 
     StringBuilder result;
-    for (Node* node = innerEditor; node; node = NodeTraversal::next(*node, innerEditor)) {
-        if (isHTMLBRElement(*node))
+    for (Node& node : NodeTraversal::inclusiveDescendantsOf(*innerEditor)) {
+        if (isHTMLBRElement(node))
             result.append(newlineCharacter);
-        else if (node->isTextNode())
-            result.append(toText(node)->data());
+        else if (node.isTextNode())
+            result.append(toText(node).data());
     }
     return finishText(result);
 }
@@ -663,11 +660,11 @@ String HTMLTextFormControlElement::valueWithHardLineBreaks() const
     getNextSoftBreak(line, breakNode, breakOffset);
 
     StringBuilder result;
-    for (Node* node = innerText->firstChild(); node; node = NodeTraversal::next(*node, innerText)) {
-        if (isHTMLBRElement(*node))
+    for (Node& node : NodeTraversal::descendantsOf(*innerText)) {
+        if (isHTMLBRElement(node)) {
             result.append(newlineCharacter);
-        else if (node->isTextNode()) {
-            String data = toText(node)->data();
+        } else if (node.isTextNode()) {
+            String data = toText(node).data();
             unsigned length = data.length();
             unsigned position = 0;
             while (breakNode == node && breakOffset <= length) {

@@ -105,7 +105,7 @@ using namespace HTMLNames;
 
 bool isBackForwardLoadType(FrameLoadType type)
 {
-    return type == FrameLoadTypeBackForward;
+    return type == FrameLoadTypeBackForward || type == FrameLoadTypeInitialHistoryLoad;
 }
 
 static bool needsHistoryItemRestore(FrameLoadType type)
@@ -140,6 +140,9 @@ void FrameLoader::trace(Visitor* visitor)
     visitor->trace(m_mixedContentChecker);
     visitor->trace(m_progressTracker);
     visitor->trace(m_fetchContext);
+    visitor->trace(m_currentItem);
+    visitor->trace(m_provisionalItem);
+    visitor->trace(m_deferredHistoryLoad);
 }
 
 void FrameLoader::init()
@@ -169,7 +172,8 @@ void FrameLoader::setDefersLoading(bool defers)
 
     if (!defers) {
         if (m_deferredHistoryLoad.isValid()) {
-            loadHistoryItem(m_deferredHistoryLoad.m_item.get(), m_deferredHistoryLoad.m_type, m_deferredHistoryLoad.m_cachePolicy);
+            loadHistoryItem(m_deferredHistoryLoad.m_item.get(), FrameLoadTypeBackForward,
+                m_deferredHistoryLoad.m_type, m_deferredHistoryLoad.m_cachePolicy);
             m_deferredHistoryLoad = DeferredHistoryLoad();
         }
         m_frame->navigationScheduler().startTimer();
@@ -254,8 +258,9 @@ void FrameLoader::didExplicitOpen()
 
 void FrameLoader::clear()
 {
-    // clear() is called during (Local)Frame finalization and when creating
-    // a new Document within it (DocumentLoader::createWriterFor().)
+    // clear() is called during (Local)Frame detachment or when
+    // reusing a FrameLoader by putting a new Document within it
+    // (DocumentLoader::ensureWriter().)
     if (m_stateMachine.creatingInitialEmptyDocument())
         return;
 
@@ -286,7 +291,7 @@ void FrameLoader::replaceDocumentWhileExecutingJavaScriptURL(const String& sourc
     if (!m_frame->document()->loader())
         return;
 
-    // DocumentWriter::replaceDocumentWhileExecutingJavaScriptURL can cause the DocumentLoader to get deref'ed and possible destroyed,
+    // DocumentLoader::replaceDocumentWhileExecutingJavaScriptURL can cause the DocumentLoader to get deref'ed and possible destroyed,
     // so protect it with a RefPtr.
     RefPtr<DocumentLoader> documentLoader(m_frame->document()->loader());
 
@@ -336,6 +341,7 @@ static HistoryCommitType loadTypeToCommitType(FrameLoadType type)
     case FrameLoadTypeStandard:
         return StandardCommit;
     case FrameLoadTypeInitialInChildFrame:
+    case FrameLoadTypeInitialHistoryLoad:
         return InitialCommitInChildFrame;
     case FrameLoadTypeBackForward:
         return BackForwardCommit;
@@ -371,9 +377,6 @@ void FrameLoader::didBeginDocument(bool dispatch)
 {
     m_frame->document()->setReadyState(Document::Loading);
 
-    if (m_provisionalItem && m_loadType == FrameLoadTypeBackForward)
-        m_frame->domWindow()->statePopped(m_provisionalItem->stateObject());
-
     if (dispatch)
         dispatchDidClearDocumentOfWindowObject();
 
@@ -400,7 +403,7 @@ void FrameLoader::didBeginDocument(bool dispatch)
         }
     }
 
-    if (m_provisionalItem && m_loadType == FrameLoadTypeBackForward)
+    if (m_provisionalItem && (m_loadType == FrameLoadTypeBackForward || m_loadType == FrameLoadTypeInitialHistoryLoad))
         m_frame->document()->setStateForNewFormElements(m_provisionalItem->documentState());
 }
 
@@ -660,21 +663,22 @@ void FrameLoader::completed(EventAction *action)
 
 void FrameLoader::setReferrerForFrameRequest(ResourceRequest& request, ShouldSendReferrer shouldSendReferrer, Document* originDocument)
 {
-    if (shouldSendReferrer == NeverSendReferrer) {
-        request.clearHTTPReferrer();
+    if (!originDocument)
         return;
-    }
+    // FIXME: This should be an assertion, but there's some plugin code in the chromium repo
+    // that both determines its own referrer and expects to be associated with an originDocument.
+    if (!request.httpReferrer().isEmpty())
+        return;
+    if (shouldSendReferrer == NeverSendReferrer)
+        return;
 
     // Always use the initiating document to generate the referrer.
-    // We need to generateReferrerHeader(), because we might not have enforced ReferrerPolicy or https->http
+    // We need to generateReferrer(), because we haven't enforced ReferrerPolicy or https->http
     // referrer suppression yet.
-    String argsReferrer(request.httpReferrer());
-    if (argsReferrer.isEmpty())
-        argsReferrer = originDocument->outgoingReferrer();
-    String referrer = SecurityPolicy::generateReferrerHeader(originDocument->referrerPolicy(), request.url(), argsReferrer);
+    Referrer referrer = SecurityPolicy::generateReferrer(originDocument->referrerPolicy(), request.url(), originDocument->outgoingReferrer());
 
-    request.setHTTPReferrer(Referrer(referrer, originDocument->referrerPolicy()));
-    RefPtr<SecurityOrigin> referrerOrigin = SecurityOrigin::createFromString(referrer);
+    request.setHTTPReferrer(referrer);
+    RefPtr<SecurityOrigin> referrerOrigin = SecurityOrigin::createFromString(referrer.referrer);
     request.addHTTPOriginIfNeeded(referrerOrigin->toAtomicString());
 }
 
@@ -728,8 +732,6 @@ bool FrameLoader::prepareRequestForThisFrame(FrameLoadRequest& request)
 
     if (!request.formState() && request.frameName().isEmpty())
         request.setFrameName(m_frame->document()->baseTarget());
-
-    setReferrerForFrameRequest(request.resourceRequest(), request.shouldSendReferrer(), request.originDocument());
     return true;
 }
 
@@ -785,6 +787,8 @@ void FrameLoader::load(const FrameLoadRequest& passedRequest)
         return;
     }
 
+    setReferrerForFrameRequest(request.resourceRequest(), request.shouldSendReferrer(), request.originDocument());
+
     FrameLoadType newLoadType = determineFrameLoadType(request);
     NavigationAction action(request.resourceRequest(), newLoadType, request.formState(), request.triggeringEvent());
     if (action.resourceRequest().requestContext() == WebURLRequest::RequestContextUnspecified)
@@ -837,7 +841,8 @@ void FrameLoader::reportLocalLoadFailed(LocalFrame* frame, const String& url)
 ResourceRequest FrameLoader::requestFromHistoryItem(HistoryItem* item, ResourceRequestCachePolicy cachePolicy)
 {
     RefPtr<FormData> formData = item->formData();
-    ResourceRequest request(item->url(), item->referrer());
+    ResourceRequest request(item->url());
+    request.setHTTPReferrer(item->referrer());
     request.setCachePolicy(cachePolicy);
     if (formData) {
         request.setHTTPMethod("POST");
@@ -1164,61 +1169,22 @@ String FrameLoader::userAgent(const KURL& url) const
     return userAgent;
 }
 
-void FrameLoader::detachFromParent()
+void FrameLoader::detach()
 {
 #if !ENABLE(OILPAN)
     // The caller must protect a reference to m_frame.
     ASSERT(m_frame->refCount() > 1);
 #endif
-
-    InspectorInstrumentation::frameDetachedFromParent(m_frame);
-
     if (m_documentLoader)
         m_documentLoader->detachFromFrame();
     m_documentLoader = nullptr;
 
-    if (!client())
-        return;
-
-    // FIXME: All this code belongs up in Page.
     Frame* parent = m_frame->tree().parent();
-    if (parent && parent->isLocalFrame()) {
-        m_frame->setView(nullptr);
-        // FIXME: Shouldn't need to check if page() is null here.
-        if (m_frame->owner() && m_frame->page())
-            m_frame->page()->decrementSubframeCount();
-        m_frame->willDetachFrameHost();
-        detachClient();
+    if (parent && parent->isLocalFrame())
         toLocalFrame(parent)->loader().scheduleCheckCompleted();
-    } else {
-        m_frame->setView(nullptr);
-        m_frame->willDetachFrameHost();
-        detachClient();
-    }
-    m_frame->detachFromFrameHost();
-}
-
-void FrameLoader::detachClient()
-{
-    ASSERT(client());
-
-    // Finish all cleanup work that might require talking to the embedder.
     m_progressTracker->dispose();
     m_progressTracker.clear();
     setOpener(0);
-    // Notify ScriptController that the frame is closing, since its cleanup ends up calling
-    // back to FrameLoaderClient via WindowProxy.
-    m_frame->script().clearForClose();
-
-    // client() should never be null because that means we somehow re-entered
-    // the frame detach code... but it is sometimes.
-    // FIXME: Understand why this is happening so we can document this insanity.
-    if (client()) {
-        // After this, we must no longer talk to the client since this clears
-        // its owning reference back to our owning LocalFrame.
-        client()->detachedFromParent();
-        m_frame->clearClient();
-    }
 }
 
 void FrameLoader::receivedMainResourceError(const ResourceError& error)
@@ -1498,7 +1464,7 @@ LocalFrame* FrameLoader::findFrameForNavigation(const AtomicString& name, Docume
     return toLocalFrame(frame);
 }
 
-void FrameLoader::loadHistoryItem(HistoryItem* item, HistoryLoadType historyLoadType, ResourceRequestCachePolicy cachePolicy)
+void FrameLoader::loadHistoryItem(HistoryItem* item, FrameLoadType frameLoadType, HistoryLoadType historyLoadType, ResourceRequestCachePolicy cachePolicy)
 {
     RefPtrWillBeRawPtr<LocalFrame> protect(m_frame.get());
     if (m_frame->page()->defersLoading()) {
@@ -1508,7 +1474,7 @@ void FrameLoader::loadHistoryItem(HistoryItem* item, HistoryLoadType historyLoad
 
     m_provisionalItem = item;
     if (historyLoadType == HistorySameDocumentLoad) {
-        loadInSameDocument(item->url(), item->stateObject(), FrameLoadTypeBackForward, NotClientRedirect);
+        loadInSameDocument(item->url(), item->stateObject(), frameLoadType, NotClientRedirect);
         restoreScrollPositionAndViewState();
         return;
     }
@@ -1516,7 +1482,7 @@ void FrameLoader::loadHistoryItem(HistoryItem* item, HistoryLoadType historyLoad
     ResourceRequest request = requestFromHistoryItem(item, cachePolicy);
     request.setFrameType(m_frame->isMainFrame() ? WebURLRequest::FrameTypeTopLevel : WebURLRequest::FrameTypeNested);
     request.setRequestContext(WebURLRequest::RequestContextInternal);
-    loadWithNavigationAction(NavigationAction(request, FrameLoadTypeBackForward), FrameLoadTypeBackForward, nullptr, SubstituteData(), CheckContentSecurityPolicy);
+    loadWithNavigationAction(NavigationAction(request, frameLoadType), frameLoadType, nullptr, SubstituteData(), CheckContentSecurityPolicy);
 }
 
 void FrameLoader::dispatchDocumentElementAvailable()

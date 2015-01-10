@@ -104,7 +104,7 @@ void RenderLayerModelObject::styleWillChange(StyleDifference diff, const RenderS
 
 void RenderLayerModelObject::styleDidChange(StyleDifference diff, const RenderStyle* oldStyle)
 {
-    bool hadTransform = hasTransform();
+    bool hadTransform = hasTransformRelatedProperty();
     bool hadLayer = hasLayer();
     bool layerWasSelfPainting = hadLayer && layer()->isSelfPaintingLayer();
 
@@ -123,7 +123,7 @@ void RenderLayerModelObject::styleDidChange(StyleDifference diff, const RenderSt
             }
         }
     } else if (layer() && layer()->parent()) {
-        setHasTransform(false); // Either a transform wasn't specified or the object doesn't support transforms, so just null out the bit.
+        setHasTransformRelatedProperty(false); // Either a transform wasn't specified or the object doesn't support transforms, so just null out the bit.
         setHasReflection(false);
         layer()->removeOnlyThisLayer(); // calls destroyLayer() which clears m_layer
         if (s_wasFloating && isFloating())
@@ -183,31 +183,32 @@ void RenderLayerModelObject::invalidateTreeIfNeeded(const PaintInvalidationState
     const RenderLayerModelObject& newPaintInvalidationContainer = *adjustCompositedContainerForSpecialAncestors(establishesNewPaintInvalidationContainer ? this : &paintInvalidationState.paintInvalidationContainer());
     ASSERT(&newPaintInvalidationContainer == containerForPaintInvalidation());
 
-    InvalidationReason reason = invalidatePaintIfNeeded(paintInvalidationState, newPaintInvalidationContainer);
+    PaintInvalidationReason reason = invalidatePaintIfNeeded(paintInvalidationState, newPaintInvalidationContainer);
     clearPaintInvalidationState(paintInvalidationState);
 
     PaintInvalidationState childTreeWalkState(paintInvalidationState, *this, newPaintInvalidationContainer);
-    if (reason == InvalidationLocationChange || reason == InvalidationFull)
+    if (reason == PaintInvalidationLocationChange)
         childTreeWalkState.setForceCheckForPaintInvalidation();
     invalidatePaintOfSubtreesIfNeeded(childTreeWalkState);
 }
 
-void RenderLayerModelObject::setBackingNeedsPaintInvalidationInRect(const LayoutRect& r, InvalidationReason invalidationReason) const
+void RenderLayerModelObject::setBackingNeedsPaintInvalidationInRect(const LayoutRect& r, PaintInvalidationReason invalidationReason, const RenderObject& forRenderer) const
 {
     // https://bugs.webkit.org/show_bug.cgi?id=61159 describes an unreproducible crash here,
     // so assert but check that the layer is composited.
     ASSERT(compositingState() != NotComposited);
 
-    WebInvalidationDebugAnnotations annotations = invalidationReason == InvalidationRendererInsertion ? WebInvalidationDebugAnnotationsFirstPaint : WebInvalidationDebugAnnotationsNone;
-
     // FIXME: generalize accessors to backing GraphicsLayers so that this code is squashing-agnostic.
     if (layer()->groupedMapping()) {
         LayoutRect paintInvalidationRect = r;
-        paintInvalidationRect.move(layer()->subpixelAccumulation());
-        if (GraphicsLayer* squashingLayer = layer()->groupedMapping()->squashingLayer())
-            squashingLayer->setNeedsDisplayInRect(pixelSnappedIntRect(paintInvalidationRect), annotations);
+        if (GraphicsLayer* squashingLayer = layer()->groupedMapping()->squashingLayer()) {
+            // Note: the subpixel accumulation of layer() does not need to be added here. It is already taken into account.
+            squashingLayer->setNeedsDisplayInRect(pixelSnappedIntRect(paintInvalidationRect), invalidationReason);
+        }
+    } else if (this != forRenderer && isBox() && toRenderBox(this)->usesCompositedScrolling()) {
+        layer()->compositedLayerMapping()->setScrollingContentsNeedDisplayInRect(r, invalidationReason);
     } else {
-        layer()->compositedLayerMapping()->setContentsNeedDisplayInRect(r, annotations);
+        layer()->compositedLayerMapping()->setContentsNeedDisplayInRect(r, invalidationReason);
     }
 }
 

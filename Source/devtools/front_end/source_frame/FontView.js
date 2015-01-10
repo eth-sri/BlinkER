@@ -34,7 +34,7 @@
 WebInspector.FontView = function(url)
 {
     WebInspector.VBox.call(this);
-    this.registerRequiredCSS("fontView.css");
+    this.registerRequiredCSS("source_frame/fontView.css");
     this.element.classList.add("font-view");
     this._url = url
 }
@@ -53,11 +53,11 @@ WebInspector.FontView.prototype = {
 
         var uniqueFontName = "WebInspectorFontPreview" + (++WebInspector.FontView._fontId);
 
-        this.fontStyleElement = document.createElement("style");
+        this.fontStyleElement = createElement("style");
         this.fontStyleElement.textContent = "@font-face { font-family: \"" + uniqueFontName + "\"; src: url(" + this._url + "); }";
-        document.head.appendChild(this.fontStyleElement);
+        this.element.ownerDocument.head.appendChild(this.fontStyleElement);
 
-        var fontPreview = document.createElement("div");
+        var fontPreview = createElement("div");
         for (var i = 0; i < WebInspector.FontView._fontPreviewLines.length; ++i) {
             if (i > 0)
                 fontPreview.createChild("br");

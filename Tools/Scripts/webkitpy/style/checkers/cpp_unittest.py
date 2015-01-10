@@ -1602,16 +1602,7 @@ class CppStyleTest(CppStyleTestBase):
             'int foo() const {',
             'Place brace on its own line for function definitions.  [whitespace/braces] [4]')
         self.assert_multi_line_lint(
-            'int foo() const OVERRIDE {',
-            'Place brace on its own line for function definitions.  [whitespace/braces] [4]')
-        self.assert_multi_line_lint(
-            'int foo() OVERRIDE {',
-            'Place brace on its own line for function definitions.  [whitespace/braces] [4]')
-        self.assert_multi_line_lint(
             'int foo() override {',
-            'Place brace on its own line for function definitions.  [whitespace/braces] [4]')
-        self.assert_multi_line_lint(
-            'int foo() FINAL {',
             'Place brace on its own line for function definitions.  [whitespace/braces] [4]')
         self.assert_multi_line_lint(
             'int foo() final {',
@@ -1622,17 +1613,7 @@ class CppStyleTest(CppStyleTestBase):
             '}\n',
             '')
         self.assert_multi_line_lint(
-            'int foo() OVERRIDE\n'
-            '{\n'
-            '}\n',
-            '')
-        self.assert_multi_line_lint(
             'int foo() override\n'
-            '{\n'
-            '}\n',
-            '')
-        self.assert_multi_line_lint(
-            'int foo() FINAL\n'
             '{\n'
             '}\n',
             '')
@@ -1798,6 +1779,15 @@ class CppStyleTest(CppStyleTestBase):
         self.assert_lint('a<Foo*> t <<= *b / &c; // Test', '')
         self.assert_lint('if (a=b == 1)', 'Missing spaces around =  [whitespace/operators] [4]')
         self.assert_lint('a = 1<<20', 'Missing spaces around <<  [whitespace/operators] [3]')
+        self.assert_lint('a = 1>> 20', 'Missing spaces around >>  [whitespace/operators] [3]')
+        self.assert_lint('a = 1 >>20', 'Missing spaces around >>  [whitespace/operators] [3]')
+        self.assert_lint('a = 1>>20', 'Missing spaces around >>  [whitespace/operators] [3]')
+        self.assert_lint('func(OwnPtr<Vector<Foo>>)', '')
+        self.assert_lint('func(OwnPtr<Vector<Foo>> foo)', '')
+        self.assert_lint('func(OwnPtr<HashMap<Foo, Member<Bar>>>)', '')
+        # FIXME: The following test should not show any error.
+        self.assert_lint('func(OwnPtr<HashMap<Foo, Member<Bar\n    >>>)',
+                         'Missing spaces around <  [whitespace/operators] [3]')
         self.assert_lint('if (a = b == 1)', '')
         self.assert_lint('a = 1 << 20', '')
         self.assert_multi_line_lint('#include <sys/io.h>\n', '')
@@ -5048,11 +5038,6 @@ class WebKitStyleTest(CppStyleTestBase):
 
         # vm_throw is allowed as well.
         self.assert_lint('int vm_throw;', '')
-
-        # Attributes.
-        self.assert_lint('int foo ALLOW_UNUSED;', '')
-        self.assert_lint('int foo_error ALLOW_UNUSED;', 'foo_error' + name_underscore_error_message)
-        self.assert_lint('ThreadFunctionInvocation* leakedInvocation ALLOW_UNUSED = invocation.leakPtr()', '')
 
         # Bitfields.
         self.assert_lint('unsigned _fillRule : 1;',

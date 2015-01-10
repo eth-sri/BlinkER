@@ -31,12 +31,13 @@
 #include "core/rendering/ImageQualityController.h"
 #include "core/rendering/PointerEventsHitRules.h"
 #include "core/rendering/RenderImageResource.h"
-#include "core/rendering/svg/RenderSVGResource.h"
+#include "core/rendering/svg/RenderSVGResourceContainer.h"
 #include "core/rendering/svg/SVGRenderSupport.h"
 #include "core/rendering/svg/SVGResources.h"
 #include "core/rendering/svg/SVGResourcesCache.h"
 #include "core/svg/SVGImageElement.h"
 #include "platform/LengthFunctions.h"
+#include "platform/graphics/DisplayList.h"
 
 namespace blink {
 
@@ -127,6 +128,8 @@ void RenderSVGImage::layout()
     }
 
     if (m_needsBoundariesUpdate) {
+        m_bufferedForeground.clear();
+
         m_paintInvalidationBoundingBox = m_objectBoundingBox;
         SVGRenderSupport::intersectPaintInvalidationRectWithResources(this, m_paintInvalidationBoundingBox);
 
@@ -147,11 +150,6 @@ void RenderSVGImage::layout()
 void RenderSVGImage::paint(PaintInfo& paintInfo, const LayoutPoint&)
 {
     SVGImagePainter(*this).paint(paintInfo);
-}
-
-void RenderSVGImage::invalidateBufferedForeground()
-{
-    m_bufferedForeground.clear();
 }
 
 bool RenderSVGImage::nodeAtFloatPoint(const HitTestRequest& request, HitTestResult& result, const FloatPoint& pointInParent, HitTestAction hitTestAction)
@@ -186,16 +184,16 @@ void RenderSVGImage::imageChanged(WrappedImagePtr, const IntRect*)
         resources->removeClientFromCache(this);
 
     // Eventually notify parent resources, that we've changed.
-    RenderSVGResource::markForLayoutAndParentResourceInvalidation(this, false);
+    RenderSVGResourceContainer::markForLayoutAndParentResourceInvalidation(this, false);
 
     // Update the SVGImageCache sizeAndScales entry in case image loading finished after layout.
     // (https://bugs.webkit.org/show_bug.cgi?id=99489)
     m_objectBoundingBox = FloatRect();
     updateImageViewport();
 
-    invalidateBufferedForeground();
+    m_bufferedForeground.clear();
 
-    setShouldDoFullPaintInvalidation(true);
+    setShouldDoFullPaintInvalidation();
 }
 
 void RenderSVGImage::addFocusRingRects(Vector<LayoutRect>& rects, const LayoutPoint&, const RenderLayerModelObject*) const

@@ -46,10 +46,6 @@ class EventRacerLog;
 class ExceptionState;
 class MessagePort;
 class Node;
-class TextTrack;
-class TextTrackCue;
-class XMLHttpRequest;
-class XMLHttpRequestUpload;
 
 struct FiringEventIterator {
     FiringEventIterator(const AtomicString& eventType, size_t& iterator, size_t& end)
@@ -177,18 +173,18 @@ private:
 
 class EventTargetWithInlineData : public EventTarget {
 public:
-    virtual void setCreatorEventRacerContext(PassRefPtr<EventRacerLog>, EventAction *) OVERRIDE FINAL;
-    virtual PassRefPtr<EventRacerLog> getCreatorEventRacerLog() const OVERRIDE FINAL;
-    virtual EventAction *getCreatorEventAction() const OVERRIDE FINAL { return m_creatorAction; }
+    virtual void setCreatorEventRacerContext(PassRefPtr<EventRacerLog>, EventAction *) override final;
+    virtual PassRefPtr<EventRacerLog> getCreatorEventRacerLog() const override final;
+    virtual EventAction *getCreatorEventAction() const override final { return m_creatorAction; }
 
 protected:
     EventTargetWithInlineData();
     ~EventTargetWithInlineData();
 
-    virtual EventTargetData* eventTargetData() OVERRIDE FINAL { return &m_eventTargetData; }
-    virtual const EventTargetData* eventTargetData() const OVERRIDE FINAL { return &m_eventTargetData; }
-    virtual EventTargetData& ensureEventTargetData() OVERRIDE FINAL { return m_eventTargetData; }
-    virtual const EventTargetData& ensureEventTargetData() const OVERRIDE FINAL { return m_eventTargetData; }
+    virtual EventTargetData* eventTargetData() override final { return &m_eventTargetData; }
+    virtual const EventTargetData* eventTargetData() const override final { return &m_eventTargetData; }
+    virtual EventTargetData& ensureEventTargetData() override final { return m_eventTargetData; }
+    virtual const EventTargetData& ensureEventTargetData() const override final { return m_eventTargetData; }
 
 private:
     EventTargetData m_eventTargetData;
@@ -282,8 +278,8 @@ public: \
     using baseClass::ref; \
     using baseClass::deref; \
 private: \
-    virtual void refEventTarget() OVERRIDE FINAL { ref(); } \
-    virtual void derefEventTarget() OVERRIDE FINAL { deref(); } \
+    virtual void refEventTarget() override final { ref(); } \
+    virtual void derefEventTarget() override final { deref(); } \
     typedef int thisIsHereToForceASemiColonAfterThisEventTargetMacro
 #define DEFINE_EVENT_TARGET_REFCOUNTING_WILL_BE_REMOVED(baseClass) DEFINE_EVENT_TARGET_REFCOUNTING(baseClass)
 #endif

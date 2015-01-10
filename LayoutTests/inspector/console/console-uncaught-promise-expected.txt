@@ -1,0 +1,27 @@
+CONSOLE ERROR: line 23: Unhandled promise rejection
+CONSOLE ERROR: line 44: Unhandled promise rejection
+CONSOLE ERROR: line 62: Unhandled promise rejection
+Tests that uncaught promise rejections are logged into console.
+
+
+    console-uncaught-promise.html:23 Unhandled promise rejection Promise {[[PromiseStatus]]: "rejected", [[PromiseValue]]: Error: err1}
+        __proto__: Promise
+        [[PromiseStatus]]: "rejected"
+        [[PromiseValue]]: Error: err1
+        console-uncaught-promise.html:23 promiseTest1
+        console-uncaught-promise.html:16 timeout
+
+    console-uncaught-promise.html:44 Unhandled promise rejection Promise {[[PromiseStatus]]: "rejected", [[PromiseValue]]: Error: err2}
+        __proto__: Promise
+        [[PromiseStatus]]: "rejected"
+        [[PromiseValue]]: Error: err2
+        console-uncaught-promise.html:44 promiseTest2
+        console-uncaught-promise.html:16 timeout
+
+    console-uncaught-promise.html:62 Unhandled promise rejection Promise {[[PromiseStatus]]: "rejected", [[PromiseValue]]: DOMException: Failed to execute 'removeChild' on 'Node': The node to be removed is not a child of th…}
+        __proto__: Promise
+        [[PromiseStatus]]: "rejected"
+        [[PromiseValue]]: DOMException: Failed to execute 'removeChild' on 'Node': The node to be removed is not a child of this node.
+        console-uncaught-promise.html:62 throwDOMException
+        console-uncaught-promise.html:54 catcher
+

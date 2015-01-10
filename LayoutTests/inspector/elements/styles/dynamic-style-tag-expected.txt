@@ -1,6 +1,5 @@
 Tests that different types of inline styles are correctly disambiguated and their sourceURL is correct.
 
-Page reloaded.
 Stylesheet added:
   - isInline: false
   - sourceURL: 
@@ -18,6 +17,15 @@ Stylesheet added:
    color: orange;
 }
 Stylesheet added:
+  - isInline: true
+  - sourceURL: dynamic-style-tag.html
+  - hasSourceURL: false
+  - contents: 
+/* comment */.inline-style-added-by-parser {
+   color: red;
+}
+
+Stylesheet added:
   - isInline: false
   - sourceURL: inlineStyleAddedByDocumentWrite.css
   - hasSourceURL: true
@@ -26,23 +34,6 @@ Stylesheet added:
    color: yellow;
 }
 /*# sourceURL=inlineStyleAddedByDocumentWrite.css*/
-
-Stylesheet added:
-  - isInline: false
-  - sourceURL: inlineStyleCreatedByScript.css
-  - hasSourceURL: true
-  - contents: .inline-style-created-by-script-with-source-url {
-   color: grey;
-}
-/*# sourceURL=inlineStyleCreatedByScript.css*/
-Stylesheet added:
-  - isInline: true
-  - sourceURL: dynamic-style-tag.html
-  - hasSourceURL: false
-  - contents: 
-/* comment */.inline-style-added-by-parser {
-   color: red;
-}
 
 Stylesheet added:
   - isInline: true
@@ -54,6 +45,14 @@ Stylesheet added:
 }
 /*# sourceURL=inlineStyleAddedByParser.css*/
 
+Stylesheet added:
+  - isInline: false
+  - sourceURL: inlineStyleCreatedByScript.css
+  - hasSourceURL: true
+  - contents: .inline-style-created-by-script-with-source-url {
+   color: grey;
+}
+/*# sourceURL=inlineStyleCreatedByScript.css*/
 [expanded] 
 element.style  { ()
 color: red;

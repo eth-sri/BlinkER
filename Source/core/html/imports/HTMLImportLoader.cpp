@@ -91,7 +91,7 @@ void HTMLImportLoader::responseReceived(Resource* resource, const ResourceRespon
     setState(startWritingAndParsing(response));
 }
 
-void HTMLImportLoader::dataReceived(Resource*, const char* data, int length)
+void HTMLImportLoader::dataReceived(Resource*, const char* data, unsigned length)
 {
     RefPtrWillBeRawPtr<DocumentWriter> protectingWriter(m_writer.get());
     m_writer->addData(data, length);
@@ -233,6 +233,7 @@ void HTMLImportLoader::trace(Visitor* visitor)
     visitor->trace(m_document);
     visitor->trace(m_writer);
     visitor->trace(m_microtaskQueue);
+    DocumentParserClient::trace(visitor);
 }
 
 } // namespace blink

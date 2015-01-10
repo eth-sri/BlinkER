@@ -61,14 +61,14 @@ public:
         : m_resolver(resolver)
         , m_adapter(m_resolver) { }
     virtual ~GetRegistrationCallback() { }
-    virtual void onSuccess(WebServiceWorkerRegistration* registration) OVERRIDE
+    virtual void onSuccess(WebServiceWorkerRegistration* registration) override
     {
         if (registration)
             m_adapter.onSuccess(registration);
         else if (m_resolver->executionContext() && !m_resolver->executionContext()->activeDOMObjectsAreStopped())
             m_resolver->resolve();
     }
-    virtual void onError(WebServiceWorkerError* error) OVERRIDE { m_adapter.onError(error); }
+    virtual void onError(WebServiceWorkerError* error) override { m_adapter.onError(error); }
 private:
     RefPtr<ScriptPromiseResolver> m_resolver;
     CallbackPromiseAdapter<ServiceWorkerRegistration, ServiceWorkerError> m_adapter;
@@ -135,6 +135,11 @@ ScriptPromise ServiceWorkerContainer::registerServiceWorker(ScriptState* scriptS
         return promise;
     }
 
+    if (!patternURL.string().startsWith(scriptURL.baseAsString())) {
+        resolver->reject(DOMException::create(SecurityError, "The scope must be under the directory of the script URL."));
+        return promise;
+    }
+
     m_provider->registerServiceWorker(patternURL, scriptURL, new CallbackPromiseAdapter<ServiceWorkerRegistration, ServiceWorkerError>(resolver));
 
     return promise;
@@ -170,6 +175,7 @@ ScriptPromise ServiceWorkerContainer::getRegistration(ScriptState* scriptState, 
     }
 
     KURL completedURL = executionContext->completeURL(documentURL);
+    completedURL.removeFragmentIdentifier();
     if (!documentOrigin->canRequest(completedURL)) {
         resolver->reject(DOMException::create(SecurityError, "The documentURL must match the current origin."));
         return promise;
@@ -207,12 +213,6 @@ static void deleteIfNoExistingOwner(WebServiceWorker* serviceWorker)
         delete serviceWorker;
 }
 
-static void deleteIfNoExistingOwner(WebServiceWorkerRegistration* registration)
-{
-    if (registration && !registration->proxy())
-        delete registration;
-}
-
 void ServiceWorkerContainer::setController(WebServiceWorker* serviceWorker)
 {
     if (!executionContext()) {
@@ -225,7 +225,7 @@ void ServiceWorkerContainer::setController(WebServiceWorker* serviceWorker)
 void ServiceWorkerContainer::setReadyRegistration(WebServiceWorkerRegistration* registration)
 {
     if (!executionContext()) {
-        deleteIfNoExistingOwner(registration);
+        ServiceWorkerRegistration::dispose(registration);
         return;
     }
 

@@ -47,7 +47,7 @@ class WorkerGlobalScopeProxy;
 
 // FrameConsole takes per-frame console messages and routes them up through the FrameHost to the ChromeClient and Inspector.
 // It's meant as an abstraction around ChromeClient calls and the way that Blink core/ can add messages to the console.
-class FrameConsole FINAL : public NoBaseWillBeGarbageCollected<FrameConsole> {
+class FrameConsole final : public NoBaseWillBeGarbageCollected<FrameConsole> {
     DECLARE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(FrameConsole);
 public:
     static PassOwnPtrWillBeRawPtr<FrameConsole> create(LocalFrame& frame)
@@ -65,7 +65,6 @@ public:
     static void mute();
     static void unmute();
 
-    ConsoleMessageStorage* messageStorage();
     void clearMessages();
 
     void didFailLoading(unsigned long requestIdentifier, const ResourceError&);
@@ -81,8 +80,9 @@ private:
         return *m_frame;
     }
 
+    ConsoleMessageStorage* messageStorage();
+
     RawPtrWillBeMember<LocalFrame> m_frame;
-    OwnPtrWillBeMember<ConsoleMessageStorage> m_consoleMessageStorage;
 };
 
 } // namespace blink

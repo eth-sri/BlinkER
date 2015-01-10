@@ -23,7 +23,7 @@
 
 namespace blink {
 
-const WrapperTypeInfo V8TestInterfaceConstructor2::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceConstructor2::domTemplate, V8TestInterfaceConstructor2::refObject, V8TestInterfaceConstructor2::derefObject, V8TestInterfaceConstructor2::createPersistentHandle, 0, 0, 0, V8TestInterfaceConstructor2::installConditionallyEnabledMethods, V8TestInterfaceConstructor2::installConditionallyEnabledProperties, 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::Independent, WrapperTypeInfo::RefCountedObject };
+const WrapperTypeInfo V8TestInterfaceConstructor2::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceConstructor2::domTemplate, V8TestInterfaceConstructor2::refObject, V8TestInterfaceConstructor2::derefObject, V8TestInterfaceConstructor2::trace, 0, 0, 0, V8TestInterfaceConstructor2::installConditionallyEnabledMethods, V8TestInterfaceConstructor2::installConditionallyEnabledProperties, 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::Independent, WrapperTypeInfo::RefCountedObject };
 
 // This static member must be declared by DEFINE_WRAPPERTYPEINFO in TestInterfaceConstructor2.h.
 // For details, see the comment of DEFINE_WRAPPERTYPEINFO in
@@ -199,8 +199,10 @@ static void installV8TestInterfaceConstructor2Template(v8::Handle<v8::FunctionTe
         isolate);
     functionTemplate->SetCallHandler(V8TestInterfaceConstructor2::constructorCallback);
     functionTemplate->SetLength(1);
-    v8::Local<v8::ObjectTemplate> instanceTemplate ALLOW_UNUSED = functionTemplate->InstanceTemplate();
-    v8::Local<v8::ObjectTemplate> prototypeTemplate ALLOW_UNUSED = functionTemplate->PrototypeTemplate();
+    v8::Local<v8::ObjectTemplate> instanceTemplate = functionTemplate->InstanceTemplate();
+    ALLOW_UNUSED_LOCAL(instanceTemplate);
+    v8::Local<v8::ObjectTemplate> prototypeTemplate = functionTemplate->PrototypeTemplate();
+    ALLOW_UNUSED_LOCAL(prototypeTemplate);
 
     // Custom toString template
     functionTemplate->Set(v8AtomicString(isolate, "toString"), V8PerIsolateData::from(isolate)->toStringTemplate());
@@ -226,21 +228,14 @@ TestInterfaceConstructor2* V8TestInterfaceConstructor2::toImplWithTypeCheck(v8::
     return hasInstance(value, isolate) ? blink::toScriptWrappableBase(v8::Handle<v8::Object>::Cast(value))->toImpl<TestInterfaceConstructor2>() : 0;
 }
 
-
-void V8TestInterfaceConstructor2::refObject(ScriptWrappableBase* internalPointer)
+void V8TestInterfaceConstructor2::refObject(ScriptWrappableBase* scriptWrappableBase)
 {
-    internalPointer->toImpl<TestInterfaceConstructor2>()->ref();
+    scriptWrappableBase->toImpl<TestInterfaceConstructor2>()->ref();
 }
 
-void V8TestInterfaceConstructor2::derefObject(ScriptWrappableBase* internalPointer)
+void V8TestInterfaceConstructor2::derefObject(ScriptWrappableBase* scriptWrappableBase)
 {
-    internalPointer->toImpl<TestInterfaceConstructor2>()->deref();
-}
-
-WrapperPersistentNode* V8TestInterfaceConstructor2::createPersistentHandle(ScriptWrappableBase* internalPointer)
-{
-    ASSERT_NOT_REACHED();
-    return 0;
+    scriptWrappableBase->toImpl<TestInterfaceConstructor2>()->deref();
 }
 
 template<>

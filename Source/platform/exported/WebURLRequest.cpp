@@ -169,10 +169,7 @@ void WebURLRequest::setHTTPHeaderField(const WebString& name, const WebString& v
 
 void WebURLRequest::setHTTPReferrer(const WebString& referrer, WebReferrerPolicy referrerPolicy)
 {
-    if (referrer.isEmpty())
-        m_private->m_resourceRequest->clearHTTPReferrer();
-    else
-        m_private->m_resourceRequest->setHTTPReferrer(Referrer(referrer, static_cast<ReferrerPolicy>(referrerPolicy)));
+    m_private->m_resourceRequest->setHTTPReferrer(Referrer(referrer, static_cast<ReferrerPolicy>(referrerPolicy)));
 }
 
 void WebURLRequest::addHTTPHeaderField(const WebString& name, const WebString& value)
@@ -320,6 +317,16 @@ WebURLRequest::FetchRequestMode WebURLRequest::fetchRequestMode() const
 void WebURLRequest::setFetchRequestMode(WebURLRequest::FetchRequestMode mode)
 {
     return m_private->m_resourceRequest->setFetchRequestMode(mode);
+}
+
+WebURLRequest::FetchCredentialsMode WebURLRequest::fetchCredentialsMode() const
+{
+    return m_private->m_resourceRequest->fetchCredentialsMode();
+}
+
+void WebURLRequest::setFetchCredentialsMode(WebURLRequest::FetchCredentialsMode mode)
+{
+    return m_private->m_resourceRequest->setFetchCredentialsMode(mode);
 }
 
 WebURLRequest::ExtraData* WebURLRequest::extraData() const

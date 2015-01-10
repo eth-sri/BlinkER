@@ -26,7 +26,7 @@
 #include "core/rendering/svg/RenderSVGText.h"
 #include "core/rendering/svg/SVGTextMetrics.h"
 #include "platform/fonts/GlyphBuffer.h"
-#include "platform/fonts/SimpleShaper.h"
+#include "platform/fonts/shaping/SimpleShaper.h"
 #include "platform/text/BidiCharacterRun.h"
 #include "platform/text/BidiResolver.h"
 #include "platform/text/TextDirection.h"
@@ -79,9 +79,10 @@ SVGTextMetricsCalculator::SVGTextMetricsCalculator(RenderSVGInlineText* text)
     , m_totalWidth(0)
 {
     const Font& scaledFont = text->scaledFont();
-    CodePath codePath = scaledFont.codePath(m_run);
+    CodePath codePath = scaledFont.codePath(TextRunPaintInfo(m_run));
     m_isComplexText = codePath == ComplexPath;
     m_run.setCharacterScanForCodePath(!m_isComplexText);
+    m_run.setUseComplexCodePath(m_isComplexText);
 
     if (!m_isComplexText)
         m_simpleShaper = adoptPtr(new SimpleShaper(&scaledFont, m_run));
@@ -123,8 +124,7 @@ SVGTextMetrics SVGTextMetricsCalculator::computeMetricsForCharacterSimple(unsign
     float currentWidth = m_simpleShaper->runWidthSoFar() - m_totalWidth;
     m_totalWidth = m_simpleShaper->runWidthSoFar();
 
-    Glyph glyphId = glyphBuffer.glyphAt(0);
-    return SVGTextMetrics(m_text, textPosition, metricsLength, currentWidth, glyphId);
+    return SVGTextMetrics(m_text, textPosition, metricsLength, currentWidth);
 }
 
 SVGTextMetrics SVGTextMetricsCalculator::computeMetricsForCharacterComplex(unsigned textPosition)

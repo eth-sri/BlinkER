@@ -39,6 +39,7 @@
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
+#include "core/paint/FramePainter.h"
 #include "core/rendering/RenderEmbeddedObject.h"
 #include "core/rendering/RenderLayerStackingNode.h"
 #include "core/rendering/RenderLayerStackingNodeIterator.h"
@@ -303,7 +304,7 @@ static void forceRecomputePaintInvalidationRectsIncludingNonCompositingDescendan
     // changing the previous position from our paint invalidation container, which is fine as
     // we want a full paint invalidation anyway.
     renderer->setPreviousPaintInvalidationRect(LayoutRect());
-    renderer->setShouldDoFullPaintInvalidation(true);
+    renderer->setShouldDoFullPaintInvalidation();
 
     for (RenderObject* child = renderer->slowFirstChild(); child; child = child->nextSibling()) {
         if (!child->isPaintInvalidationContainer())
@@ -756,9 +757,7 @@ void RenderLayerCompositor::setOverlayLayer(GraphicsLayer* layer)
 
 bool RenderLayerCompositor::canBeComposited(const RenderLayer* layer) const
 {
-    // FIXME: We disable accelerated compositing for elements in a RenderFlowThread as it doesn't work properly.
-    // See http://webkit.org/b/84900 to re-enable it.
-    return m_hasAcceleratedCompositing && layer->isSelfPaintingLayer() && !layer->subtreeIsInvisible() && layer->renderer()->flowThreadState() == RenderObject::NotInsideFlowThread;
+    return m_hasAcceleratedCompositing && layer->isSelfPaintingLayer() && !layer->subtreeIsInvisible();
 }
 
 // Return true if the given layer is a stacking context and has compositing child
@@ -805,7 +804,7 @@ void RenderLayerCompositor::paintContents(const GraphicsLayer* graphicsLayer, Gr
         context.translate(-scrollCorner.x(), -scrollCorner.y());
         IntRect transformedClip = clip;
         transformedClip.moveBy(scrollCorner.location());
-        m_renderView.frameView()->paintScrollCorner(&context, transformedClip);
+        FramePainter(*m_renderView.frameView()).paintScrollCorner(&context, transformedClip);
         context.restore();
     }
 }

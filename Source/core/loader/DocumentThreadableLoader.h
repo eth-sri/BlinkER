@@ -51,16 +51,16 @@ class ResourceRequest;
 class SecurityOrigin;
 class ThreadableLoaderClient;
 
-class DocumentThreadableLoader FINAL : public ThreadableLoader, private ResourceOwner<RawResource>  {
+class DocumentThreadableLoader final : public ThreadableLoader, private ResourceOwner<RawResource>  {
     WTF_MAKE_FAST_ALLOCATED;
     public:
         static void loadResourceSynchronously(Document&, const ResourceRequest&, ThreadableLoaderClient&, const ThreadableLoaderOptions&, const ResourceLoaderOptions&);
         static PassRefPtr<DocumentThreadableLoader> create(Document&, ThreadableLoaderClient*, const ResourceRequest&, const ThreadableLoaderOptions&, const ResourceLoaderOptions&);
         virtual ~DocumentThreadableLoader();
 
-        virtual void overrideTimeout(unsigned long timeout) OVERRIDE;
+        virtual void overrideTimeout(unsigned long timeout) override;
 
-        virtual void cancel() OVERRIDE;
+        virtual void cancel() override;
         void setDefersLoading(bool);
 
     private:
@@ -72,12 +72,12 @@ class DocumentThreadableLoader FINAL : public ThreadableLoader, private Resource
         DocumentThreadableLoader(Document&, ThreadableLoaderClient*, BlockingBehavior, const ResourceRequest&, const ThreadableLoaderOptions&, const ResourceLoaderOptions&);
 
         // RawResourceClient implementation
-        virtual void dataSent(Resource*, unsigned long long bytesSent, unsigned long long totalBytesToBeSent) OVERRIDE;
-        virtual void responseReceived(Resource*, const ResourceResponse&) OVERRIDE;
-        virtual void dataReceived(Resource*, const char* data, int dataLength) OVERRIDE;
-        virtual void redirectReceived(Resource*, ResourceRequest&, const ResourceResponse&) OVERRIDE;
-        virtual void notifyFinished(Resource*) OVERRIDE;
-        virtual void dataDownloaded(Resource*, int) OVERRIDE;
+        virtual void dataSent(Resource*, unsigned long long bytesSent, unsigned long long totalBytesToBeSent) override;
+        virtual void responseReceived(Resource*, const ResourceResponse&) override;
+        virtual void dataReceived(Resource*, const char* data, unsigned dataLength) override;
+        virtual void redirectReceived(Resource*, ResourceRequest&, const ResourceResponse&) override;
+        virtual void notifyFinished(Resource*) override;
+        virtual void dataDownloaded(Resource*, int) override;
 
         void cancelWithError(const ResourceError&);
 
@@ -87,11 +87,17 @@ class DocumentThreadableLoader FINAL : public ThreadableLoader, private Resource
         // Methods containing code to handle resource fetch results which is
         // common to both sync and async mode.
         void handleResponse(unsigned long identifier, const ResourceResponse&);
-        void handleReceivedData(const char* data, int dataLength);
+        void handleReceivedData(const char* data, unsigned dataLength);
         void handleSuccessfulFinish(unsigned long identifier, double finishTime);
 
         void didTimeout(Timer<DocumentThreadableLoader>*);
+        // Calls the appropriate loading method according to policy and data
+        // about origin. Only for handling the initial load (including fallback
+        // after consulting ServiceWorker).
+        void dispatchInitialRequest(const ResourceRequest&);
         void makeCrossOriginAccessRequest(const ResourceRequest&);
+        // Loads m_fallbackRequestForServiceWorker.
+        void loadFallbackRequestForServiceWorker();
         // Loads m_actualRequest.
         void loadActualRequest();
         // Clears m_actualRequest and reports access control check failure to
@@ -103,7 +109,7 @@ class DocumentThreadableLoader FINAL : public ThreadableLoader, private Resource
 
         void loadRequest(const ResourceRequest&, ResourceLoaderOptions);
         bool isAllowedRedirect(const KURL&) const;
-        bool isAllowedByPolicy(const KURL&) const;
+        bool isAllowedByContentSecurityPolicy(const KURL&) const;
         // Returns DoNotAllowStoredCredentials
         // if m_forceDoNotAllowStoredCredentials is set. Otherwise, just
         // returns allowCredentials value of m_resourceLoaderOptions.
@@ -127,6 +133,9 @@ class DocumentThreadableLoader FINAL : public ThreadableLoader, private Resource
         bool m_simpleRequest;
         bool m_async;
 
+        // Holds the original request for fallback in case the Service Worker
+        // does not respond.
+        OwnPtr<ResourceRequest> m_fallbackRequestForServiceWorker;
         // Holds the original request and options for it during preflight
         // request handling phase.
         OwnPtr<ResourceRequest> m_actualRequest;

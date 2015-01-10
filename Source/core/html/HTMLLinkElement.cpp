@@ -42,6 +42,7 @@
 #include "core/fetch/ResourceFetcher.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/SubresourceIntegrity.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/LinkManifest.h"
 #include "core/html/imports/LinkImport.h"
@@ -275,8 +276,11 @@ Node::InsertionNotificationRequest HTMLLinkElement::insertedInto(ContainerNode* 
         return InsertionDone;
 
     m_isInShadowTree = isInShadowTree();
-    if (m_isInShadowTree)
+    if (m_isInShadowTree) {
+        String message = "HTML element <link> is ignored in shadow tree.";
+        document().addConsoleMessage(ConsoleMessage::create(JSMessageSource, WarningMessageLevel, message));
         return InsertionDone;
+    }
 
     document().styleEngine()->addStyleSheetCandidateNode(this, m_createdByParser);
 
@@ -501,8 +505,14 @@ void LinkStyle::setCSSStyleSheet(const String& href, const KURL& baseURL, const 
     if (!m_owner->inDocument()) {
         ASSERT(!m_sheet);
         return;
-
     }
+
+    if (!SubresourceIntegrity::CheckSubresourceIntegrity(*m_owner, cachedStyleSheet->sheetText(), KURL(KURL(), href))) {
+        m_loading = false;
+        removePendingSheet();
+        return;
+    }
+
     // Completing the sheet load may cause scripts to execute.
     RefPtrWillBeRawPtr<Node> protector(m_owner.get());
 
@@ -527,6 +537,7 @@ void LinkStyle::setCSSStyleSheet(const String& href, const KURL& baseURL, const 
 
     if (m_sheet)
         clearSheet();
+
     m_sheet = CSSStyleSheet::create(styleSheet, m_owner);
     m_sheet->setMediaQueries(MediaQuerySet::create(m_owner->media()));
     m_sheet->setTitle(m_owner->title());

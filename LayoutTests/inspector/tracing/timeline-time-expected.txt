@@ -5,7 +5,6 @@ Running: testSimpleConsoleTime
 Root
 ----> FunctionCall
 --------> a
-----> FunctionCall
 
 Running: testNestedConsoleTime
 Root
@@ -18,7 +17,7 @@ Root
 Running: testUnbalancedConsoleTime
 Root
 ----> FunctionCall
---------> b
+--------> a
 
 Running: testConsoleTimeWithoutConsoleTimeEnd
 Root

@@ -1,6 +1,9 @@
 function initialize_EditDOMTests()
 {
 
+// Preload codemirror which is used for "Edit as HTML".
+InspectorTest.preloadPanel("sources");
+
 InspectorTest.doAddAttribute = function(testName, dataNodeId, attributeText, next)
 {
     InspectorTest.domActionTestForNodeId(testName, dataNodeId, testBody, next);
@@ -14,7 +17,7 @@ InspectorTest.doAddAttribute = function(testName, dataNodeId, attributeText, nex
 
         function testContinuation()
         {
-            var editorElement = window.getSelection().anchorNode.parentElement;
+            var editorElement = WebInspector.panels.elements._treeOutlines[0]._shadowRoot.getSelection().anchorNode.parentElement;
             editorElement.textContent = attributeText;
             editorElement.dispatchEvent(InspectorTest.createKeyEvent("Enter"));
             InspectorTest.addSniffer(WebInspector.ElementsTreeUpdater.prototype, "_updateModifiedNodes", done);

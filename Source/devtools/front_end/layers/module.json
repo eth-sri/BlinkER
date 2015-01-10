@@ -14,9 +14,8 @@
         }
     ],
     "dependencies": ["timeline"],
+    "experiment": "layersPanel",
     "scripts": [
-        "LayerTreeOutline.js",
-        "LayerDetailsView.js",
         "LayerPaintProfilerView.js",
         "LayersPanel.js"
     ]

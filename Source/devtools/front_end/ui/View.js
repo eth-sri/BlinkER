@@ -27,10 +27,19 @@
 /**
  * @constructor
  * @extends {WebInspector.Object}
+ * @param {boolean=} isWebComponent
  */
-WebInspector.View = function()
+WebInspector.View = function(isWebComponent)
 {
-    this.element = document.createElementWithClass("div", "view");
+    this.contentElement = createElementWithClass("div", "view");
+    if (isWebComponent) {
+        WebInspector.installComponentRootStyles(this.contentElement);
+        this.element = createElementWithClass("div", "vbox flex-auto");
+        this._shadowRoot = this.element.createShadowRoot();
+        this._shadowRoot.appendChild(this.contentElement);
+    } else {
+        this.element = this.contentElement;
+    }
     this.element.__view = this;
     this._visible = true;
     this._isRoot = false;
@@ -40,8 +49,6 @@ WebInspector.View = function()
     this._cssFiles = [];
     this._notificationDepth = 0;
 }
-
-WebInspector.View._cssFileToContent = {};
 
 WebInspector.View._buildSourceURL = function(cssFile)
 {
@@ -54,12 +61,14 @@ WebInspector.View._buildSourceURL = function(cssFile)
  */
 WebInspector.View.createStyleElement = function(cssFile)
 {
-    var content = WebInspector.View._cssFileToContent[cssFile];
+    var content = Runtime.cachedResources[cssFile];
     if (!content) {
-        content = loadResource(cssFile) + WebInspector.View._buildSourceURL(cssFile)
-        WebInspector.View._cssFileToContent[cssFile] = content;
+        if (Runtime.isReleaseMode())
+            console.error(cssFile + " not preloaded, loading from the remote. Check module.json");
+        content = loadResource(cssFile) + WebInspector.View._buildSourceURL(cssFile);
+        Runtime.cachedResources[cssFile] = content;
     }
-    var styleElement = document.createElement("style");
+    var styleElement = createElement("style");
     styleElement.type = "text/css";
     styleElement.textContent = content;
     return styleElement;
@@ -68,6 +77,7 @@ WebInspector.View.createStyleElement = function(cssFile)
 WebInspector.View.prototype = {
     markAsRoot: function()
     {
+        WebInspector.installComponentRootStyles(this.element);
         WebInspector.View.__assert(!this.element.parentElement, "Attempt to mark as root attached node");
         this._isRoot = true;
     },
@@ -213,7 +223,7 @@ WebInspector.View.prototype = {
 
             var currentParent = parentElement;
             while (currentParent && !currentParent.__view)
-                currentParent = currentParent.parentElement;
+                currentParent = currentParent.parentElementOrShadowHost();
 
             if (currentParent) {
                 this._parentView = currentParent.__view;
@@ -389,7 +399,7 @@ WebInspector.View.prototype = {
     focus: function()
     {
         var element = this.defaultFocusedElement();
-        if (!element || element.isAncestor(document.activeElement))
+        if (!element || element.isAncestor(this.element.ownerDocument.activeElement))
             return;
 
         WebInspector.setCurrentFocusElement(element);
@@ -400,7 +410,7 @@ WebInspector.View.prototype = {
      */
     hasFocus: function()
     {
-        var activeElement = document.activeElement;
+        var activeElement = this.element.ownerDocument.activeElement;
         return activeElement && activeElement.isSelfOrDescendant(this.element);
     },
 
@@ -409,6 +419,7 @@ WebInspector.View.prototype = {
      */
     measurePreferredSize: function()
     {
+        var document = this.element.ownerDocument;
         WebInspector.View._originalAppendChild.call(document.body, this.element);
         this.element.positionAt(0, 0);
         var result = new Size(this.element.offsetWidth, this.element.offsetHeight);
@@ -495,7 +506,7 @@ WebInspector.View._incrementViewCounter = function(parentElement, childElement)
 
     while (parentElement) {
         parentElement.__viewCounter = (parentElement.__viewCounter || 0) + count;
-        parentElement = parentElement.parentElement;
+        parentElement = parentElement.parentElementOrShadowHost();
     }
 }
 
@@ -507,7 +518,7 @@ WebInspector.View._decrementViewCounter = function(parentElement, childElement)
 
     while (parentElement) {
         parentElement.__viewCounter -= count;
-        parentElement = parentElement.parentElement;
+        parentElement = parentElement.parentElementOrShadowHost();
     }
 }
 
@@ -522,11 +533,12 @@ WebInspector.View.__assert = function(condition, message)
 /**
  * @constructor
  * @extends {WebInspector.View}
+ * @param {boolean=} isWebComponent
  */
-WebInspector.VBox = function()
+WebInspector.VBox = function(isWebComponent)
 {
-    WebInspector.View.call(this);
-    this.element.classList.add("vbox");
+    WebInspector.View.call(this, isWebComponent);
+    this.contentElement.classList.add("vbox");
 };
 
 WebInspector.VBox.prototype = {
@@ -558,11 +570,12 @@ WebInspector.VBox.prototype = {
 /**
  * @constructor
  * @extends {WebInspector.View}
+ * @param {boolean=} isWebComponent
  */
-WebInspector.HBox = function()
+WebInspector.HBox = function(isWebComponent)
 {
-    WebInspector.View.call(this);
-    this.element.classList.add("hbox");
+    WebInspector.View.call(this, isWebComponent);
+    this.contentElement.classList.add("hbox");
 };
 
 WebInspector.HBox.prototype = {

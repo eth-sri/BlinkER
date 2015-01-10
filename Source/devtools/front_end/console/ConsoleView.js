@@ -37,7 +37,7 @@
 WebInspector.ConsoleView = function()
 {
     WebInspector.VBox.call(this);
-    this.registerRequiredCSS("filter.css");
+    this.registerRequiredCSS("ui/filter.css");
 
     this._searchableView = new WebInspector.SearchableView(this);
     this._searchableView.setMinimalSearchQuerySize(0);
@@ -88,7 +88,7 @@ WebInspector.ConsoleView = function()
 
     this._viewportThrottler = new WebInspector.Throttler(50);
 
-    this._filterStatusMessageElement = document.createElementWithClass("div", "console-message");
+    this._filterStatusMessageElement = createElementWithClass("div", "console-message");
     this._messagesElement.insertBefore(this._filterStatusMessageElement, this._messagesElement.firstChild);
     this._filterStatusTextElement = this._filterStatusMessageElement.createChild("span", "console-info");
     this._filterStatusMessageElement.createTextChild(" ");
@@ -342,7 +342,7 @@ WebInspector.ConsoleView.prototype = {
         if (WebInspector.isWorkerFrontend() && executionContext.target() === WebInspector.targetManager.mainTarget())
             return;
 
-        var newOption = document.createElement("option");
+        var newOption = createElement("option");
         newOption.__executionContext = executionContext;
         newOption.text = this._titleFor(executionContext);
         this._optionByExecutionContext.set(executionContext, newOption);
@@ -386,7 +386,7 @@ WebInspector.ConsoleView.prototype = {
      */
     _clearExecutionContextsForTarget: function(target)
     {
-        var executionContexts = this._optionByExecutionContext.keys();
+        var executionContexts = this._optionByExecutionContext.keysArray();
         for (var i = 0; i < executionContexts.length; ++i) {
             if (executionContexts[i].target() === target)
                 this._executionContextDestroyed(executionContexts[i]);
@@ -472,7 +472,12 @@ WebInspector.ConsoleView.prototype = {
          */
         function invalidateViewport(finishCallback)
         {
-            this._viewport.invalidate();
+            if (this._needsFullUpdate) {
+                this._updateMessageList();
+                delete this._needsFullUpdate;
+            } else {
+                this._viewport.invalidate();
+            }
             finishCallback();
         }
         this._viewportThrottler.schedule(invalidateViewport.bind(this));
@@ -491,40 +496,6 @@ WebInspector.ConsoleView.prototype = {
     },
 
     /**
-     * @param {!WebInspector.ConsoleViewMessage} viewMessage
-     */
-    _consoleMessageAdded: function(viewMessage)
-    {
-        /**
-         * @param {!WebInspector.ConsoleViewMessage} viewMessage1
-         * @param {!WebInspector.ConsoleViewMessage} viewMessage2
-         * @return {number}
-         */
-        function compareTimestamps(viewMessage1, viewMessage2)
-        {
-            return WebInspector.ConsoleMessage.timestampComparator(viewMessage1.consoleMessage(), viewMessage2.consoleMessage());
-        }
-        var insertAt = insertionIndexForObjectInListSortedByFunction(viewMessage, this._consoleMessages, compareTimestamps, true);
-        this._consoleMessages.splice(insertAt, 0, viewMessage);
-
-        var message = viewMessage.consoleMessage();
-        if (this._urlToMessageCount[message.url])
-            this._urlToMessageCount[message.url]++;
-        else
-            this._urlToMessageCount[message.url] = 1;
-
-        if (this._tryToCollapseMessages(viewMessage, this._visibleViewMessages.peekLast()))
-            return;
-
-        if (this._filter.shouldBeVisible(viewMessage))
-            this._showConsoleMessage(viewMessage)
-        else {
-            this._hiddenByFilterCount++;
-            this._updateFilterStatus();
-        }
-    },
-
-    /**
      * @param {!WebInspector.Event} event
      */
     _onConsoleMessageAdded: function(event)
@@ -538,16 +509,57 @@ WebInspector.ConsoleView.prototype = {
      */
     _addConsoleMessage: function(message)
     {
+        /**
+         * @param {!WebInspector.ConsoleViewMessage} viewMessage1
+         * @param {!WebInspector.ConsoleViewMessage} viewMessage2
+         * @return {number}
+         */
+        function compareTimestamps(viewMessage1, viewMessage2)
+        {
+            return WebInspector.ConsoleMessage.timestampComparator(viewMessage1.consoleMessage(), viewMessage2.consoleMessage());
+        }
+
+        if (message.type === WebInspector.ConsoleMessage.MessageType.Command || message.type === WebInspector.ConsoleMessage.MessageType.Result)
+            message.timestamp = this._consoleMessages.length ? this._consoleMessages.peekLast().consoleMessage().timestamp : 0;
         var viewMessage = this._createViewMessage(message);
-        this._consoleMessageAdded(viewMessage);
+        var insertAt = insertionIndexForObjectInListSortedByFunction(viewMessage, this._consoleMessages, compareTimestamps, true);
+        var insertedInMiddle = insertAt < this._consoleMessages.length;
+        this._consoleMessages.splice(insertAt, 0, viewMessage);
+
+        if (this._urlToMessageCount[message.url])
+            ++this._urlToMessageCount[message.url];
+        else
+            this._urlToMessageCount[message.url] = 1;
+
+        if (!insertedInMiddle) {
+            this._appendMessageToEnd(viewMessage)
+            this._updateFilterStatus();
+        } else {
+            this._needsFullUpdate = true;
+        }
+
         this._scheduleViewportRefresh();
+        this._consoleMessageAddedForTest(viewMessage);
     },
 
     /**
      * @param {!WebInspector.ConsoleViewMessage} viewMessage
      */
-    _showConsoleMessage: function(viewMessage)
+    _consoleMessageAddedForTest: function(viewMessage) { },
+
+    /**
+     * @param {!WebInspector.ConsoleViewMessage} viewMessage
+     */
+    _appendMessageToEnd: function(viewMessage)
     {
+        if (!this._filter.shouldBeVisible(viewMessage)) {
+            this._hiddenByFilterCount++;
+            return;
+        }
+
+        if (this._tryToCollapseMessages(viewMessage, this._visibleViewMessages.peekLast()))
+            return;
+
         var lastMessage = this._visibleViewMessages.peekLast();
         if (viewMessage.consoleMessage().type === WebInspector.ConsoleMessage.MessageType.EndGroup) {
             if (lastMessage && !this._currentGroup.messagesHidden())
@@ -581,7 +593,7 @@ WebInspector.ConsoleView.prototype = {
         var nestingLevel = this._currentGroup.nestingLevel();
         switch (message.type) {
         case WebInspector.ConsoleMessage.MessageType.Command:
-            return new WebInspector.ConsoleCommand(message, nestingLevel);
+            return new WebInspector.ConsoleCommand(message, this._linkifier, nestingLevel);
         case WebInspector.ConsoleMessage.MessageType.Result:
             return new WebInspector.ConsoleCommandResult(message, this._linkifier, nestingLevel);
         case WebInspector.ConsoleMessage.MessageType.StartGroupCollapsed:
@@ -645,9 +657,9 @@ WebInspector.ConsoleView.prototype = {
         contextMenu.appendItem(WebInspector.UIString(WebInspector.useLowerCaseMenuTitles() ? "Clear console" : "Clear Console"), this._requestClearMessages.bind(this));
 
         var request = consoleMessage ? consoleMessage.request : null;
-        if (request && request.type === WebInspector.resourceTypes.XHR) {
+        if (request && request.resourceType() === WebInspector.resourceTypes.XHR) {
             contextMenu.appendSeparator();
-            contextMenu.appendItem(WebInspector.UIString("Replay XHR"), NetworkAgent.replayXHR.bind(null, request.requestId));
+            contextMenu.appendItem(WebInspector.UIString("Replay XHR"), request.replayXHR.bind(request));
         }
 
         contextMenu.show();
@@ -679,15 +691,8 @@ WebInspector.ConsoleView.prototype = {
             this._visibleViewMessages[i].resetIncrementRepeatCount();
         }
         this._visibleViewMessages = [];
-        for (var i = 0; i < this._consoleMessages.length; ++i) {
-            var viewMessage = this._consoleMessages[i];
-            if (this._tryToCollapseMessages(viewMessage, this._visibleViewMessages.peekLast()))
-                continue;
-            if (this._filter.shouldBeVisible(viewMessage))
-                this._showConsoleMessage(viewMessage);
-            else
-                this._hiddenByFilterCount++;
-        }
+        for (var i = 0; i < this._consoleMessages.length; ++i)
+            this._appendMessageToEnd(this._consoleMessages[i]);
         this._updateFilterStatus();
         this._viewport.invalidate();
     },
@@ -823,7 +828,7 @@ WebInspector.ConsoleView.prototype = {
             if (!wasThrown)
                 message = new WebInspector.ConsoleMessage(target, WebInspector.ConsoleMessage.MessageSource.JS, level, "", WebInspector.ConsoleMessage.MessageType.Result, url, lineNumber, columnNumber, undefined, [result]);
             else
-                message = new WebInspector.ConsoleMessage(target, WebInspector.ConsoleMessage.MessageSource.JS, level, exceptionDetails.text, WebInspector.ConsoleMessage.MessageType.Result, exceptionDetails.url, exceptionDetails.line, exceptionDetails.column, undefined, [WebInspector.UIString("Uncaught"), result], exceptionDetails.stackTrace);
+                message = new WebInspector.ConsoleMessage(target, WebInspector.ConsoleMessage.MessageSource.JS, level, exceptionDetails.text, WebInspector.ConsoleMessage.MessageType.Result, exceptionDetails.url, exceptionDetails.line, exceptionDetails.column, undefined, [WebInspector.UIString("Uncaught"), result], exceptionDetails.stackTrace, undefined, undefined, undefined, undefined, exceptionDetails.scriptId);
             message.setOriginatingMessage(originatingConsoleMessage);
             target.consoleModel.addMessage(message);
         }
@@ -900,12 +905,13 @@ WebInspector.ConsoleView.prototype = {
     },
 
     /**
-     * @param {string} query
+     * @param {!WebInspector.SearchableView.SearchConfig} searchConfig
      * @param {boolean} shouldJump
      * @param {boolean=} jumpBackwards
      */
-    performSearch: function(query, shouldJump, jumpBackwards)
+    performSearch: function(searchConfig, shouldJump, jumpBackwards)
     {
+        var query = searchConfig.query;
         this.searchCanceled();
         this._searchableView.updateSearchMatchesCount(0);
         this._searchRegex = createPlainTextSearchRegex(query, "gi");
@@ -935,6 +941,22 @@ WebInspector.ConsoleView.prototype = {
         if (!this._searchResults || !this._searchResults.length)
             return;
         this._jumpToSearchResult(this._currentSearchResultIndex - 1);
+    },
+
+    /**
+     * @return {boolean}
+     */
+    supportsCaseSensitiveSearch: function()
+    {
+        return false;
+    },
+
+    /**
+     * @return {boolean}
+     */
+    supportsRegexSearch: function()
+    {
+        return false;
     },
 
     _clearCurrentSearchResultHighlight: function()
@@ -995,6 +1017,9 @@ WebInspector.ConsoleViewFilter.prototype = {
         this._levelFilterUI = new WebInspector.NamedBitSetFilterUI(levels, WebInspector.settings.messageLevelFilters);
         this._levelFilterUI.addEventListener(WebInspector.FilterUI.Events.FilterChanged, this._filterChanged, this);
         filterBar.addFilter(this._levelFilterUI);
+        this._hideNetworkMessagesCheckbox = new WebInspector.CheckboxFilterUI("hide-network-messages", WebInspector.UIString("Hide network messages"), true, WebInspector.settings.hideNetworkMessages);
+        this._hideNetworkMessagesCheckbox.addEventListener(WebInspector.FilterUI.Events.FilterChanged, this._filterChanged.bind(this), this);
+        filterBar.addFilter(this._hideNetworkMessagesCheckbox);
     },
 
     _textFilterChanged: function(event)
@@ -1055,6 +1080,9 @@ WebInspector.ConsoleViewFilter.prototype = {
             }
         }
 
+        if (WebInspector.settings.hideNetworkMessages.get() && viewMessage.consoleMessage().source === WebInspector.ConsoleMessage.MessageSource.Network)
+            return false;
+
         if (viewMessage.consoleMessage().isGroupMessage())
             return true;
 
@@ -1082,6 +1110,7 @@ WebInspector.ConsoleViewFilter.prototype = {
         WebInspector.settings.messageURLFilters.set(this._messageURLFilters);
         WebInspector.settings.messageLevelFilters.set({});
         this._view._showAllMessagesCheckbox.inputElement.checked = true;
+        this._hideNetworkMessagesCheckbox.setState(false);
         this._textFilterUI.setValue("");
         this._filterChanged();
     },
@@ -1094,11 +1123,12 @@ WebInspector.ConsoleViewFilter.prototype = {
  * @constructor
  * @extends {WebInspector.ConsoleViewMessage}
  * @param {!WebInspector.ConsoleMessage} message
+ * @param {!WebInspector.Linkifier} linkifier
  * @param {number} nestingLevel
  */
-WebInspector.ConsoleCommand = function(message, nestingLevel)
+WebInspector.ConsoleCommand = function(message, linkifier, nestingLevel)
 {
-    WebInspector.ConsoleViewMessage.call(this, message, null, nestingLevel);
+    WebInspector.ConsoleViewMessage.call(this, message, linkifier, nestingLevel);
 }
 
 WebInspector.ConsoleCommand.prototype = {
@@ -1142,7 +1172,7 @@ WebInspector.ConsoleCommand.prototype = {
     contentElement: function()
     {
         if (!this._element) {
-            this._element = document.createElementWithClass("div", "console-user-command");
+            this._element = createElementWithClass("div", "console-user-command");
             this._element.message = this;
 
             this._formatCommand();
@@ -1153,7 +1183,7 @@ WebInspector.ConsoleCommand.prototype = {
 
     _formatCommand: function()
     {
-        this._formattedCommand = document.createElementWithClass("span", "console-message-text source-code");
+        this._formattedCommand = createElementWithClass("span", "console-message-text source-code");
         this._formattedCommand.textContent = this.text;
     },
 
@@ -1190,6 +1220,7 @@ WebInspector.ConsoleCommandResult.prototype = {
     {
         var element = WebInspector.ConsoleViewMessage.prototype.contentElement.call(this);
         element.classList.add("console-user-command-result");
+        this.updateTimestamp(false);
         return element;
     },
 

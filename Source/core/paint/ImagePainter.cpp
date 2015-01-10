@@ -14,6 +14,7 @@
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/page/Page.h"
 #include "core/paint/BoxPainter.h"
+#include "core/paint/DrawingRecorder.h"
 #include "core/rendering/PaintInfo.h"
 #include "core/rendering/RenderImage.h"
 #include "core/rendering/RenderReplaced.h"
@@ -62,7 +63,9 @@ void ImagePainter::paintAreaElementFocusRing(PaintInfo& paintInfo)
     // FIXME: Clip path instead of context when Skia pathops is ready.
     // https://crbug.com/251206
     GraphicsContextStateSaver savedContext(*paintInfo.context);
-    paintInfo.context->clip(m_renderImage.absoluteContentBox());
+    IntRect focusRect = m_renderImage.absoluteContentBox();
+    DrawingRecorder recorder(paintInfo.context, &m_renderImage, paintInfo.phase, focusRect);
+    paintInfo.context->clip(focusRect);
     paintInfo.context->drawFocusRing(path, outlineWidth,
         areaElementStyle->outlineOffset(),
         m_renderImage.resolveColor(areaElementStyle, CSSPropertyOutlineColor));
@@ -88,10 +91,12 @@ void ImagePainter::paintReplaced(PaintInfo& paintInfo, const LayoutPoint& paintO
             LayoutUnit topPad = m_renderImage.paddingTop();
 
             // Draw an outline rect where the image should be.
+            IntRect paintRect = pixelSnappedIntRect(LayoutRect(paintOffset.x() + leftBorder + leftPad, paintOffset.y() + topBorder + topPad, cWidth, cHeight));
+            DrawingRecorder recorder(context, &m_renderImage, paintInfo.phase, paintRect);
             context->setStrokeStyle(SolidStroke);
             context->setStrokeColor(Color::lightGray);
             context->setFillColor(Color::transparent);
-            context->drawRect(pixelSnappedIntRect(LayoutRect(paintOffset.x() + leftBorder + leftPad, paintOffset.y() + topBorder + topPad, cWidth, cHeight)));
+            context->drawRect(paintRect);
 
             bool errorPictureDrawn = false;
             LayoutSize imageOffset;
@@ -153,6 +158,7 @@ void ImagePainter::paintReplaced(PaintInfo& paintInfo, const LayoutPoint& paintO
         contentRect.moveBy(paintOffset);
         LayoutRect paintRect = m_renderImage.replacedContentRect();
         paintRect.moveBy(paintOffset);
+        DrawingRecorder recorder(context, &m_renderImage, paintInfo.phase, contentRect);
         bool clip = !contentRect.contains(paintRect);
         if (clip) {
             context->save();
@@ -176,8 +182,6 @@ void ImagePainter::paintIntoRect(GraphicsContext* context, const LayoutRect& rec
     if (!img || img->isNull())
         return;
 
-    HTMLImageElement* imageElt = isHTMLImageElement(m_renderImage.node()) ? toHTMLImageElement(m_renderImage.node()) : 0;
-    CompositeOperator compositeOperator = imageElt ? imageElt->compositeOperator() : CompositeSourceOver;
     Image* image = img.get();
     InterpolationQuality interpolationQuality = BoxPainter::chooseInterpolationQuality(m_renderImage, context, image, image, alignedRect.size());
 
@@ -186,7 +190,7 @@ void ImagePainter::paintIntoRect(GraphicsContext* context, const LayoutRect& rec
     InspectorInstrumentation::willPaintImage(&m_renderImage);
     InterpolationQuality previousInterpolationQuality = context->imageInterpolationQuality();
     context->setImageInterpolationQuality(interpolationQuality);
-    context->drawImage(image, alignedRect, compositeOperator, m_renderImage.shouldRespectImageOrientation());
+    context->drawImage(image, alignedRect, CompositeSourceOver, m_renderImage.shouldRespectImageOrientation());
     context->setImageInterpolationQuality(previousInterpolationQuality);
     InspectorInstrumentation::didPaintImage(&m_renderImage);
 }

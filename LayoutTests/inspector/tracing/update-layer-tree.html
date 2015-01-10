@@ -5,7 +5,7 @@
     position: absolute;
     width: 20px;
     height: 20px;
-    -webkit-transform: translateZ(10px);
+    transform: translateZ(10px);
 }
 </style>
 <script src="../../http/tests/inspector/inspector-test.js"></script>
@@ -27,7 +27,7 @@ function test()
     InspectorTest.invokeWithTracing("doActions", onTracingComplete);
     function onTracingComplete()
     {
-        var events = InspectorTest.tracingTimelineModel.inspectedTargetEvents();
+        var events = InspectorTest.tracingTimelineModel().inspectedTargetEvents();
         for (var i = 0; i < events.length; ++i) {
             var event = events[i];
             if (events[i].name === WebInspector.TracingTimelineModel.RecordType.UpdateLayerTree) {

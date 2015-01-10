@@ -50,9 +50,8 @@ function test()
         {"name": "Program", "ts": 2590000, "ph": "E", "tid": mainThread, "pid": pid, "cat":"disabled-by-default.devtools.timeline", "args": {}}
     ];
 
-    var panel = WebInspector.inspectorView._showPanel("timeline");
-    var view = panel._currentViews[0];
-    var model = view._presentationModel;
+    var panel = WebInspector.panels.timeline;
+    var model = InspectorTest.timelinePresentationModel();
 
     InspectorTest.timelineModel().setEventsForTest(testData);
 

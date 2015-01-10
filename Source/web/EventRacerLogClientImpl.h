@@ -15,9 +15,9 @@ public:
 
     virtual ~EventRacerLogClientImpl();
 
-    virtual void didCompleteEventAction(const EventAction &) OVERRIDE;
-    virtual void didHappenBefore(const Vector<EventAction::Edge> &) OVERRIDE;
-    virtual void didUpdateStringTable(size_t, const Vector<String> &) OVERRIDE;
+    virtual void didCompleteEventAction(const EventAction &) override;
+    virtual void didHappenBefore(const Vector<EventAction::Edge> &) override;
+    virtual void didUpdateStringTable(size_t, const Vector<String> &) override;
 
 private:
     EventRacerLogClientImpl(PassOwnPtr<WebEventRacerLogClient>);

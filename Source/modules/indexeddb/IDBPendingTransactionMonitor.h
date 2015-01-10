@@ -37,7 +37,6 @@ class IDBTransaction;
 // Javascript execution context. Transactions have an internal |active| flag
 // which is set to true on creation, but must be set to false when control
 // returns to the event loop.
-
 class IDBPendingTransactionMonitor {
     WTF_MAKE_NONCOPYABLE(IDBPendingTransactionMonitor);
 

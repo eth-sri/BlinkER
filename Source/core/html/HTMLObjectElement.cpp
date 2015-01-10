@@ -75,7 +75,7 @@ void HTMLObjectElement::trace(Visitor* visitor)
     HTMLPlugInElement::trace(visitor);
 }
 
-RenderWidget* HTMLObjectElement::existingRenderWidget() const
+RenderPart* HTMLObjectElement::existingRenderPart() const
 {
     return renderPart(); // This will return 0 if the renderer is not a RenderPart.
 }
@@ -401,8 +401,8 @@ bool HTMLObjectElement::isExposed() const
         if (ancestor->isExposed())
             return false;
     }
-    for (HTMLElement* element = Traversal<HTMLElement>::firstWithin(*this); element; element = Traversal<HTMLElement>::next(*element, this)) {
-        if (isHTMLObjectElement(*element) || isHTMLEmbedElement(*element))
+    for (HTMLElement& element : Traversal<HTMLElement>::descendantsOf(*this)) {
+        if (isHTMLObjectElement(element) || isHTMLEmbedElement(element))
             return false;
     }
     return true;
@@ -413,14 +413,14 @@ bool HTMLObjectElement::containsJavaApplet() const
     if (MIMETypeRegistry::isJavaAppletMIMEType(getAttribute(typeAttr)))
         return true;
 
-    for (HTMLElement* child = Traversal<HTMLElement>::firstChild(*this); child; child = Traversal<HTMLElement>::nextSibling(*child)) {
-        if (isHTMLParamElement(*child)
-                && equalIgnoringCase(child->getNameAttribute(), "type")
-                && MIMETypeRegistry::isJavaAppletMIMEType(child->getAttribute(valueAttr).string()))
+    for (HTMLElement& child : Traversal<HTMLElement>::childrenOf(*this)) {
+        if (isHTMLParamElement(child)
+            && equalIgnoringCase(child.getNameAttribute(), "type")
+            && MIMETypeRegistry::isJavaAppletMIMEType(child.getAttribute(valueAttr).string()))
             return true;
-        if (isHTMLObjectElement(*child) && toHTMLObjectElement(*child).containsJavaApplet())
+        if (isHTMLObjectElement(child) && toHTMLObjectElement(child).containsJavaApplet())
             return true;
-        if (isHTMLAppletElement(*child))
+        if (isHTMLAppletElement(child))
             return true;
     }
 

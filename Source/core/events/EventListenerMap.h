@@ -34,7 +34,6 @@
 #define EventListenerMap_h
 
 #include "core/events/RegisteredEventListener.h"
-// FIXME: #include "platform/heap/Handle.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/text/AtomicStringHash.h"
 
@@ -102,9 +101,9 @@ public:
     bool containsCapturing(const AtomicString& eventType) const;
 
     void clear();
-    bool add(const AtomicString& eventType, PassRefPtr<blink::EventListener>, bool useCapture);
-    bool remove(const AtomicString& eventType, blink::EventListener*, bool useCapture, size_t& indexOfRemovedListener);
-    blink::EventListenerVector* find(const AtomicString& eventType);
+    bool add(const AtomicString& eventType, PassRefPtr<EventListener>, bool useCapture);
+    bool remove(const AtomicString& eventType, EventListener*, bool useCapture, size_t& indexOfRemovedListener);
+    EventListenerVector* find(const AtomicString& eventType);
     EventAction *getEventAction(const AtomicString &eventType);
     void setEventAction(const AtomicString &eventType, EventAction *act);
     Vector<AtomicString> eventTypes() const;
@@ -117,7 +116,7 @@ private:
 
     void assertNoActiveIterators();
 
-    Vector<blink::EventListenerMapEntry, 2> m_entries;
+    Vector<EventListenerMapEntry, 2> m_entries;
 
 #if ENABLE(ASSERT)
     int m_activeIteratorCount;
@@ -133,7 +132,7 @@ public:
     ~EventListenerIterator();
 #endif
 
-    blink::EventListener* nextListener();
+    EventListener* nextListener();
 
 private:
     EventListenerMap* m_map;

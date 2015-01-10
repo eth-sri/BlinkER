@@ -46,12 +46,12 @@
 #include "core/workers/WorkerScriptLoaderClient.h"
 #include "core/workers/WorkerThreadStartupData.h"
 #include "modules/serviceworkers/ServiceWorkerThread.h"
-#include "platform/NotImplemented.h"
 #include "platform/SharedBuffer.h"
 #include "platform/heap/Handle.h"
 #include "platform/network/ContentSecurityPolicyParsers.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebURLRequest.h"
+#include "public/platform/WebWaitableEvent.h"
 #include "public/web/WebDevToolsAgent.h"
 #include "public/web/WebServiceWorkerContextClient.h"
 #include "public/web/WebServiceWorkerNetworkProvider.h"
@@ -89,7 +89,7 @@ public:
             *loadingContext, scriptURL, DenyCrossOriginRequests, this);
     }
 
-    virtual void notifyFinished() OVERRIDE
+    virtual void notifyFinished() override
     {
         m_callback();
     }
@@ -119,12 +119,12 @@ public:
         return adoptPtr(new LoaderProxy(embeddedWorker));
     }
 
-    virtual void postTaskToLoader(PassOwnPtr<ExecutionContextTask> task) OVERRIDE
+    virtual void postTaskToLoader(PassOwnPtr<ExecutionContextTask> task) override
     {
         toWebLocalFrameImpl(m_embeddedWorker.m_mainFrame)->frame()->document()->postTask(task);
     }
 
-    virtual bool postTaskToWorkerGlobalScope(PassOwnPtr<ExecutionContextTask> task) OVERRIDE
+    virtual bool postTaskToWorkerGlobalScope(PassOwnPtr<ExecutionContextTask> task) override
     {
         if (m_embeddedWorker.m_askedToTerminate || !m_embeddedWorker.m_workerThread)
             return false;
@@ -172,6 +172,11 @@ WebEmbeddedWorkerImpl::WebEmbeddedWorkerImpl(
 
 WebEmbeddedWorkerImpl::~WebEmbeddedWorkerImpl()
 {
+    if (m_workerThread) {
+        ASSERT(m_workerThread->terminated());
+        m_workerThread->terminationEvent()->wait();
+    }
+
     ASSERT(runningWorkerInstances().contains(this));
     runningWorkerInstances().remove(this);
     ASSERT(m_webView);
@@ -237,10 +242,6 @@ void WebEmbeddedWorkerImpl::resumeAfterDownload()
         m_waitingForDebuggerState = WaitingForDebuggerAfterScriptLoaded;
     else if (wasPaused)
         startWorkerThread();
-}
-
-void WebEmbeddedWorkerImpl::resumeWorkerContext()
-{
 }
 
 void WebEmbeddedWorkerImpl::attachDevTools(const WebString& hostId)

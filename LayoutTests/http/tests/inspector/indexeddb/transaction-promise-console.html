@@ -1,12 +1,12 @@
 <html>
 <head>
 <script src="../inspector-test.js"></script>
+<script src="../console-test.js"></script>
 <script>
 function test()
 {
     testRunner.waitUntilDone();
     testRunner.showWebInspector();
-    WebInspector.inspectorView._showPanel("console");
 
     var dbname = location.href;
     indexedDB.deleteDatabase(dbname).onsuccess = function() {

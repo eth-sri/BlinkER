@@ -64,14 +64,14 @@ InspectorTest.dumpResourcesTree = function()
             dump(children[i], prefix + "    ");
     }
 
-    dump(WebInspector.inspectorView._showPanel("resources").resourcesListTreeElement, "");
+    dump(WebInspector.panels.resources.resourcesListTreeElement, "");
 }
 
 InspectorTest.dumpResourceTreeEverything = function()
 {
     function format(resource)
     {
-        return resource.type.name() + " " + resource.url;
+        return resource.resourceType().name() + " " + resource.url;
     }
 
     InspectorTest.addResult("Resources:");

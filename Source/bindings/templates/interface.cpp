@@ -2,25 +2,6 @@
 
 
 {##############################################################################}
-{% block security_check_functions %}
-{% if has_access_check_callbacks %}
-bool indexedSecurityCheck(v8::Local<v8::Object> host, uint32_t index, v8::AccessType type, v8::Local<v8::Value>)
-{
-    {{cpp_class}}* impl = {{v8_class}}::toImpl(host);
-    return BindingSecurity::shouldAllowAccessToFrame(v8::Isolate::GetCurrent(), impl->frame(), DoNotReportSecurityError);
-}
-
-bool namedSecurityCheck(v8::Local<v8::Object> host, v8::Local<v8::Value> key, v8::AccessType type, v8::Local<v8::Value>)
-{
-    {{cpp_class}}* impl = {{v8_class}}::toImpl(host);
-    return BindingSecurity::shouldAllowAccessToFrame(v8::Isolate::GetCurrent(), impl->frame(), DoNotReportSecurityError);
-}
-
-{% endif %}
-{% endblock %}
-
-
-{##############################################################################}
 {% block indexed_property_getter %}
 {% if indexed_property_getter and not indexed_property_getter.is_custom %}
 {% set getter = indexed_property_getter %}
@@ -168,7 +149,6 @@ static void indexedPropertyDeleterCallback(uint32_t index, const v8::PropertyCal
 
 
 {##############################################################################}
-{% from 'methods.cpp' import union_type_method_call_and_set_return_value %}
 {% block named_property_getter %}
 {% if named_property_getter and not named_property_getter.is_custom %}
 {% set getter = named_property_getter %}
@@ -187,10 +167,12 @@ static void namedPropertyGetter(v8::Local<v8::String> name, const v8::PropertyCa
     v8::String::Utf8Value namedProperty(name);
     ExceptionState exceptionState(ExceptionState::GetterContext, *namedProperty, "{{interface_name}}", info.Holder(), info.GetIsolate());
     {% endif %}
-    {% if getter.union_arguments %}
-    {{union_type_method_call_and_set_return_value(getter) | indent}}
+    {% if getter.use_output_parameter_for_result %}
+    {{getter.cpp_type}} result;
+    {{getter.cpp_value}};
     {% else %}
     {{getter.cpp_type}} result = {{getter.cpp_value}};
+    {% endif %}
     {% if getter.is_raises_exception %}
     if (exceptionState.throwIfNeeded())
         return;
@@ -198,7 +180,6 @@ static void namedPropertyGetter(v8::Local<v8::String> name, const v8::PropertyCa
     if ({{getter.is_null_expression}})
         return;
     {{getter.v8_set_return_value}};
-    {% endif %}
 }
 
 {% endif %}
@@ -446,14 +427,14 @@ static void {{cpp_class}}OriginSafeMethodSetterCallback(v8::Local<v8::String> na
 
 
 {##############################################################################}
-{% from 'methods.cpp' import generate_constructor with context %}
 {% block named_constructor %}
+{% from 'methods.cpp' import generate_constructor with context %}
 {% if named_constructor %}
 {% set to_active_dom_object = '%s::toActiveDOMObject' % v8_class
                               if is_active_dom_object else '0' %}
 {% set to_event_target = '%s::toEventTarget' % v8_class
                          if is_event_target else '0' %}
-const WrapperTypeInfo {{v8_class}}Constructor::wrapperTypeInfo = { gin::kEmbedderBlink, {{v8_class}}Constructor::domTemplate, {{v8_class}}::refObject, {{v8_class}}::derefObject, {{v8_class}}::createPersistentHandle, {{to_active_dom_object}}, {{to_event_target}}, 0, {{v8_class}}::installConditionallyEnabledMethods, {{v8_class}}::installConditionallyEnabledProperties, 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::{{wrapper_class_id}}, WrapperTypeInfo::{{lifetime}}, WrapperTypeInfo::{{gc_type}} };
+const WrapperTypeInfo {{v8_class}}Constructor::wrapperTypeInfo = { gin::kEmbedderBlink, {{v8_class}}Constructor::domTemplate, {{v8_class}}::refObject, {{v8_class}}::derefObject, {{v8_class}}::trace, {{to_active_dom_object}}, {{to_event_target}}, 0, {{v8_class}}::installConditionallyEnabledMethods, {{v8_class}}::installConditionallyEnabledProperties, 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::{{wrapper_class_id}}, WrapperTypeInfo::{{lifetime}}, WrapperTypeInfo::{{gc_type}} };
 
 {{generate_constructor(named_constructor)}}
 v8::Handle<v8::FunctionTemplate> {{v8_class}}Constructor::domTemplate(v8::Isolate* isolate)
@@ -572,7 +553,7 @@ static void constructor(const v8::FunctionCallbackInfo<v8::Value>& info)
     if (DOMWrapperWorld::current(info.GetIsolate()).isIsolatedWorld()) {
         {% for attribute in any_type_attributes %}
         if (!{{attribute.name}}.IsEmpty())
-            event->setSerialized{{attribute.name | blink_capitalize}}(SerializedScriptValue::createAndSwallowExceptions({{attribute.name}}, info.GetIsolate()));
+            event->setSerialized{{attribute.name | blink_capitalize}}(SerializedScriptValue::createAndSwallowExceptions(info.GetIsolate(), {{attribute.name}}));
         {% endfor %}
     }
 
@@ -589,9 +570,9 @@ static void constructor(const v8::FunctionCallbackInfo<v8::Value>& info)
 {##############################################################################}
 {% block visit_dom_wrapper %}
 {% if reachable_node_function or set_wrapper_reference_to_list %}
-void {{v8_class}}::visitDOMWrapper(ScriptWrappableBase* internalPointer, const v8::Persistent<v8::Object>& wrapper, v8::Isolate* isolate)
+void {{v8_class}}::visitDOMWrapper(ScriptWrappableBase* scriptWrappableBase, const v8::Persistent<v8::Object>& wrapper, v8::Isolate* isolate)
 {
-    {{cpp_class}}* impl = internalPointer->toImpl<{{cpp_class}}>();
+    {{cpp_class}}* impl = scriptWrappableBase->toImpl<{{cpp_class}}>();
     {% if set_wrapper_reference_to_list %}
     v8::Local<v8::Object> creationContext = v8::Local<v8::Object>::New(isolate, wrapper);
     V8WrapperInstantiationScope scope(creationContext, isolate);
@@ -599,7 +580,7 @@ void {{v8_class}}::visitDOMWrapper(ScriptWrappableBase* internalPointer, const v
     {{set_wrapper_reference_to.cpp_type}} {{set_wrapper_reference_to.name}} = impl->{{set_wrapper_reference_to.name}}();
     if ({{set_wrapper_reference_to.name}}) {
         if (!DOMDataStore::containsWrapper<{{set_wrapper_reference_to.v8_type}}>({{set_wrapper_reference_to.name}}, isolate))
-            wrap({{set_wrapper_reference_to.name}}, creationContext, isolate);
+            {{set_wrapper_reference_to.name}}->wrap(creationContext, isolate);
         DOMDataStore::setWrapperReference<{{set_wrapper_reference_to.v8_type}}>(wrapper, {{set_wrapper_reference_to.name}}, isolate);
     }
     {% endfor %}
@@ -607,12 +588,12 @@ void {{v8_class}}::visitDOMWrapper(ScriptWrappableBase* internalPointer, const v
     {% if reachable_node_function %}
     // The {{reachable_node_function}}() method may return a reference or a pointer.
     if (Node* owner = WTF::getPtr(impl->{{reachable_node_function}}())) {
-        Node* root = V8GCController::opaqueRootForGC(owner, isolate);
+        Node* root = V8GCController::opaqueRootForGC(isolate, owner);
         isolate->SetReferenceFromGroup(v8::UniqueId(reinterpret_cast<intptr_t>(root)), wrapper);
         return;
     }
     {% endif %}
-    setObjectGroup(internalPointer, wrapper, isolate);
+    setObjectGroup(scriptWrappableBase, wrapper, isolate);
 }
 
 {% endif %}
@@ -620,8 +601,8 @@ void {{v8_class}}::visitDOMWrapper(ScriptWrappableBase* internalPointer, const v
 
 
 {##############################################################################}
-{% from 'attributes.cpp' import attribute_configuration with context %}
 {% block shadow_attributes %}
+{% from 'attributes.cpp' import attribute_configuration with context %}
 {% if interface_name == 'Window' %}
 static const V8DOMConfiguration::AttributeConfiguration shadowAttributes[] = {
     {% for attribute in attributes if attribute.is_unforgeable and attribute.should_be_exposed_to_script %}
@@ -651,7 +632,7 @@ bool initialize{{cpp_class}}({{cpp_class}}Init& eventInit, const Dictionary& opt
     {% if attribute.deprecate_as %}
     if (DictionaryHelper::convert(options, conversionContext.setConversionType("{{attribute.idl_type}}", {{is_nullable}}), "{{attribute.name}}", eventInit.{{attribute.cpp_name}})) {
         if (options.hasProperty("{{attribute.name}}"))
-            UseCounter::countDeprecation(callingExecutionContext(info.GetIsolate()), UseCounter::{{attribute.deprecate_as}});
+            UseCounter::countDeprecationIfNotPrivateScript(info.GetIsolate(), callingExecutionContext(info.GetIsolate()), UseCounter::{{attribute.deprecate_as}});
     } else {
         return false;
     }
@@ -674,7 +655,7 @@ void {{v8_class}}::constructorCallback(const v8::FunctionCallbackInfo<v8::Value>
 {
     TRACE_EVENT_SCOPED_SAMPLING_STATE("blink", "DOMConstructor");
     {% if measure_as %}
-    UseCounter::count(callingExecutionContext(info.GetIsolate()), UseCounter::{{measure_as}});
+    UseCounter::countIfNotPrivateScript(info.GetIsolate(), callingExecutionContext(info.GetIsolate()), UseCounter::{{measure_as}});
     {% endif %}
     if (!info.IsConstructCall()) {
         V8ThrowException::throwTypeError(ExceptionMessages::constructorNotCallableAsFunction("{{interface_name}}"), info.GetIsolate());
@@ -746,11 +727,20 @@ V8DOMConfiguration::installAttribute({{method.function_template}}, v8::Handle<v8
 
 {##############################################################################}
 {% block get_dom_template %}
+{% if not is_array_buffer_or_view %}
 v8::Handle<v8::FunctionTemplate> {{v8_class}}::domTemplate(v8::Isolate* isolate)
 {
-    return V8DOMConfiguration::domClassTemplate(isolate, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), install{{v8_class}}Template);
+    {% if has_partial_interface %}
+    {% set installTemplateFunction = '%s::install%sTemplateFunction' % (v8_class, v8_class) %}
+    ASSERT({{installTemplateFunction}} != {{v8_class}}::install{{v8_class}}Template);
+    {% else %}
+    {% set installTemplateFunction = 'install%sTemplate' % v8_class %}
+    {% endif %}
+{% set installTemplateFunction = '%s::install%sTemplateFunction' % (v8_class, v8_class) if has_partial_interface else 'install%sTemplate' % v8_class %}
+    return V8DOMConfiguration::domClassTemplate(isolate, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), {{installTemplateFunction}});
 }
 
+{% endif %}
 {% endblock %}
 
 
@@ -758,22 +748,112 @@ v8::Handle<v8::FunctionTemplate> {{v8_class}}::domTemplate(v8::Isolate* isolate)
 {% block has_instance %}
 bool {{v8_class}}::hasInstance(v8::Handle<v8::Value> v8Value, v8::Isolate* isolate)
 {
+    {% if is_array_buffer_or_view %}
+    return v8Value->Is{{interface_name}}();
+    {% else %}
     return V8PerIsolateData::from(isolate)->hasInstance(&wrapperTypeInfo, v8Value);
+    {% endif %}
 }
 
+{% if not is_array_buffer_or_view %}
 v8::Handle<v8::Object> {{v8_class}}::findInstanceInPrototypeChain(v8::Handle<v8::Value> v8Value, v8::Isolate* isolate)
 {
     return V8PerIsolateData::from(isolate)->findInstanceInPrototypeChain(&wrapperTypeInfo, v8Value);
 }
 
+{% endif %}
 {% endblock %}
 
 
 {##############################################################################}
-{% block to_native_with_type_check %}
+{% block to_impl %}
+{% if interface_name == 'ArrayBuffer' %}
+{{cpp_class}}* V8ArrayBuffer::toImpl(v8::Handle<v8::Object> object)
+{
+    ASSERT(object->IsArrayBuffer());
+    v8::Local<v8::ArrayBuffer> v8buffer = object.As<v8::ArrayBuffer>();
+    if (v8buffer->IsExternal()) {
+        const WrapperTypeInfo* wrapperTypeInfo = toWrapperTypeInfo(object);
+        RELEASE_ASSERT(wrapperTypeInfo);
+        RELEASE_ASSERT(wrapperTypeInfo->ginEmbedder == gin::kEmbedderBlink);
+        return blink::toScriptWrappableBase(object)->toImpl<{{cpp_class}}>();
+    }
+
+    // Transfer the ownership of the allocated memory to an ArrayBuffer without
+    // copying.
+    v8::ArrayBuffer::Contents v8Contents = v8buffer->Externalize();
+    WTF::ArrayBufferContents contents(v8Contents.Data(), v8Contents.ByteLength(), 0);
+    RefPtr<{{cpp_class}}> buffer = {{cpp_class}}::create(contents);
+    // Since this transfer doesn't allocate new memory, do not call
+    // DOMArrayBufferDeallocationObserver::blinkAllocatedMemory.
+    buffer->buffer()->setDeallocationObserverWithoutAllocationNotification(
+        DOMArrayBufferDeallocationObserver::instance());
+    buffer->associateWithWrapper(buffer->wrapperTypeInfo(), object, v8::Isolate::GetCurrent());
+
+    return blink::toScriptWrappableBase(object)->toImpl<{{cpp_class}}>();
+}
+
+{% elif interface_name == 'ArrayBufferView' %}
+{{cpp_class}}* V8ArrayBufferView::toImpl(v8::Handle<v8::Object> object)
+{
+    ASSERT(object->IsArrayBufferView());
+    ScriptWrappableBase* scriptWrappableBase = blink::toScriptWrappableBase(object);
+    if (scriptWrappableBase)
+        return scriptWrappableBase->toImpl<{{cpp_class}}>();
+
+    if (object->IsInt8Array())
+        return V8Int8Array::toImpl(object);
+    if (object->IsInt16Array())
+        return V8Int16Array::toImpl(object);
+    if (object->IsInt32Array())
+        return V8Int32Array::toImpl(object);
+    if (object->IsUint8Array())
+        return V8Uint8Array::toImpl(object);
+    if (object->IsUint8ClampedArray())
+        return V8Uint8ClampedArray::toImpl(object);
+    if (object->IsUint16Array())
+        return V8Uint16Array::toImpl(object);
+    if (object->IsUint32Array())
+        return V8Uint32Array::toImpl(object);
+    if (object->IsFloat32Array())
+        return V8Float32Array::toImpl(object);
+    if (object->IsFloat64Array())
+        return V8Float64Array::toImpl(object);
+    if (object->IsDataView())
+        return V8DataView::toImpl(object);
+
+    ASSERT_NOT_REACHED();
+    return 0;
+}
+
+{% elif is_array_buffer_or_view %}
+{{cpp_class}}* {{v8_class}}::toImpl(v8::Handle<v8::Object> object)
+{
+    ASSERT(object->Is{{interface_name}}());
+    ScriptWrappableBase* scriptWrappableBase = blink::toScriptWrappableBase(object);
+    if (scriptWrappableBase)
+        return scriptWrappableBase->toImpl<{{cpp_class}}>();
+
+    v8::Handle<v8::{{interface_name}}> v8View = object.As<v8::{{interface_name}}>();
+    RefPtr<{{cpp_class}}> typedArray = {{cpp_class}}::create(V8ArrayBuffer::toImpl(v8View->Buffer()), v8View->ByteOffset(), v8View->{% if interface_name == 'DataView' %}Byte{% endif %}Length());
+    typedArray->associateWithWrapper(typedArray->wrapperTypeInfo(), object, v8::Isolate::GetCurrent());
+
+    return typedArray->toImpl<{{cpp_class}}>();
+}
+
+{% endif %}
+{% endblock %}
+
+
+{##############################################################################}
+{% block to_impl_with_type_check %}
 {{cpp_class}}* {{v8_class}}::toImplWithTypeCheck(v8::Isolate* isolate, v8::Handle<v8::Value> value)
 {
+    {% if is_array_buffer_or_view %}
+    return hasInstance(value, isolate) ? toImpl(v8::Handle<v8::Object>::Cast(value)) : 0;
+    {% else %}
     return hasInstance(value, isolate) ? blink::toScriptWrappableBase(v8::Handle<v8::Object>::Cast(value))->toImpl<{{cpp_class}}>() : 0;
+    {% endif %}
 }
 
 {% endblock %}
@@ -781,6 +861,7 @@ v8::Handle<v8::Object> {{v8_class}}::findInstanceInPrototypeChain(v8::Handle<v8:
 
 {##############################################################################}
 {% block install_conditional_attributes %}
+{% from 'attributes.cpp' import attribute_configuration with context %}
 {% if has_conditional_attributes %}
 void {{v8_class}}::installConditionallyEnabledProperties(v8::Handle<v8::Object> instanceObject, v8::Isolate* isolate)
 {
@@ -793,29 +874,6 @@ void {{v8_class}}::installConditionallyEnabledProperties(v8::Handle<v8::Object> 
     static const V8DOMConfiguration::AttributeConfiguration attributeConfiguration =\
     {{attribute_configuration(attribute)}};
     V8DOMConfiguration::installAttribute(instanceObject, prototypeObject, attributeConfiguration, isolate);
-    {% endfilter %}
-    {% endfilter %}
-    {% endfor %}
-}
-
-{% endif %}
-{% endblock %}
-
-
-{##############################################################################}
-{% block install_conditional_methods %}
-{% if conditionally_enabled_methods %}
-void {{v8_class}}::installConditionallyEnabledMethods(v8::Handle<v8::Object> prototypeObject, v8::Isolate* isolate)
-{
-    {# Define per-context enabled operations #}
-    v8::Local<v8::Signature> defaultSignature = v8::Signature::New(isolate, domTemplate(isolate));
-    ExecutionContext* context = toExecutionContext(prototypeObject->CreationContext());
-    ASSERT(context);
-
-    {% for method in conditionally_enabled_methods %}
-    {% filter per_context_enabled(method.per_context_enabled_function) %}
-    {% filter exposed(method.exposed_test) %}
-    prototypeObject->Set(v8AtomicString(isolate, "{{method.name}}"), v8::FunctionTemplate::New(isolate, {{cpp_class}}V8Internal::{{method.name}}MethodCallback, v8Undefined(), defaultSignature, {{method.number_of_required_arguments}})->GetFunction());
     {% endfilter %}
     {% endfilter %}
     {% endfor %}
@@ -920,43 +978,25 @@ v8::Handle<v8::Object> {{v8_class}}::createWrapper({{pass_cpp_type}} impl, v8::H
 
 {##############################################################################}
 {% block deref_object_and_to_v8_no_inline %}
-
-void {{v8_class}}::refObject(ScriptWrappableBase* internalPointer)
+void {{v8_class}}::refObject(ScriptWrappableBase* scriptWrappableBase)
 {
 {% if gc_type == 'WillBeGarbageCollectedObject' %}
 #if !ENABLE(OILPAN)
-    internalPointer->toImpl<{{cpp_class}}>()->ref();
+    scriptWrappableBase->toImpl<{{cpp_class}}>()->ref();
 #endif
 {% elif gc_type == 'RefCountedObject' %}
-    internalPointer->toImpl<{{cpp_class}}>()->ref();
+    scriptWrappableBase->toImpl<{{cpp_class}}>()->ref();
 {% endif %}
 }
 
-void {{v8_class}}::derefObject(ScriptWrappableBase* internalPointer)
+void {{v8_class}}::derefObject(ScriptWrappableBase* scriptWrappableBase)
 {
 {% if gc_type == 'WillBeGarbageCollectedObject' %}
 #if !ENABLE(OILPAN)
-    internalPointer->toImpl<{{cpp_class}}>()->deref();
+    scriptWrappableBase->toImpl<{{cpp_class}}>()->deref();
 #endif
 {% elif gc_type == 'RefCountedObject' %}
-    internalPointer->toImpl<{{cpp_class}}>()->deref();
-{% endif %}
-}
-
-WrapperPersistentNode* {{v8_class}}::createPersistentHandle(ScriptWrappableBase* internalPointer)
-{
-{% if gc_type == 'GarbageCollectedObject' %}
-    return WrapperPersistent<{{cpp_class}}>::create(internalPointer->toImpl<{{cpp_class}}>());
-{% elif gc_type == 'WillBeGarbageCollectedObject' %}
-#if ENABLE(OILPAN)
-    return WrapperPersistent<{{cpp_class}}>::create(internalPointer->toImpl<{{cpp_class}}>());
-#else
-    ASSERT_NOT_REACHED();
-    return 0;
-#endif
-{% elif gc_type == 'RefCountedObject' %}
-    ASSERT_NOT_REACHED();
-    return 0;
+    scriptWrappableBase->toImpl<{{cpp_class}}>()->deref();
 {% endif %}
 }
 
@@ -966,4 +1006,25 @@ v8::Handle<v8::Value> toV8NoInline({{cpp_class}}* impl, v8::Handle<v8::Object> c
     return toV8(impl, creationContext, isolate);
 }
 
+{% endblock %}
+
+{##############################################################################}
+{% block partial_interface %}
+{% if has_partial_interface %}
+InstallTemplateFunction {{v8_class}}::install{{v8_class}}TemplateFunction = (InstallTemplateFunction)&{{v8_class}}::install{{v8_class}}Template;
+
+void {{v8_class}}::updateWrapperTypeInfo(InstallTemplateFunction installTemplateFunction, InstallConditionallyEnabledMethodsFunction installConditionallyEnabledMethodsFunction)
+{
+    {{v8_class}}::install{{v8_class}}TemplateFunction = installTemplateFunction;
+    if (installConditionallyEnabledMethodsFunction)
+        {{v8_class}}::wrapperTypeInfo.installConditionallyEnabledMethodsFunction = installConditionallyEnabledMethodsFunction;
+}
+
+{% for method in methods if method.overloads and method.overloads.has_partial_overloads %}
+void {{v8_class}}::register{{method.name | blink_capitalize}}MethodForPartialInterface(void (*method)(const v8::FunctionCallbackInfo<v8::Value>&))
+{
+    {{cpp_class}}V8Internal::{{method.name}}MethodForPartialInterface = method;
+}
+{% endfor %}
+{% endif %}
 {% endblock %}

@@ -59,7 +59,7 @@ MediaStream* MediaStream::create(ExecutionContext* context)
     MediaStreamTrackVector audioTracks;
     MediaStreamTrackVector videoTracks;
 
-    return adoptRefCountedGarbageCollectedWillBeNoop(new MediaStream(context, audioTracks, videoTracks));
+    return new MediaStream(context, audioTracks, videoTracks);
 }
 
 MediaStream* MediaStream::create(ExecutionContext* context, MediaStream* stream)
@@ -75,7 +75,7 @@ MediaStream* MediaStream::create(ExecutionContext* context, MediaStream* stream)
     for (size_t i = 0; i < stream->m_videoTracks.size(); ++i)
         processTrack(stream->m_videoTracks[i].get(), videoTracks);
 
-    return adoptRefCountedGarbageCollectedWillBeNoop(new MediaStream(context, audioTracks, videoTracks));
+    return new MediaStream(context, audioTracks, videoTracks);
 }
 
 MediaStream* MediaStream::create(ExecutionContext* context, const MediaStreamTrackVector& tracks)
@@ -86,15 +86,15 @@ MediaStream* MediaStream::create(ExecutionContext* context, const MediaStreamTra
     for (size_t i = 0; i < tracks.size(); ++i)
         processTrack(tracks[i].get(), tracks[i]->kind() == "audio" ? audioTracks : videoTracks);
 
-    return adoptRefCountedGarbageCollectedWillBeNoop(new MediaStream(context, audioTracks, videoTracks));
+    return new MediaStream(context, audioTracks, videoTracks);
 }
 
-MediaStream* MediaStream::create(ExecutionContext* context, MediaStreamDescriptor* streamDescriptor)
+MediaStream* MediaStream::create(ExecutionContext* context, PassRefPtr<MediaStreamDescriptor> streamDescriptor)
 {
-    return adoptRefCountedGarbageCollectedWillBeNoop(new MediaStream(context, streamDescriptor));
+    return new MediaStream(context, streamDescriptor);
 }
 
-MediaStream::MediaStream(ExecutionContext* context, MediaStreamDescriptor* streamDescriptor)
+MediaStream::MediaStream(ExecutionContext* context, PassRefPtr<MediaStreamDescriptor> streamDescriptor)
     : ContextLifecycleObserver(context)
     , m_stopped(false)
     , m_descriptor(streamDescriptor)
@@ -147,6 +147,7 @@ MediaStream::MediaStream(ExecutionContext* context, const MediaStreamTrackVector
 
 MediaStream::~MediaStream()
 {
+    m_descriptor->setClient(0);
 }
 
 bool MediaStream::ended() const
@@ -391,9 +392,7 @@ void MediaStream::trace(Visitor* visitor)
     visitor->trace(m_audioTracks);
     visitor->trace(m_videoTracks);
     visitor->trace(m_scheduledEvents);
-    visitor->trace(m_descriptor);
     EventTargetWithInlineData::trace(visitor);
-    MediaStreamDescriptorClient::trace(visitor);
 }
 
 } // namespace blink

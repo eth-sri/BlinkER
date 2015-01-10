@@ -71,49 +71,49 @@ public:
     }
 
 private:
-    virtual void closeWindowSoon() OVERRIDE
+    virtual void closeWindowSoon() override
     {
         m_popup->closePopup();
     }
 
-    virtual FloatRect windowRect() OVERRIDE
+    virtual FloatRect windowRect() override
     {
         return FloatRect(m_popup->m_windowRectInScreen.x, m_popup->m_windowRectInScreen.y, m_popup->m_windowRectInScreen.width, m_popup->m_windowRectInScreen.height);
     }
 
-    virtual void setWindowRect(const FloatRect& rect) OVERRIDE
+    virtual void setWindowRect(const FloatRect& rect) override
     {
         m_popup->m_windowRectInScreen = IntRect(rect);
         m_popup->widgetClient()->setWindowRect(m_popup->m_windowRectInScreen);
     }
 
-    virtual IntRect rootViewToScreen(const IntRect& rect) const OVERRIDE
+    virtual IntRect rootViewToScreen(const IntRect& rect) const override
     {
         IntRect rectInScreen(rect);
         rectInScreen.move(m_popup->m_windowRectInScreen.x, m_popup->m_windowRectInScreen.y);
         return rectInScreen;
     }
 
-    virtual void addMessageToConsole(LocalFrame*, MessageSource, MessageLevel, const String& message, unsigned lineNumber, const String&, const String&) OVERRIDE
+    virtual void addMessageToConsole(LocalFrame*, MessageSource, MessageLevel, const String& message, unsigned lineNumber, const String&, const String&) override
     {
 #ifndef NDEBUG
         fprintf(stderr, "CONSOLE MESSSAGE:%u: %s\n", lineNumber, message.utf8().data());
 #endif
     }
 
-    virtual void invalidateContentsAndRootView(const IntRect& paintRect) OVERRIDE
+    virtual void invalidateContentsAndRootView(const IntRect& paintRect) override
     {
         if (paintRect.isEmpty())
             return;
         m_popup->widgetClient()->didInvalidateRect(paintRect);
     }
 
-    virtual void invalidateContentsForSlowScroll(const IntRect& updateRect) OVERRIDE
+    virtual void invalidateContentsForSlowScroll(const IntRect& updateRect) override
     {
         invalidateContentsAndRootView(updateRect);
     }
 
-    virtual void scheduleAnimation() OVERRIDE
+    virtual void scheduleAnimation() override
     {
         // Calling scheduleAnimation on m_webView so WebTestProxy will call beginFrame.
         if (LayoutTestSupport::isRunningLayoutTest())
@@ -127,43 +127,43 @@ private:
         m_popup->m_widgetClient->scheduleAnimation();
     }
 
-    virtual WebScreenInfo screenInfo() const OVERRIDE
+    virtual WebScreenInfo screenInfo() const override
     {
         return m_popup->m_webView->client() ? m_popup->m_webView->client()->screenInfo() : WebScreenInfo();
     }
 
-    virtual void* webView() const OVERRIDE
+    virtual void* webView() const override
     {
         return m_popup->m_webView;
     }
 
-    virtual FloatSize minimumWindowSize() const OVERRIDE
+    virtual FloatSize minimumWindowSize() const override
     {
         return FloatSize(0, 0);
     }
 
-    virtual void setCursor(const Cursor& cursor) OVERRIDE
+    virtual void setCursor(const Cursor& cursor) override
     {
         if (m_popup->m_webView->client())
             m_popup->m_webView->client()->didChangeCursor(WebCursorInfo(cursor));
     }
 
-    virtual void needTouchEvents(bool needsTouchEvents) OVERRIDE
+    virtual void needTouchEvents(bool needsTouchEvents) override
     {
         m_popup->widgetClient()->hasTouchEventHandlers(needsTouchEvents);
     }
 
-    virtual GraphicsLayerFactory* graphicsLayerFactory() const OVERRIDE
+    virtual GraphicsLayerFactory* graphicsLayerFactory() const override
     {
         return m_popup->m_webView->graphicsLayerFactory();
     }
 
-    virtual void attachRootGraphicsLayer(GraphicsLayer* graphicsLayer) OVERRIDE
+    virtual void attachRootGraphicsLayer(GraphicsLayer* graphicsLayer) override
     {
         m_popup->setRootGraphicsLayer(graphicsLayer);
     }
 
-    virtual void postAccessibilityNotification(AXObject* obj, AXObjectCache::AXNotification notification) OVERRIDE
+    virtual void postAccessibilityNotification(AXObject* obj, AXObjectCache::AXNotification notification) override
     {
         WebLocalFrameImpl* frame = WebLocalFrameImpl::fromFrame(m_popup->m_popupClient->ownerElement().document().frame());
         if (obj && frame && frame->client())
@@ -178,7 +178,7 @@ private:
 };
 
 class PagePopupFeaturesClient : public ContextFeaturesClient {
-    virtual bool isEnabled(Document*, ContextFeatures::FeatureType, bool) OVERRIDE;
+    virtual bool isEnabled(Document*, ContextFeatures::FeatureType, bool) override;
 };
 
 bool PagePopupFeaturesClient::isEnabled(Document*, ContextFeatures::FeatureType type, bool defaultValue)
@@ -277,7 +277,7 @@ AXObject* WebPagePopupImpl::rootAXObject()
         return 0;
     AXObjectCache* cache = document->axObjectCache();
     ASSERT(cache);
-    return cache->getOrCreate(document->view());
+    return cache->getOrCreateAXObjectFromRenderView(document->renderView());
 }
 
 void WebPagePopupImpl::setRootGraphicsLayer(GraphicsLayer* layer)
@@ -326,9 +326,11 @@ WebSize WebPagePopupImpl::size()
 
 void WebPagePopupImpl::beginFrame(const WebBeginFrameArgs& frameTime)
 {
+    if (!m_page)
+        return;
     // FIXME: This should use frameTime.lastFrameTimeMonotonic but doing so
     // breaks tests.
-    PageWidgetDelegate::animate(m_page.get(), monotonicallyIncreasingTime());
+    PageWidgetDelegate::animate(*m_page, monotonicallyIncreasingTime(), *m_page->deprecatedLocalMainFrame());
 }
 
 void WebPagePopupImpl::willCloseLayerTreeView()
@@ -339,13 +341,15 @@ void WebPagePopupImpl::willCloseLayerTreeView()
 
 void WebPagePopupImpl::layout()
 {
-    PageWidgetDelegate::layout(m_page.get());
+    if (!m_page)
+        return;
+    PageWidgetDelegate::layout(*m_page, *m_page->deprecatedLocalMainFrame());
 }
 
 void WebPagePopupImpl::paint(WebCanvas* canvas, const WebRect& rect)
 {
     if (!m_closing)
-        PageWidgetDelegate::paint(m_page.get(), 0, canvas, rect, PageWidgetDelegate::Opaque);
+        PageWidgetDelegate::paint(*m_page, 0, canvas, rect, PageWidgetDelegate::Opaque, *m_page->deprecatedLocalMainFrame());
 }
 
 void WebPagePopupImpl::resize(const WebSize& newSize)
@@ -384,7 +388,7 @@ bool WebPagePopupImpl::handleInputEvent(const WebInputEvent& event)
 {
     if (m_closing)
         return false;
-    return PageWidgetDelegate::handleInputEvent(m_page.get(), *this, event);
+    return PageWidgetDelegate::handleInputEvent(*this, event, m_page->deprecatedLocalMainFrame());
 }
 
 bool WebPagePopupImpl::handleKeyEvent(const PlatformKeyboardEvent& event)

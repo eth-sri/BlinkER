@@ -1,4 +1,15 @@
+@charset "UTF-8";
+@charset "ASCII";
+
 @import url("different-rule-types-import.css");
+
+@page {
+    margin: 1em;
+}
+
+@font-face {
+    font-family: "Example Font";
+}
 
 @media (min-width: 1px) {
     .inspected {
@@ -8,11 +19,11 @@
 
 @keyframes drop {
     0% {
-        -webkit-transform: scale(0);
+        transform: scale(0);
         opacity: 1
     }
     100% {
-        -webkit-transform: scale(1);
+        transform: scale(1);
         opacity: 1
     }
 }
@@ -23,7 +34,12 @@
     }
 }
 
+@viewport {
+    zoom: 0.75;
+    min-zoom: 0.5;
+    max-zoom: 0.9;
+}
+
 .inspected {
     color: blue;
 }
-

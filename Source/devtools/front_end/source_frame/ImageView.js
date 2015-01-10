@@ -36,7 +36,7 @@
 WebInspector.ImageView = function(url, mimeType, contentProvider)
 {
     WebInspector.VBox.call(this);
-    this.registerRequiredCSS("imageView.css");
+    this.registerRequiredCSS("source_frame/imageView.css");
     this.element.classList.add("image-view");
     this._url = url;
     this._parsedURL = new WebInspector.ParsedURL(url);
@@ -62,7 +62,7 @@ WebInspector.ImageView.prototype = {
         this._container = this.element.createChild("div", "info");
         this._container.createChild("h1", "title").textContent = this._parsedURL.displayName;
 
-        var infoListElement = document.createElementWithClass("dl", "infoList");
+        var infoListElement = createElementWithClass("dl", "infoList");
 
         WebInspector.Resource.populateImageSource(this._url, this._mimeType, this._contentProvider, imagePreviewElement);
         this._contentProvider.requestContent(onContentAvailable.bind(this));
@@ -87,15 +87,19 @@ WebInspector.ImageView.prototype = {
                 infoListElement.createChild("dd").textContent = imageProperties[i].value;
             }
             infoListElement.createChild("dt").textContent = WebInspector.UIString("URL");
-            infoListElement.createChild("dd").appendChild(WebInspector.linkifyURLAsNode(this._url, undefined, undefined, true /* externalResource */));
+            infoListElement.createChild("dd").appendChild(WebInspector.createExternalAnchor(this._url));
             this._container.appendChild(infoListElement);
         }
         this._imagePreviewElement = imagePreviewElement;
     },
 
+    /**
+     * @param {?string} content
+     * @return {number}
+     */
     _base64ToSize: function(content)
     {
-        if (!content.length)
+        if (!content || !content.length)
             return 0;
         var size = (content.length || 0) * 3 / 4;
         if (content.length > 0 && content[content.length - 1] === "=")

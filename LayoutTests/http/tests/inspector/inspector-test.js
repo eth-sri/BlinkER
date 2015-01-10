@@ -1,7 +1,6 @@
 var initialize_InspectorTest = function() {
 
 var results = [];
-var resultsSynchronized = false;
 
 function consoleOutputHook(messageType)
 {
@@ -19,23 +18,6 @@ console.assert = function(condition, object)
     InspectorTest.addResult(new Error(message).stack);
 }
 
-InspectorTest.Output = {   // override in window.initialize_yourName
-    testComplete: function() 
-    {
-        RuntimeAgent.evaluate("didEvaluateForTestInFrontend(" + InspectorTest.completeTestCallId + ", \"\")", "test");
-    },
-
-    addResult: function(text) 
-    {
-        InspectorTest.evaluateInPage("output(unescape('" + escape(text) + "'))");
-    },
-    
-    clearResults: function() 
-    {
-        InspectorTest.evaluateInPage("clearOutput()");
-    }
-};
-
 InspectorTest.startDumpingProtocolMessages = function()
 {
     InspectorBackendClass.Connection.prototype._dumpProtocolMessage = testRunner.logToStderr.bind(testRunner);
@@ -44,36 +26,13 @@ InspectorTest.startDumpingProtocolMessages = function()
 
 InspectorTest.completeTest = function()
 {
-    InspectorTest.Output.testComplete();
+    RuntimeAgent.evaluate("completeTest(\"" + escape(JSON.stringify(results)) + "\")", "test");
 }
 
-InspectorTest.evaluateInConsole = function(code, callback)
+InspectorTest.flushResults = function()
 {
-    callback = InspectorTest.safeWrap(callback);
-
-    WebInspector.inspectorView._panel("console");
-    var consoleView = WebInspector.ConsolePanel._view();
-    consoleView.visible = true;
-    consoleView._prompt.text = code;
-    var event = document.createEvent("KeyboardEvent");
-    event.initKeyboardEvent("keydown", true, true, null, "Enter", "");
-    consoleView._prompt.proxyElement.dispatchEvent(event);
-    InspectorTest.addConsoleSniffer(
-        function(commandResult) {
-            callback(commandResult.toMessageElement().textContent);
-        });
-}
-
-InspectorTest.evaluateInConsoleAndDump = function(code, callback)
-{
-    callback = InspectorTest.safeWrap(callback);
-
-    function mycallback(text)
-    {
-        InspectorTest.addResult(code + " = " + text);
-        callback(text);
-    }
-    InspectorTest.evaluateInConsole(code, mycallback);
+    RuntimeAgent.evaluate("flushResults(\"" + escape(JSON.stringify(results)) + "\")", "test");
+    results = [];
 }
 
 InspectorTest.evaluateInPage = function(code, callback)
@@ -90,7 +49,8 @@ InspectorTest.evaluateInPage = function(code, callback)
 
 InspectorTest.evaluateInPageWithTimeout = function(code)
 {
-    InspectorTest.evaluateInPage("setTimeout(unescape('" + escape(code) + "'))");
+    // FIXME: we need a better way of waiting for chromium events to happen
+    InspectorTest.evaluateInPage("setTimeout(unescape('" + escape(code) + "'), 1)");
 }
 
 var lastEvalId = 0;
@@ -130,15 +90,7 @@ InspectorTest.check = function(passCondition, failureText)
 
 InspectorTest.addResult = function(text)
 {
-    results.push(text);
-    if (resultsSynchronized)
-        InspectorTest.Output.addResult(text);
-    else {
-        InspectorTest.Output.clearResults();
-        for (var i = 0; i < results.length; ++i)
-            InspectorTest.Output.addResult(results[i]);
-        resultsSynchronized = true;
-    }
+    results.push(String(text));
 }
 
 InspectorTest.addResults = function(textArray)
@@ -240,24 +192,10 @@ InspectorTest.assertGreaterOrEqual = function(a, b, message)
         InspectorTest.addResult("FAILED: " + (message ? message + ": " : "") + a + " < " + b);
 }
 
-InspectorTest.registerModule = function(moduleName, loadImmediately)
-{
-    runtime._registerModule(moduleName);
-    if (loadImmediately)
-        runtime.loadModule(moduleName);
-}
-
 InspectorTest.navigate = function(url, callback)
 {
     InspectorTest._pageLoadedCallback = InspectorTest.safeWrap(callback);
-
-    WebInspector.inspectorView._panel("network")._networkLogView._reset();
-    InspectorTest.evaluateInConsole("window.location = '" + url + "'");
-}
-
-InspectorTest.recordNetwork = function()
-{
-    WebInspector.inspectorView._panel("network")._networkLogView._recordButton.toggled = true;
+    InspectorTest.evaluateInPage("window.location = '" + url + "'");
 }
 
 InspectorTest.hardReloadPage = function(callback, scriptToEvaluateOnLoad, scriptPreprocessor)
@@ -281,7 +219,6 @@ InspectorTest._innerReloadPage = function(hardReload, callback, scriptToEvaluate
 
 InspectorTest.pageLoaded = function()
 {
-    resultsSynchronized = false;
     InspectorTest.addResult("Page reloaded.");
     if (InspectorTest._pageLoadedCallback) {
         var callback = InspectorTest._pageLoadedCallback;
@@ -304,8 +241,11 @@ InspectorTest.runWhenPageLoads = function(callback)
 
 InspectorTest.runAfterPendingDispatches = function(callback)
 {
-    callback = InspectorTest.safeWrap(callback);
-    InspectorBackend.connection().runAfterPendingDispatches(callback);
+    var barrier = new CallbackBarrier();
+    var targets = WebInspector.targetManager.targets();
+    for (var i = 0; i < targets.length; ++i)
+        targets[i]._connection.runAfterPendingDispatches(barrier.createCallback());
+    barrier.callWhenDone(InspectorTest.safeWrap(callback));
 }
 
 InspectorTest.createKeyEvent = function(keyIdentifier, ctrlKey, altKey, shiftKey, metaKey)
@@ -399,12 +339,7 @@ InspectorTest.addSniffer = function(receiver, methodName, override, opt_sticky)
 
 InspectorTest.addConsoleSniffer = function(override, opt_sticky)
 {
-    var sniffer = function (viewMessage) {
-        override(viewMessage);
-    };
-
-    WebInspector.inspectorView._panel("console");
-    InspectorTest.addSniffer(WebInspector.ConsoleView.prototype, "_showConsoleMessage", sniffer, opt_sticky);
+    InspectorTest.addSniffer(WebInspector.ConsoleModel.prototype, "addMessage", override, opt_sticky);
 }
 
 InspectorTest.override = function(receiver, methodName, override, opt_sticky)
@@ -514,18 +449,18 @@ InspectorTest.TempFileMock = function(dirPath, name, callback)
 {
     this._chunks = [];
     this._name = name;
-    setTimeout(callback.bind(this, this), 0);
+    setTimeout(callback.bind(this, this), 1);
 }
 
 InspectorTest.TempFileMock.prototype = {
     /**
-     * @param {!Array.<string>} strings
+     * @param {!Array.<string>} chunks
      * @param {!function(boolean)} callback
      */
-    write: function(strings, callback)
+    write: function(chunks, callback)
     {
-        this._chunks.push.apply(this._chunks, strings);
-        setTimeout(callback.bind(this, true), 0);
+        this._chunks.push.apply(this._chunks, chunks);
+        setTimeout(callback.bind(this, true), 1);
     },
 
     finishWriting: function() { },
@@ -535,7 +470,25 @@ InspectorTest.TempFileMock.prototype = {
      */
     read: function(callback)
     {
-        callback(this._chunks.join(""));
+        this.readRange(undefined, undefined, callback);
+    },
+
+    /**
+     * @param {number|undefined} startOffset
+     * @param {number|undefined} endOffset
+     * @param {function(?string)} callback
+     */
+    readRange: function(startOffset, endOffset, callback)
+    {
+        var blob = new Blob(this._chunks);
+        blob = blob.slice(startOffset || 0, endOffset || blob.size);
+        reader = new FileReader();
+        var self = this;
+        reader.onloadend = function()
+        {
+            callback(reader.result);
+        }
+        reader.readAsText(blob);
     },
 
     /**
@@ -646,12 +599,18 @@ WebInspector.targetManager.observeTargets({
     targetRemoved: function(target) { }
 });
 
+InspectorTest._panelsToPreload = [];
+
+InspectorTest.preloadPanel = function(panelName)
+{
+    InspectorTest._panelsToPreload.push(panelName);
+}
+
 };  // initialize_InspectorTest
 
 var initializeCallId = 0;
 var runTestCallId = 1;
-var completeTestCallId = 2;
-var evalCallbackCallId = 3;
+var evalCallbackCallId = 2;
 var frontendReopeningCount = 0;
 
 function reopenFrontend()
@@ -663,17 +622,18 @@ function closeFrontend(callback)
 {
     // Do this asynchronously to allow InspectorBackendDispatcher to send response
     // back to the frontend before it's destroyed.
+    // FIXME: we need a better way of waiting for chromium events to happen
     setTimeout(function() {
         testRunner.closeWebInspector();
         callback();
-    }, 0);
+    }, 1);
 }
 
 function openFrontendAndIncrement()
 {
     frontendReopeningCount++;
     testRunner.showWebInspector();
-    setTimeout(runTest, 0);
+    setTimeout(runTest, 1);
 }
 
 function runAfterIframeIsLoaded()
@@ -711,25 +671,70 @@ function runTest(enableWatchDogWhileDebugging)
             try {
                 initializationFunctions[i]();
             } catch (e) {
-                console.error("Exception in test initialization: " + e);
+                console.error("Exception in test initialization: " + e + " " + e.stack);
                 InspectorTest.completeTest();
             }
         }
     }
 
-    function runTestInFrontend(testFunction, completeTestCallId)
+    function runTestInFrontend(testFunction)
     {
-        if (InspectorTest.completeTestCallId) 
+        if (InspectorTest.wasAlreadyExecuted)
             return;
 
-        InspectorTest.completeTestCallId = completeTestCallId;
+        InspectorTest.wasAlreadyExecuted = true;
 
-        try {
-            testFunction();
-        } catch (e) {
-            console.error("Exception during test execution: " + e,  (e.stack ? e.stack : "") );
-            InspectorTest.completeTest();
+        // 1. Preload panels.
+        var lastLoadedPanel;
+
+        var promises = [];
+        for (var i = 0; i < InspectorTest._panelsToPreload.length; ++i) {
+            lastLoadedPanel = InspectorTest._panelsToPreload[i];
+            promises.push(WebInspector.inspectorView.panel(lastLoadedPanel));
         }
+
+        var testPath = WebInspector.settings.testPath.get();
+
+        // FIXME(399531): enable timelineOnTraceEvents experiment when running layout tests under inspector/tracing/. This code
+        // should be removed along with the old Timeline implementation once we move tracing based Timeline out of experimental.
+        if (testPath.indexOf("tracing/") !== -1)
+            Runtime.experiments.setEnabled("timelineOnTraceEvents", true);
+
+        if (testPath.indexOf("layers/") !== -1)
+            Runtime.experiments.setEnabled("layersPanel", true);
+
+        // 2. Show initial panel based on test path.
+        var initialPanelByFolder = {
+            "audits": "audits",
+            "console": "console",
+            "elements": "elements",
+            "editor": "sources",
+            "layers": "layers",
+            "profiler": "profiles",
+            "resource-tree": "resources",
+            "search": "sources",
+            "sources": "sources",
+            "timeline": "timeline",
+            "tracing": "timeline",
+        }
+        var initialPanelShown = false;
+        for (var folder in initialPanelByFolder) {
+            if (testPath.indexOf(folder + "/") !== -1) {
+                lastLoadedPanel = initialPanelByFolder[folder];
+                promises.push(WebInspector.inspectorView.panel(lastLoadedPanel));
+                break;
+            }
+        }
+
+        // 3. Run test function.
+        Promise.all(promises).then(function() {
+            if (lastLoadedPanel)
+                WebInspector.inspectorView.showInitialPanelForTest(lastLoadedPanel);
+            testFunction();
+        }).catch(function(e) {
+            console.error(e);
+            InspectorTest.completeTest();
+        });
     }
 
     var initializationFunctions = [ String(initialize_InspectorTest) ];
@@ -737,12 +742,10 @@ function runTest(enableWatchDogWhileDebugging)
         if (name.indexOf("initialize_") === 0 && typeof window[name] === "function" && name !== "initialize_InspectorTest")
             initializationFunctions.push(window[name].toString());
     }
-    var parameters = ["[" + initializationFunctions + "]"];
-    var toEvaluate = "(" + initializeFrontend + ")(" + parameters.join(", ") + ");";
+    var toEvaluate = "(" + initializeFrontend + ")(" + "[" + initializationFunctions + "]" + ");";
     testRunner.evaluateInWebInspector(initializeCallId, toEvaluate);
 
-    parameters = [test, completeTestCallId];
-    toEvaluate = "(" + runTestInFrontend + ")(" + parameters.join(", ") + ");";
+    toEvaluate = "(" + runTestInFrontend + ")(" + test + ");";
     testRunner.evaluateInWebInspector(runTestCallId, toEvaluate);
 
     if (enableWatchDogWhileDebugging) {
@@ -764,14 +767,17 @@ function runTestAfterDisplay(enableWatchDogWhileDebugging)
     requestAnimationFrame(runTest.bind(this, enableWatchDogWhileDebugging));
 }
 
-function didEvaluateForTestInFrontend(callId)
+function completeTest(results)
 {
-    if (callId !== completeTestCallId)
-        return;
-    delete window.completeTestCallId;
-    if (outputElement && window.quietUntilDone)
-        outputElementParent.appendChild(outputElement);
+    flushResults(results);
     closeInspectorAndNotifyDone();
+}
+
+function flushResults(results)
+{
+    results = (JSON && JSON.parse ? JSON.parse : eval)(unescape(results));
+    for (var i = 0; i < results.length; ++i)
+        _output(results[i]);
 }
 
 function closeInspectorAndNotifyDone()
@@ -786,85 +792,28 @@ function closeInspectorAndNotifyDone()
 }
 
 var outputElement;
-var outputElementParent;
-var savedOutput;
 
 function createOutputElement()
 {
-    var intermediate = document.createElement("div");
-    document.body.appendChild(intermediate);
-
-    outputElementParent = document.createElement("div");
-    intermediate.appendChild(outputElementParent);
-
     outputElement = document.createElement("div");
-    outputElement.className = "output";
-    outputElement.id = "output";
-    outputElement.style.whiteSpace = "pre";
-    if (!window.quietUntilDone)
-        outputElementParent.appendChild(outputElement);
+    // Support for svg - add to document, not body, check for style.
+    if (outputElement.style) {
+        outputElement.style.whiteSpace = "pre";
+        outputElement.style.height = "10px";
+        outputElement.style.overflow = "hidden";
+    }
+    document.documentElement.appendChild(outputElement);
 }
 
 function output(text)
 {
+    _output("[page] " + text);
+}
+
+function _output(result)
+{
     if (!outputElement)
         createOutputElement();
-    outputElement.appendChild(document.createTextNode(text));
+    outputElement.appendChild(document.createTextNode(result));
     outputElement.appendChild(document.createElement("br"));
 }
-
-function clearOutput()
-{
-    if (outputElement) {
-        outputElement.remove();
-        outputElement = null;
-    }
-}
-
-function saveOutput()
-{
-    savedOutput = outputElement ? outputElement.innerHTML : "";
-}
-
-function restoreOutput()
-{
-    if (!savedOutput)
-        return;
-    createOutputElement();
-    outputElement.innerHTML = savedOutput;
-}
-
-function StandaloneTestRunnerStub()
-{
-}
-
-StandaloneTestRunnerStub.prototype = {
-    dumpAsText: function()
-    {
-    },
-
-    waitUntilDone: function()
-    {
-    },
-
-    closeWebInspector: function()
-    {
-        window.opener.postMessage(["closeWebInspector"], "*");
-    },
-
-    notifyDone: function()
-    {
-        var actual = document.body.innerText + "\n";
-        window.opener.postMessage(["notifyDone", actual], "*");
-    },
-
-    evaluateInWebInspector: function(callId, script)
-    {
-        window.opener.postMessage(["evaluateInWebInspector", callId, script], "*");
-    },
-
-    display: function() { }
-}
-
-if (!window.testRunner && window.opener)
-    window.testRunner = new StandaloneTestRunnerStub();

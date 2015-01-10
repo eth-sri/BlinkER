@@ -16,6 +16,10 @@
                 var video = document.getElementById('testVideo');
                 var audioMediaKeySession = null;
                 var videoMediaKeySession = null;
+                var audioInitDataType = null;
+                var videoInitDataType = null;
+                var audioInitData = null;
+                var videoInitData = null;
                 var audioKeyProvided = false;
                 var videoKeyProvided = false;
 
@@ -27,22 +31,48 @@
                 var videoKey = new Uint8Array([0x7A, 0x7A, 0x62, 0xF1, 0x68, 0x14, 0xD2, 0x7B,
                                                0x68, 0xEF, 0x12, 0x2A, 0xFC, 0xE4, 0xAE, 0x0A]);
 
-                function onNeedKey(event)
+                function onEncrypted(event)
                 {
-                    var keyId = String.fromCharCode.apply(null, event.initData);
+                    var keyId = String.fromCharCode.apply(null, new Uint8Array(event.initData));
 
+                    // To avoid issues when comparing the expected.txt file
+                    // (which logs the events in the order they occur), save
+                    // the initData and make the calls to generateRequest()
+                    // only after both "onencrypted" events are received.
+                    // This prevents a "message" event from occurring before
+                    // both "onencrypted" events are received.
                     var mediaKeySession = video.mediaKeys.createSession();
-                    waitForEventAndRunStep('message', mediaKeySession, onMessage, test);
-                    mediaKeySession.generateRequest(event.contentType, event.initData).then(function() {
-                        if (keyId == videoKeyId) {
-                            assert_equals(videoMediaKeySession, null);
-                            videoMediaKeySession = mediaKeySession;
-                        } else {
-                            assert_equals(keyId, audioKeyId);
-                            assert_equals(audioMediaKeySession, null);
-                            audioMediaKeySession = mediaKeySession;
-                        }
-                    }).catch(function(error) {
+                    if (keyId == videoKeyId) {
+                        assert_equals(videoMediaKeySession, null);
+                        videoMediaKeySession = mediaKeySession;
+                        videoInitDataType = event.initDataType;
+                        videoInitData = event.initData;
+                        // Return if audio "onencrypted" event not yet received.
+                        if (audioMediaKeySession == null)
+                            return;
+                    } else {
+                        assert_equals(keyId, audioKeyId);
+                        assert_equals(audioMediaKeySession, null);
+                        audioMediaKeySession = mediaKeySession;
+                        audioInitDataType = event.initDataType;
+                        audioInitData = event.initData;
+                        // Return if video "onencrypted" event not yet received.
+                        if (videoMediaKeySession == null)
+                            return;
+                    }
+
+                    // Both sessions have been created.
+                    assert_not_equals(videoMediaKeySession, null);
+                    assert_not_equals(audioMediaKeySession, null);
+
+                    var promises = [];
+                    waitForEventAndRunStep('message', videoMediaKeySession, onMessage, test);
+                    promises.push(videoMediaKeySession.generateRequest(videoInitDataType, videoInitData));
+
+                    waitForEventAndRunStep('message', audioMediaKeySession, onMessage, test);
+                    promises.push(audioMediaKeySession.generateRequest(audioInitDataType, audioInitData));
+
+                    Promise.all(promises).catch(function(error) {
                         forceTestFailureFromPromise(test, error);
                     });
                 }
@@ -90,8 +120,10 @@
                     test.done();
                 }
 
-                MediaKeys.create('org.w3.clearkey').then(function(mediaKeys) {
-                    waitForEventAndRunStep('needkey', video, onNeedKey, test);
+                navigator.requestMediaKeySystemAccess('org.w3.clearkey').then(function(access) {
+                    return access.createMediaKeys();
+                }).then(function(mediaKeys) {
+                    waitForEventAndRunStep('encrypted', video, onEncrypted, test);
                     waitForEventAndRunStep('playing', video, onPlaying, test);
                     video.src = '../content/test-encrypted-different-av-keys.webm';
                     return video.setMediaKeys(mediaKeys);

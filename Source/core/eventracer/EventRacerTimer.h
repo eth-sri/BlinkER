@@ -13,13 +13,13 @@ class EventRacerContext;
 class EventRacerTimerBase : public blink::TimerBase {
 public:
     virtual void start(double nextFireInterval, double repeatInterval,
-                       const blink::TraceLocation&) OVERRIDE;
-    virtual void stop() OVERRIDE;
+                       const blink::TraceLocation&) override;
+    virtual void stop() override;
 
     unsigned int getSerial() const { return m_data ? m_data->serial : 0; }
 
 protected:
-    virtual void fired() OVERRIDE;
+    virtual void fired() override;
     virtual void didFire() = 0;
 
     class EventRacerData : public RefCounted<EventRacerData> {
@@ -50,7 +50,7 @@ public:
         : m_object(o), m_function(f) { }
 
 private:
-    virtual void didFire() OVERRIDE { (m_object->*m_function)(this); }
+    virtual void didFire() override { (m_object->*m_function)(this); }
 
     // FIXME: oilpan: TimerBase should be moved to the heap and m_object should be traced.
     // This raw pointer is safe as long as Timer<X> is held by the X itself (That's the case

@@ -496,6 +496,11 @@ void WebSettingsImpl::setAntialiased2dCanvasEnabled(bool enabled)
     m_settings->setAntialiased2dCanvasEnabled(enabled);
 }
 
+void WebSettingsImpl::setAntialiasedClips2dCanvasEnabled(bool enabled)
+{
+    m_settings->setAntialiasedClips2dCanvasEnabled(enabled);
+}
+
 void WebSettingsImpl::setContainerCullingEnabled(bool enabled)
 {
     m_settings->setContainerCullingEnabled(enabled);
@@ -505,11 +510,6 @@ void WebSettingsImpl::setDeferredImageDecodingEnabled(bool enabled)
 {
     DeferredImageDecoder::setEnabled(enabled);
     m_deferredImageDecodingEnabled = enabled;
-}
-
-void WebSettingsImpl::setDeferredFiltersEnabled(bool enabled)
-{
-    m_settings->setDeferredFiltersEnabled(enabled);
 }
 
 void WebSettingsImpl::setPreferCompositingToLCDTextEnabled(bool enabled)
@@ -722,11 +722,6 @@ void WebSettingsImpl::setMainFrameResizesAreOrientationChanges(bool enabled)
     m_mainFrameResizesAreOrientationChanges = enabled;
 }
 
-void WebSettingsImpl::setDisallowFullscreenForNonMediaElements(bool enabled)
-{
-    m_settings->setDisallowFullscreenForNonMediaElements(enabled);
-}
-
 void WebSettingsImpl::setV8CacheOptions(V8CacheOptions options)
 {
     m_settings->setV8CacheOptions(static_cast<blink::V8CacheOptions>(options));
@@ -735,6 +730,11 @@ void WebSettingsImpl::setV8CacheOptions(V8CacheOptions options)
 void WebSettingsImpl::setV8ScriptStreamingEnabled(bool enabled)
 {
     m_settings->setV8ScriptStreamingEnabled(enabled);
+}
+
+void WebSettingsImpl::setV8ScriptStreamingMode(V8ScriptStreamingMode mode)
+{
+    m_settings->setV8ScriptStreamingMode(static_cast<blink::ScriptStreamingMode>(mode));
 }
 
 } // namespace blink

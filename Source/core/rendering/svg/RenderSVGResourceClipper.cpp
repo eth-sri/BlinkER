@@ -66,13 +66,6 @@ void RenderSVGResourceClipper::removeClientFromCache(RenderObject* client, bool 
     markClientForInvalidation(client, markForInvalidation ? BoundariesInvalidation : ParentOnlyInvalidation);
 }
 
-bool RenderSVGResourceClipper::applyResource(RenderObject*, RenderStyle*, GraphicsContext*&, unsigned short)
-{
-    // Clippers are always applied using stateful methods.
-    ASSERT_NOT_REACHED();
-    return false;
-}
-
 bool RenderSVGResourceClipper::applyStatefulResource(RenderObject* object, GraphicsContext*& context, ClipperState& clipperState)
 {
     ASSERT(object);
@@ -192,7 +185,7 @@ bool RenderSVGResourceClipper::applyClippingToContext(RenderObject* target, cons
             //   b) pop multiple states if needed (similarly to SkCanvas::restoreToCount())
             // Then we should be able to replace this mess with a single, top-level GCSS.
             maskContentSaver.restore();
-            context->restoreLayer();
+            context->endLayer();
             return false;
         }
 
@@ -206,12 +199,6 @@ bool RenderSVGResourceClipper::applyClippingToContext(RenderObject* target, cons
     context->beginLayer(1, CompositeSourceIn, &paintInvalidationRect);
 
     return true;
-}
-
-void RenderSVGResourceClipper::postApplyResource(RenderObject*, GraphicsContext*&)
-{
-    // Clippers are always applied using stateful methods.
-    ASSERT_NOT_REACHED();
 }
 
 void RenderSVGResourceClipper::postApplyStatefulResource(RenderObject*, GraphicsContext*& context, ClipperState& clipperState)
@@ -242,15 +229,16 @@ void RenderSVGResourceClipper::drawClipMaskContent(GraphicsContext* context, con
         context->concatCTM(contentTransformation);
     }
 
-    if (!m_clipContentDisplayList)
-        createDisplayList(context, contentTransformation);
+    if (!m_clipContentDisplayList) {
+        SubtreeContentTransformScope contentTransformScope(contentTransformation);
+        createDisplayList(context);
+    }
 
     ASSERT(m_clipContentDisplayList);
     context->drawDisplayList(m_clipContentDisplayList.get());
 }
 
-void RenderSVGResourceClipper::createDisplayList(GraphicsContext* context,
-    const AffineTransform& contentTransformation)
+void RenderSVGResourceClipper::createDisplayList(GraphicsContext* context)
 {
     ASSERT(context);
     ASSERT(frame());
@@ -267,7 +255,7 @@ void RenderSVGResourceClipper::createDisplayList(GraphicsContext* context,
     // - fill is set to the initial fill paint server (solid, black)
     // - stroke is set to the initial stroke paint server (none)
     PaintBehavior oldBehavior = frame()->view()->paintBehavior();
-    frame()->view()->setPaintBehavior(oldBehavior | PaintBehaviorRenderingSVGMask);
+    frame()->view()->setPaintBehavior(oldBehavior | PaintBehaviorRenderingClipPathAsMask);
 
     for (SVGElement* childElement = Traversal<SVGElement>::firstChild(*element()); childElement; childElement = Traversal<SVGElement>::nextSibling(*childElement)) {
         RenderObject* renderer = childElement->renderer();
@@ -298,7 +286,7 @@ void RenderSVGResourceClipper::createDisplayList(GraphicsContext* context,
         if (isUseElement)
             renderer = childElement->renderer();
 
-        SVGRenderingContext::renderSubtree(context, renderer, contentTransformation);
+        SVGRenderingContext::renderSubtree(context, renderer);
     }
 
     frame()->view()->setPaintBehavior(oldBehavior);

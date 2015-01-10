@@ -9,7 +9,6 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/Iterator.h"
 #include "core/fetch/FetchUtils.h"
-#include "core/xml/XMLHttpRequest.h"
 #include "wtf/NotFound.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"
@@ -19,7 +18,7 @@ namespace blink {
 
 namespace {
 
-class HeadersIterator FINAL : public Iterator {
+class HeadersIterator final : public Iterator {
 public:
     // Only KeyValue is currently used; the other types are to support
     // Map-like iteration with entries(), keys() and values(), but this has
@@ -28,7 +27,7 @@ public:
 
     HeadersIterator(FetchHeaderList* headers, IterationType type) : m_headers(headers), m_type(type), m_current(0) { }
 
-    virtual ScriptValue next(ScriptState* scriptState, ExceptionState& exception) OVERRIDE
+    virtual ScriptValue next(ScriptState* scriptState, ExceptionState& exception) override
     {
         // FIXME: This simply advances an index and returns the next value if
         // any, so if the iterated object is mutated values may be skipped.
@@ -54,7 +53,7 @@ public:
         return ScriptValue();
     }
 
-    virtual ScriptValue next(ScriptState* scriptState, ScriptValue, ExceptionState& exceptionState) OVERRIDE
+    virtual ScriptValue next(ScriptState* scriptState, ScriptValue, ExceptionState& exceptionState) override
     {
         return next(scriptState, exceptionState);
     }
@@ -91,6 +90,14 @@ Headers* Headers::create(const Headers* init, ExceptionState& exceptionState)
     // "2. If |init| is given, fill headers with |init|. Rethrow any exception."
     headers->fillWith(init, exceptionState);
     // "3. Return |headers|."
+    return headers;
+}
+
+Headers* Headers::create(const Vector<Vector<String> >& init, ExceptionState& exceptionState)
+{
+    // The same steps as above.
+    Headers* headers = create();
+    headers->fillWith(init, exceptionState);
     return headers;
 }
 
@@ -275,46 +282,34 @@ void Headers::fillWith(const Headers* object, ExceptionState& exceptionState)
     }
 }
 
+void Headers::fillWith(const Vector<Vector<String> >& object, ExceptionState& exceptionState)
+{
+    ASSERT(!m_headerList->size());
+    // "2. Otherwise, if |object| is a sequence, then for each |header| in
+    //     |object|, run these substeps:
+    //    1. If |header| does not contain exactly two items, throw a
+    //       TypeError.
+    //    2. Append |header|'s first item/|header|'s second item to
+    //       |headers|. Rethrow any exception."
+    for (size_t i = 0; i < object.size(); ++i) {
+        if (object[i].size() != 2) {
+            exceptionState.throwTypeError("Invalid value");
+            return;
+        }
+        append(object[i][0], object[i][1], exceptionState);
+        if (exceptionState.hadException())
+            return;
+    }
+}
+
 void Headers::fillWith(const Dictionary& object, ExceptionState& exceptionState)
 {
-    ASSERT(m_headerList->size() == 0);
+    ASSERT(!m_headerList->size());
     Vector<String> keys;
     object.getOwnPropertyNames(keys);
-    if (keys.size() == 0)
+    if (!keys.size())
         return;
 
-    // Because of the restrictions in IDL compiler of blink we recieve
-    // sequence<sequence<ByteString>> as a Dictionary, which is a type of union
-    // type of HeadersInit defined in the spec.
-    // http://fetch.spec.whatwg.org/#headers-class
-    // FIXME: Support sequence<sequence<ByteString>>.
-    Vector<String> keyValuePair;
-    if (DictionaryHelper::get(object, keys[0], keyValuePair)) {
-        // "2. Otherwise, if |object| is a sequence, then for each |header| in
-        //     |object|, run these substeps:
-        //    1. If |header| does not contain exactly two items, throw a
-        //       TypeError.
-        //    2. Append |header|'s first item/|header|'s second item to
-        //       |headers|. Rethrow any exception."
-        for (size_t i = 0; i < keys.size(); ++i) {
-            // We've already got the keyValuePair for key[0].
-            if (i > 0) {
-                if (!DictionaryHelper::get(object, keys[i], keyValuePair)) {
-                    exceptionState.throwTypeError("Invalid value");
-                    return;
-                }
-            }
-            if (keyValuePair.size() != 2) {
-                exceptionState.throwTypeError("Invalid value");
-                return;
-            }
-            append(keyValuePair[0], keyValuePair[1], exceptionState);
-            if (exceptionState.hadException())
-                return;
-            keyValuePair.clear();
-        }
-        return;
-    }
     // "3. Otherwise, if |object| is an open-ended dictionary, then for each
     //    |header| in object, run these substeps:
     //    1. Set |header|'s key to |header|'s key, converted to ByteString.

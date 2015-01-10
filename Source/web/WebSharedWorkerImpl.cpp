@@ -97,14 +97,14 @@ public:
             *loadingContext, scriptURL, DenyCrossOriginRequests, this);
     }
 
-    void didReceiveResponse(unsigned long identifier, const ResourceResponse& response) OVERRIDE
+    void didReceiveResponse(unsigned long identifier, const ResourceResponse& response) override
     {
         m_identifier = identifier;
         m_appCacheID = response.appCacheID();
         m_receiveResponseCallback();
     }
 
-    virtual void notifyFinished() OVERRIDE
+    virtual void notifyFinished() override
     {
         m_finishCallback();
     }
@@ -231,8 +231,7 @@ void WebSharedWorkerImpl::loadShadowPage()
     // Construct substitute data source for the 'shadow page'. We only need it
     // to have same origin as the worker so the loading checks work correctly.
     CString content("");
-    int length = static_cast<int>(content.length());
-    RefPtr<SharedBuffer> buffer(SharedBuffer::create(content.data(), length));
+    RefPtr<SharedBuffer> buffer(SharedBuffer::create(content.data(), content.length()));
     webFrame->frame()->loader().load(FrameLoadRequest(0, ResourceRequest(m_url), SubstituteData(buffer, "text/html", "UTF-8", KURL())));
 }
 
@@ -291,10 +290,6 @@ void WebSharedWorkerImpl::postMessageToPageInspectorOnMainThread(const String& m
         return;
     pageInspector->dispatchMessageFromWorker(message);
 
-}
-
-void WebSharedWorkerImpl::updateInspectorStateCookie(const String& cookie)
-{
 }
 
 void WebSharedWorkerImpl::workerGlobalScopeClosed()
@@ -425,10 +420,6 @@ void WebSharedWorkerImpl::clientDestroyed()
 void WebSharedWorkerImpl::pauseWorkerContextOnStart()
 {
     m_pauseWorkerContextOnStart = true;
-}
-
-void WebSharedWorkerImpl::resumeWorkerContext()
-{
 }
 
 void WebSharedWorkerImpl::attachDevTools(const WebString& hostId)

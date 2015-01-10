@@ -44,7 +44,7 @@ typedef StaticNodeTypeList<Node> StaticNodeList;
 class TouchEventContext;
 class TreeScope;
 
-class TreeScopeEventContext FINAL : public RefCountedWillBeGarbageCollected<TreeScopeEventContext> {
+class TreeScopeEventContext final : public RefCountedWillBeGarbageCollected<TreeScopeEventContext> {
     DECLARE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(TreeScopeEventContext);
 public:
     static PassRefPtrWillBeRawPtr<TreeScopeEventContext> create(TreeScope&);
@@ -83,7 +83,7 @@ private:
     RefPtrWillBeMember<StaticNodeList> m_eventPath;
     RefPtrWillBeMember<TouchEventContext> m_touchEventContext;
 
-    WillBeHeapVector<RawPtrWillBeMember<TreeScopeEventContext> > m_children;
+    WillBeHeapVector<RawPtrWillBeMember<TreeScopeEventContext>> m_children;
     int m_preOrder;
     int m_postOrder;
 };

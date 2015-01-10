@@ -199,9 +199,9 @@ function wait_for_activated(test, registration) {
   };
 
   function service_worker_test(url, description) {
-    var scope = window.location.origin + '/service-worker-scope' +
+    var scope = new URL('./', new URL(url, window.location)) +
+      'resources/service-worker-scope' +
       window.location.pathname;
-
     var test = async_test(description);
     var registration;
     service_worker_unregister_and_register(test, url, scope)
@@ -245,4 +245,22 @@ function get_host_info() {
 
 function base_path() {
     return location.pathname.replace(/\/[^\/]*$/, '/');
+}
+
+function test_login(test, origin, username, password) {
+  return new Promise(function(resolve, reject) {
+      with_iframe(
+        origin + base_path() +
+        'resources/fetch-access-control-login.html')
+        .then(test.step_func(function(frame) {
+            var channel = new MessageChannel();
+            channel.port1.onmessage = test.step_func(function() {
+                unload_iframe(frame).catch(function() {});
+                resolve();
+              });
+            frame.contentWindow.postMessage(
+              {username: username, password: password},
+              [channel.port2], origin);
+          }));
+    });
 }

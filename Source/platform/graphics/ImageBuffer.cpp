@@ -138,6 +138,11 @@ void ImageBuffer::notifySurfaceInvalid()
         m_client->notifySurfaceInvalid();
 }
 
+PassRefPtr<SkImage> ImageBuffer::newImageSnapshot() const
+{
+    return m_surface->newImageSnapshot();
+}
+
 static SkBitmap deepSkBitmapCopy(const SkBitmap& bitmap)
 {
     SkBitmap tmp;
@@ -261,7 +266,7 @@ void ImageBuffer::draw(GraphicsContext* context, const FloatRect& destRect, cons
     FloatRect srcRect = srcPtr ? *srcPtr : FloatRect(FloatPoint(), size());
     RefPtr<SkPicture> picture = m_surface->getPicture();
     if (picture) {
-        context->drawPicture(picture.release(), destRect, srcRect, op, blendMode);
+        context->drawPicture(picture.get(), destRect, srcRect, op, blendMode);
         return;
     }
 

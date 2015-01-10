@@ -108,6 +108,7 @@ Resource::Resource(const ResourceRequest& request, Type type)
     , m_handleCount(0)
     , m_preloadCount(0)
     , m_protectorCount(0)
+    , m_cacheIdentifier(MemoryCache::defaultCacheIdentifier())
     , m_preloadResult(PreloadNotReferenced)
     , m_requestedFromNetworkingLayer(false)
     , m_loading(false)
@@ -145,7 +146,6 @@ Resource::~Resource()
     ASSERT(canDelete());
     RELEASE_ASSERT(!memoryCache()->contains(this));
     RELEASE_ASSERT(!ResourceCallback::callbackHandler()->isScheduled(this));
-    ASSERT(url().isNull() || memoryCache()->resourceForURL(KURL(ParsedURLString, url())) != this);
     assertAlive();
 
 #ifdef ENABLE_RESOURCE_IS_DELETED_CHECK
@@ -239,7 +239,7 @@ void Resource::checkNotify()
         c->notifyFinished(this);
 }
 
-void Resource::appendData(const char* data, int length)
+void Resource::appendData(const char* data, unsigned length)
 {
     TRACE_EVENT0("blink", "Resource::appendData");
     ASSERT(!m_resourceToRevalidate);
@@ -386,9 +386,9 @@ const ResourceRequest& Resource::lastResourceRequest() const
     return m_redirectChain.last().m_request;
 }
 
-void Resource::willSendRequest(ResourceRequest& request, const ResourceResponse& response)
+void Resource::willFollowRedirect(ResourceRequest& newRequest, const ResourceResponse& redirectResponse)
 {
-    m_redirectChain.append(RedirectPair(request, response));
+    m_redirectChain.append(RedirectPair(newRequest, redirectResponse));
     m_requestedFromNetworkingLayer = true;
 }
 
@@ -473,7 +473,7 @@ bool Resource::hasOneHandle() const
 CachedMetadata* Resource::cachedMetadata(unsigned dataTypeID) const
 {
     if (!m_cachedMetadata || m_cachedMetadata->dataTypeID() != dataTypeID)
-        return 0;
+        return nullptr;
     return m_cachedMetadata.get();
 }
 
@@ -660,9 +660,7 @@ void Resource::finishPendingClients()
     // added during the notifications following.
     clearCallbackEventAction();
 
-    for (size_t i = 0; i < clientsToNotify.size(); ++i) {
-        ResourceClient* client = clientsToNotify[i];
-
+    for (const auto& client : clientsToNotify) {
         // Handle case (2) to skip removed clients.
         if (!m_clientsAwaitingCallback.remove(client))
             continue;
@@ -732,9 +730,7 @@ void Resource::switchClientsToRevalidatedResource()
     m_resourceToRevalidate->m_identifier = m_identifier;
 
     m_switchingClientsToRevalidatedResource = true;
-    HashSet<ResourcePtrBase*>::iterator end = m_handlesToRevalidate.end();
-    for (HashSet<ResourcePtrBase*>::iterator it = m_handlesToRevalidate.begin(); it != end; ++it) {
-        ResourcePtrBase* handle = *it;
+    for (ResourcePtrBase* handle : m_handlesToRevalidate) {
         handle->m_resource = m_resourceToRevalidate;
         m_resourceToRevalidate->registerHandle(handle);
         --m_handleCount;
@@ -743,14 +739,10 @@ void Resource::switchClientsToRevalidatedResource()
     m_handlesToRevalidate.clear();
 
     Vector<ResourceClient*> clientsToMove;
-    HashCountedSet<ResourceClient*>::iterator end2 = m_clients.end();
-    for (HashCountedSet<ResourceClient*>::iterator it = m_clients.begin(); it != end2; ++it) {
-        ResourceClient* client = it->key;
-        unsigned count = it->value;
-        while (count) {
-            clientsToMove.append(client);
-            --count;
-        }
+    for (const auto& clientHashEntry : m_clients) {
+        unsigned count = clientHashEntry.value;
+        while (count--)
+            clientsToMove.append(clientHashEntry.key);
     }
 
     unsigned moveCount = clientsToMove.size();
@@ -778,16 +770,15 @@ void Resource::updateResponseAfterRevalidation(const ResourceResponse& validatin
     // RFC2616 10.3.5
     // Update cached headers from the 304 response
     const HTTPHeaderMap& newHeaders = validatingResponse.httpHeaderFields();
-    HTTPHeaderMap::const_iterator end = newHeaders.end();
-    for (HTTPHeaderMap::const_iterator it = newHeaders.begin(); it != end; ++it) {
+    for (const auto& header : newHeaders) {
         // Entity headers should not be sent by servers when generating a 304
         // response; misconfigured servers send them anyway. We shouldn't allow
         // such headers to update the original request. We'll base this on the
         // list defined by RFC2616 7.1, with a few additions for extension headers
         // we care about.
-        if (!shouldUpdateHeaderAfterRevalidation(it->key))
+        if (!shouldUpdateHeaderAfterRevalidation(header.key))
             continue;
-        m_response.setHTTPHeaderField(it->key, it->value);
+        m_response.setHTTPHeaderField(header.key, header.value);
     }
 }
 
@@ -849,10 +840,10 @@ void Resource::unregisterHandle(ResourcePtrBase* h)
 
 bool Resource::canReuseRedirectChain()
 {
-    for (size_t i = 0; i < m_redirectChain.size(); ++i) {
-        if (!canUseResponse(m_redirectChain[i].m_redirectResponse, m_responseTimestamp))
+    for (auto& redirect : m_redirectChain) {
+        if (!canUseResponse(redirect.m_redirectResponse, m_responseTimestamp))
             return false;
-        if (m_redirectChain[i].m_request.cacheControlContainsNoCache() || m_redirectChain[i].m_request.cacheControlContainsNoStore())
+        if (redirect.m_request.cacheControlContainsNoCache() || redirect.m_request.cacheControlContainsNoStore())
             return false;
     }
     return true;
@@ -957,20 +948,19 @@ bool Resource::ResourceCallback::isScheduled(Resource* resource) const
 
 void Resource::ResourceCallback::timerFired(Timer<ResourceCallback>*)
 {
-    HashSet<Resource*>::iterator end = m_resourcesWithPendingClients.end();
-    Vector<ResourcePtr<Resource> > resources;
-    for (HashSet<Resource*>::iterator it = m_resourcesWithPendingClients.begin(); it != end; ++it)
-        resources.append(*it);
+    Vector<ResourcePtr<Resource>> resources;
+    for (Resource* resource : m_resourcesWithPendingClients)
+        resources.append(resource);
     m_resourcesWithPendingClients.clear();
 
-    for (size_t i = 0; i < resources.size(); i++) {
-        resources[i]->assertAlive();
-        resources[i]->finishPendingClients();
-        resources[i]->assertAlive();
+    for (const auto& resource : resources) {
+        resource->assertAlive();
+        resource->finishPendingClients();
+        resource->assertAlive();
     }
 
-    for (size_t i = 0; i < resources.size(); i++)
-        resources[i]->assertAlive();
+    for (const auto& resource : resources)
+        resource->assertAlive();
 }
 
 static const char* initatorTypeNameToString(const AtomicString& initiatorTypeName)

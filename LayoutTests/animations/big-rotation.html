@@ -11,12 +11,12 @@
       background-color: blue;
       -webkit-animation-duration: 3s;
       -webkit-animation-timing-function: linear;
-      -webkit-animation-name: "rotate";
+      -webkit-animation-name: rotate;
       -webkit-animation-fill-mode: forwards;
     }
-    @-webkit-keyframes "rotate" {
-        from { -webkit-transform: rotate(0); }
-        to   { -webkit-transform: rotate(540deg); }
+    @-webkit-keyframes rotate {
+        from { transform: rotate(0); }
+        to   { transform: rotate(540deg); }
     }
   </style>
   <script src="resources/animation-test-helpers.js" type="text/javascript" charset="utf-8"></script>

@@ -25,6 +25,8 @@
 #include "config.h"
 #include "core/rendering/svg/SVGRenderSupport.h"
 
+#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
 #include "core/rendering/PaintInfo.h"
 #include "core/rendering/RenderGeometryMap.h"
 #include "core/rendering/RenderLayer.h"
@@ -41,7 +43,6 @@
 #include "core/rendering/svg/SVGResourcesCache.h"
 #include "core/svg/SVGElement.h"
 #include "platform/geometry/TransformState.h"
-#include "platform/graphics/Path.h"
 
 namespace blink {
 
@@ -274,6 +275,11 @@ bool SVGRenderSupport::isOverflowHidden(const RenderObject* object)
     return object->style()->overflowX() == OHIDDEN || object->style()->overflowX() == OSCROLL;
 }
 
+bool SVGRenderSupport::isRenderingClipPathAsMaskImage(const RenderObject& object)
+{
+    return object.frame() && object.frame()->view() && object.frame()->view()->paintBehavior() & PaintBehaviorRenderingClipPathAsMask;
+}
+
 void SVGRenderSupport::intersectPaintInvalidationRectWithResources(const RenderObject* renderer, FloatRect& paintInvalidationRect)
 {
     ASSERT(renderer);
@@ -387,14 +393,38 @@ void SVGRenderSupport::applyStrokeStyleToStrokeData(StrokeData* strokeData, cons
     strokeData->setLineDash(dashArray, svgStyle.strokeDashOffset()->value(lengthContext));
 }
 
-void SVGRenderSupport::fillOrStrokePath(GraphicsContext* context, unsigned short resourceMode, const Path& path)
+bool SVGRenderSupport::updateGraphicsContext(GraphicsContextStateSaver& stateSaver, RenderStyle* style, RenderObject& renderer, RenderSVGResourceMode resourceMode, const AffineTransform* additionalPaintServerTransform)
 {
-    ASSERT(resourceMode != ApplyToDefaultMode);
+    ASSERT(style);
 
-    if (resourceMode & ApplyToFillMode)
-        context->fillPath(path);
-    if (resourceMode & ApplyToStrokeMode)
-        context->strokePath(path);
+    GraphicsContext* context = stateSaver.context();
+    if (isRenderingClipPathAsMaskImage(renderer)) {
+        if (resourceMode == ApplyToStrokeMode)
+            return false;
+        context->setAlphaAsFloat(1);
+        context->setFillColor(SVGRenderStyle::initialFillPaintColor());
+        return true;
+    }
+
+    SVGPaintServer paintServer = SVGPaintServer::requestForRenderer(renderer, style, resourceMode);
+    if (!paintServer.isValid())
+        return false;
+
+    if (additionalPaintServerTransform && paintServer.isTransformDependent())
+        paintServer.prependTransform(*additionalPaintServerTransform);
+
+    paintServer.apply(*context, resourceMode, &stateSaver);
+
+    const SVGRenderStyle& svgStyle = style->svgStyle();
+
+    if (resourceMode == ApplyToFillMode) {
+        context->setAlphaAsFloat(svgStyle.fillOpacity());
+        context->setFillRule(svgStyle.fillRule());
+    } else {
+        context->setAlphaAsFloat(svgStyle.strokeOpacity());
+        applyStrokeStyleToContext(context, style, &renderer);
+    }
+    return true;
 }
 
 bool SVGRenderSupport::isRenderableTextNode(const RenderObject* object)

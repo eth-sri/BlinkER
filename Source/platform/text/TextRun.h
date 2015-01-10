@@ -27,20 +27,15 @@
 #include "platform/PlatformExport.h"
 #include "platform/fonts/Glyph.h"
 #include "platform/geometry/FloatRect.h"
+#include "platform/heap/Heap.h"
 #include "platform/text/TextDirection.h"
 #include "platform/text/TextPath.h"
 #include "wtf/RefCounted.h"
 #include "wtf/text/WTFString.h"
 
-namespace blink {
+class SkTextBlob;
 
-class FloatPoint;
-class Font;
-class GraphicsContext;
-class GlyphBuffer;
-class SimpleFontData;
-struct GlyphData;
-struct SimpleShaper;
+namespace blink {
 
 class PLATFORM_EXPORT TextRun {
     WTF_MAKE_FAST_ALLOCATED;
@@ -66,6 +61,7 @@ public:
         , m_direction(direction)
         , m_directionalOverride(directionalOverride)
         , m_characterScanForCodePath(characterScanForCodePath)
+        , m_useComplexCodePath(false)
         , m_disableSpacing(false)
         , m_tabSize(0)
         , m_normalizeSpace(false)
@@ -85,6 +81,7 @@ public:
         , m_direction(direction)
         , m_directionalOverride(directionalOverride)
         , m_characterScanForCodePath(characterScanForCodePath)
+        , m_useComplexCodePath(false)
         , m_disableSpacing(false)
         , m_tabSize(0)
         , m_normalizeSpace(false)
@@ -103,6 +100,7 @@ public:
         , m_direction(direction)
         , m_directionalOverride(directionalOverride)
         , m_characterScanForCodePath(characterScanForCodePath)
+        , m_useComplexCodePath(false)
         , m_disableSpacing(false)
         , m_tabSize(0)
         , m_normalizeSpace(normalizeSpace)
@@ -130,6 +128,7 @@ public:
         , m_direction(direction)
         , m_directionalOverride(directionalOverride)
         , m_characterScanForCodePath(characterScanForCodePath)
+        , m_useComplexCodePath(false)
         , m_disableSpacing(false)
         , m_tabSize(0)
         , m_normalizeSpace(normalizeSpace)
@@ -196,20 +195,18 @@ public:
     bool ltr() const { return m_direction == LTR; }
     bool directionalOverride() const { return m_directionalOverride; }
     bool characterScanForCodePath() const { return m_characterScanForCodePath; }
+    bool useComplexCodePath() const { return m_useComplexCodePath; }
     bool spacingDisabled() const { return m_disableSpacing; }
 
     void disableSpacing() { m_disableSpacing = true; }
     void setDirection(TextDirection direction) { m_direction = direction; }
     void setDirectionalOverride(bool override) { m_directionalOverride = override; }
     void setCharacterScanForCodePath(bool scan) { m_characterScanForCodePath = scan; }
+    void setUseComplexCodePath(bool useComplex) { m_useComplexCodePath = useComplex; }
 
     class RenderingContext : public RefCounted<RenderingContext> {
     public:
         virtual ~RenderingContext() { }
-
-        virtual GlyphData glyphDataForCharacter(const Font&, const TextRun&, SimpleShaper&, UChar32 character, bool mirror, int currentCharacter, unsigned& advanceLength) = 0;
-        virtual void drawSVGGlyphs(GraphicsContext*, const TextRun&, const SimpleFontData*, const GlyphBuffer&, int from, int to, const FloatPoint&) const = 0;
-        virtual float floatWidthUsingSVGFont(const Font&, const TextRun&, int& charsConsumed, Glyph& glyphId) const = 0;
     };
 
     RenderingContext* renderingContext() const { return m_renderingContext.get(); }
@@ -236,6 +233,7 @@ private:
     unsigned m_direction : 1;
     unsigned m_directionalOverride : 1; // Was this direction set by an override character.
     unsigned m_characterScanForCodePath : 1;
+    unsigned m_useComplexCodePath : 1;
     unsigned m_disableSpacing : 1;
     unsigned m_tabSize;
     bool m_normalizeSpace;
@@ -250,10 +248,13 @@ inline void TextRun::setTabSize(bool allow, unsigned size)
 
 // Container for parameters needed to paint TextRun.
 struct TextRunPaintInfo {
+    STACK_ALLOCATED();
+public:
     explicit TextRunPaintInfo(const TextRun& r)
         : run(r)
         , from(0)
         , to(r.length())
+        , cachedTextBlob(nullptr)
     {
     }
 
@@ -261,6 +262,7 @@ struct TextRunPaintInfo {
     int from;
     int to;
     FloatRect bounds;
+    RefPtr<const SkTextBlob>* cachedTextBlob;
 };
 
 }

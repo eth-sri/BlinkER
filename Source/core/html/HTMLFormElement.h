@@ -39,13 +39,16 @@ class GenericEventQueue;
 class HTMLFormControlElement;
 class HTMLFormControlsCollection;
 class HTMLImageElement;
+class RadioNodeListOrElement;
 
-class HTMLFormElement FINAL : public HTMLElement {
+class HTMLFormElement final : public HTMLElement {
     DEFINE_WRAPPERTYPEINFO();
 public:
     static PassRefPtrWillBeRawPtr<HTMLFormElement> create(Document&);
     virtual ~HTMLFormElement();
-    virtual void trace(Visitor*) OVERRIDE;
+    virtual void trace(Visitor*) override;
+
+    void setNeedsValidityCheck();
 
     PassRefPtrWillBeRawPtr<HTMLFormControlsCollection> elements();
     void getNamedElements(const AtomicString&, WillBeHeapVector<RefPtrWillBeMember<Element> >&);
@@ -93,6 +96,9 @@ public:
     HTMLFormControlElement* defaultButton() const;
 
     bool checkValidity();
+    bool reportValidity();
+    virtual bool matchesValidityPseudoClasses() const override final;
+    virtual bool isValidElement() override final;
 
     enum AutocompleteResult {
         AutocompleteResultSuccess,
@@ -112,26 +118,26 @@ public:
     const FormAssociatedElement::List& associatedElements() const;
     const WillBeHeapVector<RawPtrWillBeMember<HTMLImageElement> >& imageElements();
 
-    void anonymousNamedGetter(const AtomicString& name, RefPtrWillBeRawPtr<RadioNodeList>&, RefPtrWillBeRawPtr<Element>&);
+    void anonymousNamedGetter(const AtomicString& name, RadioNodeListOrElement&);
 
 private:
     explicit HTMLFormElement(Document&);
 
-    virtual bool rendererIsNeeded(const RenderStyle&) OVERRIDE;
-    virtual InsertionNotificationRequest insertedInto(ContainerNode*) OVERRIDE;
-    virtual void removedFrom(ContainerNode*) OVERRIDE;
-    virtual void finishParsingChildren() OVERRIDE;
+    virtual bool rendererIsNeeded(const RenderStyle&) override;
+    virtual InsertionNotificationRequest insertedInto(ContainerNode*) override;
+    virtual void removedFrom(ContainerNode*) override;
+    virtual void finishParsingChildren() override;
 
-    virtual void handleLocalEvents(Event*) OVERRIDE;
+    virtual void handleLocalEvents(Event*) override;
 
-    virtual void attributeWillChange(const QualifiedName&, const AtomicString& oldValue, const AtomicString& newValue) OVERRIDE;
-    virtual void parseAttribute(const QualifiedName&, const AtomicString&) OVERRIDE;
-    virtual bool isURLAttribute(const Attribute&) const OVERRIDE;
-    virtual bool hasLegalLinkAttribute(const QualifiedName&) const OVERRIDE;
+    virtual void attributeWillChange(const QualifiedName&, const AtomicString& oldValue, const AtomicString& newValue) override;
+    virtual void parseAttribute(const QualifiedName&, const AtomicString&) override;
+    virtual bool isURLAttribute(const Attribute&) const override;
+    virtual bool hasLegalLinkAttribute(const QualifiedName&) const override;
 
-    virtual bool shouldRegisterAsNamedItem() const OVERRIDE { return true; }
+    virtual bool shouldRegisterAsNamedItem() const override { return true; }
 
-    virtual void copyNonAttributePropertiesFromElement(const Element&) OVERRIDE;
+    virtual void copyNonAttributePropertiesFromElement(const Element&) override;
 
     void submitDialog(PassRefPtrWillBeRawPtr<FormSubmission>);
     void submit(Event*, bool activateSubmitButton, bool processingUserGesture, FormSubmissionTrigger);
@@ -142,12 +148,12 @@ private:
     void collectImageElements(Node& root, WillBeHeapVector<RawPtrWillBeMember<HTMLImageElement> >&);
 
     // Returns true if the submission should proceed.
-    bool validateInteractively(Event*);
+    bool validateInteractively();
 
     // Validates each of the controls, and stores controls of which 'invalid'
     // event was not canceled to the specified vector. Returns true if there
     // are any invalid controls in this form.
-    bool checkInvalidControlsAndCollectUnhandled(WillBeHeapVector<RefPtrWillBeMember<FormAssociatedElement> >*);
+    bool checkInvalidControlsAndCollectUnhandled(WillBeHeapVector<RefPtrWillBeMember<HTMLFormControlElement> >*, CheckValidityEventBehavior);
 
     Element* elementFromPastNamesMap(const AtomicString&);
     void addToPastNamesMap(Element*, const AtomicString& pastName);

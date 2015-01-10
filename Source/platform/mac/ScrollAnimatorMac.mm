@@ -35,13 +35,12 @@
 #include "platform/geometry/IntRect.h"
 #include "platform/mac/BlockExceptions.h"
 #include "platform/mac/NSScrollerImpDetails.h"
-#include "platform/scroll/ScrollView.h"
 #include "platform/scroll/ScrollableArea.h"
 #include "platform/scroll/ScrollbarTheme.h"
 #include "platform/scroll/ScrollbarThemeMacCommon.h"
 #include "platform/scroll/ScrollbarThemeMacOverlayAPI.h"
 #include "wtf/MainThread.h"
-#include "wtf/PassOwnPtr.h"
+#include "wtf/PassRefPtr.h"
 
 using namespace blink;
 
@@ -534,7 +533,7 @@ private:
     // If we are currently animating, stop
     if (scrollbarPartAnimation) {
         [scrollbarPartAnimation.get() stopAnimation];
-        scrollbarPartAnimation = nil;
+        scrollbarPartAnimation = nullptr;
     }
 
     if (part == blink::ThumbPart && _scrollbar->orientation() == VerticalScrollbar) {
@@ -654,9 +653,9 @@ private:
 
 namespace blink {
 
-PassOwnPtr<ScrollAnimator> ScrollAnimator::create(ScrollableArea* scrollableArea)
+PassRefPtr<ScrollAnimator> ScrollAnimator::create(ScrollableArea* scrollableArea)
 {
-    return adoptPtr(new ScrollAnimatorMac(scrollableArea));
+    return adoptRef(new ScrollAnimatorMac(scrollableArea));
 }
 
 ScrollAnimatorMac::ScrollAnimatorMac(ScrollableArea* scrollableArea)

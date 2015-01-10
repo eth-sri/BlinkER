@@ -65,10 +65,10 @@
 #include "core/rendering/HitTestResult.h"
 #include "core/rendering/InlineTextBox.h"
 #include "core/rendering/RenderLayer.h"
+#include "core/rendering/RenderPart.h"
 #include "core/rendering/RenderText.h"
 #include "core/rendering/RenderTheme.h"
 #include "core/rendering/RenderView.h"
-#include "core/rendering/RenderWidget.h"
 #include "platform/SecureTextInput.h"
 #include "platform/geometry/FloatQuad.h"
 #include "platform/graphics/GraphicsContext.h"
@@ -482,8 +482,8 @@ TextDirection FrameSelection::directionOfEnclosingBlock()
 
 TextDirection FrameSelection::directionOfSelection()
 {
-    InlineBox* startBox = 0;
-    InlineBox* endBox = 0;
+    InlineBox* startBox = nullptr;
+    InlineBox* endBox = nullptr;
     int unusedOffset;
     // Cache the VisiblePositions because visibleStart() and visibleEnd()
     // can cause layout, which has the potential to invalidate lineboxes.
@@ -1376,7 +1376,7 @@ void FrameSelection::selectAll()
     }
 
     RefPtrWillBeRawPtr<Node> root = nullptr;
-    Node* selectStartTarget = 0;
+    Node* selectStartTarget = nullptr;
     if (isContentEditable()) {
         root = highestEditableRoot(m_selection.start());
         if (Node* shadowRoot = m_selection.nonBoundaryShadowTreeRootNode())
@@ -1602,7 +1602,7 @@ void FrameSelection::updateAppearance(ResetCaretBlinkOption option)
     if (startPos.isNotNull() && endPos.isNotNull() && selection.visibleStart() != selection.visibleEnd()) {
         RenderObject* startRenderer = startPos.deprecatedNode()->renderer();
         RenderObject* endRenderer = endPos.deprecatedNode()->renderer();
-        if (startRenderer->view() == view && endRenderer->view() == view)
+        if (startRenderer && endRenderer && startRenderer->view() == view && endRenderer->view() == view)
             view->setSelection(startRenderer, startPos.deprecatedEditingOffset(), endRenderer, endPos.deprecatedEditingOffset());
     }
 }
@@ -1659,9 +1659,9 @@ static bool isFrameElement(const Node* n)
     if (!n)
         return false;
     RenderObject* renderer = n->renderer();
-    if (!renderer || !renderer->isWidget())
+    if (!renderer || !renderer->isRenderPart())
         return false;
-    Widget* widget = toRenderWidget(renderer)->widget();
+    Widget* widget = toRenderPart(renderer)->widget();
     return widget && widget->isFrameView();
 }
 
@@ -1715,7 +1715,16 @@ String FrameSelection::selectedTextForClipboard() const
     return selectedText();
 }
 
-FloatRect FrameSelection::bounds() const
+LayoutRect FrameSelection::bounds() const
+{
+    FrameView* view = m_frame->view();
+    if (!view)
+        return LayoutRect();
+
+    return intersection(unclippedBounds(), view->visibleContentRect());
+}
+
+LayoutRect FrameSelection::unclippedBounds() const
 {
     m_frame->document()->updateRenderTreeIfNeeded();
 
@@ -1723,10 +1732,9 @@ FloatRect FrameSelection::bounds() const
     RenderView* renderView = m_frame->contentRenderer();
 
     if (!view || !renderView)
-        return FloatRect();
+        return LayoutRect();
 
-    LayoutRect selectionRect = renderView->selectionBounds();
-    return selectionRect;
+    return renderView->selectionBounds();
 }
 
 static inline HTMLFormElement* associatedFormElement(HTMLElement& element)
@@ -1742,13 +1750,12 @@ static HTMLFormElement* scanForForm(Node* start)
     if (!start)
         return 0;
 
-    HTMLElement* element = start->isHTMLElement() ? toHTMLElement(start) : Traversal<HTMLElement>::next(*start);
-    for (; element; element = Traversal<HTMLElement>::next(*element)) {
-        if (HTMLFormElement* form = associatedFormElement(*element))
+    for (HTMLElement& element : Traversal<HTMLElement>::startsAt(start->isHTMLElement() ? toHTMLElement(start) : Traversal<HTMLElement>::next(*start))) {
+        if (HTMLFormElement* form = associatedFormElement(element))
             return form;
 
-        if (isHTMLFrameElementBase(*element)) {
-            Node* childDocument = toHTMLFrameElementBase(*element).contentDocument();
+        if (isHTMLFrameElementBase(element)) {
+            Node* childDocument = toHTMLFrameElementBase(element).contentDocument();
             if (HTMLFormElement* frameResult = scanForForm(childDocument))
                 return frameResult;
         }
@@ -1787,7 +1794,7 @@ void FrameSelection::revealSelection(const ScrollAlignment& alignment, RevealExt
         rect = absoluteCaretBounds();
         break;
     case RangeSelection:
-        rect = revealExtentOption == RevealExtent ? VisiblePosition(extent()).absoluteCaretBounds() : enclosingIntRect(bounds());
+        rect = revealExtentOption == RevealExtent ? VisiblePosition(extent()).absoluteCaretBounds() : enclosingIntRect(unclippedBounds());
         break;
     }
 

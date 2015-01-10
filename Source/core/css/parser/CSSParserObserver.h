@@ -57,11 +57,14 @@ public:
     virtual void endSelector(unsigned offset) = 0;
     virtual void startRuleBody(unsigned offset) = 0;
     virtual void endRuleBody(unsigned offset, bool error) = 0;
-    virtual void startEndUnknownRule() = 0;
     virtual void startProperty(unsigned offset) = 0;
     virtual void endProperty(bool isImportant, bool isParsed, unsigned offset, CSSParserError) = 0;
     virtual void startComment(unsigned offset) = 0;
     virtual void endComment(unsigned offset) = 0;
+    virtual void startMediaQueryExp(unsigned offset) = 0;
+    virtual void endMediaQueryExp(unsigned offset) = 0;
+    virtual void startMediaQuery() = 0;
+    virtual void endMediaQuery() = 0;
 };
 
 } // namespace blink

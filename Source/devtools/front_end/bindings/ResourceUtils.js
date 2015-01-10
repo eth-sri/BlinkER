@@ -96,7 +96,7 @@ WebInspector.displayNameForURL = function(url)
  */
 WebInspector.linkifyStringAsFragmentWithCustomLinkifier = function(string, linkifier)
 {
-    var container = document.createDocumentFragment();
+    var container = createDocumentFragment();
     var linkStringRegEx = /(?:[a-zA-Z][a-zA-Z0-9+.-]{2,}:\/\/|data:|www\.)[\w$\-_+*'=\|\/\\(){}[\]^%@&#~,:;.!?]{2,}[\w$\-_+*=\|\/\\({^%@&#~]/;
     var lineColumnRegEx = /:(\d+)(:(\d+))?$/;
 
@@ -108,7 +108,7 @@ WebInspector.linkifyStringAsFragmentWithCustomLinkifier = function(string, linki
         linkString = linkString[0];
         var linkIndex = string.indexOf(linkString);
         var nonLink = string.substring(0, linkIndex);
-        container.appendChild(document.createTextNode(nonLink));
+        container.appendChild(createTextNode(nonLink));
 
         var title = linkString;
         var realURL = (linkString.startsWith("www.") ? "http://" + linkString : linkString);
@@ -132,7 +132,7 @@ WebInspector.linkifyStringAsFragmentWithCustomLinkifier = function(string, linki
     }
 
     if (string)
-        container.appendChild(document.createTextNode(string));
+        container.appendChild(createTextNode(string));
 
     return container;
 }
@@ -181,7 +181,7 @@ WebInspector.linkifyURLAsNode = function(url, linkText, classes, isExternal, too
     classes = (classes ? classes + " " : "");
     classes += isExternal ? "webkit-html-external-link" : "webkit-html-resource-link";
 
-    var a = document.createElement("a");
+    var a = createElement("a");
     var href = sanitizeHref(url);
     if (href !== null)
         a.href = href;

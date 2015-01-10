@@ -1,5 +1,7 @@
 var initialize_HeapSnapshotTest = function() {
 
+InspectorTest.preloadPanel("profiles");
+
 InspectorTest.createHeapSnapshotMockFactories = function() {
 
 InspectorTest.createJSHeapSnapshotMockObject = function()
@@ -85,7 +87,7 @@ InspectorTest.createHeapSnapshotMockRaw = function()
             1, 5, 6, 6,  6, 21, 0], // E (35)
         edges: [
             // root node edges
-            2,  6,  7, // shortcut 'a' to node 'A'
+            1,  6,  7, // property 'a' to node 'A'
             1,  7, 14, // property 'b' to node 'B'
 
             // A node edges
@@ -259,7 +261,8 @@ InspectorTest.HeapEdge.Type = {
     "property": "property",
     "internal": "internal",
     "hidden": "hidden",
-    "shortcut": "shortcut"
+    "shortcut": "shortcut",
+    "weak": "weak"
 };
 
 InspectorTest.HeapSnapshotBuilder = function()
@@ -411,7 +414,6 @@ InspectorTest.createHeapSnapshotMockFactories();
 
 InspectorTest.startProfilerTest = function(callback)
 {
-    WebInspector.inspectorView._showPanel("profiles");
     WebInspector.settings.showAdvancedHeapSnapshotProperties.set(true);
 
     InspectorTest.addResult("Profiler was enabled.");

@@ -50,16 +50,13 @@ namespace blink {
 class AudioSourceProvider;
 class MediaStreamComponent;
 class MediaStreamDescriptor;
-class MediaStreamTrackSourcesRequest;
 
-class PLATFORM_EXPORT MediaStreamCenter FINAL : public blink::WebMediaStreamCenterClient {
+class PLATFORM_EXPORT MediaStreamCenter final : public blink::WebMediaStreamCenterClient {
     WTF_MAKE_NONCOPYABLE(MediaStreamCenter);
 public:
     virtual ~MediaStreamCenter();
 
     static MediaStreamCenter& instance();
-
-    bool getMediaStreamTrackSources(MediaStreamTrackSourcesRequest*);
 
     void didCreateMediaStreamTrack(MediaStreamComponent*);
     void didSetMediaStreamTrackEnabled(MediaStreamComponent*);
@@ -73,7 +70,7 @@ public:
     void didStopLocalMediaStream(MediaStreamDescriptor*);
 
     // blink::WebMediaStreamCenterClient
-    virtual void stopLocalMediaStream(const blink::WebMediaStream&) OVERRIDE;
+    virtual void stopLocalMediaStream(const blink::WebMediaStream&) override;
 
 private:
     MediaStreamCenter();

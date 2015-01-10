@@ -1,5 +1,5 @@
 <body style="font: 20px Ahem; margin: 0;">
-    <div id="result" style="outline: solid blue; height: 100px; width: 100px; -webkit-transform: translatez(0)"></div>
+    <div id="result" style="outline: solid blue; height: 100px; width: 100px; transform: translatez(0)"></div>
     <div style="height: 900px"></div>
     <div style="height: 100px;">target</div>
     <div style="height: 1000px;"></div>
@@ -10,6 +10,6 @@
         }
 
         document.execCommand("FindString", false, "target");
-        document.getElementById("result").innerText = document.body.scrollTop === 864 ? "PASS" : "FAIL";
+        document.getElementById("result").innerText = document.body.scrollTop === 863.5 ? "PASS" : "FAIL (scrollTop:" + document.body.scrollTop + ")";
     </script>
 </body>

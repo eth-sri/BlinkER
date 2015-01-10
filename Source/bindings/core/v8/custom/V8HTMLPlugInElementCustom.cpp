@@ -100,6 +100,17 @@ void setScriptableObjectProperty(PropertyType property, v8::Local<v8::Value> val
         callNpObjectSetter(instance, property, value, info);
         return;
     }
+
+    // FIXME: The gTalk pepper plugin is the only plugin to make use of
+    // SetProperty and that is being deprecated. This can be removed as soon as
+    // it goes away.
+    // Call SetProperty on a pepper plugin's scriptable object. Note that we
+    // never set the return value here which would indicate that the plugin has
+    // intercepted the SetProperty call, which means that the property on the
+    // DOM element will also be set. For plugin's that don't intercept the call
+    // (all except gTalk) this makes no difference at all. For gTalk the fact
+    // that the property on the DOM element also gets set is inconsequential.
+    instance->Set(property, value);
 }
 } // namespace
 
@@ -190,19 +201,19 @@ void invokeOnScriptableObject(const v8::FunctionCallbackInfo<v8::Value>& info)
 void V8HTMLAppletElement::legacyCallCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     invokeOnScriptableObject<V8HTMLAppletElement>(info);
-    UseCounter::count(V8HTMLAppletElement::toImpl(info.Holder())->document(), UseCounter::HTMLAppletElementLegacyCall);
+    UseCounter::countIfNotPrivateScript(info.GetIsolate(), V8HTMLAppletElement::toImpl(info.Holder())->document(), UseCounter::HTMLAppletElementLegacyCall);
 }
 
 void V8HTMLEmbedElement::legacyCallCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     invokeOnScriptableObject<V8HTMLEmbedElement>(info);
-    UseCounter::count(V8HTMLEmbedElement::toImpl(info.Holder())->document(), UseCounter::HTMLEmbedElementLegacyCall);
+    UseCounter::countIfNotPrivateScript(info.GetIsolate(), V8HTMLEmbedElement::toImpl(info.Holder())->document(), UseCounter::HTMLEmbedElementLegacyCall);
 }
 
 void V8HTMLObjectElement::legacyCallCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     invokeOnScriptableObject<V8HTMLObjectElement>(info);
-    UseCounter::count(V8HTMLObjectElement::toImpl(info.Holder())->document(), UseCounter::HTMLObjectElementLegacyCall);
+    UseCounter::countIfNotPrivateScript(info.GetIsolate(), V8HTMLObjectElement::toImpl(info.Holder())->document(), UseCounter::HTMLObjectElementLegacyCall);
 }
 
 } // namespace blink

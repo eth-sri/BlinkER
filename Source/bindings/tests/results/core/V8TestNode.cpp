@@ -21,7 +21,7 @@
 
 namespace blink {
 
-const WrapperTypeInfo V8TestNode::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestNode::domTemplate, V8TestNode::refObject, V8TestNode::derefObject, V8TestNode::createPersistentHandle, 0, V8TestNode::toEventTarget, 0, V8TestNode::installConditionallyEnabledMethods, V8TestNode::installConditionallyEnabledProperties, &V8Node::wrapperTypeInfo, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::NodeClassId, WrapperTypeInfo::Dependent, WrapperTypeInfo::WillBeGarbageCollectedObject };
+const WrapperTypeInfo V8TestNode::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestNode::domTemplate, V8TestNode::refObject, V8TestNode::derefObject, V8TestNode::trace, 0, V8TestNode::toEventTarget, 0, V8TestNode::installConditionallyEnabledMethods, V8TestNode::installConditionallyEnabledProperties, &V8Node::wrapperTypeInfo, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::NodeClassId, WrapperTypeInfo::Dependent, WrapperTypeInfo::WillBeGarbageCollectedObject };
 
 // This static member must be declared by DEFINE_WRAPPERTYPEINFO in TestNode.h.
 // For details, see the comment of DEFINE_WRAPPERTYPEINFO in
@@ -195,8 +195,10 @@ static void installV8TestNodeTemplate(v8::Handle<v8::FunctionTemplate> functionT
         isolate);
     functionTemplate->SetCallHandler(V8TestNode::constructorCallback);
     functionTemplate->SetLength(0);
-    v8::Local<v8::ObjectTemplate> instanceTemplate ALLOW_UNUSED = functionTemplate->InstanceTemplate();
-    v8::Local<v8::ObjectTemplate> prototypeTemplate ALLOW_UNUSED = functionTemplate->PrototypeTemplate();
+    v8::Local<v8::ObjectTemplate> instanceTemplate = functionTemplate->InstanceTemplate();
+    ALLOW_UNUSED_LOCAL(instanceTemplate);
+    v8::Local<v8::ObjectTemplate> prototypeTemplate = functionTemplate->PrototypeTemplate();
+    ALLOW_UNUSED_LOCAL(prototypeTemplate);
 
     // Custom toString template
     functionTemplate->Set(v8AtomicString(isolate, "toString"), V8PerIsolateData::from(isolate)->toStringTemplate());
@@ -227,28 +229,17 @@ EventTarget* V8TestNode::toEventTarget(v8::Handle<v8::Object> object)
     return toImpl(object);
 }
 
-
-void V8TestNode::refObject(ScriptWrappableBase* internalPointer)
+void V8TestNode::refObject(ScriptWrappableBase* scriptWrappableBase)
 {
 #if !ENABLE(OILPAN)
-    internalPointer->toImpl<TestNode>()->ref();
+    scriptWrappableBase->toImpl<TestNode>()->ref();
 #endif
 }
 
-void V8TestNode::derefObject(ScriptWrappableBase* internalPointer)
+void V8TestNode::derefObject(ScriptWrappableBase* scriptWrappableBase)
 {
 #if !ENABLE(OILPAN)
-    internalPointer->toImpl<TestNode>()->deref();
-#endif
-}
-
-WrapperPersistentNode* V8TestNode::createPersistentHandle(ScriptWrappableBase* internalPointer)
-{
-#if ENABLE(OILPAN)
-    return WrapperPersistent<TestNode>::create(internalPointer->toImpl<TestNode>());
-#else
-    ASSERT_NOT_REACHED();
-    return 0;
+    scriptWrappableBase->toImpl<TestNode>()->deref();
 #endif
 }
 

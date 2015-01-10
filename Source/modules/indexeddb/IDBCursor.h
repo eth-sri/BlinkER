@@ -41,12 +41,13 @@ namespace blink {
 class ExceptionState;
 class IDBAny;
 class IDBTransaction;
-class ExecutionContext;
+class ScriptState;
 class SharedBuffer;
 class WebBlobInfo;
 
 class IDBCursor : public GarbageCollectedFinalized<IDBCursor>, public ScriptWrappable {
     DEFINE_WRAPPERTYPEINFO();
+    USING_PRE_FINALIZER(IDBCursor, dispose);
 public:
     static WebIDBCursorDirection stringToDirection(const String& modeString, ExceptionState&);
 
@@ -86,6 +87,7 @@ protected:
     IDBCursor(PassOwnPtr<WebIDBCursor>, WebIDBCursorDirection, IDBRequest*, IDBAny* source, IDBTransaction*);
 
 private:
+    void dispose();
     IDBObjectStore* effectiveObjectStore() const;
     void handleBlobAcks();
 

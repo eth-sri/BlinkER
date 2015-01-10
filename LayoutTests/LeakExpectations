@@ -54,6 +54,7 @@ crbug.com/364417 fast/dom/shadow/drop-event-for-input-in-shadow.html [ Leak ]
 crbug.com/364417 fast/events/touch/gesture/context-menu-on-long-tap.html [ Leak ]
 crbug.com/364417 fast/repaint/japanese-rl-selection-clear.html [ Leak ]
 crbug.com/364417 fast/text/international/hebrew-selection.html [ Leak ]
+crbug.com/364417 virtual/textblob/fast/text/international/hebrew-selection.html [ Leak ]
 crbug.com/364417 svg/custom/bug79798.html [ Leak ]
 crbug.com/364417 imported/web-platform-tests/shadow-dom/elements-and-dom-objects/shadowroot-object/shadowroot-methods/test-004.html [ Leak ]
 crbug.com/364417 imported/web-platform-tests/shadow-dom/user-interaction/ranges-and-selections/test-001.html [ Leak ]
@@ -62,13 +63,6 @@ crbug.com/364417 imported/web-platform-tests/shadow-dom/user-interaction/ranges-
 crbug.com/366042 fast/history/history-traversal-is-asynchronous.html [ Leak ]
 
 crbug.com/364391 http/tests/misc/acid3.html [ Leak Pass ]
-
-crbug.com/366455 fast/dom/remove-svg-font-face-element-crash.xhtml [ Leak Pass ]
-crbug.com/366455 svg/W3C-SVG-1.1-SE/text-intro-05-t.svg [ Leak ]
-crbug.com/366455 svg/W3C-SVG-1.1/text-intro-01-t.svg [ Leak ]
-crbug.com/366455 svg/W3C-SVG-1.1/text-intro-04-t.svg [ Leak ]
-crbug.com/366455 svg/css/font-face-crash.html [ Leak ]
-crbug.com/366455 svg/custom/svg-fonts-fallback.xhtml [ Leak ]
 
 # Resource leak
 crbug.com/403987 fast/dom/element-attribute-js-null.html [ Leak ]
@@ -83,3 +77,4 @@ crbug.com/413731 imported/web-platform-tests/shadow-dom/user-interaction/ranges-
 crbug.com/414163 [ Debug ] inspector/sources/debugger/promise-tracker.html [ Crash ]
 
 crbug.com/417752 storage/websql/sql-error-codes.html [ Pass Leak ]
+crbug.com/427628 inspector/sources/debugger/debugger-save-to-temp-var.html [ Leak ]

@@ -52,8 +52,8 @@ public:
 
 private:
     // DateTimeFormat::TokenHandler functions.
-    virtual void visitField(DateTimeFormat::FieldType, int) OVERRIDE FINAL;
-    virtual void visitLiteral(const String&) OVERRIDE FINAL;
+    virtual void visitField(DateTimeFormat::FieldType, int) override final;
+    virtual void visitLiteral(const String&) override final;
 
     String zeroPadString(const String&, size_t width);
     void appendNumber(int number, size_t width);
@@ -211,6 +211,11 @@ String Locale::queryString(WebLocalizedString::Name name, const String& paramete
 String Locale::validationMessageTooLongText(unsigned valueLength, int maxLength)
 {
     return queryString(WebLocalizedString::ValidationTooLong, convertToLocalizedNumber(String::number(valueLength)), convertToLocalizedNumber(String::number(maxLength)));
+}
+
+String Locale::validationMessageTooShortText(unsigned valueLength, int minLength)
+{
+    return queryString(WebLocalizedString::ValidationTooShort, convertToLocalizedNumber(String::number(valueLength)), convertToLocalizedNumber(String::number(minLength)));
 }
 
 String Locale::weekFormatInLDML()

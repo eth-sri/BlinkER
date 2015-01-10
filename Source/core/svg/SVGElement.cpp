@@ -629,7 +629,6 @@ AnimatedPropertyType SVGElement::animatedPropertyTypeForCSSAttribute(const Quali
             { alignment_baselineAttr, AnimatedString },
             { baseline_shiftAttr, AnimatedString },
             { buffered_renderingAttr, AnimatedString },
-            { clipAttr, AnimatedRect },
             { clip_pathAttr, AnimatedString },
             { clip_ruleAttr, AnimatedString },
             { SVGNames::colorAttr, AnimatedColor },
@@ -959,6 +958,12 @@ bool SVGElement::hasFocusEventListeners() const
 {
     return hasEventListeners(EventTypeNames::focusin) || hasEventListeners(EventTypeNames::focusout)
         || hasEventListeners(EventTypeNames::focus) || hasEventListeners(EventTypeNames::blur);
+}
+
+void SVGElement::markForLayoutAndParentResourceInvalidation(RenderObject* renderer)
+{
+    ASSERT(renderer);
+    RenderSVGResourceContainer::markForLayoutAndParentResourceInvalidation(renderer, true);
 }
 
 void SVGElement::invalidateInstances()

@@ -43,6 +43,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/html/FormDataList.h"
 #include "core/html/forms/FormController.h"
+#include "core/html/parser/HTMLParserIdioms.h"
 #include "core/html/shadow/ShadowElementNames.h"
 #include "core/html/shadow/TextControlInnerElements.h"
 #include "core/page/Chrome.h"
@@ -189,9 +190,11 @@ void HTMLTextAreaElement::parseAttribute(const QualifiedName& name, const Atomic
         }
     } else if (name == accesskeyAttr) {
         // ignore for the moment
-    } else if (name == maxlengthAttr)
+    } else if (name == maxlengthAttr) {
         setNeedsValidityCheck();
-    else
+    } else if (name == minlengthAttr) {
+        setNeedsValidityCheck();
+    } else
         HTMLTextFormControlElement::parseAttribute(name, value);
 }
 
@@ -348,11 +351,11 @@ void HTMLTextAreaElement::setValue(const String& value, TextFieldEventBehavior e
 
 void HTMLTextAreaElement::setNonDirtyValue(const String& value)
 {
-    setValueCommon(value, DispatchNoEvent, ChangeSelection);
+    setValueCommon(value, DispatchNoEvent, SetSeletion);
     m_isDirty = false;
 }
 
-void HTMLTextAreaElement::setValueCommon(const String& newValue, TextFieldEventBehavior eventBehavior, SelectionOption selectionOption)
+void HTMLTextAreaElement::setValueCommon(const String& newValue, TextFieldEventBehavior eventBehavior, SetValueCommonOption setValueOption)
 {
     // Code elsewhere normalizes line endings added by the user via the keyboard or pasting.
     // We normalize line endings coming from JavaScript here.
@@ -365,12 +368,12 @@ void HTMLTextAreaElement::setValueCommon(const String& newValue, TextFieldEventB
     // FIXME: Simple early return doesn't match the Firefox ever.
     // Remove these lines.
     if (normalizedValue == value()) {
-        if (selectionOption == ChangeSelection) {
+        if (setValueOption == SetSeletion) {
             setNeedsValidityCheck();
             if (isFinishedParsingChildren()) {
                 // Set the caret to the end of the text value except for initialize.
                 unsigned endOfString = m_value.length();
-                setSelectionRange(endOfString, endOfString, SelectionHasNoDirection, NotChangeSelection);
+                setSelectionRange(endOfString, endOfString, SelectionHasNoDirection, ChangeSelectionIfFocused);
             }
         }
         return;
@@ -387,7 +390,7 @@ void HTMLTextAreaElement::setValueCommon(const String& newValue, TextFieldEventB
     if (isFinishedParsingChildren()) {
         // Set the caret to the end of the text value except for initialize.
         unsigned endOfString = m_value.length();
-        setSelectionRange(endOfString, endOfString, SelectionHasNoDirection, NotChangeSelection);
+        setSelectionRange(endOfString, endOfString, SelectionHasNoDirection, ChangeSelectionIfFocused);
     }
 
     notifyFormStateChanged();
@@ -446,17 +449,40 @@ void HTMLTextAreaElement::setDefaultValue(const String& defaultValue)
 
 int HTMLTextAreaElement::maxLength() const
 {
-    bool ok;
-    int value = getAttribute(maxlengthAttr).toInt(&ok);
-    return ok && value >= 0 ? value : -1;
+    int value;
+    if (!parseHTMLInteger(getAttribute(maxlengthAttr), value))
+        return -1;
+    return value >= 0 ? value : -1;
+}
+
+int HTMLTextAreaElement::minLength() const
+{
+    int value;
+    if (!parseHTMLInteger(getAttribute(minlengthAttr), value))
+        return -1;
+    return value >= 0 ? value : -1;
 }
 
 void HTMLTextAreaElement::setMaxLength(int newValue, ExceptionState& exceptionState)
 {
+    int min = minLength();
     if (newValue < 0)
         exceptionState.throwDOMException(IndexSizeError, "The value provided (" + String::number(newValue) + ") is not positive or 0.");
+    else if (min >= 0 && newValue < min)
+        exceptionState.throwDOMException(IndexSizeError, ExceptionMessages::indexExceedsMinimumBound("maxLength", newValue, min));
     else
         setIntegralAttribute(maxlengthAttr, newValue);
+}
+
+void HTMLTextAreaElement::setMinLength(int newValue, ExceptionState& exceptionState)
+{
+    int max = maxLength();
+    if (newValue < 0)
+        exceptionState.throwDOMException(IndexSizeError, "The value provided (" + String::number(newValue) + ") is not positive or 0.");
+    else if (max >= 0 && newValue > max)
+        exceptionState.throwDOMException(IndexSizeError, ExceptionMessages::indexExceedsMaximumBound("minLength", newValue, max));
+    else
+        setIntegralAttribute(minlengthAttr, newValue);
 }
 
 String HTMLTextAreaElement::suggestedValue() const
@@ -490,6 +516,9 @@ String HTMLTextAreaElement::validationMessage() const
     if (tooLong())
         return locale().validationMessageTooLongText(computeLengthForSubmission(value()), maxLength());
 
+    if (tooShort())
+        return locale().validationMessageTooShortText(computeLengthForSubmission(value()), minLength());
+
     return String();
 }
 
@@ -510,6 +539,12 @@ bool HTMLTextAreaElement::tooLong() const
     return willValidate() && tooLong(0, CheckDirtyFlag);
 }
 
+bool HTMLTextAreaElement::tooShort() const
+{
+    // We should not call value() for performance.
+    return willValidate() && tooShort(0, CheckDirtyFlag);
+}
+
 bool HTMLTextAreaElement::tooLong(const String* value, NeedsToCheckDirtyFlag check) const
 {
     // Return false for the default value or value set by script even if it is
@@ -523,9 +558,24 @@ bool HTMLTextAreaElement::tooLong(const String* value, NeedsToCheckDirtyFlag che
     return computeLengthForSubmission(value ? *value : this->value()) > static_cast<unsigned>(max);
 }
 
+bool HTMLTextAreaElement::tooShort(const String* value, NeedsToCheckDirtyFlag check) const
+{
+    // Return false for the default value or value set by script even if it is
+    // shorter than minLength.
+    if (check == CheckDirtyFlag && !lastChangeWasUserEdit())
+        return false;
+
+    int min = minLength();
+    if (min <= 0)
+        return false;
+    // An empty string is excluded from minlength check.
+    unsigned len = computeLengthForSubmission(value ? *value : this->value());
+    return len > 0 && len < static_cast<unsigned>(min);
+}
+
 bool HTMLTextAreaElement::isValidValue(const String& candidate) const
 {
-    return !valueMissing(&candidate) && !tooLong(&candidate, IgnoreDirtyFlag);
+    return !valueMissing(&candidate) && !tooLong(&candidate, IgnoreDirtyFlag) && !tooShort(&candidate, IgnoreDirtyFlag);
 }
 
 void HTMLTextAreaElement::accessKeyAction(bool)

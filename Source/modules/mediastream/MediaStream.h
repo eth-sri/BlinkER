@@ -37,7 +37,7 @@ namespace blink {
 
 class ExceptionState;
 
-class MediaStream FINAL
+class MediaStream final
     : public RefCountedGarbageCollectedWillBeGarbageCollectedFinalized<MediaStream>
     , public URLRegistrable
     , public MediaStreamDescriptorClient
@@ -45,12 +45,12 @@ class MediaStream FINAL
     , public ContextLifecycleObserver {
     DEFINE_EVENT_TARGET_REFCOUNTING_WILL_BE_REMOVED(RefCountedGarbageCollectedWillBeGarbageCollectedFinalized<MediaStream>);
     DEFINE_WRAPPERTYPEINFO();
-    USING_GARBAGE_COLLECTED_MIXIN(MediaStream);
+    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(MediaStream);
 public:
     static MediaStream* create(ExecutionContext*);
     static MediaStream* create(ExecutionContext*, MediaStream*);
     static MediaStream* create(ExecutionContext*, const MediaStreamTrackVector&);
-    static MediaStream* create(ExecutionContext*, MediaStreamDescriptor*);
+    static MediaStream* create(ExecutionContext*, PassRefPtr<MediaStreamDescriptor>);
     virtual ~MediaStream();
 
     // DEPRECATED
@@ -77,29 +77,29 @@ public:
     void trackEnded();
 
     // MediaStreamDescriptorClient
-    virtual void streamEnded() OVERRIDE;
+    virtual void streamEnded() override;
 
     MediaStreamDescriptor* descriptor() const { return m_descriptor.get(); }
 
     // EventTarget
-    virtual const AtomicString& interfaceName() const OVERRIDE;
-    virtual ExecutionContext* executionContext() const OVERRIDE;
+    virtual const AtomicString& interfaceName() const override;
+    virtual ExecutionContext* executionContext() const override;
 
     // URLRegistrable
-    virtual URLRegistry& registry() const OVERRIDE;
+    virtual URLRegistry& registry() const override;
 
-    virtual void trace(Visitor*) OVERRIDE;
+    virtual void trace(Visitor*) override;
 
 private:
-    MediaStream(ExecutionContext*, MediaStreamDescriptor*);
+    MediaStream(ExecutionContext*, PassRefPtr<MediaStreamDescriptor>);
     MediaStream(ExecutionContext*, const MediaStreamTrackVector& audioTracks, const MediaStreamTrackVector& videoTracks);
 
     // ContextLifecycleObserver
-    virtual void contextDestroyed() OVERRIDE;
+    virtual void contextDestroyed() override;
 
     // MediaStreamDescriptorClient
-    virtual void addRemoteTrack(MediaStreamComponent*) OVERRIDE;
-    virtual void removeRemoteTrack(MediaStreamComponent*) OVERRIDE;
+    virtual void addRemoteTrack(MediaStreamComponent*) override;
+    virtual void removeRemoteTrack(MediaStreamComponent*) override;
 
     void scheduleDispatchEvent(PassRefPtrWillBeRawPtr<Event>);
     void scheduledEventTimerFired(Timer<MediaStream>*);
@@ -108,7 +108,7 @@ private:
 
     MediaStreamTrackVector m_audioTracks;
     MediaStreamTrackVector m_videoTracks;
-    Member<MediaStreamDescriptor> m_descriptor;
+    RefPtr<MediaStreamDescriptor> m_descriptor;
 
     Timer<MediaStream> m_scheduledEventTimer;
     WillBeHeapVector<RefPtrWillBeMember<Event> > m_scheduledEvents;

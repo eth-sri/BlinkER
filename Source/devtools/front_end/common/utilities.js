@@ -1185,25 +1185,16 @@ function numberToStringWithSpacesPadding(value, symbolsCount)
 }
 
 /**
- * @return {string}
- */
-var createObjectIdentifier = function()
-{
-    // It has to be string for better performance.
-    return "_" + ++createObjectIdentifier._last;
-}
-
-createObjectIdentifier._last = 0;
-
-/**
- * @constructor
+ * @param {!Iterator.<T>} iterator
+ * @return {!Array.<T>}
  * @template T
  */
-var Set = function()
+Array.from = function(iterator)
 {
-    /** @type {!Object.<string, !T>} */
-    this._set = {};
-    this._size = 0;
+    var values = [];
+    for (var iteratorValue = iterator.next(); !iteratorValue.done; iteratorValue = iterator.next())
+        values.push(iteratorValue.value);
+    return values;
 }
 
 /**
@@ -1213,311 +1204,59 @@ var Set = function()
  */
 Set.fromArray = function(array)
 {
-    var result = new Set();
-    array.forEach(function(item) { result.add(item); });
-    return result;
-}
-
-Set.prototype = {
-    /**
-     * @param {!T} item
-     */
-    add: function(item)
-    {
-        var objectIdentifier = item.__identifier;
-        if (!objectIdentifier) {
-            objectIdentifier = createObjectIdentifier();
-            item.__identifier = objectIdentifier;
-        }
-        if (!this._set[objectIdentifier])
-            ++this._size;
-        this._set[objectIdentifier] = item;
-    },
-
-    /**
-     * @param {!T} item
-     * @return {boolean}
-     */
-    remove: function(item)
-    {
-        if (this._set[item.__identifier]) {
-            --this._size;
-            delete this._set[item.__identifier];
-            return true;
-        }
-        return false;
-    },
-
-    /**
-     * @return {!Array.<!T>}
-     */
-    values: function()
-    {
-        var result = new Array(this._size);
-        var i = 0;
-        for (var objectIdentifier in this._set)
-            result[i++] = this._set[objectIdentifier];
-        return result;
-    },
-
-    /**
-     * @param {!T} item
-     * @return {boolean}
-     */
-    contains: function(item)
-    {
-        return !!this._set[item.__identifier];
-    },
-
-    /**
-     * @return {number}
-     */
-    size: function()
-    {
-        return this._size;
-    },
-
-    clear: function()
-    {
-        this._set = {};
-        this._size = 0;
-    }
+    return new Set(array);
 }
 
 /**
- * @constructor
- * @template K,V
- */
-var Map = function()
-{
-    /** @type {!Object.<string, !Array.<K|V>>} */
-    this._map = {};
-    this._size = 0;
-}
-
-Map.prototype = {
-    /**
-     * @param {K} key
-     * @param {V} value
-     */
-    set: function(key, value)
-    {
-        var objectIdentifier = key.__identifier;
-        if (!objectIdentifier) {
-            objectIdentifier = createObjectIdentifier();
-            key.__identifier = objectIdentifier;
-        }
-        if (!this._map[objectIdentifier])
-            ++this._size;
-        this._map[objectIdentifier] = [key, value];
-    },
-
-    /**
-     * @param {K} key
-     * @return {V}
-     */
-    remove: function(key)
-    {
-        var result = this._map[key.__identifier];
-        if (!result)
-            return undefined;
-        --this._size;
-        delete this._map[key.__identifier];
-        return result[1];
-    },
-
-    /**
-     * @return {!Array.<K>}
-     */
-    keys: function()
-    {
-        return this._list(0);
-    },
-
-    /**
-     * @return {!Array.<V>}
-     */
-    values: function()
-    {
-        return this._list(1);
-    },
-
-    /**
-     * @param {number} index
-     * @return {!Array.<K|V>}
-     */
-    _list: function(index)
-    {
-        var result = new Array(this._size);
-        var i = 0;
-        for (var objectIdentifier in this._map)
-            result[i++] = this._map[objectIdentifier][index];
-        return result;
-    },
-
-    /**
-     * @param {K} key
-     * @return {V|undefined}
-     */
-    get: function(key)
-    {
-        var entry = this._map[key.__identifier];
-        return entry ? entry[1] : undefined;
-    },
-
-    /**
-     * @param {K} key
-     * @return {boolean}
-     */
-    has: function(key)
-    {
-        var entry = this._map[key.__identifier];
-        return !!entry;
-    },
-
-    /**
-     * @return {number}
-     */
-    get size()
-    {
-        return this._size;
-    },
-
-    clear: function()
-    {
-        this._map = {};
-        this._size = 0;
-    }
-}
-
-/**
- * @constructor
+ * @return {!Array.<T>}
  * @template T
  */
-var StringMap = function()
+Set.prototype.valuesArray = function()
 {
-    /** @type {!Object.<string, T>} */
-    this._map = {};
-    this._size = 0;
+    return Array.from(this.values());
 }
 
-StringMap.prototype = {
-    /**
-     * @param {string} key
-     * @param {T} value
-     */
-    set: function(key, value)
-    {
-        if (key === "__proto__") {
-            if (!this._hasProtoKey) {
-                ++this._size;
-                this._hasProtoKey = true;
-            }
-            /** @type {T} */
-            this._protoValue = value;
-            return;
-        }
-        if (!Object.prototype.hasOwnProperty.call(this._map, key))
-            ++this._size;
-        this._map[key] = value;
-    },
+Set.prototype.remove = Set.prototype.delete;
 
-    /**
-     * @param {string} key
-     * @return {T|undefined}
-     */
-    remove: function(key)
-    {
-        var result;
-        if (key === "__proto__") {
-            if (!this._hasProtoKey)
-                return undefined;
-            --this._size;
-            delete this._hasProtoKey;
-            result = this._protoValue;
-            delete this._protoValue;
-            return result;
-        }
-        if (!Object.prototype.hasOwnProperty.call(this._map, key))
-            return undefined;
-        --this._size;
-        result = this._map[key];
-        delete this._map[key];
-        return result;
-    },
+/**
+ * @return {T}
+ * @template T
+ */
+Map.prototype.remove = function(key)
+{
+    var value = this.get(key);
+    this.delete(key);
+    return value;
+}
 
-    /**
-     * @return {!Array.<string>}
-     */
-    keys: function()
-    {
-        var result = Object.keys(this._map) || [];
-        if (this._hasProtoKey)
-            result.push("__proto__");
-        return result;
-    },
+/**
+ * @return {!Array.<V>}
+ * @template K, V
+ * @this {Map.<K, V>}
+ */
+Map.prototype.valuesArray = function()
+{
+    return Array.from(this.values());
+}
 
-    /**
-     * @return {!Array.<T>}
-     */
-    values: function()
-    {
-        var result = Object.values(this._map);
-        if (this._hasProtoKey)
-            result.push(this._protoValue);
-        return result;
-    },
-
-    /**
-     * @param {string} key
-     * @return {T|undefined}
-     */
-    get: function(key)
-    {
-        if (key === "__proto__")
-            return this._protoValue;
-        if (!Object.prototype.hasOwnProperty.call(this._map, key))
-            return undefined;
-        return this._map[key];
-    },
-
-    /**
-     * @param {string} key
-     * @return {boolean}
-     */
-    has: function(key)
-    {
-        var result;
-        if (key === "__proto__")
-            return this._hasProtoKey;
-        return Object.prototype.hasOwnProperty.call(this._map, key);
-    },
-
-    /**
-     * @return {number}
-     */
-    get size()
-    {
-        return this._size;
-    },
-
-    clear: function()
-    {
-        this._map = {};
-        this._size = 0;
-        delete this._hasProtoKey;
-        delete this._protoValue;
-    }
+/**
+ * @return {!Array.<K>}
+ * @template K, V
+ * @this {Map.<K, V>}
+ */
+Map.prototype.keysArray = function()
+{
+    return Array.from(this.keys());
 }
 
 /**
  * @constructor
- * @extends {StringMap.<Set.<!T>>}
  * @template T
  */
 var StringMultimap = function()
 {
-    StringMap.call(this);
+    /** @type {!Map.<string, !Set.<!T>>} */
+    this._map = new Map();
 }
 
 StringMultimap.prototype = {
@@ -1527,21 +1266,12 @@ StringMultimap.prototype = {
      */
     set: function(key, value)
     {
-        if (key === "__proto__") {
-            if (!this._hasProtoKey) {
-                ++this._size;
-                this._hasProtoKey = true;
-                /** @type {!Set.<T>} */
-                this._protoValue = new Set();
-            }
-            this._protoValue.add(value);
-            return;
+        var set = this._map.get(key);
+        if (!set) {
+            set = new Set();
+            this._map.set(key, set);
         }
-        if (!Object.prototype.hasOwnProperty.call(this._map, key)) {
-            ++this._size;
-            this._map[key] = new Set();
-        }
-        this._map[key].add(value);
+        set.add(value);
     },
 
     /**
@@ -1550,7 +1280,7 @@ StringMultimap.prototype = {
      */
     get: function(key)
     {
-        var result = StringMap.prototype.get.call(this, key);
+        var result = this._map.get(key);
         if (!result)
             result = new Set();
         return result;
@@ -1564,8 +1294,8 @@ StringMultimap.prototype = {
     {
         var values = this.get(key);
         values.remove(value);
-        if (!values.size())
-            StringMap.prototype.remove.call(this, key)
+        if (!values.size)
+            this._map.remove(key)
     },
 
     /**
@@ -1573,85 +1303,27 @@ StringMultimap.prototype = {
      */
     removeAll: function(key)
     {
-        StringMap.prototype.remove.call(this, key);
-    },
-
-    /**
-     * @return {!Array.<!T>}
-     */
-    values: function()
-    {
-        var result = [];
-        var keys = this.keys();
-        for (var i = 0; i < keys.length; ++i)
-            result.pushAll(this.get(keys[i]).values());
-        return result;
-    },
-
-    __proto__: StringMap.prototype
-}
-
-/**
- * @constructor
- */
-var StringSet = function()
-{
-    /** @type {!StringMap.<boolean>} */
-    this._map = new StringMap();
-}
-
-/**
- * @param {!Array.<string>} array
- * @return {!StringSet}
- */
-StringSet.fromArray = function(array)
-{
-    var result = new StringSet();
-    array.forEach(function(item) { result.add(item); });
-    return result;
-}
-
-StringSet.prototype = {
-    /**
-     * @param {string} value
-     */
-    add: function(value)
-    {
-        this._map.set(value, true);
-    },
-
-    /**
-     * @param {string} value
-     * @return {boolean}
-     */
-    remove: function(value)
-    {
-        return !!this._map.remove(value);
+        this._map.remove(key)
     },
 
     /**
      * @return {!Array.<string>}
      */
-    values: function()
+    keysArray: function()
     {
-        return this._map.keys();
+        return this._map.keysArray();
     },
 
     /**
-     * @param {string} value
-     * @return {boolean}
+     * @return {!Array.<!T>}
      */
-    contains: function(value)
+    valuesArray: function()
     {
-        return this._map.has(value);
-    },
-
-    /**
-     * @return {number}
-     */
-    size: function()
-    {
-        return this._map.size;
+        var result = [];
+        var keys = this.keysArray();
+        for (var i = 0; i < keys.length; ++i)
+            result.pushAll(this.get(keys[i]).valuesArray());
+        return result;
     },
 
     clear: function()
@@ -1745,49 +1417,10 @@ function suppressUnused(value)
 
 /**
  * @param {function()} callback
+ * @return {number}
  */
-self.setImmediate = (function() {
-    var callbacks = [];
-    function run() {
-        var cbList = callbacks.slice();
-        callbacks.length = 0;
-        cbList.forEach(function(callback) { callback(); });
-    };
-    return function setImmediate(callback) {
-        if (!callbacks.length)
-            new Promise(function(resolve,reject){ resolve(null);}).then(run);
-        callbacks.push(callback);
-    };
-})();
-
-/**
- * @param {string} error
- * @return {!Promise}
- */
-Promise.rejectWithError = function(error)
+self.setImmediate = function(callback)
 {
-    return Promise.reject(new Error(error));
-}
-
-Promise.prototype.done = function()
-{
-    this.catch(console.error.bind(console));
-}
-
-/**
- * @param {function()} callback
- * @return {!Promise}
- */
-Promise.prototype.thenOrCatch = function(callback)
-{
-    return this.then(callback, reject);
-
-    /**
-     * @param {*} e
-     */
-    function reject(e)
-    {
-        console.error(e);
-        callback();
-    }
+    Promise.resolve().then(callback).done();
+    return 0;
 }

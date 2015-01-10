@@ -142,6 +142,8 @@ const Shape& ShapeOutsideInfo::computedShape() const
     if (Shape* shape = m_shape.get())
         return *shape;
 
+    TemporaryChange<bool> isInComputingShape(m_isComputingShape, true);
+
     const RenderStyle& style = *m_renderer.style();
     ASSERT(m_renderer.containingBlock());
     const RenderStyle& containingBlockStyle = *m_renderer.containingBlock()->style();
@@ -315,7 +317,7 @@ LayoutRect ShapeOutsideInfo::computedShapePhysicalBoundingBox() const
     LayoutRect physicalBoundingBox = computedShape().shapeMarginLogicalBoundingBox();
     physicalBoundingBox.setX(physicalBoundingBox.x() + logicalLeftOffset());
 
-    if (m_renderer.style()->isFlippedBlocksWritingMode())
+    if (m_renderer.style()->slowIsFlippedBlocksWritingMode())
         physicalBoundingBox.setY(m_renderer.logicalHeight() - physicalBoundingBox.maxY());
     else
         physicalBoundingBox.setY(physicalBoundingBox.y() + logicalTopOffset());
@@ -331,7 +333,7 @@ LayoutRect ShapeOutsideInfo::computedShapePhysicalBoundingBox() const
 FloatPoint ShapeOutsideInfo::shapeToRendererPoint(FloatPoint point) const
 {
     FloatPoint result = FloatPoint(point.x() + logicalLeftOffset(), point.y() + logicalTopOffset());
-    if (m_renderer.style()->isFlippedBlocksWritingMode())
+    if (m_renderer.style()->slowIsFlippedBlocksWritingMode())
         result.setY(m_renderer.logicalHeight() - result.y());
     if (!m_renderer.style()->isHorizontalWritingMode())
         result = result.transposedPoint();

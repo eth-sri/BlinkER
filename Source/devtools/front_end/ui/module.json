@@ -4,7 +4,6 @@
         "host"
     ],
     "scripts": [
-        "DOMExtension.js",
         "View.js",
         "treeoutline.js",
         "ActionRegistry.js",
@@ -43,5 +42,10 @@
         "UIUtils.js",
         "ViewportControl.js",
         "ZoomManager.js"
+    ],
+    "stylesheets": [
+        "dataGrid.css",
+        "filter.css",
+        "pieChart.css"
     ]
 }

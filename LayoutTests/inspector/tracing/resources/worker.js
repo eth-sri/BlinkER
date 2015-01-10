@@ -1,9 +1,5 @@
-onmessage = function(event) {
-    doWork();
-    setInterval(doWork, 0);
-};
 var message_id = 0;
-function doWork()
+onmessage = function(event)
 {
-    postMessage("Message #" + message_id++);
-}
+    postMessage("Ack #" + message_id++);
+};
