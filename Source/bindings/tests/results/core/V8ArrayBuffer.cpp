@@ -22,7 +22,7 @@
 
 namespace blink {
 
-const WrapperTypeInfo V8ArrayBuffer::wrapperTypeInfo = { gin::kEmbedderBlink, 0, V8ArrayBuffer::refObject, V8ArrayBuffer::derefObject, V8ArrayBuffer::trace, 0, 0, 0, V8ArrayBuffer::installConditionallyEnabledMethods, V8ArrayBuffer::installConditionallyEnabledProperties, 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::Independent, WrapperTypeInfo::RefCountedObject };
+const WrapperTypeInfo V8ArrayBuffer::wrapperTypeInfo = { gin::kEmbedderBlink, 0, V8ArrayBuffer::refObject, V8ArrayBuffer::derefObject, V8ArrayBuffer::trace, 0, 0, V8ArrayBuffer::installConditionallyEnabledMethods, V8ArrayBuffer::installConditionallyEnabledProperties, 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent, WrapperTypeInfo::RefCountedObject };
 
 // This static member must be declared by DEFINE_WRAPPERTYPEINFO in TestArrayBuffer.h.
 // For details, see the comment of DEFINE_WRAPPERTYPEINFO in
@@ -42,7 +42,7 @@ TestArrayBuffer* V8ArrayBuffer::toImpl(v8::Handle<v8::Object> object)
         const WrapperTypeInfo* wrapperTypeInfo = toWrapperTypeInfo(object);
         RELEASE_ASSERT(wrapperTypeInfo);
         RELEASE_ASSERT(wrapperTypeInfo->ginEmbedder == gin::kEmbedderBlink);
-        return blink::toScriptWrappableBase(object)->toImpl<TestArrayBuffer>();
+        return toScriptWrappable(object)->toImpl<TestArrayBuffer>();
     }
 
     // Transfer the ownership of the allocated memory to an ArrayBuffer without
@@ -54,9 +54,9 @@ TestArrayBuffer* V8ArrayBuffer::toImpl(v8::Handle<v8::Object> object)
     // DOMArrayBufferDeallocationObserver::blinkAllocatedMemory.
     buffer->buffer()->setDeallocationObserverWithoutAllocationNotification(
         DOMArrayBufferDeallocationObserver::instance());
-    buffer->associateWithWrapper(buffer->wrapperTypeInfo(), object, v8::Isolate::GetCurrent());
+    buffer->associateWithWrapper(v8::Isolate::GetCurrent(), buffer->wrapperTypeInfo(), object);
 
-    return blink::toScriptWrappableBase(object)->toImpl<TestArrayBuffer>();
+    return buffer.get();
 }
 
 TestArrayBuffer* V8ArrayBuffer::toImplWithTypeCheck(v8::Isolate* isolate, v8::Handle<v8::Value> value)
@@ -64,14 +64,14 @@ TestArrayBuffer* V8ArrayBuffer::toImplWithTypeCheck(v8::Isolate* isolate, v8::Ha
     return hasInstance(value, isolate) ? toImpl(v8::Handle<v8::Object>::Cast(value)) : 0;
 }
 
-void V8ArrayBuffer::refObject(ScriptWrappableBase* scriptWrappableBase)
+void V8ArrayBuffer::refObject(ScriptWrappable* scriptWrappable)
 {
-    scriptWrappableBase->toImpl<TestArrayBuffer>()->ref();
+    scriptWrappable->toImpl<TestArrayBuffer>()->ref();
 }
 
-void V8ArrayBuffer::derefObject(ScriptWrappableBase* scriptWrappableBase)
+void V8ArrayBuffer::derefObject(ScriptWrappable* scriptWrappable)
 {
-    scriptWrappableBase->toImpl<TestArrayBuffer>()->deref();
+    scriptWrappable->toImpl<TestArrayBuffer>()->deref();
 }
 
 template<>

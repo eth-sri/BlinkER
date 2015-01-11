@@ -289,10 +289,9 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
     public:
         void allocateBuffer(size_t newCapacity)
         {
-            typedef typename Allocator::template VectorBackingHelper<T, VectorTraits<T> >::Type VectorBacking;
             ASSERT(newCapacity);
             size_t sizeToAllocate = allocationSize(newCapacity);
-            m_buffer = Allocator::template backingMalloc<T*, VectorBacking>(sizeToAllocate);
+            m_buffer = Allocator::template vectorBackingMalloc<T>(sizeToAllocate);
             m_capacity = sizeToAllocate / sizeof(T);
         }
 
@@ -356,7 +355,17 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
 
         void deallocateBuffer(T* bufferToDeallocate)
         {
-            Allocator::backingFree(bufferToDeallocate);
+            Allocator::vectorBackingFree(bufferToDeallocate);
+        }
+
+        bool expandBuffer(size_t newCapacity)
+        {
+            size_t sizeToAllocate = allocationSize(newCapacity);
+            if (Allocator::vectorBackingExpand(m_buffer, sizeToAllocate)) {
+                m_capacity = sizeToAllocate / sizeof(T);
+                return true;
+            }
+            return false;
         }
 
         void resetBufferPointer()
@@ -419,13 +428,27 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
 
         NEVER_INLINE void reallyDeallocateBuffer(T* bufferToDeallocate)
         {
-            Allocator::backingFree(bufferToDeallocate);
+            Allocator::vectorBackingFree(bufferToDeallocate);
         }
 
         void deallocateBuffer(T* bufferToDeallocate)
         {
             if (UNLIKELY(bufferToDeallocate != inlineBuffer()))
                 reallyDeallocateBuffer(bufferToDeallocate);
+        }
+
+        bool expandBuffer(size_t newCapacity)
+        {
+            ASSERT(newCapacity > inlineCapacity);
+            if (m_buffer == inlineBuffer())
+                return false;
+
+            size_t sizeToAllocate = allocationSize(newCapacity);
+            if (Allocator::vectorBackingExpand(m_buffer, sizeToAllocate)) {
+                m_capacity = sizeToAllocate / sizeof(T);
+                return true;
+            }
+            return false;
         }
 
         void resetBufferPointer()
@@ -613,10 +636,8 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
         template<size_t otherCapacity>
         Vector& operator=(const Vector<T, otherCapacity, Allocator>&);
 
-#if COMPILER_SUPPORTS(CXX_RVALUE_REFERENCES)
         Vector(Vector&&);
         Vector& operator=(Vector&&);
-#endif
 
         size_t size() const { return m_size; }
         size_t capacity() const { return Base::capacity(); }
@@ -796,7 +817,6 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
         return *this;
     }
 
-#if COMPILER_SUPPORTS(CXX_RVALUE_REFERENCES)
     template<typename T, size_t inlineCapacity, typename Allocator>
     Vector<T, inlineCapacity, Allocator>::Vector(Vector<T, inlineCapacity, Allocator>&& other)
     {
@@ -812,7 +832,6 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
         swap(other);
         return *this;
     }
-#endif
 
     template<typename T, size_t inlineCapacity, typename Allocator>
     template<typename U>
@@ -953,6 +972,11 @@ static const size_t kInitialVectorSize = WTF_VECTOR_INITIAL_SIZE;
             return;
         T* oldBuffer = begin();
         T* oldEnd = end();
+        // The Allocator::isGarbageCollected check is not needed.
+        // The check is just a static hint for a compiler to indicate that
+        // Base::expandBuffer returns false if Allocator is a DefaultAllocator.
+        if (Allocator::isGarbageCollected && Base::expandBuffer(newCapacity))
+            return;
         Base::allocateBuffer(newCapacity);
         TypeOperations::move(oldBuffer, oldEnd, begin());
         Base::deallocateBuffer(oldBuffer);

@@ -7,10 +7,11 @@
 #include "config.h"
 #include "V8TestDictionary.h"
 
-#include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptValue.h"
+#include "bindings/core/v8/UnionTypesCore.h"
 #include "bindings/core/v8/V8Element.h"
+#include "bindings/core/v8/V8InternalDictionary.h"
 #include "bindings/core/v8/V8TestInterface.h"
 #include "bindings/core/v8/V8TestInterfaceGarbageCollected.h"
 #include "bindings/core/v8/V8TestInterfaceWillBeGarbageCollected.h"
@@ -26,46 +27,57 @@ void V8TestDictionary::toImpl(v8::Isolate* isolate, v8::Handle<v8::Value> v8Valu
         return;
     }
 
-    // FIXME: Do not use Dictionary and DictionaryHelper
-    // https://crbug.com/321462
-    Dictionary dictionary(v8Value, isolate);
-    // FIXME: Remove this v8::TryCatch once the code is switched from
-    // Dictionary/DictionaryHelper to something that uses ExceptionState.
+    v8::Local<v8::Object> v8Object = v8Value->ToObject(isolate);
     v8::TryCatch block;
-    bool booleanMember;
-    if (DictionaryHelper::getWithUndefinedOrNullCheck(dictionary, "booleanMember", booleanMember)) {
+    v8::Local<v8::Value> booleanMemberValue = v8Object->Get(v8String(isolate, "booleanMember"));
+    if (!booleanMemberValue.IsEmpty() && !isUndefinedOrNull(booleanMemberValue)) {
+        bool booleanMember = booleanMemberValue->BooleanValue();
         impl.setBooleanMember(booleanMember);
     } else if (block.HasCaught()) {
         exceptionState.rethrowV8Exception(block.Exception());
         return;
     }
 
-    bool create;
-    if (DictionaryHelper::getWithUndefinedOrNullCheck(dictionary, "create", create)) {
+    v8::Local<v8::Value> createValue = v8Object->Get(v8String(isolate, "create"));
+    if (!createValue.IsEmpty() && !isUndefinedOrNull(createValue)) {
+        bool create = createValue->BooleanValue();
         impl.setCreateMember(create);
     } else if (block.HasCaught()) {
         exceptionState.rethrowV8Exception(block.Exception());
         return;
     }
 
-    double doubleOrNullMember;
-    if (DictionaryHelper::getWithUndefinedOrNullCheck(dictionary, "doubleOrNullMember", doubleOrNullMember)) {
+    v8::Local<v8::Value> doubleOrNullMemberValue = v8Object->Get(v8String(isolate, "doubleOrNullMember"));
+    if (!doubleOrNullMemberValue.IsEmpty() && !isUndefinedOrNull(doubleOrNullMemberValue)) {
+        TONATIVE_VOID_EXCEPTIONSTATE(double, doubleOrNullMember, toDouble(doubleOrNullMemberValue, exceptionState), exceptionState);
         impl.setDoubleOrNullMember(doubleOrNullMember);
     } else if (block.HasCaught()) {
         exceptionState.rethrowV8Exception(block.Exception());
         return;
     }
 
-    RefPtrWillBeRawPtr<Element> elementOrNullMember;
-    if (DictionaryHelper::getWithUndefinedOrNullCheck(dictionary, "elementOrNullMember", elementOrNullMember)) {
+    v8::Local<v8::Value> doubleOrStringMemberValue = v8Object->Get(v8String(isolate, "doubleOrStringMember"));
+    if (!doubleOrStringMemberValue.IsEmpty() && !isUndefinedOrNull(doubleOrStringMemberValue)) {
+        DoubleOrString doubleOrStringMember;
+        TONATIVE_VOID_EXCEPTIONSTATE_ARGINTERNAL(V8DoubleOrString::toImpl(isolate, doubleOrStringMemberValue, doubleOrStringMember, exceptionState), exceptionState);
+        impl.setDoubleOrStringMember(doubleOrStringMember);
+    } else if (block.HasCaught()) {
+        exceptionState.rethrowV8Exception(block.Exception());
+        return;
+    }
+
+    v8::Local<v8::Value> elementOrNullMemberValue = v8Object->Get(v8String(isolate, "elementOrNullMember"));
+    if (!elementOrNullMemberValue.IsEmpty() && !isUndefinedOrNull(elementOrNullMemberValue)) {
+        Element* elementOrNullMember = V8Element::toImplWithTypeCheck(isolate, elementOrNullMemberValue);
         impl.setElementOrNullMember(elementOrNullMember);
     } else if (block.HasCaught()) {
         exceptionState.rethrowV8Exception(block.Exception());
         return;
     }
 
-    String enumMember;
-    if (DictionaryHelper::getWithUndefinedOrNullCheck(dictionary, "enumMember", enumMember)) {
+    v8::Local<v8::Value> enumMemberValue = v8Object->Get(v8String(isolate, "enumMember"));
+    if (!enumMemberValue.IsEmpty() && !isUndefinedOrNull(enumMemberValue)) {
+        TOSTRING_VOID(V8StringResource<>, enumMember, enumMemberValue);
         String string = enumMember;
         if (!(string == "foo" || string == "bar" || string == "baz")) {
             exceptionState.throwTypeError("member enumMember ('" + string + "') is not a valid enum value.");
@@ -77,16 +89,27 @@ void V8TestDictionary::toImpl(v8::Isolate* isolate, v8::Handle<v8::Value> v8Valu
         return;
     }
 
-    int longMember;
-    if (DictionaryHelper::getWithUndefinedOrNullCheck(dictionary, "longMember", longMember)) {
+    v8::Local<v8::Value> internalDictionarySequenceMemberValue = v8Object->Get(v8String(isolate, "internalDictionarySequenceMember"));
+    if (!internalDictionarySequenceMemberValue.IsEmpty() && !isUndefinedOrNull(internalDictionarySequenceMemberValue)) {
+        TONATIVE_VOID_EXCEPTIONSTATE(Vector<InternalDictionary>, internalDictionarySequenceMember, toImplArray<InternalDictionary>(internalDictionarySequenceMemberValue, 0, isolate, exceptionState), exceptionState);
+        impl.setInternalDictionarySequenceMember(internalDictionarySequenceMember);
+    } else if (block.HasCaught()) {
+        exceptionState.rethrowV8Exception(block.Exception());
+        return;
+    }
+
+    v8::Local<v8::Value> longMemberValue = v8Object->Get(v8String(isolate, "longMember"));
+    if (!longMemberValue.IsEmpty() && !isUndefinedOrNull(longMemberValue)) {
+        TONATIVE_VOID_EXCEPTIONSTATE(int, longMember, toInt32(longMemberValue, exceptionState), exceptionState);
         impl.setLongMember(longMember);
     } else if (block.HasCaught()) {
         exceptionState.rethrowV8Exception(block.Exception());
         return;
     }
 
-    ScriptValue objectMember;
-    if (DictionaryHelper::getWithUndefinedOrNullCheck(dictionary, "objectMember", objectMember)) {
+    v8::Local<v8::Value> objectMemberValue = v8Object->Get(v8String(isolate, "objectMember"));
+    if (!objectMemberValue.IsEmpty() && !isUndefinedOrNull(objectMemberValue)) {
+        ScriptValue objectMember = ScriptValue(ScriptState::current(isolate), objectMemberValue);
         if (!objectMember.isObject()) {
             exceptionState.throwTypeError("member objectMember is not an object.");
             return;
@@ -97,8 +120,9 @@ void V8TestDictionary::toImpl(v8::Isolate* isolate, v8::Handle<v8::Value> v8Valu
         return;
     }
 
-    ScriptValue objectOrNullMember;
-    if (DictionaryHelper::getWithUndefinedOrNullCheck(dictionary, "objectOrNullMember", objectOrNullMember)) {
+    v8::Local<v8::Value> objectOrNullMemberValue = v8Object->Get(v8String(isolate, "objectOrNullMember"));
+    if (!objectOrNullMemberValue.IsEmpty() && !isUndefinedOrNull(objectOrNullMemberValue)) {
+        ScriptValue objectOrNullMember = ScriptValue(ScriptState::current(isolate), objectOrNullMemberValue);
         if (!objectOrNullMember.isObject()) {
             exceptionState.throwTypeError("member objectOrNullMember is not an object.");
             return;
@@ -109,80 +133,90 @@ void V8TestDictionary::toImpl(v8::Isolate* isolate, v8::Handle<v8::Value> v8Valu
         return;
     }
 
-    Vector<String> stringArrayMember;
-    if (DictionaryHelper::getWithUndefinedOrNullCheck(dictionary, "stringArrayMember", stringArrayMember)) {
+    v8::Local<v8::Value> stringArrayMemberValue = v8Object->Get(v8String(isolate, "stringArrayMember"));
+    if (!stringArrayMemberValue.IsEmpty() && !isUndefinedOrNull(stringArrayMemberValue)) {
+        TONATIVE_VOID_EXCEPTIONSTATE(Vector<String>, stringArrayMember, toImplArray<String>(stringArrayMemberValue, 0, isolate, exceptionState), exceptionState);
         impl.setStringArrayMember(stringArrayMember);
     } else if (block.HasCaught()) {
         exceptionState.rethrowV8Exception(block.Exception());
         return;
     }
 
-    String stringMember;
-    if (DictionaryHelper::getWithUndefinedOrNullCheck(dictionary, "stringMember", stringMember)) {
+    v8::Local<v8::Value> stringMemberValue = v8Object->Get(v8String(isolate, "stringMember"));
+    if (!stringMemberValue.IsEmpty() && !isUndefinedOrNull(stringMemberValue)) {
+        TOSTRING_VOID(V8StringResource<>, stringMember, stringMemberValue);
         impl.setStringMember(stringMember);
     } else if (block.HasCaught()) {
         exceptionState.rethrowV8Exception(block.Exception());
         return;
     }
 
-    String stringOrNullMember;
-    if (DictionaryHelper::getWithUndefinedOrNullCheck(dictionary, "stringOrNullMember", stringOrNullMember)) {
+    v8::Local<v8::Value> stringOrNullMemberValue = v8Object->Get(v8String(isolate, "stringOrNullMember"));
+    if (!stringOrNullMemberValue.IsEmpty() && !isUndefinedOrNull(stringOrNullMemberValue)) {
+        TOSTRING_VOID(V8StringResource<>, stringOrNullMember, stringOrNullMemberValue);
         impl.setStringOrNullMember(stringOrNullMember);
     } else if (block.HasCaught()) {
         exceptionState.rethrowV8Exception(block.Exception());
         return;
     }
 
-    Vector<String> stringSequenceMember;
-    if (DictionaryHelper::getWithUndefinedOrNullCheck(dictionary, "stringSequenceMember", stringSequenceMember)) {
+    v8::Local<v8::Value> stringSequenceMemberValue = v8Object->Get(v8String(isolate, "stringSequenceMember"));
+    if (!stringSequenceMemberValue.IsEmpty() && !isUndefinedOrNull(stringSequenceMemberValue)) {
+        TONATIVE_VOID_EXCEPTIONSTATE(Vector<String>, stringSequenceMember, toImplArray<String>(stringSequenceMemberValue, 0, isolate, exceptionState), exceptionState);
         impl.setStringSequenceMember(stringSequenceMember);
     } else if (block.HasCaught()) {
         exceptionState.rethrowV8Exception(block.Exception());
         return;
     }
 
-    RawPtr<TestInterfaceGarbageCollected> testInterfaceGarbageCollectedMember;
-    if (DictionaryHelper::getWithUndefinedOrNullCheck(dictionary, "testInterfaceGarbageCollectedMember", testInterfaceGarbageCollectedMember)) {
+    v8::Local<v8::Value> testInterfaceGarbageCollectedMemberValue = v8Object->Get(v8String(isolate, "testInterfaceGarbageCollectedMember"));
+    if (!testInterfaceGarbageCollectedMemberValue.IsEmpty() && !isUndefinedOrNull(testInterfaceGarbageCollectedMemberValue)) {
+        TestInterfaceGarbageCollected* testInterfaceGarbageCollectedMember = V8TestInterfaceGarbageCollected::toImplWithTypeCheck(isolate, testInterfaceGarbageCollectedMemberValue);
         impl.setTestInterfaceGarbageCollectedMember(testInterfaceGarbageCollectedMember);
     } else if (block.HasCaught()) {
         exceptionState.rethrowV8Exception(block.Exception());
         return;
     }
 
-    RawPtr<TestInterfaceGarbageCollected> testInterfaceGarbageCollectedOrNullMember;
-    if (DictionaryHelper::getWithUndefinedOrNullCheck(dictionary, "testInterfaceGarbageCollectedOrNullMember", testInterfaceGarbageCollectedOrNullMember)) {
+    v8::Local<v8::Value> testInterfaceGarbageCollectedOrNullMemberValue = v8Object->Get(v8String(isolate, "testInterfaceGarbageCollectedOrNullMember"));
+    if (!testInterfaceGarbageCollectedOrNullMemberValue.IsEmpty() && !isUndefinedOrNull(testInterfaceGarbageCollectedOrNullMemberValue)) {
+        TestInterfaceGarbageCollected* testInterfaceGarbageCollectedOrNullMember = V8TestInterfaceGarbageCollected::toImplWithTypeCheck(isolate, testInterfaceGarbageCollectedOrNullMemberValue);
         impl.setTestInterfaceGarbageCollectedOrNullMember(testInterfaceGarbageCollectedOrNullMember);
     } else if (block.HasCaught()) {
         exceptionState.rethrowV8Exception(block.Exception());
         return;
     }
 
-    RefPtr<TestInterfaceImplementation> testInterfaceMember;
-    if (DictionaryHelper::getWithUndefinedOrNullCheck(dictionary, "testInterfaceMember", testInterfaceMember)) {
+    v8::Local<v8::Value> testInterfaceMemberValue = v8Object->Get(v8String(isolate, "testInterfaceMember"));
+    if (!testInterfaceMemberValue.IsEmpty() && !isUndefinedOrNull(testInterfaceMemberValue)) {
+        TestInterfaceImplementation* testInterfaceMember = V8TestInterface::toImplWithTypeCheck(isolate, testInterfaceMemberValue);
         impl.setTestInterfaceMember(testInterfaceMember);
     } else if (block.HasCaught()) {
         exceptionState.rethrowV8Exception(block.Exception());
         return;
     }
 
-    RefPtr<TestInterfaceImplementation> testInterfaceOrNullMember;
-    if (DictionaryHelper::getWithUndefinedOrNullCheck(dictionary, "testInterfaceOrNullMember", testInterfaceOrNullMember)) {
+    v8::Local<v8::Value> testInterfaceOrNullMemberValue = v8Object->Get(v8String(isolate, "testInterfaceOrNullMember"));
+    if (!testInterfaceOrNullMemberValue.IsEmpty() && !isUndefinedOrNull(testInterfaceOrNullMemberValue)) {
+        TestInterfaceImplementation* testInterfaceOrNullMember = V8TestInterface::toImplWithTypeCheck(isolate, testInterfaceOrNullMemberValue);
         impl.setTestInterfaceOrNullMember(testInterfaceOrNullMember);
     } else if (block.HasCaught()) {
         exceptionState.rethrowV8Exception(block.Exception());
         return;
     }
 
-    RefPtrWillBeRawPtr<TestInterfaceWillBeGarbageCollected> testInterfaceWillBeGarbageCollectedMember;
-    if (DictionaryHelper::getWithUndefinedOrNullCheck(dictionary, "testInterfaceWillBeGarbageCollectedMember", testInterfaceWillBeGarbageCollectedMember)) {
+    v8::Local<v8::Value> testInterfaceWillBeGarbageCollectedMemberValue = v8Object->Get(v8String(isolate, "testInterfaceWillBeGarbageCollectedMember"));
+    if (!testInterfaceWillBeGarbageCollectedMemberValue.IsEmpty() && !isUndefinedOrNull(testInterfaceWillBeGarbageCollectedMemberValue)) {
+        TestInterfaceWillBeGarbageCollected* testInterfaceWillBeGarbageCollectedMember = V8TestInterfaceWillBeGarbageCollected::toImplWithTypeCheck(isolate, testInterfaceWillBeGarbageCollectedMemberValue);
         impl.setTestInterfaceWillBeGarbageCollectedMember(testInterfaceWillBeGarbageCollectedMember);
     } else if (block.HasCaught()) {
         exceptionState.rethrowV8Exception(block.Exception());
         return;
     }
 
-    RefPtrWillBeRawPtr<TestInterfaceWillBeGarbageCollected> testInterfaceWillBeGarbageCollectedOrNullMember;
-    if (DictionaryHelper::getWithUndefinedOrNullCheck(dictionary, "testInterfaceWillBeGarbageCollectedOrNullMember", testInterfaceWillBeGarbageCollectedOrNullMember)) {
+    v8::Local<v8::Value> testInterfaceWillBeGarbageCollectedOrNullMemberValue = v8Object->Get(v8String(isolate, "testInterfaceWillBeGarbageCollectedOrNullMember"));
+    if (!testInterfaceWillBeGarbageCollectedOrNullMemberValue.IsEmpty() && !isUndefinedOrNull(testInterfaceWillBeGarbageCollectedOrNullMemberValue)) {
+        TestInterfaceWillBeGarbageCollected* testInterfaceWillBeGarbageCollectedOrNullMember = V8TestInterfaceWillBeGarbageCollected::toImplWithTypeCheck(isolate, testInterfaceWillBeGarbageCollectedOrNullMemberValue);
         impl.setTestInterfaceWillBeGarbageCollectedOrNullMember(testInterfaceWillBeGarbageCollectedOrNullMember);
     } else if (block.HasCaught()) {
         exceptionState.rethrowV8Exception(block.Exception());
@@ -191,92 +225,118 @@ void V8TestDictionary::toImpl(v8::Isolate* isolate, v8::Handle<v8::Value> v8Valu
 
 }
 
-v8::Handle<v8::Value> toV8(TestDictionary& impl, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
+v8::Handle<v8::Value> toV8(const TestDictionary& impl, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
 {
     v8::Handle<v8::Object> v8Object = v8::Object::New(isolate);
+    toV8TestDictionary(impl, v8Object, creationContext, isolate);
+    return v8Object;
+}
+
+template<>
+v8::Handle<v8::Value> toV8NoInline(const TestDictionary* impl, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
+{
+    return toV8(*impl, creationContext, isolate);
+}
+
+void toV8TestDictionary(const TestDictionary& impl, v8::Handle<v8::Object> dictionary, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
+{
     if (impl.hasBooleanMember()) {
-        v8Object->Set(v8String(isolate, "booleanMember"), v8Boolean(impl.booleanMember(), isolate));
+        dictionary->Set(v8String(isolate, "booleanMember"), v8Boolean(impl.booleanMember(), isolate));
     }
 
     if (impl.hasCreateMember()) {
-        v8Object->Set(v8String(isolate, "create"), v8Boolean(impl.createMember(), isolate));
+        dictionary->Set(v8String(isolate, "create"), v8Boolean(impl.createMember(), isolate));
     }
 
     if (impl.hasDoubleOrNullMember()) {
-        v8Object->Set(v8String(isolate, "doubleOrNullMember"), v8::Number::New(isolate, impl.doubleOrNullMember()));
+        dictionary->Set(v8String(isolate, "doubleOrNullMember"), v8::Number::New(isolate, impl.doubleOrNullMember()));
     } else {
-        v8Object->Set(v8String(isolate, "doubleOrNullMember"), v8::Null(isolate));
+        dictionary->Set(v8String(isolate, "doubleOrNullMember"), v8::Null(isolate));
+    }
+
+    if (impl.hasDoubleOrStringMember()) {
+        dictionary->Set(v8String(isolate, "doubleOrStringMember"), toV8(impl.doubleOrStringMember(), creationContext, isolate));
     }
 
     if (impl.hasElementOrNullMember()) {
-        v8Object->Set(v8String(isolate, "elementOrNullMember"), toV8(impl.elementOrNullMember(), creationContext, isolate));
+        dictionary->Set(v8String(isolate, "elementOrNullMember"), toV8(impl.elementOrNullMember(), creationContext, isolate));
     }
 
     if (impl.hasEnumMember()) {
-        v8Object->Set(v8String(isolate, "enumMember"), v8String(isolate, impl.enumMember()));
+        dictionary->Set(v8String(isolate, "enumMember"), v8String(isolate, impl.enumMember()));
     } else {
-        v8Object->Set(v8String(isolate, "enumMember"), v8String(isolate, String("foo")));
+        dictionary->Set(v8String(isolate, "enumMember"), v8String(isolate, String("foo")));
+    }
+
+    if (impl.hasInternalDictionarySequenceMember()) {
+        dictionary->Set(v8String(isolate, "internalDictionarySequenceMember"), v8Array(impl.internalDictionarySequenceMember(), creationContext, isolate));
     }
 
     if (impl.hasLongMember()) {
-        v8Object->Set(v8String(isolate, "longMember"), v8::Integer::New(isolate, impl.longMember()));
+        dictionary->Set(v8String(isolate, "longMember"), v8::Integer::New(isolate, impl.longMember()));
     } else {
-        v8Object->Set(v8String(isolate, "longMember"), v8::Integer::New(isolate, 1));
+        dictionary->Set(v8String(isolate, "longMember"), v8::Integer::New(isolate, 1));
     }
 
     if (impl.hasObjectMember()) {
         ASSERT(impl.objectMember().isObject());
-        v8Object->Set(v8String(isolate, "objectMember"), impl.objectMember().v8Value());
+        dictionary->Set(v8String(isolate, "objectMember"), impl.objectMember().v8Value());
     }
 
     if (impl.hasObjectOrNullMember()) {
         ASSERT(impl.objectOrNullMember().isObject());
-        v8Object->Set(v8String(isolate, "objectOrNullMember"), impl.objectOrNullMember().v8Value());
+        dictionary->Set(v8String(isolate, "objectOrNullMember"), impl.objectOrNullMember().v8Value());
     }
 
     if (impl.hasStringArrayMember()) {
-        v8Object->Set(v8String(isolate, "stringArrayMember"), v8Array(impl.stringArrayMember(), creationContext, isolate));
+        dictionary->Set(v8String(isolate, "stringArrayMember"), v8Array(impl.stringArrayMember(), creationContext, isolate));
     }
 
     if (impl.hasStringMember()) {
-        v8Object->Set(v8String(isolate, "stringMember"), v8String(isolate, impl.stringMember()));
+        dictionary->Set(v8String(isolate, "stringMember"), v8String(isolate, impl.stringMember()));
     }
 
     if (impl.hasStringOrNullMember()) {
-        v8Object->Set(v8String(isolate, "stringOrNullMember"), v8String(isolate, impl.stringOrNullMember()));
+        dictionary->Set(v8String(isolate, "stringOrNullMember"), v8String(isolate, impl.stringOrNullMember()));
     } else {
-        v8Object->Set(v8String(isolate, "stringOrNullMember"), v8String(isolate, String("default string value")));
+        dictionary->Set(v8String(isolate, "stringOrNullMember"), v8String(isolate, String("default string value")));
     }
 
     if (impl.hasStringSequenceMember()) {
-        v8Object->Set(v8String(isolate, "stringSequenceMember"), v8Array(impl.stringSequenceMember(), creationContext, isolate));
+        dictionary->Set(v8String(isolate, "stringSequenceMember"), v8Array(impl.stringSequenceMember(), creationContext, isolate));
     }
 
     if (impl.hasTestInterfaceGarbageCollectedMember()) {
-        v8Object->Set(v8String(isolate, "testInterfaceGarbageCollectedMember"), toV8(impl.testInterfaceGarbageCollectedMember(), creationContext, isolate));
+        dictionary->Set(v8String(isolate, "testInterfaceGarbageCollectedMember"), toV8(impl.testInterfaceGarbageCollectedMember(), creationContext, isolate));
     }
 
     if (impl.hasTestInterfaceGarbageCollectedOrNullMember()) {
-        v8Object->Set(v8String(isolate, "testInterfaceGarbageCollectedOrNullMember"), toV8(impl.testInterfaceGarbageCollectedOrNullMember(), creationContext, isolate));
+        dictionary->Set(v8String(isolate, "testInterfaceGarbageCollectedOrNullMember"), toV8(impl.testInterfaceGarbageCollectedOrNullMember(), creationContext, isolate));
     }
 
     if (impl.hasTestInterfaceMember()) {
-        v8Object->Set(v8String(isolate, "testInterfaceMember"), toV8(impl.testInterfaceMember(), creationContext, isolate));
+        dictionary->Set(v8String(isolate, "testInterfaceMember"), toV8(impl.testInterfaceMember(), creationContext, isolate));
     }
 
     if (impl.hasTestInterfaceOrNullMember()) {
-        v8Object->Set(v8String(isolate, "testInterfaceOrNullMember"), toV8(impl.testInterfaceOrNullMember(), creationContext, isolate));
+        dictionary->Set(v8String(isolate, "testInterfaceOrNullMember"), toV8(impl.testInterfaceOrNullMember(), creationContext, isolate));
     }
 
     if (impl.hasTestInterfaceWillBeGarbageCollectedMember()) {
-        v8Object->Set(v8String(isolate, "testInterfaceWillBeGarbageCollectedMember"), toV8(impl.testInterfaceWillBeGarbageCollectedMember(), creationContext, isolate));
+        dictionary->Set(v8String(isolate, "testInterfaceWillBeGarbageCollectedMember"), toV8(impl.testInterfaceWillBeGarbageCollectedMember(), creationContext, isolate));
     }
 
     if (impl.hasTestInterfaceWillBeGarbageCollectedOrNullMember()) {
-        v8Object->Set(v8String(isolate, "testInterfaceWillBeGarbageCollectedOrNullMember"), toV8(impl.testInterfaceWillBeGarbageCollectedOrNullMember(), creationContext, isolate));
+        dictionary->Set(v8String(isolate, "testInterfaceWillBeGarbageCollectedOrNullMember"), toV8(impl.testInterfaceWillBeGarbageCollectedOrNullMember(), creationContext, isolate));
     }
 
-    return v8Object;
+}
+
+TestDictionary NativeValueTraits<TestDictionary>::nativeValue(const v8::Handle<v8::Value>& value, v8::Isolate* isolate, ExceptionState& exceptionState)
+{
+    TestDictionary impl;
+    V8TestDictionary::toImpl(isolate, value, impl, exceptionState);
+    return impl;
 }
 
 } // namespace blink

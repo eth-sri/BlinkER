@@ -45,7 +45,7 @@ namespace blink {
 AcceleratedImageBufferSurface::AcceleratedImageBufferSurface(const IntSize& size, OpacityMode opacityMode, int msaaSampleCount)
     : ImageBufferSurface(size, opacityMode)
 {
-    m_contextProvider = adoptPtr(blink::Platform::current()->createSharedOffscreenGraphicsContext3DProvider());
+    m_contextProvider = adoptPtr(Platform::current()->createSharedOffscreenGraphicsContext3DProvider());
     if (!m_contextProvider)
         return;
     GrContext* grContext = m_contextProvider->grContext();
@@ -54,7 +54,9 @@ AcceleratedImageBufferSurface::AcceleratedImageBufferSurface(const IntSize& size
 
     SkAlphaType alphaType = (Opaque == opacityMode) ? kOpaque_SkAlphaType : kPremul_SkAlphaType;
     SkImageInfo info = SkImageInfo::MakeN32(size.width(), size.height(), alphaType);
-    m_surface = adoptPtr(SkSurface::NewScratchRenderTarget(grContext, info, msaaSampleCount));
+    SkSurfaceProps disableLCDProps(0, kUnknown_SkPixelGeometry);
+    m_surface = adoptPtr(SkSurface::NewScratchRenderTarget(grContext, info, msaaSampleCount,
+        Opaque == opacityMode ? 0 : &disableLCDProps));
     if (!m_surface.get())
         return;
     clear();

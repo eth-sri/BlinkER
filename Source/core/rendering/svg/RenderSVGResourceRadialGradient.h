@@ -35,8 +35,8 @@ public:
 
     virtual const char* renderName() const override { return "RenderSVGResourceRadialGradient"; }
 
+    static const RenderSVGResourceType s_resourceType = RadialGradientResourceType;
     virtual RenderSVGResourceType resourceType() const override { return s_resourceType; }
-    static const RenderSVGResourceType s_resourceType;
 
     virtual SVGUnitTypes::SVGUnitType gradientUnits() const override { return m_attributes.gradientUnits(); }
     virtual void calculateGradientTransform(AffineTransform& transform) override { transform = m_attributes.gradientTransform(); }
@@ -47,6 +47,8 @@ public:
     FloatPoint focalPoint(const RadialGradientAttributes&) const;
     float radius(const RadialGradientAttributes&) const;
     float focalRadius(const RadialGradientAttributes&) const;
+
+    virtual void trace(Visitor*) override;
 
 private:
     RadialGradientAttributes m_attributes;

@@ -179,6 +179,72 @@ function DOMFileSystem() {}
  */
 DOMFileSystem.prototype.root = null;
 
+var DevToolsHost = {};
+
+/** @typedef {{type:string, id:(number|undefined),
+              label:(string|undefined), enabled:(boolean|undefined), checked:(boolean|undefined),
+              subItems:(!Array.<!DevToolsHost.ContextMenuDescriptor>|undefined)}} */
+DevToolsHost.ContextMenuDescriptor;
+
+/**
+ * @return {number}
+ */
+DevToolsHost.zoomFactor = function() { }
+
+/**
+ * @param {string} origin
+ * @param {string} script
+ */
+DevToolsHost.setInjectedScriptForOrigin = function(origin, script) { }
+
+/**
+ * @param {string} text
+ */
+DevToolsHost.copyText = function(text) { }
+
+/**
+ * @return {string}
+ */
+DevToolsHost.platform = function() { }
+
+/**
+ * @param {number} x
+ * @param {number} y
+ * @param {!Array.<!DevToolsHost.ContextMenuDescriptor>} items
+ * @param {!Document} document
+ */
+DevToolsHost.showContextMenuAtPoint = function(x, y, items, document) { }
+
+/**
+ * @param {string} message
+ */
+DevToolsHost.sendMessageToBackend = function(message) { }
+
+/**
+ * @param {string} message
+ */
+DevToolsHost.sendMessageToEmbedder = function(message) { }
+
+/**
+ * @return {string}
+ */
+DevToolsHost.getSelectionBackgroundColor = function() { }
+
+/**
+ * @return {string}
+ */
+DevToolsHost.getSelectionForegroundColor = function() { }
+
+/**
+ * @return {boolean}
+ */
+DevToolsHost.isUnderTest = function() { }
+
+/**
+ * @return {boolean}
+ */
+DevToolsHost.isHostedMode = function() { }
+
 // FIXME: remove everything below.
 var FormatterWorker = {}
 var WebInspector = {}
@@ -227,6 +293,12 @@ function ExtensionReloadOptions() {
     this.preprocessingScript = "";
     this.userAgent = "";
 }
+
+var Adb = {};
+/** @typedef {{id: string, adbBrowserChromeVersion: string, compatibleVersion: boolean, adbBrowserName: string, source: string, adbBrowserVersion: string}} */
+Adb.Browser;
+/** @typedef {{id: string, adbModel: string, adbSerial: string, browsers: !Array.<!Adb.Browser>, adbPortStatus: !Array.<number>, adbConnected: boolean}} */
+Adb.Device;
 
 /* jsdifflib API */
 var difflib = {};
@@ -462,6 +534,7 @@ function Symbol(description) {}
 
 /**
  * @interface
+ * @extends $jscomp.Iterable.<T>
  * @template T
  */
 var Iterator = function() { }
@@ -470,14 +543,20 @@ Iterator.prototype = {
     /**
      * @return {{done: boolean, value: (T|undefined)}}
      */
-    next: function() { }
+    next: function() { },
+
+    // FIXME: This should be removed once transpilation is not required for closure compiler ES6
+    $$iterator: function() { }
 }
 
+// FIXME: $jscomp.Iterable hack below should be removed once transpilation is not required for closure compiler ES6
 /**
  * @constructor
+ * @implements $jscomp.Iterable.<!Array.<K|V>>
+ * @param {!Array.<!Array.<K|V>>|!Iterator.<!Array.<K|V>>=} iterable
  * @template K, V
  */
-var Map = function() { }
+var Map = function(iterable) { }
 
 Map.prototype = {
     /**
@@ -503,6 +582,11 @@ Map.prototype = {
     values: function() { },
 
     /**
+     * @return {!Array.<!Array.<K|V>>}
+     */
+    entries: function() { },
+
+    /**
      * @param {K} key
      * @return {V}
      */
@@ -519,7 +603,10 @@ Map.prototype = {
     /**
      * @return {number}
      */
-    get size() { }
+    get size() { },
+
+    // FIXME: This should be removed once transpilation is not required for closure compiler ES6
+    $$iterator: function() { }
 }
 
 // FIXME: $jscomp.Iterable hack below should be removed once transpilation is not required for closure compiler ES6

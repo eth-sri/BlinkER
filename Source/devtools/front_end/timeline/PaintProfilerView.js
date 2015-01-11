@@ -41,7 +41,8 @@ WebInspector.PaintProfilerView = function(showImageCallback)
     this._progressBanner = this.element.createChild("div", "fill progress-banner hidden");
     this._progressBanner.textContent = WebInspector.UIString("Profiling\u2026");
     this._pieChart = new WebInspector.PieChart(55, this._formatPieChartTime.bind(this), true);
-    this.element.createChild("div", "paint-profiler-pie-chart").appendChild(this._pieChart.element);
+    this._pieChart.element.classList.add("paint-profiler-pie-chart");
+    this.element.appendChild(this._pieChart.element);
 
     this._showImageCallback = showImageCallback;
 
@@ -81,6 +82,7 @@ WebInspector.PaintProfilerView.prototype = {
 
         if (!this._snapshot) {
             this._update();
+            this._pieChart.setTotal(0);
             return;
         }
         this._progressBanner.classList.remove("hidden");
@@ -95,6 +97,7 @@ WebInspector.PaintProfilerView.prototype = {
             this._progressBanner.classList.add("hidden");
             this._profiles = profiles;
             this._update();
+            this._updatePieChart();
         }
     },
 
@@ -173,8 +176,14 @@ WebInspector.PaintProfilerView.prototype = {
     _onWindowChanged: function()
     {
         this.dispatchEventToListeners(WebInspector.PaintProfilerView.Events.WindowChanged);
+        this._updatePieChart();
+        if (this._updateImageTimer)
+            return;
+        this._updateImageTimer = setTimeout(this._updateImage.bind(this), 100);
+    },
 
-        // Update pie chart
+    _updatePieChart: function()
+    {
         var window = this.windowBoundaries();
         var totalTime = 0;
         var timeByCategory = {};
@@ -191,10 +200,6 @@ WebInspector.PaintProfilerView.prototype = {
         this._pieChart.setTotal(totalTime / this._profiles.length);
         for (var color in timeByCategory)
           this._pieChart.addSlice(timeByCategory[color] / this._profiles.length, color);
-
-        if (this._updateImageTimer)
-            return;
-        this._updateImageTimer = setTimeout(this._updateImage.bind(this), 100);
     },
 
     /**

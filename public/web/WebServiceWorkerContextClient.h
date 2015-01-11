@@ -94,6 +94,10 @@ public:
     // This is called on the main thread.
     virtual void workerContextFailedToStart() { }
 
+    // Called when the worker script is evaluated. |success| is true if the
+    // evaluation completed with no uncaught exception.
+    virtual void didEvaluateWorkerScript(bool success) { }
+
     // Called when the WorkerGlobalScope had an error or an exception.
     virtual void reportException(const WebString& errorMessage, int lineNumber, int columnNumber, const WebString& sourceURL) { }
 
@@ -107,16 +111,26 @@ public:
     // ServiceWorker specific method.
     virtual void didHandleActivateEvent(int eventID, WebServiceWorkerEventResult result) { }
 
-    // ServiceWorker specific method. Called after InstallEvent (dispatched
-    // via WebServiceWorkerContextProxy) is handled by the ServiceWorker's
-    // script context.
-    virtual void didHandleInstallEvent(int installEventID, WebServiceWorkerEventResult result) { }
-
     // ServiceWorker specific methods. Called after FetchEvent is handled by the
     // ServiceWorker's script context. When no response is provided, the browser
     // should fallback to native fetch.
     virtual void didHandleFetchEvent(int fetchEventID) { }
     virtual void didHandleFetchEvent(int fetchEventID, const WebServiceWorkerResponse& response) { }
+
+    // ServiceWorker specific method. Called after InstallEvent (dispatched
+    // via WebServiceWorkerContextProxy) is handled by the ServiceWorker's
+    // script context.
+    virtual void didHandleInstallEvent(int installEventID, WebServiceWorkerEventResult result) { }
+
+    // ServiceWorker specific method. Called after NotificationClickEvent
+    // (dispatched via WebServiceWorkerContextProxy) is handled by the
+    // ServiceWorker's script context.
+    virtual void didHandleNotificationClickEvent(int eventID, WebServiceWorkerEventResult result) { }
+
+    // ServiceWorker specific method. Called after PushEvent (dispatched via
+    // WebServiceWorkerContextProxy) is handled by the ServiceWorker's script
+    // context.
+    virtual void didHandlePushEvent(int pushEventID, WebServiceWorkerEventResult result) { }
 
     // ServiceWorker specific method. Called after SyncEvent (dispatched via
     // WebServiceWorkerContextProxy) is handled by the ServiceWorker's script

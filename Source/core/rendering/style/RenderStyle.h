@@ -229,8 +229,6 @@ protected:
                 && explicitInheritance == other.explicitInheritance
                 && unique == other.unique
                 && emptyState == other.emptyState
-                && firstChildState == other.firstChildState
-                && lastChildState == other.lastChildState
                 && isLink == other.isLink;
         }
 
@@ -263,8 +261,6 @@ protected:
         unsigned unique : 1; // Style can not be shared.
 
         unsigned emptyState : 1;
-        unsigned firstChildState : 1;
-        unsigned lastChildState : 1;
 
         unsigned affectedByFocus : 1;
         unsigned affectedByHover : 1;
@@ -317,8 +313,6 @@ protected:
         noninherited_flags.explicitInheritance = false;
         noninherited_flags.unique = false;
         noninherited_flags.emptyState = false;
-        noninherited_flags.firstChildState = false;
-        noninherited_flags.lastChildState = false;
         noninherited_flags.hasViewportUnits = false;
         noninherited_flags.affectedByFocus = false;
         noninherited_flags.affectedByHover = false;
@@ -345,7 +339,8 @@ public:
     // Computes how the style change should be propagated down the tree.
     static StyleRecalcChange stylePropagationDiff(const RenderStyle* oldStyle, const RenderStyle* newStyle);
 
-    static ItemPosition resolveAlignment(const RenderStyle* parentStyle, const RenderStyle* childStyle);
+    static ItemPosition resolveAlignment(const RenderStyle* parentStyle, const RenderStyle* childStyle, ItemPosition resolvedAutoPositionForRenderer);
+    static ItemPosition resolveJustification(const RenderStyle* parentStyle, const RenderStyle* childStyle, ItemPosition resolvedAutoPositionForRenderer);
 
     StyleDifference visualInvalidationDiff(const RenderStyle&) const;
 
@@ -932,7 +927,7 @@ public:
     WritingMode writingMode() const { return static_cast<WritingMode>(inherited_flags.m_writingMode); }
     bool isHorizontalWritingMode() const { return blink::isHorizontalWritingMode(writingMode()); }
     bool isFlippedLinesWritingMode() const { return blink::isFlippedLinesWritingMode(writingMode()); }
-    bool slowIsFlippedBlocksWritingMode() const { return blink::isFlippedBlocksWritingMode(writingMode()); }
+    bool isFlippedBlocksWritingMode() const { return blink::isFlippedBlocksWritingMode(writingMode()); }
 
     EImageRendering imageRendering() const { return static_cast<EImageRendering>(rareInheritedData->m_imageRendering); }
 
@@ -942,20 +937,20 @@ public:
     const FilterOperations& filter() const { return rareNonInheritedData->m_filter->m_operations; }
     bool hasFilter() const { return !rareNonInheritedData->m_filter->m_operations.operations().isEmpty(); }
 
-    WebBlendMode blendMode() const;
-    void setBlendMode(WebBlendMode v);
-    bool hasBlendMode() const;
+    WebBlendMode blendMode() const { return static_cast<WebBlendMode>(rareNonInheritedData->m_effectiveBlendMode); }
+    void setBlendMode(WebBlendMode v) { rareNonInheritedData.access()->m_effectiveBlendMode = v; }
+    bool hasBlendMode() const { return blendMode() != WebBlendModeNormal; }
 
-    EIsolation isolation() const;
-    void setIsolation(EIsolation v);
-    bool hasIsolation() const;
+    EIsolation isolation() const { return static_cast<EIsolation>(rareNonInheritedData->m_isolation); }
+    void setIsolation(EIsolation v) { rareNonInheritedData.access()->m_isolation = v; }
+    bool hasIsolation() const { return isolation() != IsolationAuto; }
 
     bool shouldPlaceBlockDirectionScrollbarOnLogicalLeft() const { return !isLeftToRightDirection() && isHorizontalWritingMode(); }
 
     TouchAction touchAction() const { return static_cast<TouchAction>(rareNonInheritedData->m_touchAction); }
-    TouchActionDelay touchActionDelay() const { return static_cast<TouchActionDelay>(rareInheritedData->m_touchActionDelay); }
 
     ScrollBehavior scrollBehavior() const { return static_cast<ScrollBehavior>(rareNonInheritedData->m_scrollBehavior); }
+    ScrollBlocksOn scrollBlocksOn() const { return static_cast<ScrollBlocksOn>(rareNonInheritedData->m_scrollBlocksOn); }
 
     const Vector<CSSPropertyID>& willChangeProperties() const { return rareNonInheritedData->m_willChange->m_properties; }
     bool willChangeContents() const { return rareNonInheritedData->m_willChange->m_contents; }
@@ -1107,16 +1102,8 @@ public:
     void setTableLayout(ETableLayout v) { noninherited_flags.tableLayout = v; }
 
     bool setFontDescription(const FontDescription&);
-    // Only used for blending font sizes when animating and for text autosizing.
-    void setFontSize(float);
-    void setFontStretch(FontStretch);
-    void setFontWeight(FontWeight);
 
-    void setTextAutosizingMultiplier(float v)
-    {
-        SET_VAR(inherited, textAutosizingMultiplier, v);
-        setFontSize(fontDescription().specifiedSize());
-    }
+    void setTextAutosizingMultiplier(float);
 
     void setColor(const Color&);
     void setTextIndent(const Length& v) { SET_VAR(rareInheritedData, indent, v); }
@@ -1135,6 +1122,7 @@ public:
     void setLineHeight(const Length& specifiedLineHeight);
     bool setZoom(float);
     bool setEffectiveZoom(float);
+    void clearMultiCol();
 
     void setImageRendering(EImageRendering v) { SET_VAR(rareInheritedData, m_imageRendering, v); }
 
@@ -1359,16 +1347,6 @@ public:
     // Apple-specific property setters
     void setPointerEvents(EPointerEvents p) { inherited_flags._pointerEvents = p; }
 
-    void clearAnimations()
-    {
-        rareNonInheritedData.access()->m_animations.clear();
-    }
-
-    void clearTransitions()
-    {
-        rareNonInheritedData.access()->m_transitions.clear();
-    }
-
     void setTransformStyle3D(ETransformStyle3D b) { SET_VAR(rareNonInheritedData, m_transformStyle3D, b); }
     void setBackfaceVisibility(EBackfaceVisibility b) { SET_VAR(rareNonInheritedData, m_backfaceVisibility, b); }
     void setPerspective(float p) { SET_VAR(rareNonInheritedData, m_perspective, p); }
@@ -1392,9 +1370,9 @@ public:
     void setTapHighlightColor(const Color& c) { SET_VAR(rareInheritedData, tapHighlightColor, c); }
     void setTextSecurity(ETextSecurity aTextSecurity) { SET_VAR(rareInheritedData, textSecurity, aTextSecurity); }
     void setTouchAction(TouchAction t) { SET_VAR(rareNonInheritedData, m_touchAction, t); }
-    void setTouchActionDelay(TouchActionDelay t) { SET_VAR(rareInheritedData, m_touchActionDelay, t); }
 
     void setScrollBehavior(ScrollBehavior b) { SET_VAR(rareNonInheritedData, m_scrollBehavior, b); }
+    void setScrollBlocksOn(ScrollBlocksOn b) { SET_VAR(rareNonInheritedData, m_scrollBlocksOn, b); }
 
     void setWillChangeProperties(const Vector<CSSPropertyID>& properties) { SET_VAR(rareNonInheritedData.access()->m_willChange, m_properties, properties); }
     void setWillChangeContents(bool b) { SET_VAR(rareNonInheritedData.access()->m_willChange, m_contents, b); }
@@ -1417,11 +1395,11 @@ public:
     float strokeOpacity() const { return svgStyle().strokeOpacity(); }
     void setStrokeOpacity(float f) { accessSVGStyle().setStrokeOpacity(f); }
     SVGLength* strokeWidth() const { return svgStyle().strokeWidth(); }
-    void setStrokeWidth(PassRefPtr<SVGLength> w) { accessSVGStyle().setStrokeWidth(w); }
+    void setStrokeWidth(PassRefPtrWillBeRawPtr<SVGLength> w) { accessSVGStyle().setStrokeWidth(w); }
     SVGLengthList* strokeDashArray() const { return svgStyle().strokeDashArray(); }
-    void setStrokeDashArray(PassRefPtr<SVGLengthList> array) { accessSVGStyle().setStrokeDashArray(array); }
+    void setStrokeDashArray(PassRefPtrWillBeRawPtr<SVGLengthList> array) { accessSVGStyle().setStrokeDashArray(array); }
     SVGLength* strokeDashOffset() const { return svgStyle().strokeDashOffset(); }
-    void setStrokeDashOffset(PassRefPtr<SVGLength> d) { accessSVGStyle().setStrokeDashOffset(d); }
+    void setStrokeDashOffset(PassRefPtrWillBeRawPtr<SVGLength> d) { accessSVGStyle().setStrokeDashOffset(d); }
     float strokeMiterLimit() const { return svgStyle().strokeMiterLimit(); }
     void setStrokeMiterLimit(float f) { accessSVGStyle().setStrokeMiterLimit(f); }
 
@@ -1436,7 +1414,7 @@ public:
     void setLightingColor(const Color& c) { accessSVGStyle().setLightingColor(c); }
 
     SVGLength* baselineShiftValue() const { return svgStyle().baselineShiftValue(); }
-    void setBaselineShiftValue(PassRefPtr<SVGLength> s) { accessSVGStyle().setBaselineShiftValue(s); }
+    void setBaselineShiftValue(PassRefPtrWillBeRawPtr<SVGLength> s) { accessSVGStyle().setBaselineShiftValue(s); }
 
     void setShapeOutside(PassRefPtr<ShapeValue> value)
     {
@@ -1514,13 +1492,7 @@ public:
 
     bool emptyState() const { return noninherited_flags.emptyState; }
     void setEmptyState(bool b) { setUnique(); noninherited_flags.emptyState = b; }
-    bool firstChildState() const { return noninherited_flags.firstChildState; }
-    void setFirstChildState() { setUnique(); noninherited_flags.firstChildState = true; }
-    bool lastChildState() const { return noninherited_flags.lastChildState; }
-    void setLastChildState() { setUnique(); noninherited_flags.lastChildState = true; }
 
-    StyleColor visitedDependentDecorationStyleColor() const;
-    Color visitedDependentDecorationColor() const;
     Color visitedDependentColor(int colorProperty) const;
 
     void setHasExplicitlyInheritedProperties() { noninherited_flags.explicitInheritance = true; }
@@ -1669,10 +1641,10 @@ public:
     static StyleImage* initialMaskBoxImageSource() { return 0; }
     static PrintColorAdjust initialPrintColorAdjust() { return PrintColorAdjustEconomy; }
     static TouchAction initialTouchAction() { return TouchActionAuto; }
-    static TouchActionDelay initialTouchActionDelay() { return TouchActionDelayScript; }
     static ShadowList* initialBoxShadow() { return 0; }
     static ShadowList* initialTextShadow() { return 0; }
-    static ScrollBehavior initialScrollBehavior() { return ScrollBehaviorInstant; }
+    static ScrollBehavior initialScrollBehavior() { return ScrollBehaviorAuto; }
+    static ScrollBlocksOn initialScrollBlocksOn() { return ScrollBlocksOnNone; }
 
     // The initial value is 'none' for grid tracks.
     static Vector<GridTrackSize> initialGridTemplateColumns() { return Vector<GridTrackSize>(); }
@@ -1710,7 +1682,11 @@ public:
     static LineClampValue initialLineClamp() { return LineClampValue(); }
     static ETextSecurity initialTextSecurity() { return TSNONE; }
     static Color initialTapHighlightColor();
+#if ENABLE(OILPAN)
+    static const FilterOperations& initialFilter();
+#else
     static const FilterOperations& initialFilter() { DEFINE_STATIC_LOCAL(FilterOperations, ops, ()); return ops; }
+#endif
     static WebBlendMode initialBlendMode() { return WebBlendModeNormal; }
     static EIsolation initialIsolation() { return IsolationAuto; }
 private:
@@ -1788,6 +1764,7 @@ private:
     StyleColor visitedLinkTextFillColor() const { return rareInheritedData->visitedLinkTextFillColor(); }
     StyleColor visitedLinkTextStrokeColor() const { return rareInheritedData->visitedLinkTextStrokeColor(); }
 
+    StyleColor decorationColorIncludingFallback(bool visitedLink) const;
     Color colorIncludingFallback(int colorProperty, bool visitedLink) const;
 
     Color stopColor() const { return svgStyle().stopColor(); }

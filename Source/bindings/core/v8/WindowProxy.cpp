@@ -235,9 +235,7 @@ bool WindowProxy::initialize()
         updateActivityLogger();
         SecurityOrigin* origin = m_world->isolatedWorldSecurityOrigin();
         setSecurityToken(origin);
-        if (origin && InspectorInstrumentation::hasFrontends()) {
-            InspectorInstrumentation::didCreateIsolatedContext(m_frame, m_scriptState.get(), origin);
-        }
+        InspectorInstrumentation::didCreateIsolatedContext(m_frame, m_scriptState.get(), origin);
     }
     m_frame->loader().client()->didCreateScriptContext(context, m_world->extensionGroup(), m_world->worldId());
     return true;
@@ -297,7 +295,7 @@ bool WindowProxy::installDOMWindow()
     if (windowWrapper.IsEmpty())
         return false;
 
-    V8DOMWrapper::setNativeInfo(v8::Handle<v8::Object>::Cast(windowWrapper->GetPrototype()), wrapperTypeInfo, window->toScriptWrappableBase());
+    V8DOMWrapper::setNativeInfo(v8::Handle<v8::Object>::Cast(windowWrapper->GetPrototype()), wrapperTypeInfo, window);
 
     // Install the windowWrapper as the prototype of the innerGlobalObject.
     // The full structure of the global object is as follows:
@@ -312,9 +310,9 @@ bool WindowProxy::installDOMWindow()
     //       outer, inner, and LocalDOMWindow instance all appear to be the same
     //       JavaScript object.
     v8::Handle<v8::Object> innerGlobalObject = toInnerGlobalObject(m_scriptState->context());
-    V8DOMWrapper::setNativeInfo(innerGlobalObject, wrapperTypeInfo, window->toScriptWrappableBase());
+    V8DOMWrapper::setNativeInfo(innerGlobalObject, wrapperTypeInfo, window);
     innerGlobalObject->SetPrototype(windowWrapper);
-    V8DOMWrapper::associateObjectWithWrapperNonTemplate(window, wrapperTypeInfo, windowWrapper, m_isolate);
+    V8DOMWrapper::associateObjectWithWrapper(m_isolate, window, wrapperTypeInfo, windowWrapper);
     wrapperTypeInfo->installConditionallyEnabledProperties(windowWrapper, m_isolate);
     return true;
 }

@@ -187,12 +187,11 @@ void HTMLObjectElement::parametersForPlugin(Vector<String>& paramNames, Vector<S
 
     // Turn the attributes of the <object> element into arrays, but don't override <param> values.
     AttributeCollection attributes = this->attributes();
-    AttributeCollection::iterator end = attributes.end();
-    for (AttributeCollection::iterator it = attributes.begin(); it != end; ++it) {
-        const AtomicString& name = it->name().localName();
+    for (const Attribute& attribute : attributes) {
+        const AtomicString& name = attribute.name().localName();
         if (!uniqueParamNames.contains(name.impl())) {
             paramNames.append(name.string());
-            paramValues.append(it->value().string());
+            paramValues.append(attribute.value().string());
         }
     }
 
@@ -438,7 +437,9 @@ bool HTMLObjectElement::appendFormData(FormDataList& encoding, bool)
     if (name().isEmpty())
         return false;
 
-    Widget* widget = pluginWidget();
+    // Widget is needed immediately to satisfy cases like
+    // LayoutTests/plugins/form-value.html.
+    Widget* widget = pluginWidgetForJSBindings();
     if (!widget || !widget->isPluginView())
         return false;
     String value;

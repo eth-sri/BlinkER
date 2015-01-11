@@ -41,7 +41,6 @@
 
 namespace blink {
 
-class KURL;
 class WebWaitableEvent;
 class WorkerGlobalScope;
 class WorkerInspectorController;
@@ -69,6 +68,7 @@ public:
     WebWaitableEvent* shutdownEvent() { return m_shutdownEvent.get(); }
 
     WebWaitableEvent* terminationEvent() { return m_terminationEvent.get(); }
+    void terminateAndWait();
     static void terminateAndWaitForAllWorkers();
 
     bool isCurrentThread() const;

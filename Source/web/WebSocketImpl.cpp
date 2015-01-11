@@ -31,16 +31,16 @@
 #include "config.h"
 #include "web/WebSocketImpl.h"
 
+#include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/Document.h"
 #include "core/frame/ConsoleTypes.h"
-#include "modules/websockets/NewWebSocketChannelImpl.h"
+#include "modules/websockets/DocumentWebSocketChannel.h"
 #include "modules/websockets/WebSocketChannel.h"
 #include "public/platform/WebArrayBuffer.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURL.h"
 #include "public/web/WebDocument.h"
 #include "web/WebSocketChannelClientProxy.h"
-#include "wtf/ArrayBuffer.h"
 #include "wtf/text/CString.h"
 #include "wtf/text/WTFString.h"
 
@@ -55,7 +55,7 @@ WebSocketImpl::WebSocketImpl(const WebDocument& document, WebSocketClient* clien
     , m_bufferedAmountAfterClose(0)
 {
     RefPtrWillBeRawPtr<Document> coreDocument = PassRefPtrWillBeRawPtr<Document>(document);
-    m_private = NewWebSocketChannelImpl::create(coreDocument.get(), m_channelProxy.get());
+    m_private = DocumentWebSocketChannel::create(coreDocument.get(), m_channelProxy.get());
 }
 
 WebSocketImpl::~WebSocketImpl()
@@ -121,7 +121,8 @@ bool WebSocketImpl::sendArrayBuffer(const WebArrayBuffer& webArrayBuffer)
     if (m_isClosingOrClosed)
         return true;
 
-    m_private->send(*PassRefPtr<ArrayBuffer>(webArrayBuffer), 0, webArrayBuffer.byteLength());
+    RefPtr<DOMArrayBuffer> arrayBuffer = DOMArrayBuffer::create(webArrayBuffer);
+    m_private->send(*arrayBuffer, 0, arrayBuffer->byteLength());
     return true;
 }
 

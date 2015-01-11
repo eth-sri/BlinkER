@@ -643,12 +643,6 @@ bool WebRemoteFrameImpl::isPrintScalingDisabledForPlugin(const WebNode&)
     return false;
 }
 
-int WebRemoteFrameImpl::getPrintCopiesForPlugin(const WebNode&)
-{
-    ASSERT_NOT_REACHED();
-    return 1;
-}
-
 bool WebRemoteFrameImpl::hasCustomPageSizeStyle(int pageIndex)
 {
     ASSERT_NOT_REACHED();
@@ -847,6 +841,12 @@ void WebRemoteFrameImpl::initializeFromFrame(WebLocalFrame* source) const
     client()->initializeChildFrame(
         localFrameImpl->frame()->view()->frameRect(),
         localFrameImpl->frame()->view()->visibleContentScaleFactor());
+}
+
+void WebRemoteFrameImpl::setReplicatedOrigin(const WebSecurityOrigin& origin) const
+{
+    ASSERT(frame());
+    frame()->securityContext()->setReplicatedOrigin(origin);
 }
 
 } // namespace blink

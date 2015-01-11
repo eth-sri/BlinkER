@@ -80,7 +80,8 @@ protected:
 
     virtual void imageChanged(WrappedImagePtr, const IntRect* = 0) override;
 
-    virtual void paint(PaintInfo&, const LayoutPoint&) override final;
+    virtual void paint(const PaintInfo&, const LayoutPoint&) override final;
+
     virtual void layout() override;
     virtual bool updateImageLoadingPriorities() override final;
 
@@ -91,10 +92,12 @@ private:
 
     virtual bool isImage() const override { return true; }
 
-    virtual void paintReplaced(PaintInfo&, const LayoutPoint&) override;
+    virtual void paintReplaced(const PaintInfo&, const LayoutPoint&) override;
 
     virtual bool foregroundIsKnownToBeOpaqueInRect(const LayoutRect& localRect, unsigned maxDepthToTest) const override final;
     virtual bool computeBackgroundIsKnownToBeObscured() override final;
+
+    virtual bool backgroundShouldAlwaysBeClipped() const override { return true; }
 
     virtual LayoutUnit minimumReplacedHeight() const override;
 

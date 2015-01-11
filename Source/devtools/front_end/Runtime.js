@@ -35,24 +35,6 @@ var _loadedScripts = {};
 
 /**
  * @param {string} url
- * @return {string}
- */
-function loadResource(url)
-{
-    var xhr = new XMLHttpRequest();
-    xhr.open("GET", url, false);
-    try {
-        xhr.send(null);
-    } catch (e) {
-        console.error(url + " -> " + new Error().stack);
-        throw e;
-    }
-    // xhr.status === 0 if loading from bundle.
-    return xhr.status < 400 ? xhr.responseText : "";
-}
-
-/**
- * @param {string} url
  * @return {!Promise.<string>}
  */
 function loadResourcePromise(url)
@@ -138,7 +120,7 @@ function loadScriptsPromise(scriptNames)
         if (_loadedScripts[sourceURL])
             continue;
         urls.push(sourceURL);
-        promises.push(loadResourcePromise(sourceURL).thenOrCatch(scriptSourceLoaded.bind(null, i)));
+        promises.push(loadResourcePromise(sourceURL).then(scriptSourceLoaded.bind(null, i), scriptSourceLoaded.bind(null, i, undefined)));
     }
     return Promise.all(promises).then(undefined);
 
@@ -210,7 +192,7 @@ function Runtime(descriptors, coreModuleNames)
     for (var i = 0; i < descriptors.length; ++i)
         this._registerModule(descriptors[i]);
     if (coreModuleNames)
-        this._loadAutoStartModules(coreModuleNames).done();
+        this._loadAutoStartModules(coreModuleNames).catch(Runtime._reportError);
 }
 
 /**
@@ -229,74 +211,6 @@ Runtime.cachedResources = { __proto__: null };
 Runtime.isReleaseMode = function()
 {
     return !!allDescriptors.length;
-}
-
-/**
- * @param {string} moduleName
- * @param {string} workerName
- * @return {!SharedWorker}
- */
-Runtime.startSharedWorker = function(moduleName, workerName)
-{
-    if (Runtime.isReleaseMode())
-        return new SharedWorker(moduleName + "_module.js", workerName);
-
-    var content = loadResource(moduleName + "/module.json");
-    if (!content)
-        throw new Error("Worker is not defined: " + moduleName + " " + new Error().stack);
-    var scripts = JSON.parse(content)["scripts"];
-    if (scripts.length !== 1)
-        throw Error("Runtime.startSharedWorker supports modules with only one script!");
-    return new SharedWorker(moduleName + "/" + scripts[0], workerName);
-}
-
-/**
- * @param {string} moduleName
- * @return {!Worker}
- */
-Runtime.startWorker = function(moduleName)
-{
-    if (Runtime.isReleaseMode())
-        return new Worker(moduleName + "_module.js");
-
-    var content = loadResource(moduleName + "/module.json");
-    if (!content)
-        throw new Error("Worker is not defined: " + moduleName + " " + new Error().stack);
-    var message = [];
-    var scripts = JSON.parse(content)["scripts"];
-    for (var i = 0; i < scripts.length; ++i) {
-        var url = self._importScriptPathPrefix + moduleName + "/" + scripts[i];
-        var parts = url.split("://");
-        url = parts.length === 1 ? url : parts[0] + "://" + normalizePath(parts[1]);
-        message.push({
-            source: loadResource(moduleName + "/" + scripts[i]),
-            url: url
-        });
-    }
-
-    /**
-     * @suppress {checkTypes}
-     */
-    var loader = function() {
-        self.onmessage = function(event) {
-            self.onmessage = null;
-            var scripts = event.data;
-            for (var i = 0; i < scripts.length; ++i) {
-                var source = scripts[i]["source"];
-                self.eval(source + "\n//# sourceURL=" + scripts[i]["url"]);
-            }
-        };
-    };
-
-    var blob = new Blob(["(" + loader.toString() + ")()\n//# sourceURL=" + moduleName], { type: "text/javascript" });
-    var workerURL = window.URL.createObjectURL(blob);
-    try {
-        var worker = new Worker(workerURL);
-        worker.postMessage(message);
-        return worker;
-    } finally {
-        window.URL.revokeObjectURL(workerURL);
-    }
 }
 
 /**
@@ -341,7 +255,7 @@ Runtime.startApplication = function(appName)
                 coreModuleNames.push(name);
         }
 
-        Promise.all(moduleJSONPromises).then(instantiateRuntime).done();
+        Promise.all(moduleJSONPromises).then(instantiateRuntime).catch(Runtime._reportError);
         /**
          * @param {!Array.<!Object>} moduleDescriptors
          */
@@ -364,6 +278,21 @@ Runtime.queryParam = function(name)
 }
 
 /**
+ * @param {!Array.<string>} banned
+ * @return {string}
+ */
+Runtime.constructQueryParams = function(banned)
+{
+    var params = [];
+    for (var key in Runtime._queryParamsObject) {
+        if (!key || banned.indexOf(key) !== -1)
+            continue;
+        params.push(key + "=" + Runtime._queryParamsObject[key]);
+    }
+    return params.length ? "?" + params.join("&") : "";
+}
+
+/**
  * @return {!Object}
  */
 Runtime._experimentsSetting = function()
@@ -374,6 +303,70 @@ Runtime._experimentsSetting = function()
         console.error("Failed to parse localStorage['experiments']");
         return {};
     }
+}
+
+/**
+ * @param {!Array.<!Promise.<T, !Error>>} promises
+ * @return {!Promise.<!Array.<T>>}
+ * @template T
+ */
+Runtime._some = function(promises)
+{
+    var all = [];
+    var wasRejected = [];
+    for (var i = 0; i < promises.length; ++i) {
+        // Workaround closure compiler bug.
+        var handlerFunction = /** @type {function()} */ (handler.bind(promises[i], i));
+        all.push(promises[i].catch(handlerFunction));
+    }
+
+    return Promise.all(all).then(filterOutFailuresResults);
+
+    /**
+     * @param {!Array.<T>} results
+     * @return {!Array.<T>}
+     * @template T
+     */
+    function filterOutFailuresResults(results)
+    {
+        var filtered = [];
+        for (var i = 0; i < results.length; ++i) {
+            if (!wasRejected[i])
+                filtered.push(results[i]);
+        }
+        return filtered;
+    }
+
+    /**
+     * @this {!Promise}
+     * @param {number} index
+     * @param {!Error} e
+     */
+    function handler(index, e)
+    {
+        wasRejected[index] = true;
+        console.error(e.stack);
+    }
+}
+
+Runtime._console = console;
+Runtime._originalAssert = console.assert;
+Runtime._assert = function(value, message)
+{
+    if (value)
+        return;
+    Runtime._originalAssert.call(Runtime._console, value, message);
+}
+
+/**
+ * @param {*} e
+ */
+Runtime._reportError = function(e)
+{
+    if (e instanceof Error)
+        console.error(e.stack);
+    else
+        console.error(e);
 }
 
 Runtime.prototype = {
@@ -537,7 +530,7 @@ Runtime.prototype = {
         var promises = [];
         for (var i = 0; i < extensions.length; ++i)
             promises.push(extensions[i].instancePromise());
-        return Promise.some(promises);
+        return Runtime._some(promises);
     },
 
     /**
@@ -661,6 +654,7 @@ Runtime.Module.prototype = {
             dependencyPromises.push(this._manager._modulesMap[dependencies[i]]._loadPromise());
 
         this._pendingLoadPromise = Promise.all(dependencyPromises)
+            .then(this._loadStylesheets.bind(this))
             .then(this._loadScripts.bind(this))
             .then(markAsLoaded.bind(this));
 
@@ -678,25 +672,58 @@ Runtime.Module.prototype = {
 
     /**
      * @return {!Promise.<undefined>}
+     * @this {Runtime.Module}
+     */
+    _loadStylesheets: function()
+    {
+        var stylesheets = this._descriptor["stylesheets"];
+        if (!stylesheets)
+            return Promise.resolve();
+        var promises = [];
+        for (var i = 0; i < stylesheets.length; ++i) {
+            var url = this._modularizeURL(stylesheets[i]);
+            promises.push(loadResourcePromise(url).then(cacheStylesheet.bind(this, url), cacheStylesheet.bind(this, url, undefined)));
+        }
+        return Promise.all(promises).then(undefined);
+
+        /**
+         * @param {string} path
+         * @param {string=} content
+         */
+        function cacheStylesheet(path, content)
+        {
+            if (!content) {
+                console.error("Failed to load stylesheet: " + path);
+                return;
+            }
+            var sourceURL = window.location.href;
+            if (window.location.search)
+                sourceURL.replace(window.location.search, "");
+            sourceURL = sourceURL.substring(0, sourceURL.lastIndexOf("/") + 1) + path;
+            Runtime.cachedResources[path] = content + "\n/*# sourceURL=" + sourceURL + " */";
+        }
+    },
+
+    /**
+     * @return {!Promise.<undefined>}
      */
     _loadScripts: function()
     {
         if (!this._descriptor.scripts)
-            return Promise.resolve(undefined);
+            return Promise.resolve();
 
         if (Runtime.isReleaseMode())
             return loadScriptsPromise([this._name + "_module.js"]);
 
-        return loadScriptsPromise(this._descriptor.scripts.map(modularizeURL, this)).catchAndReport();
+        return loadScriptsPromise(this._descriptor.scripts.map(this._modularizeURL, this)).catch(Runtime._reportError);
+    },
 
-        /**
-         * @param {string} scriptName
-         * @this {Runtime.Module}
-         */
-        function modularizeURL(scriptName)
-        {
-            return this._name + "/" + scriptName;
-        }
+    /**
+     * @param {string} resourceName
+     */
+    _modularizeURL: function(resourceName)
+    {
+        return normalizePath(this._name + "/" + resourceName);
     },
 
     /**
@@ -853,7 +880,7 @@ Runtime.ExperimentsSupport.prototype = {
      */
     register: function(experimentName, experimentTitle, hidden)
     {
-        console.assert(!this._experimentNames[experimentName], "Duplicate registration of experiment " + experimentName);
+        Runtime._assert(!this._experimentNames[experimentName], "Duplicate registration of experiment " + experimentName);
         this._experimentNames[experimentName] = true;
         this._experiments.push(new Runtime.Experiment(this, experimentName, experimentTitle, !!hidden));
     },
@@ -923,7 +950,7 @@ Runtime.ExperimentsSupport.prototype = {
      */
     _checkExperiment: function(experimentName)
     {
-        console.assert(this._experimentNames[experimentName], "Unknown experiment " + experimentName);
+        Runtime._assert(this._experimentNames[experimentName], "Unknown experiment " + experimentName);
     }
 }
 
@@ -984,110 +1011,6 @@ Runtime.Experiment.prototype = {
     }
 })();}
 
-/**
- * @param {string} error
- * @return {!Promise.<T>}
- * @template T
- */
-Promise.rejectWithError = function(error)
-{
-    return Promise.reject(new Error(error));
-}
-
-/**
- * @param {function((T|undefined))} callback
- * @return {!Promise.<T>}
- * @template T
- */
-Promise.prototype.thenOrCatch = function(callback)
-{
-    return this.then(callback, reject.bind(this));
-
-    /**
-     * @param {*} e
-     */
-    function reject(e)
-    {
-        this._reportError(e);
-        callback(undefined);
-    }
-}
-
-Promise.prototype.done = function()
-{
-    this.catchAndReport();
-}
-
-Promise.prototype.catchAndReport = function()
-{
-    return this.catch(this._reportError.bind(this));
-}
-
-/**
- * @param {*} e
- */
-Promise.prototype._reportError = function(e)
-{
-    if (e instanceof Error)
-        console.error(e.stack);
-    else
-        console.error(e);
-}
-
-/**
- * @param {!Array.<!Promise.<T, !Error>>} promises
- * @return {!Promise.<!Array.<T>>}
- * @template T
- */
-Promise.some = function(promises)
-{
-    var all = [];
-    var wasRejected = [];
-    for (var i = 0; i < promises.length; ++i) {
-        // Workaround closure compiler bug.
-        var handlerFunction = /** @type {function()} */ (handler.bind(promises[i], i));
-        all.push(promises[i].catch(handlerFunction));
-    }
-
-    return Promise.all(all).then(filterOutFailuresResults);
-
-    /**
-     * @param {!Array.<T>} results
-     * @return {!Array.<T>}
-     * @template T
-     */
-    function filterOutFailuresResults(results)
-    {
-        var filtered = [];
-        for (var i = 0; i < results.length; ++i) {
-            if (!wasRejected[i])
-                filtered.push(results[i]);
-        }
-        return filtered;
-    }
-
-    /**
-     * @this {!Promise}
-     * @param {number} index
-     * @param {!Error} e
-     */
-    function handler(index, e)
-    {
-        wasRejected[index] = true;
-        this._reportError(e);
-    }
-}
-
-// FIXME: This performance optimization should be moved to blink so that all developers could enjoy it.
-// console is retrieved with V8Window.getAttribute method which is slow. Here we copy it to a js variable for faster access.
-console = console;
-console.__originalAssert = console.assert;
-console.assert = function(value, message)
-{
-    if (value)
-        return;
-    console.__originalAssert(value, message);
-}
 
 // This must be constructed after the query parameters have been parsed.
 Runtime.experiments = new Runtime.ExperimentsSupport();

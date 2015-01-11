@@ -52,6 +52,7 @@ public:
 
     // FrameLoaderClient ----------------------------------------------
 
+    virtual void didCreateNewDocument() override;
     // Notifies the WebView delegate that the JS window object has been cleared,
     // giving it a chance to bind native objects to the window before script
     // parsing begins.
@@ -96,7 +97,7 @@ public:
 
     virtual void dispatchDidChangeThemeColor() override;
     virtual NavigationPolicy decidePolicyForNavigation(const ResourceRequest&, DocumentLoader*, NavigationPolicy, bool isTransitionNavigation) override;
-    virtual void dispatchAddNavigationTransitionData(const String& allowedDestinationOrigin, const String& selector, const String& markup) override;
+    virtual void dispatchAddNavigationTransitionData(const Document::TransitionElementData&) override;
     virtual void dispatchWillRequestResource(FetchRequest*) override;
     virtual void dispatchWillSendSubmitEvent(HTMLFormElement*) override;
     virtual void dispatchWillSubmitForm(HTMLFormElement*) override;
@@ -170,6 +171,8 @@ public:
     virtual void didStopAllLoaders() override;
 
     virtual void dispatchDidChangeManifest() override;
+
+    virtual unsigned backForwardLength() override;
 
     virtual PassOwnPtr<EventRacerLogClient> createEventRacerLogClient() override;
 

@@ -7,11 +7,13 @@
 
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ScriptWrappable.h"
+#include "bindings/modules/v8/UnionTypesModules.h"
 #include "modules/serviceworkers/Body.h"
 #include "modules/serviceworkers/FetchRequestData.h"
 #include "modules/serviceworkers/Headers.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
+#include "public/platform/WebURLRequest.h"
 #include "wtf/RefPtr.h"
 #include "wtf/text/WTFString.h"
 
@@ -20,10 +22,16 @@ namespace blink {
 class RequestInit;
 class WebServiceWorkerRequest;
 
+typedef RequestOrUSVString RequestInfo;
+
 class Request final : public Body {
     DEFINE_WRAPPERTYPEINFO();
 public:
     virtual ~Request() { }
+
+    // From Request.idl:
+    static Request* create(ExecutionContext*, const RequestInfo&, const Dictionary&, ExceptionState&);
+
     static Request* create(ExecutionContext*, const String&, ExceptionState&);
     static Request* create(ExecutionContext*, const String&, const Dictionary&, ExceptionState&);
     static Request* create(ExecutionContext*, Request*, ExceptionState&);
@@ -36,6 +44,7 @@ public:
 
     const FetchRequestData* request() { return m_request; }
 
+    // From Request.idl:
     String method() const;
     String url() const;
     Headers* headers() const { return m_headers; }
@@ -43,11 +52,13 @@ public:
     String mode() const;
     String credentials() const;
 
-    Request* clone() const;
+    // From Request.idl:
+    Request* clone(ExceptionState&) const;
 
     void populateWebServiceWorkerRequest(WebServiceWorkerRequest&) const;
 
     void setBodyBlobHandle(PassRefPtr<BlobDataHandle>);
+    bool hasBody() const { return m_request->blobDataHandle(); }
 
     virtual void trace(Visitor*)  override;
 
@@ -56,7 +67,7 @@ private:
     Request(ExecutionContext*, FetchRequestData*);
     Request(ExecutionContext*, const WebServiceWorkerRequest&);
 
-    static Request* createRequestWithRequestData(ExecutionContext*, FetchRequestData*, const RequestInit&, FetchRequestData::Mode, FetchRequestData::Credentials, ExceptionState&);
+    static Request* createRequestWithRequestOrString(ExecutionContext*, Request*, const String&, const RequestInit&, ExceptionState&);
     void clearHeaderList();
 
     virtual PassRefPtr<BlobDataHandle> blobDataHandle() override;

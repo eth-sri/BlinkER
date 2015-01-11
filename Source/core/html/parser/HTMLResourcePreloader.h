@@ -46,7 +46,6 @@ public:
 
     const String& charset() const { return m_charset; }
     double discoveryTime() const { return m_discoveryTime; }
-    FetchRequest::DeferOption defer() const { return m_defer; }
     void setDefer(FetchRequest::DeferOption defer) { m_defer = defer; }
     void setCharset(const String& charset) { m_charset = charset.isolatedCopy(); }
     void setCrossOriginEnabled(StoredCredentials allowCredentials)
@@ -85,7 +84,7 @@ private:
     FetchRequest::DeferOption m_defer;
 };
 
-typedef Vector<OwnPtr<PreloadRequest> > PreloadRequestStream;
+typedef Vector<OwnPtr<PreloadRequest>> PreloadRequestStream;
 
 class HTMLResourcePreloader final : public NoBaseWillBeGarbageCollected<HTMLResourcePreloader> {
     WTF_MAKE_NONCOPYABLE(HTMLResourcePreloader); WTF_MAKE_FAST_ALLOCATED_WILL_BE_REMOVED;
@@ -94,10 +93,11 @@ public:
     void trace(Visitor*);
 
     void takeAndPreload(PreloadRequestStream&);
-    void preload(PassOwnPtr<PreloadRequest>);
 
 private:
     explicit HTMLResourcePreloader(Document&);
+
+    void preload(PassOwnPtr<PreloadRequest>);
 
     RawPtrWillBeMember<Document> m_document;
 };

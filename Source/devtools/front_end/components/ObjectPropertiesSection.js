@@ -166,7 +166,8 @@ WebInspector.ObjectPropertyTreeElement.prototype = {
      */
     ondblclick: function(event)
     {
-        if ((this.property.writable || this.property.setter) && event.target.isSelfOrDescendant(this.valueElement))
+        var editableElement = this.elementAndValueToEdit().element;
+        if ((this.property.writable || this.property.setter) && event.target.isSelfOrDescendant(editableElement))
             this.startEditing(event);
         return false;
     },
@@ -354,7 +355,7 @@ WebInspector.ObjectPropertyTreeElement.prototype = {
         }
 
         var proxyElement = this._prompt.attachAndStartEditing(elementToEdit, blurListener.bind(this));
-        window.getSelection().setBaseAndExtent(elementToEdit, 0, elementToEdit, 1);
+        this.listItemElement.window().getSelection().setBaseAndExtent(elementToEdit, 0, elementToEdit, 1);
         proxyElement.addEventListener("keydown", this._promptKeyDown.bind(this, context), false);
     },
 
@@ -555,6 +556,12 @@ WebInspector.ObjectPropertyTreeElement.populateWithProperties = function(treeEle
             treeElement.appendChild(new treeElementConstructor(property));
         }
     }
+    if (internalProperties) {
+        for (var i = 0; i < internalProperties.length; i++) {
+            internalProperties[i].parentObject = value;
+            treeElement.appendChild(new treeElementConstructor(internalProperties[i]));
+        }
+    }
     if (value && value.type === "function") {
         // Whether function has TargetFunction internal property.
         // This is a simple way to tell that the function is actually a bound function (we are not told).
@@ -572,14 +579,8 @@ WebInspector.ObjectPropertyTreeElement.populateWithProperties = function(treeEle
         if (!hasTargetFunction)
             treeElement.appendChild(new WebInspector.FunctionScopeMainTreeElement(value));
     }
-    if (value && value.type === "object" && (value.subtype === "map" || value.subtype === "set"))
+    if (value && value.type === "object" && (value.subtype === "map" || value.subtype === "set" || value.subtype === "iterator"))
         treeElement.appendChild(new WebInspector.CollectionEntriesMainTreeElement(value));
-    if (internalProperties) {
-        for (var i = 0; i < internalProperties.length; i++) {
-            internalProperties[i].parentObject = value;
-            treeElement.appendChild(new treeElementConstructor(internalProperties[i]));
-        }
-    }
 
     WebInspector.ObjectPropertyTreeElement._appendEmptyPlaceholderIfNeeded(treeElement, emptyPlaceholder);
 }
@@ -658,21 +659,24 @@ WebInspector.FunctionScopeMainTreeElement.prototype = {
             for (var i = 0; i < scopeChain.length; ++i) {
                 var scope = scopeChain[i];
                 var title = null;
-                var isTrueObject;
+                var isTrueObject = false;
 
                 switch (scope.type) {
                 case DebuggerAgent.ScopeType.Local:
                     // Not really expecting this scope type here.
                     title = WebInspector.UIString("Local");
-                    isTrueObject = false;
                     break;
                 case DebuggerAgent.ScopeType.Closure:
                     title = WebInspector.UIString("Closure");
-                    isTrueObject = false;
                     break;
                 case DebuggerAgent.ScopeType.Catch:
                     title = WebInspector.UIString("Catch");
-                    isTrueObject = false;
+                    break;
+                case DebuggerAgent.ScopeType.Block:
+                    title = WebInspector.UIString("Block");
+                    break;
+                case DebuggerAgent.ScopeType.Script:
+                    title = WebInspector.UIString("Script");
                     break;
                 case DebuggerAgent.ScopeType.With:
                     title = WebInspector.UIString("With Block");

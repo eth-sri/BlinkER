@@ -39,9 +39,8 @@
 
 namespace blink {
 
-class DisplayList;
 class Node;
-class RenderLayer;
+class RenderLayerModelObject;
 struct WebRect;
 class WebViewImpl;
 
@@ -75,16 +74,15 @@ private:
     void releaseResources();
     void computeQuads(const Node&, WTF::Vector<FloatQuad>&) const;
 
-    RenderLayer* computeEnclosingCompositingLayer();
+    void attachLinkHighlightToCompositingLayer(const RenderLayerModelObject* paintInvalidationContainer);
     void clearGraphicsLayerLinkHighlightPointer();
     // This function computes the highlight path, and returns true if it has changed
     // size since the last call to this function.
-    bool computeHighlightLayerPathAndPosition(RenderLayer*);
+    bool computeHighlightLayerPathAndPosition(const RenderLayerModelObject*);
 
     OwnPtr<WebContentLayer> m_contentLayer;
     OwnPtr<WebLayer> m_clipLayer;
     Path m_path;
-    RefPtr<DisplayList> m_displayList;
 
     RefPtrWillBePersistent<Node> m_node;
     WebViewImpl* m_owningWebViewImpl;

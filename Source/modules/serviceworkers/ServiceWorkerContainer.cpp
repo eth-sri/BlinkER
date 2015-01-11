@@ -35,11 +35,13 @@
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/SerializedScriptValueFactory.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/MessagePort.h"
 #include "core/events/MessageEvent.h"
+#include "core/frame/LocalDOMWindow.h"
 #include "modules/serviceworkers/ServiceWorker.h"
 #include "modules/serviceworkers/ServiceWorkerContainerClient.h"
 #include "modules/serviceworkers/ServiceWorkerError.h"
@@ -107,7 +109,7 @@ ScriptPromise ServiceWorkerContainer::registerServiceWorker(ScriptState* scriptS
     ScriptPromise promise = resolver->promise();
 
     if (!m_provider) {
-        resolver->reject(DOMException::create(InvalidStateError, "No associated provider is available"));
+        resolver->reject(DOMException::create(InvalidStateError, "The document is in an invalid state."));
         return promise;
     }
 
@@ -118,6 +120,12 @@ ScriptPromise ServiceWorkerContainer::registerServiceWorker(ScriptState* scriptS
     String errorMessage;
     if (!documentOrigin->canAccessFeatureRequiringSecureOrigin(errorMessage)) {
         resolver->reject(DOMException::create(NotSupportedError, errorMessage));
+        return promise;
+    }
+
+    KURL pageURL = KURL(KURL(), documentOrigin->toString());
+    if (!pageURL.protocolIsInHTTPFamily()) {
+        resolver->reject(DOMException::create(SecurityError, "The URL protocol of the current origin is not supported: " + pageURL.protocol()));
         return promise;
     }
 
@@ -164,6 +172,11 @@ ScriptPromise ServiceWorkerContainer::getRegistration(ScriptState* scriptState, 
     RefPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(scriptState);
     ScriptPromise promise = resolver->promise();
 
+    if (!m_provider) {
+        resolver->reject(DOMException::create(InvalidStateError, "The document is in an invalid state."));
+        return promise;
+    }
+
     // FIXME: This should use the container's execution context, not
     // the callers.
     ExecutionContext* executionContext = scriptState->executionContext();
@@ -171,6 +184,12 @@ ScriptPromise ServiceWorkerContainer::getRegistration(ScriptState* scriptState, 
     String errorMessage;
     if (!documentOrigin->canAccessFeatureRequiringSecureOrigin(errorMessage)) {
         resolver->reject(DOMException::create(NotSupportedError, errorMessage));
+        return promise;
+    }
+
+    KURL pageURL = KURL(KURL(), documentOrigin->toString());
+    if (!pageURL.protocolIsInHTTPFamily()) {
+        resolver->reject(DOMException::create(SecurityError, "The URL protocol of the current origin is not supported: " + pageURL.protocol()));
         return promise;
     }
 
@@ -248,7 +267,7 @@ void ServiceWorkerContainer::dispatchMessageEvent(const WebString& message, cons
         return;
 
     OwnPtrWillBeRawPtr<MessagePortArray> ports = MessagePort::toMessagePortArray(executionContext(), webChannels);
-    RefPtr<SerializedScriptValue> value = SerializedScriptValue::createFromWire(message);
+    RefPtr<SerializedScriptValue> value = SerializedScriptValueFactory::instance().createFromWire(message);
     executionContext()->executingWindow()->dispatchEvent(MessageEvent::create(ports.release(), value));
 }
 

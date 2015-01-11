@@ -36,7 +36,6 @@
 #include "public/platform/WebFileSystemType.h"
 #include "public/web/WebLocalFrame.h"
 #include "web/FrameLoaderClientImpl.h"
-#include "web/NotificationPresenterImpl.h"
 #include "web/UserMediaClientImpl.h"
 #include "wtf/Compiler.h"
 #include "wtf/OwnPtr.h"
@@ -53,6 +52,7 @@ class Range;
 class ScriptSourceCode;
 class SharedWorkerRepositoryClientImpl;
 class TextFinder;
+class WebAutofillClient;
 class WebDataSourceImpl;
 class WebFrameClient;
 class WebPerformance;
@@ -180,7 +180,7 @@ public:
     virtual float getPrintPageShrink(int page) override;
     virtual void printEnd() override;
     virtual bool isPrintScalingDisabledForPlugin(const WebNode&) override;
-    virtual int getPrintCopiesForPlugin(const WebNode&) override;
+    virtual bool getPrintPresetOptionsForPlugin(const WebNode&, WebPrintPresetOptions*) override;
     virtual bool hasCustomPageSizeStyle(int pageIndex) override;
     virtual bool isPageBoxVisible(int pageIndex) override;
     virtual void pageSizeAndMarginsInPixels(
@@ -223,6 +223,8 @@ public:
 
     // WebLocalFrame methods:
     virtual void initializeToReplaceRemoteFrame(WebRemoteFrame*) override;
+    virtual void setAutofillClient(WebAutofillClient*) override;
+    virtual WebAutofillClient* autofillClient() override;
     virtual void sendPings(const WebNode& linkNode, const WebURL& destinationURL) override;
     virtual bool isLoading() const override;
     virtual bool isResourceLoadInProgress() const override;
@@ -339,6 +341,7 @@ private:
     RefPtrWillBeMember<LocalFrame> m_frame;
 
     WebFrameClient* m_client;
+    WebAutofillClient* m_autofillClient;
     WebPermissionClient* m_permissionClient;
     OwnPtr<SharedWorkerRepositoryClientImpl> m_sharedWorkerRepositoryClient;
 

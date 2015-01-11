@@ -37,22 +37,16 @@
 #include "platform/heap/Visitor.h"
 #include "public/platform/WebThread.h"
 #include "wtf/Assertions.h"
+#include "wtf/Atomics.h"
 #include "wtf/HashCountedSet.h"
 #include "wtf/LinkedHashSet.h"
 #include "wtf/ListHashSet.h"
 #include "wtf/OwnPtr.h"
+#include "wtf/PageAllocator.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/ThreadSafeRefCounted.h"
 
 #include <stdint.h>
-
-// FIXME: We temporarily disable parallel marking because the current
-// implementation is slower than a single-thread marking. The reason
-// of the slowness is that the parallel marking pollutes CPU caches
-// because marking threads write mark bits on on-heap objects which
-// will be touched by the mutator thread later. We need to make
-// the implementation more cache-aware (e.g., bitmap marking).
-#define ENABLE_PARALLEL_MARKING 0
 
 namespace blink {
 
@@ -101,13 +95,6 @@ const uint8_t finalizedZapValue = 24;
 // The orphaned zap value must be zero in the lowest bits to allow for using
 // the mark bit when tracing.
 const uint8_t orphanedZapValue = 240;
-
-#if ENABLE_PARALLEL_MARKING
-const int maxNumberOfMarkingThreads = 4;
-#else
-const int maxNumberOfMarkingThreads = 0;
-#endif
-
 const int numberOfPagesToConsiderForCoalescing = 100;
 
 enum CallbackInvocationMode {
@@ -116,7 +103,6 @@ enum CallbackInvocationMode {
 };
 
 class CallbackStack;
-class HeapStats;
 class PageMemory;
 template<ThreadAffinity affinity> class ThreadLocalPersistents;
 template<typename T, typename RootsAccessor = ThreadLocalPersistents<ThreadingTrait<T>::Affinity > > class Persistent;
@@ -125,13 +111,11 @@ template<typename T, typename RootsAccessor = ThreadLocalPersistents<ThreadingTr
 class TracedValue;
 #endif
 
-PLATFORM_EXPORT size_t osPageSize();
-
 // Blink heap pages are set up with a guard page before and after the
 // payload.
 inline size_t blinkPagePayloadSize()
 {
-    return blinkPageSize - 2 * osPageSize();
+    return blinkPageSize - 2 * WTF::kSystemPageSize;
 }
 
 // Blink heap pages are aligned to the Blink heap page size.
@@ -168,7 +152,7 @@ inline Address blinkPageAddress(Address address)
 // aligned.
 inline bool isPageHeaderAddress(Address address)
 {
-    return !((reinterpret_cast<uintptr_t>(address) & blinkPageOffsetMask) - osPageSize());
+    return !((reinterpret_cast<uintptr_t>(address) & blinkPageOffsetMask) - WTF::kSystemPageSize);
 }
 #endif
 
@@ -176,10 +160,10 @@ inline bool isPageHeaderAddress(Address address)
 // All oilpan heap pages are aligned at blinkPageBase plus an OS page size.
 // FIXME: Remove PLATFORM_EXPORT once we get a proper public interface to our typed heaps.
 // This is only exported to enable tests in HeapTest.cpp.
-PLATFORM_EXPORT inline BaseHeapPage* pageHeaderFromObject(const void* object)
+PLATFORM_EXPORT inline BaseHeapPage* pageFromObject(const void* object)
 {
     Address address = reinterpret_cast<Address>(const_cast<void*>(object));
-    return reinterpret_cast<BaseHeapPage*>(blinkPageAddress(address) + osPageSize());
+    return reinterpret_cast<BaseHeapPage*>(blinkPageAddress(address) + WTF::kSystemPageSize);
 }
 
 // Large allocations are allocated as separate objects and linked in a
@@ -193,11 +177,11 @@ PLATFORM_EXPORT inline BaseHeapPage* pageHeaderFromObject(const void* object)
 //
 // | BaseHeapPage | next pointer | FinalizedHeapObjectHeader or HeapObjectHeader | payload |
 template<typename Header>
-class LargeHeapObject : public BaseHeapPage {
+class LargeObject final : public BaseHeapPage {
 public:
-    LargeHeapObject(PageMemory* storage, const GCInfo* gcInfo, ThreadState* state) : BaseHeapPage(storage, gcInfo, state)
+    LargeObject(PageMemory* storage, const GCInfo* gcInfo, ThreadState* state) : BaseHeapPage(storage, gcInfo, state)
     {
-        COMPILE_ASSERT(!(sizeof(LargeHeapObject<Header>) & allocationMask), large_heap_object_header_misaligned);
+        COMPILE_ASSERT(!(sizeof(LargeObject<Header>) & allocationMask), large_heap_object_header_misaligned);
     }
 
     virtual void checkAndMarkPointer(Visitor*, Address) override;
@@ -216,18 +200,19 @@ public:
     void snapshot(TracedValue*, ThreadState::SnapshotInfo*);
 #endif
 
-    void link(LargeHeapObject<Header>** previousNext)
+    void link(LargeObject<Header>** previousNext)
     {
         m_next = *previousNext;
         *previousNext = this;
     }
 
-    void unlink(LargeHeapObject<Header>** previousNext)
+    void unlink(LargeObject<Header>** previousNext)
     {
         *previousNext = m_next;
+        m_next = nullptr;
     }
 
-    // The LargeHeapObject pseudo-page contains one actual object. Determine
+    // The LargeObject pseudo-page contains one actual object. Determine
     // whether the pointer is within that object.
     bool objectContains(Address object)
     {
@@ -242,14 +227,14 @@ public:
         return roundToBlinkPageStart(address()) <= object && object < roundToBlinkPageEnd(address() + size());
     }
 
-    LargeHeapObject<Header>* next()
+    LargeObject<Header>* next()
     {
         return m_next;
     }
 
     size_t size()
     {
-        return heapObjectHeader()->size() + sizeof(LargeHeapObject<Header>) + headerPadding<Header>();
+        return heapObjectHeader()->size() + sizeof(LargeObject<Header>) + headerPadding<Header>();
     }
 
     Address payload() { return heapObjectHeader()->payload(); }
@@ -257,17 +242,18 @@ public:
 
     Header* heapObjectHeader()
     {
-        Address headerAddress = address() + sizeof(LargeHeapObject<Header>) + headerPadding<Header>();
+        Address headerAddress = address() + sizeof(LargeObject<Header>) + headerPadding<Header>();
         return reinterpret_cast<Header*>(headerAddress);
     }
 
     bool isMarked();
     void unmark();
-    void getStatsForTesting(HeapStats&);
+    size_t objectPayloadSizeForTesting();
     void mark(Visitor*);
     void finalize();
-    void setDeadMark();
-    virtual void markOrphaned()
+    void markDead();
+    void markUnmarkedObjectsDead();
+    virtual void markOrphaned() override
     {
         // Zap the payload with a recognizable value to detect any incorrect
         // cross thread pointer usage.
@@ -278,7 +264,7 @@ public:
 private:
     friend class ThreadHeap<Header>;
 
-    LargeHeapObject<Header>* m_next;
+    LargeObject<Header>* m_next;
 };
 
 // The BasicObjectHeader is the minimal object header. It is used when
@@ -303,6 +289,9 @@ public:
 
     NO_SANITIZE_ADDRESS
     size_t size() const { return m_size & sizeMask; }
+
+    NO_SANITIZE_ADDRESS
+    void setSize(size_t size) { m_size = (size | (m_size & ~sizeMask)); }
 
 #if ENABLE(GC_PROFILE_HEAP)
     NO_SANITIZE_ADDRESS
@@ -364,9 +353,8 @@ public:
     inline size_t payloadSize();
     inline Address payloadEnd();
 
-    inline void setDeadMark();
-    inline void clearDeadMark();
-    inline bool hasDeadMark() const;
+    inline void markDead();
+    inline bool isDead() const;
 
     // Zap magic number with a new magic number that means there was once an
     // object allocated here, but it was freed because nobody marked it during
@@ -501,12 +489,21 @@ private:
 // each object. In that case objects have only a HeapObjectHeader and
 // not a FinalizedHeapObjectHeader saving a word per object.
 template<typename Header>
-class HeapPage : public BaseHeapPage {
+class HeapPage final : public BaseHeapPage {
 public:
     HeapPage(PageMemory*, ThreadHeap<Header>*, const GCInfo*);
 
-    void link(HeapPage**);
-    static void unlink(ThreadHeap<Header>*, HeapPage*, HeapPage**);
+    void link(HeapPage** previousNext)
+    {
+        m_next = *previousNext;
+        *previousNext = this;
+    }
+
+    void unlink(HeapPage** previousNext)
+    {
+        *previousNext = m_next;
+        m_next = nullptr;
+    }
 
     bool isEmpty();
 
@@ -516,7 +513,7 @@ public:
     virtual bool contains(Address addr) override
     {
         Address blinkPageStart = roundToBlinkPageStart(address());
-        ASSERT(blinkPageStart == address() - osPageSize()); // Page is at aligned address plus guard page size.
+        ASSERT(blinkPageStart == address() - WTF::kSystemPageSize); // Page is at aligned address plus guard page size.
         return blinkPageStart <= addr && addr < blinkPageStart + blinkPageSize;
     }
 
@@ -534,9 +531,9 @@ public:
 
     Address end() { return payload() + payloadSize(); }
 
-    void getStatsForTesting(HeapStats&);
-    void clearLiveAndMarkDead();
-    void sweep(HeapStats*, ThreadHeap<Header>*);
+    size_t objectPayloadSizeForTesting();
+    void markUnmarkedObjectsDead();
+    void sweep(ThreadHeap<Header>*);
     void clearObjectStartBitMap();
     void finalize(Header*);
     virtual void checkAndMarkPointer(Visitor*, Address) override;
@@ -550,20 +547,17 @@ public:
 #if defined(ADDRESS_SANITIZER)
     void poisonUnmarkedObjects();
 #endif
-    NO_SANITIZE_ADDRESS
-    virtual void markOrphaned()
+
+    virtual void markOrphaned() override
     {
         // Zap the payload with a recognizable value to detect any incorrect
         // cross thread pointer usage.
 #if defined(ADDRESS_SANITIZER)
-        // Don't use memset when running with ASan since this needs to zap
-        // poisoned memory as well and the NO_SANITIZE_ADDRESS annotation
-        // only works for code in this method and not for calls to memset.
-        for (Address current = payload(); current < payload() + payloadSize(); ++current)
-            *current = orphanedZapValue;
-#else
-        memset(payload(), orphanedZapValue, payloadSize());
+        // This needs to zap poisoned memory as well.
+        // Force unpoison memory before memset.
+        ASAN_UNPOISON_MEMORY_REGION(payload(), payloadSize());
 #endif
+        memset(payload(), orphanedZapValue, payloadSize());
         BaseHeapPage::markOrphaned();
     }
 
@@ -691,10 +685,10 @@ public:
     // Find the page in this thread heap containing the given
     // address. Returns 0 if the address is not contained in any
     // page in this thread heap.
-    virtual BaseHeapPage* heapPageFromAddress(Address) = 0;
+    virtual BaseHeapPage* pageFromAddress(Address) = 0;
 
 #if ENABLE(GC_PROFILE_MARKING)
-    virtual const GCInfo* findGCInfoOfLargeHeapObject(Address) = 0;
+    virtual const GCInfo* findGCInfoOfLargeObject(Address) = 0;
 #endif
 
 #if ENABLE(GC_PROFILE_HEAP)
@@ -703,31 +697,44 @@ public:
 
     // Sweep this part of the Blink heap. This finalizes dead objects
     // and builds freelists for all the unused memory.
-    virtual void sweep(HeapStats*) = 0;
+    virtual void sweep() = 0;
     virtual void postSweepProcessing() = 0;
 
     virtual void clearFreeLists() = 0;
-    virtual void clearLiveAndMarkDead() = 0;
+    virtual void markUnmarkedObjectsDead() = 0;
 
     virtual void makeConsistentForSweeping() = 0;
 #if ENABLE(ASSERT)
     virtual bool isConsistentForSweeping() = 0;
 #endif
-    virtual void getStatsForTesting(HeapStats&) = 0;
-
-    virtual void updateRemainingAllocationSize() = 0;
+    virtual size_t objectPayloadSizeForTesting() = 0;
 
     virtual void prepareHeapForTermination() = 0;
 
     virtual int normalPageCount() = 0;
+};
 
-    virtual PassOwnPtr<BaseHeap> split(int normalPages) = 0;
-    virtual void merge(PassOwnPtr<BaseHeap> other) = 0;
+template<typename Header>
+class FreeList {
+public:
+    FreeList();
 
+    void addToFreeList(Address, size_t);
+    void clear();
+
+private:
     // Returns a bucket number for inserting a FreeListEntry of a
     // given size. All FreeListEntries in the given bucket, n, have
     // size >= 2^n.
     static int bucketIndexForSize(size_t);
+
+    int m_biggestFreeListIndex;
+
+    // All FreeListEntries in the nth list have size >= 2^n.
+    FreeListEntry* m_freeLists[blinkPageSizeLog2];
+    FreeListEntry* m_lastFreeListEntries[blinkPageSizeLog2];
+
+    friend class ThreadHeap<Header>;
 };
 
 // Thread heaps represent a part of the per-thread Blink heap.
@@ -747,33 +754,36 @@ public:
     virtual ~ThreadHeap();
     virtual void cleanupPages() override;
 
-    virtual BaseHeapPage* heapPageFromAddress(Address) override;
+    virtual BaseHeapPage* pageFromAddress(Address) override;
 #if ENABLE(GC_PROFILE_MARKING)
-    virtual const GCInfo* findGCInfoOfLargeHeapObject(Address) override;
+    virtual const GCInfo* findGCInfoOfLargeObject(Address) override;
 #endif
 #if ENABLE(GC_PROFILE_HEAP)
     virtual void snapshot(TracedValue*, ThreadState::SnapshotInfo*) override;
 #endif
 
-    virtual void sweep(HeapStats*) override;
+    virtual void sweep() override;
     virtual void postSweepProcessing() override;
 
     virtual void clearFreeLists() override;
-    virtual void clearLiveAndMarkDead() override;
+    virtual void markUnmarkedObjectsDead() override;
 
     virtual void makeConsistentForSweeping() override;
 #if ENABLE(ASSERT)
     virtual bool isConsistentForSweeping() override;
 #endif
-    virtual void getStatsForTesting(HeapStats&) override;
-
-    virtual void updateRemainingAllocationSize() override;
+    virtual size_t objectPayloadSizeForTesting() override;
 
     ThreadState* threadState() { return m_threadState; }
-    HeapStats& stats() { return m_threadState->stats(); }
+
+    void addToFreeList(Address address, size_t size)
+    {
+        ASSERT(pageFromAddress(address));
+        ASSERT(pageFromAddress(address + size - 1));
+        m_freeList.addToFreeList(address, size);
+    }
 
     inline Address allocate(size_t, const GCInfo*);
-    void addToFreeList(Address, size_t);
     inline static size_t roundedAllocationSize(size_t size)
     {
         return allocationSizeFromSize(size) - sizeof(Header);
@@ -783,33 +793,33 @@ public:
 
     virtual int normalPageCount() override { return m_numberOfNormalPages; }
 
-    virtual PassOwnPtr<BaseHeap> split(int numberOfNormalPages) override;
-    virtual void merge(PassOwnPtr<BaseHeap> splitOffBase) override;
-
     void removePageFromHeap(HeapPage<Header>*);
 
     PLATFORM_EXPORT void promptlyFreeObject(Header*);
+    PLATFORM_EXPORT bool expandObject(Header*, size_t);
 
 private:
     void addPageToHeap(const GCInfo*);
-    PLATFORM_EXPORT Address outOfLineAllocate(size_t, const GCInfo*);
+    PLATFORM_EXPORT Address outOfLineAllocate(size_t payloadSize, size_t allocationSize, const GCInfo*);
     static size_t allocationSizeFromSize(size_t);
     PLATFORM_EXPORT Address allocateLargeObject(size_t, const GCInfo*);
     Address currentAllocationPoint() const { return m_currentAllocationPoint; }
     size_t remainingAllocationSize() const { return m_remainingAllocationSize; }
-    bool ownsNonEmptyAllocationArea() const { return currentAllocationPoint() && remainingAllocationSize(); }
+    bool hasCurrentAllocationArea() const { return currentAllocationPoint() && remainingAllocationSize(); }
     void setAllocationPoint(Address point, size_t size)
     {
-        ASSERT(!point || heapPageFromAddress(point));
+        ASSERT(!point || pageFromAddress(point));
         ASSERT(size <= HeapPage<Header>::payloadSize());
+        if (hasCurrentAllocationArea())
+            addToFreeList(currentAllocationPoint(), remainingAllocationSize());
         updateRemainingAllocationSize();
         m_currentAllocationPoint = point;
         m_lastRemainingAllocationSize = m_remainingAllocationSize = size;
     }
-    void ensureCurrentAllocation(size_t, const GCInfo*);
+    void updateRemainingAllocationSize();
     bool allocateFromFreeList(size_t);
 
-    void freeLargeObject(LargeHeapObject<Header>*, LargeHeapObject<Header>**);
+    void freeLargeObject(LargeObject<Header>*, LargeObject<Header>**);
     void allocatePage(const GCInfo*);
 
 #if ENABLE(ASSERT)
@@ -817,8 +827,8 @@ private:
     bool pagesAllocatedDuringSweepingContains(Address);
 #endif
 
-    void sweepNormalPages(HeapStats*);
-    void sweepLargePages(HeapStats*);
+    void sweepNormalPages();
+    void sweepLargePages();
     bool coalesce(size_t);
 
     Address m_currentAllocationPoint;
@@ -826,21 +836,17 @@ private:
     size_t m_lastRemainingAllocationSize;
 
     HeapPage<Header>* m_firstPage;
-    LargeHeapObject<Header>* m_firstLargeHeapObject;
+    LargeObject<Header>* m_firstLargeObject;
 
     HeapPage<Header>* m_firstPageAllocatedDuringSweeping;
     HeapPage<Header>* m_lastPageAllocatedDuringSweeping;
 
-    // Merge point for parallel sweep.
-    HeapPage<Header>* m_mergePoint;
-
-    int m_biggestFreeListIndex;
+    LargeObject<Header>* m_firstLargeObjectAllocatedDuringSweeping;
+    LargeObject<Header>* m_lastLargeObjectAllocatedDuringSweeping;
 
     ThreadState* m_threadState;
 
-    // All FreeListEntries in the nth list have size >= 2^n.
-    FreeListEntry* m_freeLists[blinkPageSizeLog2];
-    FreeListEntry* m_lastFreeListEntries[blinkPageSizeLog2];
+    FreeList<Header> m_freeList;
 
     // Index into the page pools. This is used to ensure that the pages of the
     // same type go into the correct page pool and thus avoid type confusion.
@@ -880,9 +886,9 @@ public:
     // the containerObject can be the same thing, but the containerObject is
     // constrained to be on the heap, since the heap is used to identify the
     // correct thread.
-    static void pushWeakObjectPointerCallback(void* closure, void* containerObject, WeakPointerCallback);
+    static void pushWeakPointerCallback(void* closure, void* containerObject, WeakPointerCallback);
 
-    // Similar to the more general pushWeakObjectPointerCallback, but cell
+    // Similar to the more general pushWeakPointerCallback, but cell
     // pointer callbacks are added to a static callback work list and the weak
     // callback is performed on the thread performing garbage collection. This
     // is OK because cells are just cleared and no deallocation can happen.
@@ -914,18 +920,16 @@ public:
 
     template<typename T> static Address reallocate(void* previous, size_t);
 
-    static void collectGarbage(ThreadState::StackState, ThreadState::CauseOfGC = ThreadState::NormalGC);
+    static void collectGarbage(ThreadState::StackState, ThreadState::GCType = ThreadState::ForcedGC);
     static void collectGarbageForTerminatingThread(ThreadState*);
     static void collectAllGarbage();
-    static void processMarkingStackEntries(int*);
-    static void processMarkingStackOnMultipleThreads();
-    static void processMarkingStackInParallel();
     template<CallbackInvocationMode Mode> static void processMarkingStack();
     static void postMarkingProcessing();
     static void globalWeakProcessing();
     static void setForcePreciseGCForTesting();
 
-    static void prepareForGC();
+    static void preGC();
+    static void postGC();
 
     // Conservatively checks whether an address is a pointer in any of the thread
     // heaps. If so marks the object pointed to as live.
@@ -943,20 +947,7 @@ public:
     static String createBacktraceString();
 #endif
 
-    // Collect heap stats for all threads attached to the Blink
-    // garbage collector. Should only be called during garbage
-    // collection where threads are known to be at safe points.
-    static void getStats(HeapStats*);
-
-    static void getStatsForTesting(HeapStats*);
-
-    static void getHeapSpaceSize(uint64_t*, uint64_t*);
-
-    static void makeConsistentForSweeping();
-
-#if ENABLE(ASSERT)
-    static bool isConsistentForSweeping();
-#endif
+    static size_t objectPayloadSizeForTesting();
 
     static void flushHeapDoesNotContainCache();
 
@@ -973,6 +964,19 @@ public:
     static BaseHeapPage* lookup(Address);
     static void addPageMemoryRegion(PageMemoryRegion*);
     static void removePageMemoryRegion(PageMemoryRegion*);
+
+    static void increaseAllocatedObjectSize(size_t delta) { atomicAdd(&s_allocatedObjectSize, static_cast<long>(delta)); }
+    static void decreaseAllocatedObjectSize(size_t delta) { atomicSubtract(&s_allocatedObjectSize, static_cast<long>(delta)); }
+    static size_t allocatedObjectSize() { return s_allocatedObjectSize; }
+    static void increaseMarkedObjectSize(size_t delta) { atomicAdd(&s_markedObjectSize, static_cast<long>(delta)); }
+    static size_t markedObjectSize() { return s_markedObjectSize; }
+    static void increaseAllocatedSpace(size_t delta) { atomicAdd(&s_allocatedSpace, static_cast<long>(delta)); }
+    static void decreaseAllocatedSpace(size_t delta) { atomicSubtract(&s_allocatedSpace, static_cast<long>(delta)); }
+    static size_t allocatedSpace() { return s_allocatedSpace; }
+
+    static void enterGC() { ASSERT(!s_inGC); s_inGC = true; }
+    static void leaveGC() { ASSERT(s_inGC); s_inGC = false; }
+    static bool isInGC() { return s_inGC; }
 
 private:
     // A RegionTree is a simple binary search tree of PageMemoryRegions sorted
@@ -994,8 +998,10 @@ private:
         RegionTree* m_right;
     };
 
+    static void resetAllocatedObjectSize() { ASSERT(Heap::isInGC()); s_allocatedObjectSize = 0; }
+    static void resetMarkedObjectSize() { ASSERT(Heap::isInGC()); s_markedObjectSize = 0; }
+
     static Visitor* s_markingVisitor;
-    static Vector<OwnPtr<blink::WebThread> >* s_markingThreads;
     static CallbackStack* s_markingStack;
     static CallbackStack* s_postMarkingCallbackStack;
     static CallbackStack* s_weakCallbackStack;
@@ -1003,49 +1009,14 @@ private:
     static HeapDoesNotContainCache* s_heapDoesNotContainCache;
     static bool s_shutdownCalled;
     static bool s_lastGCWasConservative;
+    static bool s_inGC;
     static FreePagePool* s_freePagePool;
     static OrphanedPagePool* s_orphanedPagePool;
     static RegionTree* s_regionTree;
+    static size_t s_allocatedSpace;
+    static size_t s_allocatedObjectSize;
+    static size_t s_markedObjectSize;
     friend class ThreadState;
-};
-
-// The NoAllocationScope class is used in debug mode to catch unwanted
-// allocations. E.g. allocations during GC.
-template<ThreadAffinity Affinity>
-class NoAllocationScope {
-public:
-    NoAllocationScope() : m_active(true) { enter(); }
-
-    explicit NoAllocationScope(bool active) : m_active(active) { enter(); }
-
-    NoAllocationScope(const NoAllocationScope& other) : m_active(other.m_active) { enter(); }
-
-    NoAllocationScope& operator=(const NoAllocationScope& other)
-    {
-        release();
-        m_active = other.m_active;
-        enter();
-        return *this;
-    }
-
-    ~NoAllocationScope() { release(); }
-
-    void release()
-    {
-        if (m_active) {
-            ThreadStateFor<Affinity>::state()->leaveNoAllocationScope();
-            m_active = false;
-        }
-    }
-
-private:
-    void enter() const
-    {
-        if (m_active)
-            ThreadStateFor<Affinity>::state()->enterNoAllocationScope();
-    }
-
-    bool m_active;
 };
 
 // Base class for objects allocated in the Blink garbage-collected
@@ -1238,7 +1209,6 @@ private:
 // need to have a trace method. That trace method will be called
 // automatically by the Heap collections.
 //
-#if COMPILER_SUPPORTS(CXX_DELETED_FUNCTIONS)
 #define DISALLOW_ALLOCATION()                                   \
     private:                                                    \
         void* operator new(size_t) = delete;                    \
@@ -1255,28 +1225,6 @@ private:
 #define STATIC_ONLY(Type) \
     private:              \
         Type() = delete;
-
-#else
-
-#define DISALLOW_ALLOCATION()                          \
-    private:                                           \
-        void* operator new(size_t);                    \
-        void* operator new(size_t, NotNullTag, void*); \
-        void* operator new(size_t, void*)
-
-#define ALLOW_ONLY_INLINE_ALLOCATION()                                              \
-    public:                                                                         \
-        void* operator new(size_t, NotNullTag, void* location) { return location; } \
-        void* operator new(size_t, void* location) { return location; }             \
-    private:                                                                        \
-        void* operator new(size_t);
-
-#define STATIC_ONLY(Type)  \
-    private:               \
-        Type();
-
-#endif
-
 
 // These macros insert annotations that the Blink GC plugin for clang uses for
 // verification. STACK_ALLOCATED is used to declare that objects of this type
@@ -1302,10 +1250,7 @@ private:
 NO_SANITIZE_ADDRESS
 void HeapObjectHeader::checkHeader() const
 {
-#if ENABLE(ASSERT)
-    BaseHeapPage* page = pageHeaderFromObject(this);
-    ASSERT(page->orphaned() || m_magic == magic);
-#endif
+    ASSERT(pageFromObject(this)->orphaned() || m_magic == magic);
 }
 
 Address HeapObjectHeader::payload()
@@ -1327,13 +1272,7 @@ NO_SANITIZE_ADDRESS
 void HeapObjectHeader::mark()
 {
     checkHeader();
-    // The use of atomic ops guarantees that the reads and writes are
-    // atomic and that no memory operation reorderings take place.
-    // Multiple threads can still read the old value and all store the
-    // new value. However, the new value will be the same for all of
-    // the threads and the end result is therefore consistent.
-    unsigned size = asanUnsafeAcquireLoad(&m_size);
-    asanUnsafeReleaseStore(&m_size, size | markBitMask);
+    m_size = m_size | markBitMask;
 }
 
 Address FinalizedHeapObjectHeader::payload()
@@ -1370,8 +1309,8 @@ Address ThreadHeap<Header>::allocate(size_t size, const GCInfo* gcInfo)
         Address headerAddress = m_currentAllocationPoint;
         m_currentAllocationPoint += allocationSize;
         m_remainingAllocationSize -= allocationSize;
-        Header* header = new (NotNull, headerAddress) Header(allocationSize, gcInfo);
-        Address result = headerAddress + sizeof(*header);
+        new (NotNull, headerAddress) Header(allocationSize, gcInfo);
+        Address result = headerAddress + sizeof(Header);
         ASSERT(!(reinterpret_cast<uintptr_t>(result) & allocationMask));
 
         // Unpoison the memory used for the object (payload).
@@ -1379,10 +1318,10 @@ Address ThreadHeap<Header>::allocate(size_t size, const GCInfo* gcInfo)
 #if ENABLE(ASSERT) || defined(LEAK_SANITIZER) || defined(ADDRESS_SANITIZER)
         memset(result, 0, allocationSize - sizeof(Header));
 #endif
-        ASSERT(heapPageFromAddress(headerAddress + allocationSize - 1));
+        ASSERT(pageFromAddress(headerAddress + allocationSize - 1));
         return result;
     }
-    return outOfLineAllocate(size, gcInfo);
+    return outOfLineAllocate(size, allocationSize, gcInfo);
 }
 
 template<typename T, typename HeapTraits>
@@ -1442,7 +1381,7 @@ public:
     static size_t quantizedSize(size_t count)
     {
         RELEASE_ASSERT(count <= kMaxUnquantizedAllocation / sizeof(T));
-        return HeapIndexTrait<CollectionBackingHeap>::HeapType::roundedAllocationSize(count * sizeof(T));
+        return HeapIndexTrait<VectorBackingHeap>::HeapType::roundedAllocationSize(count * sizeof(T));
     }
     static const size_t kMaxUnquantizedAllocation = maxHeapObjectSize;
 };
@@ -1455,22 +1394,29 @@ public:
     typedef blink::Visitor Visitor;
     static const bool isGarbageCollected = true;
 
-    template <typename Return, typename Metadata>
-    static Return backingMalloc(size_t size)
+    template <typename T>
+    static T* vectorBackingMalloc(size_t size)
     {
-        return reinterpret_cast<Return>(Heap::allocate<Metadata, HeapIndexTrait<CollectionBackingHeap> >(size));
+        return reinterpret_cast<T*>(Heap::allocate<HeapVectorBacking<T, VectorTraits<T>>, HeapIndexTrait<VectorBackingHeap> >(size));
     }
-    template <typename Return, typename Metadata>
-    static Return zeroedBackingMalloc(size_t size)
+    template <typename T, typename HashTable>
+    static T* hashTableBackingMalloc(size_t size)
     {
-        return backingMalloc<Return, Metadata>(size);
+        return reinterpret_cast<T*>(Heap::allocate<HeapHashTableBacking<HashTable>, HeapIndexTrait<HashTableBackingHeap> >(size));
+    }
+    template <typename T, typename HashTable>
+    static T* zeroedHashTableBackingMalloc(size_t size)
+    {
+        return hashTableBackingMalloc<T, HashTable>(size);
     }
     template <typename Return, typename Metadata>
     static Return malloc(size_t size)
     {
         return reinterpret_cast<Return>(Heap::allocate<Metadata>(size));
     }
-    PLATFORM_EXPORT static void backingFree(void* address);
+    PLATFORM_EXPORT static void vectorBackingFree(void* address);
+    PLATFORM_EXPORT static void hashTableBackingFree(void* address);
+    PLATFORM_EXPORT static bool vectorBackingExpand(void*, size_t);
 
     static void free(void* address) { }
     template<typename T>
@@ -1530,25 +1476,6 @@ public:
         typedef T* Type;
     };
 
-    // The WTF classes use Allocator::VectorBackingHelper in order to find a
-    // class to template their backing allocation operation on. For off-heap
-    // allocations the VectorBackingHelper is a dummy class, since the class is
-    // not used during allocation of backing. For on-heap allocations this
-    // typedef ensures that the allocation is done with the correct templated
-    // instantiation of the allocation function. This ensures the correct GC
-    // map is written when backing allocations take place.
-    template<typename T, typename Traits>
-    struct VectorBackingHelper {
-        typedef HeapVectorBacking<T, Traits> Type;
-    };
-
-    // Like the VectorBackingHelper, but this type is used for HashSet and
-    // HashMap, both of which are implemented using HashTable.
-    template<typename Table>
-    struct HashTableBackingHelper {
-        typedef HeapHashTableBacking<Table> Type;
-    };
-
     template<typename T>
     struct OtherType {
         typedef T* Type;
@@ -1563,18 +1490,23 @@ public:
     static void enterNoAllocationScope()
     {
 #if ENABLE(ASSERT)
-        ThreadStateFor<AnyThread>::state()->enterNoAllocationScope();
+        ThreadState::current()->enterNoAllocationScope();
 #endif
     }
 
     static void leaveNoAllocationScope()
     {
 #if ENABLE(ASSERT)
-        ThreadStateFor<AnyThread>::state()->leaveNoAllocationScope();
+        ThreadState::current()->leaveNoAllocationScope();
 #endif
     }
 
 private:
+    template<typename HeapTraits, typename HeapType, typename HeaderType>
+    static void backingFree(void*);
+    template<typename HeapTraits, typename HeapType, typename HeaderType>
+    static bool backingExpand(void*, size_t);
+
     template<typename T, size_t u, typename V> friend class WTF::Vector;
     template<typename T, typename U, typename V, typename W> friend class WTF::HashSet;
     template<typename T, typename U, typename V, typename W, typename X, typename Y> friend class WTF::HashMap;
@@ -2388,20 +2320,6 @@ struct GCInfoTrait<HeapDeque<T, inlineCapacity> > : public GCInfoTrait<Deque<T, 
 template<typename T, typename U, typename V>
 struct GCInfoTrait<HeapHashCountedSet<T, U, V> > : public GCInfoTrait<HashCountedSet<T, U, V, HeapAllocator> > { };
 
-template<typename T>
-struct IfWeakMember;
-
-template<typename T>
-struct IfWeakMember {
-    template<typename U>
-    static bool isDead(Visitor*, const U&) { return false; }
-};
-
-template<typename T>
-struct IfWeakMember<WeakMember<T> > {
-    static bool isDead(Visitor* visitor, const WeakMember<T>& t) { return !visitor->isAlive(t.get()); }
-};
-
-}
+} // namespace blink
 
 #endif // Heap_h

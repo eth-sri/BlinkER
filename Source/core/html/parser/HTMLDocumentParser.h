@@ -99,6 +99,7 @@ public:
         HTMLTreeBuilderSimulator::State treeBuilderState;
         HTMLInputCheckpoint inputCheckpoint;
         TokenPreloadScannerCheckpoint preloadScannerCheckpoint;
+        bool startingScript;
     };
     void didReceiveParsedChunkFromBackgroundParser(PassOwnPtr<ParsedChunk>);
     void didReceiveEncodingDataFromBackgroundParser(const DocumentEncodingData&);
@@ -148,7 +149,7 @@ private:
     void stopBackgroundParser();
     void validateSpeculations(PassOwnPtr<ParsedChunk> lastChunk);
     void discardSpeculationsAndResumeFrom(PassOwnPtr<ParsedChunk> lastChunk, PassOwnPtr<HTMLToken>, PassOwnPtr<HTMLTokenizer>);
-    void processParsedChunkFromBackgroundParser(PassOwnPtr<ParsedChunk>);
+    size_t processParsedChunkFromBackgroundParser(PassOwnPtr<ParsedChunk>);
     void pumpPendingSpeculations();
 
     Document* contextForParsingSession();
@@ -194,7 +195,7 @@ private:
     // FIXME: m_lastChunkBeforeScript, m_tokenizer, m_token, and m_input should be combined into a single state object
     // so they can be set and cleared together and passed between threads together.
     OwnPtr<ParsedChunk> m_lastChunkBeforeScript;
-    Deque<OwnPtr<ParsedChunk> > m_speculations;
+    Deque<OwnPtr<ParsedChunk>> m_speculations;
     WeakPtrFactory<HTMLDocumentParser> m_weakFactory;
     WeakPtr<BackgroundHTMLParser> m_backgroundParser;
     OwnPtrWillBeMember<HTMLResourcePreloader> m_preloader;
@@ -203,6 +204,7 @@ private:
     bool m_endWasDelayed;
     bool m_haveBackgroundParser;
     unsigned m_pumpSessionNestingLevel;
+    unsigned m_pumpSpeculationsSessionNestingLevel;
     RefPtr<EventRacerLog> m_log;
     EventRacerJoinActions m_joinActions;
 };

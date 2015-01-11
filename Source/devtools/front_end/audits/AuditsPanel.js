@@ -35,7 +35,7 @@
 WebInspector.AuditsPanel = function()
 {
     WebInspector.PanelWithSidebarTree.call(this, "audits");
-    this.registerRequiredCSS("components/panelEnablerView.css");
+    this.registerRequiredCSS("ui/panelEnablerView.css");
     this.registerRequiredCSS("audits/auditsPanel.css");
 
     this.auditsTreeElement = new WebInspector.SidebarSectionTreeElement("", {}, true);
@@ -159,7 +159,7 @@ WebInspector.AuditsPanel.prototype = {
         this._visibleView = x;
 
         if (x)
-            x.show(this.mainElement());
+            this.splitView().setMainView(x);
     },
 
     wasShown: function()
@@ -310,7 +310,7 @@ WebInspector.AuditRule.prototype = {
     /**
      * @param {!WebInspector.Target} target
      * @param {!Array.<!WebInspector.NetworkRequest>} requests
-     * @param {function(!WebInspector.AuditRuleResult)} callback
+     * @param {function(?WebInspector.AuditRuleResult)} callback
      * @param {!WebInspector.Progress} progress
      */
     run: function(target, requests, callback, progress)
@@ -327,7 +327,7 @@ WebInspector.AuditRule.prototype = {
      * @param {!WebInspector.Target} target
      * @param {!Array.<!WebInspector.NetworkRequest>} requests
      * @param {!WebInspector.AuditRuleResult} result
-     * @param {function(!WebInspector.AuditRuleResult)} callback
+     * @param {function(?WebInspector.AuditRuleResult)} callback
      * @param {!WebInspector.Progress} progress
      */
     doRun: function(target, requests, result, callback, progress)

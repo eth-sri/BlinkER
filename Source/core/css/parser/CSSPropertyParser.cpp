@@ -606,13 +606,13 @@ bool CSSPropertyParser::parseValue(CSSPropertyID propId, bool important)
             bool acceptQuirkyColors = false;
             switch (propId) {
             case CSSPropertyBackgroundColor:
-                if (!inShorthand())
-                    acceptQuirkyColors = true;
-                break;
             case CSSPropertyBorderBottomColor:
             case CSSPropertyBorderLeftColor:
             case CSSPropertyBorderRightColor:
             case CSSPropertyBorderTopColor:
+                if (!inShorthand() || m_currentShorthand == CSSPropertyBorderColor)
+                    acceptQuirkyColors = true;
+                break;
             case CSSPropertyColor:
                 acceptQuirkyColors = true;
                 break;
@@ -1483,6 +1483,10 @@ bool CSSPropertyParser::parseValue(CSSPropertyID propId, bool important)
         parsedValue = parseTouchAction();
         break;
 
+    case CSSPropertyScrollBlocksOn:
+        parsedValue = parseScrollBlocksOn();
+        break;
+
     case CSSPropertyAlignSelf:
         ASSERT(RuntimeEnabledFeatures::cssGridLayoutEnabled());
         return parseItemPositionOverflowPosition(propId, important);
@@ -2135,7 +2139,7 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseQuotes()
 // [ <string> | attr(X) | open-quote | close-quote | no-open-quote | no-close-quote ]+ | inherit
 bool CSSPropertyParser::parseContent(CSSPropertyID propId, bool important)
 {
-    RefPtrWillBeRawPtr<CSSValueList> values = CSSValueList::createCommaSeparated();
+    RefPtrWillBeRawPtr<CSSValueList> values = CSSValueList::createSpaceSeparated();
 
     while (CSSParserValue* val = m_valueList->current()) {
         RefPtrWillBeRawPtr<CSSValue> parsedValue = nullptr;
@@ -2917,17 +2921,25 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseAnimationIterationCount
     return nullptr;
 }
 
-PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseAnimationName()
+PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseAnimationName(bool allowQuotedName)
 {
     CSSParserValue* value = m_valueList->current();
-    // FIXME: Strings are not valid as per spec
-    if (value->unit == CSSPrimitiveValue::CSS_STRING || value->unit == CSSPrimitiveValue::CSS_IDENT) {
-        if (value->unit == CSSPrimitiveValue::CSS_STRING && m_context.useCounter())
+
+    if (value->id == CSSValueNone)
+        return cssValuePool().createIdentifierValue(CSSValueNone);
+
+    if (value->unit == CSSPrimitiveValue::CSS_IDENT)
+        return createPrimitiveStringValue(value);
+
+    if (allowQuotedName && value->unit == CSSPrimitiveValue::CSS_STRING) {
+        // Legacy support for strings in prefixed animations
+        if (m_context.useCounter())
             m_context.useCounter()->count(UseCounter::QuotedAnimationName);
-        if (value->id == CSSValueNone || (value->unit == CSSPrimitiveValue::CSS_STRING && equalIgnoringCase(value->string, "none")))
+        if (equalIgnoringCase(value->string, "none"))
             return cssValuePool().createIdentifierValue(CSSValueNone);
         return createPrimitiveStringValue(value);
     }
+
     return nullptr;
 }
 
@@ -3084,8 +3096,10 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseAnimationProperty(CSSPr
         value = parseAnimationIterationCount();
         break;
     case CSSPropertyAnimationName:
+        value = parseAnimationName(false);
+        break;
     case CSSPropertyWebkitAnimationName:
-        value = parseAnimationName();
+        value = parseAnimationName(true);
         break;
     case CSSPropertyAnimationPlayState:
     case CSSPropertyWebkitAnimationPlayState:
@@ -7383,6 +7397,36 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseTouchAction()
         return list.release();
 
     return nullptr;
+}
+
+PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseScrollBlocksOn()
+{
+    CSSParserValue* value = m_valueList->current();
+    if (value->id == CSSValueNone) {
+        m_valueList->next();
+        return cssValuePool().createIdentifierValue(CSSValueNone);
+    }
+
+    RefPtrWillBeRawPtr<CSSValueList> list = CSSValueList::createSpaceSeparated();
+    while (value) {
+        switch (value->id) {
+        case CSSValueStartTouch:
+        case CSSValueWheelEvent:
+        case CSSValueScrollEvent: {
+            RefPtrWillBeRawPtr<CSSValue> flagValue = cssValuePool().createIdentifierValue(value->id);
+            if (list->hasValue(flagValue.get()))
+                return nullptr;
+            list->append(flagValue.release());
+            break;
+        }
+        default:
+            return nullptr;
+        }
+        value = m_valueList->next();
+    }
+
+    ASSERT(list->length());
+    return list.release();
 }
 
 void CSSPropertyParser::addTextDecorationProperty(CSSPropertyID propId, PassRefPtrWillBeRawPtr<CSSValue> value, bool important)

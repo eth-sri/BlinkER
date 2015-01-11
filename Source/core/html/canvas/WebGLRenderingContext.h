@@ -35,6 +35,7 @@ class WebGLRenderingContext final : public WebGLRenderingContextBase, public Scr
     DEFINE_WRAPPERTYPEINFO();
 public:
     static PassOwnPtrWillBeRawPtr<WebGLRenderingContext> create(HTMLCanvasElement*, WebGLContextAttributes*);
+    static void forceNextWebGLContextCreationToFail();
     virtual ~WebGLRenderingContext();
 
     virtual unsigned version() const override { return 1; }
@@ -48,6 +49,7 @@ private:
 
     // Enabled extension objects.
     RefPtrWillBeMember<ANGLEInstancedArrays> m_angleInstancedArrays;
+    RefPtrWillBeMember<CHROMIUMSubscribeUniform> m_chromiumSubscribeUniform;
     RefPtrWillBeMember<EXTBlendMinMax> m_extBlendMinMax;
     RefPtrWillBeMember<EXTFragDepth> m_extFragDepth;
     RefPtrWillBeMember<EXTShaderTextureLOD> m_extShaderTextureLOD;

@@ -55,6 +55,7 @@ public:
     virtual void setAcceleratedCompositingEnabled(bool) override;
     virtual void setPreferCompositingToLCDTextEnabled(bool) override;
     virtual void setAccessibilityEnabled(bool) override;
+    virtual void setAccessibilityPasswordValuesEnabled(bool) override;
     virtual void setAllowDisplayOfInsecureContent(bool) override;
     virtual void setAllowFileAccessFromFileURLs(bool) override;
     virtual void setAllowCustomScrollbarInMainFrame(bool) override;
@@ -133,6 +134,8 @@ public:
     virtual void setPrimaryHoverType(HoverType) override;
     virtual void setRenderVSyncNotificationEnabled(bool) override;
     virtual void setReportScreenSizeInPhysicalPixelsQuirk(bool) override;
+    virtual void setRootLayerScrolls(bool) override;
+    virtual void setRubberBandingOnCompositorThread(bool) override;
     virtual void setSansSerifFontFamily(const WebString&, UScriptCode = USCRIPT_COMMON) override;
     virtual void setSelectTrailingWhitespaceEnabled(bool override);
     virtual void setSelectionIncludesAltImageText(bool) override;

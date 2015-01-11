@@ -5,56 +5,28 @@
 #ifndef ClipRecorder_h
 #define ClipRecorder_h
 
-#include "core/paint/ViewDisplayList.h"
-#include "core/rendering/PaintPhase.h"
-#include "platform/geometry/RoundedRect.h"
-#include "wtf/Vector.h"
+#include "core/rendering/RenderLayerModelObject.h"
+#include "platform/geometry/LayoutRect.h"
+#include "platform/graphics/paint/DisplayItem.h"
 
 namespace blink {
 
-class ClipRect;
-class GraphicsContext;
-class RenderObject;
 class RenderLayer;
-
-class ClipDisplayItem : public DisplayItem {
-public:
-    ClipDisplayItem(RenderObject* renderer, RenderLayer*, Type type, IntRect clipRect)
-        : DisplayItem(renderer, type), m_clipRect(clipRect) { }
-
-    Vector<RoundedRect>& roundedRectClips() { return m_roundedRectClips; }
-
-private:
-    virtual void replay(GraphicsContext*) override;
-
-    IntRect m_clipRect;
-    Vector<RoundedRect> m_roundedRectClips;
-#ifndef NDEBUG
-    virtual WTF::String asDebugString() const override;
-#endif
-};
-
-class EndClipDisplayItem : public DisplayItem {
-public:
-    EndClipDisplayItem() : DisplayItem(0, EndClip) { }
-
-private:
-    virtual void replay(GraphicsContext*) override;
-};
+class RoundedRect;
+struct PaintInfo;
 
 class ClipRecorder {
 public:
-    explicit ClipRecorder(RenderLayer*, GraphicsContext*, DisplayItem::Type, const ClipRect&);
-    void addRoundedRectClip(const RoundedRect&);
-
+    ClipRecorder(RenderLayerModelObject&, const PaintInfo&, const LayoutRect& clipRect);
     ~ClipRecorder();
 
+    static DisplayItem::Type paintPhaseToClipType(PaintPhase);
 private:
-    ClipDisplayItem* m_clipDisplayItem;
-    GraphicsContext* m_graphicsContext;
-    RenderLayer* m_renderLayer;
+    LayoutRect m_clipRect;
+    const PaintInfo& m_paintInfo;
+    RenderLayerModelObject& m_canvas;
 };
 
 } // namespace blink
 
-#endif // ViewDisplayList_h
+#endif // ClipRecorder_h

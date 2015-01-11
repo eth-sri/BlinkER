@@ -32,7 +32,6 @@
 #include "public/web/WebNode.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/accessibility/AXObjectCache.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/Node.h"
@@ -44,6 +43,8 @@
 #include "core/html/HTMLElement.h"
 #include "core/rendering/RenderObject.h"
 #include "core/rendering/RenderPart.h"
+#include "modules/accessibility/AXObject.h"
+#include "modules/accessibility/AXObjectCacheImpl.h"
 #include "platform/Widget.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebVector.h"
@@ -254,7 +255,7 @@ WebAXObject WebNode::accessibilityObject()
 {
     WebDocument webDocument = document();
     const Document* doc = document().constUnwrap<Document>();
-    AXObjectCache* cache = doc->existingAXObjectCache();
+    AXObjectCacheImpl* cache = toAXObjectCacheImpl(doc->existingAXObjectCache());
     Node* node = unwrap<Node>();
     return cache ? WebAXObject(cache->get(node)) : WebAXObject();
 }

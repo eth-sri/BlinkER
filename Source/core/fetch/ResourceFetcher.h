@@ -136,9 +136,9 @@ public:
     // ResourceLoaderHost
     virtual void incrementRequestCount(const Resource*) override;
     virtual void decrementRequestCount(const Resource*) override;
-    virtual void didLoadResource(Resource*) override;
+    virtual void didLoadResource() override;
     virtual void redirectReceived(Resource*, const ResourceResponse&) override;
-    virtual void didFinishLoading(const Resource*, double finishTime, int64_t encodedDataLength) override;
+    virtual void didFinishLoading(Resource*, double finishTime, int64_t encodedDataLength) override;
     virtual void didChangeLoadingPriority(const Resource*, ResourceLoadPriority, int intraPriorityValue) override;
     virtual void didFailLoading(const Resource*, const ResourceError&) override;
     virtual void willSendRequest(unsigned long identifier, ResourceRequest&, const ResourceResponse& redirectResponse, const FetchInitiatorInfo&) override;
@@ -183,7 +183,6 @@ private:
     void preCacheDataURIImage(const FetchRequest&);
     void preCacheSubstituteDataForMainResource(const FetchRequest&, const SubstituteData&);
     void storeResourceTimingInitiatorInformation(Resource*);
-    void requestPreload(Resource::Type, FetchRequest&, const String& charset);
 
     enum RevalidationPolicy { Use, Revalidate, Reload, Load };
     RevalidationPolicy determineRevalidationPolicy(Resource::Type, const FetchRequest&, Resource* existingResource) const;

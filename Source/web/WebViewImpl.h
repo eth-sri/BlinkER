@@ -47,7 +47,6 @@
 #include "public/web/WebInputEvent.h"
 #include "public/web/WebNavigationPolicy.h"
 #include "public/web/WebView.h"
-#include "web/BackForwardClientImpl.h"
 #include "web/ChromeClientImpl.h"
 #include "web/ContextMenuClientImpl.h"
 #include "web/DragClientImpl.h"
@@ -184,7 +183,7 @@ public:
     virtual void setFocusedFrame(WebFrame*) override;
     virtual void setInitialFocus(bool reverse) override;
     virtual void clearFocusedElement() override;
-    virtual void scrollFocusedNodeIntoRect(const WebRect&) override;
+    virtual bool scrollFocusedNodeIntoRect(const WebRect&) override;
     virtual void zoomToFindInPageRect(const WebRect&) override;
     virtual void advanceFocus(bool reverse) override;
     virtual double zoomLevel() override;
@@ -222,6 +221,7 @@ public:
         const WebPluginAction&,
         const WebPoint&) override;
     virtual WebHitTestResult hitTestResultAt(const WebPoint&) override;
+    virtual WebHitTestResult hitTestResultForTap(const WebPoint&, const WebSize&) override;
     virtual void copyImageAt(const WebPoint&) override;
     virtual void saveImageAt(const WebPoint&) override;
     virtual void dragSourceEndedAt(
@@ -508,6 +508,10 @@ public:
 
     virtual void setTopControlsLayoutHeight(float) override;
 
+    virtual void forceNextWebGLContextCreationToFail() override;
+
+    IntSize mainFrameSize();
+
 private:
     void didUpdateTopControls();
     void setTopControlsContentOffset(float);
@@ -610,7 +614,6 @@ private:
     DragClientImpl m_dragClientImpl;
     EditorClientImpl m_editorClientImpl;
     InspectorClientImpl m_inspectorClientImpl;
-    BackForwardClientImpl m_backForwardClientImpl;
     SpellCheckerClientImpl m_spellCheckerClientImpl;
     StorageClientImpl m_storageClientImpl;
 

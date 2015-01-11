@@ -68,6 +68,7 @@
 #include "core/css/resolver/StyleResolverStats.h"
 #include "core/css/resolver/ViewportStyleResolver.h"
 #include "core/dom/CSSSelectorWatch.h"
+#include "core/dom/FirstLetterPseudoElement.h"
 #include "core/dom/NodeRenderStyle.h"
 #include "core/dom/StyleEngine.h"
 #include "core/dom/Text.h"
@@ -170,38 +171,34 @@ void StyleResolver::removePendingAuthorStyleSheets(const WillBeHeapVector<RefPtr
         m_pendingStyleSheets.remove(styleSheets[i].get());
 }
 
-void StyleResolver::appendCSSStyleSheet(CSSStyleSheet* cssSheet)
+void StyleResolver::appendCSSStyleSheet(CSSStyleSheet& cssSheet)
 {
-    ASSERT(cssSheet);
-    ASSERT(!cssSheet->disabled());
-    if (cssSheet->mediaQueries() && !m_medium->eval(cssSheet->mediaQueries(), &m_viewportDependentMediaQueryResults))
+    ASSERT(!cssSheet.disabled());
+    if (cssSheet.mediaQueries() && !m_medium->eval(cssSheet.mediaQueries(), &m_viewportDependentMediaQueryResults))
         return;
 
-    TreeScope* treeScope = ScopedStyleResolver::treeScopeFor(document(), cssSheet);
+    TreeScope* treeScope = ScopedStyleResolver::treeScopeFor(document(), &cssSheet);
     if (!treeScope)
         return;
 
-    ScopedStyleResolver& resolver = treeScope->ensureScopedStyleResolver();
-    document().styleEngine()->addScopedStyleResolver(&resolver);
-    unsigned index = resolver.appendCSSStyleSheet(cssSheet);
-
+    unsigned index = treeScope->ensureScopedStyleResolver().appendCSSStyleSheet(&cssSheet);
     addRulesFromSheet(cssSheet, treeScope, index);
 }
 
-void StyleResolver::addRulesFromSheet(CSSStyleSheet* cssSheet, TreeScope* treeScope, unsigned index)
+void StyleResolver::addRulesFromSheet(CSSStyleSheet& cssSheet, TreeScope* treeScope, unsigned index)
 {
-    StyleSheetContents* sheet = cssSheet->contents();
+    StyleSheetContents* sheet = cssSheet.contents();
     AddRuleFlags addRuleFlags = document().securityOrigin()->canRequest(sheet->baseURL()) ? RuleHasDocumentSecurityOrigin : RuleHasNoSpecialState;
     const RuleSet& ruleSet = sheet->ensureRuleSet(*m_medium, addRuleFlags);
 
     addMediaQueryResults(ruleSet.viewportDependentMediaQueryResults());
-    processScopedRules(ruleSet, cssSheet, index, treeScope->rootNode());
+    processScopedRules(ruleSet, &cssSheet, index, treeScope->rootNode());
 }
 
 void StyleResolver::appendPendingAuthorStyleSheets()
 {
     for (const auto& styleSheet : m_pendingStyleSheets)
-        appendCSSStyleSheet(styleSheet);
+        appendCSSStyleSheet(*styleSheet);
 
     m_pendingStyleSheets.clear();
     finishAppendAuthorStyleSheets();
@@ -211,9 +208,8 @@ void StyleResolver::appendAuthorStyleSheets(const WillBeHeapVector<RefPtrWillBeM
 {
     // This handles sheets added to the end of the stylesheet list only. In other cases the style resolver
     // needs to be reconstructed. To handle insertions too the rule order numbers would need to be updated.
-    unsigned size = styleSheets.size();
-    for (unsigned i = 0; i < size; ++i)
-        appendCSSStyleSheet(styleSheets[i].get());
+    for (const auto& styleSheet : styleSheets)
+        appendCSSStyleSheet(*styleSheet);
 }
 
 void StyleResolver::finishAppendAuthorStyleSheets()
@@ -240,10 +236,9 @@ void StyleResolver::resetRuleFeatures()
 void StyleResolver::processScopedRules(const RuleSet& authorRules, CSSStyleSheet* parentStyleSheet, unsigned parentIndex, ContainerNode& scope)
 {
     const WillBeHeapVector<RawPtrWillBeMember<StyleRuleKeyframes> > keyframesRules = authorRules.keyframesRules();
-    ScopedStyleResolver* resolver = &scope.treeScope().ensureScopedStyleResolver();
-    document().styleEngine()->addScopedStyleResolver(resolver);
+    ScopedStyleResolver& resolver = scope.treeScope().ensureScopedStyleResolver();
     for (unsigned i = 0; i < keyframesRules.size(); ++i)
-        resolver->addKeyframeStyle(keyframesRules[i]);
+        resolver.addKeyframeStyle(keyframesRules[i]);
 
     m_treeBoundaryCrossingRules.addTreeBoundaryCrossingRules(authorRules, parentStyleSheet, parentIndex, scope);
 
@@ -264,14 +259,12 @@ void StyleResolver::resetAuthorStyle(TreeScope& treeScope)
         return;
 
     m_treeBoundaryCrossingRules.reset(&treeScope.rootNode());
-
     resolver->resetAuthorStyle();
     resetRuleFeatures();
     if (treeScope.rootNode().isDocumentNode())
         return;
 
     // resolver is going to be freed below.
-    document().styleEngine()->removeScopedStyleResolver(resolver);
     treeScope.clearScopedStyleResolver();
 }
 
@@ -402,8 +395,13 @@ void StyleResolver::matchAuthorRules(Element* element, ElementRuleCollector& col
     collector.clearMatchedRules();
     collector.matchedResult().ranges.lastAuthorRule = collector.matchedResult().matchedProperties.size() - 1;
 
-    if (document().styleEngine()->hasOnlyScopedResolverForDocument()) {
-        document().scopedStyleResolver()->collectMatchingAuthorRules(collector, includeEmptyRules, ignoreCascadeScope);
+    if (document().styleEngine()->onlyDocumentHasStyles()) {
+        ScopedStyleResolver* resolver = document().scopedStyleResolver();
+        if (!resolver)
+            return;
+        // If we have no resolver for a document, the document has no styles.
+        // We don't need to see any rules (including treeboundary crossing ones).
+        resolver->collectMatchingAuthorRules(collector, includeEmptyRules, ignoreCascadeScope);
         m_treeBoundaryCrossingRules.collectTreeBoundaryCrossingRules(element, collector, includeEmptyRules);
         collector.sortAndTransferMatchedRules();
         return;
@@ -419,15 +417,14 @@ void StyleResolver::matchAuthorRules(Element* element, ElementRuleCollector& col
         return;
     }
 
-    if (resolvers.isEmpty())
-        return;
-
-    CascadeScope cascadeScope = 0;
-    CascadeOrder cascadeOrder = resolvers.size();
-    for (unsigned i = 0; i < resolvers.size(); ++i, --cascadeOrder) {
-        ScopedStyleResolver* resolver = resolvers.at(i);
-        // FIXME: Need to clarify how to treat style scoped.
-        resolver->collectMatchingAuthorRules(collector, includeEmptyRules, cascadeScope++, resolver->treeScope() == element->treeScope() && resolver->treeScope().rootNode().isShadowRoot() ? 0 : cascadeOrder);
+    if (!resolvers.isEmpty()) {
+        CascadeScope cascadeScope = 0;
+        CascadeOrder cascadeOrder = resolvers.size();
+        for (unsigned i = 0; i < resolvers.size(); ++i, --cascadeOrder) {
+            ScopedStyleResolver* resolver = resolvers.at(i);
+            // FIXME: Need to clarify how to treat style scoped.
+            resolver->collectMatchingAuthorRules(collector, includeEmptyRules, cascadeScope++, resolver->treeScope() == element->treeScope() && resolver->treeScope().rootNode().isShadowRoot() ? 0 : cascadeOrder);
+        }
     }
 
     m_treeBoundaryCrossingRules.collectTreeBoundaryCrossingRules(element, collector, includeEmptyRules);
@@ -520,12 +517,6 @@ PassRefPtr<RenderStyle> StyleResolver::styleForDocument(Document& document)
     return documentStyle.release();
 }
 
-static inline void resetDirectionAndWritingModeOnDocument(Document& document)
-{
-    document.setDirectionSetOnDocumentElement(false);
-    document.setWritingModeSetOnDocumentElement(false);
-}
-
 static void addContentAttrValuesToFeatures(const Vector<AtomicString>& contentAttrValues, RuleFeatureSet& features)
 {
     for (size_t i = 0; i < contentAttrValues.size(); ++i)
@@ -570,8 +561,6 @@ PassRefPtr<RenderStyle> StyleResolver::styleForElement(Element* element, RenderS
 
     StyleResolverParentScope::ensureParentStackIsPushed();
 
-    if (element == document().documentElement())
-        resetDirectionAndWritingModeOnDocument(document());
     StyleResolverState state(document(), element, defaultParent);
 
     if (sharingBehavior == AllowStyleSharing && state.parentStyle()) {
@@ -589,8 +578,9 @@ PassRefPtr<RenderStyle> StyleResolver::styleForElement(Element* element, RenderS
             state.setParentStyle(defaultStyleForElement());
     } else {
         if (state.parentStyle()) {
-            state.setStyle(RenderStyle::create());
-            state.style()->inheritFrom(state.parentStyle(), isAtShadowBoundary(element) ? RenderStyle::AtShadowBoundary : RenderStyle::NotAtShadowBoundary);
+            RefPtr<RenderStyle> style = RenderStyle::create();
+            style->inheritFrom(state.parentStyle(), isAtShadowBoundary(element) ? RenderStyle::AtShadowBoundary : RenderStyle::NotAtShadowBoundary);
+            state.setStyle(style.release());
         } else {
             state.setStyle(defaultStyleForElement());
             state.setParentStyle(RenderStyle::clone(state.style()));
@@ -627,6 +617,13 @@ PassRefPtr<RenderStyle> StyleResolver::styleForElement(Element* element, RenderS
         ElementRuleCollector collector(state.elementContext(), m_selectorFilter, state.style());
 
         matchAllRules(state, collector, matchingBehavior != MatchAllRulesExcludingSMIL);
+
+        if (element->renderStyle() && element->renderStyle()->textAutosizingMultiplier() != state.style()->textAutosizingMultiplier()) {
+            // Preserve the text autosizing multiplier on style recalc. Autosizer will update it during layout if needed.
+            // NOTE: this must occur before applyMatchedProperties for correct computation of font-relative lengths.
+            state.style()->setTextAutosizingMultiplier(element->renderStyle()->textAutosizingMultiplier());
+            state.style()->setUnique();
+        }
 
         applyMatchedProperties(state, collector.matchedResult());
         applyCallbackSelectors(state);
@@ -666,8 +663,6 @@ PassRefPtr<RenderStyle> StyleResolver::styleForKeyframe(Element& element, const 
     ASSERT(document().settings());
     ASSERT(!hasPendingAuthorStyleSheets());
 
-    if (&element == document().documentElement())
-        resetDirectionAndWritingModeOnDocument(document());
     StyleResolverState state(document(), &element, parentStyle);
 
     MatchResult result;
@@ -716,7 +711,15 @@ PassRefPtrWillBeRawPtr<AnimatableValue> StyleResolver::createAnimatableValueSnap
 PassRefPtrWillBeRawPtr<AnimatableValue> StyleResolver::createAnimatableValueSnapshot(StyleResolverState& state, CSSPropertyID property, CSSValue& value)
 {
     StyleBuilder::applyProperty(property, state, &value);
+    state.fontBuilder().createFont(state.document().styleEngine()->fontSelector(), state.style(), state.parentStyle());
     return CSSAnimatableValueFactory::create(property, *state.style());
+}
+
+PassRefPtrWillBeRawPtr<PseudoElement> StyleResolver::createPseudoElement(Element* parent, PseudoId pseudoId)
+{
+    if (pseudoId == FIRST_LETTER)
+        return FirstLetterPseudoElement::create(parent);
+    return PseudoElement::create(parent, pseudoId);
 }
 
 PassRefPtrWillBeRawPtr<PseudoElement> StyleResolver::createPseudoElementIfNeeded(Element& parent, PseudoId pseudoId)
@@ -725,10 +728,15 @@ PassRefPtrWillBeRawPtr<PseudoElement> StyleResolver::createPseudoElementIfNeeded
     if (!parentRenderer)
         return nullptr;
 
-    if (pseudoId < FIRST_INTERNAL_PSEUDOID && !parentRenderer->style()->hasPseudoStyle(pseudoId))
+    // The first letter pseudo element has to look up the tree and see if any
+    // of the ancestors are first letter.
+    if (pseudoId < FIRST_INTERNAL_PSEUDOID && pseudoId != FIRST_LETTER && !parentRenderer->style()->hasPseudoStyle(pseudoId))
         return nullptr;
 
     if (pseudoId == BACKDROP && !parent.isInTopLayer())
+        return nullptr;
+
+    if (pseudoId == FIRST_LETTER && (parent.isSVGElement() || !FirstLetterPseudoElement::firstLetterTextRenderer(parent)))
         return nullptr;
 
     if (!parentRenderer->canHaveGeneratedChildren())
@@ -738,7 +746,7 @@ PassRefPtrWillBeRawPtr<PseudoElement> StyleResolver::createPseudoElementIfNeeded
     if (RenderStyle* cachedStyle = parentStyle->getCachedPseudoStyle(pseudoId)) {
         if (!pseudoElementRendererIsNeeded(cachedStyle))
             return nullptr;
-        return PseudoElement::create(&parent, pseudoId);
+        return createPseudoElement(&parent, pseudoId);
     }
 
     StyleResolverState state(document(), &parent, parentStyle);
@@ -751,7 +759,7 @@ PassRefPtrWillBeRawPtr<PseudoElement> StyleResolver::createPseudoElementIfNeeded
     if (!pseudoElementRendererIsNeeded(style.get()))
         return nullptr;
 
-    RefPtrWillBeRawPtr<PseudoElement> pseudo = PseudoElement::create(&parent, pseudoId);
+    RefPtrWillBeRawPtr<PseudoElement> pseudo = createPseudoElement(&parent, pseudoId);
 
     setAnimationUpdateIfNeeded(state, *pseudo);
     if (ActiveAnimations* activeAnimations = pseudo->activeAnimations())
@@ -776,8 +784,9 @@ bool StyleResolver::pseudoStyleForElementInternal(Element& element, const Pseudo
     if (baseRenderStyle) {
         state.setStyle(RenderStyle::clone(baseRenderStyle));
     } else if (pseudoStyleRequest.allowsInheritance(state.parentStyle())) {
-        state.setStyle(RenderStyle::create());
-        state.style()->inheritFrom(state.parentStyle());
+        RefPtr<RenderStyle> style = RenderStyle::create();
+        style->inheritFrom(state.parentStyle());
+        state.setStyle(style.release());
     } else {
         state.setStyle(defaultStyleForElement());
         state.setParentStyle(RenderStyle::clone(state.style()));
@@ -852,13 +861,13 @@ PassRefPtr<RenderStyle> StyleResolver::pseudoStyleForElement(Element* element, c
 PassRefPtr<RenderStyle> StyleResolver::styleForPage(int pageIndex)
 {
     ASSERT(!hasPendingAuthorStyleSheets());
-    resetDirectionAndWritingModeOnDocument(document());
     StyleResolverState state(document(), document().documentElement()); // m_rootElementStyle will be set to the document style.
 
-    state.setStyle(RenderStyle::create());
+    RefPtr<RenderStyle> style = RenderStyle::create();
     const RenderStyle* rootElementStyle = state.rootElementStyle() ? state.rootElementStyle() : document().renderStyle();
     ASSERT(rootElementStyle);
-    state.style()->inheritFrom(rootElementStyle);
+    style->inheritFrom(rootElementStyle);
+    state.setStyle(style.release());
 
     PageRuleCollector collector(rootElementStyle, pageIndex);
 
@@ -906,18 +915,18 @@ void StyleResolver::collectViewportRules()
 
 PassRefPtr<RenderStyle> StyleResolver::defaultStyleForElement()
 {
-    StyleResolverState state(document(), 0);
-    state.setStyle(RenderStyle::create());
-    state.fontBuilder().setInitial(state.style()->effectiveZoom());
-    state.style()->font().update(document().styleEngine()->fontSelector());
-    return state.takeStyle();
+    RefPtr<RenderStyle> style = RenderStyle::create();
+    FontBuilder fontBuilder(document());
+    fontBuilder.setInitial(style->effectiveZoom());
+    fontBuilder.createFont(document().styleEngine()->fontSelector(), style.get(), nullptr);
+    return style.release();
 }
 
 PassRefPtr<RenderStyle> StyleResolver::styleForText(Text* textNode)
 {
     ASSERT(textNode);
 
-    Node* parentNode = NodeRenderingTraversal::parent(textNode);
+    Node* parentNode = NodeRenderingTraversal::parent(*textNode);
     if (!parentNode || !parentNode->renderStyle())
         return defaultStyleForElement();
     return parentNode->renderStyle();
@@ -925,7 +934,9 @@ PassRefPtr<RenderStyle> StyleResolver::styleForText(Text* textNode)
 
 void StyleResolver::updateFont(StyleResolverState& state)
 {
-    state.fontBuilder().createFont(document().styleEngine()->fontSelector(), state.parentStyle(), state.style());
+    state.fontBuilder().createFont(document().styleEngine()->fontSelector(), state.style(), state.parentStyle());
+    state.setConversionFontSizes(CSSToLengthConversionData::FontSizes(state.style(), state.rootElementStyle()));
+    state.setConversionZoom(state.style()->effectiveZoom());
 }
 
 PassRefPtrWillBeRawPtr<StyleRuleList> StyleResolver::styleRulesForElement(Element* element, unsigned rulesToInclude)
@@ -1208,10 +1219,14 @@ static inline bool isValidFirstLetterStyleProperty(CSSPropertyID id)
     case CSSPropertyWebkitMarginTopCollapse:
     case CSSPropertyWordSpacing:
         return true;
+    case CSSPropertyTextDecoration:
+        ASSERT(!RuntimeEnabledFeatures::css3TextDecorationsEnabled());
+        return true;
     case CSSPropertyTextDecorationColor:
     case CSSPropertyTextDecorationLine:
     case CSSPropertyTextDecorationStyle:
-        return RuntimeEnabledFeatures::css3TextDecorationsEnabled();
+        ASSERT(RuntimeEnabledFeatures::css3TextDecorationsEnabled());
+        return true;
 
     // text-shadow added in text decoration spec:
     // http://www.w3.org/TR/css-text-decor-3/#text-shadow-property
@@ -1279,7 +1294,7 @@ bool StyleResolver::isPropertyForPass(CSSPropertyID property)
 // This method expands the 'all' shorthand property to longhand properties
 // and applies the expanded longhand properties.
 template <StyleResolver::StyleApplicationPass pass>
-void StyleResolver::applyAllProperty(StyleResolverState& state, CSSValue* allValue)
+void StyleResolver::applyAllProperty(StyleResolverState& state, CSSValue* allValue, bool inheritedOnly)
 {
     bool isUnsetValue = !allValue->isInitialValue() && !allValue->isInheritedValue();
     unsigned startCSSProperty = firstCSSPropertyId<pass>();
@@ -1299,6 +1314,11 @@ void StyleResolver::applyAllProperty(StyleResolverState& state, CSSValue* allVal
         // We skip applyProperty when a given property is unicode-bidi or
         // direction.
         if (!CSSProperty::isAffectedByAllProperty(propertyId))
+            continue;
+
+        // When hitting matched properties' cache, only inherited properties will be
+        // applied.
+        if (inheritedOnly && !CSSPropertyMetadata::isInheritedProperty(propertyId))
             continue;
 
         CSSValue* value;
@@ -1325,7 +1345,7 @@ void StyleResolver::applyProperties(StyleResolverState& state, const StyleProper
 
         CSSPropertyID property = current.id();
         if (property == CSSPropertyAll) {
-            applyAllProperty<pass>(state, current.value());
+            applyAllProperty<pass>(state, current.value(), inheritedOnly);
             continue;
         }
 
@@ -1419,6 +1439,11 @@ void StyleResolver::applyMatchedProperties(StyleResolverState& state, const Matc
 
             // Unfortunately the link status is treated like an inherited property. We need to explicitly restore it.
             state.style()->setInsideLink(linkStatus);
+
+            state.fontBuilder().setFontDescription(state.style()->fontDescription());
+
+            updateFont(state);
+
             return;
         }
         applyInheritedOnly = true;
@@ -1570,7 +1595,6 @@ bool StyleResolver::mediaQueryAffectedByViewportChange() const
 void StyleResolver::trace(Visitor* visitor)
 {
 #if ENABLE(OILPAN)
-    visitor->trace(m_keyframesRuleMap);
     visitor->trace(m_matchedPropertiesCache);
     visitor->trace(m_viewportDependentMediaQueryResults);
     visitor->trace(m_selectorFilter);

@@ -14,7 +14,7 @@ namespace blink {
 
 const int buttonShadowHeight = 2;
 
-void FileUploadControlPainter::paintObject(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
+void FileUploadControlPainter::paintObject(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
     if (m_renderFileUploadControl.style()->visibility() != VISIBLE)
         return;
@@ -66,7 +66,7 @@ void FileUploadControlPainter::paintObject(PaintInfo& paintInfo, const LayoutPoi
         paintInfo.context->setFillColor(m_renderFileUploadControl.resolveColor(CSSPropertyColor));
 
         // Draw the filename
-        paintInfo.context->drawBidiText(font, textRunPaintInfo, IntPoint(roundToInt(textX), roundToInt(textY)));
+        paintInfo.context->drawBidiText(font, textRunPaintInfo, FloatPoint(roundToInt(textX), roundToInt(textY)));
     }
 
     // Paint the children.

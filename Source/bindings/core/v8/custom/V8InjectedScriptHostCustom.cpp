@@ -80,12 +80,12 @@ void V8InjectedScriptHost::inspectedObjectMethodCustom(const v8::FunctionCallbac
         return;
 
     if (!info[0]->IsInt32()) {
-        V8ThrowException::throwTypeError("argument has to be an integer", info.GetIsolate());
+        V8ThrowException::throwTypeError(info.GetIsolate(), "argument has to be an integer");
         return;
     }
 
     InjectedScriptHost* host = V8InjectedScriptHost::toImpl(info.Holder());
-    InjectedScriptHost::InspectableObject* object = host->inspectedObject(info[0]->ToInt32()->Value());
+    InjectedScriptHost::InspectableObject* object = host->inspectedObject(info[0]->ToInt32(info.GetIsolate())->Value());
     v8SetReturnValue(info, object->get(ScriptState::current(info.GetIsolate())).v8Value());
 }
 
@@ -111,7 +111,7 @@ void V8InjectedScriptHost::internalConstructorNameMethodCustom(const v8::Functio
     if (info.Length() < 1 || !info[0]->IsObject())
         return;
 
-    v8::Local<v8::Object> object = info[0]->ToObject();
+    v8::Local<v8::Object> object = info[0]->ToObject(info.GetIsolate());
     v8::Local<v8::String> result = object->GetConstructorName();
 
     if (!result.IsEmpty() && toCoreStringWithUndefinedOrNullCheck(result) == "Object") {
@@ -172,6 +172,10 @@ void V8InjectedScriptHost::subtypeMethodCustom(const v8::FunctionCallbackInfo<v8
         v8SetReturnValue(info, v8AtomicString(isolate, "set"));
         return;
     }
+    if (value->IsMapIterator() || value->IsSetIterator()) {
+        v8SetReturnValue(info, v8AtomicString(isolate, "iterator"));
+        return;
+    }
     if (V8Node::hasInstance(value, isolate)) {
         v8SetReturnValue(info, v8AtomicString(isolate, "node"));
         return;
@@ -202,7 +206,7 @@ void V8InjectedScriptHost::functionDetailsMethodCustom(const v8::FunctionCallbac
     v8::Local<v8::Object> location = v8::Object::New(isolate);
     location->Set(v8AtomicString(isolate, "lineNumber"), v8::Integer::New(isolate, lineNumber));
     location->Set(v8AtomicString(isolate, "columnNumber"), v8::Integer::New(isolate, columnNumber));
-    location->Set(v8AtomicString(isolate, "scriptId"), v8::Integer::New(isolate, function->ScriptId())->ToString());
+    location->Set(v8AtomicString(isolate, "scriptId"), v8::Integer::New(isolate, function->ScriptId())->ToString(isolate));
 
     v8::Local<v8::Object> result = v8::Object::New(isolate);
     result->Set(v8AtomicString(isolate, "location"), location);
@@ -286,7 +290,7 @@ void V8InjectedScriptHost::getEventListenersMethodCustom(const v8::FunctionCallb
 
     // We need to handle a LocalDOMWindow specially, because a LocalDOMWindow wrapper exists on a prototype chain.
     if (!target)
-        target = toDOMWindow(value, info.GetIsolate());
+        target = toDOMWindow(info.GetIsolate(), value);
 
     if (!target || !target->executionContext())
         return;
@@ -327,7 +331,7 @@ void V8InjectedScriptHost::evalMethodCustom(const v8::FunctionCallbackInfo<v8::V
         return;
     }
 
-    v8::Handle<v8::String> expression = info[0]->ToString();
+    v8::Handle<v8::String> expression = info[0]->ToString(isolate);
     if (expression.IsEmpty()) {
         isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(isolate, "The argument must be a string.")));
         return;
@@ -351,7 +355,7 @@ void V8InjectedScriptHost::evaluateWithExceptionDetailsMethodCustom(const v8::Fu
         return;
     }
 
-    v8::Handle<v8::String> expression = info[0]->ToString();
+    v8::Handle<v8::String> expression = info[0]->ToString(isolate);
     if (expression.IsEmpty()) {
         isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(isolate, "The argument must be a string.")));
         return;
@@ -503,7 +507,7 @@ void V8InjectedScriptHost::setNonEnumPropertyMethodCustom(const v8::FunctionCall
     if (info.Length() < 3 || !info[0]->IsObject() || !info[1]->IsString())
         return;
 
-    v8::Local<v8::Object> object = info[0]->ToObject();
+    v8::Local<v8::Object> object = info[0]->ToObject(info.GetIsolate());
     object->ForceSet(info[1], info[2], v8::DontEnum);
 }
 

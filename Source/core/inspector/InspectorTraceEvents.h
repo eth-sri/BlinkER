@@ -14,6 +14,7 @@
 
 namespace blink {
 
+class CSSStyleSheetResource;
 class DescendantInvalidationSet;
 class Document;
 class Element;
@@ -21,6 +22,7 @@ class Event;
 class ExecutionContext;
 class FrameView;
 class GraphicsLayer;
+class ImageResource;
 class KURL;
 class LayoutRect;
 class LocalFrame;
@@ -32,6 +34,7 @@ class RenderObject;
 class ResourceRequest;
 class ResourceResponse;
 class StyleChangeReasonForTracing;
+class StyleImage;
 class TracedValue;
 class WorkerThread;
 class XMLHttpRequest;
@@ -83,7 +86,7 @@ public:
     static const char PreventStyleSharingForParent[];
 
     static PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(Element&, const char* reason);
-    static PassRefPtr<TraceEvent::ConvertableToTraceFormat> selectorPart(Element&, const char* reason, const String&);
+    static PassRefPtr<TraceEvent::ConvertableToTraceFormat> selectorPart(Element&, const char* reason, const DescendantInvalidationSet&, const String&);
     static PassRefPtr<TraceEvent::ConvertableToTraceFormat> invalidationList(Element&, const WillBeHeapVector<RefPtrWillBeMember<DescendantInvalidationSet> >&);
 
 private:
@@ -97,12 +100,12 @@ private:
         "data", \
         InspectorStyleInvalidatorInvalidateEvent::data((element), (InspectorStyleInvalidatorInvalidateEvent::reason)))
 
-#define TRACE_STYLE_INVALIDATOR_INVALIDATION_SELECTORPART(element, reason, singleSelectorPart) \
+#define TRACE_STYLE_INVALIDATOR_INVALIDATION_SELECTORPART(element, reason, invalidationSet, singleSelectorPart) \
     TRACE_EVENT_INSTANT1( \
         TRACE_DISABLED_BY_DEFAULT("devtools.timeline.invalidationTracking"), \
         "StyleInvalidatorInvalidationTracking", \
         "data", \
-        InspectorStyleInvalidatorInvalidateEvent::selectorPart((element), (InspectorStyleInvalidatorInvalidateEvent::reason), (singleSelectorPart)))
+        InspectorStyleInvalidatorInvalidateEvent::selectorPart((element), (InspectorStyleInvalidatorInvalidateEvent::reason), (invalidationSet), (singleSelectorPart)))
 
 class InspectorLayoutInvalidationTrackingEvent {
 public:
@@ -169,6 +172,11 @@ public:
     static PassRefPtr<TraceEvent::ConvertableToTraceFormat> beginData(Document*, unsigned startLine);
 };
 
+class InspectorParseAuthorStyleSheetEvent {
+public:
+    static PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(const CSSStyleSheetResource*);
+};
+
 class InspectorXhrReadyStateChangeEvent {
 public:
     static PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(ExecutionContext*, XMLHttpRequest*);
@@ -186,7 +194,6 @@ public:
     static const char RemovedFromSquashingLayer[];
     static const char ReflectionLayerChanged[];
     static const char NewCompositedLayer[];
-    static const char AncestorRequiresNewLayer[];
 
     static PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(const RenderLayer*, const char* reason);
 };
@@ -205,6 +212,13 @@ public:
 class InspectorPaintImageEvent {
 public:
     static PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(const RenderImage&);
+    static PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(const RenderObject&, const StyleImage&);
+    static PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(const RenderObject*, const ImageResource&);
+};
+
+class InspectorCommitLoadEvent {
+public:
+    static PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(LocalFrame*);
 };
 
 class InspectorMarkLoadEvent {
@@ -215,6 +229,11 @@ public:
 class InspectorScrollLayerEvent {
 public:
     static PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(RenderObject*);
+};
+
+class InspectorUpdateLayerTreeEvent {
+public:
+    static PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(LocalFrame*);
 };
 
 class InspectorEvaluateScriptEvent {
@@ -232,9 +251,14 @@ public:
     static PassRefPtr<TraceEvent::ConvertableToTraceFormat> data();
 };
 
-class InspectorCallStackEvent {
+class InspectorInvalidateLayoutEvent {
 public:
-    static PassRefPtr<TraceEvent::ConvertableToTraceFormat> currentCallStack();
+    static PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(LocalFrame*);
+};
+
+class InspectorRecalculateStylesEvent {
+public:
+    static PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(LocalFrame*);
 };
 
 class InspectorEventDispatchEvent {
@@ -249,7 +273,7 @@ public:
 
 class InspectorTracingSessionIdForWorkerEvent {
 public:
-    static PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(const String& sessionId, WorkerThread*);
+    static PassRefPtr<TraceEvent::ConvertableToTraceFormat> data(const String& sessionId, int workerId, WorkerThread*);
 };
 
 } // namespace blink

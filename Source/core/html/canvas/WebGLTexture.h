@@ -26,14 +26,13 @@
 #ifndef WebGLTexture_h
 #define WebGLTexture_h
 
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/html/canvas/WebGLSharedObject.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/Vector.h"
 
 namespace blink {
 
-class WebGLTexture final : public WebGLSharedObject, public ScriptWrappable {
+class WebGLTexture final : public WebGLSharedObject {
     DEFINE_WRAPPERTYPEINFO();
 public:
     enum TextureExtensionFlag {
@@ -76,12 +75,11 @@ public:
 
     static GLint computeLevelCount(GLsizei width, GLsizei height);
 
-protected:
+private:
     explicit WebGLTexture(WebGLRenderingContextBase*);
 
     virtual void deleteObjectImpl(blink::WebGraphicsContext3D*, Platform3DObject) override;
 
-private:
     class LevelInfo {
     public:
         LevelInfo()
@@ -124,7 +122,7 @@ private:
     GLenum m_wrapS;
     GLenum m_wrapT;
 
-    Vector<Vector<LevelInfo> > m_info;
+    Vector<Vector<LevelInfo>> m_info;
 
     bool m_isNPOT;
     bool m_isCubeComplete;

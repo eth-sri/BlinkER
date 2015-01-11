@@ -30,6 +30,7 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/CrossThreadTask.h"
+#include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "modules/webaudio/AudioBuffer.h"
 #include "modules/webaudio/AudioContext.h"
@@ -37,7 +38,6 @@
 #include "modules/webaudio/AudioNodeOutput.h"
 #include "modules/webaudio/AudioProcessingEvent.h"
 #include "public/platform/Platform.h"
-#include "wtf/Float32Array.h"
 
 namespace blink {
 

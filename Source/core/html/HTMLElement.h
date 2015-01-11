@@ -74,7 +74,7 @@ public:
 
     bool ieForbidsInsertHTML() const;
 
-    virtual HTMLFormElement* formOwner() const { return 0; }
+    virtual HTMLFormElement* formOwner() const { return nullptr; }
 
     HTMLFormElement* findFormAncestor() const;
 
@@ -96,6 +96,7 @@ public:
 
     static const AtomicString& eventParameterName();
 
+    HTMLMenuElement* assignedContextMenu() const;
     HTMLMenuElement* contextMenu() const;
     void setContextMenu(HTMLMenuElement*);
 
@@ -119,8 +120,8 @@ protected:
 private:
     virtual String nodeName() const override final;
 
-    bool isHTMLElement() const WTF_DELETED_FUNCTION; // This will catch anyone doing an unnecessary check.
-    bool isStyledElement() const WTF_DELETED_FUNCTION; // This will catch anyone doing an unnecessary check.
+    bool isHTMLElement() const = delete; // This will catch anyone doing an unnecessary check.
+    bool isStyledElement() const = delete; // This will catch anyone doing an unnecessary check.
 
     void mapLanguageAttributeToLocale(const AtomicString&, MutableStylePropertySet*);
 

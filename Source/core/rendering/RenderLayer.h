@@ -116,8 +116,7 @@ public:
 
     void setLayerType(LayerType layerType) { m_layerType = layerType; }
 
-    bool isTransparent() const { return renderer()->isTransparent() || renderer()->hasMask(); }
-    RenderLayer* transparentPaintingAncestor();
+    bool isTransparent() const { return renderer()->isTransparent() || renderer()->style()->hasBlendMode() || renderer()->hasMask(); }
 
     bool isReflection() const { return renderer()->isReplica(); }
     RenderLayerReflectionInfo* reflectionInfo() { return m_reflectionInfo.get(); }
@@ -134,7 +133,7 @@ public:
     LayoutPoint location() const;
     IntSize size() const;
 
-    LayoutRect rect() const { return LayoutRect(location(), size()); }
+    LayoutRect rect() const { return LayoutRect(location(), LayoutSize(size())); }
 
     bool isRootLayer() const { return m_isRootLayer; }
 
@@ -185,9 +184,6 @@ public:
     void updateScrollingStateAfterCompositingChange();
     bool hasVisibleNonLayerContent() const { return m_hasVisibleNonLayerContent; }
     bool hasNonCompositedChild() const { ASSERT(isAllowedToQueryCompositingState()); return m_hasNonCompositedChild; }
-
-    bool usedTransparency() const { return m_usedTransparency; }
-    void setUsedTransparency(bool usedTransparency) { m_usedTransparency = usedTransparency; }
 
     // Gets the nearest enclosing positioned ancestor layer (also includes
     // the <html> layer and the root layer).
@@ -275,8 +271,6 @@ public:
     void filterNeedsPaintInvalidation();
     bool hasFilter() const { return renderer()->hasFilter(); }
 
-    bool paintsWithBlendMode() const;
-
     void* operator new(size_t);
     // Only safe to call from RenderLayerModelObject::destroyLayer()
     void operator delete(void*);
@@ -289,8 +283,6 @@ public:
 
     // Don't null check this.
     CompositedLayerMapping* compositedLayerMapping() const;
-    // FIXME: This should return a reference.
-    CompositedLayerMapping* ensureCompositedLayerMapping();
     GraphicsLayer* graphicsLayerBacking() const;
     GraphicsLayer* graphicsLayerBackingForScrolling() const;
     // NOTE: If you are using hasCompositedLayerMapping to determine the state of compositing for this layer,
@@ -298,6 +290,7 @@ public:
     // then you may have incorrect logic. Use compositingState() instead.
     // FIXME: This is identical to null checking compositedLayerMapping(), why not just call that?
     bool hasCompositedLayerMapping() const { return m_compositedLayerMapping.get(); }
+    void ensureCompositedLayerMapping();
     void clearCompositedLayerMapping(bool layerBeingDestroyed = false);
     CompositedLayerMapping* groupedMapping() const { return m_groupedMapping; }
     void setGroupedMapping(CompositedLayerMapping* groupedMapping, bool layerBeingDestroyed = false);
@@ -305,8 +298,6 @@ public:
     bool hasCompositedMask() const;
     bool hasCompositedClippingMask() const;
     bool needsCompositedScrolling() const { return m_scrollableArea && m_scrollableArea->needsCompositedScrolling(); }
-
-    bool clipsCompositingDescendantsWithBorderRadius() const;
 
     // Computes the position of the given render object in the space of |paintInvalidationContainer|.
     // FIXME: invert the logic to have paint invalidation containers take care of painting objects into them, rather than the reverse.
@@ -594,6 +585,7 @@ private:
 
     void updatePaginationRecursive(bool needsPaginationUpdate = false);
     void updatePagination();
+    void clearPaginationRecursive();
 
     // FIXME: Temporary. Remove when new columns come online.
     bool useRegionBasedColumns() const;
@@ -611,10 +603,6 @@ private:
     mutable unsigned m_hasSelfPaintingLayerDescendantDirty : 1;
 
     const unsigned m_isRootLayer : 1;
-
-    unsigned m_usedTransparency : 1; // Tracks whether we need to close a transparent layer, i.e., whether
-                                 // we ended up painting this layer or any descendants (and therefore need to
-                                 // blend).
 
     unsigned m_visibleContentStatusDirty : 1;
     unsigned m_hasVisibleContent : 1;

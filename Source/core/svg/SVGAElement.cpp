@@ -62,6 +62,13 @@ inline SVGAElement::SVGAElement(Document& document)
     addToPropertyMap(m_svgTarget);
 }
 
+void SVGAElement::trace(Visitor* visitor)
+{
+    visitor->trace(m_svgTarget);
+    SVGGraphicsElement::trace(visitor);
+    SVGURIReference::trace(visitor);
+}
+
 DEFINE_NODE_FACTORY(SVGAElement)
 
 String SVGAElement::title() const
@@ -110,7 +117,9 @@ RenderObject* SVGAElement::createRenderer(RenderStyle*)
 void SVGAElement::defaultEventHandler(Event* event)
 {
     if (isLink()) {
-        if (focused() && isEnterKeyKeydownEvent(event)) {
+        Node* target = event->target() ? event->target()->toNode() : 0;
+        bool hasFocus = focused() || (target && target->focused());
+        if (hasFocus && isEnterKeyKeypressEvent(event)) {
             event->setDefaultHandled();
             dispatchSimulatedClick(event);
             return;

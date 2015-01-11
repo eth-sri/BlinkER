@@ -33,6 +33,7 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptState.h"
+#include "bindings/core/v8/UnionTypesCore.h"
 #include "core/CSSValueKeywords.h"
 #include "core/css/BinaryDataFontFaceSource.h"
 #include "core/css/CSSFontFace.h"
@@ -58,7 +59,6 @@
 #include "core/frame/UseCounter.h"
 #include "platform/FontFamilyNames.h"
 #include "platform/SharedBuffer.h"
-#include "wtf/ArrayBufferView.h"
 
 namespace blink {
 
@@ -66,6 +66,18 @@ static PassRefPtrWillBeRawPtr<CSSValue> parseCSSValue(const Document* document, 
 {
     CSSParserContext context(*document, UseCounter::getFrom(document));
     return CSSParser::parseSingleValue(propertyID, s, context);
+}
+
+PassRefPtrWillBeRawPtr<FontFace> FontFace::create(ExecutionContext* context, const AtomicString& family, StringOrArrayBufferOrArrayBufferView& source, const FontFaceDescriptors& descriptors)
+{
+    if (source.isString())
+        return create(context, family, source.getAsString(), descriptors);
+    if (source.isArrayBuffer())
+        return create(context, family, source.getAsArrayBuffer(), descriptors);
+    if (source.isArrayBufferView())
+        return create(context, family, source.getAsArrayBufferView(), descriptors);
+    ASSERT_NOT_REACHED();
+    return nullptr;
 }
 
 PassRefPtrWillBeRawPtr<FontFace> FontFace::create(ExecutionContext* context, const AtomicString& family, const String& source, const FontFaceDescriptors& descriptors)

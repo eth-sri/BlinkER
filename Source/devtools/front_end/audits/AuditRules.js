@@ -496,7 +496,7 @@ WebInspector.AuditRules.ParsedStyleSheet;
  * @constructor
  * @param {!Array.<!WebInspector.CSSStyleSheetHeader>} styleSheetHeaders
  * @param {!WebInspector.Progress} progress
- * @param {!function(!Array.<!WebInspector.AuditRules.ParsedStyleSheet>)} styleSheetsParsedCallback
+ * @param {function(!Array.<!WebInspector.AuditRules.ParsedStyleSheet>)} styleSheetsParsedCallback
  */
 WebInspector.AuditRules.StyleSheetProcessor = function(styleSheetHeaders, progress, styleSheetsParsedCallback)
 {
@@ -1353,9 +1353,9 @@ WebInspector.AuditRules.VendorPrefixedCSSProperties.prototype = {
     },
 
     /**
-     * @param {!WebInspector.CSSParser.StyleRule} rule
+     * @override
      */
-    visitRule: function(rule)
+    visitRule: function()
     {
         this._mentionedProperties = {};
     },

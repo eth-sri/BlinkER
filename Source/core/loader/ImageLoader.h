@@ -136,7 +136,8 @@ private:
     void setImageWithoutConsideringPendingLoadEvent(ImageResource*);
     void sourceImageChanged();
     void clearFailedLoadURL();
-    void crossSiteOrCSPViolationOccured(AtomicString);
+    void dispatchErrorEvent();
+    void crossSiteOrCSPViolationOccurred(AtomicString);
     void enqueueImageLoadingMicroTask(UpdateFromElementBehavior);
     static ResourcePtr<ImageResource> createImageResourceForImageDocument(Document&, FetchRequest&);
 
@@ -186,6 +187,7 @@ private:
     bool m_imageComplete : 1;
     bool m_loadingImageDocument : 1;
     bool m_elementIsProtected : 1;
+    bool m_suppressErrorEvents : 1;
     unsigned m_highPriorityClientCount;
 };
 

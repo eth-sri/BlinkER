@@ -37,9 +37,10 @@
 namespace blink {
 
 class CSSStyleSheet;
-class LocalDOMWindow;
 class Document;
 class ExecutionContext;
+class Frame;
+class LocalFrame;
 class StyleSheetContents;
 
 // UseCounter is used for counting the number of times features of
@@ -119,7 +120,6 @@ public:
         PrefixedMediaAddKey = 71,
         PrefixedMediaGenerateKeyRequest = 72,
         DocumentClear = 74,
-        SVGFontElement = 76,
         XMLDocument = 77,
         XSLProcessingInstruction = 78,
         XSLTProcessor = 79,
@@ -132,14 +132,13 @@ public:
         LineClamp = 96,
         SubFrameBeforeUnloadRegistered = 97,
         SubFrameBeforeUnloadFired = 98,
-        TextReplaceWholeText = 100,
         ConsoleMarkTimeline = 102,
-        ElementGetAttributeNode = 107, // Removed from DOM4.
-        ElementSetAttributeNode = 108, // Removed from DOM4.
-        ElementRemoveAttributeNode = 109, // Removed from DOM4.
-        ElementGetAttributeNodeNS = 110, // Removed from DOM4.
-        DocumentCreateAttribute = 111, // Removed from DOM4.
-        DocumentCreateAttributeNS = 112, // Removed from DOM4.
+        ElementGetAttributeNode = 107,
+        ElementSetAttributeNode = 108,
+        ElementRemoveAttributeNode = 109,
+        ElementGetAttributeNodeNS = 110,
+        DocumentCreateAttribute = 111,
+        DocumentCreateAttributeNS = 112,
         DocumentCreateCDATASection = 113, // Removed from DOM4.
         DocumentInputEncoding = 114, // Removed from DOM4.
         DocumentXMLEncoding = 115, // Removed from DOM4.
@@ -166,7 +165,7 @@ public:
         SVGSVGElement = 138,
         InsertAdjacentText = 140,
         InsertAdjacentElement = 141,
-        HasAttributes = 142, // Removed from DOM4.
+        HasAttributes = 142,
         DOMSubtreeModifiedEvent = 143,
         DOMNodeInsertedEvent = 144,
         DOMNodeRemovedEvent = 145,
@@ -174,13 +173,11 @@ public:
         DOMNodeInsertedIntoDocumentEvent = 147,
         DOMCharacterDataModifiedEvent = 148,
         DocumentAllLegacyCall = 150,
-        HTMLAppletElementLegacyCall = 151,
         HTMLEmbedElementLegacyCall = 152,
         HTMLObjectElementLegacyCall = 153,
         GetMatchedCSSRules = 155,
-        SVGFontInCSS = 156,
-        AttributeOwnerElement = 160, // Removed in DOM4.
-        AttributeSpecified = 162, // Removed in DOM4.
+        AttributeOwnerElement = 160,
+        AttributeSpecified = 162,
         PrefixedAudioDecodedByteCount = 164,
         PrefixedVideoDecodedByteCount = 165,
         PrefixedVideoSupportsFullscreen = 166,
@@ -215,7 +212,6 @@ public:
         DocumentUnloadFired = 203,
         SVGLocatableNearestViewportElement = 204,
         SVGLocatableFarthestViewportElement = 205,
-        HTMLHeadElementProfile = 207,
         OverflowChangedEvent = 208,
         SVGPointMatrixTransform = 209,
         DOMFocusInOutEvent = 211,
@@ -223,7 +219,7 @@ public:
         HTMLElementInnerText = 213,
         HTMLElementOuterText = 214,
         ReplaceDocumentViaJavaScriptURL = 215,
-        ElementSetAttributeNodeNS = 216, // Removed from DOM4.
+        ElementSetAttributeNodeNS = 216,
         ElementPrefixedMatchesSelector = 217,
         CSSStyleSheetRules = 219,
         CSSStyleSheetAddRule = 220,
@@ -231,8 +227,6 @@ public:
         // The above items are available in M33 branch.
 
         InitMessageEvent = 222,
-        ElementSetPrefix = 224, // Element.prefix is readonly in DOM4.
-        CSSStyleDeclarationGetPropertyCSSValue = 225,
         PrefixedMediaCancelKeyRequest = 229,
         DOMImplementationHasFeature = 230,
         DOMImplementationHasFeatureReturnFalse = 231,
@@ -242,7 +236,6 @@ public:
         PrefixedMinDevicePixelRatioMediaFeature = 235,
         PrefixedTransform3dMediaFeature = 237,
         PrefixedStorageQuota = 240,
-        ContentSecurityPolicyReportOnlyInMeta = 241,
         ResetReferrerPolicy = 243,
         CaseInsensitiveAttrSelectorMatch = 244, // Case-insensitivity dropped from specification.
         FormNameAccessForImageElement = 246,
@@ -250,7 +243,6 @@ public:
         FormAssociationByParser = 248,
         SVGSVGElementInDocument = 250,
         SVGDocumentRootElement = 251,
-        MediaErrorEncrypted = 253,
         EventSourceURL = 254,
         WebSocketURL = 255,
         WorkerSubjectToCSP = 257,
@@ -304,7 +296,6 @@ public:
         XHRProgressEventPosition = 316,
         XHRProgressEventTotalSize = 317,
         PrefixedDocumentIsFullscreen = 318,
-        PrefixedDocumentFullScreenKeyboardInputAllowed = 319,
         PrefixedDocumentCurrentFullScreenElement = 320,
         PrefixedDocumentCancelFullScreen = 321,
         PrefixedDocumentFullscreenEnabled = 322,
@@ -316,17 +307,6 @@ public:
         SelectionSetPosition = 327,
         AnimationPlayerFinishEvent = 328,
         SVGSVGElementInXMLDocument = 329,
-        CanvasRenderingContext2DSetAlpha = 330,
-        CanvasRenderingContext2DSetCompositeOperation = 331,
-        CanvasRenderingContext2DSetLineWidth = 332,
-        CanvasRenderingContext2DSetLineCap = 333,
-        CanvasRenderingContext2DSetLineJoin = 334,
-        CanvasRenderingContext2DSetMiterLimit = 335,
-        CanvasRenderingContext2DClearShadow = 336,
-        CanvasRenderingContext2DSetStrokeColor = 337,
-        CanvasRenderingContext2DSetFillColor = 338,
-        CanvasRenderingContext2DDrawImageFromRect = 339,
-        CanvasRenderingContext2DSetShadow = 340,
         PrefixedPerformanceClearResourceTimings = 341,
         PrefixedPerformanceSetResourceTimingBufferSize = 342,
         EventSrcElement = 343,
@@ -340,8 +320,6 @@ public:
         EventGetReturnValueFalse = 351,
         EventSetReturnValueTrue = 352,
         EventSetReturnValueFalse = 353,
-        NodeIteratorExpandEntityReferences = 354,
-        TreeWalkerExpandEntityReferences = 355,
         WindowOffscreenBuffering = 356,
         WindowDefaultStatus = 357,
         WindowDefaultstatus = 358,
@@ -409,9 +387,6 @@ public:
         FocusInOutEvent = 433,
         MouseEventMovementX = 434,
         MouseEventMovementY = 435,
-        MixedContentRaw = 437,
-        MixedContentImage = 438,
-        MixedContentMedia = 439,
         DocumentFonts = 440,
         MixedContentFormsSubmitted = 441,
         FormsSubmitted = 442,
@@ -448,7 +423,6 @@ public:
         // The above items are available in M37 branch.
 
         UseAsm = 473,
-        KeyEventNotAllowedInFullScreen = 474,
         DOMWindowOpen = 475,
         DOMWindowOpenFeatures = 476,
         MediaStreamTrackGetSources = 478,
@@ -479,7 +453,6 @@ public:
         UIEventLayerY = 512,
         UIEventPageX = 513,
         UIEventPageY = 514,
-        BgPropertiesFixed = 515,
         DevToolsConsoleTimeline = 517,
         DevToolsConsoleProfile = 518,
         SVGStyleElementTitle = 519,
@@ -547,6 +520,32 @@ public:
         CanvasRenderingContext2DCompositeOperationDarker = 577,
         ScriptElementWithInvalidTypeHasSrc = 578,
         TimelineStart = 579,
+        ElementBaseURIFromXMLBase = 580,
+        XMLHttpRequestSynchronousInNonWorkerOutsideBeforeUnload = 581,
+        CSSSelectorPseudoScrollbar = 582,
+        CSSSelectorPseudoScrollbarButton = 583,
+        CSSSelectorPseudoScrollbarThumb = 584,
+        CSSSelectorPseudoScrollbarTrack = 585,
+        CSSSelectorPseudoScrollbarTrackPiece = 586,
+        LangAttribute = 587,
+        LangAttributeOnHTML = 588,
+        LangAttributeOnBody = 589,
+        LangAttributeDoesNotMatchToUILocale = 590,
+        InputTypeSubmit = 591,
+        InputTypeSubmitWithValue = 592,
+        // The above items are available in M40 branch.
+
+        SetReferrerPolicy = 593,
+        DOMImplementationHasFeatureReturnFalseInternal = 594,
+        MouseEventWhich = 595,
+        UIEventCharCode = 596,
+        UIEventKeyCode = 597,
+        UIEventWhich = 598,
+        TextWholeText = 599,
+        AttrChildAccess = 600,
+        AttrChildChange = 601,
+        DocumentGetOverrideStyle = 602,
+        NotificationCloseEvent = 603,
 
         // Add new features immediately above this line. Don't change assigned
         // numbers of any item, and don't reuse removed slots.
@@ -556,6 +555,7 @@ public:
     };
 
     // "count" sets the bit for this feature to 1. Repeated calls are ignored.
+    static void count(const Frame*, Feature);
     static void count(const Document&, Feature);
     // This doesn't count for ExecutionContexts for shared workers and service
     // workers.
@@ -563,6 +563,7 @@ public:
     // Use countIfNotPrivateScript() instead of count() if you don't want
     // to count metrics in private scripts. You should use
     // countIfNotPrivateScript() in a binding layer.
+    static void countIfNotPrivateScript(v8::Isolate*, const Frame*, Feature);
     static void countIfNotPrivateScript(v8::Isolate*, const Document&, Feature);
     static void countIfNotPrivateScript(v8::Isolate*, const ExecutionContext*, Feature);
 
@@ -578,7 +579,7 @@ public:
     //
     // The ExecutionContext* overload doesn't work for shared workers and
     // service workers.
-    static void countDeprecation(const LocalDOMWindow*, Feature);
+    static void countDeprecation(const LocalFrame*, Feature);
     static void countDeprecation(ExecutionContext*, Feature);
     static void countDeprecation(const Document&, Feature);
     // Use countDeprecationIfNotPrivateScript() instead of countDeprecation()

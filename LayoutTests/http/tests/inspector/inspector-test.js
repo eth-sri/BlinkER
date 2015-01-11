@@ -445,11 +445,11 @@ InspectorTest.MockSetting.prototype = {
  * @param {!string} name
  * @param {!function(?WebInspector.TempFile)} callback
  */
-InspectorTest.TempFileMock = function(dirPath, name, callback)
+InspectorTest.TempFileMock = function(dirPath, name)
 {
     this._chunks = [];
     this._name = name;
-    setTimeout(callback.bind(this, this), 1);
+    this._size = 0;
 }
 
 InspectorTest.TempFileMock.prototype = {
@@ -459,8 +459,10 @@ InspectorTest.TempFileMock.prototype = {
      */
     write: function(chunks, callback)
     {
+        for (var i = 0; i < chunks.length; ++i)
+            this._size += chunks[i].length;
         this._chunks.push.apply(this._chunks, chunks);
-        setTimeout(callback.bind(this, true), 1);
+        setTimeout(callback.bind(this, this._size), 1);
     },
 
     finishWriting: function() { },
@@ -527,6 +529,12 @@ InspectorTest.TempFileMock.prototype = {
     remove: function() { }
 }
 
+InspectorTest.TempFileMock.create = function(dirPath, name)
+{
+    var tempFile = new InspectorTest.TempFileMock(dirPath, name);
+    return Promise.resolve(tempFile);
+}
+
 InspectorTest.dumpLoadedModules = function(next)
 {
     function moduleSorter(left, right)
@@ -580,8 +588,6 @@ InspectorTest.TimeoutMock.prototype = {
         this._timeoutIdToMillis = {};
     }
 }
-
-WebInspector.TempFile = InspectorTest.TempFileMock;
 
 WebInspector.targetManager.observeTargets({
     targetAdded: function(target)
@@ -694,11 +700,6 @@ function runTest(enableWatchDogWhileDebugging)
         }
 
         var testPath = WebInspector.settings.testPath.get();
-
-        // FIXME(399531): enable timelineOnTraceEvents experiment when running layout tests under inspector/tracing/. This code
-        // should be removed along with the old Timeline implementation once we move tracing based Timeline out of experimental.
-        if (testPath.indexOf("tracing/") !== -1)
-            Runtime.experiments.setEnabled("timelineOnTraceEvents", true);
 
         if (testPath.indexOf("layers/") !== -1)
             Runtime.experiments.setEnabled("layersPanel", true);

@@ -77,6 +77,7 @@
 #include "core/events/UIEvent.h"
 #include "core/events/WheelEvent.h"
 #include "core/frame/EventHandlerRegistry.h"
+#include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLAnchorElement.h"
@@ -768,7 +769,7 @@ bool Node::shouldHaveFocusAppearance() const
 bool Node::isInert() const
 {
     const HTMLDialogElement* dialog = document().activeModalDialog();
-    if (dialog && this != document() && !NodeRenderingTraversal::contains(dialog, this))
+    if (dialog && this != document() && !NodeRenderingTraversal::contains(*dialog, *this))
         return true;
     return document().ownerElement() && document().ownerElement()->isInert();
 }
@@ -965,16 +966,15 @@ void Node::detach(const AttachContext& context)
 #endif
 }
 
-void Node::reattachWhitespaceSiblings(Text* start)
+void Node::reattachWhitespaceSiblingsIfNeeded(Text* start)
 {
     for (Node* sibling = start; sibling; sibling = sibling->nextSibling()) {
         if (sibling->isTextNode() && toText(sibling)->containsOnlyWhitespace()) {
             bool hadRenderer = !!sibling->renderer();
-            sibling->reattach();
-            // If the reattach didn't toggle the visibility of the whitespace we don't
-            // need to continue reattaching siblings since they won't toggle visibility
-            // either.
-            if (hadRenderer == !!sibling->renderer())
+            toText(sibling)->reattachIfNeeded();
+            // If sibling's renderer status didn't change we don't need to continue checking
+            // other siblings since their renderer status won't change either.
+            if (!!sibling->renderer() == hadRenderer)
                 return;
         } else if (sibling->renderer()) {
             return;
@@ -1413,11 +1413,14 @@ void Node::setTextContent(const String& text)
                 return;
 
             ChildListMutationScope mutation(*this);
-            container->removeChildren();
             // Note: This API will not insert empty text nodes:
             // http://dom.spec.whatwg.org/#dom-node-textcontent
-            if (!text.isEmpty())
+            if (text.isEmpty()) {
+                container->removeChildren(DispatchSubtreeModifiedEvent);
+            } else {
+                container->removeChildren(OmitSubtreeModifiedEvent);
                 container->appendChild(document().createTextNode(text), ASSERT_NO_EXCEPTION);
+            }
             return;
         }
         case DOCUMENT_NODE:
@@ -1695,6 +1698,8 @@ static void traverseTreeAndMark(const String& baseIndent, const Node* rootNode, 
                 traverseTreeAndMark(indent.toString(), pseudo, markedNode1, markedLabel1, markedNode2, markedLabel2);
             if (Element* pseudo = element.pseudoElement(AFTER))
                 traverseTreeAndMark(indent.toString(), pseudo, markedNode1, markedLabel1, markedNode2, markedLabel2);
+            if (Element* pseudo = element.pseudoElement(FIRST_LETTER))
+                traverseTreeAndMark(indent.toString(), pseudo, markedNode1, markedLabel1, markedNode2, markedLabel2);
             if (Element* pseudo = element.pseudoElement(BACKDROP))
                 traverseTreeAndMark(indent.toString(), pseudo, markedNode1, markedLabel1, markedNode2, markedLabel2);
         }
@@ -1774,7 +1779,7 @@ void Node::showTreeForThisAcrossFrame() const
 
 Element* Node::enclosingLinkEventParentOrSelf()
 {
-    for (Node* node = this; node; node = NodeRenderingTraversal::parent(node)) {
+    for (Node* node = this; node; node = NodeRenderingTraversal::parent(*node)) {
         // For imagemaps, the enclosing link node is the associated area element not the image itself.
         // So we don't let images be the enclosingLinkNode, even though isLink sometimes returns true
         // for them.
@@ -2456,21 +2461,21 @@ v8::Handle<v8::Object> Node::wrap(v8::Handle<v8::Object> creationContext, v8::Is
     // object gets associated with the wrapper.
     RefPtrWillBeRawPtr<Node> protect(this);
 
-    ASSERT(!DOMDataStore::containsWrapperNonTemplate(this, isolate));
+    ASSERT(!DOMDataStore::containsWrapper(this, isolate));
 
     const WrapperTypeInfo* wrapperType = wrapperTypeInfo();
 
-    v8::Handle<v8::Object> wrapper = V8DOMWrapper::createWrapper(creationContext, wrapperType, toScriptWrappableBase(), isolate);
+    v8::Handle<v8::Object> wrapper = V8DOMWrapper::createWrapper(isolate, creationContext, wrapperType, this);
     if (UNLIKELY(wrapper.IsEmpty()))
         return wrapper;
 
     wrapperType->installConditionallyEnabledProperties(wrapper, isolate);
-    return associateWithWrapper(wrapperType, wrapper, isolate);
+    return associateWithWrapper(isolate, wrapperType, wrapper);
 }
 
-v8::Handle<v8::Object> Node::associateWithWrapper(const WrapperTypeInfo* wrapperType, v8::Handle<v8::Object> wrapper, v8::Isolate* isolate)
+v8::Handle<v8::Object> Node::associateWithWrapper(v8::Isolate* isolate, const WrapperTypeInfo* wrapperType, v8::Handle<v8::Object> wrapper)
 {
-    return V8DOMWrapper::associateObjectWithWrapperNonTemplate(this, wrapperType, wrapper, isolate);
+    return V8DOMWrapper::associateObjectWithWrapper(isolate, this, wrapperType, wrapper);
 }
 
 } // namespace blink

@@ -51,6 +51,8 @@ class WebLayer;
 namespace blink {
 
 class ANGLEInstancedArrays;
+class CHROMIUMSubscribeUniform;
+class CHROMIUMValuebuffer;
 class EXTBlendMinMax;
 class EXTFragDepth;
 class EXTShaderTextureLOD;
@@ -185,8 +187,8 @@ public:
 
     PassRefPtrWillBeRawPtr<WebGLActiveInfo> getActiveAttrib(WebGLProgram*, GLuint index);
     PassRefPtrWillBeRawPtr<WebGLActiveInfo> getActiveUniform(WebGLProgram*, GLuint index);
-    bool getAttachedShaders(WebGLProgram*, WillBeHeapVector<RefPtrWillBeMember<WebGLShader> >&);
-    Nullable<WillBeHeapVector<RefPtrWillBeMember<WebGLShader> > > getAttachedShaders(WebGLProgram*);
+    bool getAttachedShaders(WebGLProgram*, WillBeHeapVector<RefPtrWillBeMember<WebGLShader>>&);
+    Nullable<WillBeHeapVector<RefPtrWillBeMember<WebGLShader>>> getAttachedShaders(WebGLProgram*);
     GLint getAttribLocation(WebGLProgram*, const String& name);
     WebGLGetInfo getBufferParameter(GLenum target, GLenum pname);
     PassRefPtrWillBeRawPtr<WebGLContextAttributes> getContextAttributes();
@@ -201,7 +203,7 @@ public:
     String getShaderInfoLog(WebGLShader*);
     PassRefPtrWillBeRawPtr<WebGLShaderPrecisionFormat> getShaderPrecisionFormat(GLenum shaderType, GLenum precisionType);
     String getShaderSource(WebGLShader*);
-    Nullable<Vector<String> > getSupportedExtensions();
+    Nullable<Vector<String>> getSupportedExtensions();
     WebGLGetInfo getTexParameter(GLenum target, GLenum pname);
     WebGLGetInfo getUniform(WebGLProgram*, const WebGLUniformLocation*);
     PassRefPtrWillBeRawPtr<WebGLUniformLocation> getUniformLocation(WebGLProgram*, const String&);
@@ -348,7 +350,7 @@ public:
     void reshape(int width, int height);
 
     void markLayerComposited();
-    PassRefPtrWillBeRawPtr<ImageData> paintRenderingResultsToImageData();
+    PassRefPtrWillBeRawPtr<ImageData> paintRenderingResultsToImageData(SourceDrawingBuffer);
 
     void removeSharedObject(WebGLSharedObject*);
     void removeContextObject(WebGLContextObject*);
@@ -359,7 +361,14 @@ public:
     virtual bool hasPendingActivity() const override;
     virtual void stop() override;
 
-    void setSavingImage(bool isSaving) { m_savingImage = isSaving; }
+    // GL_CHROMIUM_subscribe_uniform
+    PassRefPtrWillBeRawPtr<CHROMIUMValuebuffer> createValuebufferCHROMIUM();
+    void deleteValuebufferCHROMIUM(CHROMIUMValuebuffer*);
+    GLboolean isValuebufferCHROMIUM(CHROMIUMValuebuffer*);
+    void bindValuebufferCHROMIUM(GLenum target, CHROMIUMValuebuffer*);
+    void subscribeValueCHROMIUM(GLenum target, GLenum subscription);
+    void populateSubscribedValuesCHROMIUM(GLenum target);
+    void uniformValuebufferCHROMIUM(const WebGLUniformLocation*, GLenum target, GLenum subscription);
 
     virtual void trace(Visitor*) override;
 
@@ -400,7 +409,7 @@ protected:
     virtual bool is3d() const override { return true; }
     virtual bool isAccelerated() const override { return true; }
     virtual void setIsHidden(bool) override;
-    virtual void paintRenderingResultsToCanvas() override;
+    virtual void paintRenderingResultsToCanvas(SourceDrawingBuffer) override;
     virtual blink::WebLayer* platformLayer() const override;
 
     void addSharedObject(WebGLSharedObject*);
@@ -457,7 +466,7 @@ protected:
     Timer<WebGLRenderingContextBase> m_restoreTimer;
 
     bool m_markedCanvasDirty;
-    WillBeHeapHashSet<RawPtrWillBeWeakMember<WebGLContextObject> > m_contextObjects;
+    WillBeHeapHashSet<RawPtrWillBeWeakMember<WebGLContextObject>> m_contextObjects;
 
     OwnPtrWillBeMember<WebGLRenderingContextLostCallback> m_contextLostCallbackAdapter;
     OwnPtrWillBeMember<WebGLRenderingContextErrorMessageCallback> m_errorMessageCallbackAdapter;
@@ -503,6 +512,7 @@ protected:
     RefPtrWillBeMember<WebGLProgram> m_currentProgram;
     RefPtrWillBeMember<WebGLFramebuffer> m_framebufferBinding;
     RefPtrWillBeMember<WebGLRenderbuffer> m_renderbufferBinding;
+    RefPtrWillBeMember<CHROMIUMValuebuffer> m_valuebufferBinding;
 
     WillBeHeapVector<TextureUnitState> m_textureUnits;
     unsigned long m_activeTextureUnit;
@@ -571,8 +581,6 @@ protected:
 
     OwnPtr<Extensions3DUtil> m_extensionsUtil;
 
-    bool m_savingImage;
-
     enum ExtensionFlags {
         ApprovedExtension               = 0x00,
         // Extension that is behind the draft extensions runtime flag:
@@ -616,7 +624,7 @@ protected:
     template <typename T>
     class TypedExtensionTracker final : public ExtensionTracker {
     public:
-        static PassOwnPtrWillBeRawPtr<TypedExtensionTracker<T> > create(RefPtrWillBeMember<T>& extensionField, ExtensionFlags flags, const char* const* prefixes)
+        static PassOwnPtrWillBeRawPtr<TypedExtensionTracker<T>> create(RefPtrWillBeMember<T>& extensionField, ExtensionFlags flags, const char* const* prefixes)
         {
             return adoptPtrWillBeNoop(new TypedExtensionTracker<T>(extensionField, flags, prefixes));
         }
@@ -680,7 +688,7 @@ protected:
     };
 
     bool m_extensionEnabled[WebGLExtensionNameCount];
-    WillBeHeapVector<OwnPtrWillBeMember<ExtensionTracker> > m_extensions;
+    WillBeHeapVector<OwnPtrWillBeMember<ExtensionTracker>> m_extensions;
 
     template <typename T>
     void registerExtension(RefPtrWillBeMember<T>& extensionPtr, ExtensionFlags flags = ApprovedExtension, const char* const* prefixes = 0)

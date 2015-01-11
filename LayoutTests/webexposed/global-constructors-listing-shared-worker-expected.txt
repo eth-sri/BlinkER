@@ -42,10 +42,12 @@ Starting worker: resources/global-context-constructors-listing.js
 [Worker] MessageChannel
 [Worker] MessageEvent
 [Worker] NetworkInformation
+[Worker] Notification
 [Worker] Number
 [Worker] Object
 [Worker] Promise
 [Worker] RangeError
+[Worker] ReadableStream
 [Worker] ReferenceError
 [Worker] RegExp
 [Worker] Set

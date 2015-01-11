@@ -30,17 +30,12 @@
 #ifndef RenderFlowThread_h
 #define RenderFlowThread_h
 
-
+#include "core/rendering/LayerFragment.h"
 #include "core/rendering/RenderBlockFlow.h"
-#include "wtf/HashCountedSet.h"
 #include "wtf/ListHashSet.h"
-#include "wtf/PassRefPtr.h"
 
 namespace blink {
 
-struct LayerFragment;
-typedef Vector<LayerFragment, 1> LayerFragments;
-class RenderFlowThread;
 class RenderMultiColumnSet;
 class RenderRegion;
 
@@ -61,11 +56,15 @@ public:
     virtual bool isRenderMultiColumnFlowThread() const { return false; }
     virtual bool isRenderPagedFlowThread() const { return false; }
 
+    virtual bool supportsPaintInvalidationStateCachedOffsets() const override { return false; }
+
     virtual void layout() override;
 
     // Always create a RenderLayer for the RenderFlowThread so that we
     // can easily avoid drawing the children directly.
     virtual LayerType layerTypeRequired() const override final { return NormalLayer; }
+
+    virtual void flowThreadDescendantWasInserted(RenderObject*) { }
 
     virtual bool nodeAtPoint(const HitTestRequest&, HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction) override final;
 
@@ -80,7 +79,7 @@ public:
     void invalidateRegions();
     bool hasValidRegionInfo() const { return !m_regionsInvalidated && !m_multiColumnSetList.isEmpty(); }
 
-    void paintInvalidationRectangleInRegions(const LayoutRect&) const;
+    virtual void mapRectToPaintInvalidationBacking(const RenderLayerModelObject* paintInvalidationContainer, LayoutRect&, const PaintInvalidationState*) const override;
 
     LayoutUnit pageLogicalHeightForOffset(LayoutUnit);
     LayoutUnit pageRemainingLogicalHeightForOffset(LayoutUnit, PageBoundaryRule = IncludePageBoundary);
@@ -100,7 +99,7 @@ public:
     bool pageLogicalSizeChanged() const { return m_pageLogicalSizeChanged; }
 
     void collectLayerFragments(LayerFragments&, const LayoutRect& layerBoundingBox, const LayoutRect& dirtyRect);
-    LayoutRect fragmentsBoundingBox(const LayoutRect& layerBoundingBox);
+    LayoutRect fragmentsBoundingBox(const LayoutRect& layerBoundingBox) const;
 
     LayoutPoint flowThreadPointToVisualPoint(const LayoutPoint& flowThreadPoint) const
     {
@@ -118,7 +117,6 @@ protected:
     virtual const char* renderName() const = 0;
 
     void updateRegionsFlowThreadPortionRect();
-    bool shouldIssuePaintInvalidations(const LayoutRect&) const;
 
     virtual RenderMultiColumnSet* columnSetAtBlockOffset(LayoutUnit) const = 0;
 

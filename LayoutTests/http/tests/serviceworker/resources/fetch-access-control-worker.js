@@ -37,7 +37,7 @@ function getRequestInit(params) {
     init['credentials'] = params['credentials'];
   }
   if (params['headers'] === 'CUSTOM') {
-    init['headers'] = {"X-ServiceWorker-Test": "test"};
+    init['headers'] = {'X-ServiceWorker-Test': 'test'};
   } else if (params['headers'] === '{}') {
     init['headers'] = {};
   }
@@ -79,7 +79,7 @@ self.addEventListener('fetch', function(event) {
           fetch(request)
             .then(function(res) {
                 response = res;
-                res.text()
+                res.clone().text()
                   .then(function(body) {
                       // Send the result to fetch-access-control.html.
                       port.postMessage(

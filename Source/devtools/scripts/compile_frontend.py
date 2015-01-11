@@ -43,6 +43,13 @@ try:
 except ImportError:
     import json
 
+
+if len(sys.argv) == 2 and sys.argv[1] == '--help':
+    print("Usage: %s [module_names]" % path.basename(sys.argv[0]))
+    print("  module_names    list of modules for which the Closure compilation should run.")
+    print("                  If absent, the entire frontend will be compiled.")
+    sys.exit(0)
+
 is_cygwin = sys.platform == 'cygwin'
 
 
@@ -86,6 +93,7 @@ type_checked_jsdoc_tags_or = '|'.join(type_checked_jsdoc_tags_list)
 # Basic regex for invalid JsDoc types: an object type name ([A-Z][A-Za-z0-9.]+[A-Za-z0-9]) not preceded by '!', '?', ':' (this, new), or '.' (object property).
 invalid_type_regex = re.compile(r'@(?:' + type_checked_jsdoc_tags_or + r')\s*\{.*(?<![!?:.A-Za-z0-9])([A-Z][A-Za-z0-9.]+[A-Za-z0-9])[^/]*\}')
 invalid_type_designator_regex = re.compile(r'@(?:' + type_checked_jsdoc_tags_or + r')\s*.*(?<![{: ])([?!])=?\}')
+invalid_non_object_type_regex = re.compile(r'@(?:' + type_checked_jsdoc_tags_or + r')\s*\{.*(![a-z]+)[^/]*\}')
 error_warning_regex = re.compile(r'WARNING|ERROR')
 loaded_css_regex = re.compile(r'(?:registerRequiredCSS|WebInspector\.View\.createStyleElement)\s*\(\s*"(.+)"\s*\)')
 
@@ -122,7 +130,7 @@ def error_excepthook(exctype, value, traceback):
     sys.__excepthook__(exctype, value, traceback)
 sys.excepthook = error_excepthook
 
-application_descriptors = ['devtools.json', 'toolbox.json']
+application_descriptors = ['devtools.json', 'inspector.json', 'toolbox.json']
 loader = modular_build.DescriptorLoader(devtools_frontend_path)
 descriptors = loader.load_applications(application_descriptors)
 modules_by_name = descriptors.modules
@@ -169,6 +177,11 @@ def verify_jsdoc_line(fileName, lineIndex, line):
     match = re.search(invalid_type_regex, line)
     if match:
         print_error('Type "%s" nullability not marked explicitly with "?" (nullable) or "!" (non-nullable)' % match.group(1), match.start(1))
+        errors_found = True
+
+    match = re.search(invalid_non_object_type_regex, line)
+    if match:
+        print_error('Non-object type explicitly marked with "!" (non-nullable), which is the default and should be omitted', match.start(1))
         errors_found = True
 
     match = re.search(invalid_type_designator_regex, line)
@@ -287,6 +300,13 @@ def module_arg(module_name):
     return ' --module ' + jsmodule_name_prefix + module_name
 
 
+def modules_to_check():
+    if len(sys.argv) == 1:
+        return descriptors.sorted_modules()
+    print 'Compiling only these modules: %s' % sys.argv[1:]
+    return [module for module in descriptors.sorted_modules() if module in set(sys.argv[1:])]
+
+
 def dump_module(name, recursively, processed_modules):
     if name in processed_modules:
         return ''
@@ -320,7 +340,8 @@ compiler_args_file = tempfile.NamedTemporaryFile(mode='wt', delete=False)
 try:
     platform_protocol_externs_file = to_platform_path(protocol_externs_file)
     runtime_js_path = to_platform_path(path.join(devtools_frontend_path, 'Runtime.js'))
-    for name in descriptors.sorted_modules():
+    checked_modules = modules_to_check()
+    for name in checked_modules:
         closure_args = common_closure_args
         closure_args += ' --externs ' + to_platform_path(global_externs_file)
         closure_args += ' --externs ' + platform_protocol_externs_file
@@ -415,6 +436,8 @@ def skip_dependents(module_name):
     for skipped_module in dependents_by_module_name.get(module_name, []):
         skipped_modules[skipped_module] = True
 
+has_module_output = False
+
 # pylint: disable=E1103
 for line in moduleCompileOut.splitlines():
     if not in_module:
@@ -422,6 +445,7 @@ for line in moduleCompileOut.splitlines():
         if not match:
             continue
         in_module = True
+        has_module_output = True
         module_error_count = 0
         module_output = []
         module_name = match.group(1)
@@ -447,6 +471,9 @@ for line in moduleCompileOut.splitlines():
         else:
             print 'Module %s compile failed: %s errors%s' % (module_name, module_error_count, os.linesep)
             print os.linesep.join(module_output)
+
+if not has_module_output:
+    print moduleCompileOut
 
 if error_count:
     print 'Total Closure errors: %d%s' % (error_count, os.linesep)

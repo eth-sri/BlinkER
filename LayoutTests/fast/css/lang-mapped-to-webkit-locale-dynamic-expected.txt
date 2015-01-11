@@ -14,6 +14,9 @@ PASS localeOfNode('x2') is "ja"
 PASS localeOfNode('x3') is "ar"
 PASS localeOfNode('x3') is "auto"
 PASS localeOfNode('x3') is "ja"
+PASS localeOfNode('x2') is "zh"
+PASS localeOfNode('x2') is "ja"
+PASS localeOfNode('x2') is "ja"
 PASS successfullyParsed is true
 
 TEST COMPLETE

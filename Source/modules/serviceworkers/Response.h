@@ -7,6 +7,7 @@
 
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ScriptWrappable.h"
+#include "bindings/modules/v8/UnionTypesModules.h"
 #include "modules/serviceworkers/Body.h"
 #include "modules/serviceworkers/FetchResponseData.h"
 #include "modules/serviceworkers/Headers.h"
@@ -22,14 +23,17 @@ class ExceptionState;
 class ResponseInit;
 class WebServiceWorkerResponse;
 
+typedef BlobOrArrayBufferOrArrayBufferViewOrUSVString BodyInit;
+
 class Response final : public Body {
     DEFINE_WRAPPERTYPEINFO();
 public:
     virtual ~Response() { }
-    static Response* create(ExecutionContext*, Blob*, const Dictionary&, ExceptionState&);
-    static Response* create(ExecutionContext*, const String&, const Dictionary&, ExceptionState&);
-    static Response* create(ExecutionContext*, const DOMArrayBuffer*, const Dictionary&, ExceptionState&);
-    static Response* create(ExecutionContext*, const DOMArrayBufferView*, const Dictionary&, ExceptionState&);
+
+    // From Response.idl:
+    static Response* create(ExecutionContext*, ExceptionState&);
+    static Response* create(ExecutionContext*, const BodyInit&, const Dictionary&, ExceptionState&);
+
     static Response* create(ExecutionContext*, Blob*, const ResponseInit&, ExceptionState&);
     static Response* create(ExecutionContext*, FetchResponseData*);
     static Response* create(ExecutionContext*, const WebServiceWorkerResponse&);
@@ -39,15 +43,19 @@ public:
 
     const FetchResponseData* response() const { return m_response; }
 
+    // From Response.idl:
     String type() const;
     String url() const;
     unsigned short status() const;
     String statusText() const;
     Headers* headers() const;
 
-    Response* clone() const;
+    // From Response.idl:
+    Response* clone(ExceptionState&) const;
 
     void populateWebServiceWorkerResponse(WebServiceWorkerResponse&);
+
+    bool hasBody() const { return m_response->blobDataHandle(); }
 
     virtual void trace(Visitor*) override;
 

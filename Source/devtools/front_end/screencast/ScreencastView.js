@@ -153,6 +153,9 @@ WebInspector.ScreencastView.prototype = {
         this._scrollOffsetX = metadata.scrollOffsetX;
         this._scrollOffsetY = metadata.scrollOffsetY;
 
+        if (event.data.frameNumber)
+            this._target.pageAgent().screencastFrameAck(event.data.frameNumber);
+
         var deviceSizeRatio = metadata.deviceHeight / metadata.deviceWidth;
         var dimensionsCSS = this._viewportDimensions();
 
@@ -522,7 +525,7 @@ WebInspector.ScreencastView.prototype = {
     {
         if (!color)
             return "transparent";
-        return WebInspector.Color.fromRGBA([color.r, color.g, color.b, color.a]).toString(WebInspector.Color.Format.RGBA) || "";
+        return WebInspector.Color.fromRGBA([color.r, color.g, color.b, color.a]).asString(WebInspector.Color.Format.RGBA) || "";
     },
 
     /**

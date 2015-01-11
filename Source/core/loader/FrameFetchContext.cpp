@@ -135,7 +135,6 @@ void FrameFetchContext::dispatchWillSendRequest(DocumentLoader* loader, unsigned
     m_frame->loader().applyUserAgent(request);
     m_frame->loader().client()->dispatchWillSendRequest(loader, identifier, request, redirectResponse);
     TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "ResourceSendRequest", "data", InspectorSendRequestEvent::data(identifier, m_frame, request));
-    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline.stack"), "CallStack", "stack", InspectorCallStackEvent::currentCallStack());
     // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentation::willSendRequest(m_frame, identifier, ensureLoader(loader), request, redirectResponse, initiatorInfo);
 }
@@ -186,6 +185,7 @@ void FrameFetchContext::dispatchDidFinishLoading(DocumentLoader* loader, unsigne
 void FrameFetchContext::dispatchDidFail(DocumentLoader* loader, unsigned long identifier, const ResourceError& error, bool isInternalRequest)
 {
     m_frame->loader().progress().completeProgress(identifier);
+    m_frame->loader().client()->dispatchDidFinishLoading(loader, identifier);
     TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "ResourceFinish", "data", InspectorResourceFinishEvent::data(identifier, 0, true));
     // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentation::didFailLoading(m_frame, identifier, error);

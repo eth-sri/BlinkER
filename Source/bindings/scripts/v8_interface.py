@@ -163,10 +163,7 @@ def interface_context(interface):
     for set_wrapper_reference_to in set_wrapper_reference_to_list:
         set_wrapper_reference_to['idl_type'].add_includes_for_type()
 
-    # [NotScriptWrappable]
-    is_script_wrappable = 'NotScriptWrappable' not in extended_attributes
-
-    # [Custom=Wrap], [SetWrapperReferenceFrom]
+    # [SetWrapperReferenceFrom]
     has_visit_dom_wrapper = (
         has_extended_attribute_value(interface, 'Custom', 'VisitDOMWrapper') or
         reachable_node_function or
@@ -185,6 +182,7 @@ def interface_context(interface):
         'conditional_string': conditional_string(interface),  # [Conditional]
         'cpp_class': cpp_class_name,
         'cpp_class_or_partial': cpp_class_name_or_partial,
+        'event_target_inheritance': 'InheritFromEventTarget' if is_event_target else 'NotInheritFromEventTarget',
         'gc_type': this_gc_type,
         # FIXME: Remove 'EventTarget' special handling, http://crbug.com/383699
         'has_access_check_callbacks': (is_check_security and
@@ -192,7 +190,6 @@ def interface_context(interface):
                                        interface.name != 'EventTarget'),
         'has_custom_legacy_call_as_function': has_extended_attribute_value(interface, 'Custom', 'LegacyCallAsFunction'),  # [Custom=LegacyCallAsFunction]
         'has_custom_to_v8': has_extended_attribute_value(interface, 'Custom', 'ToV8'),  # [Custom=ToV8]
-        'has_custom_wrap': has_extended_attribute_value(interface, 'Custom', 'Wrap'),  # [Custom=Wrap]
         'has_partial_interface': len(interface.partial_interfaces) > 0,
         'has_visit_dom_wrapper': has_visit_dom_wrapper,
         'header_includes': header_includes,
@@ -200,12 +197,10 @@ def interface_context(interface):
         'is_active_dom_object': is_active_dom_object,
         'is_array_buffer_or_view': is_array_buffer_or_view,
         'is_check_security': is_check_security,
-        'is_dependent_lifetime': is_dependent_lifetime,
         'is_event_target': is_event_target,
         'is_exception': interface.is_exception,
         'is_node': inherits_interface(interface.name, 'Node'),
         'is_partial': interface.is_partial,
-        'is_script_wrappable': is_script_wrappable,
         'is_typed_array_type': is_typed_array_type,
         'iterator_method': iterator_method,
         'lifetime': 'Dependent'
@@ -250,6 +245,7 @@ def interface_context(interface):
         includes.add('bindings/core/v8/Dictionary.h')
         if any_type_attributes:
             includes.add('bindings/core/v8/SerializedScriptValue.h')
+            includes.add('bindings/core/v8/SerializedScriptValueFactory.h')
 
     # [NamedConstructor]
     named_constructor = named_constructor_context(interface)
@@ -636,8 +632,9 @@ def effective_overload_set(F):
         # if X’s argument at index i is a final, variadic argument, “optional”
         # if the argument is optional, and “required” otherwise.
         # (“optionality list”)
-        # (We’re just using a boolean for optional vs. required.)
-        o = tuple(argument['is_optional'] for argument in arguments)
+        # (We’re just using a boolean for optional/variadic vs. required.)
+        o = tuple(argument['is_optional'] or argument['is_variadic']
+                  for argument in arguments)
         # 4. Add to S the tuple <X, t0..n−1, o0..n−1>.
         S.append((X, t, o))
         # 5. If X is declared to be variadic, then:
@@ -842,11 +839,32 @@ def resolution_tests_methods(effective_overloads):
         test = 'V8{idl_type}::hasInstance({cpp_value}, info.GetIsolate())'.format(idl_type=idl_type.base_type, cpp_value=cpp_value)
         yield test, method
 
-    # 8. Otherwise: if V is any kind of object except for a native Date object,
+    # 13. Otherwise: if IsCallable(V) is true, and there is an entry in S that
+    # has one of the following types at position i of its type list,
+    # • a callback function type
+    # ...
+    #
+    # FIXME:
+    # We test for functions rather than callability, which isn't strictly the
+    # same thing.
+    try:
+        method = next(method for idl_type, method in idl_types_methods
+                      if idl_type.is_callback_function)
+        test = '%s->IsFunction()' % cpp_value
+        yield test, method
+    except StopIteration:
+        pass
+
+    # 14. Otherwise: if V is any kind of object except for a native Date object,
+    # a native RegExp object, and there is an entry in S that has one of the
+    # following types at position i of its type list,
+    # • a sequence type
+    # ...
+    #
+    # 15. Otherwise: if V is any kind of object except for a native Date object,
     # a native RegExp object, and there is an entry in S that has one of the
     # following types at position i of its type list,
     # • an array type
-    # • a sequence type
     # ...
     # • a dictionary
     #
@@ -1044,7 +1062,7 @@ def interface_length(interface, constructors):
 
 def property_getter(getter, cpp_arguments):
     def is_null_expression(idl_type):
-        if v8_methods.use_output_parameter_for_result(idl_type):
+        if idl_type.use_output_parameter_for_result:
             return 'result.isNull()'
         if idl_type.name == 'String':
             return 'result.isNull()'
@@ -1055,7 +1073,7 @@ def property_getter(getter, cpp_arguments):
     idl_type = getter.idl_type
     extended_attributes = getter.extended_attributes
     is_raises_exception = 'RaisesException' in extended_attributes
-    use_output_parameter_for_result = v8_methods.use_output_parameter_for_result(idl_type)
+    use_output_parameter_for_result = idl_type.use_output_parameter_for_result
 
     # FIXME: make more generic, so can use v8_methods.cpp_value
     cpp_method_name = 'impl->%s' % cpp_name(getter)

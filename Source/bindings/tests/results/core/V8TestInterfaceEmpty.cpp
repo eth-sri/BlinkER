@@ -20,7 +20,7 @@
 
 namespace blink {
 
-const WrapperTypeInfo V8TestInterfaceEmpty::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceEmpty::domTemplate, V8TestInterfaceEmpty::refObject, V8TestInterfaceEmpty::derefObject, V8TestInterfaceEmpty::trace, 0, 0, 0, V8TestInterfaceEmpty::installConditionallyEnabledMethods, V8TestInterfaceEmpty::installConditionallyEnabledProperties, 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::Independent, WrapperTypeInfo::RefCountedObject };
+const WrapperTypeInfo V8TestInterfaceEmpty::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceEmpty::domTemplate, V8TestInterfaceEmpty::refObject, V8TestInterfaceEmpty::derefObject, V8TestInterfaceEmpty::trace, 0, 0, V8TestInterfaceEmpty::installConditionallyEnabledMethods, V8TestInterfaceEmpty::installConditionallyEnabledProperties, 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent, WrapperTypeInfo::RefCountedObject };
 
 // This static member must be declared by DEFINE_WRAPPERTYPEINFO in TestInterfaceEmpty.h.
 // For details, see the comment of DEFINE_WRAPPERTYPEINFO in
@@ -67,17 +67,17 @@ v8::Handle<v8::Object> V8TestInterfaceEmpty::findInstanceInPrototypeChain(v8::Ha
 
 TestInterfaceEmpty* V8TestInterfaceEmpty::toImplWithTypeCheck(v8::Isolate* isolate, v8::Handle<v8::Value> value)
 {
-    return hasInstance(value, isolate) ? blink::toScriptWrappableBase(v8::Handle<v8::Object>::Cast(value))->toImpl<TestInterfaceEmpty>() : 0;
+    return hasInstance(value, isolate) ? toImpl(v8::Handle<v8::Object>::Cast(value)) : 0;
 }
 
-void V8TestInterfaceEmpty::refObject(ScriptWrappableBase* scriptWrappableBase)
+void V8TestInterfaceEmpty::refObject(ScriptWrappable* scriptWrappable)
 {
-    scriptWrappableBase->toImpl<TestInterfaceEmpty>()->ref();
+    scriptWrappable->toImpl<TestInterfaceEmpty>()->ref();
 }
 
-void V8TestInterfaceEmpty::derefObject(ScriptWrappableBase* scriptWrappableBase)
+void V8TestInterfaceEmpty::derefObject(ScriptWrappable* scriptWrappable)
 {
-    scriptWrappableBase->toImpl<TestInterfaceEmpty>()->deref();
+    scriptWrappable->toImpl<TestInterfaceEmpty>()->deref();
 }
 
 template<>

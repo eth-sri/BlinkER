@@ -46,6 +46,7 @@
 #include "core/dom/ViewportDescription.h"
 #include "core/dom/custom/CustomElement.h"
 #include "core/eventracer/EventRacerJoinActions.h"
+#include "core/frame/LocalDOMWindow.h"
 #include "core/html/CollectionType.h"
 #include "core/page/FocusType.h"
 #include "core/page/PageVisibilityState.h"
@@ -77,6 +78,7 @@ class ContextFeatures;
 class CustomElementMicrotaskRunQueue;
 class CustomElementRegistrationContext;
 class DOMImplementation;
+class DOMWindow;
 class DocumentFragment;
 class DocumentLifecycleNotifier;
 class DocumentLoader;
@@ -115,7 +117,6 @@ class HitTestRequest;
 class LayoutPoint;
 class LiveNodeListBase;
 class Locale;
-class LocalDOMWindow;
 class LocalFrame;
 class Location;
 class MainThreadTaskRunner;
@@ -386,11 +387,18 @@ public:
     bool isTransitionDocument() const { return m_isTransitionDocument; }
     void setIsTransitionDocument() { m_isTransitionDocument = true; }
     void hideTransitionElements(const AtomicString& cssSelector);
+    void showTransitionElements(const AtomicString& cssSelector);
+
+    struct TransitionElement {
+        String id;
+        IntRect rect;
+    };
 
     struct TransitionElementData {
         String scope;
         String selector;
         String markup;
+        Vector<TransitionElement> elements;
     };
     void getTransitionElementData(Vector<TransitionElementData>&);
 
@@ -486,7 +494,7 @@ public:
     void prepareForDestruction();
 
     // If you have a Document, use renderView() instead which is faster.
-    void renderer() const WTF_DELETED_FUNCTION;
+    void renderer() const = delete;
 
     RenderView* renderView() const { return m_renderView; }
 
@@ -585,8 +593,14 @@ public:
     void setReadyState(ReadyState);
     bool isLoadCompleted();
 
-    void setParsing(bool);
-    bool parsing() const { return m_isParsing; }
+    enum ParsingState {
+        Parsing,
+        InDOMContentLoaded,
+        FinishedParsing
+    };
+    void setParsingState(ParsingState);
+    bool parsing() const { return m_parsingState == Parsing; }
+    bool isInDOMContentLoaded() const { return m_parsingState == InDOMContentLoaded; }
 
     bool shouldScheduleLayout() const;
     int elapsedTime() const;
@@ -693,7 +707,7 @@ public:
     bool hasMutationObservers() const { return m_mutationObserverTypes; }
     void addMutationObserverTypes(MutationObserverOptions types) { m_mutationObserverTypes |= types; }
 
-    CSSStyleDeclaration* getOverrideStyle(Element*, const String& pseudoElt);
+    CSSStyleDeclaration* getOverrideStyle() { return 0; }
 
     /**
      * Handles a HTTP header equivalent set by a meta tag using <meta http-equiv="..." content="...">. This is called
@@ -779,14 +793,6 @@ public:
 
     DocumentMarkerController& markers() const { return *m_markers; }
 
-    bool directionSetOnDocumentElement() const { return m_directionSetOnDocumentElement; }
-    bool writingModeSetOnDocumentElement() const { return m_writingModeSetOnDocumentElement; }
-    void setDirectionSetOnDocumentElement(bool b) { m_directionSetOnDocumentElement = b; }
-    void setWritingModeSetOnDocumentElement(bool b) { m_writingModeSetOnDocumentElement = b; }
-
-    bool containsAnyRareWritingMode() const { return m_containsAnyRareWritingMode; }
-    void setContainsAnyRareWritingMode(bool b) { m_containsAnyRareWritingMode = b; }
-
     bool execCommand(const String& command, bool userInterface = false, const String& value = String());
     bool queryCommandEnabled(const String& command);
     bool queryCommandIndeterm(const String& command);
@@ -813,10 +819,6 @@ public:
     HTMLScriptElement* currentScript() const { return !m_currentScriptStack.isEmpty() ? m_currentScriptStack.last().get() : nullptr; }
     void pushCurrentScript(PassRefPtrWillBeRawPtr<HTMLScriptElement>);
     void popCurrentScript();
-
-    void applyXSLTransform(ProcessingInstruction* pi);
-    PassRefPtrWillBeRawPtr<Document> transformSourceDocument() { return m_transformSourceDocument; }
-    void setTransformSourceDocument(Document* doc) { m_transformSourceDocument = doc; }
 
     void setTransformSource(PassOwnPtr<TransformSource>);
     TransformSource* transformSource() const { return m_transformSource.get(); }
@@ -906,6 +908,8 @@ public:
     bool processingLoadEvent() const { return m_loadEventProgress == LoadEventInProgress; }
     bool loadEventFinished() const { return m_loadEventProgress >= LoadEventCompleted; }
     bool unloadStarted() const { return m_loadEventProgress >= PageHideInProgress; }
+    bool processingBeforeUnload() const { return m_loadEventProgress == BeforeUnloadEventInProgress; }
+    void suppressLoadEvent() { m_loadEventProgress = LoadEventCompleted; }
 
     void setContainsPlugins() { m_containsPlugins = true; }
     bool containsPlugins() const { return m_containsPlugins; }
@@ -938,7 +942,7 @@ public:
     bool isDelayingLoadEvent();
     void loadPluginsSoon();
 
-    PassRefPtrWillBeRawPtr<Touch> createTouch(LocalDOMWindow*, EventTarget*, int identifier, double pageX, double pageY, double screenX, double screenY, double radiusX, double radiusY, float rotationAngle, float force) const;
+    PassRefPtrWillBeRawPtr<Touch> createTouch(DOMWindow*, EventTarget*, int identifier, double pageX, double pageY, double screenX, double screenY, double radiusX, double radiusY, float rotationAngle, float force) const;
     PassRefPtrWillBeRawPtr<TouchList> createTouchList(WillBeHeapVector<RefPtrWillBeMember<Touch>>&) const;
 
     const DocumentTiming& timing() const { return m_documentTiming; }
@@ -1047,7 +1051,7 @@ public:
     AtomicString convertLocalName(const AtomicString&);
 
     virtual v8::Handle<v8::Object> wrap(v8::Handle<v8::Object> creationContext, v8::Isolate*) override;
-    virtual v8::Handle<v8::Object> associateWithWrapper(const WrapperTypeInfo*, v8::Handle<v8::Object> wrapper, v8::Isolate*) override;
+    virtual v8::Handle<v8::Object> associateWithWrapper(v8::Isolate*, const WrapperTypeInfo*, v8::Handle<v8::Object> wrapper) override;
 
 protected:
     Document(const DocumentInit&, DocumentClassFlags = DefaultDocumentClass);
@@ -1069,9 +1073,9 @@ private:
     friend class Node;
     friend class IgnoreDestructiveWriteCountIncrementer;
 
-    bool isDocumentFragment() const WTF_DELETED_FUNCTION; // This will catch anyone doing an unnecessary check.
-    bool isDocumentNode() const WTF_DELETED_FUNCTION; // This will catch anyone doing an unnecessary check.
-    bool isElementNode() const WTF_DELETED_FUNCTION; // This will catch anyone doing an unnecessary check.
+    bool isDocumentFragment() const = delete; // This will catch anyone doing an unnecessary check.
+    bool isDocumentNode() const = delete; // This will catch anyone doing an unnecessary check.
+    bool isElementNode() const = delete; // This will catch anyone doing an unnecessary check.
 
     ScriptedAnimationController& ensureScriptedAnimationController();
     virtual SecurityContext& securityContext() override final { return *this; }
@@ -1159,6 +1163,8 @@ private:
     using EventFactorySet = HashSet<OwnPtr<EventFactoryBase>>;
     static EventFactorySet& eventFactories();
 
+    void updateElementOpacity(const AtomicString& cssSelector, double opacity);
+
     DocumentLifecycle m_lifecycle;
 
     bool m_hasNodesWithPlaceholderStyle;
@@ -1238,7 +1244,7 @@ private:
 
     bool m_visuallyOrdered;
     ReadyState m_readyState;
-    bool m_isParsing;
+    ParsingState m_parsingState;
 
     bool m_gotoAnchorNeededAfterStylesheetsLoad;
     bool m_isDNSPrefetchEnabled;
@@ -1270,7 +1276,6 @@ private:
     WillBeHeapVector<RefPtrWillBeMember<HTMLScriptElement>> m_currentScriptStack;
 
     OwnPtr<TransformSource> m_transformSource;
-    RefPtrWillBeMember<Document> m_transformSourceDocument;
 
     String m_xmlEncoding;
     String m_xmlVersion;
@@ -1333,12 +1338,8 @@ private:
     ViewportDescription m_legacyViewportDescription;
     Length m_viewportDefaultMinWidth;
 
-    bool m_didSetReferrerPolicy;
     ReferrerPolicy m_referrerPolicy;
 
-    bool m_directionSetOnDocumentElement;
-    bool m_writingModeSetOnDocumentElement;
-    bool m_containsAnyRareWritingMode;
     DocumentTiming m_documentTiming;
     RefPtrWillBeMember<MediaQueryMatcher> m_mediaQueryMatcher;
     bool m_writeRecursionIsTooDeep;
@@ -1419,6 +1420,8 @@ inline bool Node::isDocumentNode() const
 }
 
 Node* eventTargetNodeForDocument(Document*);
+
+DEFINE_TYPE_CASTS(TreeScope, Document, document, true, true);
 
 } // namespace blink
 

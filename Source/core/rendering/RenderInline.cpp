@@ -30,7 +30,6 @@
 #include "core/paint/BoxPainter.h"
 #include "core/paint/InlinePainter.h"
 #include "core/paint/ObjectPainter.h"
-#include "core/rendering/GraphicsContextAnnotator.h"
 #include "core/rendering/HitTestResult.h"
 #include "core/rendering/InlineTextBox.h"
 #include "core/rendering/RenderBlock.h"
@@ -43,7 +42,6 @@
 #include "core/rendering/style/StyleInheritedData.h"
 #include "platform/geometry/FloatQuad.h"
 #include "platform/geometry/TransformState.h"
-#include "platform/graphics/GraphicsContext.h"
 
 namespace blink {
 
@@ -553,7 +551,7 @@ void RenderInline::addChildToContinuation(RenderObject* newChild, RenderObject* 
     }
 }
 
-void RenderInline::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
+void RenderInline::paint(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
     InlinePainter(*this).paint(paintInfo, paintOffset);
 }
@@ -1128,7 +1126,7 @@ LayoutSize RenderInline::offsetFromContainer(const RenderObject* container, cons
 
     if (offsetDependsOnPoint) {
         *offsetDependsOnPoint = container->hasColumns()
-            || (container->isBox() && container->style()->slowIsFlippedBlocksWritingMode())
+            || (container->isBox() && container->style()->isFlippedBlocksWritingMode())
             || container->isRenderFlowThread();
     }
 
@@ -1154,7 +1152,7 @@ void RenderInline::mapLocalToContainer(const RenderLayerModelObject* paintInvali
         return;
 
     if (mode & ApplyContainerFlip && o->isBox()) {
-        if (o->style()->slowIsFlippedBlocksWritingMode()) {
+        if (o->style()->isFlippedBlocksWritingMode()) {
             IntPoint centerPoint = roundedIntPoint(transformState.mappedPoint());
             transformState.move(toRenderBox(o)->flipForWritingModeIncludingColumns(centerPoint) - centerPoint);
         }
@@ -1368,21 +1366,18 @@ public:
 
 } // unnamed namespace
 
-void RenderInline::addFocusRingRects(Vector<LayoutRect>& rects, const LayoutPoint& additionalOffset, const RenderLayerModelObject* paintContainer) const
+void RenderInline::addFocusRingRects(Vector<LayoutRect>& rects, const LayoutPoint& additionalOffset) const
 {
     AbsoluteLayoutRectsIgnoringEmptyRectsGeneratorContext context(rects, additionalOffset);
     generateLineBoxRects(context);
 
-    addChildFocusRingRects(rects, additionalOffset, paintContainer);
+    addChildFocusRingRects(rects, additionalOffset);
 
     if (continuation()) {
-        // If the continuation doesn't paint into the same container, let its paint invalidation container handle it.
-        if (paintContainer != continuation()->containerForPaintInvalidation())
-            return;
         if (continuation()->isInline())
-            continuation()->addFocusRingRects(rects, additionalOffset + (continuation()->containingBlock()->location() - containingBlock()->location()), paintContainer);
+            continuation()->addFocusRingRects(rects, additionalOffset + (continuation()->containingBlock()->location() - containingBlock()->location()));
         else
-            continuation()->addFocusRingRects(rects, additionalOffset + (toRenderBox(continuation())->location() - containingBlock()->location()), paintContainer);
+            continuation()->addFocusRingRects(rects, additionalOffset + (toRenderBox(continuation())->location() - containingBlock()->location()));
     }
 }
 

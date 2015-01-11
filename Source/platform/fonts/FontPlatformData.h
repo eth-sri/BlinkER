@@ -62,6 +62,7 @@ typedef uint32_t SkFontID;
 
 namespace blink {
 
+class Font;
 class GraphicsContext;
 class HarfBuzzFace;
 
@@ -75,12 +76,11 @@ public:
     FontPlatformData(WTF::HashTableDeletedValueType);
     FontPlatformData();
     FontPlatformData(const FontPlatformData&);
-    FontPlatformData(float size, bool syntheticBold, bool syntheticItalic, FontOrientation = Horizontal, FontWidthVariant = RegularWidth);
+    FontPlatformData(float size, bool syntheticBold, bool syntheticItalic, FontOrientation = Horizontal);
     FontPlatformData(const FontPlatformData& src, float textSize);
 #if OS(MACOSX)
-    FontPlatformData(NSFont*, float size, bool syntheticBold = false, bool syntheticItalic = false,
-                     FontOrientation = Horizontal, FontWidthVariant = RegularWidth);
-    FontPlatformData(CGFontRef, float size, bool syntheticBold, bool syntheticOblique, FontOrientation, FontWidthVariant);
+    FontPlatformData(NSFont*, float size, bool syntheticBold = false, bool syntheticItalic = false, FontOrientation = Horizontal);
+    FontPlatformData(CGFontRef, PassRefPtr<SkTypeface>, float size, bool syntheticBold, bool syntheticOblique, FontOrientation);
 #else
     FontPlatformData(PassRefPtr<SkTypeface>, const char* name, float textSize, bool syntheticBold, bool syntheticItalic, FontOrientation = Horizontal, bool subpixelTextPosition = defaultUseSubpixelPositioning());
 #endif
@@ -98,8 +98,6 @@ public:
 
     bool isColorBitmapFont() const { return m_isColorBitmapFont; }
     bool isCompositeFontReference() const { return m_isCompositeFontReference; }
-
-    FontWidthVariant widthVariant() const { return m_widthVariant; }
 #endif
 
     String fontFamilyName() const;
@@ -143,7 +141,7 @@ public:
     // The returned styles are all actual styles without FontRenderStyle::NoPreference.
     const FontRenderStyle& fontRenderStyle() const { return m_style; }
 #endif
-    void setupPaint(SkPaint*, GraphicsContext* = 0) const;
+    void setupPaint(SkPaint*, GraphicsContext* = 0, const Font* = 0) const;
 
 #if OS(WIN)
     int paintTextFlags() const { return m_paintTextFlags; }
@@ -186,7 +184,6 @@ public:
     bool m_isColorBitmapFont;
     bool m_isCompositeFontReference;
 #endif
-    FontWidthVariant m_widthVariant;
 private:
 #if OS(MACOSX)
     NSFont* m_font;

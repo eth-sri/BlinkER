@@ -52,8 +52,16 @@ public:
 #endif
 
     void resetInstance();
+
+    // Returns the existing plugin widget, if there is one.
+    Widget* existingPluginWidget() const;
+
+    // Returns the plugin widget, forcing layout and post-layout tasks
+    // to happen synchronously (e.g. for JS bindings).
+    // See also renderPartForJSBindings().
+    Widget* pluginWidgetForJSBindings();
+
     SharedPersistent<v8::Object>* pluginWrapper();
-    Widget* pluginWidget() const;
     NPObject* getNPObject();
     bool canProcessDrag() const;
     const String& url() const { return m_url; }
@@ -139,7 +147,7 @@ private:
 
     void setPersistedPluginWidget(Widget*);
 
-    mutable RefPtr<SharedPersistent<v8::Object> > m_pluginWrapper;
+    mutable RefPtr<SharedPersistent<v8::Object>> m_pluginWrapper;
     NPObject* m_NPObject;
     bool m_isCapturingMouseEvents;
     bool m_needsWidgetUpdate;

@@ -172,7 +172,7 @@ void EventRacerLog::logOperation(EventAction *act, Operation::Type type, size_t 
 void EventRacerLog::logOperation(EventAction *act, Operation::Type type,
                                  const WTF::String &loc, bool ignoreEmpty) {
     ASSERT(act->getState() == EventAction::ACTIVE);
-    enum StringTableKind k;
+    enum StringTableKind k = SCOPE_STRINGS;
     switch(type) {
     case Operation::ENTER_SCOPE:
         k = SCOPE_STRINGS;
@@ -300,7 +300,7 @@ void EventRacerLog::logMemoryValue(const ScriptValue &val, int fnid) {
 }
 
 // JS instrumentation calls
-ScriptValue EventRacerLog::ER_read(LocalDOMWindow &, const V8StringResource<> &name,
+ScriptValue EventRacerLog::ER_read(DOMWindow &, const V8StringResource<> &name,
                                    const ScriptValue &val) {
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
     if (log && log->hasAction()) {
@@ -310,7 +310,7 @@ ScriptValue EventRacerLog::ER_read(LocalDOMWindow &, const V8StringResource<> &n
     return val;
 }
 
-ScriptValue EventRacerLog::ER_write(LocalDOMWindow &, const V8StringResource<> &name,
+ScriptValue EventRacerLog::ER_write(DOMWindow &, const V8StringResource<> &name,
                                     const ScriptValue &val) {
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
     if (log && log->hasAction()) {
@@ -320,7 +320,7 @@ ScriptValue EventRacerLog::ER_write(LocalDOMWindow &, const V8StringResource<> &
     return val;
 }
 
-ScriptValue EventRacerLog::ER_writeFunc(LocalDOMWindow &, const V8StringResource<> &name,
+ScriptValue EventRacerLog::ER_writeFunc(DOMWindow &, const V8StringResource<> &name,
                                         const ScriptValue &val, int id) {
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
     if (log && log->hasAction()) {
@@ -330,7 +330,7 @@ ScriptValue EventRacerLog::ER_writeFunc(LocalDOMWindow &, const V8StringResource
     return val;
 }
 
-ScriptValue EventRacerLog::ER_readProp(LocalDOMWindow &, const ScriptValue &obj,
+ScriptValue EventRacerLog::ER_readProp(DOMWindow &, const ScriptValue &obj,
                                        const V8StringResource<> &name, const ScriptValue &val) {
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
     if (log && log->hasAction())
@@ -338,7 +338,7 @@ ScriptValue EventRacerLog::ER_readProp(LocalDOMWindow &, const ScriptValue &obj,
     return val;
 }
 
-ScriptValue EventRacerLog::ER_writeProp(LocalDOMWindow &, const ScriptValue &obj,
+ScriptValue EventRacerLog::ER_writeProp(DOMWindow &, const ScriptValue &obj,
                                         const V8StringResource<> &name, const ScriptValue &val) {
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
     if (log && log->hasAction())
@@ -346,7 +346,7 @@ ScriptValue EventRacerLog::ER_writeProp(LocalDOMWindow &, const ScriptValue &obj
     return val;
 }
 
-ScriptValue EventRacerLog::ER_writePropFunc(LocalDOMWindow &, const ScriptValue &obj,
+ScriptValue EventRacerLog::ER_writePropFunc(DOMWindow &, const ScriptValue &obj,
                                             const V8StringResource<> &name, const ScriptValue &val,
                                             int id) {
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
@@ -355,7 +355,7 @@ ScriptValue EventRacerLog::ER_writePropFunc(LocalDOMWindow &, const ScriptValue 
     return val;
 }
 
-void EventRacerLog::ER_delete(LocalDOMWindow &, const V8StringResource <>&name) {
+void EventRacerLog::ER_delete(DOMWindow &, const V8StringResource <>&name) {
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
     if (log && log->hasAction()) {
         log->logOperation(log->getCurrentAction(), Operation::WRITE_MEMORY, WTF::String(name));
@@ -363,14 +363,14 @@ void EventRacerLog::ER_delete(LocalDOMWindow &, const V8StringResource <>&name) 
     }
 }
 
-void EventRacerLog::ER_deleteProp(LocalDOMWindow &, const ScriptValue &obj,
+void EventRacerLog::ER_deleteProp(DOMWindow &, const ScriptValue &obj,
                                   const V8StringResource<> &name) {
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
     if (log && log->hasAction())
         log->logFieldAccess(Operation::WRITE_MEMORY, obj, name, NULL);
 }
 
-void EventRacerLog::ER_enterFunction(LocalDOMWindow &, const V8StringResource<> &name, int scriptId, int fnId) {
+void EventRacerLog::ER_enterFunction(DOMWindow &, const V8StringResource<> &name, int scriptId, int fnId) {
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
     if (log && log->hasAction()) {
         // If there's no script or function id, just use the |name| for the
@@ -403,7 +403,7 @@ void EventRacerLog::ER_enterFunction(LocalDOMWindow &, const V8StringResource<> 
     }
 }
 
-ScriptValue EventRacerLog::ER_exitFunction(LocalDOMWindow &, const ScriptValue &val) {
+ScriptValue EventRacerLog::ER_exitFunction(DOMWindow &, const ScriptValue &val) {
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
     if (log && log->hasAction())
         log->logOperation(log->getCurrentAction(), Operation::EXIT_SCOPE, 0, true);
@@ -411,7 +411,7 @@ ScriptValue EventRacerLog::ER_exitFunction(LocalDOMWindow &, const ScriptValue &
     return val;
 }
 
-void EventRacerLog::ER_readArray(LocalDOMWindow &, const ScriptValue &arr) {
+void EventRacerLog::ER_readArray(DOMWindow &, const ScriptValue &arr) {
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
     if (log && log->hasAction()) {
         v8::Handle<v8::Value> v = arr.v8Value();
@@ -423,7 +423,7 @@ void EventRacerLog::ER_readArray(LocalDOMWindow &, const ScriptValue &arr) {
     }
 }
 
-void EventRacerLog::ER_writeArray(LocalDOMWindow &, const ScriptValue &arr) {
+void EventRacerLog::ER_writeArray(DOMWindow &, const ScriptValue &arr) {
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
     if (log && log->hasAction()) {
         v8::Handle<v8::Value> v = arr.v8Value();

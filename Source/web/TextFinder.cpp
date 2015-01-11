@@ -42,8 +42,11 @@
 #include "core/frame/FrameView.h"
 #include "core/page/Page.h"
 #include "core/rendering/RenderObject.h"
+#include "modules/accessibility/AXObject.h"
+#include "modules/accessibility/AXObjectCacheImpl.h"
 #include "platform/Timer.h"
 #include "public/platform/WebVector.h"
+#include "public/web/WebAXObject.h"
 #include "public/web/WebFindOptions.h"
 #include "public/web/WebFrameClient.h"
 #include "public/web/WebViewClient.h"
@@ -205,6 +208,26 @@ void TextFinder::stopFindingAndClearSelection()
 
     // Let the frame know that we don't want tickmarks or highlighting anymore.
     ownerFrame().invalidateAll();
+}
+
+void TextFinder::reportFindInPageResultToAccessibility(int identifier)
+{
+    AXObjectCacheImpl* axObjectCache = toAXObjectCacheImpl(ownerFrame().frame()->document()->existingAXObjectCache());
+    if (!axObjectCache)
+        return;
+
+    AXObject* startObject = axObjectCache->get(m_activeMatch->startContainer());
+    AXObject* endObject = axObjectCache->get(m_activeMatch->endContainer());
+    if (!startObject || !endObject)
+        return;
+
+    WebLocalFrameImpl* mainFrameImpl = ownerFrame().viewImpl()->mainFrameImpl();
+    if (mainFrameImpl && mainFrameImpl->client()) {
+        mainFrameImpl->client()->handleAccessibilityFindInPageResult(
+            identifier, m_activeMatchIndexInCurrentFrame + 1,
+            WebAXObject(startObject), m_activeMatch->startOffset(),
+            WebAXObject(endObject), m_activeMatch->endOffset());
+    }
 }
 
 void TextFinder::scopeStringMatches(int identifier, const WebString& searchText, const WebFindOptions& options, bool reset)
@@ -425,6 +448,10 @@ void TextFinder::reportFindInPageSelection(const WebRect& selectionRect, int act
     // Update the UI with the latest selection rect.
     if (ownerFrame().client())
         ownerFrame().client()->reportFindInPageSelection(identifier, ordinalOfFirstMatch() + activeMatchOrdinal, selectionRect);
+
+    // Update accessibility too, so if the user commits to this query
+    // we can move accessibility focus to this result.
+    reportFindInPageResultToAccessibility(identifier);
 }
 
 void TextFinder::resetMatchCount()

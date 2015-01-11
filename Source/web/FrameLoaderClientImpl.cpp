@@ -83,6 +83,7 @@
 #include "public/web/WebPluginParams.h"
 #include "public/web/WebPluginPlaceholder.h"
 #include "public/web/WebSecurityOrigin.h"
+#include "public/web/WebTransitionElementData.h"
 #include "public/web/WebViewClient.h"
 #include "web/EventRacerLogClientImpl.h"
 #include "web/PluginPlaceholderImpl.h"
@@ -107,6 +108,12 @@ FrameLoaderClientImpl::FrameLoaderClientImpl(WebLocalFrameImpl* frame)
 
 FrameLoaderClientImpl::~FrameLoaderClientImpl()
 {
+}
+
+void FrameLoaderClientImpl::didCreateNewDocument()
+{
+    if (m_webFrame->client())
+        m_webFrame->client()->didCreateNewDocument(m_webFrame);
 }
 
 void FrameLoaderClientImpl::dispatchDidClearWindowObjectInMainWorld()
@@ -460,10 +467,47 @@ void FrameLoaderClientImpl::dispatchDidChangeThemeColor()
         m_webFrame->client()->didChangeThemeColor();
 }
 
+static bool allowCreatingBackgroundTabs()
+{
+    const WebInputEvent* inputEvent = WebViewImpl::currentInputEvent();
+    if (!inputEvent || inputEvent->type != WebInputEvent::MouseUp)
+        return false;
+
+    const WebMouseEvent* mouseEvent = static_cast<const WebMouseEvent*>(inputEvent);
+
+    unsigned short buttonNumber;
+    switch (mouseEvent->button) {
+    case WebMouseEvent::ButtonLeft:
+        buttonNumber = 0;
+        break;
+    case WebMouseEvent::ButtonMiddle:
+        buttonNumber = 1;
+        break;
+    case WebMouseEvent::ButtonRight:
+        buttonNumber = 2;
+        break;
+    default:
+        return false;
+    }
+    bool ctrl = mouseEvent->modifiers & WebMouseEvent::ControlKey;
+    bool shift = mouseEvent->modifiers & WebMouseEvent::ShiftKey;
+    bool alt = mouseEvent->modifiers & WebMouseEvent::AltKey;
+    bool meta = mouseEvent->modifiers & WebMouseEvent::MetaKey;
+
+    NavigationPolicy userPolicy;
+    if (!navigationPolicyFromMouseEvent(buttonNumber, ctrl, shift, alt, meta, &userPolicy))
+        return false;
+    return userPolicy == NavigationPolicyNewBackgroundTab;
+}
+
 NavigationPolicy FrameLoaderClientImpl::decidePolicyForNavigation(const ResourceRequest& request, DocumentLoader* loader, NavigationPolicy policy, bool isTransitionNavigation)
 {
     if (!m_webFrame->client())
         return NavigationPolicyIgnore;
+
+    if (policy == NavigationPolicyNewBackgroundTab && !allowCreatingBackgroundTabs())
+        policy = NavigationPolicyNewForegroundTab;
+
     WebDataSourceImpl* ds = WebDataSourceImpl::fromDocumentLoader(loader);
 
     WrappedResourceRequest wrappedResourceRequest(request);
@@ -479,10 +523,18 @@ NavigationPolicy FrameLoaderClientImpl::decidePolicyForNavigation(const Resource
     return static_cast<NavigationPolicy>(webPolicy);
 }
 
-void FrameLoaderClientImpl::dispatchAddNavigationTransitionData(const String& allowedDestinationOrigin, const String& selector, const String& markup)
+void FrameLoaderClientImpl::dispatchAddNavigationTransitionData(const Document::TransitionElementData& data)
 {
-    if (m_webFrame->client())
-        m_webFrame->client()->addNavigationTransitionData(allowedDestinationOrigin, selector, markup);
+    if (!m_webFrame->client())
+        return;
+
+    WebVector<WebTransitionElement> webElements(data.elements.size());
+    for (size_t i = 0; i < data.elements.size(); ++i) {
+        webElements[i].id = data.elements[i].id;
+        webElements[i].rect = data.elements[i].rect;
+    }
+    WebTransitionElementData webData(data.scope, data.selector, data.markup, webElements);
+    m_webFrame->client()->addNavigationTransitionData(webData);
 }
 
 void FrameLoaderClientImpl::dispatchWillRequestResource(FetchRequest* request)
@@ -541,9 +593,9 @@ bool FrameLoaderClientImpl::navigateBackForward(int offset) const
         return false;
 
     ASSERT(offset);
-    offset = std::min(offset, webview->client()->historyForwardListCount());
-    offset = std::max(offset, -webview->client()->historyBackListCount());
-    if (!offset)
+    if (offset > webview->client()->historyForwardListCount())
+        return false;
+    if (offset < -webview->client()->historyBackListCount())
         return false;
     webview->client()->navigateBackForwardSoon(offset);
     return true;
@@ -797,8 +849,11 @@ void FrameLoaderClientImpl::dispatchWillStartUsingPeerConnectionHandler(WebRTCPe
 
 void FrameLoaderClientImpl::didRequestAutocomplete(HTMLFormElement* form)
 {
+    // FIXME: remove.
     if (m_webFrame->viewImpl() && m_webFrame->viewImpl()->autofillClient())
         m_webFrame->viewImpl()->autofillClient()->didRequestAutocomplete(WebFormElement(form));
+    if (m_webFrame->autofillClient())
+        m_webFrame->autofillClient()->didRequestAutocomplete(WebFormElement(form));
 }
 
 bool FrameLoaderClientImpl::allowWebGL(bool enabledPerSettings)
@@ -865,6 +920,14 @@ void FrameLoaderClientImpl::dispatchDidChangeManifest()
 {
     if (m_webFrame->client())
         m_webFrame->client()->didChangeManifest(m_webFrame);
+}
+
+unsigned FrameLoaderClientImpl::backForwardLength()
+{
+    WebViewImpl* webview = m_webFrame->viewImpl();
+    if (!webview || !webview->client())
+        return 0;
+    return webview->client()->historyBackListCount() + 1 + webview->client()->historyForwardListCount();
 }
 
 PassOwnPtr<EventRacerLogClient> FrameLoaderClientImpl::createEventRacerLogClient()

@@ -63,7 +63,7 @@ void FramePainter::paint(GraphicsContext* context, const IntRect& rect)
         m_frameView.paintPanScrollIcon(context);
 }
 
-void FramePainter::paintContents(GraphicsContext* p, const IntRect& rect)
+void FramePainter::paintContents(GraphicsContext* context, const IntRect& rect)
 {
     Document* document = m_frameView.frame().document();
 
@@ -83,7 +83,7 @@ void FramePainter::paintContents(GraphicsContext* p, const IntRect& rect)
         fillWithRed = true;
 
     if (fillWithRed)
-        p->fillRect(rect, Color(0xFF, 0, 0));
+        context->fillRect(rect, Color(0xFF, 0, 0));
 #endif
 
     RenderView* renderView = m_frameView.renderView();
@@ -96,7 +96,6 @@ void FramePainter::paintContents(GraphicsContext* p, const IntRect& rect)
     ASSERT(document->lifecycle().state() >= DocumentLifecycle::CompositingClean);
 
     TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "Paint", "data", InspectorPaintEvent::data(renderView, rect, 0));
-    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline.stack"), "CallStack", "stack", InspectorCallStackEvent::currentCallStack());
     // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentation::willPaint(renderView, 0);
 
@@ -132,10 +131,13 @@ void FramePainter::paintContents(GraphicsContext* p, const IntRect& rect)
 
     LayerPainter layerPainter(*rootLayer);
 
-    layerPainter.paint(p, rect, m_frameView.paintBehavior(), renderer);
+    float deviceScaleFactor = blink::deviceScaleFactor(rootLayer->renderer()->frame());
+    context->setDeviceScaleFactor(deviceScaleFactor);
+
+    layerPainter.paint(context, rect, m_frameView.paintBehavior(), renderer);
 
     if (rootLayer->containsDirtyOverlayScrollbars())
-        layerPainter.paintOverlayScrollbars(p, rect, m_frameView.paintBehavior(), renderer);
+        layerPainter.paintOverlayScrollbars(context, rect, m_frameView.paintBehavior(), renderer);
 
     m_frameView.setIsPainting(false);
 
@@ -153,7 +155,7 @@ void FramePainter::paintContents(GraphicsContext* p, const IntRect& rect)
         s_inPaintContents = false;
     }
 
-    InspectorInstrumentation::didPaint(renderView, 0, p, rect);
+    InspectorInstrumentation::didPaint(renderView, 0, context, rect);
 }
 
 void FramePainter::paintScrollbars(GraphicsContext* context, const IntRect& rect)

@@ -145,7 +145,7 @@ CompositingReasons CompositingLayerAssigner::getReasonsPreventingSquashing(const
     if (squashingWouldExceedSparsityTolerance(layer, squashingState))
         return CompositingReasonSquashingSparsityExceeded;
 
-    if (layer->renderer()->hasBlendMode())
+    if (layer->renderer()->style()->hasBlendMode())
         return CompositingReasonSquashingBlendingIsDisallowed;
 
     // FIXME: this is not efficient, since it walks up the tree. We should store these values on the CompositingInputsCache.
@@ -275,8 +275,8 @@ void CompositingLayerAssigner::assignLayersToBackingsInternal(RenderLayer* layer
     }
 
     if (m_layerSquashingEnabled) {
-        // At this point, if the layer is to be "separately" composited, then its backing becomes the most recent in paint-order.
-        if (layer->compositingState() == PaintsIntoOwnBacking || layer->compositingState() == HasOwnBackingButPaintsIntoAncestor) {
+        // At this point, if the layer is to be separately composited, then its backing becomes the most recent in paint-order.
+        if (layer->compositingState() == PaintsIntoOwnBacking) {
             ASSERT(!requiresSquashing(layer->compositingReasons()));
             squashingState.updateSquashingStateForNewMapping(layer->compositedLayerMapping(), layer->hasCompositedLayerMapping());
         }

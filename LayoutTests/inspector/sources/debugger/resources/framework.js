@@ -132,3 +132,25 @@ Framework.throwFrameworkExceptionAndCatch = function()
     } catch(e) {
     }
 }
+
+Framework.scheduleUntilDone = function(callback, delay)
+{
+    Framework.schedule(Framework_scheduleUntilDone, delay);
+
+    function Framework_scheduleUntilDone()
+    {
+        if (callback && callback())
+            return;
+        Framework.schedule(Framework_scheduleUntilDone, delay);
+    }
+}
+
+Framework.doSomeWorkDoNotChangeTopCallFrame = function()
+{
+    const numberOfSteps = 5000;
+    for (var i = 0; i < numberOfSteps; ++i) {
+        if (window["dummy property should not exist!" + i]) // Prevent optimizations.
+            return i;
+    }
+    return -1;
+}

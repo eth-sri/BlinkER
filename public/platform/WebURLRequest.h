@@ -224,9 +224,17 @@ public:
     BLINK_PLATFORM_EXPORT bool downloadToFile() const;
     BLINK_PLATFORM_EXPORT void setDownloadToFile(bool);
 
+    // True if the requestor wants to receive the response body as a stream.
+    BLINK_PLATFORM_EXPORT bool useStreamOnResponse() const;
+    BLINK_PLATFORM_EXPORT void setUseStreamOnResponse(bool);
+
     // True if the request should not be handled by the ServiceWorker.
     BLINK_PLATFORM_EXPORT bool skipServiceWorker() const;
     BLINK_PLATFORM_EXPORT void setSkipServiceWorker(bool);
+
+    // True if corresponding AppCache group should be resetted.
+    BLINK_PLATFORM_EXPORT bool shouldResetAppCache() const;
+    BLINK_PLATFORM_EXPORT void setShouldResetAppCache(bool);
 
     // The request mode which will be passed to the ServiceWorker.
     BLINK_PLATFORM_EXPORT FetchRequestMode fetchRequestMode() const;
@@ -247,6 +255,13 @@ public:
 
     BLINK_PLATFORM_EXPORT Priority priority() const;
     BLINK_PLATFORM_EXPORT void setPriority(Priority);
+
+    // PlzNavigate: whether the FrameLoader should try to send the request to
+    // the browser (if browser-side navigations are enabled).
+    // Note: WebURLRequests created by RenderFrameImpl::OnCommitNavigation must
+    // not be sent to the browser.
+    BLINK_PLATFORM_EXPORT bool checkForBrowserSideNavigation() const;
+    BLINK_PLATFORM_EXPORT void setCheckForBrowserSideNavigation(bool);
 
 #if INSIDE_BLINK
     BLINK_PLATFORM_EXPORT ResourceRequest& toMutableResourceRequest();

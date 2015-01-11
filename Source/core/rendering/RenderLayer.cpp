@@ -104,7 +104,6 @@ RenderLayer::RenderLayer(RenderLayerModelObject* renderer, LayerType type)
     , m_hasSelfPaintingLayerDescendant(false)
     , m_hasSelfPaintingLayerDescendantDirty(false)
     , m_isRootLayer(renderer->isRenderView())
-    , m_usedTransparency(false)
     , m_visibleContentStatusDirty(true)
     , m_hasVisibleContent(false)
     , m_visibleDescendantStatusDirty(false)
@@ -308,7 +307,7 @@ void RenderLayer::updateTransformationMatrix()
         RenderBox* box = renderBox();
         ASSERT(box);
         m_transform->makeIdentity();
-        box->style()->applyTransform(*m_transform, box->pixelSnappedBorderBoxRect().size(), RenderStyle::IncludeTransformOrigin);
+        box->style()->applyTransform(*m_transform, LayoutSize(box->pixelSnappedSize()), RenderStyle::IncludeTransformOrigin);
         makeMatrixRenderable(*m_transform, compositor()->hasAcceleratedCompositing());
     }
 }
@@ -371,7 +370,7 @@ TransformationMatrix RenderLayer::currentTransform(RenderStyle::ApplyTransformOr
     if (applyOrigin == RenderStyle::ExcludeTransformOrigin) {
         RenderBox* box = renderBox();
         TransformationMatrix currTransform;
-        box->style()->applyTransform(currTransform, box->pixelSnappedBorderBoxRect().size(), RenderStyle::ExcludeTransformOrigin);
+        box->style()->applyTransform(currTransform, LayoutSize(box->pixelSnappedSize()), RenderStyle::ExcludeTransformOrigin);
         makeMatrixRenderable(currTransform, compositor()->hasAcceleratedCompositing());
         return currTransform;
     }
@@ -536,6 +535,13 @@ void RenderLayer::updatePagination()
     }
 }
 
+void RenderLayer::clearPaginationRecursive()
+{
+    m_enclosingPaginationLayer = 0;
+    for (RenderLayer* child = firstChild(); child; child = child->nextSibling())
+        child->clearPaginationRecursive();
+}
+
 LayoutPoint RenderLayer::positionFromPaintInvalidationBacking(const RenderObject* renderObject, const RenderLayerModelObject* paintInvalidationContainer, const PaintInvalidationState* paintInvalidationState)
 {
     FloatPoint point = renderObject->localToContainerPoint(FloatPoint(), paintInvalidationContainer, 0, 0, paintInvalidationState);
@@ -652,7 +658,7 @@ void RenderLayer::updateScrollingStateAfterCompositingChange()
 
     m_hasNonCompositedChild = false;
     for (RenderLayer* child = firstChild(); child; child = child->nextSibling()) {
-        if (child->compositingState() == NotComposited || child->compositingState() == HasOwnBackingButPaintsIntoAncestor) {
+        if (child->compositingState() == NotComposited) {
             m_hasNonCompositedChild = true;
             return;
         }
@@ -790,15 +796,15 @@ IntSize RenderLayer::size() const
 LayoutPoint RenderLayer::location() const
 {
     LayoutPoint localPoint;
-    LayoutSize inlineBoundingBoxOffset; // We don't put this into the RenderLayer x/y for inlines, so we need to subtract it out when done.
+    LayoutPoint inlineBoundingBoxOffset; // We don't put this into the RenderLayer x/y for inlines, so we need to subtract it out when done.
 
     if (renderer()->isInline() && renderer()->isRenderInline()) {
         RenderInline* inlineFlow = toRenderInline(renderer());
         IntRect lineBox = inlineFlow->linesBoundingBox();
-        inlineBoundingBoxOffset = toSize(lineBox.location());
-        localPoint += inlineBoundingBoxOffset;
+        inlineBoundingBoxOffset = lineBox.location();
+        localPoint.moveBy(inlineBoundingBoxOffset);
     } else if (RenderBox* box = renderBox()) {
-        localPoint += box->topLeftLocationOffset();
+        localPoint.moveBy(box->topLeftLocation());
     }
 
     if (!renderer()->isOutOfFlowPositioned() && renderer()->parent()) {
@@ -809,13 +815,13 @@ LayoutPoint RenderLayer::location() const
             if (curr->isBox() && !curr->isTableRow()) {
                 // Rows and cells share the same coordinate space (that of the section).
                 // Omit them when computing our xpos/ypos.
-                localPoint += toRenderBox(curr)->topLeftLocationOffset();
+                localPoint.moveBy(toRenderBox(curr)->topLeftLocation());
             }
             curr = curr->parent();
         }
         if (curr->isBox() && curr->isTableRow()) {
             // Put ourselves into the row coordinate space.
-            localPoint -= toRenderBox(curr)->topLeftLocationOffset();
+            localPoint.moveBy(-toRenderBox(curr)->topLeftLocation());
         }
     }
 
@@ -825,7 +831,7 @@ LayoutPoint RenderLayer::location() const
 
         // For positioned layers, we subtract out the enclosing positioned layer's scroll offset.
         if (positionedParent->renderer()->hasOverflowClip()) {
-            LayoutSize offset = positionedParent->renderBox()->scrolledContentOffset();
+            IntSize offset = positionedParent->renderBox()->scrolledContentOffset();
             localPoint -= offset;
         }
 
@@ -856,7 +862,7 @@ LayoutPoint RenderLayer::location() const
     localPoint.move(offsetForInFlowPosition());
 
     // FIXME: We'd really like to just get rid of the concept of a layer rectangle and rely on the renderers.
-    localPoint -= inlineBoundingBoxOffset;
+    localPoint.moveBy(-inlineBoundingBoxOffset);
 
     return localPoint;
 }
@@ -997,7 +1003,7 @@ RenderLayer* RenderLayer::enclosingLayerForPaintInvalidation() const
     if (isPaintInvalidationContainer())
         return const_cast<RenderLayer*>(this);
 
-    for (const RenderLayer* curr = parent(); curr; curr = curr->parent()) {
+    for (const RenderLayer* curr = compositingContainer(); curr; curr = curr->compositingContainer()) {
         if (curr->isPaintInvalidationContainer())
             return const_cast<RenderLayer*>(curr);
     }
@@ -1073,20 +1079,6 @@ bool RenderLayer::hasAncestorWithFilterOutsets() const
             return true;
     }
     return false;
-}
-
-RenderLayer* RenderLayer::transparentPaintingAncestor()
-{
-    if (hasCompositedLayerMapping())
-        return 0;
-
-    for (RenderLayer* curr = parent(); curr; curr = curr->parent()) {
-        if (curr->hasCompositedLayerMapping())
-            return 0;
-        if (curr->isTransparent())
-            return curr;
-    }
-    return 0;
 }
 
 static void expandClipRectForDescendantsAndReflection(LayoutRect& clipRect, const RenderLayer* layer, const RenderLayer* rootLayer,
@@ -1254,6 +1246,9 @@ RenderLayer* RenderLayer::removeChild(RenderLayer* oldChild)
     if (oldChild->m_hasVisibleContent || oldChild->m_hasVisibleDescendant)
         dirtyAncestorChainVisibleDescendantStatus();
 
+    if (oldChild->enclosingPaginationLayer())
+        oldChild->clearPaginationRecursive();
+
     return oldChild;
 }
 
@@ -1359,7 +1354,7 @@ static inline const RenderLayer* accumulateOffsetTowardsAncestor(const RenderLay
 
             location += (fixedContainerCoords - ancestorCoords);
         } else {
-            location += toSize(layer->location());
+            location += layer->location();
         }
         return ancestorLayer;
     }
@@ -1408,7 +1403,7 @@ static inline const RenderLayer* accumulateOffsetTowardsAncestor(const RenderLay
     if (!parentLayer)
         return 0;
 
-    location += toSize(layer->location());
+    location += layer->location();
     return parentLayer;
 }
 
@@ -1577,9 +1572,10 @@ bool RenderLayer::hitTest(const HitTestRequest& request, const HitTestLocation& 
     ASSERT(!renderer()->frame()->view()->layoutPending());
     ASSERT(!renderer()->document().renderView()->needsLayout());
 
-    LayoutRect hitTestArea = renderer()->view()->documentRect();
-    if (!request.ignoreClipping())
-        hitTestArea.intersect(frameVisibleRect(renderer()));
+    // Start with frameVisibleRect to ensure we include the scrollbars.
+    LayoutRect hitTestArea = frameVisibleRect(renderer());
+    if (request.ignoreClipping())
+        hitTestArea.unite(renderer()->view()->documentRect());
 
     RenderLayer* insideLayer = hitTestLayer(this, 0, request, result, hitTestArea, hitTestLocation, false);
     if (!insideLayer) {
@@ -2048,7 +2044,7 @@ RenderLayer* RenderLayer::hitTestChildLayerColumns(RenderLayer* childLayer, Rend
     for (i = 0; i < colCount; i++) {
         LayoutRect colRect = columnBlock->columnRectAt(colInfo, i);
         LayoutUnit blockDelta =  (isHorizontal ? colRect.height() : colRect.width());
-        if (columnBlock->style()->slowIsFlippedBlocksWritingMode())
+        if (columnBlock->style()->isFlippedBlocksWritingMode())
             currLogicalTopOffset += blockDelta;
         else
             currLogicalTopOffset -= blockDelta;
@@ -2059,7 +2055,7 @@ RenderLayer* RenderLayer::hitTestChildLayerColumns(RenderLayer* childLayer, Rend
         columnBlock->flipForWritingMode(colRect);
         LayoutUnit currLogicalLeftOffset = (isHorizontal ? colRect.x() : colRect.y()) - logicalLeft;
         LayoutUnit blockDelta =  (isHorizontal ? colRect.height() : colRect.width());
-        if (columnBlock->style()->slowIsFlippedBlocksWritingMode())
+        if (columnBlock->style()->isFlippedBlocksWritingMode())
             currLogicalTopOffset -= blockDelta;
         else
             currLogicalTopOffset += blockDelta;
@@ -2169,11 +2165,11 @@ void RenderLayer::invalidatePaintForBlockSelectionGaps()
 
 IntRect RenderLayer::blockSelectionGapsBounds() const
 {
-    if (!renderer()->isRenderBlock())
+    if (!renderer()->isRenderBlockFlow())
         return IntRect();
 
-    RenderBlock* renderBlock = toRenderBlock(renderer());
-    LayoutRect gapRects = renderBlock->selectionGapRectsForPaintInvalidation(renderBlock);
+    RenderBlockFlow* renderBlockFlow = toRenderBlockFlow(renderer());
+    LayoutRect gapRects = renderBlockFlow->selectionGapRectsForPaintInvalidation(renderBlockFlow);
 
     return pixelSnappedIntRect(gapRects);
 }
@@ -2250,9 +2246,6 @@ LayoutRect RenderLayer::logicalBoundingBox() const
 
 static inline LayoutRect flippedLogicalBoundingBox(LayoutRect boundingBox, RenderObject* renderer)
 {
-    if (!UNLIKELY(renderer->document().containsAnyRareWritingMode()))
-        return boundingBox;
-
     LayoutRect result = boundingBox;
     if (renderer->isBox())
         toRenderBox(renderer)->flipForWritingMode(result);
@@ -2397,9 +2390,6 @@ CompositingState RenderLayer::compositingState() const
     if (!m_compositedLayerMapping)
         return NotComposited;
 
-    if (compositedLayerMapping()->paintsIntoCompositedAncestor())
-        return HasOwnBackingButPaintsIntoAncestor;
-
     return PaintsIntoOwnBacking;
 }
 
@@ -2440,15 +2430,15 @@ GraphicsLayer* RenderLayer::graphicsLayerBackingForScrolling() const
     }
 }
 
-CompositedLayerMapping* RenderLayer::ensureCompositedLayerMapping()
+void RenderLayer::ensureCompositedLayerMapping()
 {
-    if (!m_compositedLayerMapping) {
-        m_compositedLayerMapping = adoptPtr(new CompositedLayerMapping(*this));
-        m_compositedLayerMapping->setNeedsGraphicsLayerUpdate(GraphicsLayerUpdateSubtree);
+    if (m_compositedLayerMapping)
+        return;
 
-        updateOrRemoveFilterEffectRenderer();
-    }
-    return m_compositedLayerMapping.get();
+    m_compositedLayerMapping = adoptPtr(new CompositedLayerMapping(*this));
+    m_compositedLayerMapping->setNeedsGraphicsLayerUpdate(GraphicsLayerUpdateSubtree);
+
+    updateOrRemoveFilterEffectRenderer();
 }
 
 void RenderLayer::clearCompositedLayerMapping(bool layerBeingDestroyed)
@@ -2492,23 +2482,9 @@ bool RenderLayer::hasCompositedClippingMask() const
     return m_compositedLayerMapping && m_compositedLayerMapping->hasChildClippingMaskLayer();
 }
 
-bool RenderLayer::clipsCompositingDescendantsWithBorderRadius() const
-{
-    RenderStyle* style = renderer()->style();
-    if (!style)
-        return false;
-
-    return compositor()->clipsCompositingDescendants(this) && style->hasBorderRadius();
-}
-
 bool RenderLayer::paintsWithTransform(PaintBehavior paintBehavior) const
 {
     return transform() && ((paintBehavior & PaintBehaviorFlattenCompositingLayers) || compositingState() != PaintsIntoOwnBacking);
-}
-
-bool RenderLayer::paintsWithBlendMode() const
-{
-    return m_renderer->hasBlendMode() && compositingState() != PaintsIntoOwnBacking;
 }
 
 bool RenderLayer::backgroundIsKnownToBeOpaqueInRect(const LayoutRect& localRect) const
@@ -2739,7 +2715,7 @@ FilterOperations RenderLayer::computeFilterOperations(const RenderStyle* style)
                 continue;
             ReferenceFilterOperation* referenceOperation = toReferenceFilterOperation(filterOperation);
             // FIXME: Cache the ReferenceFilter if it didn't change.
-            RefPtr<ReferenceFilter> referenceFilter = ReferenceFilter::create(style->effectiveZoom());
+            RefPtrWillBeRawPtr<ReferenceFilter> referenceFilter = ReferenceFilter::create(style->effectiveZoom());
             referenceFilter->setLastEffect(ReferenceFilterBuilder::build(referenceFilter.get(), renderer(), referenceFilter->sourceGraphic(),
                 referenceOperation));
             referenceOperation->setFilter(referenceFilter.release());
@@ -2778,7 +2754,7 @@ void RenderLayer::updateOrRemoveFilterEffectRenderer()
 
     RenderLayerFilterInfo* filterInfo = ensureFilterInfo();
     if (!filterInfo->renderer()) {
-        RefPtr<FilterEffectRenderer> filterRenderer = FilterEffectRenderer::create();
+        RefPtrWillBeRawPtr<FilterEffectRenderer> filterRenderer = FilterEffectRenderer::create();
         filterInfo->setRenderer(filterRenderer.release());
     }
 

@@ -53,6 +53,7 @@
 #include "core/loader/FrameLoader.h"
 #include "core/loader/ImageLoader.h"
 #include "core/svg/graphics/SVGImage.h"
+#include "core/xml/DocumentXSLT.h"
 #include "core/xml/parser/SharedBufferReader.h"
 #include "core/xml/parser/XMLDocumentParserScope.h"
 #include "core/xml/parser/XMLParserInput.h"
@@ -102,7 +103,7 @@ static inline AtomicString toAtomicString(const xmlChar* string)
 
 static inline bool hasNoStyleInformation(Document* document)
 {
-    if (document->sawElementsInKnownNamespaces() || document->transformSourceDocument())
+    if (document->sawElementsInKnownNamespaces() || DocumentXSLT::hasTransformSourceDocument(*document))
         return false;
 
     if (!document->frame() || !document->frame()->page())
@@ -915,7 +916,7 @@ static inline void handleNamespaceAttributes(Vector<Attribute>& prefixedAttribut
         AtomicString namespaceQName = xmlnsAtom;
         AtomicString namespaceURI = toAtomicString(namespaces[i].uri);
         if (namespaces[i].prefix)
-            namespaceQName = WTF::xmlnsWithColon + namespaces[i].prefix;
+            namespaceQName = WTF::xmlnsWithColon + toAtomicString(namespaces[i].prefix);
 
         QualifiedName parsedName = anyName;
         if (!Element::parseAttributeName(parsedName, XMLNSNames::xmlnsNamespaceURI, namespaceQName, exceptionState))
@@ -1165,7 +1166,7 @@ void XMLDocumentParser::processingInstruction(const String& target, const String
         return;
 
     m_sawXSLTransform = !m_sawFirstElement && pi->isXSL();
-    if (m_sawXSLTransform && !document()->transformSourceDocument()) {
+    if (m_sawXSLTransform && !DocumentXSLT::hasTransformSourceDocument(*document())) {
         // This behavior is very tricky. We call stopParsing() here because we
         // want to stop processing the document until we're ready to apply the
         // transform, but we actually still want to be fed decoded string pieces
@@ -1486,7 +1487,7 @@ void XMLDocumentParser::doEnd()
         xmlDocPtr doc = xmlDocPtrForString(document()->fetcher(), m_originalSourceForTransform.toString(), document()->url().string());
         document()->setTransformSource(adoptPtr(new TransformSource(doc)));
         // Make the document think it's done, so it will apply XSL stylesheets.
-        document()->setParsing(false);
+        document()->setParsingState(Document::FinishedParsing);
         document()->styleResolverChanged();
 
         // styleResolverChanged() call can detach the parser and null out its
@@ -1494,7 +1495,7 @@ void XMLDocumentParser::doEnd()
         if (isDetached())
             return;
 
-        document()->setParsing(true);
+        document()->setParsingState(Document::Parsing);
         DocumentParser::stopParsing();
     }
 }

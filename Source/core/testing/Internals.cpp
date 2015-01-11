@@ -33,6 +33,8 @@
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "bindings/core/v8/SerializedScriptValue.h"
+#include "bindings/core/v8/SerializedScriptValueFactory.h"
+#include "bindings/core/v8/V8IteratorResultValue.h"
 #include "bindings/core/v8/V8ThrowException.h"
 #include "core/InternalRuntimeFlags.h"
 #include "core/animation/AnimationTimeline.h"
@@ -58,7 +60,7 @@
 #include "core/dom/StyleEngine.h"
 #include "core/dom/TreeScope.h"
 #include "core/dom/ViewportDescription.h"
-#include "core/dom/shadow/ComposedTreeWalker.h"
+#include "core/dom/shadow/ComposedTreeTraversal.h"
 #include "core/dom/shadow/ElementShadow.h"
 #include "core/dom/shadow/SelectRuleFeatureSet.h"
 #include "core/dom/shadow/ShadowRoot.h"
@@ -119,11 +121,11 @@
 #include "core/rendering/compositing/RenderLayerCompositor.h"
 #include "core/testing/DictionaryTest.h"
 #include "core/testing/GCObservation.h"
-#include "core/testing/InternalProfilers.h"
 #include "core/testing/InternalSettings.h"
 #include "core/testing/LayerRect.h"
 #include "core/testing/LayerRectList.h"
 #include "core/testing/MockPagePopupDriver.h"
+#include "core/testing/PluginPlaceholderOptions.h"
 #include "core/testing/PrivateScriptTest.h"
 #include "core/testing/TypeConversions.h"
 #include "core/testing/UnionTypesTest.h"
@@ -159,12 +161,11 @@ public:
 
     virtual ScriptValue next(ScriptState* scriptState, ExceptionState& exceptionState) override
     {
-        v8::Isolate* isolate = scriptState->isolate();
         int value = m_current * m_current;
         if (m_current >= 5)
-            return ScriptValue(scriptState, v8DoneIteratorResult(isolate));
+            return v8IteratorResultDone(scriptState);
         ++m_current;
-        return ScriptValue(scriptState, v8IteratorResult(scriptState, value));
+        return v8IteratorResult(scriptState, value);
     }
 
     virtual ScriptValue next(ScriptState* scriptState, ScriptValue value, ExceptionState& exceptionState) override
@@ -274,13 +275,6 @@ InternalRuntimeFlags* Internals::runtimeFlags() const
     return m_runtimeFlags.get();
 }
 
-InternalProfilers* Internals::profilers()
-{
-    if (!m_profilers)
-        m_profilers = InternalProfilers::create();
-    return m_profilers.get();
-}
-
 unsigned Internals::workerThreadCount() const
 {
     return WorkerThread::workerThreadCount();
@@ -299,7 +293,7 @@ GCObservation* Internals::observeGC(ScriptValue scriptValue)
     v8::Handle<v8::Value> observedValue = scriptValue.v8Value();
     ASSERT(!observedValue.IsEmpty());
     if (observedValue->IsNull() || observedValue->IsUndefined()) {
-        V8ThrowException::throwTypeError("value to observe is null or undefined", v8::Isolate::GetCurrent());
+        V8ThrowException::throwTypeError(v8::Isolate::GetCurrent(), "value to observe is null or undefined");
         return nullptr;
     }
 
@@ -491,41 +485,31 @@ size_t Internals::countElementShadow(const Node* root, ExceptionState& exception
 Node* Internals::nextSiblingByWalker(Node* node)
 {
     ASSERT(node);
-    ComposedTreeWalker walker(node);
-    walker.nextSibling();
-    return walker.get();
+    return ComposedTreeTraversal::nextSibling(*node);
 }
 
 Node* Internals::firstChildByWalker(Node* node)
 {
     ASSERT(node);
-    ComposedTreeWalker walker(node);
-    walker.firstChild();
-    return walker.get();
+    return ComposedTreeTraversal::firstChild(*node);
 }
 
 Node* Internals::lastChildByWalker(Node* node)
 {
     ASSERT(node);
-    ComposedTreeWalker walker(node);
-    walker.lastChild();
-    return walker.get();
+    return ComposedTreeTraversal::lastChild(*node);
 }
 
 Node* Internals::nextNodeByWalker(Node* node)
 {
     ASSERT(node);
-    ComposedTreeWalker walker(node);
-    walker.next();
-    return walker.get();
+    return ComposedTreeTraversal::next(*node);
 }
 
 Node* Internals::previousNodeByWalker(Node* node)
 {
     ASSERT(node);
-    ComposedTreeWalker walker(node);
-    walker.previous();
-    return walker.get();
+    return ComposedTreeTraversal::previous(*node);
 }
 
 String Internals::elementRenderTreeAsText(Element* element, ExceptionState& exceptionState)
@@ -694,7 +678,7 @@ PassRefPtrWillBeRawPtr<PagePopupController> Internals::pagePopupController()
     return s_pagePopupDriver ? s_pagePopupDriver->pagePopupController() : 0;
 }
 
-LocalDOMWindow* Internals::pagePopupWindow() const
+DOMWindow* Internals::pagePopupWindow() const
 {
     Document* document = contextDocument();
     if (!document)
@@ -1018,7 +1002,7 @@ DOMPoint* Internals::touchPositionAdjustedToBestClickableNode(long x, long y, lo
 
     EventHandler& eventHandler = document->frame()->eventHandler();
     IntPoint hitTestPoint = document->frame()->view()->windowToContents(point);
-    HitTestResult result = eventHandler.hitTestResultAtPoint(hitTestPoint, HitTestRequest::ReadOnly | HitTestRequest::Active, radius);
+    HitTestResult result = eventHandler.hitTestResultAtPoint(hitTestPoint, HitTestRequest::ReadOnly | HitTestRequest::Active, LayoutSize(radius));
 
     Node* targetNode = 0;
     IntPoint adjustedPoint;
@@ -1045,7 +1029,7 @@ Node* Internals::touchNodeAdjustedToBestClickableNode(long x, long y, long width
 
     EventHandler& eventHandler = document->frame()->eventHandler();
     IntPoint hitTestPoint = document->frame()->view()->windowToContents(point);
-    HitTestResult result = eventHandler.hitTestResultAtPoint(hitTestPoint, HitTestRequest::ReadOnly | HitTestRequest::Active, radius);
+    HitTestResult result = eventHandler.hitTestResultAtPoint(hitTestPoint, HitTestRequest::ReadOnly | HitTestRequest::Active, LayoutSize(radius));
 
     Node* targetNode = 0;
     IntPoint adjustedPoint;
@@ -1068,7 +1052,7 @@ DOMPoint* Internals::touchPositionAdjustedToBestContextMenuNode(long x, long y, 
 
     EventHandler& eventHandler = document->frame()->eventHandler();
     IntPoint hitTestPoint = document->frame()->view()->windowToContents(point);
-    HitTestResult result = eventHandler.hitTestResultAtPoint(hitTestPoint, HitTestRequest::ReadOnly | HitTestRequest::Active, radius);
+    HitTestResult result = eventHandler.hitTestResultAtPoint(hitTestPoint, HitTestRequest::ReadOnly | HitTestRequest::Active, LayoutSize(radius));
 
     Node* targetNode = 0;
     IntPoint adjustedPoint;
@@ -1095,7 +1079,7 @@ Node* Internals::touchNodeAdjustedToBestContextMenuNode(long x, long y, long wid
 
     EventHandler& eventHandler = document->frame()->eventHandler();
     IntPoint hitTestPoint = document->frame()->view()->windowToContents(point);
-    HitTestResult result = eventHandler.hitTestResultAtPoint(hitTestPoint, HitTestRequest::ReadOnly | HitTestRequest::Active, radius);
+    HitTestResult result = eventHandler.hitTestResultAtPoint(hitTestPoint, HitTestRequest::ReadOnly | HitTestRequest::Active, LayoutSize(radius));
 
     Node* targetNode = 0;
     IntPoint adjustedPoint;
@@ -1775,6 +1759,19 @@ void Internals::registerURLSchemeAsBypassingContentSecurityPolicy(const String& 
     SchemeRegistry::registerURLSchemeAsBypassingContentSecurityPolicy(scheme);
 }
 
+void Internals::registerURLSchemeAsBypassingContentSecurityPolicy(const String& scheme, const Vector<String>& policyAreas)
+{
+    uint32_t policyAreasEnum = SchemeRegistry::PolicyAreaNone;
+    for (const auto& policyArea : policyAreas) {
+        if (policyArea == "img")
+            policyAreasEnum |= SchemeRegistry::PolicyAreaImage;
+        else if (policyArea == "style")
+            policyAreasEnum |= SchemeRegistry::PolicyAreaStyle;
+    }
+    SchemeRegistry::registerURLSchemeAsBypassingContentSecurityPolicy(
+        scheme, static_cast<SchemeRegistry::PolicyAreas>(policyAreasEnum));
+}
+
 void Internals::removeURLSchemeRegisteredAsBypassingContentSecurityPolicy(const String& scheme)
 {
     SchemeRegistry::removeURLSchemeRegisteredAsBypassingContentSecurityPolicy(scheme);
@@ -1983,15 +1980,15 @@ String Internals::getCurrentCursorInfo(Document* document, ExceptionState& excep
 PassRefPtr<DOMArrayBuffer> Internals::serializeObject(PassRefPtr<SerializedScriptValue> value) const
 {
     String stringValue = value->toWireString();
-    RefPtr<ArrayBuffer> buffer = ArrayBuffer::createUninitialized(stringValue.length(), sizeof(UChar));
+    RefPtr<DOMArrayBuffer> buffer = DOMArrayBuffer::createUninitialized(stringValue.length(), sizeof(UChar));
     stringValue.copyTo(static_cast<UChar*>(buffer->data()), 0, stringValue.length());
-    return DOMArrayBuffer::create(buffer.release());
+    return buffer.release();
 }
 
 PassRefPtr<SerializedScriptValue> Internals::deserializeBuffer(PassRefPtr<DOMArrayBuffer> buffer) const
 {
     String value(static_cast<const UChar*>(buffer->data()), buffer->byteLength() / sizeof(UChar));
-    return SerializedScriptValue::createFromWire(value);
+    return SerializedScriptValueFactory::instance().createFromWire(value);
 }
 
 void Internals::forceReload(bool endToEnd)
@@ -2195,7 +2192,6 @@ ScriptPromise Internals::promiseCheckOverload(ScriptState* scriptState, Location
 void Internals::trace(Visitor* visitor)
 {
     visitor->trace(m_runtimeFlags);
-    visitor->trace(m_profilers);
 }
 
 void Internals::setValueForUser(Element* element, const String& value)
@@ -2257,6 +2253,12 @@ unsigned Internals::countHitRegions(CanvasRenderingContext2D* context)
     return context->hitRegionsCount();
 }
 
+PassRefPtrWillBeRawPtr<ClientRect> Internals::boundsInRootViewSpace(Element* element)
+{
+    ASSERT(element);
+    return ClientRect::create(element->boundsInRootViewSpace());
+}
+
 String Internals::serializeNavigationMarkup()
 {
     Vector<Document::TransitionElementData> elementData;
@@ -2270,6 +2272,37 @@ String Internals::serializeNavigationMarkup()
     return markup.toString();
 }
 
+Vector<String> Internals::getTransitionElementIds()
+{
+    Vector<Document::TransitionElementData> elementData;
+    frame()->document()->getTransitionElementData(elementData);
+
+    Vector<String> ids;
+    for (size_t i = 0; i < elementData.size(); ++i) {
+        for (size_t j = 0; j < elementData[i].elements.size(); ++j)
+            ids.append(elementData[i].elements[j].id);
+    }
+
+    return ids;
+}
+
+PassRefPtrWillBeRawPtr<ClientRectList> Internals::getTransitionElementRects()
+{
+    Vector<Document::TransitionElementData> elementData;
+    frame()->document()->getTransitionElementData(elementData);
+
+    Vector<IntRect> rects;
+    for (size_t i = 0; i < elementData.size(); ++i) {
+        for (size_t j = 0; j < elementData[i].elements.size(); ++j)
+            rects.append(elementData[i].elements[j].rect);
+    }
+
+    Vector<FloatQuad> quads(rects.size());
+    for (size_t i = 0; i < rects.size(); ++i)
+        quads[i] = FloatRect(rects[i]);
+    return ClientRectList::create(quads);
+}
+
 void Internals::hideAllTransitionElements()
 {
     Vector<Document::TransitionElementData> elementData;
@@ -2278,6 +2311,16 @@ void Internals::hideAllTransitionElements()
     Vector<Document::TransitionElementData>::iterator iter = elementData.begin();
     for (; iter != elementData.end(); ++iter)
         frame()->document()->hideTransitionElements(AtomicString(iter->selector));
+}
+
+void Internals::showAllTransitionElements()
+{
+    Vector<Document::TransitionElementData> elementData;
+    frame()->document()->getTransitionElementData(elementData);
+
+    Vector<Document::TransitionElementData>::iterator iter = elementData.begin();
+    for (; iter != elementData.end(); ++iter)
+        frame()->document()->showTransitionElements(AtomicString(iter->selector));
 }
 
 void Internals::forcePluginPlaceholder(HTMLElement* element, PassRefPtrWillBeRawPtr<DocumentFragment> fragment, ExceptionState& exceptionState)
@@ -2289,7 +2332,7 @@ void Internals::forcePluginPlaceholder(HTMLElement* element, PassRefPtrWillBeRaw
     toHTMLPlugInElement(element)->setPlaceholder(DocumentFragmentPluginPlaceholder::create(fragment));
 }
 
-void Internals::forcePluginPlaceholder(HTMLElement* element, const Dictionary& options, ExceptionState& exceptionState)
+void Internals::forcePluginPlaceholder(HTMLElement* element, const PluginPlaceholderOptions& options, ExceptionState& exceptionState)
 {
     if (!element->isPluginElement()) {
         exceptionState.throwDOMException(InvalidNodeTypeError, "The element provided is not a plugin.");

@@ -15,14 +15,14 @@ PushEvent::PushEvent()
 {
 }
 
-PushEvent::PushEvent(const AtomicString& type, const String& data)
-    : Event(type, /*canBubble=*/false, /*cancelable=*/false)
+PushEvent::PushEvent(const AtomicString& type, PushMessageData* data, WaitUntilObserver* observer)
+    : ExtendableEvent(type, ExtendableEventInit(), observer)
     , m_data(data)
 {
 }
 
 PushEvent::PushEvent(const AtomicString& type, const PushEventInit& initializer)
-    : Event(type, initializer)
+    : ExtendableEvent(type, initializer)
     , m_data(initializer.data)
 {
 }
@@ -34,6 +34,20 @@ PushEvent::~PushEvent()
 const AtomicString& PushEvent::interfaceName() const
 {
     return EventNames::PushEvent;
+}
+
+PushMessageData* PushEvent::data()
+{
+    if (!m_data)
+        m_data = PushMessageData::create();
+
+    return m_data.get();
+}
+
+void PushEvent::trace(Visitor* visitor)
+{
+    visitor->trace(m_data);
+    ExtendableEvent::trace(visitor);
 }
 
 } // namespace blink

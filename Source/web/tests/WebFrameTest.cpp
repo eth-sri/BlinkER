@@ -34,6 +34,7 @@
 
 #include "SkBitmap.h"
 #include "SkCanvas.h"
+#include "bindings/core/v8/SerializedScriptValueFactory.h"
 #include "bindings/core/v8/V8Node.h"
 #include "core/UserAgentStyleSheets.h"
 #include "core/clipboard/DataTransfer.h"
@@ -59,6 +60,7 @@
 #include "core/frame/Settings.h"
 #include "core/html/HTMLDocument.h"
 #include "core/html/HTMLFormElement.h"
+#include "core/html/HTMLMediaElement.h"
 #include "core/loader/DocumentThreadableLoader.h"
 #include "core/loader/DocumentThreadableLoaderClient.h"
 #include "core/loader/FrameLoadRequest.h"
@@ -69,7 +71,10 @@
 #include "core/rendering/RenderFullScreen.h"
 #include "core/rendering/RenderView.h"
 #include "core/rendering/compositing/RenderLayerCompositor.h"
+#include "core/testing/NullExecutionContext.h"
 #include "core/testing/URLTestHelpers.h"
+#include "modules/mediastream/MediaStream.h"
+#include "modules/mediastream/MediaStreamRegistry.h"
 #include "platform/DragImage.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/UserGestureIndicator.h"
@@ -668,7 +673,7 @@ TEST_F(WebFrameTest, PostMessageThenDetach)
 
     RefPtrWillBeRawPtr<LocalFrame> frame = toLocalFrame(webViewHelper.webViewImpl()->page()->mainFrame());
     NonThrowableExceptionState exceptionState;
-    frame->domWindow()->postMessage(SerializedScriptValue::create("message"), 0, "*", frame->domWindow(), exceptionState);
+    frame->domWindow()->postMessage(SerializedScriptValueFactory::instance().create("message"), 0, "*", frame->localDOMWindow(), exceptionState);
     webViewHelper.reset();
     EXPECT_FALSE(exceptionState.hadException());
 
@@ -1912,7 +1917,7 @@ protected:
 
     static FloatSize computeRelativeOffset(const IntPoint& absoluteOffset, const LayoutRect& rect)
     {
-        FloatSize relativeOffset = FloatPoint(absoluteOffset) - rect.location();
+        FloatSize relativeOffset = FloatPoint(absoluteOffset) - FloatPoint(rect.location());
         relativeOffset.scale(1.f / rect.width(), 1.f / rect.height());
         return relativeOffset;
     }
@@ -2867,13 +2872,14 @@ TEST_F(WebFrameTest, DivScrollIntoEditableTest)
     int viewportHeight = 300;
     float leftBoxRatio = 0.3f;
     int caretPadding = 10;
-    float minReadableCaretHeight = 18.0f;
+    float minReadableCaretHeight = 16.0f;
     FrameTestHelpers::WebViewHelper webViewHelper;
     webViewHelper.initializeAndLoad(m_baseURL + "get_scale_for_zoom_into_editable_test.html");
+    webViewHelper.webViewImpl()->page()->settings().setTextAutosizingEnabled(false);
     webViewHelper.webView()->resize(WebSize(viewportWidth, viewportHeight));
-    webViewHelper.webView()->setPageScaleFactorLimits(1, 4);
-    webViewHelper.webView()->layout();
+    webViewHelper.webView()->setPageScaleFactorLimits(0.25f, 4);
     webViewHelper.webView()->setDeviceScaleFactor(1.5f);
+    webViewHelper.webView()->layout();
     webViewHelper.webView()->settings()->setAutoZoomFocusedNodeToLegibleScale(true);
 
     webViewHelper.webViewImpl()->enableFakePageScaleAnimationForTesting(true);
@@ -2890,6 +2896,10 @@ TEST_F(WebFrameTest, DivScrollIntoEditableTest)
     WebRect rect, caret;
     webViewHelper.webViewImpl()->selectionBounds(caret, rect);
 
+    // Set the page scale to be smaller than the minimal readable scale.
+    float initialScale = minReadableCaretHeight / caret.height * 0.5f;
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), initialScale);
+
     float scale;
     IntPoint scroll;
     bool needAnimation;
@@ -2897,43 +2907,44 @@ TEST_F(WebFrameTest, DivScrollIntoEditableTest)
     EXPECT_TRUE(needAnimation);
     // The edit box should be left aligned with a margin for possible label.
     int hScroll = editBoxWithText.x - leftBoxRatio * viewportWidth / scale;
-    EXPECT_NEAR(hScroll, scroll.x(), 5);
+    EXPECT_NEAR(hScroll, scroll.x(), 2);
     int vScroll = editBoxWithText.y - (viewportHeight / scale - editBoxWithText.height) / 2;
-    EXPECT_NEAR(vScroll, scroll.y(), 1);
+    EXPECT_NEAR(vScroll, scroll.y(), 2);
     EXPECT_NEAR(minReadableCaretHeight / caret.height, scale, 0.1);
 
     // The edit box is wider than the viewport when legible.
     viewportWidth = 200;
     viewportHeight = 150;
     webViewHelper.webView()->resize(WebSize(viewportWidth, viewportHeight));
-    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), 1);
-    webViewHelper.webViewImpl()->selectionBounds(caret, rect);
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), initialScale);
     webViewHelper.webViewImpl()->computeScaleAndScrollForFocusedNode(webViewHelper.webViewImpl()->focusedElement(), scale, scroll, needAnimation);
     EXPECT_TRUE(needAnimation);
     // The caret should be right aligned since the caret would be offscreen when the edit box is left aligned.
     hScroll = caret.x + caret.width + caretPadding - viewportWidth / scale;
-    EXPECT_NEAR(hScroll, scroll.x(), 1);
+    EXPECT_NEAR(hScroll, scroll.x(), 2);
     EXPECT_NEAR(minReadableCaretHeight / caret.height, scale, 0.1);
 
-    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), 1);
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), initialScale);
     // Move focus to edit box with text.
     webViewHelper.webView()->advanceFocus(false);
-    webViewHelper.webViewImpl()->selectionBounds(caret, rect);
     webViewHelper.webViewImpl()->computeScaleAndScrollForFocusedNode(webViewHelper.webViewImpl()->focusedElement(), scale, scroll, needAnimation);
     EXPECT_TRUE(needAnimation);
     // The edit box should be left aligned.
     hScroll = editBoxWithNoText.x;
-    EXPECT_NEAR(hScroll, scroll.x(), 1);
+    EXPECT_NEAR(hScroll, scroll.x(), 2);
     vScroll = editBoxWithNoText.y - (viewportHeight / scale - editBoxWithNoText.height) / 2;
-    EXPECT_NEAR(vScroll, scroll.y(), 1);
+    EXPECT_NEAR(vScroll, scroll.y(), 2);
     EXPECT_NEAR(minReadableCaretHeight / caret.height, scale, 0.1);
-
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), scroll, scale);
 
     // Move focus back to the first edit box.
     webViewHelper.webView()->advanceFocus(true);
+    // Zoom out slightly.
+    const float withinToleranceScale = scale * 0.9f;
+    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), scroll, withinToleranceScale);
+    // Move focus back to the second edit box.
+    webViewHelper.webView()->advanceFocus(false);
     webViewHelper.webViewImpl()->computeScaleAndScrollForFocusedNode(webViewHelper.webViewImpl()->focusedElement(), scale, scroll, needAnimation);
-    // The position should have stayed the same since this box was already on screen with the right scale.
+    // The scale should not be adjusted as the zoomed out scale was sufficiently close to the previously focused scale.
     EXPECT_FALSE(needAnimation);
 }
 
@@ -2943,13 +2954,14 @@ TEST_F(WebFrameTest, DivScrollIntoEditablePreservePageScaleTest)
 
     const int viewportWidth = 450;
     const int viewportHeight = 300;
-    const float minReadableCaretHeight = 18.0f;
+    const float minReadableCaretHeight = 16.0f;
     FrameTestHelpers::WebViewHelper webViewHelper;
     webViewHelper.initializeAndLoad(m_baseURL + "get_scale_for_zoom_into_editable_test.html");
+    webViewHelper.webViewImpl()->page()->settings().setTextAutosizingEnabled(false);
     webViewHelper.webView()->resize(WebSize(viewportWidth, viewportHeight));
-    webViewHelper.webView()->setPageScaleFactorLimits(1, 4);
-    webViewHelper.webView()->layout();
+    webViewHelper.webView()->setPageScaleFactorLimits(1.f, 4);
     webViewHelper.webView()->setDeviceScaleFactor(1.5f);
+    webViewHelper.webView()->layout();
     webViewHelper.webView()->settings()->setAutoZoomFocusedNodeToLegibleScale(true);
     webViewHelper.webViewImpl()->enableFakePageScaleAnimationForTesting(true);
 
@@ -2962,7 +2974,7 @@ TEST_F(WebFrameTest, DivScrollIntoEditablePreservePageScaleTest)
     WebRect rect, caret;
     webViewHelper.webViewImpl()->selectionBounds(caret, rect);
 
-    // Set page scale twice larger then minimal readable scale
+    // Set the page scale to be twice as large as the minimal readable scale.
     float newScale = minReadableCaretHeight / caret.height * 2.0;
     setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), newScale);
 
@@ -5328,7 +5340,7 @@ TEST_F(WebFrameTest, DidWriteToInitialDocumentBeforeModalDialog)
     // initial empty document state of the state machine. We normally set a
     // timer to notify the client.
     newView->mainFrame()->executeScript(
-        WebScriptSource("window.opener.document.write('Modified');"));
+        WebScriptSource("window.opener.document.write('Modified'); window.opener.document.close();"));
     EXPECT_FALSE(webFrameClient.m_didAccessInitialDocument);
 
     // Make sure that a modal dialog forces us to notify right away.
@@ -6294,6 +6306,36 @@ TEST_F(WebFrameTest, FullscreenSubframe)
     EXPECT_EQ(viewportWidth, fullscreenRenderer->logicalHeight().toInt());
 }
 
+TEST_F(WebFrameTest, FullscreenMediaStreamVideo)
+{
+    RuntimeEnabledFeatures::setOverlayFullscreenVideoEnabled(true);
+    FakeCompositingWebViewClient client;
+    registerMockedHttpURLLoad("fullscreen_video.html");
+    FrameTestHelpers::WebViewHelper webViewHelper;
+    WebViewImpl* webViewImpl = webViewHelper.initializeAndLoad(m_baseURL + "fullscreen_video.html", true, 0, &client, configurePinchVirtualViewport);
+    int viewportWidth = 640;
+    int viewportHeight = 480;
+    client.m_screenInfo.rect.width = viewportWidth;
+    client.m_screenInfo.rect.height = viewportHeight;
+    webViewImpl->resize(WebSize(viewportWidth, viewportHeight));
+    webViewImpl->layout();
+
+    // Fake the video element as MediaStream
+    RefPtrWillBeRawPtr<NullExecutionContext> context = adoptRefWillBeNoop(new NullExecutionContext());
+    MediaStreamRegistry::registry().registerURL(0, toKURL(m_baseURL + "test.webm"), MediaStream::create(context.get()));
+    Document* document = toWebLocalFrameImpl(webViewImpl->mainFrame())->frame()->document();
+    UserGestureIndicator gesture(DefinitelyProcessingUserGesture);
+    Element* videoFullscreen = document->getElementById("video");
+    Fullscreen::from(*document).requestFullscreen(*videoFullscreen, Fullscreen::PrefixedRequest);
+    webViewImpl->didEnterFullScreen();
+    webViewImpl->layout();
+
+    // Verify that the video layer is visible in fullscreen.
+    RenderLayer* renderLayer =  videoFullscreen->renderer()->enclosingLayer();
+    GraphicsLayer* graphicsLayer = renderLayer->graphicsLayerBacking();
+    EXPECT_TRUE(graphicsLayer->contentsAreVisible());
+}
+
 TEST_F(WebFrameTest, RenderBlockPercentHeightDescendants)
 {
     registerMockedHttpURLLoad("percent-height-descendants.html");
@@ -6830,7 +6872,7 @@ public:
         , m_provisionalLoadCount(0)
         , m_wasLastProvisionalLoadATransition(false) { }
 
-    virtual void addNavigationTransitionData(const WebString& allowedDestinationOrigin, const WebString& selector, const WebString& markup) override
+    virtual void addNavigationTransitionData(const WebTransitionElementData& data) override
     {
         m_navigationalDataReceivedCount++;
     }

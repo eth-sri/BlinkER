@@ -18,7 +18,7 @@ v8::Handle<v8::Object> DOMArrayBuffer::wrap(v8::Handle<v8::Object> creationConte
     // object gets associated with the wrapper.
     RefPtr<DOMArrayBuffer> protect(this);
 
-    ASSERT(!DOMDataStore::containsWrapperNonTemplate(this, isolate));
+    ASSERT(!DOMDataStore::containsWrapper(this, isolate));
 
     const WrapperTypeInfo* wrapperTypeInfo = this->wrapperTypeInfo();
     v8::Handle<v8::Object> wrapper = v8::ArrayBuffer::New(isolate, data(), byteLength());
@@ -29,15 +29,15 @@ v8::Handle<v8::Object> DOMArrayBuffer::wrap(v8::Handle<v8::Object> creationConte
     // DOMArrayBufferDeallocationObserver::blinkAllocatedMemory.
     buffer()->setDeallocationObserver(DOMArrayBufferDeallocationObserver::instance());
 
-    return associateWithWrapper(wrapperTypeInfo, wrapper, isolate);
+    return associateWithWrapper(isolate, wrapperTypeInfo, wrapper);
 }
 
-v8::Handle<v8::Object> DOMArrayBuffer::associateWithWrapper(const WrapperTypeInfo* wrapperTypeInfo, v8::Handle<v8::Object> wrapper, v8::Isolate* isolate)
+v8::Handle<v8::Object> DOMArrayBuffer::associateWithWrapper(v8::Isolate* isolate, const WrapperTypeInfo* wrapperTypeInfo, v8::Handle<v8::Object> wrapper)
 {
     // This function does not set a deallocation observer to the underlying
     // array buffer.  It's a caller's duty.
 
-    return V8DOMWrapper::associateObjectWithWrapperNonTemplate(this, wrapperTypeInfo, wrapper, isolate);
+    return V8DOMWrapper::associateObjectWithWrapper(isolate, this, wrapperTypeInfo, wrapper);
 }
 
 } // namespace blink

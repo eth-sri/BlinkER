@@ -85,6 +85,7 @@
 #include "platform/TracedValue.h"
 #include "platform/geometry/TransformState.h"
 #include "platform/graphics/GraphicsContext.h"
+#include "platform/graphics/paint/DisplayItemList.h"
 #include "wtf/RefCountedLeakCounter.h"
 #include "wtf/text/StringBuilder.h"
 #include "wtf/text/WTFString.h"
@@ -136,6 +137,9 @@ struct SameSizeAsRenderObject {
 COMPILE_ASSERT(sizeof(RenderObject) == sizeof(SameSizeAsRenderObject), RenderObject_should_stay_small);
 
 bool RenderObject::s_affectsParentBlock = false;
+
+typedef HashMap<const RenderObject*, LayoutRect> SelectionPaintInvalidationMap;
+static SelectionPaintInvalidationMap* selectionPaintInvalidationMap = 0;
 
 #if !ENABLE(OILPAN)
 void* RenderObject::operator new(size_t sz)
@@ -963,37 +967,6 @@ bool RenderObject::mustInvalidateBackgroundOrBorderPaintOnHeightChange() const
     return false;
 }
 
-void RenderObject::paintOutline(PaintInfo& paintInfo, const LayoutRect& paintRect)
-{
-    ObjectPainter(*this).paintOutline(paintInfo, paintRect);
-}
-
-void RenderObject::addChildFocusRingRects(Vector<LayoutRect>& rects, const LayoutPoint& additionalOffset, const RenderLayerModelObject* paintContainer) const
-{
-    for (RenderObject* current = slowFirstChild(); current; current = current->nextSibling()) {
-        if (current->isText() || current->isListMarker())
-            continue;
-
-        if (current->isBox()) {
-            RenderBox* box = toRenderBox(current);
-            if (box->hasLayer()) {
-                Vector<LayoutRect> layerFocusRingRects;
-                box->addFocusRingRects(layerFocusRingRects, LayoutPoint(), box);
-                for (size_t i = 0; i < layerFocusRingRects.size(); ++i) {
-                    FloatQuad quadInBox = box->localToContainerQuad(FloatQuad(layerFocusRingRects[i]), paintContainer);
-                    LayoutRect rect = LayoutRect(quadInBox.boundingBox());
-                    if (!rect.isEmpty())
-                        rects.append(rect);
-                }
-            } else {
-                box->addFocusRingRects(rects, additionalOffset + box->locationOffset(), paintContainer);
-            }
-        } else {
-            current->addFocusRingRects(rects, additionalOffset, paintContainer);
-        }
-    }
-}
-
 IntRect RenderObject::absoluteBoundingBoxRect() const
 {
     Vector<FloatQuad> quads;
@@ -1025,14 +998,12 @@ IntRect RenderObject::absoluteBoundingBoxRectIgnoringTransforms() const
     return pixelSnappedIntRect(result);
 }
 
-void RenderObject::absoluteFocusRingQuads(Vector<FloatQuad>& quads)
+IntRect RenderObject::absoluteFocusRingBoundingBoxRect() const
 {
     Vector<LayoutRect> rects;
-    const RenderLayerModelObject* container = containerForPaintInvalidation();
-    addFocusRingRects(rects, LayoutPoint(localToContainerPoint(FloatPoint(), container)), container);
-    size_t count = rects.size();
-    for (size_t i = 0; i < count; ++i)
-        quads.append(container->localToAbsoluteQuad(FloatQuad(rects[i])));
+    const RenderLayerModelObject* container = enclosingLayer()->renderer();
+    addFocusRingRects(rects, LayoutPoint(localToContainerPoint(FloatPoint(), container)));
+    return container->localToAbsoluteQuad(FloatQuad(unionRect(rects))).enclosingBoundingBox();
 }
 
 FloatRect RenderObject::absoluteBoundingBoxRectForRange(const Range* range)
@@ -1069,7 +1040,7 @@ LayoutRect RenderObject::paintingRootRect(LayoutRect& topLevelRect)
     return result;
 }
 
-void RenderObject::paint(PaintInfo&, const LayoutPoint&)
+void RenderObject::paint(const PaintInfo&, const LayoutPoint&)
 {
 }
 
@@ -1092,16 +1063,6 @@ const RenderLayerModelObject* RenderObject::enclosingCompositedContainer() const
 
 const RenderLayerModelObject* RenderObject::adjustCompositedContainerForSpecialAncestors(const RenderLayerModelObject* paintInvalidationContainer) const
 {
-    // If we have a flow thread, then we need to do individual paint invalidations within the RenderRegions instead.
-    // Return the flow thread as a paint invalidation container in order to create a chokepoint that allows us to change
-    // paint invalidation to do individual region paint invalidations.
-    if (RenderFlowThread* parentRenderFlowThread = flowThreadContainingBlock()) {
-        // If we have already found a paint invalidation container then we will invalidate paints in that container only if it is part of the same
-        // flow thread. Otherwise we will need to catch the paint invalidation call and send it to the flow thread.
-        if (!paintInvalidationContainer || paintInvalidationContainer->flowThreadContainingBlock() != parentRenderFlowThread)
-            paintInvalidationContainer = parentRenderFlowThread;
-    }
-
     if (paintInvalidationContainer)
         return paintInvalidationContainer;
 
@@ -1149,10 +1110,13 @@ LayoutRect RenderObject::computePaintInvalidationRect(const RenderLayerModelObje
     return clippedOverflowRectForPaintInvalidation(paintInvalidationContainer, paintInvalidationState);
 }
 
-void RenderObject::invalidatePaintUsingContainer(const RenderLayerModelObject* paintInvalidationContainer, const LayoutRect& r, PaintInvalidationReason invalidationReason) const
+void RenderObject::invalidatePaintUsingContainer(const RenderLayerModelObject* paintInvalidationContainer, const LayoutRect& r, PaintInvalidationReason invalidationReason)
 {
-    if (RuntimeEnabledFeatures::slimmingPaintEnabled())
-        view()->viewDisplayList().invalidate(this);
+    if (RuntimeEnabledFeatures::slimmingPaintEnabled()) {
+        if (RenderLayer* container = enclosingLayer()->enclosingLayerForPaintInvalidationCrossingFrameBoundaries())
+            container->graphicsLayerBacking()->displayItemList().invalidate(displayItemClient());
+        setNeedsPaint();
+    }
 
     if (r.isEmpty())
         return;
@@ -1167,19 +1131,14 @@ void RenderObject::invalidatePaintUsingContainer(const RenderLayerModelObject* p
         "object", this->debugName().ascii(),
         "info", jsonObjectForPaintInvalidationInfo(r, paintInvalidationReasonToString(invalidationReason)));
 
-    if (paintInvalidationContainer->isRenderFlowThread()) {
-        toRenderFlowThread(paintInvalidationContainer)->paintInvalidationRectangleInRegions(r);
-        return;
-    }
-
     if (paintInvalidationContainer->isRenderView()) {
-        toRenderView(paintInvalidationContainer)->invalidatePaintForRectangle(r, invalidationReason, *this);
+        toRenderView(paintInvalidationContainer)->invalidatePaintForRectangle(r, invalidationReason);
         return;
     }
 
     if (paintInvalidationContainer->view()->usesCompositing()) {
         ASSERT(paintInvalidationContainer->isPaintInvalidationContainer());
-        paintInvalidationContainer->setBackingNeedsPaintInvalidationInRect(r, invalidationReason, *this);
+        paintInvalidationContainer->setBackingNeedsPaintInvalidationInRect(r, invalidationReason);
     }
 }
 
@@ -1190,7 +1149,7 @@ LayoutRect RenderObject::boundsRectForPaintInvalidation(const RenderLayerModelOb
     return RenderLayer::computePaintInvalidationRect(this, paintInvalidationContainer->layer(), paintInvalidationState);
 }
 
-void RenderObject::invalidatePaintRectangle(const LayoutRect& r) const
+void RenderObject::invalidatePaintRectangle(const LayoutRect& r)
 {
     RELEASE_ASSERT(isRooted());
 
@@ -1202,11 +1161,6 @@ void RenderObject::invalidatePaintRectangle(const LayoutRect& r) const
     const RenderLayerModelObject* paintInvalidationContainer = containerForPaintInvalidation();
     RenderLayer::mapRectToPaintInvalidationBacking(this, paintInvalidationContainer, dirtyRect);
     invalidatePaintUsingContainer(paintInvalidationContainer, dirtyRect, PaintInvalidationRectangle);
-}
-
-IntRect RenderObject::pixelSnappedAbsoluteClippedOverflowRect() const
-{
-    return pixelSnappedIntRect(absoluteClippedOverflowRect());
 }
 
 void RenderObject::invalidateTreeIfNeeded(const PaintInvalidationState& paintInvalidationState)
@@ -1241,16 +1195,37 @@ static PassRefPtr<TraceEvent::ConvertableToTraceFormat> jsonObjectForOldAndNewRe
     return value;
 }
 
-void RenderObject::invalidateSelectionIfNeeded(const RenderLayerModelObject& paintInvalidationContainer)
+LayoutRect RenderObject::previousSelectionRectForPaintInvalidation() const
+{
+    ASSERT(shouldInvalidateSelection());
+
+    if (!selectionPaintInvalidationMap)
+        return LayoutRect();
+
+    return selectionPaintInvalidationMap->get(this);
+}
+
+void RenderObject::setPreviousSelectionRectForPaintInvalidation(const LayoutRect& selectionRect)
+{
+    if (!selectionPaintInvalidationMap)
+        selectionPaintInvalidationMap = new SelectionPaintInvalidationMap();
+
+    selectionPaintInvalidationMap->set(this, selectionRect);
+}
+
+void RenderObject::invalidateSelectionIfNeeded(const RenderLayerModelObject& paintInvalidationContainer, PaintInvalidationReason invalidationReason)
 {
     if (!shouldInvalidateSelection())
         return;
 
-    LayoutRect selection = selectionRectForPaintInvalidation(&paintInvalidationContainer);
-    // FIXME: groupedMapping() leaks the squashing abstraction. See RenderBlockSelectionInfo for more details.
-    if (paintInvalidationContainer.layer()->groupedMapping())
-        RenderLayer::mapRectToPaintBackingCoordinates(&paintInvalidationContainer, selection);
-    invalidatePaintUsingContainer(&paintInvalidationContainer, selection, PaintInvalidationSelection);
+    LayoutRect oldSelectionRect = previousSelectionRectForPaintInvalidation();
+    LayoutRect previousSelectionRectForPaintInvalidation = selectionRectForPaintInvalidation(&paintInvalidationContainer);
+    setPreviousSelectionRectForPaintInvalidation(previousSelectionRectForPaintInvalidation);
+
+    if (view()->doingFullPaintInvalidation() || isFullPaintInvalidationReason(invalidationReason))
+        return;
+
+    fullyInvalidatePaint(paintInvalidationContainer, PaintInvalidationSelection, oldSelectionRect, previousSelectionRectForPaintInvalidation);
 }
 
 PaintInvalidationReason RenderObject::invalidatePaintIfNeeded(const PaintInvalidationState& paintInvalidationState, const RenderLayerModelObject& paintInvalidationContainer)
@@ -1268,6 +1243,10 @@ PaintInvalidationReason RenderObject::invalidatePaintIfNeeded(const PaintInvalid
 
     PaintInvalidationReason invalidationReason = paintInvalidationReason(paintInvalidationContainer, oldBounds, oldLocation, newBounds, newLocation);
 
+    // We need to invalidate the selection before checking for whether we are doing a full invalidation.
+    // This is because we need to update the old rect regardless.
+    invalidateSelectionIfNeeded(paintInvalidationContainer, invalidationReason);
+
     // If we are set to do a full paint invalidation that means the RenderView will issue
     // paint invalidations. We can then skip issuing of paint invalidations for the child
     // renderers as they'll be covered by the RenderView.
@@ -1277,8 +1256,6 @@ PaintInvalidationReason RenderObject::invalidatePaintIfNeeded(const PaintInvalid
     TRACE_EVENT2(TRACE_DISABLED_BY_DEFAULT("blink.invalidation"), "RenderObject::invalidatePaintIfNeeded()",
         "object", this->debugName().ascii(),
         "info", jsonObjectForOldAndNewRects(oldBounds, oldLocation, newBounds, newLocation));
-
-    invalidateSelectionIfNeeded(paintInvalidationContainer);
 
     if (invalidationReason == PaintInvalidationNone)
         return invalidationReason;
@@ -1416,11 +1393,6 @@ void RenderObject::mapRectToPaintInvalidationBacking(const RenderLayerModelObjec
 
         o->mapRectToPaintInvalidationBacking(paintInvalidationContainer, rect, paintInvalidationState);
     }
-}
-
-void RenderObject::computeFloatRectForPaintInvalidation(const RenderLayerModelObject*, FloatRect&, const PaintInvalidationState*) const
-{
-    ASSERT_NOT_REACHED();
 }
 
 void RenderObject::dirtyLinesFromChangedChild(RenderObject*)
@@ -1603,7 +1575,7 @@ StyleDifference RenderObject::adjustStyleDifference(StyleDifference diff) const
 
 void RenderObject::setPseudoStyle(PassRefPtr<RenderStyle> pseudoStyle)
 {
-    ASSERT(pseudoStyle->styleType() == BEFORE || pseudoStyle->styleType() == AFTER);
+    ASSERT(pseudoStyle->styleType() == BEFORE || pseudoStyle->styleType() == AFTER || pseudoStyle->styleType() == FIRST_LETTER);
 
     // FIXME: We should consider just making all pseudo items use an inherited style.
 
@@ -1693,14 +1665,6 @@ void RenderObject::setStyle(PassRefPtr<RenderStyle> style)
     if (diff.transformChanged() && !needsLayout()) {
         if (RenderBlock* container = containingBlock())
             container->setNeedsOverflowRecalcAfterStyleChange();
-    }
-
-    if (diff.visualOverflowChanged() && !needsLayout()) {
-        // FIXME crbug.com/425610: Compute overflow without layout for line boxes too.
-        if (isRenderBlock())
-            setNeedsOverflowRecalcAfterStyleChange();
-        else
-            setNeedsLayoutAndPrefWidthsRecalc();
     }
 
     if (updatedDiff.needsPaintInvalidationLayer())
@@ -1964,7 +1928,7 @@ void RenderObject::mapLocalToContainer(const RenderLayerModelObject* paintInvali
     // FIXME: this should call offsetFromContainer to share code, but I'm not sure it's ever called.
     LayoutPoint centerPoint = roundedLayoutPoint(transformState.mappedPoint());
     if (mode & ApplyContainerFlip && o->isBox()) {
-        if (o->style()->slowIsFlippedBlocksWritingMode())
+        if (o->style()->isFlippedBlocksWritingMode())
             transformState.move(toRenderBox(o)->flipForWritingModeIncludingColumns(roundedLayoutPoint(transformState.mappedPoint())) - centerPoint);
         mode &= ~ApplyContainerFlip;
     }
@@ -1988,7 +1952,7 @@ const RenderObject* RenderObject::pushMappingToContainer(const RenderLayerModelO
     // FIXME: this should call offsetFromContainer to share code, but I'm not sure it's ever called.
     LayoutSize offset;
     if (container->hasOverflowClip())
-        offset = -toRenderBox(container)->scrolledContentOffset();
+        offset = -LayoutSize(toRenderBox(container)->scrolledContentOffset());
 
     geometryMap.push(this, offset, hasColumns());
 
@@ -2058,20 +2022,15 @@ FloatPoint RenderObject::localToInvalidationBackingPoint(const LayoutPoint& loca
 {
     const RenderLayerModelObject* paintInvalidationContainer = containerForPaintInvalidation();
     ASSERT(paintInvalidationContainer);
-    RenderLayer* layer = paintInvalidationContainer->layer();
-    ASSERT(layer);
+    ASSERT(paintInvalidationContainer->layer());
+    ASSERT(paintInvalidationContainer->layer()->compositingState() != NotComposited);
 
     if (backingLayer)
-        *backingLayer = layer;
-    FloatPoint containerPoint = localToContainerPoint(localPoint, paintInvalidationContainer, TraverseDocumentBoundaries);
-
-    if (layer->compositingState() == NotComposited) // This can happen for RenderFlowThread.
-        return containerPoint;
-
+        *backingLayer = paintInvalidationContainer->layer();
+    FloatPoint containerPoint = localToContainerPoint(FloatPoint(localPoint), paintInvalidationContainer, TraverseDocumentBoundaries);
     RenderLayer::mapPointToPaintBackingCoordinates(paintInvalidationContainer, containerPoint);
     return containerPoint;
 }
-
 
 LayoutSize RenderObject::offsetFromContainer(const RenderObject* o, const LayoutPoint& point, bool* offsetDependsOnPoint) const
 {
@@ -2344,6 +2303,9 @@ void RenderObject::willBeDestroyed()
 
     setAncestorLineBoxDirty(false);
 
+    if (selectionPaintInvalidationMap)
+        selectionPaintInvalidationMap->remove(this);
+
     clearLayoutRootIfNeeded();
 }
 
@@ -2370,6 +2332,9 @@ void RenderObject::insertedIntoTree()
 
     if (!isFloating() && parent()->childrenInline())
         parent()->dirtyLinesFromChangedChild(this);
+
+    if (RenderFlowThread* flowThread = parent()->flowThreadContainingBlock())
+        flowThread->flowThreadDescendantWasInserted(this);
 }
 
 void RenderObject::willBeRemovedFromTree()
@@ -2419,7 +2384,6 @@ void RenderObject::removeFromRenderFlowThreadRecursive(RenderFlowThread* renderF
         for (RenderObject* child = children->firstChild(); child; child = child->nextSibling())
             child->removeFromRenderFlowThreadRecursive(renderFlowThread);
     }
-
     setFlowThreadState(NotInsideFlowThread);
 }
 
@@ -2623,7 +2587,8 @@ static PassRefPtr<RenderStyle> firstLineStyleForCachedUncachedType(StyleCacheSta
                 return firstLineBlock->getCachedPseudoStyle(FIRST_LINE, style);
             return firstLineBlock->getUncachedPseudoStyle(PseudoStyleRequest(FIRST_LINE), style, firstLineBlock == renderer ? style : 0);
         }
-    } else if (!rendererForFirstLineStyle->isAnonymous() && rendererForFirstLineStyle->isRenderInline()) {
+    } else if (!rendererForFirstLineStyle->isAnonymous() && rendererForFirstLineStyle->isRenderInline()
+        && !rendererForFirstLineStyle->node()->isFirstLetterPseudoElement()) {
         RenderStyle* parentStyle = rendererForFirstLineStyle->parent()->firstLineStyle();
         if (parentStyle != rendererForFirstLineStyle->parent()->style()) {
             if (type == Cached) {
@@ -2714,11 +2679,6 @@ PassRefPtr<RenderStyle> RenderObject::getUncachedPseudoStyleFromParentOrShadowHo
     return getUncachedPseudoStyle(PseudoStyleRequest(SELECTION));
 }
 
-bool RenderObject::hasBlendMode() const
-{
-    return RuntimeEnabledFeatures::cssCompositingEnabled() && style() && style()->hasBlendMode();
-}
-
 void RenderObject::getTextDecorations(unsigned decorations, AppliedTextDecoration& underline, AppliedTextDecoration& overline, AppliedTextDecoration& linethrough, bool quirksMode, bool firstlineStyle)
 {
     RenderObject* curr = this;
@@ -2730,7 +2690,7 @@ void RenderObject::getTextDecorations(unsigned decorations, AppliedTextDecoratio
         styleToUse = curr->style(firstlineStyle);
         currDecs = styleToUse->textDecoration();
         currDecs &= decorations;
-        resultColor = styleToUse->visitedDependentDecorationColor();
+        resultColor = styleToUse->visitedDependentColor(CSSPropertyTextDecorationColor);
         resultStyle = styleToUse->textDecorationStyle();
         // Parameter 'decorations' is cast as an int to enable the bitwise operations below.
         if (currDecs) {
@@ -2760,7 +2720,7 @@ void RenderObject::getTextDecorations(unsigned decorations, AppliedTextDecoratio
     // If we bailed out, use the element we bailed out at (typically a <font> or <a> element).
     if (decorations && curr) {
         styleToUse = curr->style(firstlineStyle);
-        resultColor = styleToUse->visitedDependentDecorationColor();
+        resultColor = styleToUse->visitedDependentColor(CSSPropertyTextDecorationColor);
         if (decorations & TextDecorationUnderline) {
             underline.color = resultColor;
             underline.style = resultStyle;
@@ -2886,10 +2846,6 @@ Element* RenderObject::offsetParent() const
     if (isOutOfFlowPositioned() && style()->position() == FixedPosition)
         return 0;
 
-    // If A is an area HTML element which has a map HTML element somewhere in the ancestor
-    // chain return the nearest ancestor map HTML element and stop this algorithm.
-    // FIXME: Implement!
-
     float effectiveZoom = style()->effectiveZoom();
     Node* node = 0;
     for (RenderObject* ancestor = parent(); ancestor; ancestor = ancestor->parent()) {
@@ -2983,12 +2939,12 @@ CursorDirective RenderObject::getCursor(const LayoutPoint&, Cursor&) const
     return SetCursorBasedOnStyle;
 }
 
-bool RenderObject::canUpdateSelectionOnRootLineBoxes()
+bool RenderObject::canUpdateSelectionOnRootLineBoxes() const
 {
     if (needsLayout())
         return false;
 
-    RenderBlock* containingBlock = this->containingBlock();
+    const RenderBlock* containingBlock = this->containingBlock();
     return containingBlock ? !containingBlock->needsLayout() : false;
 }
 

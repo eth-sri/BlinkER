@@ -90,7 +90,7 @@ unsigned WorkerThread::workerThreadCount()
 class WorkerThreadCancelableTask final : public ExecutionContextTask {
     WTF_MAKE_NONCOPYABLE(WorkerThreadCancelableTask); WTF_MAKE_FAST_ALLOCATED;
 public:
-    static PassOwnPtr<WorkerThreadCancelableTask> create(const Closure& closure)
+    static PassOwnPtr<WorkerThreadCancelableTask> create(PassOwnPtr<Closure> closure)
     {
         return adoptPtr(new WorkerThreadCancelableTask(closure));
     }
@@ -98,18 +98,18 @@ public:
     virtual void performTask(ExecutionContext*) override
     {
         if (!m_taskCanceled)
-            m_closure();
+            (*m_closure)();
     }
 
     void cancelTask() { m_taskCanceled = true; }
 
 private:
-    explicit WorkerThreadCancelableTask(const Closure& closure)
+    explicit WorkerThreadCancelableTask(PassOwnPtr<Closure> closure)
     : m_closure(closure)
     , m_taskCanceled(false)
     { }
 
-    Closure m_closure;
+    OwnPtr<Closure> m_closure;
     bool m_taskCanceled;
 };
 
@@ -320,8 +320,9 @@ void WorkerThread::initialize()
     if (!script->isExecutionForbidden())
         script->initializeContextIfNeeded();
     InspectorInstrumentation::willEvaluateWorkerScript(workerGlobalScope(), startMode);
-    script->evaluate(ScriptSourceCode(sourceCode, scriptURL));
+    bool success = script->evaluate(ScriptSourceCode(sourceCode, scriptURL));
     m_workerGlobalScope->didEvaluateWorkerScript();
+    m_workerReportingProxy.didEvaluateWorkerScript(success);
 
     postInitialize();
 
@@ -413,6 +414,12 @@ void WorkerThread::stop()
 void WorkerThread::stopInShutdownSequence()
 {
     stopInternal();
+}
+
+void WorkerThread::terminateAndWait()
+{
+    stop();
+    m_terminationEvent->wait();
 }
 
 bool WorkerThread::terminated()

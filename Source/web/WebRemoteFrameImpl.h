@@ -145,7 +145,6 @@ public:
     virtual float getPrintPageShrink(int page) override;
     virtual void printEnd() override;
     virtual bool isPrintScalingDisabledForPlugin(const WebNode&) override;
-    virtual int getPrintCopiesForPlugin(const WebNode&) override;
     virtual bool hasCustomPageSizeStyle(int pageIndex) override;
     virtual bool isPageBoxVisible(int pageIndex) override;
     virtual void pageSizeAndMarginsInPixels(
@@ -198,6 +197,8 @@ public:
     static WebRemoteFrameImpl* fromFrame(RemoteFrame&);
 
     virtual void initializeFromFrame(WebLocalFrame*) const override;
+
+    virtual void setReplicatedOrigin(const WebSecurityOrigin&) const override;
 
 #if ENABLE(OILPAN)
     void trace(Visitor*);

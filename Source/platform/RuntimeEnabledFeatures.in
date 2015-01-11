@@ -33,7 +33,6 @@ ClientHintsDpr status=experimental
 CompositedSelectionUpdate
 ContextMenu status=experimental
 CredentialManager status=test
-Crypto status=stable
 CSS3Text status=experimental
 CSS3TextDecorations status=experimental
 CSSAnimationUnprefixed status=experimental
@@ -42,15 +41,15 @@ CSSCompositing status=experimental
 CSSGridLayout status=experimental
 CSSMaskSourceType status=experimental
 CSSOMSmoothScroll status=experimental
-CSSTouchActionDelay status=test
+CSSScrollBlocksOn status=test
 CSSViewport status=experimental
+// getPropertyCSSValue, CSSValue, etc. will be removed once layout tests no longer depend on them. crbug.com/331608
 CustomSchemeHandler depends_on=NavigatorContentUtils, status=experimental
 Database status=stable
 DecodeToYUV status=experimental
 DeviceLight status=experimental
 DisplayList2dCanvas status=stable
 ForceDisplayList2dCanvas
-EncodingAPI status=stable
 EncryptedMedia status=test
 ExecCommandInJavaScript status=test
 ExperimentalCanvasFeatures status=test
@@ -105,6 +104,7 @@ Presentation status=test
 PseudoClassesInMatchingCriteriaInAuthorShadowTrees status=test
 PushMessaging status=experimental
 QuotaPromise status=experimental
+ReducedReferrerGranularity
 RegionBasedColumns status=experimental
 RequestAutocomplete status=test
 ScreenOrientation status=stable
@@ -116,6 +116,7 @@ ScrollTopLeftInterop status=experimental
 ShowModalDialog status=deprecated
 ServiceWorker status=stable
 ServiceWorkerCache status=stable
+ServiceWorkerNotifications status=experimental
 ServiceWorkerOnFetch status=stable
 SessionStorage status=stable
 SharedWorker status=stable
@@ -124,7 +125,6 @@ Stream status=experimental
 SubpixelFontScaling status=stable
 SubresourceIntegrity status=experimental
 TextBlob
-ThemeColor status=stable
 ThreadedParserDataReceiver status=experimental
 // Many websites disable mouse support when touch APIs are available.  We'd
 // like to enable this always but can't until more websites fix this bug.

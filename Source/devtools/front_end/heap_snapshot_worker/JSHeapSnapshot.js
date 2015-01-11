@@ -52,12 +52,12 @@ WebInspector.JSHeapSnapshot = function(profile, progress, showHiddenData)
 
 WebInspector.JSHeapSnapshot.prototype = {
     /**
-     * @param {number} nodeIndex
+     * @param {number=} nodeIndex
      * @return {!WebInspector.JSHeapSnapshotNode}
      */
     createNode: function(nodeIndex)
     {
-        return new WebInspector.JSHeapSnapshotNode(this, nodeIndex);
+        return new WebInspector.JSHeapSnapshotNode(this, nodeIndex === undefined ? -1 : nodeIndex);
     },
 
     /**
@@ -82,7 +82,7 @@ WebInspector.JSHeapSnapshot.prototype = {
 
     /**
      * @override
-     * @return {?function(!WebInspector.JSHeapSnapshotNode):boolean}
+     * @return {?function(!WebInspector.HeapSnapshotNode):boolean}
      */
     classNodesFilter: function()
     {
@@ -92,7 +92,7 @@ WebInspector.JSHeapSnapshot.prototype = {
         var map = mapAndFlag.map;
         var flag = mapAndFlag.flag;
         /**
-         * @param {!WebInspector.JSHeapSnapshotNode} node
+         * @param {!WebInspector.HeapSnapshotNode} node
          * @return {boolean}
          */
         function filter(node)
@@ -176,10 +176,12 @@ WebInspector.JSHeapSnapshot.prototype = {
     },
 
     /**
+     * @override
+     * @protected
      * @param {!WebInspector.HeapSnapshotNode} node
-     * @return {!boolean}
+     * @return {boolean}
      */
-    _isUserRoot: function(node)
+    isUserRoot: function(node)
     {
         return node.isUserRoot() || node.isDocumentDOMTreesRoot();
     },
@@ -225,7 +227,7 @@ WebInspector.JSHeapSnapshot.prototype = {
         if (userRootsOnly) {
             for (var iter = this.rootNode().edges(); iter.hasNext(); iter.next()) {
                 var node = iter.edge.node();
-                if (this._isUserRoot(node))
+                if (this.isUserRoot(node))
                     doAction(node);
             }
         } else {
@@ -630,7 +632,7 @@ WebInspector.JSHeapSnapshotNode.prototype = {
     },
 
     /**
-     * @return {!boolean}
+     * @return {boolean}
      */
     isUserRoot: function()
     {
@@ -638,7 +640,7 @@ WebInspector.JSHeapSnapshotNode.prototype = {
     },
 
     /**
-     * @return {!boolean}
+     * @return {boolean}
      */
     isDocumentDOMTreesRoot: function()
     {
@@ -742,14 +744,16 @@ WebInspector.JSHeapSnapshotEdge.prototype = {
     },
 
     /**
-     * @return {string|number}
+     * @override
+     * @return {string}
      */
     name: function()
     {
+        var name = this._name();
         if (!this.isShortcut())
-            return this._name();
-        var numName = parseInt(this._name(), 10);
-        return isNaN(numName) ? this._name() : numName;
+            return String(name);
+        var numName = parseInt(name, 10);
+        return String(isNaN(numName) ? name : numName);
     },
 
     /**

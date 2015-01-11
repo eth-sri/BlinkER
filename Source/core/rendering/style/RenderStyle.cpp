@@ -197,13 +197,19 @@ StyleRecalcChange RenderStyle::stylePropagationDiff(const RenderStyle* oldStyle,
     return NoInherit;
 }
 
-ItemPosition RenderStyle::resolveAlignment(const RenderStyle* parentStyle, const RenderStyle* childStyle)
+ItemPosition RenderStyle::resolveAlignment(const RenderStyle* parentStyle, const RenderStyle* childStyle, ItemPosition resolvedAutoPositionForRenderer)
 {
-    ItemPosition align = childStyle->alignSelf();
     // The auto keyword computes to the parent's align-items computed value, or to "stretch", if not set or "auto".
-    if (align == ItemPositionAuto)
-        align = (parentStyle->alignItems() == ItemPositionAuto) ? ItemPositionStretch : parentStyle->alignItems();
-    return align;
+    if (childStyle->alignSelf() == ItemPositionAuto)
+        return (parentStyle->alignItems() == ItemPositionAuto) ? resolvedAutoPositionForRenderer : parentStyle->alignItems();
+    return childStyle->alignSelf();
+}
+
+ItemPosition RenderStyle::resolveJustification(const RenderStyle* parentStyle, const RenderStyle* childStyle, ItemPosition resolvedAutoPositionForRenderer)
+{
+    if (childStyle->justifySelf() == ItemPositionAuto)
+        return (parentStyle->justifyItems() == ItemPositionAuto) ? resolvedAutoPositionForRenderer : parentStyle->justifyItems();
+    return childStyle->justifySelf();
 }
 
 void RenderStyle::inheritFrom(const RenderStyle* inheritParent, IsAtShadowBoundary isAtShadowBoundary)
@@ -468,6 +474,10 @@ bool RenderStyle::diffNeedsFullLayoutAndPaintInvalidation(const RenderStyle& oth
             && *rareNonInheritedData->m_flexibleBox.get() != *other.rareNonInheritedData->m_flexibleBox.get())
             return true;
 
+        // FIXME: We should add an optimized form of layout that just recomputes visual overflow.
+        if (!rareNonInheritedData->shadowDataEquivalent(*other.rareNonInheritedData.get()))
+            return true;
+
         if (!rareNonInheritedData->reflectionDataEquivalent(*other.rareNonInheritedData.get()))
             return true;
 
@@ -583,6 +593,11 @@ bool RenderStyle::diffNeedsFullLayoutAndPaintInvalidation(const RenderStyle& oth
     if ((visibility() == COLLAPSE) != (other.visibility() == COLLAPSE))
         return true;
 
+    if (!m_background->outline().visuallyEqual(other.m_background->outline())) {
+        // FIXME: We only really need to recompute the overflow but we don't have an optimized layout for it.
+        return true;
+    }
+
     // Movement of non-static-positioned object is special cased in RenderStyle::visualInvalidationDiff().
 
     return false;
@@ -646,9 +661,6 @@ bool RenderStyle::diffNeedsPaintInvalidationLayer(const RenderStyle& other) cons
 
 bool RenderStyle::diffNeedsPaintInvalidationObject(const RenderStyle& other) const
 {
-    if (!m_background->outline().visuallyEqual(other.m_background->outline()))
-        return true;
-
     if (inherited_flags._visibility != other.inherited_flags._visibility
         || inherited_flags.m_printColorAdjust != other.inherited_flags.m_printColorAdjust
         || inherited_flags._insideLink != other.inherited_flags._insideLink
@@ -667,7 +679,6 @@ bool RenderStyle::diffNeedsPaintInvalidationObject(const RenderStyle& other) con
         if (rareNonInheritedData->userDrag != other.rareNonInheritedData->userDrag
             || rareNonInheritedData->m_objectFit != other.rareNonInheritedData->m_objectFit
             || rareNonInheritedData->m_objectPosition != other.rareNonInheritedData->m_objectPosition
-            || !rareNonInheritedData->shadowDataEquivalent(*other.rareNonInheritedData.get())
             || !rareNonInheritedData->shapeOutsideDataEquivalent(*other.rareNonInheritedData.get())
             || !rareNonInheritedData->clipPathDataEquivalent(*other.rareNonInheritedData.get()))
             return true;
@@ -691,13 +702,7 @@ void RenderStyle::updatePropertySpecificDifferences(const RenderStyle& other, St
 
         if (rareNonInheritedData->m_filter != other.rareNonInheritedData->m_filter)
             diff.setFilterChanged();
-
-        if (!rareNonInheritedData->shadowDataEquivalent(*other.rareNonInheritedData.get()))
-            diff.setVisualOverflowChanged();
     }
-
-    if (!m_background->outline().visuallyEqual(other.m_background->outline()) || !surround->border.visualOverflowEqual(other.surround->border))
-        diff.setVisualOverflowChanged();
 
     if (!diff.needsPaintInvalidation()) {
         if (inherited->color != other.inherited->color
@@ -826,46 +831,6 @@ void RenderStyle::setContent(QuoteType quote, bool add)
     rareNonInheritedData.access()->m_content = ContentData::create(quote);
 }
 
-WebBlendMode RenderStyle::blendMode() const
-{
-    if (RuntimeEnabledFeatures::cssCompositingEnabled())
-        return static_cast<WebBlendMode>(rareNonInheritedData->m_effectiveBlendMode);
-    return WebBlendModeNormal;
-}
-
-void RenderStyle::setBlendMode(WebBlendMode v)
-{
-    if (RuntimeEnabledFeatures::cssCompositingEnabled())
-        rareNonInheritedData.access()->m_effectiveBlendMode = v;
-}
-
-bool RenderStyle::hasBlendMode() const
-{
-    if (RuntimeEnabledFeatures::cssCompositingEnabled())
-        return static_cast<WebBlendMode>(rareNonInheritedData->m_effectiveBlendMode) != WebBlendModeNormal;
-    return false;
-}
-
-EIsolation RenderStyle::isolation() const
-{
-    if (RuntimeEnabledFeatures::cssCompositingEnabled())
-        return static_cast<EIsolation>(rareNonInheritedData->m_isolation);
-    return IsolationAuto;
-}
-
-void RenderStyle::setIsolation(EIsolation v)
-{
-    if (RuntimeEnabledFeatures::cssCompositingEnabled())
-        rareNonInheritedData.access()->m_isolation = v;
-}
-
-bool RenderStyle::hasIsolation() const
-{
-    if (RuntimeEnabledFeatures::cssCompositingEnabled())
-        return rareNonInheritedData->m_isolation != IsolationAuto;
-    return false;
-}
-
 bool RenderStyle::hasWillChangeCompositingHint() const
 {
     for (size_t i = 0; i < rareNonInheritedData->m_willChange->m_properties.size(); ++i) {
@@ -909,7 +874,7 @@ inline bool requireTransformOrigin(const Vector<RefPtr<TransformOperation> >& tr
 
 void RenderStyle::applyTransform(TransformationMatrix& transform, const LayoutSize& borderBoxSize, ApplyTransformOrigin applyOrigin) const
 {
-    applyTransform(transform, FloatRect(FloatPoint(), borderBoxSize), applyOrigin);
+    applyTransform(transform, FloatRect(FloatPoint(), FloatSize(borderBoxSize)), applyOrigin);
 }
 
 void RenderStyle::applyTransform(TransformationMatrix& transform, const FloatRect& boundingBox, ApplyTransformOrigin applyOrigin) const
@@ -1217,10 +1182,11 @@ void RenderStyle::setLetterSpacing(float letterSpacing)
     font().update(currentFontSelector);
 }
 
-void RenderStyle::setFontSize(float size)
+void RenderStyle::setTextAutosizingMultiplier(float multiplier)
 {
-    // size must be specifiedSize if Text Autosizing is enabled, but computedSize if text
-    // zoom is enabled (if neither is enabled it's irrelevant as they're probably the same).
+    SET_VAR(inherited, textAutosizingMultiplier, multiplier);
+
+    float size = specifiedFontSize();
 
     ASSERT(std::isfinite(size));
     if (!std::isfinite(size) || size < 0)
@@ -1233,21 +1199,11 @@ void RenderStyle::setFontSize(float size)
     desc.setSpecifiedSize(size);
     desc.setComputedSize(size);
 
-    float multiplier = textAutosizingMultiplier();
     if (multiplier > 1) {
         float autosizedFontSize = TextAutosizer::computeAutosizedFontSize(size, multiplier);
         desc.setComputedSize(std::min(maximumAllowedFontSize, autosizedFontSize));
     }
 
-    setFontDescription(desc);
-    font().update(currentFontSelector);
-}
-
-void RenderStyle::setFontWeight(FontWeight weight)
-{
-    FontSelector* currentFontSelector = font().fontSelector();
-    FontDescription desc(fontDescription());
-    desc.setWeight(weight);
     setFontDescription(desc);
     font().update(currentFontSelector);
 }
@@ -1275,7 +1231,7 @@ void RenderStyle::applyTextDecorations()
         return;
 
     TextDecorationStyle style = textDecorationStyle();
-    StyleColor styleColor = visitedDependentDecorationStyleColor();
+    StyleColor styleColor = decorationColorIncludingFallback(insideLink() == InsideVisitedLink);
 
     int decorations = textDecoration();
 
@@ -1303,13 +1259,10 @@ void RenderStyle::clearAppliedTextDecorations()
         rareInheritedData.access()->appliedTextDecorations = nullptr;
 }
 
-void RenderStyle::setFontStretch(FontStretch stretch)
+void RenderStyle::clearMultiCol()
 {
-    FontSelector* currentFontSelector = font().fontSelector();
-    FontDescription desc(fontDescription());
-    desc.setStretch(stretch);
-    setFontDescription(desc);
-    font().update(currentFontSelector);
+    rareNonInheritedData.access()->m_multiCol = nullptr;
+    rareNonInheritedData.access()->m_multiCol.init();
 }
 
 void RenderStyle::getShadowExtent(const ShadowList* shadowList, LayoutUnit &top, LayoutUnit &right, LayoutUnit &bottom, LayoutUnit &left) const
@@ -1389,29 +1342,21 @@ void RenderStyle::getShadowVerticalExtent(const ShadowList* shadowList, LayoutUn
     }
 }
 
-StyleColor RenderStyle::visitedDependentDecorationStyleColor() const
+StyleColor RenderStyle::decorationColorIncludingFallback(bool visitedLink) const
 {
-    bool isVisited = insideLink() == InsideVisitedLink;
-
-    StyleColor styleColor = isVisited ? visitedLinkTextDecorationColor() : textDecorationColor();
+    StyleColor styleColor = visitedLink ? visitedLinkTextDecorationColor() : textDecorationColor();
 
     if (!styleColor.isCurrentColor())
         return styleColor;
 
     if (textStrokeWidth()) {
         // Prefer stroke color if possible, but not if it's fully transparent.
-        StyleColor textStrokeStyleColor = isVisited ? visitedLinkTextStrokeColor() : textStrokeColor();
+        StyleColor textStrokeStyleColor = visitedLink ? visitedLinkTextStrokeColor() : textStrokeColor();
         if (!textStrokeStyleColor.isCurrentColor() && textStrokeStyleColor.color().alpha())
             return textStrokeStyleColor;
     }
 
-    return isVisited ? visitedLinkTextFillColor() : textFillColor();
-}
-
-Color RenderStyle::visitedDependentDecorationColor() const
-{
-    bool isVisited = insideLink() == InsideVisitedLink;
-    return visitedDependentDecorationStyleColor().resolve(isVisited ? visitedLinkColor() : color());
+    return visitedLink ? visitedLinkTextFillColor() : textFillColor();
 }
 
 Color RenderStyle::colorIncludingFallback(int colorProperty, bool visitedLink) const
@@ -1467,6 +1412,9 @@ Color RenderStyle::colorIncludingFallback(int colorProperty, bool visitedLink) c
         break;
     case CSSPropertyWebkitTapHighlightColor:
         result = tapHighlightColor();
+        break;
+    case CSSPropertyTextDecorationColor:
+        result = decorationColorIncludingFallback(visitedLink);
         break;
     default:
         ASSERT_NOT_REACHED();
@@ -1641,6 +1589,14 @@ Color RenderStyle::initialTapHighlightColor()
 {
     return RenderTheme::tapHighlightColor();
 }
+
+#if ENABLE(OILPAN)
+const FilterOperations& RenderStyle::initialFilter()
+{
+    DEFINE_STATIC_LOCAL(Persistent<FilterOperationsWrapper>, ops, (FilterOperationsWrapper::create()));
+    return ops->operations();
+}
+#endif
 
 LayoutBoxExtent RenderStyle::imageOutsets(const NinePieceImage& image) const
 {

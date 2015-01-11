@@ -311,6 +311,8 @@ InspectorTest.waitForScriptSource = function(scriptName, callback)
     var panel = WebInspector.panels.sources;
     var uiSourceCodes = panel._workspace.uiSourceCodes();
     for (var i = 0; i < uiSourceCodes.length; ++i) {
+        if (uiSourceCodes[i].project().type() === WebInspector.projectTypes.Service)
+            continue;
         if (uiSourceCodes[i].name() === scriptName) {
             callback(uiSourceCodes[i]);
             return;
@@ -355,6 +357,26 @@ InspectorTest.dumpBreakpointSidebarPane = function(title)
     var paneElement = WebInspector.panels.sources.sidebarPanes.jsBreakpoints.listElement;
     InspectorTest.addResult("Breakpoint sidebar pane " + (title || ""));
     InspectorTest.addResult(InspectorTest.textContentWithLineBreaks(paneElement));
+};
+
+InspectorTest.dumpScopeVariablesSidebarPane = function()
+{
+    InspectorTest.addResult("Scope variables sidebar pane:");
+    var sections = WebInspector.panels.sources.sidebarPanes.scopechain._sections;
+    for (var i = 0; i < sections.length; ++i) {
+        InspectorTest.addResult(InspectorTest.textContentWithLineBreaks(sections[i].element));
+        if (!sections[i].expanded)
+            InspectorTest.addResult("    <section collapsed>");
+    }
+};
+
+InspectorTest.expandScopeVariablesSidebarPane = function(callback)
+{
+    // Expand all but the global scope. Expanding global scope takes for too long so we keep it collapsed.
+    var sections = WebInspector.panels.sources.sidebarPanes.scopechain._sections;
+    for (var i = 0; i < sections.length - 1; ++i)
+        sections[i].expand();
+    InspectorTest.runAfterPendingDispatches(callback);
 };
 
 InspectorTest.expandProperties = function(properties, callback)

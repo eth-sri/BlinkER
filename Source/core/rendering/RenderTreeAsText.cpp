@@ -29,6 +29,7 @@
 #include "core/HTMLNames.h"
 #include "core/css/StylePropertySet.h"
 #include "core/dom/Document.h"
+#include "core/dom/PseudoElement.h"
 #include "core/editing/FrameSelection.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
@@ -39,7 +40,6 @@
 #include "core/rendering/RenderBR.h"
 #include "core/rendering/RenderDetailsMarker.h"
 #include "core/rendering/RenderFileUploadControl.h"
-#include "core/rendering/RenderFlowThread.h"
 #include "core/rendering/RenderInline.h"
 #include "core/rendering/RenderLayer.h"
 #include "core/rendering/RenderListItem.h"
@@ -547,7 +547,7 @@ static void write(TextStream& ts, RenderLayer& l,
     else if (paintPhase == LayerPaintPhaseForeground)
         ts << " layerType: foreground only";
 
-    if (l.renderer()->hasBlendMode())
+    if (l.renderer()->style()->hasBlendMode())
         ts << " blendMode: " << compositeOperatorName(CompositeSourceOver, l.renderer()->style()->blendMode());
 
     if (behavior & RenderAsTextShowCompositedLayers) {
@@ -556,8 +556,6 @@ static void write(TextStream& ts, RenderLayer& l,
                 << l.compositedLayerMapping()->compositedBounds()
                 << ", drawsContent="
                 << l.compositedLayerMapping()->mainGraphicsLayer()->drawsContent()
-                << ", paints into ancestor="
-                << l.compositedLayerMapping()->paintsIntoCompositedAncestor()
                 << (l.shouldIsolateCompositedDescendants() ? ", isolatesCompositedBlending" : "")
                 << ")";
         }
@@ -586,7 +584,7 @@ void RenderTreeAsText::writeLayers(TextStream& ts, const RenderLayer* rootLayer,
 
     // FIXME: Apply overflow to the root layer to not break every test. Complete hack. Sigh.
     if (rootLayer == layer)
-        layerBounds.setSize(layer->size().expandedTo(pixelSnappedIntSize(layer->renderBox()->maxLayoutOverflow(), LayoutPoint(0, 0))));
+        layerBounds.setSize(LayoutSize(layer->size().expandedTo(pixelSnappedIntSize(layer->renderBox()->maxLayoutOverflow(), LayoutPoint(0, 0)))));
 
     // Ensure our lists are up-to-date.
     layer->stackingNode()->updateLayerListsIfNeeded();

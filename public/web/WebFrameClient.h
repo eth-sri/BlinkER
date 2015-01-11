@@ -72,17 +72,18 @@ class WebMediaPlayer;
 class WebMediaPlayerClient;
 class WebMIDIClient;
 class WebNotificationPermissionCallback;
-class WebNotificationPresenter;
 class WebServiceWorkerProvider;
 class WebServiceWorkerProviderClient;
 class WebSocketHandle;
 class WebNode;
 class WebPlugin;
 class WebPluginPlaceholder;
+class WebPushClient;
 class WebRTCPeerConnectionHandler;
 class WebScreenOrientationClient;
 class WebSharedWorker;
 class WebSharedWorkerClient;
+class WebSpeechRecognizer;
 class WebString;
 class WebURL;
 class WebURLLoader;
@@ -96,6 +97,7 @@ struct WebPluginParams;
 struct WebPopupMenuInfo;
 struct WebRect;
 struct WebSize;
+struct WebTransitionElementData;
 struct WebURLError;
 
 class WebFrameClient {
@@ -202,13 +204,19 @@ public:
     struct NavigationPolicyInfo {
         WebLocalFrame* frame;
         WebDataSource::ExtraData* extraData;
-        const WebURLRequest& urlRequest;
+
+        // Note: if browser side navigations are enabled, the client may modify
+        // the urlRequest. However, should this happen, the client should change
+        // the WebNavigationPolicy to WebNavigationPolicyIgnore, and the load
+        // should stop in blink. In all other cases, the urlRequest should not
+        // be modified.
+        WebURLRequest& urlRequest;
         WebNavigationType navigationType;
         WebNavigationPolicy defaultPolicy;
         bool isRedirect;
         bool isTransitionNavigation;
 
-        NavigationPolicyInfo(const WebURLRequest& urlRequest)
+        NavigationPolicyInfo(WebURLRequest& urlRequest)
             : frame(0)
             , extraData(0)
             , urlRequest(urlRequest)
@@ -269,6 +277,9 @@ public:
     // body is known.
     virtual void didCommitProvisionalLoad(WebLocalFrame*, const WebHistoryItem&, WebHistoryCommitType) { }
 
+    // The frame's document has just been initialized.
+    virtual void didCreateNewDocument(WebLocalFrame* frame) { }
+
     // The window object for the frame has been cleared of any extra
     // properties that may have been set by script from the previously
     // loaded document.
@@ -315,17 +326,18 @@ public:
     // Transition navigations -----------------------------------------------
 
     // Provides serialized markup of transition elements for use in the following navigation.
-    virtual void addNavigationTransitionData(const WebString& allowedDestinationOrigin, const WebString& selector, const WebString& markup) { }
-
+    virtual void addNavigationTransitionData(const WebTransitionElementData&) { }
 
     // Web Notifications ---------------------------------------------------
 
     // Requests permission to display platform notifications on the origin of this frame.
     virtual void requestNotificationPermission(const WebSecurityOrigin&, WebNotificationPermissionCallback* callback) { }
 
-    // Called to retrieve the provider of desktop notifications.
-    // FIXME: Remove this method once the presenter is obtained through Platform.
-    virtual WebNotificationPresenter* notificationPresenter() { return 0; }
+
+    // Push API ---------------------------------------------------
+
+    // Used to access the embedder for the Push API.
+    virtual WebPushClient* pushClient() { return 0; }
 
 
     // Editing -------------------------------------------------------------
@@ -558,10 +570,21 @@ public:
     // Access the embedder API for (client-based) screen orientation client .
     virtual WebScreenOrientationClient* webScreenOrientationClient() { return 0; }
 
+
     // Accessibility -------------------------------------------------------
 
     // Notifies embedder about an accessibility event.
     virtual void postAccessibilityEvent(const WebAXObject&, WebAXEvent) { }
+
+    // Provides accessibility information about a find in page result.
+    virtual void handleAccessibilityFindInPageResult(
+        int identifier,
+        int matchIndex,
+        const WebAXObject& startObject,
+        int startOffset,
+        const WebAXObject& endObject,
+        int endOffset) { }
+
 
     // ServiceWorker -------------------------------------------------------
 
@@ -572,6 +595,12 @@ public:
     // Returns an identifier of the service worker controlling the document
     // associated with the WebDataSource.
     virtual int64_t serviceWorkerID(WebDataSource&) { return -1; }
+
+
+    // Speech --------------------------------------------------------------
+
+    // Access the embedder API for speech recognition services.
+    virtual WebSpeechRecognizer* speechRecognizer() { return 0; }
 
 protected:
     virtual ~WebFrameClient() { }

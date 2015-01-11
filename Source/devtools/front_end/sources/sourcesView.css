@@ -51,28 +51,11 @@
     flex: 0 0 20px;
     background-color: #eee;
     border-top: 1px solid rgb(196,196,196);
+    overflow: hidden;
 }
 
-#sources-panel-sources-view .sources-status-bar .status-bar-item {
-    margin-top: -1px;
-    height: 20px;
-}
-
-#sources-panel-sources-view .sources-status-bar .status-bar-item.status-bar-text {
-    margin: auto 0;
-    height: auto;
-}
-
-#sources-panel-sources-view .source-frame-cursor-position {
-    -webkit-user-select: text;
-}
-
-#sources-panel-sources-view .sources-toggle-pretty-print-status-bar-item .glyph {
-    -webkit-mask-position: -256px -24px;
-}
-
-#sources-panel-sources-view .sources-toggle-pretty-print-status-bar-item.toggled .glyph {
-    background-color: rgb(66, 129, 235);
+#sources-panel-sources-view .sources-status-bar .status-bar {
+    margin-top: -2px;
 }
 
 .source-frame-debugger-script {
@@ -87,14 +70,6 @@
     background-image: url(Images/statusbarButtonGlyphs.png);
     background-size: 320px 144px;
     background-position: -202px -107px;
-}
-
-button.status-bar-item.scripts-debugger-show-hide-button {
-    display: none;
-}
-
-button.status-bar-item.scripts-navigator-show-hide-button {
-    display: none;
 }
 
 .source-frame-infobar {

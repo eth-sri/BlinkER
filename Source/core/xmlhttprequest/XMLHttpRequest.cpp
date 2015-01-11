@@ -27,6 +27,7 @@
 #include "core/FetchInitiatorTypeNames.h"
 #include "core/dom/ContextFeatures.h"
 #include "core/dom/DOMArrayBuffer.h"
+#include "core/dom/DOMArrayBufferView.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/DOMImplementation.h"
 #include "core/dom/DocumentParser.h"
@@ -64,8 +65,6 @@
 #include "platform/network/ResourceError.h"
 #include "platform/network/ResourceRequest.h"
 #include "public/platform/WebURLRequest.h"
-#include "wtf/ArrayBuffer.h"
-#include "wtf/ArrayBufferView.h"
 #include "wtf/Assertions.h"
 #include "wtf/RefCountedLeakCounter.h"
 #include "wtf/StdLibExtras.h"
@@ -108,33 +107,130 @@ static void logConsoleError(ExecutionContext* context, const String& message)
     context->addConsoleMessage(ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, message));
 }
 
-namespace {
+using Result = WebDataConsumerHandle::Result;
 
-class ReadableStreamSource : public GarbageCollectedFinalized<ReadableStreamSource>, public UnderlyingSource {
+// ReadableStreamSource is the underlying source for the response stream of
+// XHR. The class has two modes: with and without body stream (passed to the
+// constructor as the |body| argument).
+// 1) When an instance is constructed with a body stream, it receives data from
+// the body stream. The data reading is originated by a |pullSource| call.
+// 2) When an instance is constructed without a body stream, it receives data
+// from |didReceiveData| function. The associated XHR instance will push data
+// via the function.
+class XMLHttpRequest::ReadableStreamSource final : public GarbageCollectedFinalized<ReadableStreamSource>, public UnderlyingSource, public WebDataConsumerHandle::Client {
     USING_GARBAGE_COLLECTED_MIXIN(ReadableStreamSource);
 public:
-    ReadableStreamSource(XMLHttpRequest* owner) : m_owner(owner) { }
-    virtual ~ReadableStreamSource() { }
-    virtual void pullSource() override { }
-    virtual ScriptPromise cancelSource(ScriptState* scriptState, ScriptValue reason) override
+    ReadableStreamSource(XMLHttpRequest* owner, PassOwnPtr<WebDataConsumerHandle> body) : m_owner(owner), m_body(body), m_needsMore(false)
+    {
+        if (m_body) {
+            // |m_body| has |this| as a raw pointer, but it is not a problem
+            // because |this| owns |m_body|.
+            m_body->registerClient(this);
+        }
+    }
+    ~ReadableStreamSource() override { }
+
+    WebDataConsumerHandle* body() { return m_body.get(); }
+
+    // UnderlyingSource
+    void pullSource() override
+    {
+        if (m_body) {
+            m_needsMore = true;
+            enqueueToStreamFromHandle();
+        }
+    }
+
+    ScriptPromise cancelSource(ScriptState* scriptState, ScriptValue reason) override
     {
         m_owner->abort();
         return ScriptPromise::cast(scriptState, v8::Undefined(scriptState->isolate()));
     }
-    virtual void trace(Visitor* visitor) override
+
+    // WebDataConsumerHandle::Client
+    void didGetReadable() override
+    {
+        ASSERT(m_body);
+        enqueueToStreamFromHandle();
+    }
+
+    void startStream(ReadableStreamImpl<ReadableStreamChunkTypeTraits<DOMArrayBuffer> >* stream)
+    {
+        m_stream = stream;
+        stream->didSourceStart();
+    }
+
+    void didReceiveData(const char* data, size_t size)
+    {
+        m_stream->enqueue(DOMArrayBuffer::create(data, size));
+    }
+
+    void didReceiveFinishLoadingNotification()
+    {
+        if (!m_body) {
+            // When |this| is receiving data via didReceiveData, that means
+            // didFinishLoading specifies the end of data. Hence we close
+            // |m_stream| here. On the other hand, when |this| has the body
+            // stream, it receives data from the stream and the end of data
+            // will be detected via the stream itself. So we don't close
+            // |m_stream| here.
+            m_stream->close();
+        }
+    }
+
+    void trace(Visitor* visitor) override
     {
         visitor->trace(m_owner);
+        visitor->trace(m_stream);
         UnderlyingSource::trace(visitor);
     }
 
 private:
+    void enqueueToStreamFromHandle()
+    {
+        ASSERT(m_body);
+        while (m_needsMore) {
+            const void* buffer = nullptr;
+            size_t size = 0;
+            Result result = m_body->beginRead(&buffer, WebDataConsumerHandle::FlagNone, &size);
+            if (result == WebDataConsumerHandle::ShouldWait)
+                return;
+            if (result == WebDataConsumerHandle::Done) {
+                // When there is an error, didFail will be notified before we
+                // reach here and |m_stream->error| will be called at that time.
+                // |close| does nothing when errored, so we don't have to worry
+                // about it.
+                m_stream->close();
+                m_needsMore = false;
+                return;
+            }
+            if (result != WebDataConsumerHandle::Ok) {
+                m_stream->error(DOMException::create(NetworkError));
+                m_owner->abort();
+                m_needsMore = false;
+                return;
+            }
+            RefPtr<DOMArrayBuffer> arrayBuffer = DOMArrayBuffer::create(size, 1);
+            memcpy(arrayBuffer->data(), buffer, size);
+            result = m_body->endRead(size);
+            if (result != WebDataConsumerHandle::Ok) {
+                m_stream->error(DOMException::create(NetworkError));
+                m_owner->abort();
+                m_needsMore = false;
+                return;
+            }
+            m_needsMore = m_stream->enqueue(arrayBuffer.release());
+        }
+    }
+
     // This is RawPtr in non-oilpan build to avoid the reference cycle. To
     // avoid use-after free, the associated ReadableStream must be closed
     // or errored when m_owner is gone.
     RawPtrWillBeMember<XMLHttpRequest> m_owner;
+    Member<ReadableStreamImpl<ReadableStreamChunkTypeTraits<DOMArrayBuffer>>> m_stream;
+    OwnPtr<WebDataConsumerHandle> m_body;
+    bool m_needsMore;
 };
-
-} // namespace
 
 class XMLHttpRequest::BlobLoader final : public NoBaseWillBeGarbageCollectedFinalized<XMLHttpRequest::BlobLoader>, public FileReaderLoaderClient {
 public:
@@ -348,16 +444,17 @@ DOMArrayBuffer* XMLHttpRequest::responseArrayBuffer()
 
     if (!m_responseArrayBuffer) {
         if (m_binaryResponseBuilder && m_binaryResponseBuilder->size()) {
-            m_responseArrayBuffer = DOMArrayBuffer::create(m_binaryResponseBuilder->getAsArrayBuffer());
-            if (!m_responseArrayBuffer) {
+            RefPtr<DOMArrayBuffer> buffer = DOMArrayBuffer::createUninitialized(m_binaryResponseBuilder->size(), 1);
+            if (!m_binaryResponseBuilder->getAsBytes(buffer->data(), buffer->byteLength())) {
                 // m_binaryResponseBuilder failed to allocate an ArrayBuffer.
                 // We need to crash the renderer since there's no way defined in
                 // the spec to tell this to the user.
                 CRASH();
             }
+            m_responseArrayBuffer = buffer.release();
             m_binaryResponseBuilder.clear();
         } else {
-            m_responseArrayBuffer = DOMArrayBuffer::create(static_cast<void*>(0), 0);
+            m_responseArrayBuffer = DOMArrayBuffer::create(nullptr, 0);
         }
     }
 
@@ -383,7 +480,7 @@ ReadableStream* XMLHttpRequest::responseStream()
     return m_responseStream;
 }
 
-void XMLHttpRequest::setTimeout(unsigned long timeout, ExceptionState& exceptionState)
+void XMLHttpRequest::setTimeout(unsigned timeout, ExceptionState& exceptionState)
 {
     // FIXME: Need to trigger or update the timeout Timer here, if needed. http://webkit.org/b/98156
     // XHR2 spec, 4.7.3. "This implies that the timeout attribute can be set while fetching is in progress. If that occurs it will still be measured relative to the start of fetching."
@@ -516,7 +613,6 @@ void XMLHttpRequest::dispatchReadyStateChangeEvent()
 
     if (m_async || (m_state <= OPENED || m_state == DONE)) {
         TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "XHRReadyStateChange", "data", InspectorXhrReadyStateChangeEvent::data(executionContext(), this));
-        TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline.stack"), "CallStack", "stack", InspectorCallStackEvent::currentCallStack());
         XMLHttpRequestProgressEventThrottle::DeferredEventAction action = XMLHttpRequestProgressEventThrottle::Ignore;
         if (m_state == DONE) {
             if (m_error)
@@ -531,7 +627,6 @@ void XMLHttpRequest::dispatchReadyStateChangeEvent()
     InspectorInstrumentation::didDispatchXHRReadyStateChangeEvent(cookie);
     if (m_state == DONE && !m_error) {
         TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "XHRLoad", "data", InspectorXhrLoadEvent::data(executionContext(), this));
-        TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline.stack"), "CallStack", "stack", InspectorCallStackEvent::currentCallStack());
         InspectorInstrumentationCookie cookie = InspectorInstrumentation::willDispatchXHRLoadEvent(executionContext(), this);
         dispatchProgressEventFromSnapshot(EventTypeNames::load);
         InspectorInstrumentation::didDispatchXHRLoadEvent(cookie);
@@ -607,6 +702,13 @@ void XMLHttpRequest::open(const AtomicString& method, const KURL& url, bool asyn
             exceptionState.throwDOMException(InvalidAccessError, "Synchronous requests must not set a timeout.");
             return;
         }
+
+        // Here we just warn that firing sync XHR's may affect responsiveness.
+        // Eventually sync xhr will be deprecated and an "InvalidAccessError" exception thrown.
+        // Refer : https://xhr.spec.whatwg.org/#sync-warning
+        // Use count for XHR synchronous requests on main thread only.
+        if (!document()->processingBeforeUnload())
+            UseCounter::countDeprecation(executionContext(), UseCounter::XMLHttpRequestSynchronousInNonWorkerOutsideBeforeUnload);
     }
 
     m_method = FetchUtils::normalizeMethod(method);
@@ -689,8 +791,6 @@ void XMLHttpRequest::send(Document* document, ExceptionState& exceptionState)
 
         // FIXME: This should use value of document.inputEncoding to determine the encoding to use.
         httpBody = FormData::create(UTF8Encoding().encode(body, WTF::EntitiesForUnencodables));
-        if (m_upload)
-            httpBody->setAlwaysStream(true);
     }
 
     createRequest(httpBody.release(), exceptionState);
@@ -715,8 +815,6 @@ void XMLHttpRequest::send(const String& body, ExceptionState& exceptionState)
         }
 
         httpBody = FormData::create(UTF8Encoding().encode(body, WTF::EntitiesForUnencodables));
-        if (m_upload)
-            httpBody->setAlwaysStream(true);
     }
 
     createRequest(httpBody.release(), exceptionState);
@@ -782,14 +880,14 @@ void XMLHttpRequest::send(DOMFormData* body, ExceptionState& exceptionState)
     createRequest(httpBody.release(), exceptionState);
 }
 
-void XMLHttpRequest::send(ArrayBuffer* body, ExceptionState& exceptionState)
+void XMLHttpRequest::send(DOMArrayBuffer* body, ExceptionState& exceptionState)
 {
     WTF_LOG(Network, "XMLHttpRequest %p send() ArrayBuffer %p", this, body);
 
     sendBytesData(body->data(), body->byteLength(), exceptionState);
 }
 
-void XMLHttpRequest::send(ArrayBufferView* body, ExceptionState& exceptionState)
+void XMLHttpRequest::send(DOMArrayBufferView* body, ExceptionState& exceptionState)
 {
     WTF_LOG(Network, "XMLHttpRequest %p send() ArrayBufferView %p", this, body);
 
@@ -805,8 +903,6 @@ void XMLHttpRequest::sendBytesData(const void* data, size_t length, ExceptionSta
 
     if (areMethodAndURLValidForSend()) {
         httpBody = FormData::create(data, length);
-        if (m_upload)
-            httpBody->setAlwaysStream(true);
     }
 
     createRequest(httpBody.release(), exceptionState);
@@ -881,6 +977,11 @@ void XMLHttpRequest::createRequest(PassRefPtr<FormData> httpBody, ExceptionState
     m_downloadingToFile = responseTypeCode() == ResponseTypeBlob;
     if (m_downloadingToFile) {
         request.setDownloadToFile(true);
+        resourceLoaderOptions.dataBufferingPolicy = DoNotBufferData;
+    }
+
+    if (responseTypeCode() == ResponseTypeStream) {
+        request.setUseStreamOnResponse(true);
         resourceLoaderOptions.dataBufferingPolicy = DoNotBufferData;
     }
 
@@ -1034,6 +1135,7 @@ void XMLHttpRequest::clearResponse()
 
     m_responseLegacyStream = nullptr;
     m_responseStream = nullptr;
+    m_responseStreamSource = nullptr;
 
     // These variables may referred by the response accessors. So, we can clear
     // this only when we clear the response holder variables above.
@@ -1366,8 +1468,8 @@ void XMLHttpRequest::didFinishLoadingInternal()
     if (m_responseLegacyStream)
         m_responseLegacyStream->finalize();
 
-    if (m_responseStream)
-        m_responseStream->close();
+    if (m_responseStreamSource)
+        m_responseStreamSource->didReceiveFinishLoadingNotification();
 
     clearVariablesForLoading();
     endLoading();
@@ -1457,7 +1559,7 @@ void XMLHttpRequest::didSendData(unsigned long long bytesSent, unsigned long lon
     }
 }
 
-void XMLHttpRequest::didReceiveResponse(unsigned long identifier, const ResourceResponse& response)
+void XMLHttpRequest::didReceiveResponse(unsigned long identifier, const ResourceResponse& response, PassOwnPtr<WebDataConsumerHandle> handle)
 {
     WTF_LOG(Network, "XMLHttpRequest %p didReceiveResponse(%lu)", this, identifier);
 
@@ -1469,6 +1571,25 @@ void XMLHttpRequest::didReceiveResponse(unsigned long identifier, const Resource
 
     if (m_finalResponseCharset.isEmpty())
         m_finalResponseCharset = response.textEncodingName();
+
+    if (handle) {
+        ASSERT(!m_responseStream);
+        ASSERT(!m_responseStreamSource);
+        m_responseStreamSource = new ReadableStreamSource(this, handle);
+        m_responseStream = new ReadableStreamImpl<ReadableStreamChunkTypeTraits<DOMArrayBuffer> >(executionContext(), m_responseStreamSource);
+        m_responseStreamSource->startStream(m_responseStream);
+
+        // This protection seems needed to keep |this| alive after changeState
+        // calling which may call event listeners.
+        RefPtrWillBeRawPtr<XMLHttpRequest> protect(this);
+        changeState(HEADERS_RECEIVED);
+        if (m_error) {
+            // We need to check for |m_error| because |changeState| may trigger
+            // readystatechange, and user javascript can cause |abort()|.
+            return;
+        }
+        changeState(LOADING);
+    }
 }
 
 void XMLHttpRequest::parseDocumentChunk(const char* data, unsigned len)
@@ -1549,10 +1670,12 @@ void XMLHttpRequest::didReceiveData(const char* data, unsigned len)
         m_responseLegacyStream->addData(data, len);
     } else if (m_responseTypeCode == ResponseTypeStream) {
         if (!m_responseStream) {
-            m_responseStream = new ReadableStreamImpl<ReadableStreamChunkTypeTraits<DOMArrayBuffer> >(executionContext(), new ReadableStreamSource(this));
-            m_responseStream->didSourceStart();
+            ASSERT(!m_responseStreamSource);
+            m_responseStreamSource = new ReadableStreamSource(this, nullptr);
+            m_responseStream = new ReadableStreamImpl<ReadableStreamChunkTypeTraits<DOMArrayBuffer> >(executionContext(), m_responseStreamSource);
+            m_responseStreamSource->startStream(m_responseStream);
         }
-        m_responseStream->enqueue(DOMArrayBuffer::create(data, len));
+        m_responseStreamSource->didReceiveData(data, len);
     }
 
     if (m_blobLoader) {
@@ -1627,7 +1750,11 @@ bool XMLHttpRequest::hasPendingActivity() const
     // |m_loader| is non-null while request is active and ThreadableLoaderClient
     // callbacks may be called, and |m_responseDocumentParser| is non-null while
     // DocumentParserClient callbacks may be called.
-    return m_loader || m_responseDocumentParser;
+    if (m_loader || m_responseDocumentParser)
+        return true;
+    if (m_responseStream && (m_responseStream->state() == ReadableStream::Readable || m_responseStream->state() == ReadableStream::Waiting))
+        return true;
+    return false;
 }
 
 void XMLHttpRequest::contextDestroyed()
@@ -1651,7 +1778,7 @@ void XMLHttpRequest::trace(Visitor* visitor)
     visitor->trace(m_responseBlob);
     visitor->trace(m_responseLegacyStream);
     visitor->trace(m_responseStream);
-    visitor->trace(m_streamSource);
+    visitor->trace(m_responseStreamSource);
     visitor->trace(m_responseDocument);
     visitor->trace(m_responseDocumentParser);
     visitor->trace(m_progressEventThrottle);

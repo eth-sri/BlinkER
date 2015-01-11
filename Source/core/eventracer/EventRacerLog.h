@@ -17,6 +17,7 @@
 
 namespace blink {
 
+class DOMWindow;
 class EventRacerLogClient;
 
 enum StringTableKind {
@@ -95,29 +96,29 @@ public:
     void registerScript(int line, int column, const char *src, size_t len, const char *url, size_t ulen, int id);
 
     // JS instrumentation calls
-    static ScriptValue ER_read(LocalDOMWindow &, const V8StringResource<> &,
+    static ScriptValue ER_read(DOMWindow &, const V8StringResource<> &,
                                const ScriptValue &);
-    static ScriptValue ER_write(LocalDOMWindow &, const V8StringResource<> &,
+    static ScriptValue ER_write(DOMWindow &, const V8StringResource<> &,
                                 const ScriptValue &);
-    static ScriptValue ER_writeFunc(LocalDOMWindow &, const V8StringResource<> &,
+    static ScriptValue ER_writeFunc(DOMWindow &, const V8StringResource<> &,
                                     const ScriptValue &, int);
-    static ScriptValue ER_readProp(LocalDOMWindow &, const ScriptValue &,
+    static ScriptValue ER_readProp(DOMWindow &, const ScriptValue &,
                                    const V8StringResource<> &,
                                    const ScriptValue &);
-    static ScriptValue ER_writeProp(LocalDOMWindow &, const ScriptValue &,
+    static ScriptValue ER_writeProp(DOMWindow &, const ScriptValue &,
                                     const V8StringResource<> &,
                                     const ScriptValue &);
-    static ScriptValue ER_writePropFunc(LocalDOMWindow &, const ScriptValue &,
+    static ScriptValue ER_writePropFunc(DOMWindow &, const ScriptValue &,
                                         const V8StringResource<> &,
                                         const ScriptValue &, int);
-    static void ER_delete(LocalDOMWindow &, const V8StringResource<> &);
-    static void ER_deleteProp(LocalDOMWindow &, const ScriptValue &,
+    static void ER_delete(DOMWindow &, const V8StringResource<> &);
+    static void ER_deleteProp(DOMWindow &, const ScriptValue &,
                               const V8StringResource<> &);
-    static void ER_enterFunction(LocalDOMWindow &, const V8StringResource<> &, int, int);
-    static ScriptValue ER_exitFunction(LocalDOMWindow &, const ScriptValue &);
+    static void ER_enterFunction(DOMWindow &, const V8StringResource<> &, int, int);
+    static ScriptValue ER_exitFunction(DOMWindow &, const ScriptValue &);
 
-    static void ER_readArray(LocalDOMWindow &, const ScriptValue &);
-    static void ER_writeArray(LocalDOMWindow &, const ScriptValue &);
+    static void ER_readArray(DOMWindow &, const ScriptValue &);
+    static void ER_writeArray(DOMWindow &, const ScriptValue &);
 
 private:
     EventRacerLog();

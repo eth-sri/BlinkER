@@ -22,7 +22,7 @@
 
 namespace blink {
 
-const WrapperTypeInfo V8SVGTestInterface::wrapperTypeInfo = { gin::kEmbedderBlink, V8SVGTestInterface::domTemplate, V8SVGTestInterface::refObject, V8SVGTestInterface::derefObject, V8SVGTestInterface::trace, 0, 0, 0, V8SVGTestInterface::installConditionallyEnabledMethods, V8SVGTestInterface::installConditionallyEnabledProperties, 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::Dependent, WrapperTypeInfo::RefCountedObject };
+const WrapperTypeInfo V8SVGTestInterface::wrapperTypeInfo = { gin::kEmbedderBlink, V8SVGTestInterface::domTemplate, V8SVGTestInterface::refObject, V8SVGTestInterface::derefObject, V8SVGTestInterface::trace, 0, 0, V8SVGTestInterface::installConditionallyEnabledMethods, V8SVGTestInterface::installConditionallyEnabledProperties, 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Dependent, WrapperTypeInfo::RefCountedObject };
 
 // This static member must be declared by DEFINE_WRAPPERTYPEINFO in SVGTestInterface.h.
 // For details, see the comment of DEFINE_WRAPPERTYPEINFO in
@@ -104,17 +104,17 @@ v8::Handle<v8::Object> V8SVGTestInterface::findInstanceInPrototypeChain(v8::Hand
 
 SVGTestInterface* V8SVGTestInterface::toImplWithTypeCheck(v8::Isolate* isolate, v8::Handle<v8::Value> value)
 {
-    return hasInstance(value, isolate) ? blink::toScriptWrappableBase(v8::Handle<v8::Object>::Cast(value))->toImpl<SVGTestInterface>() : 0;
+    return hasInstance(value, isolate) ? toImpl(v8::Handle<v8::Object>::Cast(value)) : 0;
 }
 
-void V8SVGTestInterface::refObject(ScriptWrappableBase* scriptWrappableBase)
+void V8SVGTestInterface::refObject(ScriptWrappable* scriptWrappable)
 {
-    scriptWrappableBase->toImpl<SVGTestInterface>()->ref();
+    scriptWrappable->toImpl<SVGTestInterface>()->ref();
 }
 
-void V8SVGTestInterface::derefObject(ScriptWrappableBase* scriptWrappableBase)
+void V8SVGTestInterface::derefObject(ScriptWrappable* scriptWrappable)
 {
-    scriptWrappableBase->toImpl<SVGTestInterface>()->deref();
+    scriptWrappable->toImpl<SVGTestInterface>()->deref();
 }
 
 template<>

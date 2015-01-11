@@ -108,7 +108,7 @@ void SpeechRecognition::didEndAudio()
 
 void SpeechRecognition::didReceiveResults(const HeapVector<Member<SpeechRecognitionResult> >& newFinalResults, const HeapVector<Member<SpeechRecognitionResult> >& currentInterimResults)
 {
-    unsigned long resultIndex = m_finalResults.size();
+    size_t resultIndex = m_finalResults.size();
 
     for (size_t i = 0; i < newFinalResults.size(); ++i)
         m_finalResults.append(newFinalResults[i]);
@@ -180,10 +180,10 @@ SpeechRecognition::SpeechRecognition(ExecutionContext* context)
 {
     Document* document = toDocument(executionContext());
 
-    Page* page = document->page();
-    ASSERT(page);
+    LocalFrame* frame = document->frame();
+    ASSERT(frame);
 
-    m_controller = SpeechRecognitionController::from(page);
+    m_controller = SpeechRecognitionController::from(*frame);
     ASSERT(m_controller);
 
     // FIXME: Need to hook up with Page to get notified when the visibility changes.

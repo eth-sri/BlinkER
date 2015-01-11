@@ -258,12 +258,18 @@ class Port(object):
             self._pretty_patch_available = self.check_pretty_patch(logging=False)
         return self._pretty_patch_available
 
+    def default_batch_size(self):
+        """Return the default batch size to use for this port."""
+        if self.get_option('enable_sanitizer'):
+            # ASAN/MSAN/TSAN use more memory than regular content_shell. Their
+            # memory usage may also grow over time, up to a certain point.
+            # Relaunching the driver periodically helps keep it under control.
+            return 40
+        # The default is infinte batch size.
+        return None
+
     def default_child_processes(self):
         """Return the number of drivers to use for this port."""
-        if self.get_option('enable_sanitizer'):
-            # ASAN/MSAN/TSAN are more cpu- and memory- intensive than regular
-            # content_shell, and so we need to run fewer of them in parallel.
-            return max(int(self._executive.cpu_count() * 0.75), 1)
         return self._executive.cpu_count()
 
     def default_max_locked_shards(self):

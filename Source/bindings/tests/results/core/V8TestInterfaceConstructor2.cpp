@@ -23,7 +23,7 @@
 
 namespace blink {
 
-const WrapperTypeInfo V8TestInterfaceConstructor2::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceConstructor2::domTemplate, V8TestInterfaceConstructor2::refObject, V8TestInterfaceConstructor2::derefObject, V8TestInterfaceConstructor2::trace, 0, 0, 0, V8TestInterfaceConstructor2::installConditionallyEnabledMethods, V8TestInterfaceConstructor2::installConditionallyEnabledProperties, 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::Independent, WrapperTypeInfo::RefCountedObject };
+const WrapperTypeInfo V8TestInterfaceConstructor2::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceConstructor2::domTemplate, V8TestInterfaceConstructor2::refObject, V8TestInterfaceConstructor2::derefObject, V8TestInterfaceConstructor2::trace, 0, 0, V8TestInterfaceConstructor2::installConditionallyEnabledMethods, V8TestInterfaceConstructor2::installConditionallyEnabledProperties, 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent, WrapperTypeInfo::RefCountedObject };
 
 // This static member must be declared by DEFINE_WRAPPERTYPEINFO in TestInterfaceConstructor2.h.
 // For details, see the comment of DEFINE_WRAPPERTYPEINFO in
@@ -40,23 +40,25 @@ static void constructor1(const v8::FunctionCallbackInfo<v8::Value>& info)
     }
     RefPtr<TestInterfaceConstructor2> impl = TestInterfaceConstructor2::create(stringArg);
     v8::Handle<v8::Object> wrapper = info.Holder();
-    impl->associateWithWrapper(&V8TestInterfaceConstructor2::wrapperTypeInfo, wrapper, info.GetIsolate());
+    impl->associateWithWrapper(info.GetIsolate(), &V8TestInterfaceConstructor2::wrapperTypeInfo, wrapper);
     v8SetReturnValue(info, wrapper);
 }
 
 static void constructor2(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
+    ExceptionState exceptionState(ExceptionState::ConstructionContext, "TestInterfaceConstructor2", info.Holder(), info.GetIsolate());
     Dictionary dictionaryArg;
     {
         if (!isUndefinedOrNull(info[0]) && !info[0]->IsObject()) {
-            V8ThrowException::throwTypeError(ExceptionMessages::failedToConstruct("TestInterfaceConstructor2", "parameter 1 ('dictionaryArg') is not an object."), info.GetIsolate());
+            exceptionState.throwTypeError("parameter 1 ('dictionaryArg') is not an object.");
+            exceptionState.throwIfNeeded();
             return;
         }
-        dictionaryArg = Dictionary(info[0], info.GetIsolate());
+        TONATIVE_VOID_EXCEPTIONSTATE_INTERNAL(dictionaryArg, Dictionary(info[0], info.GetIsolate(), exceptionState), exceptionState);
     }
     RefPtr<TestInterfaceConstructor2> impl = TestInterfaceConstructor2::create(dictionaryArg);
     v8::Handle<v8::Object> wrapper = info.Holder();
-    impl->associateWithWrapper(&V8TestInterfaceConstructor2::wrapperTypeInfo, wrapper, info.GetIsolate());
+    impl->associateWithWrapper(info.GetIsolate(), &V8TestInterfaceConstructor2::wrapperTypeInfo, wrapper);
     v8SetReturnValue(info, wrapper);
 }
 
@@ -69,7 +71,7 @@ static void constructor3(const v8::FunctionCallbackInfo<v8::Value>& info)
     }
     RefPtr<TestInterfaceConstructor2> impl = TestInterfaceConstructor2::create(stringSequenceSequenceArg);
     v8::Handle<v8::Object> wrapper = info.Holder();
-    impl->associateWithWrapper(&V8TestInterfaceConstructor2::wrapperTypeInfo, wrapper, info.GetIsolate());
+    impl->associateWithWrapper(info.GetIsolate(), &V8TestInterfaceConstructor2::wrapperTypeInfo, wrapper);
     v8SetReturnValue(info, wrapper);
 }
 
@@ -96,11 +98,11 @@ static void constructor4(const v8::FunctionCallbackInfo<v8::Value>& info)
             exceptionState.throwIfNeeded();
             return;
         }
-        defaultUndefinedOptionalDictionaryArg = Dictionary(info[4], info.GetIsolate());
+        TONATIVE_VOID_EXCEPTIONSTATE_INTERNAL(defaultUndefinedOptionalDictionaryArg, Dictionary(info[4], info.GetIsolate(), exceptionState), exceptionState);
         if (UNLIKELY(info.Length() <= 5)) {
             RefPtr<TestInterfaceConstructor2> impl = TestInterfaceConstructor2::create(testInterfaceEmptyArg, longArg, defaultUndefinedOptionalStringArg, defaultNullStringOptionalStringArg, defaultUndefinedOptionalDictionaryArg);
             v8::Handle<v8::Object> wrapper = info.Holder();
-            impl->associateWithWrapper(&V8TestInterfaceConstructor2::wrapperTypeInfo, wrapper, info.GetIsolate());
+            impl->associateWithWrapper(info.GetIsolate(), &V8TestInterfaceConstructor2::wrapperTypeInfo, wrapper);
             v8SetReturnValue(info, wrapper);
             return;
         }
@@ -108,7 +110,7 @@ static void constructor4(const v8::FunctionCallbackInfo<v8::Value>& info)
     }
     RefPtr<TestInterfaceConstructor2> impl = TestInterfaceConstructor2::create(testInterfaceEmptyArg, longArg, defaultUndefinedOptionalStringArg, defaultNullStringOptionalStringArg, defaultUndefinedOptionalDictionaryArg, optionalStringArg);
     v8::Handle<v8::Object> wrapper = info.Holder();
-    impl->associateWithWrapper(&V8TestInterfaceConstructor2::wrapperTypeInfo, wrapper, info.GetIsolate());
+    impl->associateWithWrapper(info.GetIsolate(), &V8TestInterfaceConstructor2::wrapperTypeInfo, wrapper);
     v8SetReturnValue(info, wrapper);
 }
 
@@ -175,7 +177,7 @@ void V8TestInterfaceConstructor2::constructorCallback(const v8::FunctionCallback
 {
     TRACE_EVENT_SCOPED_SAMPLING_STATE("blink", "DOMConstructor");
     if (!info.IsConstructCall()) {
-        V8ThrowException::throwTypeError(ExceptionMessages::constructorNotCallableAsFunction("TestInterfaceConstructor2"), info.GetIsolate());
+        V8ThrowException::throwTypeError(info.GetIsolate(), ExceptionMessages::constructorNotCallableAsFunction("TestInterfaceConstructor2"));
         return;
     }
 
@@ -225,17 +227,17 @@ v8::Handle<v8::Object> V8TestInterfaceConstructor2::findInstanceInPrototypeChain
 
 TestInterfaceConstructor2* V8TestInterfaceConstructor2::toImplWithTypeCheck(v8::Isolate* isolate, v8::Handle<v8::Value> value)
 {
-    return hasInstance(value, isolate) ? blink::toScriptWrappableBase(v8::Handle<v8::Object>::Cast(value))->toImpl<TestInterfaceConstructor2>() : 0;
+    return hasInstance(value, isolate) ? toImpl(v8::Handle<v8::Object>::Cast(value)) : 0;
 }
 
-void V8TestInterfaceConstructor2::refObject(ScriptWrappableBase* scriptWrappableBase)
+void V8TestInterfaceConstructor2::refObject(ScriptWrappable* scriptWrappable)
 {
-    scriptWrappableBase->toImpl<TestInterfaceConstructor2>()->ref();
+    scriptWrappable->toImpl<TestInterfaceConstructor2>()->ref();
 }
 
-void V8TestInterfaceConstructor2::derefObject(ScriptWrappableBase* scriptWrappableBase)
+void V8TestInterfaceConstructor2::derefObject(ScriptWrappable* scriptWrappable)
 {
-    scriptWrappableBase->toImpl<TestInterfaceConstructor2>()->deref();
+    scriptWrappable->toImpl<TestInterfaceConstructor2>()->deref();
 }
 
 template<>

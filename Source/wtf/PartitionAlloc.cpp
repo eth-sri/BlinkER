@@ -114,6 +114,7 @@ static void parititonAllocBaseInit(PartitionRootBase* root)
     root->initialized = true;
     root->totalSizeOfCommittedPages = 0;
     root->totalSizeOfSuperPages = 0;
+    root->totalSizeOfDirectMappedPages = 0;
     root->nextSuperPage = 0;
     root->nextPartitionPage = 0;
     root->nextPartitionPageEnd = 0;
@@ -296,15 +297,41 @@ bool partitionAllocGenericShutdown(PartitionRootGeneric* root)
     return noLeaks;
 }
 
-static NEVER_INLINE void partitionOutOfMemory()
+#if !CPU(64BIT)
+static NEVER_INLINE void partitionOutOfMemoryWithLotsOfUncommitedPages()
 {
+#if OS(WIN)
+    // Crash at a special address (0x9b)
+    // to be easily distinguished on crash reports.
+    // This is because crash stack traces are inaccurate on Windows and
+    // partitionOutOfMemoryWithLotsOfUncommitedPages might be not included
+    // in the stack traces.
+    reinterpret_cast<void(*)()>(0x9b)();
+#endif
+
+    // On non-Windows environment, IMMEDIATE_CRASH is sufficient
+    // because partitionOutOfMemoryWithLotsOfUncommitedPages will appear
+    // in crash stack traces.
+    IMMEDIATE_CRASH();
+}
+#endif
+
+static NEVER_INLINE void partitionOutOfMemory(const PartitionRootBase* root)
+{
+#if !CPU(64BIT)
+    // Check whether this OOM is due to a lot of super pages that are allocated
+    // but not committed, probably due to http://crbug.com/421387.
+    if (root->totalSizeOfSuperPages + root->totalSizeOfDirectMappedPages - root->totalSizeOfCommittedPages > kReasonableSizeOfUnusedPages) {
+        partitionOutOfMemoryWithLotsOfUncommitedPages();
+    }
+#endif
     IMMEDIATE_CRASH();
 }
 
 static ALWAYS_INLINE void partitionDecommitSystemPages(PartitionRootBase* root, void* addr, size_t len)
 {
     decommitSystemPages(addr, len);
-    ASSERT(root->totalSizeOfCommittedPages > len);
+    ASSERT(root->totalSizeOfCommittedPages >= len);
     root->totalSizeOfCommittedPages -= len;
 }
 
@@ -312,6 +339,7 @@ static ALWAYS_INLINE void partitionRecommitSystemPages(PartitionRootBase* root, 
 {
     recommitSystemPages(addr, len);
     root->totalSizeOfCommittedPages += len;
+    ASSERT(root->totalSizeOfCommittedPages <= root->totalSizeOfSuperPages + root->totalSizeOfDirectMappedPages);
 }
 
 static ALWAYS_INLINE void* partitionAllocPartitionPages(PartitionRootBase* root, int flags, uint16_t numPartitionPages)
@@ -320,22 +348,27 @@ static ALWAYS_INLINE void* partitionAllocPartitionPages(PartitionRootBase* root,
     ASSERT(!(reinterpret_cast<uintptr_t>(root->nextPartitionPageEnd) % kPartitionPageSize));
     RELEASE_ASSERT(numPartitionPages <= kNumPartitionPagesPerSuperPage);
     size_t totalSize = kPartitionPageSize * numPartitionPages;
-    root->totalSizeOfCommittedPages += totalSize;
     size_t numPartitionPagesLeft = (root->nextPartitionPageEnd - root->nextPartitionPage) >> kPartitionPageShift;
     if (LIKELY(numPartitionPagesLeft >= numPartitionPages)) {
         // In this case, we can still hand out pages from the current super page
         // allocation.
         char* ret = root->nextPartitionPage;
         root->nextPartitionPage += totalSize;
+        root->totalSizeOfCommittedPages += totalSize;
+        ASSERT(root->totalSizeOfCommittedPages <= root->totalSizeOfSuperPages + root->totalSizeOfDirectMappedPages);
         return ret;
     }
 
     // Need a new super page.
-    root->totalSizeOfSuperPages += kSuperPageSize;
     char* requestedAddress = root->nextSuperPage;
     char* superPage = reinterpret_cast<char*>(allocPages(requestedAddress, kSuperPageSize, kSuperPageSize));
     if (UNLIKELY(!superPage))
         return 0;
+
+    root->totalSizeOfSuperPages += kSuperPageSize;
+    root->totalSizeOfCommittedPages += totalSize;
+    ASSERT(root->totalSizeOfCommittedPages <= root->totalSizeOfSuperPages + root->totalSizeOfDirectMappedPages);
+
     root->nextSuperPage = superPage + kSuperPageSize;
     char* ret = superPage + kPartitionPageSize;
     root->nextPartitionPage = ret + totalSize;
@@ -565,7 +598,10 @@ static ALWAYS_INLINE void* partitionDirectMap(PartitionRootBase* root, int flags
     mapSize += kPageAllocationGranularityOffsetMask;
     mapSize &= kPageAllocationGranularityBaseMask;
 
-    root->totalSizeOfCommittedPages += size + kSystemPageSize;
+    size_t committedPageSize = size + kSystemPageSize;
+    root->totalSizeOfCommittedPages += committedPageSize;
+    root->totalSizeOfDirectMappedPages += committedPageSize;
+    ASSERT(root->totalSizeOfCommittedPages <= root->totalSizeOfSuperPages + root->totalSizeOfDirectMappedPages);
 
     // TODO: we may want to let the operating system place these allocations
     // where it pleases. On 32-bit, this might limit address space
@@ -621,7 +657,11 @@ static ALWAYS_INLINE void partitionDirectUnmap(PartitionPage* page)
     unmapSize += kPartitionPageSize + kSystemPageSize;
 
     PartitionRootBase* root = partitionPageToRoot(page);
-    root->totalSizeOfCommittedPages -= page->bucket->slotSize + kSystemPageSize;
+    size_t uncommittedPageSize = page->bucket->slotSize + kSystemPageSize;
+    ASSERT(root->totalSizeOfCommittedPages >= uncommittedPageSize);
+    root->totalSizeOfCommittedPages -= uncommittedPageSize;
+    ASSERT(root->totalSizeOfDirectMappedPages >= uncommittedPageSize);
+    root->totalSizeOfDirectMappedPages -= uncommittedPageSize;
 
     ASSERT(!(unmapSize & kPageAllocationGranularityOffsetMask));
 
@@ -699,9 +739,14 @@ void* partitionAllocSlowPath(PartitionRootBase* root, int flags, size_t size, Pa
     return partitionPageAllocAndFillFreelist(newPage);
 
 partitionAllocSlowPathFailed:
-    if (returnNull)
+    if (returnNull) {
+        // If we get here, we will set the active page to null, which is an
+        // invalid state. To support continued use of this bucket, we need to
+        // restore a valid state, by setting the active page to the seed page.
+        bucket->activePagesHead = &PartitionRootGeneric::gSeedPage;
         return nullptr;
-    partitionOutOfMemory();
+    }
+    partitionOutOfMemory(root);
     return nullptr;
 }
 
@@ -763,7 +808,6 @@ void partitionFreeSlowPath(PartitionPage* page)
 {
     PartitionBucket* bucket = page->bucket;
     ASSERT(page != &PartitionRootGeneric::gSeedPage);
-    ASSERT(bucket->activePagesHead != &PartitionRootGeneric::gSeedPage);
     if (LIKELY(page->numAllocatedSlots == 0)) {
         // Page became fully unused.
         if (UNLIKELY(partitionBucketIsDirectMapped(bucket))) {
@@ -801,7 +845,10 @@ void partitionFreeSlowPath(PartitionPage* page)
         // non-full page list. Also make it the current page to increase the
         // chances of it being filled up again. The old current page will be
         // the next page.
-        page->nextPage = bucket->activePagesHead;
+        if (UNLIKELY(bucket->activePagesHead == &PartitionRootGeneric::gSeedPage))
+            page->nextPage = 0;
+        else
+            page->nextPage = bucket->activePagesHead;
         bucket->activePagesHead = page;
         --bucket->numFullPages;
         // Special case: for a partition page with just a single slot, it may

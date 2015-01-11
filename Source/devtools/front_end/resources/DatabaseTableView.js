@@ -37,7 +37,7 @@ WebInspector.DatabaseTableView = function(database, tableName)
     this.element.classList.add("storage-view");
     this.element.classList.add("table");
 
-    this.refreshButton = new WebInspector.StatusBarButton(WebInspector.UIString("Refresh"), "refresh-storage-status-bar-item");
+    this.refreshButton = new WebInspector.StatusBarButton(WebInspector.UIString("Refresh"), "refresh-status-bar-item");
     this.refreshButton.addEventListener("click", this._refreshButtonClicked, this);
 }
 
@@ -47,9 +47,12 @@ WebInspector.DatabaseTableView.prototype = {
         this.update();
     },
 
-    get statusBarItems()
+    /**
+     * @return {!Array.<!WebInspector.StatusBarItem>}
+     */
+    statusBarItems: function()
     {
-        return [this.refreshButton.element];
+        return [this.refreshButton];
     },
 
     /**

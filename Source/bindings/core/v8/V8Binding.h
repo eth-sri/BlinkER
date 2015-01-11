@@ -50,11 +50,12 @@
 
 namespace blink {
 
-class LocalDOMWindow;
+class DOMWindow;
 class Document;
 class EventListener;
 class ExecutionContext;
 class ExceptionState;
+class LocalDOMWindow;
 class LocalFrame;
 class NodeFilter;
 class XPathNSResolver;
@@ -62,8 +63,6 @@ class XPathNSResolver;
 namespace TraceEvent {
 class ConvertableToTraceFormat;
 }
-
-const int kMaxRecursionDepth = 22;
 
 // Helpers for throwing JavaScript TypeErrors for arity mismatches.
 void setArityTypeError(ExceptionState&, const char* valid, unsigned provided);
@@ -182,7 +181,7 @@ inline void v8SetReturnValue(const CallbackInfo& callbackInfo, ScriptWrappable* 
         v8SetReturnValueNull(callbackInfo);
         return;
     }
-    if (DOMDataStore::setReturnValueNonTemplate(callbackInfo.GetReturnValue(), impl))
+    if (DOMDataStore::setReturnValue(callbackInfo.GetReturnValue(), impl))
         return;
     v8::Handle<v8::Object> wrapper = impl->wrap(callbackInfo.Holder(), callbackInfo.GetIsolate());
     v8SetReturnValue(callbackInfo, wrapper);
@@ -195,7 +194,7 @@ inline void v8SetReturnValue(const CallbackInfo& callbackInfo, Node* impl)
         v8SetReturnValueNull(callbackInfo);
         return;
     }
-    if (DOMDataStore::setReturnValueNonTemplate(callbackInfo.GetReturnValue(), impl))
+    if (DOMDataStore::setReturnValue(callbackInfo.GetReturnValue(), impl))
         return;
     v8::Handle<v8::Object> wrapper = ScriptWrappable::fromNode(impl)->wrap(callbackInfo.Holder(), callbackInfo.GetIsolate());
     v8SetReturnValue(callbackInfo, wrapper);
@@ -221,10 +220,33 @@ inline void v8SetReturnValueForMainWorld(const CallbackInfo& callbackInfo, Scrip
         v8SetReturnValueNull(callbackInfo);
         return;
     }
-    if (DOMDataStore::setReturnValueForMainWorldNonTemplate(callbackInfo.GetReturnValue(), impl))
+    if (DOMDataStore::setReturnValueForMainWorld(callbackInfo.GetReturnValue(), impl))
         return;
     v8::Handle<v8::Object> wrapper = impl->wrap(callbackInfo.Holder(), callbackInfo.GetIsolate());
     v8SetReturnValue(callbackInfo, wrapper);
+}
+
+template<typename CallbackInfo>
+inline void v8SetReturnValueForMainWorld(const CallbackInfo& callbackInfo, Node* impl)
+{
+    // Since EventTarget has [Custom=ToV8] and V8EventTarget.h defines its own
+    // v8SetReturnValue family, which are slow, we need to override them with
+    // optimized versions for Node and its subclasses. Without this overload,
+    // v8SetReturnValueForMainWorld for Node would be very slow.
+    //
+    // class hierarchy:
+    //     ScriptWrappable <-- EventTarget <--+-- Node <-- ...
+    //                                        +-- Window
+    // overloads:
+    //     v8SetReturnValueForMainWorld(ScriptWrappable*)
+    //         Optimized and very fast.
+    //     v8SetReturnValueForMainWorld(EventTarget*)
+    //         Uses custom toV8 function and slow.
+    //     v8SetReturnValueForMainWorld(Node*)
+    //         Optimized and very fast.
+    //     v8SetReturnValueForMainWorld(Window*)
+    //         Uses custom toV8 function and slow.
+    v8SetReturnValueForMainWorld(callbackInfo, ScriptWrappable::fromNode(impl));
 }
 
 template<typename CallbackInfo, typename T>
@@ -246,7 +268,7 @@ inline void v8SetReturnValueFast(const CallbackInfo& callbackInfo, ScriptWrappab
         v8SetReturnValueNull(callbackInfo);
         return;
     }
-    if (DOMDataStore::setReturnValueFastNonTemplate(callbackInfo.GetReturnValue(), impl, callbackInfo.Holder(), wrappable))
+    if (DOMDataStore::setReturnValueFast(callbackInfo.GetReturnValue(), impl, callbackInfo.Holder(), wrappable))
         return;
     v8::Handle<v8::Object> wrapper = impl->wrap(callbackInfo.Holder(), callbackInfo.GetIsolate());
     v8SetReturnValue(callbackInfo, wrapper);
@@ -259,17 +281,10 @@ inline void v8SetReturnValueFast(const CallbackInfo& callbackInfo, Node* impl, c
         v8SetReturnValueNull(callbackInfo);
         return;
     }
-    if (DOMDataStore::setReturnValueFastNonTemplate(callbackInfo.GetReturnValue(), impl, callbackInfo.Holder(), wrappable))
+    if (DOMDataStore::setReturnValueFast(callbackInfo.GetReturnValue(), impl, callbackInfo.Holder(), wrappable))
         return;
     v8::Handle<v8::Object> wrapper = ScriptWrappable::fromNode(impl)->wrap(callbackInfo.Holder(), callbackInfo.GetIsolate());
     v8SetReturnValue(callbackInfo, wrapper);
-}
-
-template<typename CallbackInfo>
-inline void v8SetReturnValueFast(const CallbackInfo& callbackInfo, ScriptWrappable* impl, const ScriptWrappableBase*)
-{
-    // If the third arg is not ScriptWrappable, there is no fast path.
-    v8SetReturnValue(callbackInfo, impl);
 }
 
 template<typename CallbackInfo, typename T, typename Wrappable>
@@ -353,7 +368,7 @@ inline v8::Handle<v8::Value> toV8(ScriptWrappable* impl, v8::Handle<v8::Object> 
 {
     if (UNLIKELY(!impl))
         return v8::Null(isolate);
-    v8::Handle<v8::Value> wrapper = DOMDataStore::getWrapperNonTemplate(impl, isolate);
+    v8::Handle<v8::Value> wrapper = DOMDataStore::getWrapper(impl, isolate);
     if (!wrapper.IsEmpty())
         return wrapper;
 
@@ -364,17 +379,11 @@ inline v8::Handle<v8::Value> toV8(Node* impl, v8::Handle<v8::Object> creationCon
 {
     if (UNLIKELY(!impl))
         return v8::Null(isolate);
-    v8::Handle<v8::Value> wrapper = DOMDataStore::getWrapperNonTemplate(impl, isolate);
+    v8::Handle<v8::Value> wrapper = DOMDataStore::getWrapper(impl, isolate);
     if (!wrapper.IsEmpty())
         return wrapper;
 
     return ScriptWrappable::fromNode(impl)->wrap(creationContext, isolate);
-}
-
-template<typename T>
-inline v8::Handle<v8::Value> toV8(RefPtr<T>& impl, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
-{
-    return toV8(impl.get(), creationContext, isolate);
 }
 
 template<typename T>
@@ -957,15 +966,16 @@ Vector<T> toImplArray(v8::Handle<v8::Value> value, int argumentIndex, v8::Isolat
 template <class T>
 Vector<T> toImplArguments(const v8::FunctionCallbackInfo<v8::Value>& info, int startIndex, ExceptionState& exceptionState)
 {
-    ASSERT(startIndex <= info.Length());
     Vector<T> result;
     typedef NativeValueTraits<T> TraitsType;
     int length = info.Length();
-    result.reserveInitialCapacity(length);
-    for (int i = startIndex; i < length; ++i) {
-        result.uncheckedAppend(TraitsType::nativeValue(info[i], info.GetIsolate(), exceptionState));
-        if (exceptionState.hadException())
-            return Vector<T>();
+    if (startIndex < length) {
+        result.reserveInitialCapacity(length - startIndex);
+        for (int i = startIndex; i < length; ++i) {
+            result.uncheckedAppend(TraitsType::nativeValue(info[i], info.GetIsolate(), exceptionState));
+            if (exceptionState.hadException())
+                return Vector<T>();
+        }
     }
     return result;
 }
@@ -1083,8 +1093,8 @@ struct NativeValueTraits<Vector<T> > {
 v8::Isolate* toIsolate(ExecutionContext*);
 v8::Isolate* toIsolate(LocalFrame*);
 
-LocalDOMWindow* toDOMWindow(v8::Handle<v8::Value>, v8::Isolate*);
-LocalDOMWindow* toDOMWindow(v8::Handle<v8::Context>);
+DOMWindow* toDOMWindow(v8::Isolate*, v8::Handle<v8::Value>);
+DOMWindow* toDOMWindow(v8::Handle<v8::Context>);
 LocalDOMWindow* enteredDOMWindow(v8::Isolate*);
 LocalDOMWindow* currentDOMWindow(v8::Isolate*);
 LocalDOMWindow* callingDOMWindow(v8::Isolate*);
@@ -1123,7 +1133,7 @@ inline v8::Local<v8::Function> createClosure(v8::FunctionCallback function, v8::
 // FIXME: This will be soon embedded in the generated code.
 template<class Collection> static void indexedPropertyEnumerator(const v8::PropertyCallbackInfo<v8::Array>& info)
 {
-    Collection* collection = toScriptWrappableBase(info.Holder())->toImpl<Collection>();
+    Collection* collection = toScriptWrappable(info.Holder())->toImpl<Collection>();
     int length = collection->length();
     v8::Handle<v8::Array> properties = v8::Array::New(info.GetIsolate(), length);
     for (int i = 0; i < length; ++i) {
@@ -1200,17 +1210,6 @@ public:
 private:
     v8::TryCatch& m_block;
 };
-
-// Returns an object representing {done: true, value: undefined}.
-v8::Local<v8::Value> v8DoneIteratorResult(v8::Isolate*);
-
-// Returns an object representing {done: false, value: |value|}.
-v8::Local<v8::Value> v8IteratorResult(v8::Isolate*, v8::Handle<v8::Value>);
-template <typename T>
-v8::Local<v8::Value> v8IteratorResult(ScriptState* scriptState, const T& value)
-{
-    return v8IteratorResult(scriptState->isolate(), V8ValueTraits<T>::toV8Value(value, scriptState->context()->Global(), scriptState->isolate()));
-}
 
 typedef void (*InstallTemplateFunction)(v8::Handle<v8::FunctionTemplate>, v8::Isolate*);
 

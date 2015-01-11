@@ -205,10 +205,10 @@ static String joinStrings(const Vector<String>& strings, const char* separator)
     return builder.toString();
 }
 
-static unsigned long saturateAdd(unsigned long a, unsigned long b)
+static unsigned saturateAdd(unsigned a, unsigned long b)
 {
-    if (std::numeric_limits<unsigned long>::max() - a < b)
-        return std::numeric_limits<unsigned long>::max();
+    if (std::numeric_limits<unsigned>::max() - a < b)
+        return std::numeric_limits<unsigned>::max();
     return a + b;
 }
 
@@ -360,7 +360,7 @@ void DOMWebSocket::updateBufferedAmountAfterClose(unsigned long payloadSize)
 void DOMWebSocket::reflectBufferedAmountConsumption(Timer<DOMWebSocket>*)
 {
     ASSERT(m_bufferedAmount >= m_consumedBufferedAmount);
-    WTF_LOG(Network, "WebSocket %p reflectBufferedAmountConsumption() %lu => %lu", this, m_bufferedAmount, m_bufferedAmount - m_consumedBufferedAmount);
+    WTF_LOG(Network, "WebSocket %p reflectBufferedAmountConsumption() %u => %u", this, m_bufferedAmount, m_bufferedAmount - m_consumedBufferedAmount);
 
     m_bufferedAmount -= m_consumedBufferedAmount;
     m_consumedBufferedAmount = 0;
@@ -406,7 +406,7 @@ void DOMWebSocket::send(DOMArrayBuffer* binaryData, ExceptionState& exceptionSta
     Platform::current()->histogramEnumeration("WebCore.WebSocket.SendType", WebSocketSendTypeArrayBuffer, WebSocketSendTypeMax);
     ASSERT(m_channel);
     m_bufferedAmount += binaryData->byteLength();
-    m_channel->send(*binaryData->buffer(), 0, binaryData->byteLength());
+    m_channel->send(*binaryData, 0, binaryData->byteLength());
 }
 
 void DOMWebSocket::send(DOMArrayBufferView* arrayBufferView, ExceptionState& exceptionState)
@@ -424,8 +424,7 @@ void DOMWebSocket::send(DOMArrayBufferView* arrayBufferView, ExceptionState& exc
     Platform::current()->histogramEnumeration("WebCore.WebSocket.SendType", WebSocketSendTypeArrayBufferView, WebSocketSendTypeMax);
     ASSERT(m_channel);
     m_bufferedAmount += arrayBufferView->byteLength();
-    RefPtr<ArrayBuffer> arrayBuffer(arrayBufferView->view()->buffer());
-    m_channel->send(*arrayBuffer, arrayBufferView->byteOffset(), arrayBufferView->byteLength());
+    m_channel->send(*arrayBufferView->buffer(), arrayBufferView->byteOffset(), arrayBufferView->byteLength());
 }
 
 void DOMWebSocket::send(Blob* binaryData, ExceptionState& exceptionState)
@@ -500,7 +499,7 @@ DOMWebSocket::State DOMWebSocket::readyState() const
     return m_state;
 }
 
-unsigned long DOMWebSocket::bufferedAmount() const
+unsigned DOMWebSocket::bufferedAmount() const
 {
     return saturateAdd(m_bufferedAmount, m_bufferedAmountAfterClose);
 }
@@ -623,12 +622,6 @@ void DOMWebSocket::didReceiveBinaryMessage(PassOwnPtr<Vector<char> > binaryData)
 
     case BinaryTypeArrayBuffer:
         RefPtr<DOMArrayBuffer> arrayBuffer = DOMArrayBuffer::create(binaryData->data(), binaryData->size());
-        if (!arrayBuffer) {
-            // Failed to allocate an ArrayBuffer. We need to crash the renderer
-            // since there's no way defined in the spec to tell this to the
-            // user.
-            CRASH();
-        }
         m_eventQueue->dispatch(MessageEvent::create(arrayBuffer.release(), SecurityOrigin::create(m_url)->toString()));
         break;
     }
@@ -641,10 +634,10 @@ void DOMWebSocket::didError()
     m_eventQueue->dispatch(Event::create(EventTypeNames::error));
 }
 
-void DOMWebSocket::didConsumeBufferedAmount(unsigned long consumed)
+void DOMWebSocket::didConsumeBufferedAmount(unsigned consumed)
 {
     ASSERT(m_bufferedAmount >= consumed);
-    WTF_LOG(Network, "WebSocket %p didConsumeBufferedAmount(%lu)", this, consumed);
+    WTF_LOG(Network, "WebSocket %p didConsumeBufferedAmount(%u)", this, consumed);
     if (m_state == CLOSED)
         return;
     m_consumedBufferedAmount += consumed;

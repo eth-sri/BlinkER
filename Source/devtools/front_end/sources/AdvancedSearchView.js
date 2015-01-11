@@ -43,7 +43,7 @@ WebInspector.AdvancedSearchView = function()
 
     this._searchStatusBarElement = this.element.createChild("div", "search-status-bar-summary");
     this._searchMessageElement = this._searchStatusBarElement.createChild("div", "search-message");
-    this._searchProgressPlaceholderElement = this._searchStatusBarElement.createChild("div");
+    this._searchProgressPlaceholderElement = this._searchStatusBarElement.createChild("div", "flex-centered");
     this._searchStatusBarElement.createChild("div", "search-message-spacer");
     this._searchResultsMessageElement = this._searchStatusBarElement.createChild("div", "search-message");
 
@@ -52,7 +52,7 @@ WebInspector.AdvancedSearchView = function()
     WebInspector.AdvancedSearchView._instance = this;
     /** @type {!WebInspector.SearchScope} */
     this._searchScope = new WebInspector.SourcesSearchScope();
-    if (WebInspector.AdvancedSearchView._pendingQuery) {
+    if (WebInspector.AdvancedSearchView._pendingQuery !== undefined) {
         this._toggle(WebInspector.AdvancedSearchView._pendingQuery);
         delete WebInspector.AdvancedSearchView._pendingQuery;
     }

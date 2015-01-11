@@ -33,6 +33,7 @@
 #define ChromeClientImpl_h
 
 #include "core/page/ChromeClient.h"
+#include "core/page/WindowFeatures.h"
 #include "modules/navigatorcontentutils/NavigatorContentUtilsClient.h"
 #include "platform/PopupMenu.h"
 #include "platform/weborigin/KURL.h"
@@ -125,7 +126,6 @@ public:
     virtual bool paintCustomOverhangArea(GraphicsContext*, const IntRect&, const IntRect&, const IntRect&) override;
     virtual PassOwnPtrWillBeRawPtr<ColorChooser> createColorChooser(LocalFrame*, ColorChooserClient*, const Color&) override;
     virtual PassRefPtr<DateTimeChooser> openDateTimeChooser(DateTimeChooserClient*, const DateTimeChooserParameters&) override;
-    virtual void openTextDataListChooser(HTMLInputElement&) override;
     virtual void runOpenPanel(LocalFrame*, PassRefPtr<FileChooser>) override;
     virtual void enumerateChosenDirectory(FileChooser*) override;
     virtual void setCursor(const Cursor&) override;
@@ -164,10 +164,13 @@ public:
     virtual bool requestPointerLock() override;
     virtual void requestPointerUnlock() override;
 
-    virtual void didAssociateFormControls(const WillBeHeapVector<RefPtrWillBeMember<Element> >&) override;
+    // AutofillClient pass throughs:
+    virtual void didAssociateFormControls(const WillBeHeapVector<RefPtrWillBeMember<Element> >&, LocalFrame*) override;
+    virtual void handleKeyboardEventOnTextField(HTMLInputElement&, KeyboardEvent&) override;
     virtual void didChangeValueInTextField(HTMLFormControlElement&) override;
     virtual void didEndEditingOnTextField(HTMLInputElement&) override;
-    virtual void handleKeyboardEventOnTextField(HTMLInputElement&, KeyboardEvent&) override;
+    virtual void openTextDataListChooser(HTMLInputElement&) override;
+    virtual void textFieldDataListChanged(HTMLFormControlElement&) override;
 
     virtual void didCancelCompositionOnSelectionChange() override;
     virtual void willSetInputMethodState() override;
@@ -177,15 +180,11 @@ public:
 private:
     virtual bool isChromeClientImpl() const override { return true; }
 
-    WebNavigationPolicy getNavigationPolicy();
+    WebNavigationPolicy getNavigationPolicy(const WindowFeatures&);
     void setCursor(const WebCursorInfo&);
 
     WebViewImpl* m_webView;  // weak pointer
-    bool m_toolbarsVisible;
-    bool m_statusbarVisible;
-    bool m_scrollbarsVisible;
-    bool m_menubarVisible;
-    bool m_resizable;
+    WindowFeatures m_windowFeatures;
 
     PagePopupDriver* m_pagePopupDriver;
 };

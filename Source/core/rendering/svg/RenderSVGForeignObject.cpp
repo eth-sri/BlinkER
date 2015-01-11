@@ -48,7 +48,7 @@ bool RenderSVGForeignObject::isChildAllowed(RenderObject* child, RenderStyle* st
     return !child->isSVG() || child->isSVGRoot();
 }
 
-void RenderSVGForeignObject::paint(PaintInfo& paintInfo, const LayoutPoint&)
+void RenderSVGForeignObject::paint(const PaintInfo& paintInfo, const LayoutPoint&)
 {
     SVGForeignObjectPainter(*this).paint(paintInfo);
 }
@@ -84,7 +84,7 @@ void RenderSVGForeignObject::layout()
 
     bool updateCachedBoundariesInParents = false;
     if (m_needsTransformUpdate) {
-        m_localTransform = foreign->animatedLocalTransform();
+        m_localTransform = foreign->calculateAnimatedLocalTransform();
         m_needsTransformUpdate = false;
         updateCachedBoundariesInParents = true;
     }
@@ -116,14 +116,6 @@ void RenderSVGForeignObject::layout()
     // Invalidate all resources of this client if our layout changed.
     if (layoutChanged)
         SVGResourcesCache::clientLayoutChanged(this);
-}
-
-void RenderSVGForeignObject::mapRectToPaintInvalidationBacking(const RenderLayerModelObject* paintInvalidationContainer, LayoutRect& rect, const PaintInvalidationState* paintInvalidationState) const
-{
-    FloatRect r(rect);
-    r.inflate(style()->outlineWidth());
-    SVGRenderSupport::computeFloatRectForPaintInvalidation(this, paintInvalidationContainer, r, paintInvalidationState);
-    rect = enclosingLayoutRect(r);
 }
 
 bool RenderSVGForeignObject::nodeAtFloatPoint(const HitTestRequest& request, HitTestResult& result, const FloatPoint& pointInParent, HitTestAction hitTestAction)

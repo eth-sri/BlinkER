@@ -105,7 +105,7 @@ WebInspector.ScriptFormatter.prototype = {
         const method = "format";
         var parameters = { mimeType: mimeType, content: content, indentString: WebInspector.settings.textEditorIndent.get() };
         this._tasks.push({ data: parameters, callback: callback });
-        this._worker.postMessage({ method: method, params: parameters });
+        this._worker().postMessage({ method: method, params: parameters });
     },
 
     _didFormatContent: function(event)
@@ -119,12 +119,12 @@ WebInspector.ScriptFormatter.prototype = {
     },
 
     /**
-     * @return {!Worker}
+     * @return {!WorkerRuntime.Worker}
      */
-    get _worker()
+    _worker: function()
     {
         if (!this._cachedWorker) {
-            this._cachedWorker = Runtime.startWorker("script_formatter_worker");
+            this._cachedWorker = new WorkerRuntime.Worker("script_formatter_worker");
             this._cachedWorker.onmessage = /** @type {function(this:Worker)} */ (this._didFormatContent.bind(this));
         }
         return this._cachedWorker;
@@ -153,13 +153,9 @@ WebInspector.IdentityFormatter.prototype = {
 }
 
 /**
- * @constructor
+ * @typedef {{original: !Array.<number>, formatted: !Array.<number>}}
  */
-WebInspector.FormatterMappingPayload = function()
-{
-    this.original = [];
-    this.formatted = [];
-}
+WebInspector.FormatterMappingPayload;
 
 /**
  * @interface

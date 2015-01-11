@@ -123,7 +123,7 @@ private:
     PassRefPtrWillBeRawPtr<CSSValue> parseAnimationDuration();
     PassRefPtrWillBeRawPtr<CSSValue> parseAnimationFillMode();
     PassRefPtrWillBeRawPtr<CSSValue> parseAnimationIterationCount();
-    PassRefPtrWillBeRawPtr<CSSValue> parseAnimationName();
+    PassRefPtrWillBeRawPtr<CSSValue> parseAnimationName(bool allowQuotedName);
     PassRefPtrWillBeRawPtr<CSSValue> parseAnimationPlayState();
     PassRefPtrWillBeRawPtr<CSSValue> parseAnimationProperty();
     PassRefPtrWillBeRawPtr<CSSValue> parseAnimationTimingFunction();
@@ -237,6 +237,7 @@ private:
     bool parseTextEmphasisStyle(bool important);
 
     PassRefPtrWillBeRawPtr<CSSValue> parseTouchAction();
+    PassRefPtrWillBeRawPtr<CSSValue> parseScrollBlocksOn();
 
     void addTextDecorationProperty(CSSPropertyID, PassRefPtrWillBeRawPtr<CSSValue>, bool important);
     bool parseTextDecoration(CSSPropertyID propId, bool important);

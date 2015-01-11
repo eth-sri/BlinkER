@@ -155,7 +155,6 @@
     [TypeChecking=Interface] boolean isPageBoxVisible(Document document, long pageNumber);
 
     readonly attribute InternalSettings settings;
-    readonly attribute InternalProfilers profilers;
     readonly attribute InternalRuntimeFlags runtimeFlags;
     readonly attribute unsigned long workerThreadCount;
 
@@ -203,6 +202,7 @@
     void mediaPlayerPlayingRemotelyChanged(HTMLMediaElement mediaElement, boolean remote);
 
     void registerURLSchemeAsBypassingContentSecurityPolicy(DOMString scheme);
+    void registerURLSchemeAsBypassingContentSecurityPolicy(DOMString scheme, sequence<DOMString> policyAreas);
     void removeURLSchemeRegisteredAsBypassingContentSecurityPolicy(DOMString scheme);
 
     TypeConversions typeConversions();
@@ -282,11 +282,15 @@
     // This function is for testing HitRegions on Canvas2D.
     unsigned long countHitRegions(CanvasRenderingContext2D context);
 
+    [TypeChecking=Interface] ClientRect boundsInRootViewSpace(Element element);
     DOMString serializeNavigationMarkup();
+    DOMString[] getTransitionElementIds();
+    ClientRectList getTransitionElementRects();
     void hideAllTransitionElements();
+    void showAllTransitionElements();
 
     [RaisesException, TypeChecking=Interface] void forcePluginPlaceholder(HTMLElement plugin, DocumentFragment fragment);
-    [RaisesException, TypeChecking=Interface] void forcePluginPlaceholder(HTMLElement plugin, Dictionary options);
+    [RaisesException, TypeChecking=Interface] void forcePluginPlaceholder(HTMLElement plugin, PluginPlaceholderOptions options);
 
     DictionaryTest dictionaryTest();
     UnionTypesTest unionTypesTest();

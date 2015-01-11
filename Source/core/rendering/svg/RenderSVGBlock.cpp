@@ -20,11 +20,11 @@
  */
 
 #include "config.h"
-
 #include "core/rendering/svg/RenderSVGBlock.h"
 
 #include "core/rendering/RenderView.h"
 #include "core/rendering/style/ShadowList.h"
+#include "core/rendering/svg/RenderSVGRoot.h"
 #include "core/rendering/svg/SVGRenderSupport.h"
 #include "core/rendering/svg/SVGResourcesCache.h"
 #include "core/svg/SVGElement.h"
@@ -101,9 +101,12 @@ LayoutRect RenderSVGBlock::clippedOverflowRectForPaintInvalidation(const RenderL
     return SVGRenderSupport::clippedOverflowRectForPaintInvalidation(this, paintInvalidationContainer, paintInvalidationState);
 }
 
-void RenderSVGBlock::computeFloatRectForPaintInvalidation(const RenderLayerModelObject* paintInvalidationContainer, FloatRect& paintInvalidationRect, const PaintInvalidationState* paintInvalidationState) const
+void RenderSVGBlock::mapRectToPaintInvalidationBacking(const RenderLayerModelObject* paintInvalidationContainer, LayoutRect& rect, const PaintInvalidationState* paintInvalidationState) const
 {
-    SVGRenderSupport::computeFloatRectForPaintInvalidation(this, paintInvalidationContainer, paintInvalidationRect, paintInvalidationState);
+    FloatRect paintInvalidationRect = rect;
+    paintInvalidationRect.inflate(style()->outlineWidth());
+    const RenderSVGRoot& svgRoot = SVGRenderSupport::mapRectToSVGRootForPaintInvalidation(this, paintInvalidationRect, rect);
+    svgRoot.mapRectToPaintInvalidationBacking(paintInvalidationContainer, rect, paintInvalidationState);
 }
 
 bool RenderSVGBlock::nodeAtPoint(const HitTestRequest&, HitTestResult&, const HitTestLocation&, const LayoutPoint&, HitTestAction)

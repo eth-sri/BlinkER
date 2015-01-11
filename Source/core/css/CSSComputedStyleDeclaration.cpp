@@ -175,6 +175,7 @@ static const CSSPropertyID staticComputableProperties[] = {
     CSSPropertyResize,
     CSSPropertyRight,
     CSSPropertyScrollBehavior,
+    CSSPropertyScrollBlocksOn,
     CSSPropertySpeak,
     CSSPropertyTableLayout,
     CSSPropertyTabSize,
@@ -193,7 +194,6 @@ static const CSSPropertyID staticComputableProperties[] = {
     CSSPropertyTextTransform,
     CSSPropertyTop,
     CSSPropertyTouchAction,
-    CSSPropertyTouchActionDelay,
     CSSPropertyTransitionDelay,
     CSSPropertyTransitionDuration,
     CSSPropertyTransitionProperty,
@@ -763,7 +763,7 @@ static PassRefPtrWillBeRawPtr<CSSValue> computedTransform(RenderObject* renderer
         box = pixelSnappedIntRect(toRenderBox(renderer)->borderBoxRect());
 
     TransformationMatrix transform;
-    style.applyTransform(transform, box.size(), RenderStyle::ExcludeTransformOrigin);
+    style.applyTransform(transform, LayoutSize(box.size()), RenderStyle::ExcludeTransformOrigin);
 
     // FIXME: Need to print out individual functions (https://bugs.webkit.org/show_bug.cgi?id=23924)
     RefPtrWillBeRawPtr<CSSValueList> list = CSSValueList::createSpaceSeparated();
@@ -1463,6 +1463,23 @@ static PassRefPtrWillBeRawPtr<CSSValue> touchActionFlagsToCSSValue(TouchAction t
         if (touchAction & TouchActionPanY)
             list->append(cssValuePool().createIdentifierValue(CSSValuePanY));
     }
+    ASSERT(list->length());
+    return list.release();
+}
+
+static PassRefPtrWillBeRawPtr<CSSValue> scrollBlocksOnFlagsToCSSValue(ScrollBlocksOn scrollBlocksOn)
+{
+    RefPtrWillBeRawPtr<CSSValueList> list = CSSValueList::createSpaceSeparated();
+
+    if (scrollBlocksOn == ScrollBlocksOnNone)
+        return cssValuePool().createIdentifierValue(CSSValueNone);
+
+    if (scrollBlocksOn & ScrollBlocksOnStartTouch)
+        list->append(cssValuePool().createIdentifierValue(CSSValueStartTouch));
+    if (scrollBlocksOn & ScrollBlocksOnWheelEvent)
+        list->append(cssValuePool().createIdentifierValue(CSSValueWheelEvent));
+    if (scrollBlocksOn & ScrollBlocksOnScrollEvent)
+        list->append(cssValuePool().createIdentifierValue(CSSValueScrollEvent));
     ASSERT(list->length());
     return list.release();
 }
@@ -2176,6 +2193,8 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValu
             return cssValuePool().createValue(style->rubyPosition());
         case CSSPropertyScrollBehavior:
             return cssValuePool().createValue(style->scrollBehavior());
+        case CSSPropertyScrollBlocksOn:
+            return scrollBlocksOnFlagsToCSSValue(style->scrollBlocksOn());
         case CSSPropertyTableLayout:
             return cssValuePool().createValue(style->tableLayout());
         case CSSPropertyTextAlign:
@@ -2261,8 +2280,6 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValu
             return valueForPositionOffset(*style, CSSPropertyTop, renderer);
         case CSSPropertyTouchAction:
             return touchActionFlagsToCSSValue(style->touchAction());
-        case CSSPropertyTouchActionDelay:
-            return cssValuePool().createValue(style->touchActionDelay());
         case CSSPropertyUnicodeBidi:
             return cssValuePool().createValue(style->unicodeBidi());
         case CSSPropertyVerticalAlign:
@@ -2932,15 +2949,6 @@ PassRefPtrWillBeRawPtr<MutableStylePropertySet> CSSComputedStyleDeclaration::cop
 CSSRule* CSSComputedStyleDeclaration::parentRule() const
 {
     return 0;
-}
-
-PassRefPtrWillBeRawPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValue(const String& propertyName)
-{
-    CSSPropertyID propertyID = cssPropertyID(propertyName);
-    if (!propertyID)
-        return nullptr;
-    RefPtrWillBeRawPtr<CSSValue> value = getPropertyCSSValue(propertyID);
-    return value ? value->cloneForCSSOM() : nullptr;
 }
 
 String CSSComputedStyleDeclaration::getPropertyValue(const String& propertyName)

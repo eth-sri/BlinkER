@@ -105,6 +105,8 @@ void WebPopupMenuImpl::initialize(PopupContainer* widget, const WebRect& bounds)
         m_layerTreeView->setDeviceScaleFactor(m_client->deviceScaleFactor());
         m_rootLayer = adoptPtr(Platform::current()->compositorSupport()->createContentLayer(this));
         m_rootLayer->layer()->setBounds(m_size);
+        // FIXME: Legacy LCD behavior (http://crbug.com/436821), but are we always guaranteed to be opaque?
+        m_rootLayer->layer()->setOpaque(true);
         m_layerTreeView->setRootLayer(*m_rootLayer->layer());
     }
 }
@@ -228,7 +230,8 @@ void WebPopupMenuImpl::paint(WebCanvas* canvas, const WebRect& rect)
 
     if (!rect.isEmpty()) {
         GraphicsContext context(canvas);
-        context.applyDeviceScaleFactor(m_client->deviceScaleFactor());
+        float scaleFactor = m_client->deviceScaleFactor();
+        context.scale(scaleFactor, scaleFactor);
         m_widget->paint(&context, rect);
     }
 }

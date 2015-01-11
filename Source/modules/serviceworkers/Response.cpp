@@ -59,38 +59,43 @@ FetchResponseData* createFetchResponseDataFromWebResponse(const WebServiceWorker
 
 }
 
-Response* Response::create(ExecutionContext* context, Blob* body, const Dictionary& responseInit, ExceptionState& exceptionState)
+Response* Response::create(ExecutionContext* context, ExceptionState& exceptionState)
 {
-    return create(context, body, ResponseInit(responseInit, exceptionState), exceptionState);
+    return create(context, nullptr, ResponseInit(), exceptionState);
 }
 
-Response* Response::create(ExecutionContext* context, const String& body, const Dictionary& responseInit, ExceptionState& exceptionState)
+Response* Response::create(ExecutionContext* context, const BodyInit& body, const Dictionary& responseInit, ExceptionState& exceptionState)
 {
-    OwnPtr<BlobData> blobData = BlobData::create();
-    blobData->appendText(body, false);
-    // "Set |Content-Type| to `text/plain;charset=UTF-8`."
-    blobData->setContentType("text/plain;charset=UTF-8");
-    const long long length = blobData->length();
-    Blob* blob = Blob::create(BlobDataHandle::create(blobData.release(), length));
-    return create(context, blob, ResponseInit(responseInit, exceptionState), exceptionState);
-}
-
-Response* Response::create(ExecutionContext* context, const DOMArrayBuffer* body, const Dictionary& responseInit, ExceptionState& exceptionState)
-{
-    OwnPtr<BlobData> blobData = BlobData::create();
-    blobData->appendArrayBuffer(body->buffer());
-    const long long length = blobData->length();
-    Blob* blob = Blob::create(BlobDataHandle::create(blobData.release(), length));
-    return create(context, blob, ResponseInit(responseInit, exceptionState), exceptionState);
-}
-
-Response* Response::create(ExecutionContext* context, const DOMArrayBufferView* body, const Dictionary& responseInit, ExceptionState& exceptionState)
-{
-    OwnPtr<BlobData> blobData = BlobData::create();
-    blobData->appendArrayBufferView(body->view());
-    const long long length = blobData->length();
-    Blob* blob = Blob::create(BlobDataHandle::create(blobData.release(), length));
-    return create(context, blob, ResponseInit(responseInit, exceptionState), exceptionState);
+    ASSERT(!body.isNull());
+    if (body.isBlob())
+        return create(context, body.getAsBlob(), ResponseInit(responseInit, exceptionState), exceptionState);
+    if (body.isUSVString()) {
+        OwnPtr<BlobData> blobData = BlobData::create();
+        blobData->appendText(body.getAsUSVString(), false);
+        // "Set |Content-Type| to `text/plain;charset=UTF-8`."
+        blobData->setContentType("text/plain;charset=UTF-8");
+        const long long length = blobData->length();
+        Blob* blob = Blob::create(BlobDataHandle::create(blobData.release(), length));
+        return create(context, blob, ResponseInit(responseInit, exceptionState), exceptionState);
+    }
+    if (body.isArrayBuffer()) {
+        RefPtr<DOMArrayBuffer> arrayBuffer = body.getAsArrayBuffer();
+        OwnPtr<BlobData> blobData = BlobData::create();
+        blobData->appendBytes(arrayBuffer->data(), arrayBuffer->byteLength());
+        const long long length = blobData->length();
+        Blob* blob = Blob::create(BlobDataHandle::create(blobData.release(), length));
+        return create(context, blob, ResponseInit(responseInit, exceptionState), exceptionState);
+    }
+    if (body.isArrayBufferView()) {
+        RefPtr<DOMArrayBufferView> arrayBufferView = body.getAsArrayBufferView();
+        OwnPtr<BlobData> blobData = BlobData::create();
+        blobData->appendBytes(arrayBufferView->baseAddress(), arrayBufferView->byteLength());
+        const long long length = blobData->length();
+        Blob* blob = Blob::create(BlobDataHandle::create(blobData.release(), length));
+        return create(context, blob, ResponseInit(responseInit, exceptionState), exceptionState);
+    }
+    ASSERT_NOT_REACHED();
+    return nullptr;
 }
 
 Response* Response::create(ExecutionContext* context, Blob* body, const ResponseInit& responseInit, ExceptionState& exceptionState)
@@ -224,8 +229,12 @@ Headers* Response::headers() const
     return m_headers;
 }
 
-Response* Response::clone() const
+Response* Response::clone(ExceptionState& exceptionState) const
 {
+    if (bodyUsed()) {
+        exceptionState.throwTypeError("Response body is already used");
+        return nullptr;
+    }
     return Response::create(*this);
 }
 

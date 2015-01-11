@@ -252,9 +252,6 @@ void StyleBuilderFunctions::applyValueCSSPropertyCursor(StyleResolverState& stat
 void StyleBuilderFunctions::applyValueCSSPropertyDirection(StyleResolverState& state, CSSValue* value)
 {
     state.style()->setDirection(*toCSSPrimitiveValue(value));
-    Element* element = state.element();
-    if (element && element == element->document().documentElement())
-        element->document().setDirectionSetOnDocumentElement(true);
 }
 
 void StyleBuilderFunctions::applyValueCSSPropertyGlyphOrientationVertical(StyleResolverState& state, CSSValue* value)
@@ -290,8 +287,10 @@ void StyleBuilderFunctions::applyValueCSSPropertyGridTemplateAreas(StyleResolver
     CSSGridTemplateAreasValue* gridTemplateAreasValue = toCSSGridTemplateAreasValue(value);
     const NamedGridAreaMap& newNamedGridAreas = gridTemplateAreasValue->gridAreaMap();
 
-    NamedGridLinesMap namedGridColumnLines = state.style()->namedGridColumnLines();
-    NamedGridLinesMap namedGridRowLines = state.style()->namedGridRowLines();
+    NamedGridLinesMap namedGridColumnLines;
+    NamedGridLinesMap namedGridRowLines;
+    StyleBuilderConverter::convertOrderedNamedGridLinesMapToNamedGridLinesMap(state.style()->orderedNamedGridColumnLines(), namedGridColumnLines);
+    StyleBuilderConverter::convertOrderedNamedGridLinesMapToNamedGridLinesMap(state.style()->orderedNamedGridRowLines(), namedGridRowLines);
     StyleBuilderConverter::createImplicitNamedGridLinesFromGridArea(newNamedGridAreas, namedGridColumnLines, ForColumns);
     StyleBuilderConverter::createImplicitNamedGridLinesFromGridArea(newNamedGridAreas, namedGridRowLines, ForRows);
     state.style()->setNamedGridColumnLines(namedGridColumnLines);
@@ -300,34 +299,6 @@ void StyleBuilderFunctions::applyValueCSSPropertyGridTemplateAreas(StyleResolver
     state.style()->setNamedGridArea(newNamedGridAreas);
     state.style()->setNamedGridAreaRowCount(gridTemplateAreasValue->rowCount());
     state.style()->setNamedGridAreaColumnCount(gridTemplateAreasValue->columnCount());
-}
-
-void StyleBuilderFunctions::applyValueCSSPropertyLineHeight(StyleResolverState& state, CSSValue* value)
-{
-    CSSPrimitiveValue* primitiveValue = toCSSPrimitiveValue(value);
-    Length lineHeight;
-
-    if (primitiveValue->getValueID() == CSSValueNormal) {
-        lineHeight = RenderStyle::initialLineHeight();
-    } else if (primitiveValue->isLength()) {
-        float multiplier = state.style()->effectiveZoom();
-        if (LocalFrame* frame = state.document().frame())
-            multiplier *= frame->textZoomFactor();
-        lineHeight = primitiveValue->computeLength<Length>(state.cssToLengthConversionData().copyWithAdjustedZoom(multiplier));
-    } else if (primitiveValue->isPercentage()) {
-        lineHeight = Length((state.style()->computedFontSize() * primitiveValue->getIntValue()) / 100.0, Fixed);
-    } else if (primitiveValue->isNumber()) {
-        lineHeight = Length(primitiveValue->getDoubleValue() * 100.0, Percent);
-    } else if (primitiveValue->isCalculated()) {
-        double multiplier = state.style()->effectiveZoom();
-        if (LocalFrame* frame = state.document().frame())
-            multiplier *= frame->textZoomFactor();
-        Length zoomedLength = Length(primitiveValue->cssCalcValue()->toCalcValue(state.cssToLengthConversionData().copyWithAdjustedZoom(multiplier)));
-        lineHeight = Length(valueForLength(zoomedLength, state.style()->fontSize()), Fixed);
-    } else {
-        return;
-    }
-    state.style()->setLineHeight(lineHeight);
 }
 
 void StyleBuilderFunctions::applyValueCSSPropertyListStyleImage(StyleResolverState& state, CSSValue* value)
@@ -901,16 +872,8 @@ void StyleBuilderFunctions::applyValueCSSPropertyWebkitAppRegion(StyleResolverSt
 
 void StyleBuilderFunctions::applyValueCSSPropertyWebkitWritingMode(StyleResolverState& state, CSSValue* value)
 {
-    if (value->isPrimitiveValue()) {
-        WritingMode writingMode = *toCSSPrimitiveValue(value);
-        state.setWritingMode(writingMode);
-        if (writingMode != TopToBottomWritingMode)
-            state.document().setContainsAnyRareWritingMode(true);
-    }
-
-    // FIXME: It is not ok to modify document state while applying style.
-    if (state.element() && state.element() == state.document().documentElement())
-        state.document().setWritingModeSetOnDocumentElement(true);
+    if (value->isPrimitiveValue())
+        state.setWritingMode(*toCSSPrimitiveValue(value));
 }
 
 void StyleBuilderFunctions::applyValueCSSPropertyWebkitTextOrientation(StyleResolverState& state, CSSValue* value)

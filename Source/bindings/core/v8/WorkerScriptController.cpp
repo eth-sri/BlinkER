@@ -112,7 +112,7 @@ WorkerScriptController::WorkerScriptController(WorkerGlobalScope& workerGlobalSc
 {
     m_isolate = V8PerIsolateData::initialize();
     V8Initializer::initializeWorker(m_isolate);
-    m_world = DOMWrapperWorld::create(WorkerWorldId);
+    m_world = DOMWrapperWorld::create(m_isolate, WorkerWorldId);
     m_interruptor = adoptPtr(new V8IsolateInterruptor(m_isolate));
     ThreadState::current()->addInterruptor(m_interruptor.get());
     ThreadState::current()->registerTraceDOMWrappers(m_isolate, V8GCController::traceDOMWrappers);
@@ -185,7 +185,7 @@ bool WorkerScriptController::initializeContextIfNeeded()
         return false;
     }
 
-    V8DOMWrapper::associateObjectWithWrapperNonTemplate(&m_workerGlobalScope, wrapperTypeInfo, jsWorkerGlobalScope, m_isolate);
+    V8DOMWrapper::associateObjectWithWrapper(m_isolate, &m_workerGlobalScope, wrapperTypeInfo, jsWorkerGlobalScope);
 
     // Insert the object instance as the prototype of the shadow object.
     v8::Handle<v8::Object> globalObject = v8::Handle<v8::Object>::Cast(m_scriptState->context()->Global()->GetPrototype());
@@ -238,10 +238,10 @@ ScriptValue WorkerScriptController::evaluate(const String& script, const String&
     return ScriptValue(m_scriptState.get(), result);
 }
 
-void WorkerScriptController::evaluate(const ScriptSourceCode& sourceCode, RefPtrWillBeRawPtr<ErrorEvent>* errorEvent)
+bool WorkerScriptController::evaluate(const ScriptSourceCode& sourceCode, RefPtrWillBeRawPtr<ErrorEvent>* errorEvent)
 {
     if (isExecutionForbidden())
-        return;
+        return false;
 
     WorkerGlobalScopeExecutionState state(this);
     evaluate(sourceCode.source(), sourceCode.url().string(), sourceCode.startPosition());
@@ -250,7 +250,7 @@ void WorkerScriptController::evaluate(const ScriptSourceCode& sourceCode, RefPtr
             if (state.m_errorEventFromImportedScript) {
                 // Propagate inner error event outwards.
                 *errorEvent = state.m_errorEventFromImportedScript.release();
-                return;
+                return false;
             }
             if (m_workerGlobalScope.shouldSanitizeScriptError(state.sourceURL, NotSharableCrossOrigin))
                 *errorEvent = ErrorEvent::createSanitizedError(m_world.get());
@@ -266,7 +266,9 @@ void WorkerScriptController::evaluate(const ScriptSourceCode& sourceCode, RefPtr
                 event = ErrorEvent::create(state.errorMessage, state.sourceURL, state.lineNumber, state.columnNumber, m_world.get());
             m_workerGlobalScope.reportException(event, 0, nullptr, NotSharableCrossOrigin);
         }
+        return false;
     }
+    return true;
 }
 
 void WorkerScriptController::scheduleExecutionTermination()

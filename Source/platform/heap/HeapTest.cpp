@@ -196,9 +196,8 @@ public:
         , m_parkedAllThreads(false)
     {
         m_state->checkThread();
-        EXPECT_FALSE(m_state->isInGC());
         if (LIKELY(ThreadState::stopThreads())) {
-            m_state->enterGC();
+            Heap::enterGC();
             m_parkedAllThreads = true;
         }
     }
@@ -210,8 +209,7 @@ public:
         // Only cleanup if we parked all threads in which case the GC happened
         // and we need to resume the other threads.
         if (LIKELY(m_parkedAllThreads)) {
-            m_state->leaveGC();
-            EXPECT_FALSE(m_state->isInGC());
+            Heap::leaveGC();
             ThreadState::resumeThreads();
         }
     }
@@ -222,11 +220,11 @@ private:
     bool m_parkedAllThreads; // False if we fail to park all threads
 };
 
-static void getHeapStats(HeapStats* stats)
+static size_t objectPayloadSize()
 {
     TestGCScope scope(ThreadState::NoHeapPointersOnStack);
     EXPECT_TRUE(scope.allThreadsParked());
-    Heap::getStatsForTesting(stats);
+    return Heap::objectPayloadSizeForTesting();
 }
 
 #define DEFINE_VISITOR_METHODS(Type)                                       \
@@ -369,14 +367,12 @@ private:
 
 // Do several GCs to make sure that later GCs don't free up old memory from
 // previously run tests in this process.
-static void clearOutOldGarbage(HeapStats* heapStats)
+static void clearOutOldGarbage()
 {
     while (true) {
-        getHeapStats(heapStats);
-        size_t used = heapStats->totalObjectSpace();
+        size_t used = objectPayloadSize();
         Heap::collectGarbage(ThreadState::NoHeapPointersOnStack);
-        getHeapStats(heapStats);
-        if (heapStats->totalObjectSpace() >= used)
+        if (objectPayloadSize() >= used)
             break;
     }
 }
@@ -790,13 +786,13 @@ private:
     Member<IntWrapper> m_intWrapper;
 };
 
-class LargeObject : public GarbageCollectedFinalized<LargeObject> {
+class LargeHeapObject : public GarbageCollectedFinalized<LargeHeapObject> {
 public:
-    ~LargeObject()
+    ~LargeHeapObject()
     {
         s_destructorCalls++;
     }
-    static LargeObject* create() { return new LargeObject(); }
+    static LargeHeapObject* create() { return new LargeHeapObject(); }
     char get(size_t i) { return m_data[i]; }
     void set(size_t i, char c) { m_data[i] = c; }
     size_t length() { return s_length; }
@@ -807,8 +803,8 @@ public:
     static int s_destructorCalls;
 
 private:
-    static const size_t s_length = 1024*1024;
-    LargeObject()
+    static const size_t s_length = 1024 * 1024;
+    LargeHeapObject()
     {
         m_intWrapper = IntWrapper::create(23);
     }
@@ -816,7 +812,7 @@ private:
     char m_data[s_length];
 };
 
-int LargeObject::s_destructorCalls = 0;
+int LargeHeapObject::s_destructorCalls = 0;
 
 class RefCountedAndGarbageCollected : public RefCountedGarbageCollected<RefCountedAndGarbageCollected> {
 public:
@@ -1435,6 +1431,8 @@ public:
             *m_wrapper = IntWrapper::create(42);
         for (int i = 0; i < 512; ++i)
             new OneKiloByteObject();
+        for (int i = 0; i < 32; ++i)
+            LargeHeapObject::create();
     }
 
     void trace(Visitor*) { }
@@ -1515,17 +1513,17 @@ TEST(HeapTest, ThreadedWeakness)
 
 TEST(HeapTest, BasicFunctionality)
 {
-    HeapStats heapStats;
-    clearOutOldGarbage(&heapStats);
+    clearOutOldGarbage();
+    size_t initialObjectPayloadSize = objectPayloadSize();
     {
         size_t slack = 0;
 
         // When the test starts there may already have been leaked some memory
         // on the heap, so we establish a base line.
-        size_t baseLevel = heapStats.totalObjectSpace();
+        size_t baseLevel = initialObjectPayloadSize;
         bool testPagesAllocated = !baseLevel;
         if (testPagesAllocated)
-            EXPECT_EQ(heapStats.totalAllocatedSpace(), 0ul);
+            EXPECT_EQ(Heap::allocatedSpace(), 0ul);
 
         // This allocates objects on the general heap which should add a page of memory.
         DynamicallySizedObject* alloc32 = DynamicallySizedObject::create(32);
@@ -1537,10 +1535,9 @@ TEST(HeapTest, BasicFunctionality)
 
         size_t total = 96;
 
-        getHeapStats(&heapStats);
-        CheckWithSlack(baseLevel + total, heapStats.totalObjectSpace(), slack);
+        CheckWithSlack(baseLevel + total, objectPayloadSize(), slack);
         if (testPagesAllocated)
-            EXPECT_EQ(heapStats.totalAllocatedSpace(), 2 * blinkPageSize);
+            EXPECT_EQ(Heap::allocatedSpace(), 2 * blinkPageSize);
 
         EXPECT_EQ(alloc32->get(0), 40);
         EXPECT_EQ(alloc32->get(31), 40);
@@ -1555,13 +1552,13 @@ TEST(HeapTest, BasicFunctionality)
         EXPECT_EQ(alloc64->get(63), 27);
     }
 
-    clearOutOldGarbage(&heapStats);
+    clearOutOldGarbage();
     size_t total = 0;
     size_t slack = 0;
-    size_t baseLevel = heapStats.totalObjectSpace();
+    size_t baseLevel = objectPayloadSize();
     bool testPagesAllocated = !baseLevel;
     if (testPagesAllocated)
-        EXPECT_EQ(heapStats.totalAllocatedSpace(), 0ul);
+        EXPECT_EQ(Heap::allocatedSpace(), 0ul);
 
     size_t big = 1008;
     Persistent<DynamicallySizedObject> bigArea = DynamicallySizedObject::create(big);
@@ -1577,10 +1574,9 @@ TEST(HeapTest, BasicFunctionality)
         total += size;
         persistents[persistentCount++] = new Persistent<DynamicallySizedObject>(DynamicallySizedObject::create(size));
         slack += 4;
-        getHeapStats(&heapStats);
-        CheckWithSlack(baseLevel + total, heapStats.totalObjectSpace(), slack);
+        CheckWithSlack(baseLevel + total, objectPayloadSize(), slack);
         if (testPagesAllocated)
-            EXPECT_EQ(0ul, heapStats.totalAllocatedSpace() & (blinkPageSize - 1));
+            EXPECT_EQ(0ul, Heap::allocatedSpace() & (blinkPageSize - 1));
     }
 
     {
@@ -1593,33 +1589,30 @@ TEST(HeapTest, BasicFunctionality)
         EXPECT_TRUE(alloc32b != alloc64b);
 
         total += 96;
-        getHeapStats(&heapStats);
-        CheckWithSlack(baseLevel + total, heapStats.totalObjectSpace(), slack);
+        CheckWithSlack(baseLevel + total, objectPayloadSize(), slack);
         if (testPagesAllocated)
-            EXPECT_EQ(0ul, heapStats.totalAllocatedSpace() & (blinkPageSize - 1));
+            EXPECT_EQ(0ul, Heap::allocatedSpace() & (blinkPageSize - 1));
     }
 
-    clearOutOldGarbage(&heapStats);
+    clearOutOldGarbage();
     total -= 96;
     slack -= 8;
     if (testPagesAllocated)
-        EXPECT_EQ(0ul, heapStats.totalAllocatedSpace() & (blinkPageSize - 1));
+        EXPECT_EQ(0ul, Heap::allocatedSpace() & (blinkPageSize - 1));
 
     // Clear the persistent, so that the big area will be garbage collected.
     bigArea.release();
-    clearOutOldGarbage(&heapStats);
+    clearOutOldGarbage();
 
     total -= big;
     slack -= 4;
-    getHeapStats(&heapStats);
-    CheckWithSlack(baseLevel + total, heapStats.totalObjectSpace(), slack);
+    CheckWithSlack(baseLevel + total, objectPayloadSize(), slack);
     if (testPagesAllocated)
-        EXPECT_EQ(0ul, heapStats.totalAllocatedSpace() & (blinkPageSize - 1));
+        EXPECT_EQ(0ul, Heap::allocatedSpace() & (blinkPageSize - 1));
 
-    getHeapStats(&heapStats);
-    CheckWithSlack(baseLevel + total, heapStats.totalObjectSpace(), slack);
+    CheckWithSlack(baseLevel + total, objectPayloadSize(), slack);
     if (testPagesAllocated)
-        EXPECT_EQ(0ul, heapStats.totalAllocatedSpace() & (blinkPageSize - 1));
+        EXPECT_EQ(0ul, Heap::allocatedSpace() & (blinkPageSize - 1));
 
     for (size_t i = 0; i < persistentCount; i++) {
         delete persistents[i];
@@ -1643,15 +1636,12 @@ TEST(HeapTest, BasicFunctionality)
 
 TEST(HeapTest, SimpleAllocation)
 {
-    HeapStats initialHeapStats;
-    clearOutOldGarbage(&initialHeapStats);
-    EXPECT_EQ(0ul, initialHeapStats.totalObjectSpace());
+    clearOutOldGarbage();
+    EXPECT_EQ(0ul, objectPayloadSize());
 
     // Allocate an object in the heap.
     HeapAllocatedArray* array = new HeapAllocatedArray();
-    HeapStats statsAfterAllocation;
-    getHeapStats(&statsAfterAllocation);
-    EXPECT_TRUE(statsAfterAllocation.totalObjectSpace() >= sizeof(HeapAllocatedArray));
+    EXPECT_TRUE(objectPayloadSize() >= sizeof(HeapAllocatedArray));
 
     // Sanity check of the contents in the heap.
     EXPECT_EQ(0, array->at(0));
@@ -1716,19 +1706,20 @@ TEST(HeapTest, TypedHeapSanity)
     // We use TraceCounter for allocating an object on the general heap.
     Persistent<TraceCounter> generalHeapObject = TraceCounter::create();
     Persistent<Node> typedHeapObject = Node::create(0);
-    EXPECT_NE(pageHeaderFromObject(generalHeapObject.get()),
-        pageHeaderFromObject(typedHeapObject.get()));
+    EXPECT_NE(pageFromObject(generalHeapObject.get()),
+        pageFromObject(typedHeapObject.get()));
 }
 
 TEST(HeapTest, NoAllocation)
 {
-    EXPECT_TRUE(ThreadState::current()->isAllocationAllowed());
+    ThreadState* state = ThreadState::current();
+    EXPECT_TRUE(state->isAllocationAllowed());
     {
         // Disallow allocation
-        NoAllocationScope<AnyThread> noAllocationScope;
-        EXPECT_FALSE(ThreadState::current()->isAllocationAllowed());
+        ThreadState::NoAllocationScope noAllocationScope(state);
+        EXPECT_FALSE(state->isAllocationAllowed());
     }
-    EXPECT_TRUE(ThreadState::current()->isAllocationAllowed());
+    EXPECT_TRUE(state->isAllocationAllowed());
 }
 
 TEST(HeapTest, Members)
@@ -1822,10 +1813,10 @@ TEST(HeapTest, WideTest)
 
 TEST(HeapTest, HashMapOfMembers)
 {
-    HeapStats initialHeapSize;
     IntWrapper::s_destructorCalls = 0;
 
-    clearOutOldGarbage(&initialHeapSize);
+    clearOutOldGarbage();
+    size_t initialObjectPayloadSize = objectPayloadSize();
     {
         typedef HeapHashMap<
             Member<IntWrapper>,
@@ -1837,14 +1828,12 @@ TEST(HeapTest, HashMapOfMembers)
         Persistent<HeapObjectIdentityMap> map = new HeapObjectIdentityMap();
 
         map->clear();
-        HeapStats afterSetWasCreated;
-        getHeapStats(&afterSetWasCreated);
-        EXPECT_TRUE(afterSetWasCreated.totalObjectSpace() > initialHeapSize.totalObjectSpace());
+        size_t afterSetWasCreated = objectPayloadSize();
+        EXPECT_TRUE(afterSetWasCreated > initialObjectPayloadSize);
 
         Heap::collectGarbage(ThreadState::NoHeapPointersOnStack);
-        HeapStats afterGC;
-        getHeapStats(&afterGC);
-        EXPECT_EQ(afterGC.totalObjectSpace(), afterSetWasCreated.totalObjectSpace());
+        size_t afterGC = objectPayloadSize();
+        EXPECT_EQ(afterGC, afterSetWasCreated);
 
         // If the additions below cause garbage collections, these
         // pointers should be found by conservative stack scanning.
@@ -1853,9 +1842,8 @@ TEST(HeapTest, HashMapOfMembers)
 
         map->add(one, one);
 
-        HeapStats afterOneAdd;
-        getHeapStats(&afterOneAdd);
-        EXPECT_TRUE(afterOneAdd.totalObjectSpace() > afterGC.totalObjectSpace());
+        size_t afterOneAdd = objectPayloadSize();
+        EXPECT_TRUE(afterOneAdd > afterGC);
 
         HeapObjectIdentityMap::iterator it(map->begin());
         HeapObjectIdentityMap::iterator it2(map->begin());
@@ -1871,9 +1859,8 @@ TEST(HeapTest, HashMapOfMembers)
         // stack scanning as that could find a pointer to the
         // old backing.
         Heap::collectGarbage(ThreadState::NoHeapPointersOnStack);
-        HeapStats afterAddAndGC;
-        getHeapStats(&afterAddAndGC);
-        EXPECT_TRUE(afterAddAndGC.totalObjectSpace() >= afterOneAdd.totalObjectSpace());
+        size_t afterAddAndGC = objectPayloadSize();
+        EXPECT_TRUE(afterAddAndGC >= afterOneAdd);
 
         EXPECT_EQ(map->size(), 2u); // Two different wrappings of '1' are distinct.
 
@@ -1885,9 +1872,8 @@ TEST(HeapTest, HashMapOfMembers)
         EXPECT_EQ(gotten->value(), one->value());
         EXPECT_EQ(gotten, one);
 
-        HeapStats afterGC2;
-        getHeapStats(&afterGC2);
-        EXPECT_EQ(afterGC2.totalObjectSpace(), afterAddAndGC.totalObjectSpace());
+        size_t afterGC2 = objectPayloadSize();
+        EXPECT_EQ(afterGC2, afterAddAndGC);
 
         IntWrapper* dozen = 0;
 
@@ -1898,95 +1884,90 @@ TEST(HeapTest, HashMapOfMembers)
             if (i == 12)
                 dozen = iWrapper;
         }
-        HeapStats afterAdding1000;
-        getHeapStats(&afterAdding1000);
-        EXPECT_TRUE(afterAdding1000.totalObjectSpace() > afterGC2.totalObjectSpace());
+        size_t afterAdding1000 = objectPayloadSize();
+        EXPECT_TRUE(afterAdding1000 > afterGC2);
 
         IntWrapper* gross(map->get(dozen));
         EXPECT_EQ(gross->value(), 144);
 
         // This should clear out any junk backings created by all the adds.
         Heap::collectGarbage(ThreadState::NoHeapPointersOnStack);
-        HeapStats afterGC3;
-        getHeapStats(&afterGC3);
-        EXPECT_TRUE(afterGC3.totalObjectSpace() <= afterAdding1000.totalObjectSpace());
+        size_t afterGC3 = objectPayloadSize();
+        EXPECT_TRUE(afterGC3 <= afterAdding1000);
     }
 
     Heap::collectGarbage(ThreadState::NoHeapPointersOnStack);
     // The objects 'one', anotherOne, and the 999 other pairs.
     EXPECT_EQ(IntWrapper::s_destructorCalls, 2000);
-    HeapStats afterGC4;
-    getHeapStats(&afterGC4);
-    EXPECT_EQ(afterGC4.totalObjectSpace(), initialHeapSize.totalObjectSpace());
+    size_t afterGC4 = objectPayloadSize();
+    EXPECT_EQ(afterGC4, initialObjectPayloadSize);
 }
 
 TEST(HeapTest, NestedAllocation)
 {
-    HeapStats initialHeapSize;
-    clearOutOldGarbage(&initialHeapSize);
+    clearOutOldGarbage();
+    size_t initialObjectPayloadSize = objectPayloadSize();
     {
         Persistent<ConstructorAllocation> constructorAllocation = ConstructorAllocation::create();
     }
-    HeapStats afterFree;
-    clearOutOldGarbage(&afterFree);
-    EXPECT_TRUE(initialHeapSize == afterFree);
+    clearOutOldGarbage();
+    size_t afterFree = objectPayloadSize();
+    EXPECT_TRUE(initialObjectPayloadSize == afterFree);
 }
 
-TEST(HeapTest, LargeObjects)
+TEST(HeapTest, LargeHeapObjects)
 {
-    HeapStats initialHeapSize;
-    clearOutOldGarbage(&initialHeapSize);
+    clearOutOldGarbage();
+    size_t initialObjectPayloadSize = objectPayloadSize();
+    size_t initialAllocatedSpace = Heap::allocatedSpace();
     IntWrapper::s_destructorCalls = 0;
-    LargeObject::s_destructorCalls = 0;
+    LargeHeapObject::s_destructorCalls = 0;
     {
-        int slack = 8; // LargeObject points to an IntWrapper that is also allocated.
-        Persistent<LargeObject> object = LargeObject::create();
+        int slack = 8; // LargeHeapObject points to an IntWrapper that is also allocated.
+        Persistent<LargeHeapObject> object = LargeHeapObject::create();
         EXPECT_TRUE(ThreadState::current()->contains(object));
-        EXPECT_TRUE(ThreadState::current()->contains(reinterpret_cast<char*>(object.get()) + sizeof(LargeObject) - 1));
+        EXPECT_TRUE(ThreadState::current()->contains(reinterpret_cast<char*>(object.get()) + sizeof(LargeHeapObject) - 1));
 #if ENABLE(GC_PROFILE_MARKING)
         const GCInfo* info = ThreadState::current()->findGCInfo(reinterpret_cast<Address>(object.get()));
         EXPECT_NE(reinterpret_cast<const GCInfo*>(0), info);
-        EXPECT_EQ(info, ThreadState::current()->findGCInfo(reinterpret_cast<Address>(object.get()) + sizeof(LargeObject) - 1));
-        EXPECT_NE(info, ThreadState::current()->findGCInfo(reinterpret_cast<Address>(object.get()) + sizeof(LargeObject)));
+        EXPECT_EQ(info, ThreadState::current()->findGCInfo(reinterpret_cast<Address>(object.get()) + sizeof(LargeHeapObject) - 1));
+        EXPECT_NE(info, ThreadState::current()->findGCInfo(reinterpret_cast<Address>(object.get()) + sizeof(LargeHeapObject)));
         EXPECT_NE(info, ThreadState::current()->findGCInfo(reinterpret_cast<Address>(object.get()) - 1));
 #endif
-        HeapStats afterAllocation;
-        clearOutOldGarbage(&afterAllocation);
+        clearOutOldGarbage();
+        size_t afterAllocation = Heap::allocatedSpace();
         {
             object->set(0, 'a');
             EXPECT_EQ('a', object->get(0));
             object->set(object->length() - 1, 'b');
             EXPECT_EQ('b', object->get(object->length() - 1));
-            size_t expectedObjectSpace = sizeof(LargeObject) + sizeof(IntWrapper);
-            size_t actualObjectSpace =
-                afterAllocation.totalObjectSpace() - initialHeapSize.totalObjectSpace();
-            CheckWithSlack(expectedObjectSpace, actualObjectSpace, slack);
+            size_t expectedObjectPayloadSize = sizeof(LargeHeapObject) + sizeof(IntWrapper);
+            size_t actualObjectPayloadSize = objectPayloadSize() - initialObjectPayloadSize;
+            CheckWithSlack(expectedObjectPayloadSize, actualObjectPayloadSize, slack);
             // There is probably space for the IntWrapper in a heap page without
             // allocating extra pages. However, the IntWrapper allocation might cause
             // the addition of a heap page.
             size_t largeObjectAllocationSize =
-                sizeof(LargeObject) + sizeof(LargeHeapObject<FinalizedHeapObjectHeader>) + sizeof(FinalizedHeapObjectHeader);
-            size_t allocatedSpaceLowerBound =
-                initialHeapSize.totalAllocatedSpace() + largeObjectAllocationSize;
+                sizeof(LargeHeapObject) + sizeof(LargeObject<FinalizedHeapObjectHeader>) + sizeof(FinalizedHeapObjectHeader);
+            size_t allocatedSpaceLowerBound = initialAllocatedSpace + largeObjectAllocationSize;
             size_t allocatedSpaceUpperBound = allocatedSpaceLowerBound + slack + blinkPageSize;
-            EXPECT_LE(allocatedSpaceLowerBound, afterAllocation.totalAllocatedSpace());
-            EXPECT_LE(afterAllocation.totalAllocatedSpace(), allocatedSpaceUpperBound);
+            EXPECT_LE(allocatedSpaceLowerBound, afterAllocation);
+            EXPECT_LE(afterAllocation, allocatedSpaceUpperBound);
             EXPECT_EQ(0, IntWrapper::s_destructorCalls);
-            EXPECT_EQ(0, LargeObject::s_destructorCalls);
+            EXPECT_EQ(0, LargeHeapObject::s_destructorCalls);
             for (int i = 0; i < 10; i++)
-                object = LargeObject::create();
+                object = LargeHeapObject::create();
         }
-        HeapStats oneLargeObject;
-        clearOutOldGarbage(&oneLargeObject);
-        EXPECT_TRUE(oneLargeObject == afterAllocation);
+        clearOutOldGarbage();
+        EXPECT_TRUE(Heap::allocatedSpace() == afterAllocation);
         EXPECT_EQ(10, IntWrapper::s_destructorCalls);
-        EXPECT_EQ(10, LargeObject::s_destructorCalls);
+        EXPECT_EQ(10, LargeHeapObject::s_destructorCalls);
     }
-    HeapStats backToInitial;
-    clearOutOldGarbage(&backToInitial);
-    EXPECT_TRUE(initialHeapSize == backToInitial);
+    clearOutOldGarbage();
+    EXPECT_TRUE(initialObjectPayloadSize == objectPayloadSize());
+    EXPECT_TRUE(initialAllocatedSpace == Heap::allocatedSpace());
     EXPECT_EQ(11, IntWrapper::s_destructorCalls);
-    EXPECT_EQ(11, LargeObject::s_destructorCalls);
+    EXPECT_EQ(11, LargeHeapObject::s_destructorCalls);
     Heap::collectGarbage(ThreadState::NoHeapPointersOnStack);
 }
 
@@ -2184,7 +2165,6 @@ bool dequeContains(HeapDeque<T, inlineCapacity>& deque, U u)
 
 TEST(HeapTest, HeapCollectionTypes)
 {
-    HeapStats initialHeapSize;
     IntWrapper::s_destructorCalls = 0;
 
     typedef HeapHashMap<Member<IntWrapper>, Member<IntWrapper> > MemberMember;
@@ -2224,7 +2204,7 @@ TEST(HeapTest, HeapCollectionTypes)
     Persistent<DequeUW> dequeUW2 = new DequeUW();
     Persistent<Container> container = Container::create();
 
-    clearOutOldGarbage(&initialHeapSize);
+    clearOutOldGarbage();
     {
         Persistent<IntWrapper> one(IntWrapper::create(1));
         Persistent<IntWrapper> two(IntWrapper::create(2));
@@ -2507,8 +2487,7 @@ void SetIteratorCheck(T& it, const T& end, int expected)
 
 TEST(HeapTest, HeapWeakCollectionSimple)
 {
-    HeapStats initialHeapStats;
-    clearOutOldGarbage(&initialHeapStats);
+    clearOutOldGarbage();
     IntWrapper::s_destructorCalls = 0;
 
     PersistentHeapVector<Member<IntWrapper> > keepNumbersAlive;
@@ -2569,8 +2548,7 @@ TEST(HeapTest, HeapWeakCollectionSimple)
 template<typename Set>
 void orderedSetHelper(bool strong)
 {
-    HeapStats initialHeapStats;
-    clearOutOldGarbage(&initialHeapStats);
+    clearOutOldGarbage();
     IntWrapper::s_destructorCalls = 0;
 
     PersistentHeapVector<Member<IntWrapper> > keepNumbersAlive;
@@ -2729,8 +2707,7 @@ struct ThingWithDestructorTraits : public HashTraits<ThingWithDestructor> {
 
 static void heapMapDestructorHelper(bool clearMaps)
 {
-    HeapStats initialHeapStats;
-    clearOutOldGarbage(&initialHeapStats);
+    clearOutOldGarbage();
     ThingWithDestructor::s_liveThingsWithDestructor = 0;
 
     typedef HeapHashMap<WeakMember<IntWrapper>, Member<RefCountedAndGarbageCollected> > RefMap;
@@ -2954,7 +2931,6 @@ TEST(HeapTest, HeapWeakPairs)
 
 TEST(HeapTest, HeapWeakCollectionTypes)
 {
-    HeapStats initialHeapSize;
     IntWrapper::s_destructorCalls = 0;
 
     typedef HeapHashMap<WeakMember<IntWrapper>, Member<IntWrapper> > WeakStrong;
@@ -2963,7 +2939,7 @@ TEST(HeapTest, HeapWeakCollectionTypes)
     typedef HeapHashSet<WeakMember<IntWrapper> > WeakSet;
     typedef HeapLinkedHashSet<WeakMember<IntWrapper> > WeakOrderedSet;
 
-    clearOutOldGarbage(&initialHeapSize);
+    clearOutOldGarbage();
 
     const int weakStrongIndex = 0;
     const int strongWeakIndex = 1;
@@ -3349,8 +3325,7 @@ TEST(HeapTest, Comparisons)
 
 TEST(HeapTest, CheckAndMarkPointer)
 {
-    HeapStats initialHeapStats;
-    clearOutOldGarbage(&initialHeapStats);
+    clearOutOldGarbage();
 
     Vector<Address> objectAddresses;
     Vector<Address> endAddresses;
@@ -3363,9 +3338,9 @@ TEST(HeapTest, CheckAndMarkPointer)
         objectAddresses.append(objectAddress);
         endAddresses.append(objectAddress + sizeof(SimpleObject) - 1);
     }
-    LargeObject* largeObject = LargeObject::create();
+    LargeHeapObject* largeObject = LargeHeapObject::create();
     largeObjectAddress = reinterpret_cast<Address>(largeObject);
-    largeObjectEndAddress = largeObjectAddress + sizeof(LargeObject) - 1;
+    largeObjectEndAddress = largeObjectAddress + sizeof(LargeHeapObject) - 1;
 
     // This is a low-level test where we call checkAndMarkPointer. This method
     // causes the object start bitmap to be computed which requires the heap
@@ -3377,7 +3352,7 @@ TEST(HeapTest, CheckAndMarkPointer)
     {
         TestGCScope scope(ThreadState::HeapPointersOnStack);
         EXPECT_TRUE(scope.allThreadsParked()); // Fail the test if we could not park all threads.
-        Heap::prepareForGC();
+        Heap::preGC();
         Heap::flushHeapDoesNotContainCache();
         for (size_t i = 0; i < objectAddresses.size(); i++) {
             EXPECT_TRUE(Heap::checkAndMarkPointer(&visitor, objectAddresses[i]));
@@ -3389,15 +3364,16 @@ TEST(HeapTest, CheckAndMarkPointer)
         EXPECT_TRUE(Heap::checkAndMarkPointer(&visitor, largeObjectEndAddress));
         EXPECT_EQ(2ul, visitor.count());
         visitor.reset();
+        Heap::postGC();
     }
     // This forces a GC without stack scanning which results in the objects
     // being collected. This will also rebuild the above mentioned freelists,
     // however we don't rely on that below since we don't have any allocations.
-    clearOutOldGarbage(&initialHeapStats);
+    clearOutOldGarbage();
     {
         TestGCScope scope(ThreadState::HeapPointersOnStack);
         EXPECT_TRUE(scope.allThreadsParked());
-        Heap::prepareForGC();
+        Heap::preGC();
         Heap::flushHeapDoesNotContainCache();
         for (size_t i = 0; i < objectAddresses.size(); i++) {
             // We would like to assert that checkAndMarkPointer returned false
@@ -3414,16 +3390,16 @@ TEST(HeapTest, CheckAndMarkPointer)
         Heap::checkAndMarkPointer(&visitor, largeObjectAddress);
         Heap::checkAndMarkPointer(&visitor, largeObjectEndAddress);
         EXPECT_EQ(0ul, visitor.count());
+        Heap::postGC();
     }
     // This round of GC is important to make sure that the object start
     // bitmap are cleared out and that the free lists are rebuild.
-    clearOutOldGarbage(&initialHeapStats);
+    clearOutOldGarbage();
 }
 
 TEST(HeapTest, VisitOffHeapCollections)
 {
-    HeapStats initialHeapStats;
-    clearOutOldGarbage(&initialHeapStats);
+    clearOutOldGarbage();
     IntWrapper::s_destructorCalls = 0;
     Persistent<OffHeapContainer> container = OffHeapContainer::create();
     Heap::collectGarbage(ThreadState::NoHeapPointersOnStack);
@@ -3435,7 +3411,6 @@ TEST(HeapTest, VisitOffHeapCollections)
 
 TEST(HeapTest, PersistentHeapCollectionTypes)
 {
-    HeapStats initialHeapSize;
     IntWrapper::s_destructorCalls = 0;
 
     typedef HeapVector<Member<IntWrapper> > Vec;
@@ -3447,7 +3422,7 @@ TEST(HeapTest, PersistentHeapCollectionTypes)
     typedef PersistentHeapHashMap<WeakMember<IntWrapper>, Member<IntWrapper> > WeakPMap;
     typedef PersistentHeapDeque<Member<IntWrapper> > PDeque;
 
-    clearOutOldGarbage(&initialHeapSize);
+    clearOutOldGarbage();
     {
         PVec pVec;
         PDeque pDeque;
@@ -3529,8 +3504,7 @@ TEST(HeapTest, PersistentHeapCollectionTypes)
 
 TEST(HeapTest, CollectionNesting)
 {
-    HeapStats initialStats;
-    clearOutOldGarbage(&initialStats);
+    clearOutOldGarbage();
     int* key = &IntWrapper::s_destructorCalls;
     IntWrapper::s_destructorCalls = 0;
     typedef HeapVector<Member<IntWrapper> > IntVector;
@@ -3574,8 +3548,7 @@ TEST(HeapTest, CollectionNesting)
 
 TEST(HeapTest, GarbageCollectedMixin)
 {
-    HeapStats initialHeapStats;
-    clearOutOldGarbage(&initialHeapStats);
+    clearOutOldGarbage();
 
     Persistent<UseMixin> usemixin = UseMixin::create();
     EXPECT_EQ(0, UseMixin::s_traceCount);
@@ -3595,8 +3568,7 @@ TEST(HeapTest, GarbageCollectedMixin)
 
 TEST(HeapTest, CollectionNesting2)
 {
-    HeapStats initialStats;
-    clearOutOldGarbage(&initialStats);
+    clearOutOldGarbage();
     void* key = &IntWrapper::s_destructorCalls;
     IntWrapper::s_destructorCalls = 0;
     typedef HeapHashSet<Member<IntWrapper> > IntSet;
@@ -3618,8 +3590,7 @@ TEST(HeapTest, CollectionNesting2)
 
 TEST(HeapTest, CollectionNesting3)
 {
-    HeapStats initialStats;
-    clearOutOldGarbage(&initialStats);
+    clearOutOldGarbage();
     IntWrapper::s_destructorCalls = 0;
     typedef HeapVector<Member<IntWrapper> > IntVector;
     typedef HeapDeque<Member<IntWrapper> > IntDeque;
@@ -3649,8 +3620,7 @@ TEST(HeapTest, CollectionNesting3)
 
 TEST(HeapTest, EmbeddedInVector)
 {
-    HeapStats initialStats;
-    clearOutOldGarbage(&initialStats);
+    clearOutOldGarbage();
     SimpleFinalizedObject::s_destructorCalls = 0;
     {
         PersistentHeapVector<VectorObject, 2> inlineVector;
@@ -3689,8 +3659,7 @@ TEST(HeapTest, EmbeddedInVector)
 
 TEST(HeapTest, EmbeddedInDeque)
 {
-    HeapStats initialStats;
-    clearOutOldGarbage(&initialStats);
+    clearOutOldGarbage();
     SimpleFinalizedObject::s_destructorCalls = 0;
     {
         PersistentHeapDeque<VectorObject, 2> inlineDeque;
@@ -3749,8 +3718,7 @@ TEST(HeapTest, RawPtrInHash)
 
 TEST(HeapTest, HeapTerminatedArray)
 {
-    HeapStats initialHeapSize;
-    clearOutOldGarbage(&initialHeapSize);
+    clearOutOldGarbage();
     IntWrapper::s_destructorCalls = 0;
 
     HeapTerminatedArray<TerminatedArrayItem>* arr = 0;
@@ -3804,8 +3772,7 @@ TEST(HeapTest, HeapTerminatedArray)
 
 TEST(HeapTest, HeapLinkedStack)
 {
-    HeapStats initialHeapSize;
-    clearOutOldGarbage(&initialHeapSize);
+    clearOutOldGarbage();
     IntWrapper::s_destructorCalls = 0;
 
     HeapLinkedStack<TerminatedArrayItem>* stack = new HeapLinkedStack<TerminatedArrayItem>();
@@ -3832,24 +3799,27 @@ TEST(HeapTest, HeapLinkedStack)
 
 TEST(HeapTest, AllocationDuringFinalization)
 {
-    HeapStats initialHeapSize;
-    clearOutOldGarbage(&initialHeapSize);
+    clearOutOldGarbage();
     IntWrapper::s_destructorCalls = 0;
     OneKiloByteObject::s_destructorCalls = 0;
+    LargeHeapObject::s_destructorCalls = 0;
 
     Persistent<IntWrapper> wrapper;
     new FinalizationAllocator(&wrapper);
 
     Heap::collectGarbage(ThreadState::NoHeapPointersOnStack);
     EXPECT_EQ(0, IntWrapper::s_destructorCalls);
+    EXPECT_EQ(0, OneKiloByteObject::s_destructorCalls);
+    EXPECT_EQ(0, LargeHeapObject::s_destructorCalls);
     // Check that the wrapper allocated during finalization is not
     // swept away and zapped later in the same sweeping phase.
     EXPECT_EQ(42, wrapper->value());
 
     wrapper.clear();
     Heap::collectGarbage(ThreadState::NoHeapPointersOnStack);
-    EXPECT_EQ(10, IntWrapper::s_destructorCalls);
+    EXPECT_EQ(42, IntWrapper::s_destructorCalls);
     EXPECT_EQ(512, OneKiloByteObject::s_destructorCalls);
+    EXPECT_EQ(32, LargeHeapObject::s_destructorCalls);
 }
 
 class SimpleClassWithDestructor {
@@ -3989,8 +3959,7 @@ TEST(HeapTest, MultipleMixins)
     EXPECT_TRUE(s_isMixinTrue);
     EXPECT_FALSE(s_isMixinFalse);
 
-    HeapStats initialHeapSize;
-    clearOutOldGarbage(&initialHeapSize);
+    clearOutOldGarbage();
     IntWrapper::s_destructorCalls = 0;
     MultipleMixins* obj = new MultipleMixins();
     {
@@ -4145,8 +4114,7 @@ TEST(HeapTest, MapWithCustomWeaknessHandling)
 {
     typedef HeapHashMap<PairWithWeakHandling, RefPtr<OffHeapInt> > Map;
     typedef Map::iterator Iterator;
-    HeapStats initialHeapSize;
-    clearOutOldGarbage(&initialHeapSize);
+    clearOutOldGarbage();
     OffHeapInt::s_destructorCalls = 0;
 
     Persistent<Map> map1(new Map());
@@ -4215,8 +4183,7 @@ TEST(HeapTest, MapWithCustomWeaknessHandling2)
 {
     typedef HeapHashMap<RefPtr<OffHeapInt>, PairWithWeakHandling> Map;
     typedef Map::iterator Iterator;
-    HeapStats initialHeapSize;
-    clearOutOldGarbage(&initialHeapSize);
+    clearOutOldGarbage();
     OffHeapInt::s_destructorCalls = 0;
 
     Persistent<Map> map1(new Map());
@@ -4302,21 +4269,21 @@ TEST(HeapTest, RegressNullIsStrongified)
 
 TEST(HeapTest, Bind)
 {
-    Closure closure = bind(&Bar::trace, Bar::create(), static_cast<Visitor*>(0));
+    OwnPtr<Closure> closure = bind(&Bar::trace, Bar::create(), static_cast<Visitor*>(0));
     Heap::collectGarbage(ThreadState::NoHeapPointersOnStack);
     // The closure should have a persistent handle to the Bar.
     EXPECT_EQ(1u, Bar::s_live);
 
-    Closure closure2 = bind(&Bar::trace, RawPtr<Bar>(Bar::create()), static_cast<Visitor*>(0));
+    OwnPtr<Closure> closure2 = bind(&Bar::trace, RawPtr<Bar>(Bar::create()), static_cast<Visitor*>(0));
     Heap::collectGarbage(ThreadState::NoHeapPointersOnStack);
     // The closure should have a persistent handle to the Bar.
     EXPECT_EQ(2u, Bar::s_live);
     // RawPtr<OffHeapInt> should not make Persistent.
-    Closure closure3 = bind(&OffHeapInt::voidFunction, RawPtr<OffHeapInt>(OffHeapInt::create(1).get()));
+    OwnPtr<Closure> closure3 = bind(&OffHeapInt::voidFunction, RawPtr<OffHeapInt>(OffHeapInt::create(1).get()));
 
     UseMixin::s_traceCount = 0;
     Mixin* mixin = UseMixin::create();
-    Closure mixinClosure = bind(&Mixin::trace, mixin, static_cast<Visitor*>(0));
+    OwnPtr<Closure> mixinClosure = bind(&Mixin::trace, mixin, static_cast<Visitor*>(0));
     Heap::collectGarbage(ThreadState::NoHeapPointersOnStack);
     // The closure should have a persistent handle to the mixin.
     EXPECT_EQ(1, UseMixin::s_traceCount);
@@ -4360,8 +4327,7 @@ struct EmptyClearingHashSetTraits : HashTraits<WeakSet> {
 //    HeapHashSet.
 TEST(HeapTest, RemoveEmptySets)
 {
-    HeapStats initialHeapSize;
-    clearOutOldGarbage(&initialHeapSize);
+    clearOutOldGarbage();
     OffHeapInt::s_destructorCalls = 0;
 
     Persistent<IntWrapper> livingInt(IntWrapper::create(42));
@@ -4674,135 +4640,6 @@ static void wakeWorkerThread()
 {
     MutexLocker locker(workerThreadMutex());
     workerThreadCondition().signal();
-}
-
-class CrossThreadObject : public GarbageCollectedFinalized<CrossThreadObject> {
-public:
-    static CrossThreadObject* create(IntWrapper* workerObjectPointer)
-    {
-        return new CrossThreadObject(workerObjectPointer);
-    }
-
-    virtual ~CrossThreadObject()
-    {
-        ++s_destructorCalls;
-    }
-
-    static int s_destructorCalls;
-    void trace(Visitor* visitor) { visitor->trace(m_workerObject); }
-
-private:
-    CrossThreadObject(IntWrapper* workerObjectPointer) : m_workerObject(workerObjectPointer) { }
-
-private:
-    Member<IntWrapper> m_workerObject;
-};
-
-int CrossThreadObject::s_destructorCalls = 0;
-
-class CrossThreadPointerTester {
-public:
-    static void test()
-    {
-        CrossThreadObject::s_destructorCalls = 0;
-        IntWrapper::s_destructorCalls = 0;
-
-        MutexLocker locker(mainThreadMutex());
-        OwnPtr<WebThread> workerThread = adoptPtr(Platform::current()->createThread("Test Worker Thread"));
-        workerThread->postTask(new Task(WTF::bind(workerThreadMain)));
-
-        parkMainThread();
-
-        uintptr_t stackPtrValue = 0;
-        {
-            // Create an object with a pointer to the other heap's IntWrapper.
-            Persistent<CrossThreadObject> cto = CrossThreadObject::create(const_cast<IntWrapper*>(s_workerObjectPointer));
-            s_workerObjectPointer = 0;
-
-            Heap::collectGarbage(ThreadState::NoHeapPointersOnStack);
-
-            // Nothing should have been collected/destructed.
-            EXPECT_EQ(0, CrossThreadObject::s_destructorCalls);
-            EXPECT_EQ(0, IntWrapper::s_destructorCalls);
-
-            // Put cto into a stack value. This is used to check that a conservative
-            // GC succeeds even though we are tracing the other thread heap after
-            // shutting it down.
-            stackPtrValue = reinterpret_cast<uintptr_t>(cto.get());
-        }
-        // At this point it is "programatically" okay to shut down the worker thread
-        // since the cto object should be dead. However out stackPtrValue will cause a
-        // trace of the object when doing a conservative GC.
-        // The worker thread's thread local GC's should just add the worker thread's
-        // pages to the heap after finalizing IntWrapper.
-        wakeWorkerThread();
-
-        // Wait for the worker to shutdown.
-        parkMainThread();
-
-        // After the worker thread has detached it should have finalized the
-        // IntWrapper object on its heaps. Since there has been no global GC
-        // the cto object should not have been finalized.
-        EXPECT_EQ(0, CrossThreadObject::s_destructorCalls);
-        EXPECT_EQ(1, IntWrapper::s_destructorCalls);
-
-        // Now do a conservative GC. The stackPtrValue should keep cto alive
-        // and will also cause the orphaned page of the other thread to be
-        // traced. At this point cto should still not be finalized.
-        Heap::collectGarbage(ThreadState::HeapPointersOnStack);
-        EXPECT_EQ(0, CrossThreadObject::s_destructorCalls);
-        EXPECT_EQ(1, IntWrapper::s_destructorCalls);
-
-        // This release assert is here to ensure the stackValuePtr is not
-        // optimized away before doing the above conservative GC. If the
-        // EXPECT_EQ(0, CrossThreadObject::s_destructorCalls) call above
-        // starts failing it means we have to find a better way to ensure
-        // the stackPtrValue is not optimized away.
-        RELEASE_ASSERT(stackPtrValue);
-
-        // Do a GC with no pointers on the stack to see the cto being collected.
-        Heap::collectGarbage(ThreadState::NoHeapPointersOnStack);
-        EXPECT_EQ(1, CrossThreadObject::s_destructorCalls);
-        EXPECT_EQ(1, IntWrapper::s_destructorCalls);
-    }
-
-private:
-    static void workerThreadMain()
-    {
-        MutexLocker locker(workerThreadMutex());
-        ThreadState::attach();
-
-        {
-            // Create a worker object that is only kept alive by a cross thread
-            // pointer (from CrossThreadObject).
-            IntWrapper* workerObject = IntWrapper::create(42);
-            s_workerObjectPointer = workerObject;
-        }
-
-        // Wake up the main thread which is waiting for the worker to do its
-        // allocation and passing the pointer.
-        wakeMainThread();
-
-        // Wait for main thread to signal the worker to shutdown.
-        {
-            ThreadState::SafePointScope scope(ThreadState::NoHeapPointersOnStack);
-            parkWorkerThread();
-        }
-
-        ThreadState::detach();
-
-        // Tell the main thread the worker has done its shutdown.
-        wakeMainThread();
-    }
-
-    static volatile IntWrapper* s_workerObjectPointer;
-};
-
-volatile IntWrapper* CrossThreadPointerTester::s_workerObjectPointer = 0;
-
-TEST(HeapTest, CrossThreadPointerToOrphanedPage)
-{
-    CrossThreadPointerTester::test();
 }
 
 class DeadBitTester {

@@ -7,6 +7,7 @@ implementation classes that are used by blink's core/modules.
 """
 
 import operator
+from idl_types import IdlType
 from v8_globals import includes
 import v8_types
 import v8_utilities
@@ -19,8 +20,6 @@ DICTIONARY_H_INCLUDES = frozenset([
 
 DICTIONARY_CPP_INCLUDES = frozenset([
     'bindings/core/v8/ExceptionState.h',
-    # FIXME: Remove this, http://crbug.com/321462
-    'bindings/core/v8/Dictionary.h',
 ])
 
 
@@ -42,17 +41,28 @@ def unwrap_nullable_if_needed(idl_type):
 
 # Context for V8 bindings
 
-def dictionary_context(dictionary):
+def dictionary_context(dictionary, interfaces_info):
     includes.clear()
     includes.update(DICTIONARY_CPP_INCLUDES)
-    return {
-        'cpp_class': v8_utilities.cpp_name(dictionary),
+    cpp_class = v8_utilities.cpp_name(dictionary)
+    context = {
+        'cpp_class': cpp_class,
         'header_includes': set(DICTIONARY_H_INCLUDES),
         'members': [member_context(member)
                     for member in sorted(dictionary.members,
                                          key=operator.attrgetter('name'))],
-        'v8_class': v8_utilities.v8_class_name(dictionary),
+        'v8_class': v8_types.v8_type(cpp_class),
+        'v8_original_class': v8_types.v8_type(dictionary.name),
     }
+    if dictionary.parent:
+        IdlType(dictionary.parent).add_includes_for_type()
+        parent_cpp_class = v8_utilities.cpp_name_from_interfaces_info(
+            dictionary.parent, interfaces_info)
+        context.update({
+            'parent_cpp_class': parent_cpp_class,
+            'parent_v8_class': v8_types.v8_type(parent_cpp_class),
+        })
+    return context
 
 
 def member_context(member):
@@ -87,7 +97,11 @@ def member_context(member):
         'is_object': idl_type.name == 'Object',
         'name': member.name,
         'setter_name': setter_name_for_dictionary_member(member),
+        'use_output_parameter_for_result': idl_type.use_output_parameter_for_result,
         'v8_default_value': v8_default_value,
+        'v8_value_to_local_cpp_value': idl_type.v8_value_to_local_cpp_value(
+            member.extended_attributes, member.name + 'Value',
+            member.name, isolate='isolate'),
     }
 
 
@@ -96,13 +110,21 @@ def member_context(member):
 def dictionary_impl_context(dictionary, interfaces_info):
     includes.clear()
     header_includes = set(['platform/heap/Handle.h'])
-    return {
+    context = {
         'header_includes': header_includes,
         'cpp_class': v8_utilities.cpp_name(dictionary),
         'members': [member_impl_context(member, interfaces_info,
                                         header_includes)
                     for member in dictionary.members],
     }
+    if dictionary.parent:
+        context['parent_cpp_class'] = v8_utilities.cpp_name_from_interfaces_info(
+            dictionary.parent, interfaces_info)
+        parent_interface_info = interfaces_info.get(dictionary.parent)
+        if parent_interface_info:
+            context['header_includes'].add(
+                parent_interface_info['include_path'])
+    return context
 
 
 def member_impl_context(member, interfaces_info, header_includes):
@@ -116,7 +138,7 @@ def member_impl_context(member, interfaces_info, header_includes):
         return 'm_%s' % cpp_name
 
     def has_method_expression():
-        if idl_type.impl_should_use_nullable_container or idl_type.is_enum or idl_type.is_string_type:
+        if idl_type.impl_should_use_nullable_container or idl_type.is_enum or idl_type.is_string_type or idl_type.is_union_type:
             return '!m_%s.isNull()' % cpp_name
         elif is_object:
             return '!(m_{0}.isEmpty() || m_{0}.isNull() || m_{0}.isUndefined())'.format(cpp_name)
@@ -141,8 +163,7 @@ def member_impl_context(member, interfaces_info, header_includes):
         'has_method_expression': has_method_expression(),
         'has_method_name': has_method_name_for_dictionary_member(member),
         'is_object': is_object,
-        'is_traceable': (idl_type.is_garbage_collected or
-                         idl_type.is_will_be_garbage_collected),
+        'is_traceable': idl_type.is_traceable,
         'member_cpp_type': member_cpp_type(),
         'rvalue_cpp_type': idl_type.cpp_type_args(used_as_rvalue_type=True),
         'setter_name': setter_name_for_dictionary_member(member),

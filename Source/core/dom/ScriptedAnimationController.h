@@ -31,6 +31,7 @@
 #include "wtf/RefCounted.h"
 #include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
+#include "wtf/text/AtomicString.h"
 #include "wtf/text/StringImpl.h"
 
 namespace blink {
@@ -41,13 +42,14 @@ class EventTarget;
 class MediaQueryListListener;
 class RequestAnimationFrameCallback;
 
-class ScriptedAnimationController : public RefCountedWillBeGarbageCollectedFinalized<ScriptedAnimationController> {
+class ScriptedAnimationController : public RefCountedWillBeGarbageCollected<ScriptedAnimationController> {
+    DECLARE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(ScriptedAnimationController);
 public:
     static PassRefPtrWillBeRawPtr<ScriptedAnimationController> create(Document* document)
     {
         return adoptRefWillBeNoop(new ScriptedAnimationController(document));
     }
-    ~ScriptedAnimationController();
+
     void trace(Visitor*);
     void clearDocumentPointer() { m_document = nullptr; }
 
@@ -70,7 +72,7 @@ private:
 
     void scheduleAnimationIfNeeded();
 
-    void dispatchEvents();
+    void dispatchEvents(const AtomicString& eventInterfaceFilter = AtomicString());
     void executeCallbacks(double monotonicTimeNow);
     void callMediaQueryListListeners();
 
@@ -87,6 +89,6 @@ private:
     MediaQueryListListeners m_mediaQueryListListeners;
 };
 
-}
+} // namespace blink
 
 #endif // ScriptedAnimationController_h

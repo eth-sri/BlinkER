@@ -1,6 +1,7 @@
 var initialize_Timeline = function() {
 
 InspectorTest.preloadPanel("timeline");
+WebInspector.TempFile = InspectorTest.TempFileMock;
 
 // Scrub values when printing out these properties in the record or data field.
 InspectorTest.timelinePropertyFormatters = {
@@ -35,9 +36,7 @@ InspectorTest.timelinePropertyFormatters = {
 
 InspectorTest.switchTimelineToWaterfallMode = function()
 {
-    if (!Runtime.experiments.isEnabled("timelineOnTraceEvents"))
-        return;
-    if (WebInspector.panels.timeline._flameChartToggleButton.toggled)
+    if (WebInspector.panels.timeline._flameChartToggleButton.toggled())
         WebInspector.panels.timeline._flameChartToggleButton.element.click();
 }
 
@@ -55,11 +54,6 @@ InspectorTest.timelineModel = function()
 InspectorTest.timelineFrameModel = function()
 {
     return WebInspector.panels.timeline._frameModel();
-}
-
-InspectorTest.timelineUIUtils = function()
-{
-    return WebInspector.panels.timeline._uiUtils;
 }
 
 InspectorTest.startTimeline = function(callback)
@@ -110,7 +104,7 @@ InspectorTest.invokeAsyncWithTimeline = function(functionName, doneCallback)
 
     function step2()
     {
-       InspectorTest.stopTimeline(doneCallback);
+        InspectorTest.stopTimeline(InspectorTest.safeWrap(doneCallback));
     }
 }
 
@@ -188,7 +182,7 @@ InspectorTest.dumpTimelineRecord = function(record, detailsCallback, level, filt
         message = message + "> ";
     if (record.type() === WebInspector.TimelineModel.RecordType.TimeStamp
         || record.type() === WebInspector.TimelineModel.RecordType.ConsoleTime) {
-        message += InspectorTest.timelineUIUtils().titleForRecord(record);
+        message += WebInspector.TimelineUIUtils.titleForRecord(record);
     } else  {
         message += record.type();
     }
@@ -238,7 +232,7 @@ InspectorTest.dumpPresentationRecord = function(presentationRecord, detailsCallb
         message += record.type() + " x " + presentationRecord.presentationChildren().length;
     } else if (record.type() === WebInspector.TimelineModel.RecordType.TimeStamp
         || record.type() === WebInspector.TimelineModel.RecordType.ConsoleTime) {
-        message += InspectorTest.timelineUIUtils().titleForRecord(record);
+        message += WebInspector.TimelineUIUtils.titleForRecord(record);
     } else {
         message += record.type();
     }
@@ -273,7 +267,7 @@ InspectorTest.printTimelineRecordProperties = function(record)
     }
     if (record.children().length)
         object["children"] = [];
-    if (!record.data() && record instanceof WebInspector.TracingTimelineModel.TraceEventRecord)
+    if (!record.data())
         object["data"] = record.traceEvent().args;
     InspectorTest.addObject(object, InspectorTest.timelinePropertyFormatters);
 };

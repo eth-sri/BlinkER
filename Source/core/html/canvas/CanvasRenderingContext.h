@@ -58,9 +58,9 @@ public:
     virtual bool hasAlpha() const { return true; }
     virtual void setIsHidden(bool) = 0;
 
-    virtual void paintRenderingResultsToCanvas() {}
+    virtual void paintRenderingResultsToCanvas(SourceDrawingBuffer) { }
 
-    virtual blink::WebLayer* platformLayer() const { return 0; }
+    virtual blink::WebLayer* platformLayer() const { return nullptr; }
 
     virtual void trace(Visitor* visitor) { visitor->trace(m_canvas); }
 

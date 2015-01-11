@@ -19,12 +19,32 @@ public:
     }
     virtual ~UnionTypesTest() { }
 
+    void doubleOrStringAttribute(DoubleOrString&);
+    void setDoubleOrStringAttribute(const DoubleOrString&);
+
     String doubleOrStringArg(DoubleOrString&);
+    String doubleOrStringArrayArg(Vector<DoubleOrString>&);
+    String doubleOrStringSequenceArg(Vector<DoubleOrString>&);
+
+    String nodeListOrElementArg(NodeListOrElement&);
+    String nodeListOrElementOrNullArg(NodeListOrElement&);
 
     void trace(Visitor*) { }
 
 private:
-    UnionTypesTest() { }
+    UnionTypesTest()
+        : m_attributeType(SpecificTypeNone)
+    {
+    }
+
+    enum AttributeSpecificType {
+        SpecificTypeNone,
+        SpecificTypeDouble,
+        SpecificTypeString,
+    };
+    AttributeSpecificType m_attributeType;
+    double m_attributeDouble;
+    String m_attributeString;
 };
 
 } // namespace blink

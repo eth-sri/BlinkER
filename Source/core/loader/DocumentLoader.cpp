@@ -440,9 +440,10 @@ void DocumentLoader::cancelLoadAfterXFrameOptionsOrCSPDenied(const ResourceRespo
     return;
 }
 
-void DocumentLoader::responseReceived(Resource* resource, const ResourceResponse& response)
+void DocumentLoader::responseReceived(Resource* resource, const ResourceResponse& response, PassOwnPtr<WebDataConsumerHandle> handle)
 {
     ASSERT_UNUSED(resource, m_mainResource == resource);
+    ASSERT_UNUSED(handle, !handle);
     RefPtr<DocumentLoader> protect(this);
 
     m_applicationCacheHost->didReceiveResponseForMainResource(response);
@@ -680,7 +681,7 @@ bool DocumentLoader::scheduleArchiveLoad(Resource* cachedResource, const Resourc
     }
 
     cachedResource->setLoading(true);
-    cachedResource->responseReceived(archiveResource->response());
+    cachedResource->responseReceived(archiveResource->response(), nullptr);
     SharedBuffer* data = archiveResource->data();
     if (data)
         cachedResource->appendData(data->data(), data->size());
@@ -806,7 +807,7 @@ PassRefPtrWillBeRawPtr<DocumentWriter> DocumentLoader::createWriterFor(const Doc
     if (!init.shouldReuseDefaultView())
         frame->setDOMWindow(LocalDOMWindow::create(*frame));
 
-    RefPtrWillBeRawPtr<Document> document = frame->domWindow()->installNewDocument(mimeType, init);
+    RefPtrWillBeRawPtr<Document> document = frame->localDOMWindow()->installNewDocument(mimeType, init);
     if (ownerDocument) {
         document->setCookieURL(ownerDocument->cookieURL());
         document->setSecurityOrigin(ownerDocument->securityOrigin());

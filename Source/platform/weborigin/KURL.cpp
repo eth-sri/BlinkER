@@ -130,7 +130,7 @@ bool isValidProtocol(const String& protocol)
 
 String KURL::strippedForUseAsReferrer() const
 {
-    if (protocolIsAbout() || protocolIs("data") || protocolIs("javascript"))
+    if (!protocolIsInHTTPFamily())
         return String();
 
     if (m_parsed.username.is_nonempty() || m_parsed.password.is_nonempty() || m_parsed.ref.is_nonempty()) {
@@ -260,31 +260,6 @@ KURL& KURL::operator=(const KURL& other)
         m_innerURL.clear();
     return *this;
 }
-
-#if COMPILER_SUPPORTS(CXX_RVALUE_REFERENCES)
-KURL::KURL(KURL&& other)
-    : m_isValid(other.m_isValid)
-    , m_protocolIsInHTTPFamily(other.m_protocolIsInHTTPFamily)
-    , m_parsed(other.m_parsed)
-    // FIXME: Instead of explicitly casting to String&& here, we should use std::move, but that requires us to
-    // have a standard library that supports move semantics.
-    , m_string(static_cast<String&&>(other.m_string))
-    , m_innerURL(other.m_innerURL.release())
-{
-}
-
-KURL& KURL::operator=(KURL&& other)
-{
-    m_isValid = other.m_isValid;
-    m_protocolIsInHTTPFamily = other.m_protocolIsInHTTPFamily;
-    m_parsed = other.m_parsed;
-    // FIXME: Instead of explicitly casting to String&& here, we should use std::move, but that requires us to
-    // have a standard library that supports move semantics.
-    m_string = static_cast<String&&>(other.m_string);
-    m_innerURL = other.m_innerURL.release();
-    return *this;
-}
-#endif
 
 KURL KURL::copy() const
 {
@@ -697,13 +672,6 @@ bool KURL::isHierarchical() const
         url::IsStandard(asURLChar8Subtle(m_string), m_parsed.scheme) :
         url::IsStandard(m_string.characters16(), m_parsed.scheme);
 }
-
-#ifndef NDEBUG
-void KURL::print() const
-{
-    printf("%s\n", m_string.utf8().data());
-}
-#endif
 
 bool equalIgnoringFragmentIdentifier(const KURL& a, const KURL& b)
 {

@@ -291,11 +291,10 @@ void Resource::finishOnePart()
     checkNotify();
 }
 
-void Resource::finish(double finishTime)
+void Resource::finish()
 {
     ASSERT(!m_resourceToRevalidate);
     ASSERT(!errorOccurred());
-    m_loadFinishTime = finishTime;
     finishOnePart();
     if (!errorOccurred())
         m_status = Cached;
@@ -412,7 +411,7 @@ bool Resource::hasRightHandleCountApartFromCache(unsigned targetCount) const
     return m_handleCount == targetCount + (memoryCache()->contains(this) ? 1 : 0);
 }
 
-void Resource::responseReceived(const ResourceResponse& response)
+void Resource::responseReceived(const ResourceResponse& response, PassOwnPtr<WebDataConsumerHandle>)
 {
     setResponse(response);
     m_responseTimestamp = currentTime();

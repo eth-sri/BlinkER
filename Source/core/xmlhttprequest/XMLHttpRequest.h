@@ -44,17 +44,17 @@ namespace blink {
 class Blob;
 class BlobDataHandle;
 class DOMArrayBuffer;
+class DOMArrayBufferView;
 class DOMFormData;
 class Document;
 class DocumentParser;
 class ExceptionState;
-class ResourceRequest;
+class ReadableStream;
 class SecurityOrigin;
 class SharedBuffer;
 class Stream;
 class TextResourceDecoder;
 class ThreadableLoader;
-class UnderlyingSource;
 class XMLHttpRequestUpload;
 
 typedef int ExceptionCode;
@@ -120,8 +120,8 @@ public:
     void send(const String&, ExceptionState&);
     void send(Blob*, ExceptionState&);
     void send(DOMFormData*, ExceptionState&);
-    void send(ArrayBuffer*, ExceptionState&);
-    void send(ArrayBufferView*, ExceptionState&);
+    void send(DOMArrayBuffer*, ExceptionState&);
+    void send(DOMArrayBufferView*, ExceptionState&);
     void abort();
     void setRequestHeader(const AtomicString& name, const AtomicString& value, ExceptionState&);
     void overrideMimeType(const AtomicString& override, ExceptionState&);
@@ -134,8 +134,8 @@ public:
     DOMArrayBuffer* responseArrayBuffer();
     Stream* responseLegacyStream();
     ReadableStream* responseStream();
-    unsigned long timeout() const { return m_timeoutMilliseconds; }
-    void setTimeout(unsigned long timeout, ExceptionState&);
+    unsigned timeout() const { return m_timeoutMilliseconds; }
+    void setTimeout(unsigned timeout, ExceptionState&);
     ResponseTypeCode responseTypeCode() const { return m_responseTypeCode; }
     String responseType();
     void setResponseType(const String&, ExceptionState&);
@@ -152,13 +152,14 @@ public:
 
 private:
     class BlobLoader;
+    class ReadableStreamSource;
     XMLHttpRequest(ExecutionContext*, PassRefPtr<SecurityOrigin>);
 
     Document* document() const;
     SecurityOrigin* securityOrigin() const;
 
     virtual void didSendData(unsigned long long bytesSent, unsigned long long totalBytesToBeSent) override;
-    virtual void didReceiveResponse(unsigned long identifier, const ResourceResponse&) override;
+    virtual void didReceiveResponse(unsigned long identifier, const ResourceResponse&, PassOwnPtr<WebDataConsumerHandle>) override;
     virtual void didReceiveData(const char* data, unsigned dataLength) override;
     // When responseType is set to "blob", didDownloadData() is called instead
     // of didReceiveData().
@@ -255,8 +256,8 @@ private:
     unsigned long m_timeoutMilliseconds;
     PersistentWillBeMember<Blob> m_responseBlob;
     RefPtrWillBeMember<Stream> m_responseLegacyStream;
-    PersistentWillBeMember<ReadableStreamImpl<ReadableStreamChunkTypeTraits<DOMArrayBuffer> > > m_responseStream;
-    PersistentWillBeMember<UnderlyingSource> m_streamSource;
+    PersistentWillBeMember<ReadableStreamImpl<ReadableStreamChunkTypeTraits<DOMArrayBuffer>>> m_responseStream;
+    PersistentWillBeMember<ReadableStreamSource> m_responseStreamSource;
 
     RefPtr<ThreadableLoader> m_loader;
     unsigned long m_loaderIdentifier;

@@ -78,6 +78,7 @@ public:
     void willSendRequest(blink::WebURLLoader*, blink::WebURLRequest&, const blink::WebURLResponse& redirectResponse) override;
     void didSendData(blink::WebURLLoader*, unsigned long long bytesSent, unsigned long long totalBytesToBeSent) override;
     void didReceiveResponse(blink::WebURLLoader*, const blink::WebURLResponse&) override;
+    void didReceiveResponse(blink::WebURLLoader*, const blink::WebURLResponse&, WebDataConsumerHandle*) override;
     void didReceiveData(blink::WebURLLoader*, const char*, int, int encodedDataLength) override;
     void didReceiveCachedMetadata(blink::WebURLLoader*, const char* data, int length) override;
     void didFinishLoading(blink::WebURLLoader*, double finishTime, int64_t encodedDataLength) override;
@@ -109,6 +110,8 @@ private:
     void didFinishLoadingOnePart(double finishTime, int64_t encodedDataLength);
 
     bool responseNeedsAccessControlCheck() const;
+
+    void didComplete();
 
     ResourceRequest& applyOptions(ResourceRequest&) const;
 

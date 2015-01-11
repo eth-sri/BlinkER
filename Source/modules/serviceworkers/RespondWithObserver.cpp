@@ -74,11 +74,17 @@ void RespondWithObserver::contextDestroyed()
     m_state = Done;
 }
 
-void RespondWithObserver::didDispatchEvent()
+void RespondWithObserver::didDispatchEvent(bool defaultPrevented)
 {
     ASSERT(executionContext());
     if (m_state != Initial)
         return;
+
+    if (defaultPrevented) {
+        responseWasRejected();
+        return;
+    }
+
     ServiceWorkerGlobalScopeClient::from(executionContext())->didHandleFetchEvent(m_eventID);
     m_state = Done;
 }
@@ -87,7 +93,7 @@ void RespondWithObserver::respondWith(ScriptState* scriptState, const ScriptValu
 {
     ASSERT(RuntimeEnabledFeatures::serviceWorkerOnFetchEnabled());
     if (m_state != Initial) {
-        exceptionState.throwDOMException(InvalidStateError, "respondWith is already called.");
+        exceptionState.throwDOMException(InvalidStateError, "The fetch event has already been responded to.");
         return;
     }
 
@@ -127,6 +133,11 @@ void RespondWithObserver::responseWasFulfilled(const ScriptValue& value)
         responseWasRejected();
         return;
     }
+    if (response->bodyUsed()) {
+        responseWasRejected();
+        return;
+    }
+    response->setBodyUsed();
     WebServiceWorkerResponse webResponse;
     response->populateWebServiceWorkerResponse(webResponse);
     ServiceWorkerGlobalScopeClient::from(executionContext())->didHandleFetchEvent(m_eventID, webResponse);

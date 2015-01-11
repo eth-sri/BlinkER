@@ -32,6 +32,11 @@
 #include "modules/crypto/NormalizeAlgorithm.h"
 
 #include "bindings/core/v8/Dictionary.h"
+#include "bindings/core/v8/V8ArrayBuffer.h"
+#include "bindings/core/v8/V8ArrayBufferView.h"
+#include "bindings/modules/v8/UnionTypesModules.h"
+#include "bindings/modules/v8/V8CryptoKey.h"
+#include "core/dom/DOMArrayPiece.h"
 #include "core/dom/DOMTypedArray.h"
 #include "public/platform/WebCryptoAlgorithmParams.h"
 #include "public/platform/WebString.h"
@@ -43,6 +48,8 @@
 namespace blink {
 
 namespace {
+
+typedef ArrayBufferOrArrayBufferView BufferSource;
 
 struct AlgorithmNameMapping {
     // Must be an upper case ASCII string.
@@ -60,7 +67,9 @@ struct AlgorithmNameMapping {
 // Also all names must be upper case ASCII.
 const AlgorithmNameMapping algorithmNameMappings[] = {
     {"HMAC", 4, WebCryptoAlgorithmIdHmac},
+    {"ECDH", 4, WebCryptoAlgorithmIdEcdh},
     {"SHA-1", 5, WebCryptoAlgorithmIdSha1},
+    {"ECDSA", 5, WebCryptoAlgorithmIdEcdsa},
     {"AES-KW", 6, WebCryptoAlgorithmIdAesKw},
     {"SHA-512", 7, WebCryptoAlgorithmIdSha512},
     {"SHA-384", 7, WebCryptoAlgorithmIdSha384},
@@ -266,35 +275,37 @@ private:
 
 // Defined by the WebCrypto spec as:
 //
-//     typedef (ArrayBuffer or ArrayBufferView) CryptoOperationData;
+//     typedef (ArrayBuffer or ArrayBufferView) BufferSource;
 //
-// FIXME: Currently only supports ArrayBufferView.
-bool getOptionalCryptoOperationData(const Dictionary& raw, const char* propertyName, bool& hasProperty, RefPtr<DOMArrayBufferView>& buffer, const ErrorContext& context, AlgorithmError* error)
+bool getOptionalBufferSource(const Dictionary& raw, const char* propertyName, bool& hasProperty, BufferSource& buffer, const ErrorContext& context, AlgorithmError* error)
 {
-    if (!DictionaryHelper::get(raw, propertyName, buffer)) {
-        hasProperty = false;
+    hasProperty = false;
+    v8::Local<v8::Value> v8Value;
+    if (!raw.get(propertyName, v8Value))
+        return true;
+    hasProperty = true;
+
+    if (v8Value->IsArrayBufferView()) {
+        buffer.setArrayBufferView(V8ArrayBufferView::toImpl(v8::Handle<v8::Object>::Cast(v8Value)));
         return true;
     }
 
-    hasProperty = true;
-
-    if (!buffer) {
-        setSyntaxError(context.toString(propertyName, "Not an ArrayBufferView"), error);
-        return false;
+    if (v8Value->IsArrayBuffer()) {
+        buffer.setArrayBuffer(V8ArrayBuffer::toImpl(v8::Handle<v8::Object>::Cast(v8Value)));
+        return true;
     }
 
+    if (hasProperty) {
+        setSyntaxError(context.toString(propertyName, "Not a BufferSource"), error);
+        return false;
+    }
     return true;
 }
 
-// Defined by the WebCrypto spec as:
-//
-//     typedef (ArrayBuffer or ArrayBufferView) CryptoOperationData;
-//
-// FIXME: Currently only supports ArrayBufferView.
-bool getCryptoOperationData(const Dictionary& raw, const char* propertyName, RefPtr<DOMArrayBufferView>& buffer, const ErrorContext& context, AlgorithmError* error)
+bool getBufferSource(const Dictionary& raw, const char* propertyName, BufferSource& buffer, const ErrorContext& context, AlgorithmError* error)
 {
     bool hasProperty;
-    bool ok = getOptionalCryptoOperationData(raw, propertyName, hasProperty, buffer, context, error);
+    bool ok = getOptionalBufferSource(raw, propertyName, hasProperty, buffer, context, error);
     if (!hasProperty) {
         setSyntaxError(context.toString(propertyName, "Missing required property"), error);
         return false;
@@ -406,20 +417,21 @@ bool getOptionalUint32(const Dictionary& raw, const char* propertyName, bool& ha
 // Defined by the WebCrypto spec as:
 //
 //    dictionary AesCbcParams : Algorithm {
-//      CryptoOperationData iv;
+//      required BufferSource iv;
 //    };
 bool parseAesCbcParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithmParams>& params, const ErrorContext& context, AlgorithmError* error)
 {
-    RefPtr<DOMArrayBufferView> iv;
-    if (!getCryptoOperationData(raw, "iv", iv, context, error))
+    BufferSource ivBufferSource;
+    if (!getBufferSource(raw, "iv", ivBufferSource, context, error))
         return false;
 
-    if (iv->byteLength() != 16) {
+    DOMArrayPiece iv(ivBufferSource);
+    if (iv.byteLength() != 16) {
         setDataError(context.toString("iv", "Must be 16 bytes"), error);
         return false;
     }
 
-    params = adoptPtr(new WebCryptoAesCbcParams(static_cast<unsigned char*>(iv->baseAddress()), iv->byteLength()));
+    params = adoptPtr(new WebCryptoAesCbcParams(iv.bytes(), iv.byteLength()));
     return true;
 }
 
@@ -537,39 +549,40 @@ bool parseRsaHashedKeyGenParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithm
 // Defined by the WebCrypto spec as:
 //
 //    dictionary AesCtrParams : Algorithm {
-//      CryptoOperationData counter;
+//      required BufferSource counter;
 //      [EnforceRange] octet length;
 //    };
 bool parseAesCtrParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithmParams>& params, const ErrorContext& context, AlgorithmError* error)
 {
-    RefPtr<DOMArrayBufferView> counter;
-    if (!getCryptoOperationData(raw, "counter", counter, context, error))
+    BufferSource counterBufferSource;
+    if (!getBufferSource(raw, "counter", counterBufferSource, context, error))
         return false;
 
+    DOMArrayPiece counter(counterBufferSource);
     uint8_t length;
     if (!getUint8(raw, "length", length, context, error))
         return false;
 
-    params = adoptPtr(new WebCryptoAesCtrParams(length, static_cast<const unsigned char*>(counter->baseAddress()), counter->byteLength()));
+    params = adoptPtr(new WebCryptoAesCtrParams(length, counter.bytes(), counter.byteLength()));
     return true;
 }
 
 // Defined by the WebCrypto spec as:
 //
 //     dictionary AesGcmParams : Algorithm {
-//       CryptoOperationData iv;
-//       CryptoOperationData? additionalData;
-//       [EnforceRange] octet? tagLength;  // May be 0-128
+//       required BufferSource iv;
+//       BufferSource additionalData;
+//       [EnforceRange] octet tagLength;  // May be 0-128
 //     }
 bool parseAesGcmParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithmParams>& params, const ErrorContext& context, AlgorithmError* error)
 {
-    RefPtr<DOMArrayBufferView> iv;
-    if (!getCryptoOperationData(raw, "iv", iv, context, error))
+    BufferSource ivBufferSource;
+    if (!getBufferSource(raw, "iv", ivBufferSource, context, error))
         return false;
 
     bool hasAdditionalData;
-    RefPtr<DOMArrayBufferView> additionalData;
-    if (!getOptionalCryptoOperationData(raw, "additionalData", hasAdditionalData, additionalData, context, error))
+    BufferSource additionalDataBufferSource;
+    if (!getOptionalBufferSource(raw, "additionalData", hasAdditionalData, additionalDataBufferSource, context, error))
         return false;
 
     double tagLength;
@@ -577,32 +590,27 @@ bool parseAesGcmParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithmParams>& 
     if (!getOptionalInteger(raw, "tagLength", hasTagLength, tagLength, 0, 128, context, error))
         return false;
 
-    const unsigned char* ivStart = static_cast<const unsigned char*>(iv->baseAddress());
-    unsigned ivLength = iv->byteLength();
+    DOMArrayPiece iv(ivBufferSource);
+    DOMArrayPiece additionalData(additionalDataBufferSource);
 
-    const unsigned char* additionalDataStart = hasAdditionalData ? static_cast<const unsigned char*>(additionalData->baseAddress()) : 0;
-    unsigned additionalDataLength = hasAdditionalData ? additionalData->byteLength() : 0;
-
-    params = adoptPtr(new WebCryptoAesGcmParams(ivStart, ivLength, hasAdditionalData, additionalDataStart, additionalDataLength, hasTagLength, tagLength));
+    params = adoptPtr(new WebCryptoAesGcmParams(iv.bytes(), iv.byteLength(), hasAdditionalData, additionalData.bytes(), additionalData.byteLength(), hasTagLength, tagLength));
     return true;
 }
 
 // Defined by the WebCrypto spec as:
 //
 //     dictionary RsaOaepParams : Algorithm {
-//       CryptoOperationData? label;
+//       BufferSource label;
 //     };
 bool parseRsaOaepParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithmParams>& params, const ErrorContext& context, AlgorithmError* error)
 {
     bool hasLabel;
-    RefPtr<DOMArrayBufferView> label;
-    if (!getOptionalCryptoOperationData(raw, "label", hasLabel, label, context, error))
+    BufferSource labelBufferSource;
+    if (!getOptionalBufferSource(raw, "label", hasLabel, labelBufferSource, context, error))
         return false;
 
-    const unsigned char* labelStart = hasLabel ? static_cast<const unsigned char*>(label->baseAddress()) : 0;
-    unsigned labelLength = hasLabel ? label->byteLength() : 0;
-
-    params = adoptPtr(new WebCryptoRsaOaepParams(hasLabel, labelStart, labelLength));
+    DOMArrayPiece label(labelBufferSource);
+    params = adoptPtr(new WebCryptoRsaOaepParams(hasLabel, label.bytes(), label.byteLength()));
     return true;
 }
 
@@ -618,6 +626,107 @@ bool parseRsaPssParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithmParams>& 
         return false;
 
     params = adoptPtr(new WebCryptoRsaPssParams(saltLengthBytes));
+    return true;
+}
+
+// Defined by the WebCrypto spec as:
+//
+//     dictionary EcdsaParams : Algorithm {
+//       required HashAlgorithmIdentifier hash;
+//     };
+bool parseEcdsaParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithmParams>& params, const ErrorContext& context, AlgorithmError* error)
+{
+    WebCryptoAlgorithm hash;
+    if (!parseHash(raw, hash, context, error))
+        return false;
+
+    params = adoptPtr(new WebCryptoEcdsaParams(hash));
+    return true;
+}
+
+struct CurveNameMapping {
+    const char* const name;
+    WebCryptoNamedCurve value;
+};
+
+const CurveNameMapping curveNameMappings[] = {
+    { "P-256", WebCryptoNamedCurveP256 },
+    { "P-384", WebCryptoNamedCurveP384 },
+    { "P-521", WebCryptoNamedCurveP521 }
+};
+
+// Reminder to update curveNameMappings when adding a new curve.
+COMPILE_ASSERT(WebCryptoNamedCurveLast + 1 == WTF_ARRAY_LENGTH(curveNameMappings), UPDATE_curveNameMappings);
+
+bool parseNamedCurve(const Dictionary& raw, WebCryptoNamedCurve& namedCurve, ErrorContext context, AlgorithmError* error)
+{
+    String namedCurveString;
+    if (!DictionaryHelper::get(raw, "namedCurve", namedCurveString)) {
+        setSyntaxError(context.toString("namedCurve", "Missing or not a string"), error);
+        return false;
+    }
+
+    for (size_t i = 0; i < WTF_ARRAY_LENGTH(curveNameMappings); ++i) {
+        if (curveNameMappings[i].name == namedCurveString) {
+            namedCurve = curveNameMappings[i].value;
+            return true;
+        }
+    }
+
+    setNotSupportedError(context.toString("Unrecognized namedCurve"), error);
+    return false;
+}
+
+// Defined by the WebCrypto spec as:
+//
+//     dictionary EcKeyGenParams : Algorithm {
+//       required NamedCurve namedCurve;
+//     };
+bool parseEcKeyGenParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithmParams>& params, const ErrorContext& context, AlgorithmError* error)
+{
+    WebCryptoNamedCurve namedCurve;
+    if (!parseNamedCurve(raw, namedCurve, context, error))
+        return false;
+
+    params = adoptPtr(new WebCryptoEcKeyGenParams(namedCurve));
+    return true;
+}
+
+// Defined by the WebCrypto spec as:
+//
+//     dictionary EcKeyImportParams : Algorithm {
+//       required NamedCurve namedCurve;
+//     };
+bool parseEcKeyImportParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithmParams>& params, const ErrorContext& context, AlgorithmError* error)
+{
+    WebCryptoNamedCurve namedCurve;
+    if (!parseNamedCurve(raw, namedCurve, context, error))
+        return false;
+
+    params = adoptPtr(new WebCryptoEcKeyImportParams(namedCurve));
+    return true;
+}
+
+// Defined by the WebCrypto spec as:
+//
+//     dictionary EcdhKeyDeriveParams : Algorithm {
+//       required CryptoKey public;
+//     };
+bool parseEcdhKeyDeriveParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithmParams>& params, const ErrorContext& context, AlgorithmError* error)
+{
+    v8::Local<v8::Value> v8Value;
+    if (!raw.get("public", v8Value)) {
+        setSyntaxError(context.toString("public", "Missing required property"), error);
+        return false;
+    }
+
+    CryptoKey* cryptoKey = V8CryptoKey::toImplWithTypeCheck(raw.isolate(), v8Value);
+    if (!cryptoKey) {
+        setSyntaxError(context.toString("public", "Must be a CryptoKey"), error);
+        return false;
+    }
+
+    params = adoptPtr(new WebCryptoEcdhKeyDeriveParams(cryptoKey->key()));
     return true;
 }
 
@@ -656,6 +765,18 @@ bool parseAlgorithmParams(const Dictionary& raw, WebCryptoAlgorithmParamsType ty
     case WebCryptoAlgorithmParamsTypeRsaPssParams:
         context.add("RsaPssParams");
         return parseRsaPssParams(raw, params, context, error);
+    case WebCryptoAlgorithmParamsTypeEcdsaParams:
+        context.add("EcdsaParams");
+        return parseEcdsaParams(raw, params, context, error);
+    case WebCryptoAlgorithmParamsTypeEcKeyGenParams:
+        context.add("EcKeyGenParams");
+        return parseEcKeyGenParams(raw, params, context, error);
+    case WebCryptoAlgorithmParamsTypeEcKeyImportParams:
+        context.add("EcKeyImportParams");
+        return parseEcKeyImportParams(raw, params, context, error);
+    case WebCryptoAlgorithmParamsTypeEcdhKeyDeriveParams:
+        context.add("EcdhKeyDeriveParams");
+        return parseEcdhKeyDeriveParams(raw, params, context, error);
     }
     ASSERT_NOT_REACHED();
     return false;

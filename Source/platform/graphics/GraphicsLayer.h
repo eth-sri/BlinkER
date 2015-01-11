@@ -51,6 +51,7 @@
 
 namespace blink {
 
+class DisplayItemList;
 class FloatRect;
 class GraphicsContext;
 class GraphicsLayer;
@@ -242,12 +243,16 @@ public:
     // WebLayerScrollClient implementation.
     virtual void didScroll() override;
 
+    DisplayItemList& displayItemList();
+
 protected:
     String debugName(WebLayer*) const;
 
     explicit GraphicsLayer(GraphicsLayerClient*);
     // GraphicsLayerFactoryChromium that wants to create a GraphicsLayer need to be friends.
     friend class GraphicsLayerFactoryChromium;
+    // for testing
+    friend class FakeGraphicsLayerFactory;
 
     // Exposed for tests.
     virtual WebLayer* contentsLayer() const { return m_contentsLayer; }
@@ -341,12 +346,14 @@ private:
     ScrollableArea* m_scrollableArea;
     GraphicsLayerDebugInfo m_debugInfo;
     int m_3dRenderingContext;
+
+    OwnPtr<DisplayItemList> m_displayItemList;
 };
 
 } // namespace blink
 
 #ifndef NDEBUG
-// Outside the WebCore namespace for ease of invocation from gdb.
+// Outside the blink namespace for ease of invocation from gdb.
 void PLATFORM_EXPORT showGraphicsLayerTree(const blink::GraphicsLayer*);
 #endif
 

@@ -934,7 +934,8 @@ MainThreadScrollingReasons ScrollingCoordinator::mainThreadScrollingReasons() co
 {
     MainThreadScrollingReasons reasons = static_cast<MainThreadScrollingReasons>(0);
 
-    if (!m_page->settings().threadedScrollingEnabled())
+    // FIXME: make threaded scrolling work correctly with rootLayerScrolls.
+    if (!m_page->settings().threadedScrollingEnabled() || m_page->settings().rootLayerScrolls())
         reasons |= ThreadedScrollingDisabled;
 
     if (!m_page->mainFrame()->isLocalFrame())
@@ -945,8 +946,18 @@ MainThreadScrollingReasons ScrollingCoordinator::mainThreadScrollingReasons() co
 
     if (frameView->hasSlowRepaintObjects())
         reasons |= HasSlowRepaintObjects;
-    if (frameView->isScrollable() && hasVisibleSlowRepaintViewportConstrainedObjects(frameView))
+    FrameView::ScrollingReasons scrollingReasons = frameView->scrollingReasons();
+    const bool mayBeScrolledByInput = (scrollingReasons == FrameView::Scrollable);
+    const bool mayBeScrolledByScript = mayBeScrolledByInput || (scrollingReasons ==
+        FrameView::NotScrollableExplicitlyDisabled);
+
+    // TODO(awoloszyn) Currently crbug.com/304810 will let certain
+    // overflow:hidden elements scroll on the compositor thread, so we should
+    // not let this move there path as an optimization, when we have slow-repaint
+    // elements.
+    if (mayBeScrolledByScript && hasVisibleSlowRepaintViewportConstrainedObjects(frameView)) {
         reasons |= HasNonLayerViewportConstrainedObjects;
+    }
 
     return reasons;
 }

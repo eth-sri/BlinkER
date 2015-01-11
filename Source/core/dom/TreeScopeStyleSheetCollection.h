@@ -41,7 +41,6 @@
 
 namespace blink {
 
-class ContainerNode;
 class Node;
 class StyleSheetContents;
 class StyleRuleFontFace;
@@ -49,7 +48,7 @@ class StyleRuleFontFace;
 class TreeScopeStyleSheetCollection : public StyleSheetCollection {
 public:
     void addStyleSheetCandidateNode(Node*, bool createdByParser);
-    void removeStyleSheetCandidateNode(Node*, ContainerNode* scopingNode);
+    void removeStyleSheetCandidateNode(Node* node) { m_styleSheetCandidateNodes.remove(node); }
     bool hasStyleSheetCandidateNodes() const { return !m_styleSheetCandidateNodes.isEmpty(); }
 
     bool usesRemUnits() const { return m_usesRemUnits; }

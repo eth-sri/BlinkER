@@ -15,7 +15,6 @@
 #include "modules/serviceworkers/Headers.h"
 #include "platform/blob/BlobData.h"
 #include "platform/network/FormData.h"
-#include "wtf/ArrayBuffer.h"
 
 namespace blink {
 
@@ -41,11 +40,11 @@ RequestInit::RequestInit(ExecutionContext* context, const Dictionary& options, E
     if (body->IsArrayBuffer()) {
         DOMArrayBuffer* arrayBuffer = V8ArrayBuffer::toImpl(v8::Handle<v8::Object>::Cast(body));
         ASSERT(arrayBuffer);
-        blobData->appendArrayBuffer(arrayBuffer->buffer());
+        blobData->appendBytes(arrayBuffer->data(), arrayBuffer->byteLength());
     } else if (body->IsArrayBufferView()) {
         DOMArrayBufferView* arrayBufferView = V8ArrayBufferView::toImpl(v8::Handle<v8::Object>::Cast(body));
         ASSERT(arrayBufferView);
-        blobData->appendArrayBufferView(arrayBufferView->view());
+        blobData->appendBytes(arrayBufferView->baseAddress(), arrayBufferView->byteLength());
     } else if (V8Blob::hasInstance(body, isolate)) {
         Blob* blob = V8Blob::toImpl(v8::Handle<v8::Object>::Cast(body));
         ASSERT(blob);

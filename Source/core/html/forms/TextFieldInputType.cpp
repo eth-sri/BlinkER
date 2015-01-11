@@ -189,7 +189,7 @@ void TextFieldInputType::setValue(const String& sanitizedValue, bool valueChange
     }
 
     if (!input->focused())
-        input->setTextAsOfLastFormControlChangeEvent(sanitizedValue);
+        input->setTextAsOfLastFormControlChangeEvent(sanitizedValue.isNull() ? input->defaultValue() : sanitizedValue);
 }
 
 void TextFieldInputType::handleKeydownEvent(KeyboardEvent* event)
@@ -327,6 +327,8 @@ void TextFieldInputType::destroyShadowSubtree()
 
 void TextFieldInputType::listAttributeTargetChanged()
 {
+    if (Chrome* chrome = this->chrome())
+        chrome->client().textFieldDataListChanged(element());
     Element* picker = element().userAgentShadowRoot()->getElementById(ShadowElementNames::pickerIndicator());
     bool didHavePickerIndicator = picker;
     bool willHavePickerIndicator = element().hasValidDataListOptions();

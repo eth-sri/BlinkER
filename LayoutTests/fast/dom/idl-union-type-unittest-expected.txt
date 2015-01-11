@@ -3,6 +3,15 @@ IDL union types unittests
 On success, you will see a series of "PASS" messages, followed by "TEST COMPLETE".
 
 
+Tests for attributes
+PASS unionTypesTest.doubleOrStringAttribute is 0
+PASS unionTypesTest.doubleOrStringAttribute is 3.14
+PASS unionTypesTest.doubleOrStringAttribute is "foo"
+PASS unionTypesTest.doubleOrStringAttribute is "undefined"
+PASS unionTypesTest.doubleOrStringAttribute is "null"
+PASS unionTypesTest.doubleOrStringAttribute is "[object Object]"
+PASS unionTypesTest.doubleOrStringAttribute is ""
+
 Tests for method arguments
 PASS unionTypesTest.doubleOrStringArg(3.14) is "double is passed: 3.14"
 PASS unionTypesTest.doubleOrStringArg("foo") is "string is passed: foo"
@@ -12,6 +21,49 @@ PASS unionTypesTest.doubleOrStringArg({}) is "string is passed: [object Object]"
 PASS unionTypesTest.doubleOrStringArg([]) is "string is passed: "
 PASS typeof unionTypesTest.doubleOrStringArg(new Date) is "string"
 PASS unionTypesTest.doubleOrStringArg() threw exception TypeError: Failed to execute 'doubleOrStringArg' on 'UnionTypesTest': 1 argument required, but only 0 present..
+
+PASS unionTypesTest.doubleOrStringArrayArg([]) is ""
+PASS unionTypesTest.doubleOrStringArrayArg([3.14, "foo"]) is "double: 3.14, string: foo"
+PASS unionTypesTest.doubleOrStringArrayArg([1, "foo", "bar", 2]) is "double: 1, string: foo, string: bar, double: 2"
+PASS unionTypesTest.doubleOrStringArrayArg([null, undefined, {}, []]) is "string: null, string: undefined, string: [object Object], string: "
+PASS unionTypesTest.doubleOrStringArrayArg(null) threw exception TypeError: Failed to execute 'doubleOrStringArrayArg' on 'UnionTypesTest': The 1st argument is neither an array, nor does it have indexed properties..
+PASS unionTypesTest.doubleOrStringArrayArg(undefined) threw exception TypeError: Failed to execute 'doubleOrStringArrayArg' on 'UnionTypesTest': The 1st argument is neither an array, nor does it have indexed properties..
+PASS unionTypesTest.doubleOrStringArrayArg({}) threw exception TypeError: Failed to execute 'doubleOrStringArrayArg' on 'UnionTypesTest': The 1st argument is neither an array, nor does it have indexed properties..
+
+PASS unionTypesTest.doubleOrStringSequenceArg([]) is ""
+PASS unionTypesTest.doubleOrStringSequenceArg([3.14, "foo"]) is "double: 3.14, string: foo"
+PASS unionTypesTest.doubleOrStringSequenceArg([1, "foo", "bar", 2]) is "double: 1, string: foo, string: bar, double: 2"
+PASS unionTypesTest.doubleOrStringSequenceArg([null, undefined, {}, []]) is "string: null, string: undefined, string: [object Object], string: "
+PASS unionTypesTest.doubleOrStringSequenceArg(null) threw exception TypeError: Failed to execute 'doubleOrStringSequenceArg' on 'UnionTypesTest': The 1st argument is neither an array, nor does it have indexed properties..
+PASS unionTypesTest.doubleOrStringSequenceArg(undefined) threw exception TypeError: Failed to execute 'doubleOrStringSequenceArg' on 'UnionTypesTest': The 1st argument is neither an array, nor does it have indexed properties..
+PASS unionTypesTest.doubleOrStringSequenceArg({}) threw exception TypeError: Failed to execute 'doubleOrStringSequenceArg' on 'UnionTypesTest': The 1st argument is neither an array, nor does it have indexed properties..
+
+Tests for method arguments with defaults
+PASS unionTypesTest.doubleOrStringDefaultDoubleArg() is "double is passed: 3.14"
+PASS unionTypesTest.doubleOrStringDefaultDoubleArg(undefined) is "double is passed: 3.14"
+PASS unionTypesTest.doubleOrStringDefaultDoubleArg("foo") is "string is passed: foo"
+PASS unionTypesTest.doubleOrStringDefaultStringArg() is "string is passed: foo"
+PASS unionTypesTest.doubleOrStringDefaultStringArg(undefined) is "string is passed: foo"
+PASS unionTypesTest.doubleOrStringDefaultStringArg(3.14) is "double is passed: 3.14"
+PASS unionTypesTest.doubleOrStringDefaultNullArg() is "null is passed"
+PASS unionTypesTest.doubleOrStringDefaultNullArg(undefined) is "null is passed"
+PASS unionTypesTest.doubleOrStringDefaultNullArg(null) is "null is passed"
+PASS unionTypesTest.doubleOrStringDefaultNullArg(3.14) is "double is passed: 3.14"
+PASS unionTypesTest.doubleOrStringDefaultNullArg("foo") is "string is passed: foo"
+
+Tests for nullable method arguments
+PASS unionTypesTest.nodeListOrElementOrNullArg(undefined) is "null or undefined is passed"
+PASS unionTypesTest.nodeListOrElementOrNullArg(null) is "null or undefined is passed"
+PASS unionTypesTest.nodeListOrElementOrNullArg(nodeList) is "nodelist is passed"
+PASS unionTypesTest.nodeListOrElementOrNullArg(element) is "element is passed"
+PASS unionTypesTest.nodeListOrElementOrNullArg(3.14) threw exception TypeError: Failed to execute 'nodeListOrElementOrNullArg' on 'UnionTypesTest': The provided value is not of type '(NodeList or Element)'.
+PASS unionTypesTest.nodeListOrElementOrNullArg("foo") threw exception TypeError: Failed to execute 'nodeListOrElementOrNullArg' on 'UnionTypesTest': The provided value is not of type '(NodeList or Element)'.
+PASS unionTypesTest.nodeListOrElementOrNullArg({}) threw exception TypeError: Failed to execute 'nodeListOrElementOrNullArg' on 'UnionTypesTest': The provided value is not of type '(NodeList or Element)'.
+PASS unionTypesTest.nodeListOrElementOrNullArg([]) threw exception TypeError: Failed to execute 'nodeListOrElementOrNullArg' on 'UnionTypesTest': The provided value is not of type '(NodeList or Element)'.
+PASS unionTypesTest.nodeListOrElementArg(undefined) threw exception TypeError: Failed to execute 'nodeListOrElementArg' on 'UnionTypesTest': The provided value is not of type '(NodeList or Element)'.
+PASS unionTypesTest.nodeListOrElementArg(null) threw exception TypeError: Failed to execute 'nodeListOrElementArg' on 'UnionTypesTest': The provided value is not of type '(NodeList or Element)'.
+PASS unionTypesTest.nodeListOrElementArg(nodeList) is "nodelist is passed"
+PASS unionTypesTest.nodeListOrElementArg(element) is "element is passed"
 PASS successfullyParsed is true
 
 TEST COMPLETE

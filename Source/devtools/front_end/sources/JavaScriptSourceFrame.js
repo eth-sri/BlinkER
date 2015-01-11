@@ -273,28 +273,6 @@ WebInspector.JavaScriptSourceFrame.prototype = {
             var evaluateLabel = WebInspector.UIString(WebInspector.useLowerCaseMenuTitles() ? "Evaluate in console" : "Evaluate in Console");
             contextMenu.appendItem(evaluateLabel, this._evaluateInConsole.bind(this, selection));
             contextMenu.appendSeparator();
-        } else if (this._uiSourceCode.project().type() === WebInspector.projectTypes.Debugger) {
-            // FIXME: Change condition above to explicitly check that current uiSourceCode is created by default debugger mapping
-            // and move the code adding this menu item to generic context menu provider for UISourceCode.
-            var liveEditLabel = WebInspector.UIString(WebInspector.useLowerCaseMenuTitles() ? "Live edit" : "Live Edit");
-            var liveEditSupport = WebInspector.LiveEditSupport.liveEditSupportForUISourceCode(this._uiSourceCode);
-            if (!liveEditSupport)
-                return;
-
-            contextMenu.appendItem(liveEditLabel, liveEdit.bind(this, liveEditSupport));
-            contextMenu.appendSeparator();
-        }
-
-        /**
-         * @this {WebInspector.JavaScriptSourceFrame}
-         * @param {!WebInspector.LiveEditSupport} liveEditSupport
-         */
-        function liveEdit(liveEditSupport)
-        {
-            var liveEditUISourceCode = liveEditSupport.uiSourceCodeForLiveEdit(this._uiSourceCode);
-            if (!liveEditUISourceCode)
-                return;
-            WebInspector.Revealer.reveal(liveEditUISourceCode.uiLocation(lineNumber));
         }
 
         /**
@@ -375,11 +353,33 @@ WebInspector.JavaScriptSourceFrame.prototype = {
             if (succeededEdits + failedEdits !== scriptFiles.length)
                 return;
 
-            if (!failedEdits)
-                WebInspector.LiveEditSupport.logSuccess();
-            else
-                WebInspector.LiveEditSupport.logDetailedError(liveEditError, liveEditErrorData, contextScript)
+            if (failedEdits)
+                logLiveEditError.call(this, liveEditError, liveEditErrorData, contextScript);
             this._scriptsPanel.setIgnoreExecutionLineEvents(false);
+        }
+
+        /**
+         * @param {?string} error
+         * @param {!DebuggerAgent.SetScriptSourceError=} errorData
+         * @param {!WebInspector.Script=} contextScript
+         * @this {WebInspector.JavaScriptSourceFrame}
+         */
+        function logLiveEditError(error, errorData, contextScript)
+        {
+            var warningLevel = WebInspector.Console.MessageLevel.Warning;
+            if (!errorData) {
+                if (error)
+                    WebInspector.console.addMessage(WebInspector.UIString("LiveEdit failed: %s", error), warningLevel);
+                return;
+            }
+            var compileError = errorData.compileError;
+            if (compileError) {
+                var messageText = WebInspector.UIString("LiveEdit compile failed: %s", compileError.message);
+                var message = new WebInspector.SourceFrameMessage(messageText, WebInspector.SourceFrameMessage.Level.Error, compileError.lineNumber - 1, compileError.columnNumber);
+                this.addMessageToSource(message);
+            } else {
+                WebInspector.console.addMessage(WebInspector.UIString("Unknown LiveEdit error: %s; %s", JSON.stringify(errorData), error), warningLevel);
+            }
         }
 
         this._scriptsPanel.setIgnoreExecutionLineEvents(true);
@@ -746,14 +746,23 @@ WebInspector.JavaScriptSourceFrame.prototype = {
     {
         var message = /** @type {!WebInspector.PresentationConsoleMessage} */ (event.data);
         if (this.loaded)
-            this.addMessageToSource(message.lineNumber, message.originalMessage);
+            this.addMessageToSource(this._sourceFrameMessage(message));
     },
 
     _consoleMessageRemoved: function(event)
     {
         var message = /** @type {!WebInspector.PresentationConsoleMessage} */ (event.data);
         if (this.loaded)
-            this.removeMessageFromSource(message.lineNumber, message.originalMessage);
+            this.removeMessageFromSource(this._sourceFrameMessage(message));
+    },
+
+    /**
+     * @param {!WebInspector.PresentationConsoleMessage} message
+     * @return {!WebInspector.SourceFrameMessage}
+     */
+    _sourceFrameMessage: function(message)
+    {
+        return WebInspector.SourceFrameMessage.fromConsoleMessage(message.originalMessage, message.lineNumber);
     },
 
     _consoleMessagesCleared: function(event)
@@ -821,10 +830,8 @@ WebInspector.JavaScriptSourceFrame.prototype = {
             this._breakpointAdded({data:breakpointLocations[i]});
 
         var messages = WebInspector.presentationConsoleMessageHelper.consoleMessages(this._uiSourceCode);
-        for (var i = 0; i < messages.length; ++i) {
-            var message = messages[i];
-            this.addMessageToSource(message.lineNumber, message.originalMessage);
-        }
+        for (var message of messages)
+            this.addMessageToSource(this._sourceFrameMessage(message));
 
         var scriptFiles = this._scriptFileForTarget.valuesArray();
         for (var i = 0; i < scriptFiles.length; ++i)

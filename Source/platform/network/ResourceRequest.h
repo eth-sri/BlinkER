@@ -171,25 +171,34 @@ public:
     bool downloadToFile() const { return m_downloadToFile; }
     void setDownloadToFile(bool downloadToFile) { m_downloadToFile = downloadToFile; }
 
+    // True if the requestor wants to receive a response body as
+    // WebDataConsumerHandle.
+    bool useStreamOnResponse() const { return m_useStreamOnResponse; }
+    void setUseStreamOnResponse(bool useStreamOnResponse) { m_useStreamOnResponse = useStreamOnResponse; }
+
     // True if the request should not be handled by the ServiceWorker.
     bool skipServiceWorker() const { return m_skipServiceWorker; }
     void setSkipServiceWorker(bool skipServiceWorker) { m_skipServiceWorker = skipServiceWorker; }
+
+    // True if corresponding AppCache group should be resetted.
+    bool shouldResetAppCache() { return m_shouldResetAppCache; }
+    void setShouldResetAppCache(bool shouldResetAppCache) { m_shouldResetAppCache = shouldResetAppCache; }
 
     // Extra data associated with this request.
     ExtraData* extraData() const { return m_extraData.get(); }
     void setExtraData(PassRefPtr<ExtraData> extraData) { m_extraData = extraData; }
 
-    blink::WebURLRequest::RequestContext requestContext() const { return m_requestContext; }
-    void setRequestContext(blink::WebURLRequest::RequestContext context) { m_requestContext = context; }
+    WebURLRequest::RequestContext requestContext() const { return m_requestContext; }
+    void setRequestContext(WebURLRequest::RequestContext context) { m_requestContext = context; }
 
-    blink::WebURLRequest::FrameType frameType() const { return m_frameType; }
-    void setFrameType(blink::WebURLRequest::FrameType frameType) { m_frameType = frameType; }
+    WebURLRequest::FrameType frameType() const { return m_frameType; }
+    void setFrameType(WebURLRequest::FrameType frameType) { m_frameType = frameType; }
 
-    blink::WebURLRequest::FetchRequestMode fetchRequestMode() const { return m_fetchRequestMode; }
-    void setFetchRequestMode(blink::WebURLRequest::FetchRequestMode mode) { m_fetchRequestMode = mode; }
+    WebURLRequest::FetchRequestMode fetchRequestMode() const { return m_fetchRequestMode; }
+    void setFetchRequestMode(WebURLRequest::FetchRequestMode mode) { m_fetchRequestMode = mode; }
 
-    blink::WebURLRequest::FetchCredentialsMode fetchCredentialsMode() const { return m_fetchCredentialsMode; }
-    void setFetchCredentialsMode(blink::WebURLRequest::FetchCredentialsMode mode) { m_fetchCredentialsMode = mode; }
+    WebURLRequest::FetchCredentialsMode fetchCredentialsMode() const { return m_fetchCredentialsMode; }
+    void setFetchCredentialsMode(WebURLRequest::FetchCredentialsMode mode) { m_fetchCredentialsMode = mode; }
 
     bool cacheControlContainsNoCache() const;
     bool cacheControlContainsNoStore() const;
@@ -199,6 +208,9 @@ public:
     static void setDefaultTimeoutInterval(double);
 
     static bool compare(const ResourceRequest&, const ResourceRequest&);
+
+    bool checkForBrowserSideNavigation() const { return m_checkForBrowserSideNavigation; }
+    void setCheckForBrowserSideNavigation(bool check) { m_checkForBrowserSideNavigation = check; }
 
 private:
     void initialize(const KURL&);
@@ -217,18 +229,21 @@ private:
     bool m_reportRawHeaders : 1;
     bool m_hasUserGesture : 1;
     bool m_downloadToFile : 1;
+    bool m_useStreamOnResponse : 1;
     bool m_skipServiceWorker : 1;
+    bool m_shouldResetAppCache : 1;
     ResourceLoadPriority m_priority;
     int m_intraPriorityValue;
     int m_requestorID;
     int m_requestorProcessID;
     int m_appCacheHostID;
     RefPtr<ExtraData> m_extraData;
-    blink::WebURLRequest::RequestContext m_requestContext;
-    blink::WebURLRequest::FrameType m_frameType;
-    blink::WebURLRequest::FetchRequestMode m_fetchRequestMode;
-    blink::WebURLRequest::FetchCredentialsMode m_fetchCredentialsMode;
+    WebURLRequest::RequestContext m_requestContext;
+    WebURLRequest::FrameType m_frameType;
+    WebURLRequest::FetchRequestMode m_fetchRequestMode;
+    WebURLRequest::FetchCredentialsMode m_fetchCredentialsMode;
     ReferrerPolicy m_referrerPolicy;
+    bool m_checkForBrowserSideNavigation;
 
     mutable CacheControlHeader m_cacheControlHeaderCache;
 
@@ -258,16 +273,19 @@ public:
     bool m_hasUserGesture;
     bool m_downloadToFile;
     bool m_skipServiceWorker;
+    bool m_useStreamOnResponse;
+    bool m_shouldResetAppCache;
     ResourceLoadPriority m_priority;
     int m_intraPriorityValue;
     int m_requestorID;
     int m_requestorProcessID;
     int m_appCacheHostID;
-    blink::WebURLRequest::RequestContext m_requestContext;
-    blink::WebURLRequest::FrameType m_frameType;
-    blink::WebURLRequest::FetchRequestMode m_fetchRequestMode;
-    blink::WebURLRequest::FetchCredentialsMode m_fetchCredentialsMode;
+    WebURLRequest::RequestContext m_requestContext;
+    WebURLRequest::FrameType m_frameType;
+    WebURLRequest::FetchRequestMode m_fetchRequestMode;
+    WebURLRequest::FetchCredentialsMode m_fetchCredentialsMode;
     ReferrerPolicy m_referrerPolicy;
+    bool m_checkForBrowserSideNavigation;
 };
 
 unsigned initializeMaximumHTTPConnectionCountPerHost();

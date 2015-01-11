@@ -1,0 +1,4 @@
+Tests js cpu profile in timeline.
+
+Main Thread
+

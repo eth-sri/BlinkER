@@ -33,12 +33,11 @@
 #include "core/html/canvas/CanvasImageSource.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/geometry/IntSize.h"
-#include "platform/graphics/Canvas2DLayerBridge.h"
 #include "platform/graphics/GraphicsTypes.h"
+#include "platform/graphics/GraphicsTypes3D.h"
 #include "platform/graphics/ImageBufferClient.h"
 #include "platform/heap/Handle.h"
 #include "public/platform/WebThread.h"
-#include "wtf/Forward.h"
 
 #define CanvasDefaultInterpolationQuality InterpolationLow
 
@@ -120,11 +119,8 @@ public:
 
     void ensureUnacceleratedImageBuffer();
     ImageBuffer* buffer() const;
-    Image* copiedImage() const;
+    Image* copiedImage(SourceDrawingBuffer) const;
     void clearCopiedImage();
-    PassRefPtrWillBeRawPtr<ImageData> getImageData() const;
-    void makePresentationCopy();
-    void clearPresentationCopy();
 
     SecurityOrigin* securityOrigin() const;
     bool originClean() const { return m_originClean; }
@@ -156,6 +152,7 @@ public:
     virtual void notifySurfaceInvalid() override;
     virtual bool isDirty() override { return !m_dirtyRect.isEmpty(); }
     virtual void didFinalizeFrame() override;
+    virtual void restoreCanvasMatrixClipStack() override;
 
     // Implementation of WebThread::TaskObserver methods
     virtual void willProcessTask() override;
@@ -179,7 +176,6 @@ private:
     PassOwnPtr<ImageBufferSurface> createImageBufferSurface(const IntSize& deviceSize, int* msaaSampleCount);
     void createImageBuffer();
     void createImageBufferInternal();
-    void clearImageBuffer();
     bool shouldUseDisplayList(const IntSize& deviceSize);
 
     void resetDirtyRect();
@@ -190,9 +186,9 @@ private:
 
     void updateExternallyAllocatedMemory() const;
 
-    String toDataURLInternal(const String& mimeType, const double* quality, bool isSaving = false) const;
+    String toDataURLInternal(const String& mimeType, const double* quality, SourceDrawingBuffer) const;
 
-    WillBeHeapHashSet<RawPtrWillBeWeakMember<CanvasObserver> > m_observers;
+    WillBeHeapHashSet<RawPtrWillBeWeakMember<CanvasObserver>> m_observers;
 
     IntSize m_size;
 
@@ -209,11 +205,10 @@ private:
     // It prevents HTMLCanvasElement::buffer() from continuously re-attempting to allocate an imageBuffer
     // after the first attempt failed.
     mutable bool m_didFailToCreateImageBuffer;
-    mutable bool m_didClearImageBuffer;
+    bool m_imageBufferIsClear;
     OwnPtr<ImageBuffer> m_imageBuffer;
     mutable OwnPtr<GraphicsContextStateSaver> m_contextStateSaver;
 
-    mutable RefPtr<Image> m_presentedImage;
     mutable RefPtr<Image> m_copiedImage; // FIXME: This is temporary for platforms that have to copy the image buffer to render (and for CSSCanvasValue).
 };
 

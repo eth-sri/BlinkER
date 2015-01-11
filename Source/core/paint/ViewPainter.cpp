@@ -6,6 +6,7 @@
 #include "core/paint/ViewPainter.h"
 
 #include "core/frame/FrameView.h"
+#include "core/paint/BlockPainter.h"
 #include "core/rendering/GraphicsContextAnnotator.h"
 #include "core/rendering/PaintInfo.h"
 #include "core/rendering/RenderBox.h"
@@ -13,7 +14,7 @@
 
 namespace blink {
 
-void ViewPainter::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
+void ViewPainter::paint(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
     // If we ever require layout but receive a paint anyway, something has gone horribly wrong.
     ASSERT(!m_renderView.needsLayout());
@@ -27,6 +28,7 @@ void ViewPainter::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
         paintInfo.context->fillRect(paintInfo.rect, m_renderView.frameView()->baseBackgroundColor());
 
     m_renderView.paintObject(paintInfo, paintOffset);
+    BlockPainter(m_renderView).paintOverflowControlsIfNeeded(paintInfo, paintOffset);
 }
 
 static inline bool rendererObscuresBackground(RenderBox* rootBox)
@@ -49,7 +51,7 @@ static inline bool rendererObscuresBackground(RenderBox* rootBox)
     return true;
 }
 
-void ViewPainter::paintBoxDecorationBackground(PaintInfo& paintInfo)
+void ViewPainter::paintBoxDecorationBackground(const PaintInfo& paintInfo)
 {
     if (m_renderView.document().ownerElement() || !m_renderView.view())
         return;

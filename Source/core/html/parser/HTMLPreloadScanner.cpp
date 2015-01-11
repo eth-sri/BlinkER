@@ -68,7 +68,7 @@ static const StringImpl* tagImplFor(const HTMLToken::DataVector& data)
     const StringImpl* result = tagName.impl();
     if (result->isStatic())
         return result;
-    return 0;
+    return nullptr;
 }
 
 static const StringImpl* tagImplFor(const String& tagName)
@@ -76,7 +76,7 @@ static const StringImpl* tagImplFor(const String& tagName)
     const StringImpl* result = tagName.impl();
     if (result->isStatic())
         return result;
-    return 0;
+    return nullptr;
 }
 
 static String initiatorFor(const StringImpl* tagImpl)
@@ -137,9 +137,9 @@ public:
         ASSERT(isMainThread());
         if (!m_tagImpl)
             return;
-        for (HTMLToken::AttributeList::const_iterator iter = attributes.begin(); iter != attributes.end(); ++iter) {
-            AtomicString attributeName(iter->name);
-            String attributeValue = StringImpl::create8BitIfPossible(iter->value);
+        for (const HTMLToken::Attribute& htmlTokenAttribute : attributes) {
+            AtomicString attributeName(htmlTokenAttribute.name);
+            String attributeValue = StringImpl::create8BitIfPossible(htmlTokenAttribute.value);
             processAttribute(attributeName, attributeValue);
         }
     }
@@ -148,8 +148,8 @@ public:
     {
         if (!m_tagImpl)
             return;
-        for (Vector<CompactHTMLToken::Attribute>::const_iterator iter = attributes.begin(); iter != attributes.end(); ++iter)
-            processAttribute(iter->name, iter->value);
+        for (const CompactHTMLToken::Attribute& htmlTokenAttribute : attributes)
+            processAttribute(htmlTokenAttribute.name, htmlTokenAttribute.value);
     }
 
     void handlePictureSourceURL(String& sourceURL)
@@ -254,7 +254,6 @@ private:
             // FIXME - Don't match media multiple times.
             m_matchedMediaAttribute = mediaAttributeMatches(*m_mediaValues, attributeValue);
         }
-
     }
 
     template<typename NameType>
@@ -374,6 +373,8 @@ TokenPreloadScanner::TokenPreloadScanner(const KURL& documentURL, PassRefPtr<Med
     : m_documentURL(documentURL)
     , m_inStyle(false)
     , m_inPicture(false)
+    , m_isAppCacheEnabled(false)
+    , m_isCSPEnabled(false)
     , m_templateCount(0)
     , m_mediaValues(mediaValues)
 {
@@ -386,7 +387,7 @@ TokenPreloadScanner::~TokenPreloadScanner()
 TokenPreloadScannerCheckpoint TokenPreloadScanner::createCheckpoint()
 {
     TokenPreloadScannerCheckpoint checkpoint = m_checkpoints.size();
-    m_checkpoints.append(Checkpoint(m_predictedBaseElementURL, m_inStyle, m_templateCount));
+    m_checkpoints.append(Checkpoint(m_predictedBaseElementURL, m_inStyle, m_isAppCacheEnabled, m_isCSPEnabled, m_templateCount));
     return checkpoint;
 }
 
@@ -396,6 +397,8 @@ void TokenPreloadScanner::rewindTo(TokenPreloadScannerCheckpoint checkpointIndex
     const Checkpoint& checkpoint = m_checkpoints[checkpointIndex];
     m_predictedBaseElementURL = checkpoint.predictedBaseElementURL;
     m_inStyle = checkpoint.inStyle;
+    m_isAppCacheEnabled = checkpoint.isAppCacheEnabled;
+    m_isCSPEnabled = checkpoint.isCSPEnabled;
     m_templateCount = checkpoint.templateCount;
     m_cssScanner.reset();
     m_checkpoints.clear();
@@ -414,6 +417,14 @@ void TokenPreloadScanner::scan(const CompactHTMLToken& token, const SegmentedStr
 template<typename Token>
 void TokenPreloadScanner::scanCommon(const Token& token, const SegmentedString& source, PreloadRequestStream& requests)
 {
+    // Disable preload for documents with AppCache.
+    if (m_isAppCacheEnabled)
+        return;
+
+    // http://crbug.com/434230 Disable preload for documents with CSP <meta> tags
+    if (m_isCSPEnabled)
+        return;
+
     switch (token.type()) {
     case HTMLToken::Character: {
         if (!m_inStyle)
@@ -457,6 +468,18 @@ void TokenPreloadScanner::scanCommon(const Token& token, const SegmentedString& 
             updatePredictedBaseURL(token);
             return;
         }
+        if (match(tagImpl, htmlTag) && token.getAttributeItem(manifestAttr)) {
+            m_isAppCacheEnabled = true;
+            return;
+        }
+        if (match(tagImpl, metaTag)) {
+            const typename Token::Attribute* equivAttribute = token.getAttributeItem(http_equivAttr);
+            if (equivAttribute && equalIgnoringCase(String(equivAttribute->value), "content-security-policy")) {
+                m_isCSPEnabled = true;
+                return;
+            }
+        }
+
         if (RuntimeEnabledFeatures::pictureEnabled() && (match(tagImpl, pictureTag))) {
             m_inPicture = true;
             m_pictureSourceURL = String();

@@ -7,7 +7,6 @@
 # can see a 3x variance or more in test times on the bots. In practice, this means that any test that takes longer
 # than 2 seconds in Release mode or 6 seconds in Debug mode should be listed here.
 
-crbug.com/24182 [ Debug ] fast/js/toString-and-valueOf-override.html [ Slow ]
 crbug.com/24182 [ Debug ] storage/indexeddb/objectstore-cursor.html [ Slow ]
 crbug.com/24182 [ Linux Win Debug ] editing/selection/move-by-word-visually-mac.html [ Slow ]
 crbug.com/24182 [ Win Debug ] editing/selection/move-by-word-visually-multi-line.html [ Slow ]
@@ -57,6 +56,7 @@ crbug.com/24182 tables/mozilla/other/slashlogo.html [ Slow ]
 crbug.com/24182 virtual/gpu/fast/canvas/canvas-blend-image.html [ Slow ]
 crbug.com/24182 virtual/gpu/fast/canvas/canvas-blend-solid.html [ Slow ]
 crbug.com/24182 virtual/gpu/fast/canvas/canvas-composite-alpha.html [ Slow ]
+crbug.com/433711 [ Debug ] virtual/gpu/fast/canvas/canvas-composite-image.html [ Slow ]
 crbug.com/24182 virtual/gpu/fast/canvas/canvas-composite-canvas.html [ Slow ]
 crbug.com/24182 virtual/gpu/fast/canvas/canvas-createImageBitmap-drawImage.html [ Slow ]
 crbug.com/24182 virtual/gpu/fast/canvas/canvas-draw-canvas-on-canvas-shadow.html [ Slow ]
@@ -100,9 +100,6 @@ crbug.com/394210 [ Release ] inspector/profiler/webgl/webgl-profiler-api-changes
 crbug.com/420008 [ Release ] inspector/tracing [ Slow ]
 crbug.com/420008 [ Release ] virtual/implsidepainting/inspector/tracing [ Slow ]
 crbug.com/420008 [ Release ] virtual/deferred/inspector/tracing [ Slow ]
-crbug.com/420008 [ Release ] inspector/timeline [ Slow ]
-crbug.com/420008 [ Release ] virtual/implsidepainting/inspector/timeline [ Slow ]
-crbug.com/420008 [ Release ] virtual/deferred/inspector/timeline [ Slow ]
 crbug.com/420008 [ Release ] inspector/editor/text-editor-word-jumps.html [ Slow ]
 crbug.com/420008 [ Release ] http/tests/inspector/console-xhr-logging.html [ Slow ]
 # inspector tests below are slow on LinuxASAN
@@ -158,17 +155,11 @@ crbug.com/245154 editing/selection/move-by-character-brute-force.html [ Slow ]
 crbug.com/246749 inspector/extensions/extensions-panel.html [ Slow ]
 crbug.com/248969 [ Debug ] printing/page-count-with-one-word.html [ Slow ]
 
-crbug.com/393573 [ Win ] http/tests/htmlimports/csp-import-block-but-nonce-nested.html [ Slow ]
-
 crbug.com/336481 inspector/jump-to-previous-editing-location.html [ Slow ]
 
 crbug.com/346259 http/tests/websocket/no-crash-on-cookie-flood.html [ Slow ]
 
 crbug.com/358313 virtual/gpu/fast/canvas/webgl/webgl-large-texture.html [ Slow ]
-
-crbug.com/298188 virtual/implsidepainting/inspector/timeline/timeline-paint.html [ Slow ]
-
-crbug.com/24182 crbug.com/318490 [ Win Linux Android ] virtual/implsidepainting/inspector/timeline/timeline-decode-resize.html [ Slow ]
 
 crbug.com/313338 inspector/sources/debugger/debugger-proto-property.html [ Slow ]
 
@@ -178,7 +169,6 @@ crbug.com/362503 http/tests/xmlhttprequest/xmlhttprequest-responseXML-exception.
 crbug.com/362509 [ Debug ] fast/parser/xml-error-adopted.xml [ Slow ]
 
 crbug.com/363029 virtual/gpu/fast/canvas/canvas-composite-stroke-alpha.html [ Slow ]
-crbug.com/364225 virtual/gpu/fast/canvas/canvas-composite-text-alpha.html [ Slow ]
 
 crbug.com/372424 fast/dom/DOMImplementation/createDocument-with-used-doctype.html [ Slow ]
 

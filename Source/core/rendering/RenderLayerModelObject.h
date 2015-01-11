@@ -66,9 +66,8 @@ public:
 
     virtual void invalidateTreeIfNeeded(const PaintInvalidationState&) override;
 
-    // Indicate that the contents of this renderer need to be repainted. Only has an effect if compositing is being used.
-    // The rect is in the coordinate space of this render object.
-    void setBackingNeedsPaintInvalidationInRect(const LayoutRect&, PaintInvalidationReason, const RenderObject& forRenderer) const;
+    // Indicate that the contents of this renderer need to be repainted. Only has an effect if compositing is being used,
+    void setBackingNeedsPaintInvalidationInRect(const LayoutRect&, PaintInvalidationReason) const; // r is in the coordinate space of this render object
 
 protected:
     void createLayer(LayerType);
@@ -76,6 +75,8 @@ protected:
     virtual void willBeDestroyed() override;
 
     virtual void addLayerHitTestRects(LayerHitTestRects&, const RenderLayer*, const LayoutPoint&, const LayoutRect&) const override;
+
+    void addChildFocusRingRects(Vector<LayoutRect>&, const LayoutPoint& additionalOffset) const;
 
 private:
     virtual bool isLayerModelObject() const override final { return true; }

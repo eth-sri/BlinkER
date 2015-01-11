@@ -46,7 +46,6 @@
 #include "core/loader/FrameLoader.h"
 #include "core/loader/FrameLoaderClient.h"
 #include "core/loader/FrameLoaderStateMachine.h"
-#include "core/page/BackForwardClient.h"
 #include "core/page/Page.h"
 #include "platform/SharedBuffer.h"
 #include "platform/UserGestureIndicator.h"
@@ -150,7 +149,7 @@ public:
 class ScheduledLocationChange final : public ScheduledURLNavigation {
 public:
     ScheduledLocationChange(Document* originDocument, const String& url, bool lockBackForwardList)
-        : ScheduledURLNavigation(0.0, originDocument, url, lockBackForwardList, true) { }
+        : ScheduledURLNavigation(0.0, originDocument, url, lockBackForwardList, !protocolIsJavaScript(url)) { }
 };
 
 class ScheduledReload final : public ScheduledNavigation {
@@ -183,26 +182,6 @@ public:
         request.setClientRedirect(ClientRedirect);
         frame->loader().load(request);
     }
-};
-
-class ScheduledHistoryNavigation final : public ScheduledNavigation {
-public:
-    explicit ScheduledHistoryNavigation(int historySteps)
-        : ScheduledNavigation(0, false, true)
-        , m_historySteps(historySteps)
-    {
-    }
-
-    virtual void fire(LocalFrame* frame) override
-    {
-        OwnPtr<UserGestureIndicator> gestureIndicator = createUserGestureIndicator();
-        // go(i!=0) from a frame navigates into the history of the frame only,
-        // in both IE and NS (but not in Mozilla). We can't easily do that.
-        frame->page()->deprecatedLocalMainFrame()->loader().client()->navigateBackForward(m_historySteps);
-    }
-
-private:
-    int m_historySteps;
 };
 
 class ScheduledFormSubmission final : public ScheduledNavigation {
@@ -244,14 +223,14 @@ bool NavigationScheduler::locationChangePending()
     return m_redirect && m_redirect->isLocationChange();
 }
 
-inline bool NavigationScheduler::shouldScheduleNavigation() const
+inline bool NavigationScheduler::shouldScheduleReload() const
 {
-    return m_frame->page();
+    return m_frame->page() && NavigationDisablerForBeforeUnload::isNavigationAllowed();
 }
 
 inline bool NavigationScheduler::shouldScheduleNavigation(const String& url) const
 {
-    return shouldScheduleNavigation() && (protocolIsJavaScript(url) || NavigationDisablerForBeforeUnload::isNavigationAllowed());
+    return m_frame->page() && (protocolIsJavaScript(url) || NavigationDisablerForBeforeUnload::isNavigationAllowed());
 }
 
 void NavigationScheduler::scheduleRedirect(double delay, const String& url)
@@ -333,31 +312,11 @@ void NavigationScheduler::scheduleFormSubmission(PassRefPtrWillBeRawPtr<FormSubm
 
 void NavigationScheduler::scheduleReload()
 {
-    if (!shouldScheduleNavigation())
+    if (!shouldScheduleReload())
         return;
     if (m_frame->document()->url().isEmpty())
         return;
     schedule(adoptPtr(new ScheduledReload));
-}
-
-void NavigationScheduler::scheduleHistoryNavigation(int steps)
-{
-    if (!shouldScheduleNavigation())
-        return;
-
-    // Invalid history navigations (such as history.forward() during a new load) have the side effect of cancelling any scheduled
-    // redirects. We also avoid the possibility of cancelling the current load by avoiding the scheduled redirection altogether.
-    BackForwardClient& backForward = m_frame->page()->backForward();
-    if (steps > backForward.forwardListCount() || -steps > backForward.backListCount()) {
-        cancel();
-        return;
-    }
-
-    // In all other cases, schedule the history traversal to occur asynchronously.
-    if (steps)
-        schedule(adoptPtr(new ScheduledHistoryNavigation(steps)));
-    else
-        schedule(adoptPtr(new ScheduledReload));
 }
 
 void NavigationScheduler::timerFired(EventRacerTimer<NavigationScheduler>*)

@@ -40,7 +40,7 @@ WebInspector.HeapSnapshotWorkerProxy = function(eventHandler)
     this._nextCallId = 1;
     this._callbacks = [];
     this._previousCallbacks = [];
-    this._worker = Runtime.startWorker("heap_snapshot_worker");
+    this._worker = new WorkerRuntime.Worker("heap_snapshot_worker");
     this._worker.onmessage = this._messageReceived.bind(this);
 }
 
@@ -313,6 +313,16 @@ WebInspector.HeapSnapshotProxy = function(worker, objectId)
 
 WebInspector.HeapSnapshotProxy.prototype = {
     /**
+     * @param {!WebInspector.HeapSnapshotCommon.SearchConfig} searchConfig
+     * @param {!WebInspector.HeapSnapshotCommon.NodeFilter} filter
+     * @param {function(!Array.<number>)} callback
+     */
+    search: function(searchConfig, filter, callback)
+    {
+        this.callMethod(callback, "search", searchConfig, filter);
+    },
+
+    /**
      * @param {!WebInspector.HeapSnapshotCommon.NodeFilter} filter
      * @param {function(!Object.<string, !WebInspector.HeapSnapshotCommon.Aggregate>)} callback
      */
@@ -445,7 +455,7 @@ WebInspector.HeapSnapshotProxy.prototype = {
     },
 
     /**
-     * @param {!function(!WebInspector.HeapSnapshotCommon.Statistics):void} callback
+     * @param {function(!WebInspector.HeapSnapshotCommon.Statistics):void} callback
      */
     getStatistics: function(callback)
     {

@@ -323,6 +323,24 @@ void FrameView::detachCustomScrollbars()
     }
 }
 
+void FrameView::recalculateCustomScrollbarStyle()
+{
+    bool didStyleChange = false;
+    if (m_horizontalScrollbar && m_horizontalScrollbar->isCustomScrollbar()) {
+        m_horizontalScrollbar->styleChanged();
+        didStyleChange = true;
+    }
+    if (m_verticalScrollbar && m_verticalScrollbar->isCustomScrollbar()) {
+        m_verticalScrollbar->styleChanged();
+        didStyleChange = true;
+    }
+    if (didStyleChange) {
+        updateScrollbarGeometry();
+        updateScrollCorner();
+        positionScrollbarLayers();
+    }
+}
+
 void FrameView::recalculateScrollbarOverlayStyle()
 {
     ScrollbarOverlayStyle oldOverlayStyle = scrollbarOverlayStyle();
@@ -878,7 +896,6 @@ void FrameView::layout(bool allowSubtree)
     RELEASE_ASSERT(!isPainting());
 
     TRACE_EVENT_BEGIN1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "Layout", "beginData", InspectorLayoutEvent::beginData(this));
-    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline.stack"), "CallStack", "stack", InspectorCallStackEvent::currentCallStack());
     // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentationCookie cookie = InspectorInstrumentation::willLayout(m_frame.get());
 
@@ -991,8 +1008,6 @@ void FrameView::layout(bool allowSubtree)
 
     layer->updateLayerPositionsAfterLayout();
 
-    if (m_doFullPaintInvalidation)
-        renderView()->compositor()->fullyInvalidatePaint();
     renderView()->compositor()->didLayout();
 
     m_layoutCount++;
@@ -1048,6 +1063,9 @@ void FrameView::invalidateTreeIfNeeded()
 
     PaintInvalidationState rootPaintInvalidationState(rootForPaintInvalidation);
 
+    if (m_doFullPaintInvalidation)
+        renderView()->compositor()->fullyInvalidatePaint();
+
     rootForPaintInvalidation.invalidateTreeIfNeeded(rootPaintInvalidationState);
 
     // Invalidate the paint of the frameviews scrollbars if needed
@@ -1057,8 +1075,8 @@ void FrameView::invalidateTreeIfNeeded()
         invalidateRect(horizontalBarDamage());
     resetScrollbarDamage();
 
-    m_doFullPaintInvalidation = false;
-#ifndef NDEBUG
+
+#if ENABLE(ASSERT)
     renderView()->assertSubtreeClearedPaintInvalidationState();
 #endif
 
@@ -1469,11 +1487,13 @@ void FrameView::scrollElementToRect(Element* element, const IntRect& rect)
 
     bool pinchVirtualViewportEnabled = m_frame->settings()->pinchVirtualViewportEnabled();
 
+    // FIXME: This needs an isMainFrame() check as well. crbug.com/378776.
     if (pinchVirtualViewportEnabled) {
         PinchViewport& pinchViewport = m_frame->page()->frameHost().pinchViewport();
 
-        IntSize pinchViewportSize = expandedIntSize(pinchViewport.visibleRect().size());
-        targetRect.moveBy(ceiledIntPoint(pinchViewport.visibleRect().location()));
+        FloatRect visibleRect = pinchViewport.visibleRect();
+        IntSize pinchViewportSize = expandedIntSize(visibleRect.size());
+        targetRect.moveBy(ceiledIntPoint(visibleRect.location()));
         targetRect.setSize(pinchViewportSize.shrunkTo(targetRect.size()));
     }
 
@@ -1505,8 +1525,8 @@ void FrameView::setScrollPosition(const DoublePoint& scrollPoint, ScrollBehavior
 
     if (scrollBehavior == ScrollBehaviorAuto) {
         RenderObject* renderer = m_frame->document()->documentElement() ? m_frame->document()->documentElement()->renderer() : 0;
-        if (renderer)
-            scrollBehavior = renderer->style()->scrollBehavior();
+        if (renderer && renderer->style()->scrollBehavior() == ScrollBehaviorSmooth)
+            scrollBehavior = ScrollBehaviorSmooth;
         else
             scrollBehavior = ScrollBehaviorInstant;
     }
@@ -1654,6 +1674,11 @@ bool FrameView::isRubberBandInProgress() const
     return false;
 }
 
+bool FrameView::rubberBandingOnCompositorThread() const
+{
+    return m_frame->settings()->rubberBandingOnCompositorThread();
+}
+
 HostWindow* FrameView::hostWindow() const
 {
     Page* page = frame().page();
@@ -1714,6 +1739,8 @@ void FrameView::scrollbarExistenceDidChange()
     // http://crbug.com/269692
     bool useOverlayScrollbars = ScrollbarTheme::theme()->usesOverlayScrollbars();
 
+    // FIXME: this call to layout() could be called within FrameView::layout(), but before performLayout(),
+    // causing double-layout. See also crbug.com/429242.
     if (!useOverlayScrollbars && needsLayout())
         layout();
 
@@ -1747,8 +1774,7 @@ void FrameView::scheduleRelayout()
         return;
     if (!m_frame->document()->shouldScheduleLayout())
         return;
-    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "InvalidateLayout", "frame", m_frame.get());
-    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline.stack"), "CallStack", "stack", InspectorCallStackEvent::currentCallStack());
+    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "InvalidateLayout", "data", InspectorInvalidateLayoutEvent::data(m_frame.get()));
     // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentation::didInvalidateLayout(m_frame.get());
 
@@ -1811,8 +1837,7 @@ void FrameView::scheduleRelayoutOfSubtree(RenderObject* relayoutRoot)
         page()->animator().scheduleVisualUpdate();
         lifecycle().ensureStateAtMost(DocumentLifecycle::StyleClean);
     }
-    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "InvalidateLayout", "frame", m_frame.get());
-    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline.stack"), "CallStack", "stack", InspectorCallStackEvent::currentCallStack());
+    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "InvalidateLayout", "data", InspectorInvalidateLayoutEvent::data(m_frame.get()));
     // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentation::didInvalidateLayout(m_frame.get());
 }
@@ -1932,7 +1957,7 @@ bool FrameView::updateWidgets()
     // This is always called from updateWidgetsTimerFired.
     // m_updateWidgetsTimer should only be scheduled if we have widgets to update.
     // Thus I believe we can stop checking isEmpty here, and just ASSERT isEmpty:
-    ASSERT(!m_partUpdateSet.isEmpty());
+    // FIXME: This assert has been temporarily removed due to https://crbug.com/430344
     if (m_nestedLayoutCount > 1 || m_partUpdateSet.isEmpty())
         return true;
 
@@ -2178,6 +2203,11 @@ void FrameView::scrollTo(const DoublePoint& newPosition)
     if (scrollDelta.isZero())
         return;
 
+    if (m_frame->settings() && m_frame->settings()->rootLayerScrolls()) {
+        // Don't scroll the FrameView!
+        ASSERT_NOT_REACHED();
+    }
+
     m_scrollPosition = newPosition;
 
     if (!scrollbarsSuppressed())
@@ -2261,7 +2291,13 @@ IntRect FrameView::scrollableAreaBoundingBox() const
     return ownerRenderer->absoluteContentQuad().enclosingBoundingBox();
 }
 
+
 bool FrameView::isScrollable()
+{
+    return scrollingReasons() == Scrollable;
+}
+
+FrameView::ScrollingReasons FrameView::scrollingReasons()
 {
     // Check for:
     // 1) If there an actual overflow.
@@ -2273,22 +2309,22 @@ bool FrameView::isScrollable()
     IntSize contentsSize = this->contentsSize();
     IntSize visibleContentSize = visibleContentRect().size();
     if ((contentsSize.height() <= visibleContentSize.height() && contentsSize.width() <= visibleContentSize.width()))
-        return false;
+        return NotScrollableNoOverflow;
 
     // Covers #2.
     // FIXME: Do we need to fix this for OOPI?
     HTMLFrameOwnerElement* owner = m_frame->deprecatedLocalOwner();
     if (owner && (!owner->renderer() || !owner->renderer()->visibleToHitTesting()))
-        return false;
+        return NotScrollableNotVisible;
 
     // Cover #3 and #4.
     ScrollbarMode horizontalMode;
     ScrollbarMode verticalMode;
     calculateScrollbarModesForLayoutAndSetViewportRenderer(horizontalMode, verticalMode, RulesFromWebContentOnly);
     if (horizontalMode == ScrollbarAlwaysOff && verticalMode == ScrollbarAlwaysOff)
-        return false;
+        return NotScrollableExplicitlyDisabled;
 
-    return true;
+    return Scrollable;
 }
 
 void FrameView::updateScrollableAreaSet()
@@ -2506,11 +2542,9 @@ void FrameView::updateLayoutAndStyleForPainting()
 
     updateLayoutAndStyleIfNeededRecursive();
 
-    updateWidgetPositionsIfNeeded();
-
     RenderView* view = renderView();
     if (view) {
-        TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "UpdateLayerTree", "frame", m_frame.get());
+        TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "UpdateLayerTree", "data", InspectorUpdateLayerTreeEvent::data(m_frame.get()));
         // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
         InspectorInstrumentation::willUpdateLayerTree(m_frame.get());
 
@@ -2522,12 +2556,11 @@ void FrameView::updateLayoutAndStyleForPainting()
         updateCompositedSelectionBoundsIfNeeded();
 
         InspectorInstrumentation::didUpdateLayerTree(m_frame.get());
-    }
 
-    scrollContentsIfNeededRecursive();
+        scrollContentsIfNeededRecursive();
 
-    if (view)
         invalidateTreeIfNeededRecursive();
+    }
 
     ASSERT(lifecycle().state() == DocumentLifecycle::PaintInvalidationClean);
 }
@@ -2579,6 +2612,7 @@ void FrameView::updateLayoutAndStyleIfNeededRecursive()
     m_frame->document()->renderView()->assertRendererLaidOut();
 #endif
 
+    updateWidgetPositionsIfNeeded();
 }
 
 void FrameView::invalidateTreeIfNeededRecursive()
@@ -2594,6 +2628,8 @@ void FrameView::invalidateTreeIfNeededRecursive()
 
         toLocalFrame(child)->view()->invalidateTreeIfNeededRecursive();
     }
+
+    m_doFullPaintInvalidation = false;
 }
 
 void FrameView::enableAutoSizeMode(const IntSize& minSize, const IntSize& maxSize)
@@ -2896,24 +2932,17 @@ void FrameView::removeChild(Widget* child)
 
 bool FrameView::wheelEvent(const PlatformWheelEvent& wheelEvent)
 {
-    bool allowScrolling = userInputScrollable(HorizontalScrollbar) || userInputScrollable(VerticalScrollbar);
-
     // Note that to allow for rubber-band over-scroll behavior, even non-scrollable views
     // should handle wheel events.
 #if !USE(RUBBER_BANDING)
     if (!isScrollable())
-        allowScrolling = false;
+        return false;
 #endif
 
-    if (allowScrolling && ScrollableArea::handleWheelEvent(wheelEvent))
-        return true;
+    if (m_frame->settings()->rootLayerScrolls())
+        return false;
 
-    // If the frame didn't handle the event, give the pinch-zoom viewport a chance to
-    // process the scroll event.
-    if (m_frame->settings()->pinchVirtualViewportEnabled() && m_frame->isMainFrame())
-        return page()->frameHost().pinchViewport().handleWheelEvent(wheelEvent);
-
-    return false;
+    return ScrollableArea::handleWheelEvent(wheelEvent);
 }
 
 bool FrameView::isVerticalDocument() const
@@ -2939,7 +2968,15 @@ bool FrameView::scrollbarsDisabled() const
     if (!m_frame->settings() || !m_frame->settings()->pinchVirtualViewportEnabled())
         return false;
 
-    return m_frame->isMainFrame() && ScrollbarTheme::theme()->usesOverlayScrollbars();
+    // FIXME: This decision should be made based on whether or not to use
+    // viewport scrollbars for the main frame. This is implicitly just Android,
+    // but should be made explicit.
+    // http://crbug.com/434533
+#if !OS(ANDROID)
+    return false;
+#else
+    return m_frame->isMainFrame();
+#endif
 }
 
 AXObjectCache* FrameView::axObjectCache() const
@@ -3133,6 +3170,17 @@ IntRect FrameView::visibleContentRect(IncludeScrollbarsInRect scollbarInclusion)
     return IntRect(flooredIntPoint(m_scrollPosition), expandedIntSize(visibleContentSize));
 }
 
+IntRect FrameView::visualViewportRect() const
+{
+    if (!m_frame->isMainFrame()
+        || !m_frame->settings()
+        || !m_frame->settings()->pinchVirtualViewportEnabled())
+        return visibleContentRect();
+
+    PinchViewport& pinchViewport = m_frame->page()->frameHost().pinchViewport();
+    return enclosingIntRect(pinchViewport.visibleRectInDocument());
+}
+
 IntSize FrameView::contentsSize() const
 {
     return m_contentsSize;
@@ -3248,6 +3296,9 @@ void FrameView::computeScrollbarExistence(bool& newHasHorizontalScrollbar, bool&
     newHasHorizontalScrollbar = hasHorizontalScrollbar;
     newHasVerticalScrollbar = hasVerticalScrollbar;
 
+    if (m_frame->settings() && m_frame->settings()->rootLayerScrolls())
+        return;
+
     ScrollbarMode hScroll = m_horizontalScrollbarMode;
     ScrollbarMode vScroll = m_verticalScrollbarMode;
 
@@ -3277,13 +3328,6 @@ void FrameView::computeScrollbarExistence(bool& newHasHorizontalScrollbar, bool&
         if (vScroll == ScrollbarAuto)
             newHasVerticalScrollbar = false;
     }
-
-    // If we ever turn one scrollbar off, always turn the other one off too.
-    // Never ever try to both gain/lose a scrollbar in the same pass.
-    if (!newHasHorizontalScrollbar && hasHorizontalScrollbar && vScroll != ScrollbarAlwaysOn)
-        newHasVerticalScrollbar = false;
-    if (!newHasVerticalScrollbar && hasVerticalScrollbar && hScroll != ScrollbarAlwaysOn)
-        newHasHorizontalScrollbar = false;
 }
 
 void FrameView::updateScrollbarGeometry()
@@ -3748,7 +3792,7 @@ void FrameView::calculateOverhangAreasForPainting(IntRect& horizontalOverhangRec
         horizontalOverhangRect = frameRect();
         horizontalOverhangRect.setHeight(-physicalScrollY);
         horizontalOverhangRect.setWidth(horizontalOverhangRect.width() - verticalScrollbarWidth);
-    } else if (contentsHeight() && physicalScrollY > contentsHeight() - visibleHeight()) {
+    } else if (physicalScrollY > 0 && contentsHeight() && physicalScrollY > contentsHeight() - visibleHeight()) {
         int height = physicalScrollY - (contentsHeight() - visibleHeight());
         horizontalOverhangRect = frameRect();
         horizontalOverhangRect.setY(frameRect().maxY() - height - horizontalScrollbarHeight);
@@ -3765,7 +3809,7 @@ void FrameView::calculateOverhangAreasForPainting(IntRect& horizontalOverhangRec
             verticalOverhangRect.setY(frameRect().y() + horizontalOverhangRect.height());
         else
             verticalOverhangRect.setY(frameRect().y());
-    } else if (contentsWidth() && physicalScrollX > contentsWidth() - visibleWidth()) {
+    } else if (physicalScrollX > 0 && contentsWidth() && physicalScrollX > contentsWidth() - visibleWidth()) {
         int width = physicalScrollX - (contentsWidth() - visibleWidth());
         verticalOverhangRect.setWidth(width);
         verticalOverhangRect.setHeight(frameRect().height() - horizontalOverhangRect.height() - horizontalScrollbarHeight);

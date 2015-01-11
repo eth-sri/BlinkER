@@ -12,21 +12,21 @@ WebInspector.PromisePane = function()
     this.registerRequiredCSS("promises/promisePane.css");
     this.element.classList.add("promises");
 
-    var statusBar = this.element.createChild("div", "panel-status-bar");
-    this._recordButton = new WebInspector.StatusBarButton(WebInspector.UIString("Record Promises"), "record-profile-status-bar-item");
+    var statusBar = new WebInspector.StatusBar(this.element);
+    this._recordButton = new WebInspector.StatusBarButton(WebInspector.UIString("Record Promises"), "record-status-bar-item");
     this._recordButton.addEventListener("click", this._recordButtonClicked.bind(this));
-    statusBar.appendChild(this._recordButton.element);
+    statusBar.appendStatusBarItem(this._recordButton);
     var clearButton = new WebInspector.StatusBarButton(WebInspector.UIString("Clear"), "clear-status-bar-item");
     clearButton.addEventListener("click", this._clearButtonClicked.bind(this));
-    statusBar.appendChild(clearButton.element);
-    this._refreshButton = new WebInspector.StatusBarButton(WebInspector.UIString("Refresh"), "refresh-storage-status-bar-item");
+    statusBar.appendStatusBarItem(clearButton);
+    this._refreshButton = new WebInspector.StatusBarButton(WebInspector.UIString("Refresh"), "refresh-status-bar-item");
     this._refreshButton.addEventListener("click", this._refreshButtonClicked.bind(this));
     this._refreshButton.setEnabled(false);
-    statusBar.appendChild(this._refreshButton.element);
+    statusBar.appendStatusBarItem(this._refreshButton);
     this._liveCheckbox = new WebInspector.StatusBarCheckbox(WebInspector.UIString("Live"));
     this._liveCheckbox.element.title = WebInspector.UIString("Live Recording");
     this._liveCheckbox.inputElement.disabled = true;
-    statusBar.appendChild(this._liveCheckbox.element);
+    statusBar.appendStatusBarItem(this._liveCheckbox);
 
     this._dataGridContainer = new WebInspector.VBox();
     this._dataGridContainer.show(this.element);
@@ -44,8 +44,8 @@ WebInspector.PromisePane = function()
 WebInspector.PromisePane.prototype = {
     _recordButtonClicked: function(event)
     {
-        var recording = !this._recordButton.toggled;
-        this._recordButton.toggled = recording;
+        var recording = !this._recordButton.toggled();
+        this._recordButton.setToggled(recording);
         this._refreshButton.setEnabled(recording);
         if (recording)
             this._enablePromiseTracker();
@@ -143,6 +143,8 @@ WebInspector.PromisePane.prototype = {
     {
         this._dataGrid.rootNode().removeChildren();
         this._linkifier.reset();
+        if (this._target)
+            this._target.heapProfilerAgent().collectGarbage();
     },
 
     /**

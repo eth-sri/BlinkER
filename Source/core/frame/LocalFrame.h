@@ -55,6 +55,7 @@ namespace blink {
     class InputMethodController;
     class IntPoint;
     class IntSize;
+    class LocalDOMWindow;
     class Node;
     class Range;
     class RenderView;
@@ -79,16 +80,18 @@ namespace blink {
         virtual ~LocalFrame();
         virtual void trace(Visitor*) override;
         virtual bool isLocalFrame() const override { return true; }
-        virtual LocalDOMWindow* domWindow() const override;
+        virtual DOMWindow* domWindow() const override;
         virtual void navigate(Document& originDocument, const KURL&, bool lockBackForwardList) override;
         virtual void detach() override;
         virtual void disconnectOwnerElement() override;
+        virtual SecurityContext* securityContext() const override;
 
         void addDestructionObserver(FrameDestructionObserver*);
         void removeDestructionObserver(FrameDestructionObserver*);
 
         void willDetachFrameHost();
 
+        LocalDOMWindow* localDOMWindow() const;
         void setDOMWindow(PassRefPtrWillBeRawPtr<LocalDOMWindow>);
         FrameView* view() const;
         Document* document() const;
@@ -140,8 +143,6 @@ namespace blink {
 
         void deviceOrPageScaleFactorChanged();
         double devicePixelRatio() const;
-
-        String documentTypeString() const;
 
         PassOwnPtr<DragImage> nodeImage(Node&);
         PassOwnPtr<DragImage> dragImageForSelection();
@@ -215,6 +216,11 @@ namespace blink {
     inline void LocalFrame::init()
     {
         m_loader.init();
+    }
+
+    inline LocalDOMWindow* LocalFrame::localDOMWindow() const
+    {
+        return m_domWindow.get();
     }
 
     inline FrameLoader& LocalFrame::loader() const

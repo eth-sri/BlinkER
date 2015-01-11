@@ -122,6 +122,7 @@ public:
     bool layoutSizeFixedToFrameSize() { return m_layoutSizeFixedToFrameSize; }
 
     bool needsFullPaintInvalidation() const { return m_doFullPaintInvalidation; }
+    void setNeedsFullPaintInvalidation() { m_doFullPaintInvalidation = true; }
 
     void updateAcceleratedCompositingSettings();
 
@@ -132,6 +133,7 @@ public:
     void resetScrollbars();
     void prepareForDetach();
     void detachCustomScrollbars();
+    void recalculateCustomScrollbarStyle();
     virtual void recalculateScrollbarOverlayStyle();
 
     void clear();
@@ -161,6 +163,7 @@ public:
 
     void setScrollPosition(const DoublePoint&, ScrollBehavior = ScrollBehaviorInstant);
     virtual bool isRubberBandInProgress() const override;
+    virtual bool rubberBandingOnCompositorThread() const override;
     void setScrollPositionNonProgrammatically(const IntPoint&);
 
     // This is different than visibleContentRect() in that it ignores negative (or overly positive)
@@ -246,6 +249,14 @@ public:
 
     bool isFrameViewScrollCorner(RenderScrollbarPart* scrollCorner) const { return m_scrollCorner == scrollCorner; }
 
+    enum ScrollingReasons {
+        Scrollable,
+        NotScrollableNoOverflow,
+        NotScrollableNotVisible,
+        NotScrollableExplicitlyDisabled
+    };
+
+    ScrollingReasons scrollingReasons();
     bool isScrollable();
 
     enum ScrollbarModesCalculationStrategy { RulesFromWebContentOnly, AnyRule };
@@ -391,6 +402,11 @@ public:
     // included.
     virtual IntRect visibleContentRect(IncludeScrollbarsInRect = ExcludeScrollbars) const override;
     IntSize visibleSize() const { return visibleContentRect().size(); }
+
+    // The visual viewport in the document. For subframes, this will be the visibleContentRect.
+    // For the main frame, we delegate to the PinchViewport as the visual viewport will be affected
+    // by page scale.
+    IntRect visualViewportRect() const;
 
     // visibleContentRect().size() is computed from unscaledVisibleContentSize() divided by the value of visibleContentScaleFactor.
     // For the main frame, visibleContentScaleFactor is equal to the page's pageScaleFactor; it's 1 otherwise.

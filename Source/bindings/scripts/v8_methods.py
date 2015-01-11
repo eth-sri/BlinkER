@@ -62,10 +62,6 @@ def use_local_result(method):
             idl_type.is_explicit_nullable)
 
 
-def use_output_parameter_for_result(idl_type):
-    return idl_type.is_dictionary or idl_type.is_union_type
-
-
 def method_context(interface, method, is_visible=True):
     arguments = method.arguments
     extended_attributes = method.extended_attributes
@@ -182,7 +178,7 @@ def method_context(interface, method, is_visible=True):
         'runtime_enabled_function': v8_utilities.runtime_enabled_function_name(method),  # [RuntimeEnabled]
         'should_be_exposed_to_script': not (is_implemented_in_private_script and is_only_exposed_to_private_script),
         'signature': 'v8::Local<v8::Signature>()' if is_static or 'DoNotCheckSignature' in extended_attributes else 'defaultSignature',
-        'use_output_parameter_for_result': use_output_parameter_for_result(idl_type),
+        'use_output_parameter_for_result': idl_type.use_output_parameter_for_result,
         'use_local_result': use_local_result(method),
         'v8_set_return_value': v8_set_return_value(interface.name, method, this_cpp_value),
         'v8_set_return_value_for_main_world': v8_set_return_value(interface.name, method, this_cpp_value, for_main_world=True),
@@ -213,18 +209,18 @@ def argument_context(interface, method, argument, index):
         not idl_type.is_basic_type):
         raise Exception('Private scripts supports only primitive types and DOM wrappers.')
 
-    default_cpp_value = argument.default_cpp_value
+    set_default_value = argument.set_default_value
     return {
         'cpp_type': idl_type.cpp_type_args(extended_attributes=extended_attributes,
                                            raw_type=True,
                                            used_as_variadic_argument=argument.is_variadic),
         'cpp_value': this_cpp_value,
         # FIXME: check that the default value's type is compatible with the argument's
-        'default_value': default_cpp_value,
+        'set_default_value': set_default_value,
         'enum_validation_expression': idl_type.enum_validation_expression,
         'handle': '%sHandle' % argument.name,
         # FIXME: remove once [Default] removed and just use argument.default_value
-        'has_default': 'Default' in extended_attributes or default_cpp_value,
+        'has_default': 'Default' in extended_attributes or set_default_value,
         'has_type_checking_interface': type_checking_interface,
         'has_type_checking_unrestricted':
             (has_extended_attribute_value(interface, 'TypeChecking', 'Unrestricted') or
@@ -239,6 +235,7 @@ def argument_context(interface, method, argument, index):
         'is_dictionary': idl_type.is_dictionary or idl_type.base_type == 'Dictionary',
         'is_nullable': idl_type.is_nullable,
         'is_optional': argument.is_optional,
+        'is_variadic': argument.is_variadic,
         'is_variadic_wrapper_type': is_variadic_wrapper_type,
         'is_wrapper_type': idl_type.is_wrapper_type,
         'name': argument.name,
@@ -310,7 +307,7 @@ def cpp_value(interface, method, number_of_arguments):
     # If a method returns an IDL dictionary or union type, the return value is
     # passed as an argument to impl classes.
     idl_type = method.idl_type
-    if idl_type and use_output_parameter_for_result(idl_type):
+    if idl_type and idl_type.use_output_parameter_for_result:
         cpp_arguments.append('result')
 
     if method.name == 'Constructor':
@@ -401,14 +398,42 @@ def property_attributes(method):
     return property_attributes_list
 
 
-def argument_default_cpp_value(argument):
-    if argument.idl_type.is_dictionary:
+def argument_set_default_value(argument):
+    idl_type = argument.idl_type
+    default_value = argument.default_value
+    if not default_value:
         return None
-    if not argument.default_value:
+    if idl_type.is_dictionary:
+        if not argument.default_value.is_null:
+            raise Exception('invalid default value for dictionary type')
         return None
-    return argument.idl_type.literal_cpp_value(argument.default_value)
+    if idl_type.is_union_type:
+        if argument.default_value.is_null:
+            if not idl_type.includes_nullable_type:
+                raise Exception('invalid default value for union type: null for %s'
+                                % idl_type.name)
+            # Union container objects are "null" initially.
+            return '/* null default value */'
+        if isinstance(default_value.value, basestring):
+            member_type = idl_type.string_member_type
+        elif isinstance(default_value.value, (int, float)):
+            member_type = idl_type.numeric_member_type
+        elif isinstance(default_value.value, bool):
+            member_type = idl_type.boolean_member_type
+        else:
+            member_type = None
+        if member_type is None:
+            raise Exception('invalid default value for union type: %r for %s'
+                            % (default_value.value, idl_type.name))
+        member_type_name = (member_type.inner_type.name
+                            if member_type.is_nullable else
+                            member_type.name)
+        return '%s.set%s(%s)' % (argument.name, member_type_name,
+                                 member_type.literal_cpp_value(default_value))
+    return '%s = %s' % (argument.name,
+                        idl_type.literal_cpp_value(default_value))
 
-IdlArgument.default_cpp_value = property(argument_default_cpp_value)
+IdlArgument.set_default_value = property(argument_set_default_value)
 
 
 def method_returns_promise(method):

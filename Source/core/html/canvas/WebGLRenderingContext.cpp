@@ -28,6 +28,7 @@
 
 #include "core/frame/LocalFrame.h"
 #include "core/html/canvas/ANGLEInstancedArrays.h"
+#include "core/html/canvas/CHROMIUMSubscribeUniform.h"
 #include "core/html/canvas/EXTBlendMinMax.h"
 #include "core/html/canvas/EXTFragDepth.h"
 #include "core/html/canvas/EXTShaderTextureLOD.h"
@@ -61,6 +62,8 @@
 
 namespace blink {
 
+static bool shouldFailContextCreationForTesting = false;
+
 PassOwnPtrWillBeRawPtr<WebGLRenderingContext> WebGLRenderingContext::create(HTMLCanvasElement* canvas, WebGLContextAttributes* attrs)
 {
     Document& document = canvas->document();
@@ -85,9 +88,18 @@ PassOwnPtrWillBeRawPtr<WebGLRenderingContext> WebGLRenderingContext::create(HTML
         attrs = defaultAttrs.get();
     }
     blink::WebGraphicsContext3D::Attributes attributes = attrs->attributes(document.topDocument().url().string(), settings, 1);
-    OwnPtr<blink::WebGraphicsContext3D> context = adoptPtr(blink::Platform::current()->createOffscreenGraphicsContext3D(attributes, 0));
-    if (!context) {
-        canvas->dispatchEvent(WebGLContextEvent::create(EventTypeNames::webglcontextcreationerror, false, true, "Could not create a WebGL context."));
+    blink::WebGLInfo glInfo;
+    OwnPtr<blink::WebGraphicsContext3D> context = adoptPtr(blink::Platform::current()->createOffscreenGraphicsContext3D(attributes, 0, &glInfo));
+    if (!context || shouldFailContextCreationForTesting) {
+        shouldFailContextCreationForTesting = false;
+        String statusMessage("Could not create a WebGL context for VendorInfo = ");
+        statusMessage.append(glInfo.vendorInfo);
+        statusMessage.append(", RendererInfo = ");
+        statusMessage.append(glInfo.rendererInfo);
+        statusMessage.append(", DriverInfo = ");
+        statusMessage.append(glInfo.driverVersion);
+        statusMessage.append(".");
+        canvas->dispatchEvent(WebGLContextEvent::create(EventTypeNames::webglcontextcreationerror, false, true, statusMessage));
         return nullptr;
     }
 
@@ -124,6 +136,7 @@ void WebGLRenderingContext::registerContextExtensions()
     static const char* const bothPrefixes[] = { "", "WEBKIT_", 0, };
 
     registerExtension<ANGLEInstancedArrays>(m_angleInstancedArrays);
+    registerExtension<CHROMIUMSubscribeUniform>(m_chromiumSubscribeUniform);
     registerExtension<EXTBlendMinMax>(m_extBlendMinMax);
     registerExtension<EXTFragDepth>(m_extFragDepth);
     registerExtension<EXTShaderTextureLOD>(m_extShaderTextureLOD);
@@ -150,6 +163,7 @@ void WebGLRenderingContext::registerContextExtensions()
 void WebGLRenderingContext::trace(Visitor* visitor)
 {
     visitor->trace(m_angleInstancedArrays);
+    visitor->trace(m_chromiumSubscribeUniform);
     visitor->trace(m_extBlendMinMax);
     visitor->trace(m_extFragDepth);
     visitor->trace(m_extShaderTextureLOD);
@@ -172,6 +186,11 @@ void WebGLRenderingContext::trace(Visitor* visitor)
     visitor->trace(m_webglCompressedTextureS3TC);
     visitor->trace(m_webglDepthTexture);
     WebGLRenderingContextBase::trace(visitor);
+}
+
+void WebGLRenderingContext::forceNextWebGLContextCreationToFail()
+{
+    shouldFailContextCreationForTesting = true;
 }
 
 } // namespace blink

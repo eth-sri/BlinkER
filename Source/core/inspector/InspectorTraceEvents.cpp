@@ -11,6 +11,7 @@
 #include "core/css/invalidation/DescendantInvalidationSet.h"
 #include "core/dom/StyleChangeReason.h"
 #include "core/events/Event.h"
+#include "core/fetch/CSSStyleSheetResource.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/inspector/IdentifiersFactory.h"
@@ -37,25 +38,20 @@ static const unsigned maxInvalidationTrackingCallstackSize = 5;
 
 namespace {
 
-class JSCallStack : public TraceEvent::ConvertableToTraceFormat  {
-public:
-    explicit JSCallStack(PassRefPtrWillBeRawPtr<ScriptCallStack> callstack)
-    {
-        m_serialized = callstack ? callstack->buildInspectorArray()->toJSONString() : "[]";
-        ASSERT(m_serialized.isSafeToSendToAnotherThread());
-    }
-    virtual String asTraceFormat() const
-    {
-        return m_serialized;
-    }
-
-private:
-    String m_serialized;
-};
-
 String toHexString(const void* p)
 {
     return String::format("0x%" PRIx64, static_cast<uint64_t>(reinterpret_cast<intptr_t>(p)));
+}
+
+void setCallStack(TracedValue* value)
+{
+    bool stacksEnabled;
+    TRACE_EVENT_CATEGORY_GROUP_ENABLED(TRACE_DISABLED_BY_DEFAULT("devtools.timeline.stack"), &stacksEnabled);
+    if (!stacksEnabled)
+        return;
+    RefPtrWillBeRawPtr<ScriptCallStack> scriptCallStack = createScriptCallStack(ScriptCallStack::maxCallStackSizeToCapture, true);
+    if (scriptCallStack)
+        scriptCallStack->toTracedValue(value, "stackTrace");
 }
 
 void setNodeInfo(TracedValue* value, Node* node, const char* idFieldName, const char* nameFieldName = 0)
@@ -168,7 +164,7 @@ PassRefPtr<TracedValue> InspectorScheduleStyleInvalidationTrackingEvent::fillCom
     value->setString("invalidationSet", descendantInvalidationSetToIdString(invalidationSet));
     value->setString("invalidatedSelectorId", invalidatedSelector);
     if (RefPtrWillBeRawPtr<ScriptCallStack> stackTrace = createScriptCallStack(maxInvalidationTrackingCallstackSize, true))
-        value->setArray("stackTrace", stackTrace->buildInspectorArray()->asArray());
+        stackTrace->toTracedValue(value.get(), "stackTrace");
     return value.release();
 }
 
@@ -232,9 +228,12 @@ PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorStyleInvalidatorInvali
     return fillCommonPart(element, reason);
 }
 
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorStyleInvalidatorInvalidateEvent::selectorPart(Element& element, const char* reason, const String& selectorPart)
+PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorStyleInvalidatorInvalidateEvent::selectorPart(Element& element, const char* reason, const DescendantInvalidationSet& invalidationSet, const String& selectorPart)
 {
     RefPtr<TracedValue> value = fillCommonPart(element, reason);
+    value->beginArray("invalidationList");
+    invalidationSet.toTracedValue(value.get());
+    value->endArray();
     value->setString("selectorPart", selectorPart);
     return value.release();
 }
@@ -259,7 +258,7 @@ PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorStyleRecalcInvalidatio
     value->setString("reason", reason.reasonString());
     value->setString("extraData", reason.extraData());
     if (RefPtrWillBeRawPtr<ScriptCallStack> stackTrace = createScriptCallStack(maxInvalidationTrackingCallstackSize, true))
-        value->setArray("stackTrace", stackTrace->buildInspectorArray()->asArray());
+        stackTrace->toTracedValue(value.get(), "stackTrace");
     return value.release();
 }
 
@@ -276,6 +275,7 @@ PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorLayoutEvent::beginData
     value->setInteger("totalObjects", totalObjects);
     value->setBoolean("partialLayout", isPartial);
     value->setString("frame", toHexString(&frame));
+    setCallStack(value.get());
     return value.release();
 }
 
@@ -326,7 +326,7 @@ PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorLayoutInvalidationTrac
     value->setString("frame", toHexString(renderer->frame()));
     setGeneratingNodeInfo(value.get(), renderer, "nodeId", "nodeName");
     if (RefPtrWillBeRawPtr<ScriptCallStack> stackTrace = createScriptCallStack(maxInvalidationTrackingCallstackSize, true))
-        value->setArray("stackTrace", stackTrace->buildInspectorArray()->asArray());
+        stackTrace->toTracedValue(value.get(), "stackTrace");
     return value.release();
 }
 
@@ -349,6 +349,7 @@ PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorSendRequestEvent::data
     value->setString("frame", toHexString(frame));
     value->setString("url", request.url().string());
     value->setString("requestMethod", request.httpMethod());
+    setCallStack(value.get());
     return value.release();
 }
 
@@ -401,6 +402,7 @@ static PassRefPtr<TracedValue> genericTimerData(ExecutionContext* context, int t
     value->setInteger("timerId", timerId);
     if (LocalFrame* frame = frameForExecutionContext(context))
         value->setString("frame", toHexString(frame));
+    setCallStack(value.get());
     return value.release();
 }
 
@@ -427,6 +429,7 @@ PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorAnimationFrameEvent::d
     RefPtr<TracedValue> value = TracedValue::create();
     value->setInteger("id", callbackId);
     value->setString("frame", toHexString(document->frame()));
+    setCallStack(value.get());
     return value.release();
 }
 
@@ -438,6 +441,7 @@ PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorWebSocketCreateEvent::
     value->setString("frame", toHexString(document->frame()));
     if (!protocol.isNull())
         value->setString("webSocketProtocol", protocol);
+    setCallStack(value.get());
     return value.release();
 }
 
@@ -446,6 +450,7 @@ PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorWebSocketEvent::data(D
     RefPtr<TracedValue> value = TracedValue::create();
     value->setInteger("identifier", identifier);
     value->setString("frame", toHexString(document->frame()));
+    setCallStack(value.get());
     return value.release();
 }
 
@@ -454,6 +459,14 @@ PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorParseHtmlEvent::beginD
     RefPtr<TracedValue> value = TracedValue::create();
     value->setInteger("startLine", startLine);
     value->setString("frame", toHexString(document->frame()));
+    setCallStack(value.get());
+    return value.release();
+}
+
+PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorParseAuthorStyleSheetEvent::data(const CSSStyleSheetResource* cachedStyleSheet)
+{
+    RefPtr<TracedValue> value = TracedValue::create();
+    value->setString("styleSheetUrl", cachedStyleSheet->url().string());
     return value.release();
 }
 
@@ -464,6 +477,7 @@ PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorXhrReadyStateChangeEve
     value->setInteger("readyState", request->readyState());
     if (LocalFrame* frame = frameForExecutionContext(context))
         value->setString("frame", toHexString(frame));
+    setCallStack(value.get());
     return value.release();
 }
 
@@ -473,6 +487,7 @@ PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorXhrLoadEvent::data(Exe
     value->setString("url", request->url().string());
     if (LocalFrame* frame = frameForExecutionContext(context))
         value->setString("frame", toHexString(frame));
+    setCallStack(value.get());
     return value.release();
 }
 
@@ -492,7 +507,6 @@ const char InspectorLayerInvalidationTrackingEvent::AddedToSquashingLayer[] = "T
 const char InspectorLayerInvalidationTrackingEvent::RemovedFromSquashingLayer[] = "Removed the layer from a squashing layer";
 const char InspectorLayerInvalidationTrackingEvent::ReflectionLayerChanged[] = "Reflection layer change";
 const char InspectorLayerInvalidationTrackingEvent::NewCompositedLayer[] = "Assigned a new composited layer";
-const char InspectorLayerInvalidationTrackingEvent::AncestorRequiresNewLayer[] = "A new composited layer is needed based on the RenderLayer's compositing ancestor's properties";
 
 PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorLayerInvalidationTrackingEvent::data(const RenderLayer* layer, const char* reason)
 {
@@ -515,16 +529,28 @@ PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorPaintEvent::data(Rende
     setGeneratingNodeInfo(value.get(), renderer, "nodeId");
     int graphicsLayerId = graphicsLayer ? graphicsLayer->platformLayer()->id() : 0;
     value->setInteger("layerId", graphicsLayerId);
+    setCallStack(value.get());
     return value.release();
 }
 
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorMarkLoadEvent::data(LocalFrame* frame)
+PassRefPtr<TraceEvent::ConvertableToTraceFormat> frameEventData(LocalFrame* frame)
 {
     RefPtr<TracedValue> value = TracedValue::create();
     value->setString("frame", toHexString(frame));
     bool isMainFrame = frame && frame->isMainFrame();
     value->setBoolean("isMainFrame", isMainFrame);
     return value.release();
+}
+
+
+PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorCommitLoadEvent::data(LocalFrame* frame)
+{
+    return frameEventData(frame);
+}
+
+PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorMarkLoadEvent::data(LocalFrame* frame)
+{
+    return frameEventData(frame);
 }
 
 PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorScrollLayerEvent::data(RenderObject* renderer)
@@ -535,12 +561,20 @@ PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorScrollLayerEvent::data
     return value.release();
 }
 
+PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorUpdateLayerTreeEvent::data(LocalFrame* frame)
+{
+    RefPtr<TracedValue> value = TracedValue::create();
+    value->setString("frame", toHexString(frame));
+    return value.release();
+}
+
 PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorEvaluateScriptEvent::data(LocalFrame* frame, const String& url, int lineNumber)
 {
     RefPtr<TracedValue> value = TracedValue::create();
     value->setString("frame", toHexString(frame));
     value->setString("url", url);
     value->setInteger("lineNumber", lineNumber);
+    setCallStack(value.get());
     return value.release();
 }
 
@@ -552,6 +586,7 @@ PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorFunctionCallEvent::dat
     value->setInteger("scriptLine", scriptLine);
     if (LocalFrame* frame = frameForExecutionContext(context))
         value->setString("frame", toHexString(frame));
+    setCallStack(value.get());
     return value.release();
 }
 
@@ -561,6 +596,23 @@ PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorPaintImageEvent::data(
     setGeneratingNodeInfo(value.get(), &renderImage, "nodeId");
     if (const ImageResource* resource = renderImage.cachedImage())
         value->setString("url", resource->url().string());
+    return value.release();
+}
+
+PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorPaintImageEvent::data(const RenderObject& owningRenderer, const StyleImage& styleImage)
+{
+    RefPtr<TracedValue> value = TracedValue::create();
+    setGeneratingNodeInfo(value.get(), &owningRenderer, "nodeId");
+    if (const ImageResource* resource = styleImage.cachedImage())
+        value->setString("url", resource->url().string());
+    return value.release();
+}
+
+PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorPaintImageEvent::data(const RenderObject* owningRenderer, const ImageResource& imageResource)
+{
+    RefPtr<TracedValue> value = TracedValue::create();
+    setGeneratingNodeInfo(value.get(), owningRenderer, "nodeId");
+    value->setString("url", imageResource.url().string());
     return value.release();
 }
 
@@ -583,9 +635,20 @@ PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorUpdateCountersEvent::d
     return value.release();
 }
 
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorCallStackEvent::currentCallStack()
+PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorInvalidateLayoutEvent::data(LocalFrame* frame)
 {
-    return adoptRef(new JSCallStack(createScriptCallStack(ScriptCallStack::maxCallStackSizeToCapture, true)));
+    RefPtr<TracedValue> value = TracedValue::create();
+    value->setString("frame", toHexString(frame));
+    setCallStack(value.get());
+    return value.release();
+}
+
+PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorRecalculateStylesEvent::data(LocalFrame* frame)
+{
+    RefPtr<TracedValue> value = TracedValue::create();
+    value->setString("frame", toHexString(frame));
+    setCallStack(value.get());
+    return value.release();
 }
 
 PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorEventDispatchEvent::data(const Event& event)
@@ -604,10 +667,11 @@ PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorTimeStampEvent::data(E
     return value.release();
 }
 
-PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorTracingSessionIdForWorkerEvent::data(const String& sessionId, WorkerThread* workerThread)
+PassRefPtr<TraceEvent::ConvertableToTraceFormat> InspectorTracingSessionIdForWorkerEvent::data(const String& sessionId, int workerId, WorkerThread* workerThread)
 {
     RefPtr<TracedValue> value = TracedValue::create();
     value->setString("sessionId", sessionId);
+    value->setInteger("workerId", workerId);
     value->setDouble("workerThreadId", workerThread->platformThreadId());
     return value.release();
 }

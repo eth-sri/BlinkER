@@ -44,7 +44,14 @@ SVGGraphicsElement::~SVGGraphicsElement()
 {
 }
 
-PassRefPtr<SVGMatrixTearOff> SVGGraphicsElement::getTransformToElement(SVGElement* target, ExceptionState& exceptionState)
+void SVGGraphicsElement::trace(Visitor* visitor)
+{
+    visitor->trace(m_transform);
+    SVGElement::trace(visitor);
+    SVGTests::trace(visitor);
+}
+
+PassRefPtrWillBeRawPtr<SVGMatrixTearOff> SVGGraphicsElement::getTransformToElement(SVGElement* target, ExceptionState& exceptionState)
 {
     AffineTransform ctm = getCTM(AllowStyleUpdate);
 
@@ -112,17 +119,25 @@ AffineTransform SVGGraphicsElement::getScreenCTM(StyleUpdateStrategy styleUpdate
     return computeCTM(ScreenScope, styleUpdateStrategy);
 }
 
-PassRefPtr<SVGMatrixTearOff> SVGGraphicsElement::getCTMFromJavascript()
+PassRefPtrWillBeRawPtr<SVGMatrixTearOff> SVGGraphicsElement::getCTMFromJavascript()
 {
     return SVGMatrixTearOff::create(getCTM());
 }
 
-PassRefPtr<SVGMatrixTearOff> SVGGraphicsElement::getScreenCTMFromJavascript()
+PassRefPtrWillBeRawPtr<SVGMatrixTearOff> SVGGraphicsElement::getScreenCTMFromJavascript()
 {
     return SVGMatrixTearOff::create(getScreenCTM());
 }
 
-AffineTransform SVGGraphicsElement::animatedLocalTransform() const
+bool SVGGraphicsElement::hasAnimatedLocalTransform() const
+{
+    RenderStyle* style = renderer() ? renderer()->style() : 0;
+
+    // Each of these is used in SVGGraphicsElement::calculateAnimatedLocalTransform to create an animated local transform.
+    return (style && style->hasTransform()) || !m_transform->currentValue()->isEmpty() || hasSVGRareData();
+}
+
+AffineTransform SVGGraphicsElement::calculateAnimatedLocalTransform() const
 {
     AffineTransform matrix;
     RenderStyle* style = renderer() ? renderer()->style() : 0;
@@ -132,22 +147,28 @@ AffineTransform SVGGraphicsElement::animatedLocalTransform() const
         TransformationMatrix transform;
         float zoom = style->effectiveZoom();
 
-        // CSS transforms operate with pre-scaled lengths. To make this work with SVG
-        // (which applies the zoom factor globally, at the root level) we
-        //
-        //   * pre-scale the bounding box (to bring it into the same space as the other CSS values)
-        //   * invert the zoom factor (to effectively compute the CSS transform under a 1.0 zoom)
-        //
-        // Note: objectBoundingBox is an emptyRect for elements like pattern or clipPath.
-        // See the "Object bounding box units" section of http://dev.w3.org/csswg/css3-transforms/
-        if (zoom != 1) {
-            FloatRect scaledBBox = renderer()->objectBoundingBox();
-            scaledBBox.scale(zoom);
-            transform.scale(1 / zoom);
-            style->applyTransform(transform, scaledBBox);
-            transform.scale(zoom);
+        // SVGTextElements need special handling for the text positioning code.
+        if (isSVGTextElement(this)) {
+            // Do not take into account SVG's zoom rules, transform-origin, or percentage values.
+            style->applyTransform(transform, LayoutSize(0, 0), RenderStyle::ExcludeTransformOrigin);
         } else {
-            style->applyTransform(transform, renderer()->objectBoundingBox());
+            // CSS transforms operate with pre-scaled lengths. To make this work with SVG
+            // (which applies the zoom factor globally, at the root level) we
+            //
+            //   * pre-scale the bounding box (to bring it into the same space as the other CSS values)
+            //   * invert the zoom factor (to effectively compute the CSS transform under a 1.0 zoom)
+            //
+            // Note: objectBoundingBox is an emptyRect for elements like pattern or clipPath.
+            // See the "Object bounding box units" section of http://dev.w3.org/csswg/css3-transforms/
+            if (zoom != 1) {
+                FloatRect scaledBBox = renderer()->objectBoundingBox();
+                scaledBBox.scale(zoom);
+                transform.scale(1 / zoom);
+                style->applyTransform(transform, scaledBBox);
+                transform.scale(zoom);
+            } else {
+                style->applyTransform(transform, renderer()->objectBoundingBox());
+            }
         }
 
         // Flatten any 3D transform.
@@ -240,7 +261,7 @@ FloatRect SVGGraphicsElement::getBBox()
     return renderer()->objectBoundingBox();
 }
 
-PassRefPtr<SVGRectTearOff> SVGGraphicsElement::getBBoxFromJavascript()
+PassRefPtrWillBeRawPtr<SVGRectTearOff> SVGGraphicsElement::getBBoxFromJavascript()
 {
     return SVGRectTearOff::create(SVGRect::create(getBBox()), 0, PropertyIsNotAnimVal);
 }
@@ -254,8 +275,7 @@ RenderObject* SVGGraphicsElement::createRenderer(RenderStyle*)
 void SVGGraphicsElement::toClipPath(Path& path)
 {
     updatePathFromGraphicsElement(this, path);
-    // FIXME: How do we know the element has done a layout?
-    path.transform(animatedLocalTransform());
+    path.transform(calculateAnimatedLocalTransform());
 }
 
 }

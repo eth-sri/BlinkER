@@ -136,11 +136,11 @@ WebInspector.TabbedPane.prototype = {
     },
 
     /**
-     * @return {?Element}
+     * @return {!Element}
      */
     defaultFocusedElement: function()
     {
-        return this.visibleView ? this.visibleView.defaultFocusedElement() : null;
+        return this.visibleView ? this.visibleView.defaultFocusedElement() : this.element;
     },
 
     focus: function()
@@ -633,8 +633,10 @@ WebInspector.TabbedPane.prototype = {
         }
 
         // Perform measurement
-        for (var i = 0; i < measuringTabElements.length; ++i)
-            measuringTabElements[i].__tab._measuredWidth = measuringTabElements[i].getBoundingClientRect().width;
+        for (var i = 0; i < measuringTabElements.length; ++i) {
+            var width = measuringTabElements[i].getBoundingClientRect().width;
+            measuringTabElements[i].__tab._measuredWidth = width;
+        }
 
         // Nuke elements from the UI
         for (var i = 0; i < measuringTabElements.length; ++i)
@@ -1198,10 +1200,20 @@ WebInspector.ExtensibleTabbedPaneController.prototype = {
      */
     _tabSelected: function(event)
     {
-        var tabId = this._tabbedPane.selectedTabId;
-        if (!tabId)
-            return;
-        this.viewForId(tabId).then(this._tabbedPane.changeTabView.bind(this._tabbedPane, tabId)).done();
+        var tabId = /** @type {string} */ (event.data.tabId);
+        this.viewForId(tabId).then(viewLoaded.bind(this)).done();
+
+        /**
+         * @this {WebInspector.ExtensibleTabbedPaneController}
+         * @param {!WebInspector.View} view
+         */
+        function viewLoaded(view)
+        {
+            this._tabbedPane.changeTabView(tabId, view);
+            var shouldFocus = this._tabbedPane.visibleView.element.isSelfOrAncestor(WebInspector.currentFocusElement());
+            if (shouldFocus)
+                view.focus();
+        }
     },
 
     /**

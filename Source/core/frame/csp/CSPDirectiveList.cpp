@@ -86,12 +86,12 @@ bool CSPDirectiveList::checkInline(SourceListDirective* directive) const
 
 bool CSPDirectiveList::checkNonce(SourceListDirective* directive, const String& nonce) const
 {
-    return !directive || directive->allowNonce(nonce) || checkInline(directive);
+    return !directive || directive->allowNonce(nonce);
 }
 
 bool CSPDirectiveList::checkHash(SourceListDirective* directive, const CSPHashValue& hashValue) const
 {
-    return !directive || directive->allowHash(hashValue) || checkInline(directive);
+    return !directive || directive->allowHash(hashValue);
 }
 
 bool CSPDirectiveList::checkSource(SourceListDirective* directive, const KURL& url) const
@@ -624,6 +624,8 @@ void CSPDirectiveList::parseReferrer(const String& name, const String& value)
         m_referrerPolicy = ReferrerPolicyDefault;
     } else if (equalIgnoringCase("origin", begin, position - begin)) {
         m_referrerPolicy = ReferrerPolicyOrigin;
+    } else if (equalIgnoringCase("origin-when-crossorigin", begin, position - begin)) {
+        m_referrerPolicy = ReferrerPolicyOriginWhenCrossOrigin;
     } else {
         m_referrerPolicy = ReferrerPolicyNever;
         m_policy->reportInvalidReferrer(value);

@@ -199,7 +199,7 @@ void RenderLayerScrollableArea::invalidateScrollbarRect(Scrollbar* scrollbar, co
 
     IntRect scrollRect = rect;
     // If we are not yet inserted into the tree, there is no need to issue paint invaldiations.
-    if (!box().parent())
+    if (!box().isRenderView() && !box().parent())
         return;
 
     if (scrollbar == m_vBar.get())
@@ -1350,7 +1350,7 @@ void RenderLayerScrollableArea::resize(const PlatformEvent& evt, const LayoutSiz
 
     float zoomFactor = box().style()->effectiveZoom();
 
-    LayoutSize newOffset = offsetFromResizeCorner(document.view()->windowToContents(pos));
+    IntSize newOffset = offsetFromResizeCorner(document.view()->windowToContents(pos));
     newOffset.setWidth(newOffset.width() / zoomFactor);
     newOffset.setHeight(newOffset.height() / zoomFactor);
 
@@ -1364,7 +1364,7 @@ void RenderLayerScrollableArea::resize(const PlatformEvent& evt, const LayoutSiz
         adjustedOldOffset.setWidth(-adjustedOldOffset.width());
     }
 
-    LayoutSize difference = (currentSize + newOffset - adjustedOldOffset).expandedTo(minimumSize) - currentSize;
+    LayoutSize difference((currentSize + newOffset - adjustedOldOffset).expandedTo(minimumSize) - currentSize);
 
     bool isBoxSizingBorder = box().style()->boxSizing() == BORDER_BOX;
 
@@ -1403,7 +1403,7 @@ LayoutRect RenderLayerScrollableArea::exposeRect(const LayoutRect& rect, const S
     LayoutRect layerBounds(0, 0, box().clientWidth(), box().clientHeight());
     LayoutRect r = ScrollAlignment::getRectToExpose(layerBounds, localExposeRect, alignX, alignY);
 
-    DoubleSize clampedScrollOffset = clampScrollOffset(adjustedScrollOffset() + toIntSize(roundedIntRect(r).location()));
+    DoubleSize clampedScrollOffset = clampScrollOffset(adjustedScrollOffset() + roundedIntSize(r.location()));
     if (clampedScrollOffset == adjustedScrollOffset())
         return rect;
 

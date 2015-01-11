@@ -83,6 +83,8 @@ public:
 
     virtual bool backgroundIsKnownToBeOpaqueInRect(const LayoutRect& localRect) const override;
 
+    virtual bool backgroundShouldAlwaysBeClipped() const { return false; }
+
     // Use this with caution! No type checking is done!
     RenderBox* firstChildBox() const;
     RenderBox* lastChildBox() const;
@@ -170,6 +172,7 @@ public:
 
     // The content area of the box (excludes padding - and intrinsic padding for table cells, etc... - and border).
     LayoutRect contentBoxRect() const { return LayoutRect(borderLeft() + paddingLeft(), borderTop() + paddingTop(), contentWidth(), contentHeight()); }
+    LayoutSize contentBoxOffset() const { return LayoutSize(borderLeft() + paddingLeft(), borderTop() + paddingTop()); }
     // The content box in absolute coords. Ignores transforms.
     IntRect absoluteContentBox() const;
     // The content box converted to absolute coords (taking transforms into account).
@@ -179,7 +182,7 @@ public:
     // does include the intrinsic padding in the content box as this is what some callers expect (like getComputedStyle).
     LayoutRect computedCSSContentBoxRect() const { return LayoutRect(borderLeft() + computedCSSPaddingLeft(), borderTop() + computedCSSPaddingTop(), clientWidth() - computedCSSPaddingLeft() - computedCSSPaddingRight(), clientHeight() - computedCSSPaddingTop() - computedCSSPaddingBottom()); }
 
-    virtual void addFocusRingRects(Vector<LayoutRect>&, const LayoutPoint& additionalOffset, const RenderLayerModelObject* paintContainer) const override;
+    virtual void addFocusRingRects(Vector<LayoutRect>&, const LayoutPoint& additionalOffset) const override;
 
     // Use this with caution! No type checking is done!
     RenderBox* previousSiblingBox() const;
@@ -320,7 +323,7 @@ public:
     LayoutRect reflectedRect(const LayoutRect&) const;
 
     virtual void layout() override;
-    virtual void paint(PaintInfo&, const LayoutPoint&) override;
+    virtual void paint(const PaintInfo&, const LayoutPoint&) override;
     virtual bool nodeAtPoint(const HitTestRequest&, HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction) override;
 
     virtual LayoutUnit minPreferredLogicalWidth() const override;
@@ -404,7 +407,7 @@ public:
     LayoutUnit perpendicularContainingBlockLogicalHeight() const;
 
     virtual void updateLogicalWidth();
-    virtual void updateLogicalHeight();
+    void updateLogicalHeight();
     virtual void computeLogicalHeight(LayoutUnit logicalHeight, LayoutUnit logicalTop, LogicalExtentComputedValues&) const;
 
     void computeLogicalWidth(LogicalExtentComputedValues&) const;
@@ -452,7 +455,7 @@ public:
 
     virtual int verticalScrollbarWidth() const;
     int horizontalScrollbarHeight() const;
-    int instrinsicScrollbarLogicalWidth() const;
+    int intrinsicScrollbarLogicalWidth() const;
     int scrollbarLogicalHeight() const { return style()->isHorizontalWritingMode() ? horizontalScrollbarHeight() : verticalScrollbarWidth(); }
     virtual bool scroll(ScrollDirection, ScrollGranularity, float delta = 1);
     bool canBeScrolledAndHasScrollableArea() const;
@@ -488,25 +491,30 @@ public:
     virtual bool hasControlClip() const { return false; }
     virtual LayoutRect controlClipRect(const LayoutPoint&) const { return LayoutRect(); }
 
-    virtual void paintObject(PaintInfo&, const LayoutPoint&) { ASSERT_NOT_REACHED(); }
-    virtual void paintBoxDecorationBackground(PaintInfo&, const LayoutPoint&);
-    virtual void paintMask(PaintInfo&, const LayoutPoint&);
-    virtual void paintClippingMask(PaintInfo&, const LayoutPoint&);
+    virtual void paintObject(const PaintInfo&, const LayoutPoint&) { ASSERT_NOT_REACHED(); }
+    virtual void paintBoxDecorationBackground(const PaintInfo&, const LayoutPoint&);
+    virtual void paintMask(const PaintInfo&, const LayoutPoint&);
+    virtual void paintClippingMask(const PaintInfo&, const LayoutPoint&);
     virtual void imageChanged(WrappedImagePtr, const IntRect* = 0) override;
 
-    LayoutRect borderBoxAfterUpdatingLogicalWidth(const LayoutUnit& logicalTop);
+    void logicalExtentAfterUpdatingLogicalWidth(const LayoutUnit& logicalTop, LogicalExtentComputedValues&);
 
     // Called when a positioned object moves but doesn't necessarily change size.  A simplified layout is attempted
     // that just updates the object's position. If the size does change, the object remains dirty.
     bool tryLayoutDoingPositionedMovementOnly()
     {
-        LayoutUnit oldWidth = width();
-        LayoutUnit newWidth = borderBoxAfterUpdatingLogicalWidth(logicalTop()).width();
+        LayoutUnit oldWidth = logicalWidth();
+        LogicalExtentComputedValues computedValues;
+        logicalExtentAfterUpdatingLogicalWidth(logicalTop(), computedValues);
         // If we shrink to fit our width may have changed, so we still need full layout.
         // FIXME: We check for potential change of width when deciding to set needsPositionedMovementLayout.
         // So either that check or this one is unnecessary, probably the former. crbug.com/428050
-        if (oldWidth != newWidth)
+        if (oldWidth != computedValues.m_extent)
             return false;
+        setLogicalWidth(computedValues.m_extent);
+        setLogicalLeft(computedValues.m_position);
+        setMarginStart(computedValues.m_margins.m_start);
+        setMarginEnd(computedValues.m_margins.m_end);
         updateLogicalHeight();
         return true;
     }
@@ -530,6 +538,8 @@ public:
     bool isDeprecatedFlexItem() const { return !isInline() && !isFloatingOrOutOfFlowPositioned() && parent() && parent()->isDeprecatedFlexibleBox(); }
     bool isFlexItemIncludingDeprecated() const { return !isInline() && !isFloatingOrOutOfFlowPositioned() && parent() && parent()->isFlexibleBoxIncludingDeprecated(); }
 
+    bool isGridItem() const { return parent() && parent()->isRenderGrid(); }
+
     virtual LayoutUnit lineHeight(bool firstLine, LineDirectionMode, LinePositionMode = PositionOnContainingLine) const override;
     virtual int baselinePosition(FontBaseline, bool firstLine, LineDirectionMode, LinePositionMode = PositionOnContainingLine) const override;
 
@@ -537,21 +547,21 @@ public:
     virtual LayoutUnit offsetTop() const override;
 
     LayoutPoint flipForWritingModeForChild(const RenderBox* child, const LayoutPoint&) const;
-    LayoutUnit flipForWritingMode(LayoutUnit position) const
+    LayoutUnit flipForWritingMode(LayoutUnit position) const WARN_UNUSED_RETURN
     {
         // The offset is in the block direction (y for horizontal writing modes, x for vertical writing modes).
         if (!UNLIKELY(hasFlippedBlocksWritingMode()))
             return position;
         return logicalHeight() - position;
     }
-    LayoutPoint flipForWritingMode(const LayoutPoint& position) const
+    LayoutPoint flipForWritingMode(const LayoutPoint& position) const WARN_UNUSED_RETURN
     {
         if (!UNLIKELY(hasFlippedBlocksWritingMode()))
             return position;
         return isHorizontalWritingMode() ? LayoutPoint(position.x(), height() - position.y()) : LayoutPoint(width() - position.x(), position.y());
     }
     LayoutPoint flipForWritingModeIncludingColumns(const LayoutPoint&) const;
-    LayoutSize flipForWritingMode(const LayoutSize& offset) const
+    LayoutSize flipForWritingMode(const LayoutSize& offset) const WARN_UNUSED_RETURN
     {
         if (!UNLIKELY(hasFlippedBlocksWritingMode()))
             return offset;
@@ -566,7 +576,7 @@ public:
         else
             rect.setX(width() - rect.maxX());
     }
-    FloatPoint flipForWritingMode(const FloatPoint& position) const
+    FloatPoint flipForWritingMode(const FloatPoint& position) const WARN_UNUSED_RETURN
     {
         if (!UNLIKELY(hasFlippedBlocksWritingMode()))
             return position;
@@ -584,7 +594,7 @@ public:
     // These represent your location relative to your container as a physical offset.
     // In layout related methods you almost always want the logical location (e.g. x() and y()).
     LayoutPoint topLeftLocation() const;
-    LayoutSize topLeftLocationOffset() const;
+    LayoutSize topLeftLocationOffset() const { return toLayoutSize(topLeftLocation()); }
 
     LayoutRect logicalVisualOverflowRectForPropagation(RenderStyle*) const;
     LayoutRect visualOverflowRectForPropagation(RenderStyle*) const;
@@ -643,6 +653,7 @@ public:
 
     bool backgroundHasOpaqueTopLayer() const;
 
+    void setIntrinsicContentLogicalHeight(LayoutUnit intrinsicContentLogicalHeight) const { m_intrinsicContentLogicalHeight = intrinsicContentLogicalHeight; }
 protected:
     virtual void willBeDestroyed() override;
 
@@ -672,8 +683,6 @@ protected:
     virtual void addLayerHitTestRects(LayerHitTestRects&, const RenderLayer* currentCompositedLayer, const LayoutPoint& layerOffset, const LayoutRect& containerRect) const override;
     virtual void computeSelfHitTestRects(Vector<LayoutRect>&, const LayoutPoint& layerOffset) const override;
 
-    void updateIntrinsicContentLogicalHeight(LayoutUnit intrinsicContentLogicalHeight) const { m_intrinsicContentLogicalHeight = intrinsicContentLogicalHeight; }
-
     virtual PaintInvalidationReason paintInvalidationReason(const RenderLayerModelObject& paintInvalidationContainer,
         const LayoutRect& oldBounds, const LayoutPoint& oldPositionFromPaintInvalidationContainer,
         const LayoutRect& newBounds, const LayoutPoint& newPositionFromPaintInvalidationContainer) const override;
@@ -691,7 +700,7 @@ private:
     void updateGridPositionAfterStyleChange(const RenderStyle*);
 
     bool autoWidthShouldFitContent() const;
-    void shrinkToFitWidth(const LayoutUnit availableSpace, const LayoutUnit logicalLeftValue, const LayoutUnit bordersPlusPadding, LogicalExtentComputedValues&) const;
+    LayoutUnit shrinkToFitLogicalWidth(LayoutUnit availableLogicalWidth, LayoutUnit bordersPlusPadding) const;
 
     // Returns true if we queued up a paint invalidation.
     bool paintInvalidationLayerRectsForImage(WrappedImagePtr, const FillLayer&, bool drawingBackground);
@@ -738,7 +747,7 @@ private:
 
     virtual PaintInvalidationReason invalidatePaintIfNeeded(const PaintInvalidationState&, const RenderLayerModelObject& newPaintInvalidationContainer) override final;
 
-    bool isBox() const WTF_DELETED_FUNCTION; // This will catch anyone doing an unnecessary check.
+    bool isBox() const = delete; // This will catch anyone doing an unnecessary check.
 
     // The width/height of the contents + borders + padding.  The x/y location is relative to our container (which is not always our parent).
     LayoutRect m_frameRect;
@@ -749,6 +758,8 @@ private:
     mutable LayoutUnit m_intrinsicContentLogicalHeight;
 
     void inflatePaintInvalidationRectForReflectionAndFilter(LayoutRect&) const;
+
+    bool hasNonCompositedScrollbars() const;
 
 protected:
     LayoutBoxExtent m_marginBox;

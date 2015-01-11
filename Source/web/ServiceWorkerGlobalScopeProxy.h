@@ -69,10 +69,11 @@ public:
 
     // WebServiceWorkerContextProxy overrides:
     virtual void dispatchActivateEvent(int) override;
-    virtual void dispatchInstallEvent(int) override;
     virtual void dispatchFetchEvent(int, const WebServiceWorkerRequest&) override;
     virtual void dispatchGeofencingEvent(int, WebGeofencingEventType, const WebString& regionID, const WebCircularGeofencingRegion&) override;
+    virtual void dispatchInstallEvent(int) override;
     virtual void dispatchMessageEvent(const WebString& message, const WebMessagePortChannelArray&) override;
+    virtual void dispatchNotificationClickEvent(int, const WebString& notificationID, const WebNotificationData&) override;
     virtual void dispatchPushEvent(int, const WebString& data) override;
     virtual void dispatchSyncEvent(int) override;
 
@@ -80,6 +81,7 @@ public:
     virtual void reportException(const String& errorMessage, int lineNumber, int columnNumber, const String& sourceURL) override;
     virtual void reportConsoleMessage(PassRefPtrWillBeRawPtr<ConsoleMessage>) override;
     virtual void postMessageToPageInspector(const String&) override;
+    virtual void didEvaluateWorkerScript(bool success) override;
     virtual void workerGlobalScopeStarted(WorkerGlobalScope*) override;
     virtual void workerGlobalScopeClosed() override;
     virtual void willDestroyWorkerGlobalScope() override;

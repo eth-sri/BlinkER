@@ -73,6 +73,7 @@ private:
 DEFINE_STYLE_RULE_TYPE_CASTS(Keyframes);
 
 class CSSKeyframesRule final : public CSSRule {
+    DEFINE_WRAPPERTYPEINFO();
 public:
     static PassRefPtrWillBeRawPtr<CSSKeyframesRule> create(StyleRuleKeyframes* rule, CSSStyleSheet* sheet)
     {
@@ -81,7 +82,6 @@ public:
 
     virtual ~CSSKeyframesRule();
 
-    virtual CSSRule::Type type() const override { return KEYFRAMES_RULE; }
     virtual String cssText() const override;
     virtual void reattach(StyleRuleBase*) override;
 
@@ -105,6 +105,8 @@ public:
 
 private:
     CSSKeyframesRule(StyleRuleKeyframes*, CSSStyleSheet* parent);
+
+    virtual CSSRule::Type type() const override { return KEYFRAMES_RULE; }
 
     RefPtrWillBeMember<StyleRuleKeyframes> m_keyframesRule;
     mutable WillBeHeapVector<RefPtrWillBeMember<CSSKeyframeRule> > m_childRuleCSSOMWrappers;

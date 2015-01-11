@@ -36,23 +36,8 @@
  */
 WebInspector.Main = function()
 {
-    var boundListener = windowLoaded.bind(this);
     WebInspector.console.setUIDelegate(this);
-    if (document.readyState === "complete") {
-        this._loaded();
-        return;
-    }
-
-    /**
-     * @suppressGlobalPropertiesCheck
-     * @this {WebInspector.Main}
-     */
-    function windowLoaded()
-    {
-        this._loaded();
-        window.removeEventListener("DOMContentLoaded", boundListener, false);
-    }
-    window.addEventListener("DOMContentLoaded", boundListener, false);
+    runOnWindowLoad(this._loaded.bind(this));
 }
 
 WebInspector.Main.prototype = {
@@ -155,8 +140,8 @@ WebInspector.Main.prototype = {
         Runtime.experiments.register("fileSystemInspection", "FileSystem inspection");
         Runtime.experiments.register("gpuTimeline", "GPU data on timeline", true);
         Runtime.experiments.register("layersPanel", "Layers panel");
-        Runtime.experiments.register("promiseTracker", "Enable Promise inspection", true);
-        Runtime.experiments.register("timelineOnTraceEvents", "Timeline on trace events");
+        Runtime.experiments.register("privateScriptInspection", "Private script inspection");
+        Runtime.experiments.register("promiseTracker", "Enable Promise inspection");
         Runtime.experiments.register("timelinePowerProfiler", "Timeline power profiler");
         Runtime.experiments.register("timelineJSCPUProfile", "Timeline with JS sampling");
         Runtime.experiments.register("timelineInvalidationTracking", "Timeline with full invalidation tracking.");
@@ -168,15 +153,12 @@ WebInspector.Main.prototype = {
             var testPath = WebInspector.settings.testPath.get();
             if (testPath.indexOf("timeline/") !== -1 || testPath.indexOf("layers/") !== -1)
                 Runtime.experiments.enableForTest("layersPanel");
-            if (testPath.indexOf("tracing/") !== -1)
-                Runtime.experiments.enableForTest("timelineOnTraceEvents");
             if (testPath.indexOf("documentation/") !== -1)
                 Runtime.experiments.enableForTest("documentation");
             if (testPath.indexOf("elements/") !== -1)
                 Runtime.experiments.enableForTest("animationInspection");
         } else {
             Runtime.experiments.setDefaultExperiments([
-                "timelineOnTraceEvents",
                 "disableAgentsWhenProfile",
                 "timelineJSCPUProfile",
             ]);
@@ -630,7 +612,7 @@ WebInspector.Main.prototype = {
 WebInspector.reload = function()
 {
     InspectorAgent.reset();
-    window.location.reload();
+    window.top.location.reload();
 }
 
 /**
@@ -896,6 +878,42 @@ WebInspector.Main.InspectedNodeRevealer.prototype = {
     {
         WebInspector.Revealer.reveal(/** @type {!WebInspector.DOMNode} */ (event.data));
     }
+}
+
+/**
+ * @constructor
+ * @extends {WebInspector.HelpScreen}
+ */
+WebInspector.RemoteDebuggingTerminatedScreen = function(reason)
+{
+    WebInspector.HelpScreen.call(this, WebInspector.UIString("Detached from the target"));
+    var p = this.helpContentElement.createChild("p");
+    p.classList.add("help-section");
+    p.createChild("span").textContent = WebInspector.UIString("Remote debugging has been terminated with reason: ");
+    p.createChild("span", "error-message").textContent = reason;
+    p.createChild("br");
+    p.createChild("span").textContent = WebInspector.UIString("Please re-attach to the new target.");
+}
+
+WebInspector.RemoteDebuggingTerminatedScreen.prototype = {
+    __proto__: WebInspector.HelpScreen.prototype
+}
+
+/**
+ * @constructor
+ * @extends {WebInspector.HelpScreen}
+ */
+WebInspector.WorkerTerminatedScreen = function()
+{
+    WebInspector.HelpScreen.call(this, WebInspector.UIString("Inspected worker terminated"));
+    var p = this.helpContentElement.createChild("p");
+    p.classList.add("help-section");
+    p.textContent = WebInspector.UIString("Inspected worker has terminated. Once it restarts we will attach to it automatically.");
+}
+
+WebInspector.WorkerTerminatedScreen.prototype = {
+
+    __proto__: WebInspector.HelpScreen.prototype
 }
 
 new WebInspector.Main();

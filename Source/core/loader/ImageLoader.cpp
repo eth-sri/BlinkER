@@ -139,6 +139,7 @@ ImageLoader::ImageLoader(Element* element)
     , m_imageComplete(true)
     , m_loadingImageDocument(false)
     , m_elementIsProtected(false)
+    , m_suppressErrorEvents(false)
     , m_highPriorityClientCount(0)
 {
     WTF_LOG(Timers, "new ImageLoader %p", this);
@@ -225,11 +226,15 @@ ResourcePtr<ImageResource> ImageLoader::createImageResourceForImageDocument(Docu
     return newImage;
 }
 
-inline void ImageLoader::crossSiteOrCSPViolationOccured(AtomicString imageSourceURL)
+inline void ImageLoader::dispatchErrorEvent()
 {
-    m_failedLoadURL = imageSourceURL;
     m_hasPendingErrorEvent = true;
     errorEventSender().dispatchEventSoon(this);
+}
+
+inline void ImageLoader::crossSiteOrCSPViolationOccurred(AtomicString imageSourceURL)
+{
+    m_failedLoadURL = imageSourceURL;
 }
 
 inline void ImageLoader::clearFailedLoadURL()
@@ -284,14 +289,15 @@ void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior, Up
         else
             newImage = document.fetcher()->fetchImage(request);
 
-        if (!newImage && !pageIsBeingDismissed(&document))
-            crossSiteOrCSPViolationOccured(imageSourceURL);
-        else
+        if (!newImage && !pageIsBeingDismissed(&document)) {
+            crossSiteOrCSPViolationOccurred(imageSourceURL);
+            dispatchErrorEvent();
+        } else {
             clearFailedLoadURL();
+        }
     } else if (!imageSourceURL.isNull()) {
         // Fire an error event if the url string is not empty, but the KURL is.
-        m_hasPendingErrorEvent = true;
-        errorEventSender().dispatchEventSoon(this);
+        dispatchErrorEvent();
     }
 
     ImageResource* oldImage = m_image.get();
@@ -339,6 +345,7 @@ void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior, Up
 void ImageLoader::updateFromElement(UpdateFromElementBehavior updateBehavior, LoadType loadType)
 {
     AtomicString imageSourceURL = m_element->imageSourceURL();
+    m_suppressErrorEvents = (updateBehavior == UpdateSizeChanged);
 
     if (updateBehavior == UpdateIgnorePreviousError)
         clearFailedLoadURL();
@@ -406,8 +413,13 @@ void ImageLoader::notifyFinished(Resource* resource)
         loadEventSender().cancelEvent(this);
         m_hasPendingLoadEvent = false;
 
-        m_hasPendingErrorEvent = true;
-        errorEventSender().dispatchEventSoon(this);
+        if (resource->resourceError().isAccessCheck())
+            crossSiteOrCSPViolationOccurred(AtomicString(resource->resourceError().failingURL()));
+
+        // The error event should not fire if the image data update is a result of environment change.
+        // https://html.spec.whatwg.org/multipage/embedded-content.html#the-img-element:the-img-element-55
+        if (!m_suppressErrorEvents)
+            dispatchErrorEvent();
 
         // Only consider updating the protection ref-count of the Element immediately before returning
         // from this function as doing so might result in the destruction of this ImageLoader.

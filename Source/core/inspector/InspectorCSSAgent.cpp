@@ -683,7 +683,7 @@ void InspectorCSSAgent::getMatchedStylesForNode(ErrorString* errorString, int no
     StyleResolver& styleResolver = ownerDocument->ensureStyleResolver();
 
     RefPtrWillBeRawPtr<CSSRuleList> matchedRules = styleResolver.pseudoCSSRulesForElement(element, elementPseudoId, StyleResolver::AllCSSRules);
-    matchedCSSRules = buildArrayForMatchedRuleList(matchedRules.get(), originalElement);
+    matchedCSSRules = buildArrayForMatchedRuleList(matchedRules.get(), originalElement, NOPSEUDO);
 
     // Pseudo elements.
     if (!elementPseudoId && !asBool(excludePseudo)) {
@@ -693,7 +693,7 @@ void InspectorCSSAgent::getMatchedStylesForNode(ErrorString* errorString, int no
             if (matchedRules && matchedRules->length()) {
                 RefPtr<TypeBuilder::CSS::PseudoIdMatches> matches = TypeBuilder::CSS::PseudoIdMatches::create()
                     .setPseudoId(static_cast<int>(pseudoId))
-                    .setMatches(buildArrayForMatchedRuleList(matchedRules.get(), element));
+                    .setMatches(buildArrayForMatchedRuleList(matchedRules.get(), element, pseudoId));
                 pseudoElements->addItem(matches.release());
             }
         }
@@ -709,7 +709,7 @@ void InspectorCSSAgent::getMatchedStylesForNode(ErrorString* errorString, int no
             StyleResolver& parentStyleResolver = parentElement->ownerDocument()->ensureStyleResolver();
             RefPtrWillBeRawPtr<CSSRuleList> parentMatchedRules = parentStyleResolver.cssRulesForElement(parentElement, StyleResolver::AllCSSRules);
             RefPtr<TypeBuilder::CSS::InheritedStyleEntry> entry = TypeBuilder::CSS::InheritedStyleEntry::create()
-                .setMatchedCSSRules(buildArrayForMatchedRuleList(parentMatchedRules.get(), parentElement));
+                .setMatchedCSSRules(buildArrayForMatchedRuleList(parentMatchedRules.get(), parentElement, NOPSEUDO));
             if (parentElement->style() && parentElement->style()->length()) {
                 InspectorStyleSheetForInlineStyle* styleSheet = asInspectorStyleSheet(parentElement);
                 if (styleSheet)
@@ -793,16 +793,22 @@ void InspectorCSSAgent::getPlatformFontsForNode(ErrorString* errorString, int no
     for (size_t i = 0; i < textNodes.size(); ++i) {
         RenderText* renderer = textNodes[i]->renderer();
         collectPlatformFontsForRenderer(renderer, &fontStats);
-        if (renderer->isTextFragment()) {
-            RenderTextFragment* textFragment = toRenderTextFragment(renderer);
-            if (textFragment->firstLetter()) {
-                RenderBoxModelObject* firstLetter = textFragment->firstLetter();
-                for (RenderObject* current = firstLetter->slowFirstChild(); current; current = current->nextSibling()) {
-                    if (current->isText())
-                        collectPlatformFontsForRenderer(toRenderText(current), &fontStats);
-                }
-            }
-        }
+
+        if (!renderer->isTextFragment())
+            continue;
+
+        // If we're the remaining text from a first-letter then our previous
+        // sibling has to be the first-letter renderer.
+        RenderObject* previous = renderer->previousSibling();
+        if (!previous)
+            continue;
+
+        if (!previous->isPseudoElement() || !previous->node()->isFirstLetterPseudoElement())
+            continue;
+
+        // The first-letter pseudoElement only has one child, which is the
+        // first-letter renderer.
+        collectPlatformFontsForRenderer(toRenderText(previous->slowFirstChild()), &fontStats);
     }
 
     platformFonts = TypeBuilder::Array<TypeBuilder::CSS::PlatformFontUsage>::create();
@@ -1310,7 +1316,7 @@ TypeBuilder::CSS::StyleSheetOrigin::Enum InspectorCSSAgent::detectOrigin(CSSStyl
     if (pageStyleSheet && !pageStyleSheet->ownerNode() && pageStyleSheet->href().isEmpty())
         origin = TypeBuilder::CSS::StyleSheetOrigin::User_agent;
     else if (pageStyleSheet && pageStyleSheet->ownerNode() && pageStyleSheet->ownerNode()->isDocumentNode())
-        origin = TypeBuilder::CSS::StyleSheetOrigin::User;
+        origin = TypeBuilder::CSS::StyleSheetOrigin::Injected;
     else {
         InspectorStyleSheet* viaInspectorStyleSheetForOwner = viaInspectorStyleSheet(ownerDocument, false);
         if (viaInspectorStyleSheetForOwner && pageStyleSheet == viaInspectorStyleSheetForOwner->pageStyleSheet())
@@ -1346,7 +1352,7 @@ static inline bool matchesPseudoElement(const CSSSelector* selector, PseudoId el
     return selectorPseudoId == elementPseudoId;
 }
 
-PassRefPtr<TypeBuilder::Array<TypeBuilder::CSS::RuleMatch> > InspectorCSSAgent::buildArrayForMatchedRuleList(CSSRuleList* ruleList, Element* element)
+PassRefPtr<TypeBuilder::Array<TypeBuilder::CSS::RuleMatch> > InspectorCSSAgent::buildArrayForMatchedRuleList(CSSRuleList* ruleList, Element* element, PseudoId matchesForPseudoId)
 {
     RefPtr<TypeBuilder::Array<TypeBuilder::CSS::RuleMatch> > result = TypeBuilder::Array<TypeBuilder::CSS::RuleMatch>::create();
     if (!ruleList)
@@ -1360,13 +1366,14 @@ PassRefPtr<TypeBuilder::Array<TypeBuilder::CSS::RuleMatch> > InspectorCSSAgent::
         RefPtr<TypeBuilder::Array<int> > matchingSelectors = TypeBuilder::Array<int>::create();
         const CSSSelectorList& selectorList = rule->styleRule()->selectorList();
         long index = 0;
-        PseudoId elementPseudoId = element->pseudoId();
+        PseudoId elementPseudoId = matchesForPseudoId ? matchesForPseudoId : element->pseudoId();
         for (const CSSSelector* selector = selectorList.first(); selector; selector = CSSSelectorList::next(*selector)) {
             const CSSSelector* firstTagHistorySelector = selector;
             bool matched = false;
             if (elementPseudoId)
                 matched = matchesPseudoElement(selector, elementPseudoId); // Modifies |selector|.
-            matched |= element->matches(firstTagHistorySelector->selectorText(), IGNORE_EXCEPTION);
+            else
+                matched = element->matches(firstTagHistorySelector->selectorText(), IGNORE_EXCEPTION);
             if (matched)
                 matchingSelectors->addItem(index);
             ++index;

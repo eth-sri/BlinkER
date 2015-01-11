@@ -53,9 +53,14 @@ public:
     };
 
     enum V8CacheOptions {
-        V8CacheOptionsOff,
+        V8CacheOptionsDefault,
         V8CacheOptionsParse,
-        V8CacheOptionsCode
+        V8CacheOptionsCode,
+        V8CacheOptionsCodeCompressed,
+        V8CacheOptionsNone,
+        V8CacheOptionsParseMemory,
+        V8CacheOptionsHeuristics,
+        V8CacheOptionsHeuristicsMobile
     };
 
     enum V8ScriptStreamingMode {
@@ -100,6 +105,7 @@ public:
     // FrameLoaderClient set to the frame may override the value set by this
     // method.
     virtual void setAccessibilityEnabled(bool) = 0;
+    virtual void setAccessibilityPasswordValuesEnabled(bool) = 0;
     virtual void setAllowDisplayOfInsecureContent(bool) = 0;
     virtual void setAllowFileAccessFromFileURLs(bool) = 0;
     virtual void setAllowCustomScrollbarInMainFrame(bool) = 0;
@@ -184,6 +190,8 @@ public:
     virtual void setPrimaryHoverType(HoverType) = 0;
     virtual void setRenderVSyncNotificationEnabled(bool) = 0;
     virtual void setReportScreenSizeInPhysicalPixelsQuirk(bool) = 0;
+    virtual void setRootLayerScrolls(bool) = 0;
+    virtual void setRubberBandingOnCompositorThread(bool) = 0;
     virtual void setSansSerifFontFamily(const WebString&, UScriptCode = USCRIPT_COMMON) = 0;
     virtual void setSelectTrailingWhitespaceEnabled(bool) = 0;
     virtual void setSelectionIncludesAltImageText(bool) = 0;

@@ -38,6 +38,7 @@ WebInspector.ConsoleView = function()
 {
     WebInspector.VBox.call(this);
     this.registerRequiredCSS("ui/filter.css");
+    this.registerRequiredCSS("console/consoleView.css");
 
     this._searchableView = new WebInspector.SearchableView(this);
     this._searchableView.setMinimalSearchQuerySize(0);
@@ -68,8 +69,11 @@ WebInspector.ConsoleView = function()
     WebInspector.SettingsUI.bindCheckbox(this._preserveLogCheckbox.inputElement, WebInspector.settings.preserveConsoleLog);
     this._preserveLogCheckbox.element.title = WebInspector.UIString("Do not clear log on page reload / navigation.");
 
-    var statusBarElement = this._contentsElement.createChild("div", "console-status-bar");
-    statusBarElement.appendChildren(this._clearConsoleButton.element, this._filterBar.filterButton().element, this._executionContextSelector.element, this._preserveLogCheckbox.element);
+    var statusBar = new WebInspector.StatusBar(this._contentsElement);
+    statusBar.appendStatusBarItem(this._clearConsoleButton);
+    statusBar.appendStatusBarItem(this._filterBar.filterButton());
+    statusBar.appendStatusBarItem(this._executionContextSelector);
+    statusBar.appendStatusBarItem(this._preserveLogCheckbox);
 
     this._filtersContainer = this._contentsElement.createChild("div", "console-filters-header hidden");
     this._filtersContainer.appendChild(this._filterBar.filtersElement());
@@ -113,7 +117,7 @@ WebInspector.ConsoleView = function()
 
     this._showAllMessagesCheckbox.element.classList.add("hidden");
 
-    statusBarElement.appendChild(this._showAllMessagesCheckbox.element);
+    statusBar.appendStatusBarItem(this._showAllMessagesCheckbox);
 
     this._registerShortcuts();
 
@@ -711,7 +715,7 @@ WebInspector.ConsoleView.prototype = {
      */
     _messagesClicked: function(event)
     {
-        if (!this._prompt.isCaretInsidePrompt() && window.getSelection().isCollapsed)
+        if (!this._prompt.isCaretInsidePrompt() && event.target.window().getSelection().isCollapsed)
             this._prompt.moveCaretToEndOfPrompt();
         var groupMessage = event.target.enclosingNodeOrSelfWithClass("console-group-title");
         if (!groupMessage)

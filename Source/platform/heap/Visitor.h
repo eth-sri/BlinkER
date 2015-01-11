@@ -329,9 +329,9 @@ public:
     // mark method above to automatically provide the callback
     // function.
     virtual void mark(const void*, TraceCallback) = 0;
-    virtual void markNoTracing(const void* pointer) { mark(pointer, reinterpret_cast<TraceCallback>(0)); }
-    virtual void markNoTracing(HeapObjectHeader* header) { mark(header, reinterpret_cast<TraceCallback>(0)); }
-    virtual void markNoTracing(FinalizedHeapObjectHeader* header) { mark(header, reinterpret_cast<TraceCallback>(0)); }
+    void markNoTracing(const void* pointer) { mark(pointer, reinterpret_cast<TraceCallback>(0)); }
+    void markNoTracing(HeapObjectHeader* header) { mark(header, reinterpret_cast<TraceCallback>(0)); }
+    void markNoTracing(FinalizedHeapObjectHeader* header) { mark(header, reinterpret_cast<TraceCallback>(0)); }
 
     // Used to mark objects during conservative scanning.
     virtual void mark(HeapObjectHeader*, TraceCallback) = 0;
@@ -521,14 +521,14 @@ public:
         if (!self)
             return;
 
-        // Before doing adjustAndMark we need to check if the page is orphaned
-        // since we cannot call adjustAndMark if so, as there will be no vtable.
-        // If orphaned just mark the page as traced.
-        BaseHeapPage* heapPage = pageHeaderFromObject(self);
-        if (heapPage->orphaned()) {
-            heapPage->setTracedAfterOrphaned();
-            return;
-        }
+        // If you hit this ASSERT, it means that there is a dangling pointer
+        // from a live thread heap to a dead thread heap. We must eliminate
+        // the dangling pointer.
+        // Release builds don't have the ASSERT, but it is OK because
+        // release builds will crash at the following self->adjustAndMark
+        // because all the entries of the orphaned heaps are zeroed out and
+        // thus the item does not have a valid vtable.
+        ASSERT(!pageFromObject(self)->orphaned());
         self->adjustAndMark(visitor);
     }
 

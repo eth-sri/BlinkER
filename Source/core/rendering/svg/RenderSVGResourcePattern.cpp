@@ -38,12 +38,16 @@ public:
     AffineTransform transform;
 };
 
-const RenderSVGResourceType RenderSVGResourcePattern::s_resourceType = PatternResourceType;
-
 RenderSVGResourcePattern::RenderSVGResourcePattern(SVGPatternElement* node)
     : RenderSVGResourcePaintServer(node)
     , m_shouldCollectPatternAttributes(true)
 {
+}
+
+void RenderSVGResourcePattern::trace(Visitor* visitor)
+{
+    visitor->trace(m_attributes);
+    RenderSVGResourcePaintServer::trace(visitor);
 }
 
 void RenderSVGResourcePattern::removeAllClientsFromCache(bool markForInvalidation)

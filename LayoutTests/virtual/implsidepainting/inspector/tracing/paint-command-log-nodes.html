@@ -21,19 +21,18 @@ function test()
 
     InspectorTest.invokeWithTracing("doActions", onTracingComplete, "disabled-by-default-blink.graphics_context_annotations");
 
-
     var inFlightPictures = 0;
     function onTracingComplete()
     {
         var events = InspectorTest.tracingTimelineModel().inspectedTargetEvents();
         for (var i = 0; i < events.length; ++i) {
             var event = events[i];
-            if (event.name !== WebInspector.TracingTimelineModel.RecordType.Paint)
+            if (event.name !== WebInspector.TimelineModel.RecordType.Paint)
                 continue;
             if (!event.picture)
                 continue;
             ++inFlightPictures;
-            new WebInspector.LayerPaintEvent(event).loadPicture(onSnapshotLoaded);
+            new WebInspector.LayerPaintEvent(event, InspectorTest.timelineModel().target()).loadPicture(onSnapshotLoaded);
         }
         if (!inFlightPictures)
             InspectorTest.completeTest();

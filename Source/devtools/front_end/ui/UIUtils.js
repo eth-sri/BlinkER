@@ -73,10 +73,14 @@ WebInspector.elementDragStart = function(elementDragStart, elementDrag, elementD
     WebInspector._elementDraggingEventListener = elementDrag;
     WebInspector._elementEndDraggingEventListener = elementDragEnd;
     WebInspector._mouseOutWhileDraggingTargetDocument = targetDocument;
+    WebInspector._dragEventsTargetDocument = targetDocument;
+    WebInspector._dragEventsTargetDocumentTop = targetDocument.defaultView.top.document;
 
     targetDocument.addEventListener("mousemove", WebInspector._elementDragMove, true);
     targetDocument.addEventListener("mouseup", WebInspector._elementDragEnd, true);
     targetDocument.addEventListener("mouseout", WebInspector._mouseOutWhileDragging, true);
+    if (targetDocument !== WebInspector._dragEventsTargetDocumentTop)
+        WebInspector._dragEventsTargetDocumentTop.addEventListener("mouseup", WebInspector._elementDragEnd, true);
 
     var targetElement = /** @type {!Element} */ (event.target);
     if (typeof cursor === "string") {
@@ -108,6 +112,18 @@ WebInspector._unregisterMouseOutWhileDragging = function()
     delete WebInspector._mouseOutWhileDraggingTargetDocument;
 }
 
+WebInspector._unregisterDragEvents = function()
+{
+    if (!WebInspector._dragEventsTargetDocument)
+        return;
+    WebInspector._dragEventsTargetDocument.removeEventListener("mousemove", WebInspector._elementDragMove, true);
+    WebInspector._dragEventsTargetDocument.removeEventListener("mouseup", WebInspector._elementDragEnd, true);
+    if (WebInspector._dragEventsTargetDocument !== WebInspector._dragEventsTargetDocumentTop)
+        WebInspector._dragEventsTargetDocumentTop.removeEventListener("mouseup", WebInspector._elementDragEnd, true);
+    delete WebInspector._dragEventsTargetDocument;
+    delete WebInspector._dragEventsTargetDocumentTop;
+}
+
 /**
  * @param {!Event} event
  */
@@ -122,9 +138,7 @@ WebInspector._elementDragMove = function(event)
  */
 WebInspector._cancelDragEvents = function(event)
 {
-    var targetDocument = event.target.ownerDocument;
-    targetDocument.removeEventListener("mousemove", WebInspector._elementDragMove, true);
-    targetDocument.removeEventListener("mouseup", WebInspector._elementDragEnd, true);
+    WebInspector._unregisterDragEvents();
     WebInspector._unregisterMouseOutWhileDragging();
 
     if (WebInspector._restoreCursorAfterDrag)
@@ -363,7 +377,7 @@ WebInspector.handleElementValueModifications = function(event, element, finishHa
     if (!arrowKeyOrMouseWheelEvent && !pageKeyPressed)
         return false;
 
-    var selection = window.getSelection();
+    var selection = element.window().getSelection();
     if (!selection.rangeCount)
         return false;
 
@@ -697,6 +711,9 @@ WebInspector._isTextEditingElement = function(element)
     return false;
 }
 
+/**
+ * @param {?Node} x
+ */
 WebInspector.setCurrentFocusElement = function(x)
 {
     if (WebInspector._glassPane && x && !WebInspector._glassPane.element.isAncestor(x))
@@ -711,7 +728,7 @@ WebInspector.setCurrentFocusElement = function(x)
         // Make a caret selection inside the new element if there isn't a range selection and there isn't already a caret selection inside.
         // This is needed (at least) to remove caret from console when focus is moved to some element in the panel.
         // The code below should not be applied to text fields and text areas, hence _isTextEditingElement check.
-        var selection = window.getSelection();
+        var selection = x.window().getSelection();
         if (!WebInspector._isTextEditingElement(WebInspector._currentFocusElement) && selection.isCollapsed && !WebInspector._currentFocusElement.isInsertionCaretInside()) {
             var selectionRange = WebInspector._currentFocusElement.ownerDocument.createRange();
             selectionRange.setStart(WebInspector._currentFocusElement, 0);
@@ -742,7 +759,7 @@ WebInspector.setToolbarColors = function(document, backgroundColor, color)
         document.head.appendChild(WebInspector._themeStyleElement);
     }
     var parsedColor = WebInspector.Color.parse(color);
-    var shadowColor = parsedColor ? parsedColor.invert().setAlpha(0.33).toString(WebInspector.Color.Format.RGBA) : "white";
+    var shadowColor = parsedColor ? parsedColor.invert().setAlpha(0.33).asString(WebInspector.Color.Format.RGBA) : "white";
     var prefix = WebInspector.isMac() ? "body:not(.undocked)" : "";
     WebInspector._themeStyleElement.textContent =
         String.sprintf(
@@ -987,6 +1004,9 @@ WebInspector.InvokeOnceHandlers.prototype = {
         methods.add(method);
     },
 
+    /**
+     * @suppressGlobalPropertiesCheck
+     */
     scheduleInvoke: function()
     {
         if (this._handlers)
@@ -1036,13 +1056,14 @@ WebInspector.invokeOnceAfterBatchUpdate = function(object, method)
 }
 
 /**
+ * @param {!Window} window
  * @param {!Function} func
  * @param {!Array.<{from:number, to:number}>} params
  * @param {number} frames
  * @param {function()=} animationComplete
  * @return {function()}
  */
-WebInspector.animateFunction = function(func, params, frames, animationComplete)
+WebInspector.animateFunction = function(window, func, params, frames, animationComplete)
 {
     var values = new Array(params.length);
     var deltas = new Array(params.length);
@@ -1051,7 +1072,7 @@ WebInspector.animateFunction = function(func, params, frames, animationComplete)
         deltas[i] = (params[i].to - params[i].from) / frames;
     }
 
-    var raf = requestAnimationFrame(animationStep);
+    var raf = window.requestAnimationFrame(animationStep);
 
     var framesLeft = frames;
 
@@ -1227,4 +1248,13 @@ WebInspector.initializeUIUtils = function(window)
     window.addEventListener("blur", WebInspector._windowBlurred.bind(WebInspector, window.document), false);
     window.document.addEventListener("focus", WebInspector._focusChanged.bind(WebInspector, window.document), true);
     window.document.addEventListener("blur", WebInspector._documentBlurred.bind(WebInspector, window.document), true);
+}
+
+/**
+ * @param {string} name
+ * @return {string}
+ */
+WebInspector.beautifyFunctionName = function(name)
+{
+    return name || WebInspector.UIString("(anonymous function)");
 }

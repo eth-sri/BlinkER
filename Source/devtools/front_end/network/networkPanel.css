@@ -27,10 +27,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-.network-larger-resources-status-bar-item .glyph {
-    -webkit-mask-position: -224px 0;
-}
-
 #network-views {
     background: rgb(203, 203, 203);
 }
@@ -170,11 +166,6 @@
 
 .resource-timing-view .network-timing-table {
     width: 100%;
-}
-
-.panel.network .split-view {
-    flex: auto;
-    position: relative;
 }
 
 .network-filters-header {

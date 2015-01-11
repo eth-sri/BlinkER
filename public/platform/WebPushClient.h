@@ -15,19 +15,20 @@ class WebServiceWorkerProvider;
 struct WebPushRegistration;
 
 typedef WebCallbacks<WebPushRegistration, WebPushError> WebPushRegistrationCallbacks;
-typedef WebCallbacks<WebPushPermissionStatus, void> WebPushPermissionCallback;
+typedef WebCallbacks<WebPushPermissionStatus, void> WebPushPermissionStatusCallback;
+typedef WebCallbacks<void, void> WebPushPermissionRequestCallbacks;
 
 class WebPushClient {
 public:
     virtual ~WebPushClient() { }
 
-    // Ownership of the WebPushRegistrationCallbacks is transferred to the
-    // client. Ownership of the WebServiceWorkerProvider is not transferred.
+    // Ownership of the callback is transferred to the client.
+    // Ownership of the WebServiceWorkerProvider is not transferred.
     virtual void registerPushMessaging(WebPushRegistrationCallbacks*, WebServiceWorkerProvider*) { }
 
-    // Ownership of the WebPushPermissionCallback is transferred to the
-    // client. Ownership of the WebServiceWorkerProvider is not transferred.
-    virtual void getPermissionStatus(WebPushPermissionCallback*, WebServiceWorkerProvider*) { }
+    // Ownership of the callback is transferred to the client.
+    // Ownership of the WebServiceWorkerProvider is not transferred.
+    virtual void getPermissionStatus(WebPushPermissionStatusCallback*, WebServiceWorkerProvider*) { }
 };
 
 } // namespace blink

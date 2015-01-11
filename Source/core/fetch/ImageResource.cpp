@@ -261,16 +261,16 @@ LayoutSize ImageResource::imageSizeForRenderer(const RenderObject* renderer, flo
     ASSERT(!isPurgeable());
 
     if (!m_image)
-        return IntSize();
+        return LayoutSize();
 
     LayoutSize imageSize;
 
     if (m_image->isBitmapImage() && (renderer && renderer->shouldRespectImageOrientation() == RespectImageOrientation))
-        imageSize = toBitmapImage(m_image.get())->sizeRespectingOrientation();
+        imageSize = LayoutSize(toBitmapImage(m_image.get())->sizeRespectingOrientation());
     else if (m_image->isSVGImage() && sizeType == NormalSize)
-        imageSize = m_svgImageCache->imageSizeForRenderer(renderer);
+        imageSize = LayoutSize(m_svgImageCache->imageSizeForRenderer(renderer));
     else
-        imageSize = m_image->size();
+        imageSize = LayoutSize(m_image->size());
 
     if (multiplier == 1.0f)
         return imageSize;
@@ -414,7 +414,7 @@ void ImageResource::error(Resource::Status status)
     notifyObservers();
 }
 
-void ImageResource::responseReceived(const ResourceResponse& response)
+void ImageResource::responseReceived(const ResourceResponse& response, PassOwnPtr<WebDataConsumerHandle> handle)
 {
     if (m_loadingMultipartContent && m_data)
         finishOnePart();
@@ -427,7 +427,7 @@ void ImageResource::responseReceived(const ResourceResponse& response)
             m_hasDevicePixelRatioHeaderValue = false;
         }
     }
-    Resource::responseReceived(response);
+    Resource::responseReceived(response, handle);
 }
 
 void ImageResource::decodedSizeChanged(const blink::Image* image, int delta)
@@ -480,8 +480,10 @@ void ImageResource::changedInRect(const blink::Image* image, const IntRect& rect
 bool ImageResource::currentFrameKnownToBeOpaque(const RenderObject* renderer)
 {
     blink::Image* image = imageForRenderer(renderer);
-    if (image->isBitmapImage())
+    if (image->isBitmapImage()) {
+        TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "PaintImage", "data", InspectorPaintImageEvent::data(renderer, *this));
         image->nativeImageForCurrentFrame(); // force decode
+    }
     return image->currentFrameKnownToBeOpaque();
 }
 

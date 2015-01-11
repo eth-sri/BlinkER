@@ -30,7 +30,6 @@
 #include "core/rendering/RenderReplica.h"
 
 #include "core/paint/ReplicaPainter.h"
-#include "core/rendering/GraphicsContextAnnotator.h"
 #include "core/rendering/RenderLayer.h"
 
 namespace blink {
@@ -71,7 +70,7 @@ void RenderReplica::computePreferredLogicalWidths()
     clearPreferredLogicalWidthsDirty();
 }
 
-void RenderReplica::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
+void RenderReplica::paint(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
     ReplicaPainter(*this).paint(paintInfo, paintOffset);
 }

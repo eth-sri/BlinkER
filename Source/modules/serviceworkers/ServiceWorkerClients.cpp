@@ -7,6 +7,7 @@
 
 #include "bindings/core/v8/CallbackPromiseAdapter.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
+#include "core/dom/ExceptionCode.h"
 #include "modules/serviceworkers/ServiceWorkerClient.h"
 #include "modules/serviceworkers/ServiceWorkerError.h"
 #include "modules/serviceworkers/ServiceWorkerGlobalScopeClient.h"
@@ -37,7 +38,7 @@ namespace {
 
     private:
         WTF_MAKE_NONCOPYABLE(ClientArray);
-        ClientArray() WTF_DELETED_FUNCTION;
+        ClientArray() = delete;
     };
 
 } // namespace

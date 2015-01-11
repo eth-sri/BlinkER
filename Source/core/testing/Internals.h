@@ -46,18 +46,15 @@ class ClientRect;
 class ClientRectList;
 class DOMArrayBuffer;
 class DOMPoint;
-class DOMStringList;
 class DictionaryTest;
 class Document;
 class DocumentFragment;
 class DocumentMarker;
 class Element;
 class ExceptionState;
-class ExecutionContext;
 class GCObservation;
 class HTMLElement;
 class HTMLMediaElement;
-class InternalProfilers;
 class InternalRuntimeFlags;
 class InternalSettings;
 class Iterator;
@@ -67,6 +64,7 @@ class LocalFrame;
 class Node;
 class Page;
 class PagePopupController;
+class PluginPlaceholderOptions;
 class PrivateScriptTest;
 class Range;
 class SerializedScriptValue;
@@ -141,7 +139,7 @@ public:
     void setFormControlStateOfHistoryItem(const Vector<String>&, ExceptionState&);
     void setEnableMockPagePopup(bool, ExceptionState&);
     PassRefPtrWillBeRawPtr<PagePopupController> pagePopupController();
-    LocalDOMWindow* pagePopupWindow() const;
+    DOMWindow* pagePopupWindow() const;
 
     PassRefPtrWillBeRawPtr<ClientRect> absoluteCaretBounds(ExceptionState&);
 
@@ -208,7 +206,6 @@ public:
 
     InternalSettings* settings() const;
     InternalRuntimeFlags* runtimeFlags() const;
-    InternalProfilers* profilers();
     unsigned workerThreadCount() const;
 
     void setDeviceProximity(Document*, const String& eventType, double value, double min, double max, ExceptionState&);
@@ -258,6 +255,7 @@ public:
     void mediaPlayerPlayingRemotelyChanged(HTMLMediaElement*, bool);
 
     void registerURLSchemeAsBypassingContentSecurityPolicy(const String& scheme);
+    void registerURLSchemeAsBypassingContentSecurityPolicy(const String& scheme, const Vector<String>& policyAreas);
     void removeURLSchemeRegisteredAsBypassingContentSecurityPolicy(const String& scheme);
 
     TypeConversions* typeConversions() const;
@@ -324,13 +322,18 @@ public:
     void setNetworkStateNotifierTestOnly(bool);
     // Test must call setNetworkStateNotifierTestOnly(true) before calling setNetworkConnectionInfo.
     void setNetworkConnectionInfo(const String&, ExceptionState&);
+
+    PassRefPtrWillBeRawPtr<ClientRect> boundsInRootViewSpace(Element*);
     String serializeNavigationMarkup();
+    Vector<String> getTransitionElementIds();
+    PassRefPtrWillBeRawPtr<ClientRectList> getTransitionElementRects();
     void hideAllTransitionElements();
+    void showAllTransitionElements();
 
     unsigned countHitRegions(CanvasRenderingContext2D*);
 
     void forcePluginPlaceholder(HTMLElement* plugin, PassRefPtrWillBeRawPtr<DocumentFragment>, ExceptionState&);
-    void forcePluginPlaceholder(HTMLElement* plugin, const Dictionary& options, ExceptionState&);
+    void forcePluginPlaceholder(HTMLElement* plugin, const PluginPlaceholderOptions&, ExceptionState&);
 
     Iterator* iterator(ScriptState*, ExceptionState&);
 
@@ -343,7 +346,6 @@ private:
 
     DocumentMarker* markerAt(Node*, const String& markerType, unsigned index, ExceptionState&);
     Member<InternalRuntimeFlags> m_runtimeFlags;
-    Member<InternalProfilers> m_profilers;
 };
 
 } // namespace blink

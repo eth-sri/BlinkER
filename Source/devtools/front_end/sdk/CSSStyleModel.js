@@ -661,6 +661,18 @@ WebInspector.CSSStyleDeclaration = function(cssModel, payload)
 }
 
 /**
+ * @return {!WebInspector.CSSStyleDeclaration}
+ */
+WebInspector.CSSStyleDeclaration.createDummyStyle = function()
+{
+    var dummyPayload = {
+        shorthandEntries: [],
+        cssProperties: []
+    };
+    return new WebInspector.CSSStyleDeclaration(WebInspector.cssModel, dummyPayload);
+}
+
+/**
  * @param {!Array.<!CSSAgent.ShorthandEntry>} shorthandEntries
  * @return {!Object}
  */
@@ -1052,9 +1064,9 @@ WebInspector.CSSRule.prototype = {
         return this.origin === "user-agent";
     },
 
-    get isUser()
+    get isInjected()
     {
-        return this.origin === "user";
+        return this.origin === "injected";
     },
 
     get isViaInspector()

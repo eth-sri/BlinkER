@@ -35,8 +35,8 @@ public:
 
     virtual const char* renderName() const override { return "RenderSVGResourceLinearGradient"; }
 
+    static const RenderSVGResourceType s_resourceType = LinearGradientResourceType;
     virtual RenderSVGResourceType resourceType() const override { return s_resourceType; }
-    static const RenderSVGResourceType s_resourceType;
 
     virtual SVGUnitTypes::SVGUnitType gradientUnits() const override { return m_attributes.gradientUnits(); }
     virtual void calculateGradientTransform(AffineTransform& transform) override { transform = m_attributes.gradientTransform(); }
@@ -46,10 +46,12 @@ public:
     FloatPoint startPoint(const LinearGradientAttributes&) const;
     FloatPoint endPoint(const LinearGradientAttributes&) const;
 
+    virtual void trace(Visitor*) override;
+
 private:
     LinearGradientAttributes m_attributes;
 };
 
-}
+} // namespace blink
 
-#endif
+#endif // RenderSVGResourceLinearGradient_h

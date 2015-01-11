@@ -104,8 +104,9 @@ public:
 
     virtual ~InspectorThreadableLoaderClient() { }
 
-    virtual void didReceiveResponse(unsigned long identifier, const ResourceResponse& response) override
+    virtual void didReceiveResponse(unsigned long identifier, const ResourceResponse& response, PassOwnPtr<WebDataConsumerHandle> handle) override
     {
+        ASSERT_UNUSED(handle, !handle);
         WTF::TextEncoding textEncoding(response.textEncodingName());
         bool useDetector = false;
         if (!textEncoding.isValid()) {
@@ -326,6 +327,9 @@ void InspectorResourceAgent::willSendRequest(unsigned long identifier, DocumentL
     if (initiatorInfo.name == FetchInitiatorTypeNames::xmlhttprequest) {
         type = InspectorPageAgent::XHRResource;
         m_resourcesData->setResourceType(requestId, type);
+    } else if (initiatorInfo.name == FetchInitiatorTypeNames::document) {
+        type = InspectorPageAgent::DocumentResource;
+        m_resourcesData->setResourceType(requestId, type);
     }
 
     RefPtr<JSONObject> headers = m_state->getObject(ResourceAgentState::extraRequestHeaders);
@@ -341,8 +345,10 @@ void InspectorResourceAgent::willSendRequest(unsigned long identifier, DocumentL
 
     request.setReportRawHeaders(true);
 
-    if (m_state->getBoolean(ResourceAgentState::cacheDisabled))
+    if (m_state->getBoolean(ResourceAgentState::cacheDisabled)) {
         request.setCachePolicy(ReloadBypassingCache);
+        request.setShouldResetAppCache(true);
+    }
 
     String frameId = m_pageAgent->frameId(loader->frame());
 
@@ -398,13 +404,10 @@ void InspectorResourceAgent::didReceiveResourceResponse(LocalFrame* frame, unsig
     }
 
     InspectorPageAgent::ResourceType type = cachedResource ? InspectorPageAgent::cachedResourceType(*cachedResource) : InspectorPageAgent::OtherResource;
-    // Workaround for worker scripts and XHRs that use RawResources for loading.
+    // Override with already discovered resource type.
     InspectorPageAgent::ResourceType savedType = m_resourcesData->resourceType(requestId);
-    if (savedType == InspectorPageAgent::ScriptResource || savedType == InspectorPageAgent::XHRResource)
+    if (savedType == InspectorPageAgent::ScriptResource || savedType == InspectorPageAgent::XHRResource || savedType == InspectorPageAgent::DocumentResource)
         type = savedType;
-    // Workaround for background: url() in inline style.
-    if (loader && equalIgnoringFragmentIdentifier(response.url(), loader->url()) && !loader->isCommitted())
-        type = InspectorPageAgent::DocumentResource;
 
     if (type == InspectorPageAgent::DocumentResource && loader && loader->substituteData().isValid())
         return;
@@ -413,7 +416,6 @@ void InspectorResourceAgent::didReceiveResourceResponse(LocalFrame* frame, unsig
         m_resourcesData->addResource(requestId, cachedResource);
     m_resourcesData->responseReceived(requestId, m_pageAgent->frameId(frame), response);
     m_resourcesData->setResourceType(requestId, type);
-
 
     if (!isResponseEmpty(resourceResponse))
         m_frontend->responseReceived(requestId, m_pageAgent->frameId(frame), m_pageAgent->loaderId(loader), currentTime(), InspectorPageAgent::resourceTypeJson(type), resourceResponse);

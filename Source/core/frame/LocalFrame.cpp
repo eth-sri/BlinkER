@@ -241,7 +241,7 @@ void LocalFrame::trace(Visitor* visitor)
     Frame::trace(visitor);
 }
 
-LocalDOMWindow* LocalFrame::domWindow() const
+DOMWindow* LocalFrame::domWindow() const
 {
     return m_domWindow.get();
 }
@@ -279,6 +279,11 @@ void LocalFrame::detach()
     // stage.
     loader().clear();
 #endif
+}
+
+SecurityContext* LocalFrame::securityContext() const
+{
+    return document();
 }
 
 void LocalFrame::disconnectOwnerElement()
@@ -563,14 +568,6 @@ double LocalFrame::devicePixelRatio() const
     double ratio = m_host->deviceScaleFactor();
     ratio *= pageZoomFactor();
     return ratio;
-}
-
-String LocalFrame::documentTypeString() const
-{
-    if (DocumentType* doctype = document()->doctype())
-        return createMarkup(doctype);
-
-    return String();
 }
 
 PassOwnPtr<DragImage> LocalFrame::nodeImage(Node& node)

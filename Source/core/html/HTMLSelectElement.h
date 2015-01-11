@@ -37,6 +37,8 @@ namespace blink {
 class AutoscrollController;
 class ExceptionState;
 class HTMLOptionElement;
+class HTMLOptionElementOrHTMLOptGroupElement;
+class HTMLElementOrLong;
 
 class HTMLSelectElement final : public HTMLFormControlElementWithState, public TypeAheadDataSource {
     DEFINE_WRAPPERTYPEINFO();
@@ -64,8 +66,7 @@ public:
 
     bool usesMenuList() const;
 
-    void add(HTMLElement*, HTMLElement* beforeElement, ExceptionState&);
-    void addBeforeOptionAtIndex(HTMLElement*, int beforeIndex, ExceptionState&);
+    void add(const HTMLOptionElementOrHTMLOptGroupElement&, const HTMLElementOrLong&, ExceptionState&);
 
     using Node::remove;
     void remove(int index);
@@ -84,7 +85,7 @@ public:
     void invalidateSelectedItems();
     void updateListItemSelectedStates();
 
-    const WillBeHeapVector<RawPtrWillBeMember<HTMLElement> >& listItems() const;
+    const WillBeHeapVector<RawPtrWillBeMember<HTMLElement>>& listItems() const;
 
     virtual void accessKeyAction(bool sendMouseEvents) override;
     void accessKeySetSelectedIndex(int);
@@ -214,7 +215,7 @@ private:
     virtual String optionAtIndex(int index) const override;
 
     // m_listItems contains HTMLOptionElement, HTMLOptGroupElement, and HTMLHRElement objects.
-    mutable WillBeHeapVector<RawPtrWillBeMember<HTMLElement> > m_listItems;
+    mutable WillBeHeapVector<RawPtrWillBeMember<HTMLElement>> m_listItems;
     Vector<bool> m_lastOnChangeSelection;
     Vector<bool> m_cachedStateForActiveSelection;
     TypeAhead m_typeAhead;

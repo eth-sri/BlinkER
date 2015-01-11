@@ -12,6 +12,8 @@ PASS dict.booleanMember is undefined.
 PASS dict.doubleMember is undefined.
 PASS dict.stringMember is undefined.
 PASS dict.stringMemberWithDefault is "defaultStringValue"
+PASS dict.byteStringMember is undefined.
+PASS dict.usvStringMember is undefined.
 PASS dict.stringSequenceMember is undefined.
 PASS dict.stringSequenceOrNullMember is undefined.
 PASS dict.elementMember is undefined.
@@ -21,6 +23,7 @@ PASS dict.enumMemberWithDefault is "foo"
 PASS dict.enumOrNullMember is undefined.
 PASS dict.objectMember is undefined.
 PASS dict.objectOrNullMemberWithDefault is null
+PASS dict.doubleOrStringMember is undefined.
 
 Test for setting undefined
 PASS dict.longMember is undefined.
@@ -30,6 +33,8 @@ PASS dict.longOrNullMemberWithDefault is null
 PASS dict.booleanMember is undefined.
 PASS dict.doubleMember is undefined.
 PASS dict.stringMember is undefined.
+PASS dict.byteStringMember is undefined.
+PASS dict.usvStringMember is undefined.
 PASS dict.stringMemberWithDefault is "defaultStringValue"
 PASS dict.stringSequenceMember is undefined.
 PASS dict.stringSequenceOrNullMember is undefined.
@@ -45,6 +50,8 @@ PASS dict.longOrNullMember is 3
 PASS dict.longOrNullMemberWithDefault is 4
 PASS dict.stringMember is "modifiedString1"
 PASS dict.stringMemberWithDefault is "modifiedString2"
+PASS dict.byteStringMember is "\u0000\u0001þÿ"
+PASS dict.usvStringMember is "!@#123ABCabc 𐀀"
 PASS dict.booleanMember is true
 PASS dict.doubleMember is 3.14
 PASS dict.stringSequenceMember is ["foo", "bar", "baz"]
@@ -56,6 +63,15 @@ PASS dict.enumMemberWithDefault is "bar"
 PASS dict.enumOrNullMember is "baz"
 PASS dict.objectMember is testObject1
 PASS dict.objectOrNullMemberWithDefault is testObject2
+PASS dict.doubleOrStringMember is 3.14
+
+Additional test for union type members
+PASS dict.doubleOrStringMember is "foo"
+PASS dict.doubleOrStringMember is "[object Object]"
+PASS dict.doubleOrStringMember is ""
+This FAIL is intentional
+FAIL dict.doubleOrStringMember should be null (of type string). Was undefined (of type undefined).
+PASS dict.doubleOrStringMember is undefined.
 
 Test for explicit undefined or null, and missing members
 PASS dict.longMember is undefined.
@@ -66,6 +82,11 @@ PASS dict.longOrNullMemberWithDefault is null
 Test for setting invalid member
 PASS dict.invalidMember is undefined.
 
+Test for setting invalid ByteString value
+PASS dictionaryTest.set({byteStringMember: 'Ā'}) threw exception TypeError: Failed to execute 'set' on 'DictionaryTest': Value is not a valid ByteString..
+
+Test for setting invalid USVString value
+PASS dict.usvStringMember is "_�_�_��_"
 Test for setting invalid enum value
 PASS dictionaryTest.set({enumMember: 'invalid'}) threw exception TypeError: Failed to execute 'set' on 'DictionaryTest': member enumMember ('invalid') is not a valid enum value..
 
@@ -77,6 +98,39 @@ Test for passing invalid dictionary values
 PASS dictionaryTest.set(42) threw exception TypeError: Failed to execute 'set' on 'DictionaryTest': parameter 1 ('testingDictionary') is not an object..
 PASS dictionaryTest.set('string') threw exception TypeError: Failed to execute 'set' on 'DictionaryTest': parameter 1 ('testingDictionary') is not an object..
 
+Test for [Clamp] and [EnforceRange] member
+PASS dict.longMember is -2147483648
+PASS dict.longMemberWithClamp is 2147483647
+PASS dictionaryTest.set({ longMemberWithEnforceRange: 2147483648 }) threw exception TypeError: Failed to execute 'set' on 'DictionaryTest': Value is outside the 'long' value range..
+
+Test for derived dictionary
+PASS derived.longMember is undefined.
+PASS derived.longMemberWithDefault is 42
+PASS derived.longOrNullMember is undefined.
+PASS derived.longOrNullMemberWithDefault is null
+PASS derived.booleanMember is undefined.
+PASS derived.doubleMember is undefined.
+PASS derived.stringMember is undefined.
+PASS derived.stringMemberWithDefault is "defaultStringValue"
+PASS derived.stringSequenceMember is undefined.
+PASS derived.stringSequenceOrNullMember is undefined.
+PASS derived.elementMember is undefined.
+PASS derived.elementOrNullMember is undefined.
+PASS derived.enumMember is undefined.
+PASS derived.enumMemberWithDefault is "foo"
+PASS derived.enumOrNullMember is undefined.
+PASS derived.objectMember is undefined.
+PASS derived.objectOrNullMemberWithDefault is null
+PASS derived.derivedStringMember is undefined.
+PASS derived.derivedStringMemberWithDefault is "derivedDefaultStringValue"
+
+PASS derived.longMember is 1
+PASS derived.stringMemberWithDefault is "modifiedString"
+PASS derived.derivedStringMember is "modifiedString2"
+PASS derived.derivedStringMemberWithDefault is "modifiedString3"
+PASS derived.invalidMember is undefined.
+
+PASS dictionaryTest.setDerived({objectMember: 42}) threw exception TypeError: Failed to execute 'setDerived' on 'DictionaryTest': member objectMember is not an object..
 PASS successfullyParsed is true
 
 TEST COMPLETE

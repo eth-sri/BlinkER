@@ -8,6 +8,7 @@
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/Referrer.h"
+#include "public/platform/WebURLRequest.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/text/AtomicString.h"
@@ -24,25 +25,22 @@ class WebServiceWorkerRequest;
 class FetchRequestData final : public GarbageCollectedFinalized<FetchRequestData> {
     WTF_MAKE_NONCOPYABLE(FetchRequestData);
 public:
-    enum Mode { SameOriginMode, NoCORSMode, CORSMode, CORSWithForcedPreflight };
-    enum Credentials { OmitCredentials, SameOriginCredentials, IncludeCredentials };
-    enum Context { ChildContext, ConnectContext, DownloadContext, FontContext, FormContext, ImageContext, ManifestContext, MediaContext, NavigateContext, ObjectContext, PingContext, PopupContext, PrefetchContext, ScriptContext, ServiceWorkerContext, SharedWorkerContext, StyleContext, WorkerContext, NullContext };
     enum Tainting { BasicTainting, CORSTainting, OpaqueTainting };
 
     class Referrer final {
     public:
         Referrer() : m_type(ClientReferrer) { }
-        bool isNone() const { return m_type == NoneReferrer; }
+        bool isNoReferrer() const { return m_type == NoReferrer; }
         bool isClient() const { return m_type == ClientReferrer; }
         bool isURL() const { return m_type == URLReferrer; }
-        void setNone()
+        void setNoReferrer()
         {
             m_referrer = blink::Referrer();
-            m_type = NoneReferrer;
+            m_type = NoReferrer;
         }
-        void setClient(const blink::Referrer& referrer)
+        void setClient()
         {
-            m_referrer = referrer;
+            m_referrer = blink::Referrer();
             m_type = ClientReferrer;
         }
         void setURL(const blink::Referrer& referrer)
@@ -52,14 +50,13 @@ public:
         }
         blink::Referrer referrer() const { return m_referrer; }
     private:
-        enum Type { NoneReferrer, ClientReferrer, URLReferrer };
+        enum Type { NoReferrer, ClientReferrer, URLReferrer };
         Type m_type;
         blink::Referrer m_referrer;
     };
 
-    static FetchRequestData* create(ExecutionContext*);
+    static FetchRequestData* create();
     static FetchRequestData* create(const blink::WebServiceWorkerRequest&);
-    FetchRequestData* createRestrictedCopy(ExecutionContext*, PassRefPtr<SecurityOrigin>) const;
     FetchRequestData* createCopy() const;
     ~FetchRequestData();
 
@@ -68,16 +65,23 @@ public:
     void setURL(const KURL& url) { m_url = url; }
     const KURL& url() const { return m_url; }
     bool unsafeRequestFlag() const { return m_unsafeRequestFlag; }
+    void setUnsafeRequestFlag(bool flag) { m_unsafeRequestFlag = flag; }
+    WebURLRequest::RequestContext context() const { return m_context; }
+    void setContext(WebURLRequest::RequestContext context) { m_context = context; }
     PassRefPtr<SecurityOrigin> origin() { return m_origin; }
+    void setOrigin(PassRefPtr<SecurityOrigin> origin) { m_origin = origin; }
     bool sameOriginDataURLFlag() { return m_sameOriginDataURLFlag; }
+    void setSameOriginDataURLFlag(bool flag) { m_sameOriginDataURLFlag = flag; }
     const Referrer& referrer() const { return m_referrer; }
-    void setMode(Mode mode) { m_mode = mode; }
-    Mode mode() const { return m_mode; }
-    void setCredentials(Credentials credentials) { m_credentials = credentials; }
-    Credentials credentials() const { return m_credentials; }
+    Referrer* mutableReferrer() { return &m_referrer; }
+    void setMode(WebURLRequest::FetchRequestMode mode) { m_mode = mode; }
+    WebURLRequest::FetchRequestMode mode() const { return m_mode; }
+    void setCredentials(WebURLRequest::FetchCredentialsMode credentials) { m_credentials = credentials; }
+    WebURLRequest::FetchCredentialsMode credentials() const { return m_credentials; }
     void setResponseTainting(Tainting tainting) { m_responseTainting = tainting; }
     Tainting tainting() const { return m_responseTainting; }
-    FetchHeaderList* headerList() { return m_headerList.get(); }
+    FetchHeaderList* headerList() const { return m_headerList.get(); }
+    void setHeaderList(FetchHeaderList* headerList) { m_headerList = headerList; }
     PassRefPtr<BlobDataHandle> blobDataHandle() const { return m_blobDataHandle; }
     void setBlobDataHandle(PassRefPtr<BlobDataHandle> blobHandle) { m_blobDataHandle = blobHandle; }
 
@@ -86,23 +90,21 @@ public:
 private:
     FetchRequestData();
 
-    static FetchRequestData* create();
-
     AtomicString m_method;
     KURL m_url;
     Member<FetchHeaderList> m_headerList;
     RefPtr<BlobDataHandle> m_blobDataHandle;
     bool m_unsafeRequestFlag;
     // FIXME: Support m_skipServiceWorkerFlag;
-    Context m_context;
+    WebURLRequest::RequestContext m_context;
     RefPtr<SecurityOrigin> m_origin;
     // FIXME: Support m_forceOriginHeaderFlag;
     bool m_sameOriginDataURLFlag;
     Referrer m_referrer;
     // FIXME: Support m_authenticationFlag;
     // FIXME: Support m_synchronousFlag;
-    Mode m_mode;
-    Credentials m_credentials;
+    WebURLRequest::FetchRequestMode m_mode;
+    WebURLRequest::FetchCredentialsMode m_credentials;
     // FIXME: Support m_useURLCredentialsFlag;
     // FIXME: Support m_manualRedirectFlag;
     // FIXME: Support m_redirectCount;

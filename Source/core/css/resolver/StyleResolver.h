@@ -124,8 +124,6 @@ public:
     void resetAuthorStyle(TreeScope&);
     void finishAppendAuthorStyleSheets();
 
-    void processScopedRules(const RuleSet& authorRules, CSSStyleSheet*, unsigned sheetIndex, ContainerNode& scope);
-
     void lazyAppendAuthorStyleSheets(unsigned firstNew, const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet> >&);
     void removePendingAuthorStyleSheets(const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet> >&);
     void appendPendingAuthorStyleSheets();
@@ -211,8 +209,9 @@ private:
     void loadPendingResources(StyleResolverState&);
     void adjustRenderStyle(StyleResolverState&, Element*);
 
-    void appendCSSStyleSheet(CSSStyleSheet*);
-    void addRulesFromSheet(CSSStyleSheet*, TreeScope*, unsigned);
+    void appendCSSStyleSheet(CSSStyleSheet&);
+    void addRulesFromSheet(CSSStyleSheet&, TreeScope*, unsigned);
+    void processScopedRules(const RuleSet& authorRules, CSSStyleSheet*, unsigned sheetIndex, ContainerNode& scope);
 
     void collectPseudoRulesForElement(Element*, ElementRuleCollector&, PseudoId, unsigned rulesToInclude);
     void matchRuleSet(ElementRuleCollector&, RuleSet*);
@@ -249,7 +248,7 @@ private:
     template <StyleApplicationPass pass>
     void applyAnimatedProperties(StyleResolverState&, const WillBeHeapHashMap<CSSPropertyID, RefPtrWillBeMember<Interpolation> >&);
     template <StyleResolver::StyleApplicationPass pass>
-    void applyAllProperty(StyleResolverState&, CSSValue*);
+    void applyAllProperty(StyleResolverState&, CSSValue*, bool inheritedOnly);
 
     void matchPageRules(MatchResult&, RuleSet*, bool isLeftPage, bool isFirstPage, const String& pageName);
     void matchPageRulesForList(WillBeHeapVector<RawPtrWillBeMember<StyleRulePage> >& matchedRules, const WillBeHeapVector<RawPtrWillBeMember<StyleRulePage> >&, bool isLeftPage, bool isFirstPage, const String& pageName);
@@ -262,11 +261,9 @@ private:
 
     bool pseudoStyleForElementInternal(Element&, const PseudoStyleRequest&, RenderStyle* parentStyle, StyleResolverState&);
 
-    Document& document() { return *m_document; }
+    PassRefPtrWillBeRawPtr<PseudoElement> createPseudoElement(Element* parent, PseudoId);
 
-    // FIXME: This likely belongs on RuleSet.
-    typedef WillBeHeapHashMap<StringImpl*, RefPtrWillBeMember<StyleRuleKeyframes> > KeyframesRuleMap;
-    KeyframesRuleMap m_keyframesRuleMap;
+    Document& document() { return *m_document; }
 
     static RenderStyle* s_styleNotYetAvailable;
 

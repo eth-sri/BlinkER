@@ -116,9 +116,10 @@ def set_global_type_info(interfaces_info):
 class CodeGeneratorBase(object):
     """Base class for v8 bindings generator and IDL dictionary impl generator"""
 
-    def __init__(self, interfaces_info, cache_dir, output_dir):
+    def __init__(self, interfaces_info, component_info, cache_dir, output_dir):
         interfaces_info = interfaces_info or {}
         self.interfaces_info = interfaces_info
+        self.component_info = component_info
         self.jinja_env = initialize_jinja_env(cache_dir)
         self.output_dir = output_dir
         set_global_type_info(interfaces_info)
@@ -129,6 +130,8 @@ class CodeGeneratorBase(object):
         IdlType.set_callback_functions(definitions.callback_functions.keys())
         IdlType.set_enums((enum.name, enum.values)
                           for enum in definitions.enumerations.values())
+        # Resolve typedefs
+        definitions.resolve_typedefs(self.component_info['typedefs'])
         return self.generate_code_internal(definitions, definition_name)
 
     def generate_code_internal(self, definitions, definition_name):
@@ -137,8 +140,8 @@ class CodeGeneratorBase(object):
 
 
 class CodeGeneratorV8(CodeGeneratorBase):
-    def __init__(self, interfaces_info, cache_dir, output_dir):
-        CodeGeneratorBase.__init__(self, interfaces_info, cache_dir, output_dir)
+    def __init__(self, interfaces_info, component_info, cache_dir, output_dir):
+        CodeGeneratorBase.__init__(self, interfaces_info, component_info, cache_dir, output_dir)
 
     def output_paths(self, definition_name):
         header_path = posixpath.join(self.output_dir,
@@ -205,7 +208,8 @@ class CodeGeneratorV8(CodeGeneratorBase):
                                  dictionary):
         header_template = self.jinja_env.get_template('dictionary_v8.h')
         cpp_template = self.jinja_env.get_template('dictionary_v8.cpp')
-        template_context = v8_dictionary.dictionary_context(dictionary)
+        template_context = v8_dictionary.dictionary_context(
+            dictionary, self.interfaces_info)
         interface_info = self.interfaces_info[dictionary_name]
         include_paths = interface_info.get('dependencies_include_paths')
         # Add the include for interface itself
@@ -220,8 +224,8 @@ class CodeGeneratorV8(CodeGeneratorBase):
 
 
 class CodeGeneratorDictionaryImpl(CodeGeneratorBase):
-    def __init__(self, interfaces_info, cache_dir, output_dir):
-        CodeGeneratorBase.__init__(self, interfaces_info, cache_dir, output_dir)
+    def __init__(self, interfaces_info, component_info, cache_dir, output_dir):
+        CodeGeneratorBase.__init__(self, interfaces_info, component_info, cache_dir, output_dir)
 
     def output_paths(self, definition_name, interface_info):
         output_dir = posixpath.join(self.output_dir,
@@ -240,10 +244,17 @@ class CodeGeneratorDictionaryImpl(CodeGeneratorBase):
         template_context = v8_dictionary.dictionary_impl_context(
             dictionary, self.interfaces_info)
         include_paths = interface_info.get('dependencies_include_paths')
+        # Add union containers header file to header_includes rather than
+        # cpp file so that union containers can be used in dictionary headers.
+        union_container_headers = [header for header in include_paths
+                                   if header.find('UnionTypes') > 0]
+        include_paths = [header for header in include_paths
+                         if header not in union_container_headers]
+        template_context['header_includes'].update(union_container_headers)
         header_text, cpp_text = render_template(
             include_paths, header_template, cpp_template, template_context)
         header_path, cpp_path = self.output_paths(
-            definition_name, interface_info)
+            cpp_name(dictionary), interface_info)
         return (
             (header_path, header_text),
             (cpp_path, cpp_text),
@@ -269,8 +280,7 @@ class CodeGeneratorUnionType(object):
         header_template = self.jinja_env.get_template('union.h')
         cpp_template = self.jinja_env.get_template('union.cpp')
         template_context = v8_union.union_context(
-            sorted(union_types, key=lambda union_type: union_type.name),
-            self.interfaces_info)
+            union_types, self.interfaces_info)
         template_context['code_generator'] = module_pyname
         capitalized_component = self.target_component.capitalize()
         template_context['header_filename'] = 'bindings/%s/v8/UnionTypes%s.h' % (

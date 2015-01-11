@@ -33,7 +33,7 @@
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "modules/encryptedmedia/MediaKeySession.h"
-#include "modules/encryptedmedia/SimpleContentDecryptionModuleResult.h"
+#include "modules/encryptedmedia/SimpleContentDecryptionModuleResultPromise.h"
 #include "platform/ContentType.h"
 #include "platform/Logging.h"
 #include "platform/MIMETypeRegistry.h"
@@ -60,12 +60,12 @@ public:
         return m_result;
     }
 
-    const RefPtr<ArrayBuffer> data() const
+    const RefPtr<DOMArrayBuffer> data() const
     {
         return m_data;
     }
 
-    static PendingAction* CreatePendingSetServerCertificate(ContentDecryptionModuleResult* result, PassRefPtr<ArrayBuffer> serverCertificate)
+    static PendingAction* CreatePendingSetServerCertificate(ContentDecryptionModuleResult* result, PassRefPtr<DOMArrayBuffer> serverCertificate)
     {
         ASSERT(result);
         ASSERT(serverCertificate);
@@ -82,14 +82,14 @@ public:
     }
 
 private:
-    PendingAction(ContentDecryptionModuleResult* result, PassRefPtr<ArrayBuffer> data)
+    PendingAction(ContentDecryptionModuleResult* result, PassRefPtr<DOMArrayBuffer> data)
         : m_result(result)
         , m_data(data)
     {
     }
 
     const Member<ContentDecryptionModuleResult> m_result;
-    const RefPtr<ArrayBuffer> m_data;
+    const RefPtr<DOMArrayBuffer> m_data;
 };
 
 MediaKeys::MediaKeys(ExecutionContext* context, const String& keySystem, PassOwnPtr<WebContentDecryptionModule> cdm)
@@ -132,17 +132,17 @@ MediaKeySession* MediaKeys::createSession(ScriptState* scriptState, const String
 
 ScriptPromise MediaKeys::setServerCertificate(ScriptState* scriptState, DOMArrayBuffer* serverCertificate)
 {
-    RefPtr<ArrayBuffer> serverCertificateCopy = ArrayBuffer::create(serverCertificate->data(), serverCertificate->byteLength());
+    RefPtr<DOMArrayBuffer> serverCertificateCopy = DOMArrayBuffer::create(serverCertificate->data(), serverCertificate->byteLength());
     return setServerCertificateInternal(scriptState, serverCertificateCopy.release());
 }
 
 ScriptPromise MediaKeys::setServerCertificate(ScriptState* scriptState, DOMArrayBufferView* serverCertificate)
 {
-    RefPtr<ArrayBuffer> serverCertificateCopy = ArrayBuffer::create(serverCertificate->baseAddress(), serverCertificate->byteLength());
+    RefPtr<DOMArrayBuffer> serverCertificateCopy = DOMArrayBuffer::create(serverCertificate->baseAddress(), serverCertificate->byteLength());
     return setServerCertificateInternal(scriptState, serverCertificateCopy.release());
 }
 
-ScriptPromise MediaKeys::setServerCertificateInternal(ScriptState* scriptState, PassRefPtr<ArrayBuffer> serverCertificate)
+ScriptPromise MediaKeys::setServerCertificateInternal(ScriptState* scriptState, PassRefPtr<DOMArrayBuffer> serverCertificate)
 {
     // From https://dvcs.w3.org/hg/html-media/raw-file/default/encrypted-media/encrypted-media.html#dom-setservercertificate:
     // The setServerCertificate(serverCertificate) method provides a server
@@ -165,7 +165,7 @@ ScriptPromise MediaKeys::setServerCertificateInternal(ScriptState* scriptState, 
     //    (Done in caller.)
 
     // 4. Let promise be a new promise.
-    SimpleContentDecryptionModuleResult* result = new SimpleContentDecryptionModuleResult(scriptState);
+    SimpleContentDecryptionModuleResultPromise* result = new SimpleContentDecryptionModuleResultPromise(scriptState);
     ScriptPromise promise = result->promise();
 
     // 5. Run the following steps asynchronously (documented in timerFired()).

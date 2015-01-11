@@ -46,6 +46,12 @@
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
 
+namespace WTF {
+
+class ArrayBufferContents;
+
+} // namespace WTF
+
 namespace blink {
 
 class Extensions3DUtil;
@@ -144,7 +150,6 @@ public:
     void setIsHidden(bool);
 
     WebLayer* platformLayer();
-    void paintCompositedResultsToCanvas(ImageBuffer*);
 
     WebGraphicsContext3D* context();
 
@@ -158,12 +163,12 @@ public:
 
     // Destroys the TEXTURE_2D binding for the owned context
     bool copyToPlatformTexture(WebGraphicsContext3D*, Platform3DObject texture, GLenum internalFormat,
-        GLenum destType, GLint level, bool premultiplyAlpha, bool flipY, bool fromFrontBuffer = false);
+        GLenum destType, GLint level, bool premultiplyAlpha, bool flipY, SourceDrawingBuffer);
 
     void setPackAlignment(GLint param);
 
     void paintRenderingResultsToCanvas(ImageBuffer*);
-    PassRefPtr<Uint8ClampedArray> paintRenderingResultsToImageData(int&, int&);
+    bool paintRenderingResultsToImageData(int&, int&, SourceDrawingBuffer, WTF::ArrayBufferContents&);
 
 protected: // For unittests
     DrawingBuffer(
@@ -246,7 +251,11 @@ private:
     Platform3DObject m_fbo;
     // DrawingBuffer's output is double-buffered. m_colorBuffer is the back buffer.
     TextureInfo m_colorBuffer;
-    TextureInfo m_frontColorBuffer;
+    struct FrontBufferInfo {
+        TextureInfo texInfo;
+        WebExternalTextureMailbox mailbox;
+    };
+    FrontBufferInfo m_frontColorBuffer;
 
     // This is used when we have OES_packed_depth_stencil.
     Platform3DObject m_depthStencilBuffer;

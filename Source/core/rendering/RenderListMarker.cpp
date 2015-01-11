@@ -1120,13 +1120,13 @@ LayoutRect RenderListMarker::localSelectionRect()
     if (!box)
         return LayoutRect(LayoutPoint(), size());
     RootInlineBox& root = inlineBoxWrapper()->root();
-    LayoutUnit newLogicalTop = root.block().style()->slowIsFlippedBlocksWritingMode() ? inlineBoxWrapper()->logicalBottom() - root.selectionBottom() : root.selectionTop() - inlineBoxWrapper()->logicalTop();
+    LayoutUnit newLogicalTop = root.block().style()->isFlippedBlocksWritingMode() ? inlineBoxWrapper()->logicalBottom() - root.selectionBottom() : root.selectionTop() - inlineBoxWrapper()->logicalTop();
     if (root.block().style()->isHorizontalWritingMode())
         return LayoutRect(0, newLogicalTop, width(), root.selectionHeight());
     return LayoutRect(newLogicalTop, 0, root.selectionHeight(), height());
 }
 
-void RenderListMarker::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
+void RenderListMarker::paint(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
     ListMarkerPainter(*this).paint(paintInfo, paintOffset);
 }
@@ -1630,6 +1630,9 @@ LayoutRect RenderListMarker::selectionRectForPaintInvalidation(const RenderLayer
     RootInlineBox& root = inlineBoxWrapper()->root();
     LayoutRect rect(0, root.selectionTop() - y(), width(), root.selectionHeight());
     mapRectToPaintInvalidationBacking(paintInvalidationContainer, rect, 0);
+    // FIXME: groupedMapping() leaks the squashing abstraction.
+    if (paintInvalidationContainer->layer()->groupedMapping())
+        RenderLayer::mapRectToPaintBackingCoordinates(paintInvalidationContainer, rect);
     return rect;
 }
 

@@ -123,6 +123,10 @@ scrollAnimatorEnabled initial=true
 # main thread scrolling are supported.
 threadedScrollingEnabled initial=true, invalidate=Style
 
+# Handles frame-level scrolls via the root RenderLayer instead of the FrameView.
+# crbug.com/417782 tracks enabling this by default.
+rootLayerScrolls initial=false
+
 # Used in layout tests for gesture tap highlights. Makes the highlights square
 # (rather than rounded) to make it possible to reftest the results.
 mockGestureTapHighlightsEnabled initial=false
@@ -220,6 +224,11 @@ pinchVirtualViewportEnabled initial=false
 useSolidColorScrollbars initial=false
 pinchOverlayScrollbarThickness type=int, initial=0
 
+# The rubber-band overscroll effect is implemented in Blink and is being moved
+# to the compositor thread. This will be set to true and eventually removed.
+# crbug.com/133097
+rubberBandingOnCompositorThread initial=false
+
 mainFrameClipsContent initial=true
 
 
@@ -278,7 +287,7 @@ maxBeaconTransmission type=int, initial=65536
 fullscreenSupported initial=true
 
 # V8 supports different types of caching. Used by V8 bindings.
-v8CacheOptions type=V8CacheOptions, initial=V8CacheOptionsOff
+v8CacheOptions type=V8CacheOptions, initial=V8CacheOptionsDefault
 
 v8ScriptStreamingEnabled initial=false
 v8ScriptStreamingMode type=ScriptStreamingMode, initial=ScriptStreamingModeAll
@@ -293,5 +302,11 @@ availableHoverTypes type=int, initial=HoverTypeNone, invalidate=MediaQuery
 primaryPointerType type=PointerType, initial=PointerTypeNone, invalidate=MediaQuery
 primaryHoverType type=HoverType, initial=HoverTypeNone, invalidate=MediaQuery
 
+# Whether accessibility support is enabled at all.
 accessibilityEnabled initial=false, invalidate=AccessibilityState
+
+# If true, the value in password fields is exposed to assistive technologies.
+accessibilityPasswordValuesEnabled initial=false
+
+# If true, static text nodes expose inline text box children.
 inlineTextBoxAccessibilityEnabled initial=false

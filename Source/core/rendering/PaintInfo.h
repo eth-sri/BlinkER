@@ -81,6 +81,7 @@ struct PaintInfo {
     }
 
     bool forceBlackText() const { return paintBehavior & PaintBehaviorForceBlackText; }
+    bool isRenderingClipPathAsMaskImage() const { return paintBehavior & PaintBehaviorRenderingClipPathAsMask; }
 
     bool skipRootBackground() const { return paintBehavior & PaintBehaviorSkipRootBackground; }
     bool paintRootBackgroundOnly() const { return paintBehavior & PaintBehaviorRootBackgroundOnly; }
@@ -108,7 +109,7 @@ struct PaintInfo {
     static IntRect infiniteRect() { return IntRect(LayoutRect::infiniteRect()); }
     const RenderLayerModelObject* paintContainer() const { return m_paintContainer; }
 
-    ListHashSet<RenderInline*>* outlineObjects() { return m_outlineObjects; }
+    ListHashSet<RenderInline*>* outlineObjects() const { return m_outlineObjects; }
     void setOutlineObjects(ListHashSet<RenderInline*>* objects) { m_outlineObjects = objects; }
 
     // FIXME: Introduce setters/getters at some point. Requires a lot of changes throughout rendering/.

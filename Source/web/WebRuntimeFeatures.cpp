@@ -84,6 +84,11 @@ void WebRuntimeFeatures::enableDecodeToYUV(bool enable)
     RuntimeEnabledFeatures::setDecodeToYUVEnabled(enable);
 }
 
+void WebRuntimeFeatures::forceDisplayList2dCanvas(bool enable)
+{
+    RuntimeEnabledFeatures::setForceDisplayList2dCanvasEnabled(enable);
+}
+
 void WebRuntimeFeatures::enableDisplayList2dCanvas(bool enable)
 {
     RuntimeEnabledFeatures::setDisplayList2dCanvasEnabled(enable);
@@ -312,6 +317,11 @@ void WebRuntimeFeatures::enableV8IdleTasks(bool enable)
 void WebRuntimeFeatures::enableSVG1DOM(bool enable)
 {
     RuntimeEnabledFeatures::setSVG1DOMEnabled(enable);
+}
+
+void WebRuntimeFeatures::enableReducedReferrerGranularity(bool enable)
+{
+    RuntimeEnabledFeatures::setReducedReferrerGranularityEnabled(enable);
 }
 
 } // namespace blink

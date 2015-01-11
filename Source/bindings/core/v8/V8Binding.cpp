@@ -48,6 +48,7 @@
 #include "core/dom/Element.h"
 #include "core/dom/NodeFilter.h"
 #include "core/dom/QualifiedName.h"
+#include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/inspector/BindingVisitors.h"
@@ -126,7 +127,7 @@ PassRefPtrWillBeRawPtr<NodeFilter> toNodeFilter(v8::Handle<v8::Value> callback, 
         return nullptr;
     RefPtrWillBeRawPtr<NodeFilter> filter = NodeFilter::create();
 
-    v8::Handle<v8::Object> filterWrapper = toV8(filter, creationContext, scriptState->isolate()).As<v8::Object>();
+    v8::Handle<v8::Object> filterWrapper = toV8(filter.get(), creationContext, scriptState->isolate()).As<v8::Object>();
 
     RefPtrWillBeRawPtr<NodeFilterCondition> condition = V8NodeFilterCondition::create(callback, filterWrapper, scriptState);
     filter->setCondition(condition.release());
@@ -203,9 +204,10 @@ static inline T toSmallerInt(v8::Handle<v8::Value> value, IntegerConversionConfi
         return static_cast<T>(result > LimitsTrait::maxValue ? result - LimitsTrait::numberOfValues : result);
     }
 
+    v8::Isolate* isolate = v8::Isolate::GetCurrent();
     // Can the value be converted to a number?
-    v8::TryCatch block;
-    v8::Local<v8::Number> numberObject(value->ToNumber());
+    v8::TryCatch block(isolate);
+    v8::Local<v8::Number> numberObject(value->ToNumber(isolate));
     if (block.HasCaught()) {
         exceptionState.rethrowV8Exception(block.Exception());
         return 0;
@@ -251,9 +253,10 @@ static inline T toSmallerUInt(v8::Handle<v8::Value> value, IntegerConversionConf
         return static_cast<T>(result);
     }
 
+    v8::Isolate* isolate = v8::Isolate::GetCurrent();
     // Can the value be converted to a number?
-    v8::TryCatch block;
-    v8::Local<v8::Number> numberObject(value->ToNumber());
+    v8::TryCatch block(isolate);
+    v8::Local<v8::Number> numberObject(value->ToNumber(isolate));
     if (block.HasCaught()) {
         exceptionState.rethrowV8Exception(block.Exception());
         return 0;
@@ -329,9 +332,10 @@ int32_t toInt32(v8::Handle<v8::Value> value, IntegerConversionConfiguration conf
     if (value->IsInt32())
         return value->Int32Value();
 
+    v8::Isolate* isolate = v8::Isolate::GetCurrent();
     // Can the value be converted to a number?
-    v8::TryCatch block;
-    v8::Local<v8::Number> numberObject(value->ToNumber());
+    v8::TryCatch block(isolate);
+    v8::Local<v8::Number> numberObject(value->ToNumber(isolate));
     if (block.HasCaught()) {
         exceptionState.rethrowV8Exception(block.Exception());
         return 0;
@@ -382,9 +386,10 @@ uint32_t toUInt32(v8::Handle<v8::Value> value, IntegerConversionConfiguration co
         return result;
     }
 
+    v8::Isolate* isolate = v8::Isolate::GetCurrent();
     // Can the value be converted to a number?
-    v8::TryCatch block;
-    v8::Local<v8::Number> numberObject(value->ToNumber());
+    v8::TryCatch block(isolate);
+    v8::Local<v8::Number> numberObject(value->ToNumber(isolate));
     if (block.HasCaught()) {
         exceptionState.rethrowV8Exception(block.Exception());
         return 0;
@@ -424,9 +429,10 @@ int64_t toInt64(v8::Handle<v8::Value> value, IntegerConversionConfiguration conf
     if (value->IsInt32())
         return value->Int32Value();
 
+    v8::Isolate* isolate = v8::Isolate::GetCurrent();
     // Can the value be converted to a number?
-    v8::TryCatch block;
-    v8::Local<v8::Number> numberObject(value->ToNumber());
+    v8::TryCatch block(isolate);
+    v8::Local<v8::Number> numberObject(value->ToNumber(isolate));
     if (block.HasCaught()) {
         exceptionState.rethrowV8Exception(block.Exception());
         return 0;
@@ -474,9 +480,10 @@ uint64_t toUInt64(v8::Handle<v8::Value> value, IntegerConversionConfiguration co
         return result;
     }
 
+    v8::Isolate* isolate = v8::Isolate::GetCurrent();
     // Can the value be converted to a number?
-    v8::TryCatch block;
-    v8::Local<v8::Number> numberObject(value->ToNumber());
+    v8::TryCatch block(isolate);
+    v8::Local<v8::Number> numberObject(value->ToNumber(isolate));
     if (block.HasCaught()) {
         exceptionState.rethrowV8Exception(block.Exception());
         return 0;
@@ -520,8 +527,9 @@ double toDouble(v8::Handle<v8::Value> value, ExceptionState& exceptionState)
     if (value->IsNumber())
         return value->NumberValue();
 
-    v8::TryCatch block;
-    v8::Local<v8::Number> numberObject(value->ToNumber());
+    v8::Isolate* isolate = v8::Isolate::GetCurrent();
+    v8::TryCatch block(isolate);
+    v8::Local<v8::Number> numberObject(value->ToNumber(isolate));
     if (block.HasCaught()) {
         exceptionState.rethrowV8Exception(block.Exception());
         return 0;
@@ -541,8 +549,9 @@ String toByteString(v8::Handle<v8::Value> value, ExceptionState& exceptionState)
         return String();
 
     // 1. Let x be ToString(v)
-    v8::TryCatch block;
-    v8::Local<v8::String> stringObject(value->ToString());
+    v8::Isolate* isolate = v8::Isolate::GetCurrent();
+    v8::TryCatch block(isolate);
+    v8::Local<v8::String> stringObject(value->ToString(isolate));
     if (block.HasCaught()) {
         exceptionState.rethrowV8Exception(block.Exception());
         return String();
@@ -671,8 +680,9 @@ String toUSVString(v8::Handle<v8::Value> value, ExceptionState& exceptionState)
     if (value.IsEmpty())
         return String();
 
-    v8::TryCatch block;
-    v8::Local<v8::String> stringObject(value->ToString());
+    v8::Isolate* isolate = v8::Isolate::GetCurrent();
+    v8::TryCatch block(isolate);
+    v8::Local<v8::String> stringObject(value->ToString(isolate));
     if (block.HasCaught()) {
         exceptionState.rethrowV8Exception(block.Exception());
         return String();
@@ -691,11 +701,11 @@ PassRefPtrWillBeRawPtr<XPathNSResolver> toXPathNSResolver(v8::Isolate* isolate, 
     if (V8XPathNSResolver::hasInstance(value, isolate))
         resolver = V8XPathNSResolver::toImpl(v8::Handle<v8::Object>::Cast(value));
     else if (value->IsObject())
-        resolver = V8CustomXPathNSResolver::create(value->ToObject(), isolate);
+        resolver = V8CustomXPathNSResolver::create(value->ToObject(isolate), isolate);
     return resolver;
 }
 
-LocalDOMWindow* toDOMWindow(v8::Handle<v8::Value> value, v8::Isolate* isolate)
+DOMWindow* toDOMWindow(v8::Isolate* isolate, v8::Handle<v8::Value> value)
 {
     if (value.IsEmpty() || !value->IsObject())
         return 0;
@@ -706,16 +716,16 @@ LocalDOMWindow* toDOMWindow(v8::Handle<v8::Value> value, v8::Isolate* isolate)
     return 0;
 }
 
-LocalDOMWindow* toDOMWindow(v8::Handle<v8::Context> context)
+DOMWindow* toDOMWindow(v8::Handle<v8::Context> context)
 {
     if (context.IsEmpty())
         return 0;
-    return toDOMWindow(context->Global(), context->GetIsolate());
+    return toDOMWindow(context->GetIsolate(), context->Global());
 }
 
 LocalDOMWindow* enteredDOMWindow(v8::Isolate* isolate)
 {
-    LocalDOMWindow* window = toDOMWindow(isolate->GetEnteredContext());
+    LocalDOMWindow* window = toLocalDOMWindow(toDOMWindow(isolate->GetEnteredContext()));
     if (!window) {
         // We don't always have an entered DOM window, for example during microtask callbacks from V8
         // (where the entered context may be the DOM-in-JS context). In that case, we fall back
@@ -728,7 +738,7 @@ LocalDOMWindow* enteredDOMWindow(v8::Isolate* isolate)
 
 LocalDOMWindow* currentDOMWindow(v8::Isolate* isolate)
 {
-    return toDOMWindow(isolate->GetCurrentContext());
+    return toLocalDOMWindow(toDOMWindow(isolate->GetCurrentContext()));
 }
 
 LocalDOMWindow* callingDOMWindow(v8::Isolate* isolate)
@@ -740,7 +750,7 @@ LocalDOMWindow* callingDOMWindow(v8::Isolate* isolate)
         // entered context.
         context = isolate->GetEnteredContext();
     }
-    return toDOMWindow(context);
+    return toLocalDOMWindow(toDOMWindow(context));
 }
 
 ExecutionContext* toExecutionContext(v8::Handle<v8::Context> context)
@@ -777,7 +787,7 @@ ExecutionContext* callingExecutionContext(v8::Isolate* isolate)
 
 LocalFrame* toFrameIfNotDetached(v8::Handle<v8::Context> context)
 {
-    LocalDOMWindow* window = toDOMWindow(context);
+    LocalDOMWindow* window = toLocalDOMWindow(toDOMWindow(context));
     if (window && window->isCurrentlyDisplayedInFrame())
         return window->frame();
     // We return 0 here because |context| is detached from the LocalFrame. If we
@@ -981,22 +991,6 @@ PassRefPtr<TraceEvent::ConvertableToTraceFormat> devToolsTraceEventData(v8::Isol
     int lineNumber = 1;
     GetDevToolsFunctionInfo(function, isolate, scriptId, resourceName, lineNumber);
     return InspectorFunctionCallEvent::data(context, scriptId, resourceName, lineNumber);
-}
-
-v8::Local<v8::Value> v8DoneIteratorResult(v8::Isolate* isolate)
-{
-    v8::Local<v8::Object> result = v8::Object::New(isolate);
-    result->Set(v8String(isolate, "value"), v8::Undefined(isolate));
-    result->Set(v8String(isolate, "done"), v8Boolean(true, isolate));
-    return result;
-}
-
-v8::Local<v8::Value> v8IteratorResult(v8::Isolate* isolate, v8::Handle<v8::Value> value)
-{
-    v8::Local<v8::Object> result = v8::Object::New(isolate);
-    result->Set(v8String(isolate, "value"), value);
-    result->Set(v8String(isolate, "done"), v8Boolean(false, isolate));
-    return result;
 }
 
 } // namespace blink

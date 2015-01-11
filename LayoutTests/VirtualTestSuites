@@ -2,12 +2,24 @@
   {
     "prefix": "gpu",
     "base": "fast/canvas",
-    "args": ["--enable-accelerated-2d-canvas"]
+    "args": ["--enable-accelerated-2d-canvas",
+             "--disable-display-list-2d-canvas"]
   },
   {
     "prefix": "gpu",
     "base": "canvas/philip",
-    "args": ["--enable-accelerated-2d-canvas"]
+    "args": ["--enable-accelerated-2d-canvas",
+             "--disable-display-list-2d-canvas"]
+  },
+  {
+    "prefix": "display_list_2d_canvas",
+    "base": "fast/canvas",
+    "args": ["--force-display-list-2d-canvas"]
+  },
+  {
+    "prefix": "display_list_2d_canvas",
+    "base": "canvas/philip",
+    "args": ["--force-display-list-2d-canvas"]
   },
   {
     "prefix": "threaded",
@@ -22,12 +34,6 @@
   {
     "prefix": "deferred",
     "base": "fast/images",
-    "args": ["--enable-deferred-image-decoding",
-             "--enable-per-tile-painting"]
-  },
-  {
-    "prefix": "deferred",
-    "base": "inspector/timeline",
     "args": ["--enable-deferred-image-decoding",
              "--enable-per-tile-painting"]
   },
@@ -84,11 +90,6 @@
   },
   {
     "prefix": "implsidepainting",
-    "base": "inspector/timeline",
-    "args": ["--enable-threaded-compositing", "--enable-impl-side-painting"]
-  },
-  {
-    "prefix": "implsidepainting",
     "base": "inspector/tracing",
     "args": ["--enable-threaded-compositing", "--enable-impl-side-painting"]
   },
@@ -141,6 +142,26 @@
   {
     "prefix": "slimmingpaint",
     "base": "fast/block",
+    "args": ["--enable-slimming-paint"]
+  },
+  {
+    "prefix": "slimmingpaint",
+    "base": "fast/inline",
+    "args": ["--enable-slimming-paint"]
+  },
+  {
+    "prefix": "slimmingpaint",
+    "base": "fast/inline-block",
+    "args": ["--enable-slimming-paint"]
+  },
+  {
+    "prefix": "slimmingpaint",
+    "base": "fast/images",
+    "args": ["--enable-slimming-paint"]
+  },
+  {
+    "prefix": "slimmingpaint",
+    "base": "fast/table",
     "args": ["--enable-slimming-paint"]
   }
 ]

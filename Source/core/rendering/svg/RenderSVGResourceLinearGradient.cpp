@@ -26,8 +26,6 @@
 
 namespace blink {
 
-const RenderSVGResourceType RenderSVGResourceLinearGradient::s_resourceType = LinearGradientResourceType;
-
 RenderSVGResourceLinearGradient::RenderSVGResourceLinearGradient(SVGLinearGradientElement* node)
     : RenderSVGResourceGradient(node)
 {
@@ -35,6 +33,12 @@ RenderSVGResourceLinearGradient::RenderSVGResourceLinearGradient(SVGLinearGradie
 
 RenderSVGResourceLinearGradient::~RenderSVGResourceLinearGradient()
 {
+}
+
+void RenderSVGResourceLinearGradient::trace(Visitor* visitor)
+{
+    visitor->trace(m_attributes);
+    RenderSVGResourceGradient::trace(visitor);
 }
 
 bool RenderSVGResourceLinearGradient::collectGradientAttributes(SVGGradientElement* gradientElement)

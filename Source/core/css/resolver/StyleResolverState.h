@@ -62,15 +62,19 @@ public:
 
     void setStyle(PassRefPtr<RenderStyle> style)
     {
+        // FIXME: Improve RAII of StyleResolverState to remove this function.
         m_style = style;
-        m_cssToLengthConversionData.setStyle(m_style.get());
-        m_fontBuilder.setStyle(m_style.get());
+        m_cssToLengthConversionData = CSSToLengthConversionData(m_style.get(), rootElementStyle(), document().renderView(), m_style->effectiveZoom());
+        m_fontBuilder.setFontDescription(m_style->fontDescription());
     }
     const RenderStyle* style() const { return m_style.get(); }
     RenderStyle* style() { return m_style.get(); }
     PassRefPtr<RenderStyle> takeStyle() { return m_style.release(); }
 
     const CSSToLengthConversionData& cssToLengthConversionData() const { return m_cssToLengthConversionData; }
+
+    void setConversionFontSizes(const CSSToLengthConversionData::FontSizes& fontSizes) { m_cssToLengthConversionData.setFontSizes(fontSizes); }
+    void setConversionZoom(float zoom) { m_cssToLengthConversionData.setZoom(zoom); }
 
     void setAnimationUpdate(PassOwnPtrWillBeRawPtr<CSSAnimationUpdate>);
     const CSSAnimationUpdate* animationUpdate() { return m_animationUpdate.get(); }

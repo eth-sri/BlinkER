@@ -4,9 +4,12 @@ importScripts('test-helpers.js');
 async_test(function(t) {
     fetch('http://')
       .then(
-        unreached_rejection(t, 'fetch of invalid URL must fail'),
+        t.unreached_func('fetch of invalid URL must fail'),
         function(e) {
-          assert_equals(e.message, 'Invalid URL');
+          assert_equals(
+            e.message,
+            'Failed to execute \'fetch\' on \'ServiceWorkerGlobalScope\': ' +
+            'Failed to parse URL from http://');
           t.done();
         })
       .catch(unreached_rejection(t));
@@ -73,7 +76,7 @@ async_test(function(t) {
   }, 'Fetch with string body test in ServiceWorkerGlobalScope');
 
 async_test(function(t) {
-    var text = "Test ArrayBuffer";
+    var text = 'Test ArrayBuffer';
     var array = new Uint8Array(text.length);
     for (var i = 0; i < text.length; ++i)
       array[i] = text.charCodeAt(i);
@@ -91,7 +94,7 @@ async_test(function(t) {
   }, 'Fetch with ArrayBuffer body test in ServiceWorkerGlobalScope');
 
 async_test(function(t) {
-    var text = "Test ArrayBufferView";
+    var text = 'Test ArrayBufferView';
     var array = new Uint8Array(text.length);
     for (var i = 0; i < text.length; ++i)
       array[i] = text.charCodeAt(i);
@@ -116,7 +119,7 @@ async_test(function(t) {
     formData.append('FileKey',
                     new File(['file content'], 'file.dat'));
     var request = new Request('fetch-access-control.php',
-                          {method: 'POST', body: formData});
+                              {method: 'POST', body: formData});
     fetch(request)
       .then(function(response) { return response.text(); })
       .then(evalJsonp)
@@ -147,4 +150,4 @@ test(function(t) {
     runInfiniteFetchLoop();
   },
   'Destroying the execution context while fetch is happening should not ' +
-      'cause a crash.');
+  'cause a crash.');

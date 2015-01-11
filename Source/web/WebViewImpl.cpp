@@ -34,7 +34,6 @@
 #include "core/CSSValueKeywords.h"
 #include "core/HTMLNames.h"
 #include "core/InputTypeNames.h"
-#include "core/accessibility/AXObjectCache.h"
 #include "core/clipboard/DataObject.h"
 #include "core/dom/Document.h"
 #include "core/dom/DocumentMarkerController.h"
@@ -61,6 +60,7 @@
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/HTMLPlugInElement.h"
 #include "core/html/HTMLTextAreaElement.h"
+#include "core/html/canvas/WebGLRenderingContext.h"
 #include "core/html/ime/InputMethodContext.h"
 #include "core/inspector/InspectorController.h"
 #include "core/loader/DocumentLoader.h"
@@ -85,12 +85,13 @@
 #include "core/rendering/RenderView.h"
 #include "core/rendering/TextAutosizer.h"
 #include "core/rendering/compositing/RenderLayerCompositor.h"
+#include "modules/accessibility/AXObject.h"
+#include "modules/accessibility/AXObjectCacheImpl.h"
 #include "modules/credentialmanager/CredentialManagerClient.h"
 #include "modules/device_orientation/DeviceOrientationInspectorAgent.h"
 #include "modules/encryptedmedia/MediaKeysController.h"
 #include "modules/filesystem/InspectorFileSystemAgent.h"
 #include "modules/indexeddb/InspectorIndexedDBAgent.h"
-#include "modules/push_messaging/PushController.h"
 #include "platform/ContextMenu.h"
 #include "platform/ContextMenuItem.h"
 #include "platform/Cursor.h"
@@ -147,7 +148,6 @@
 #include "web/NavigatorContentUtilsClientImpl.h"
 #include "web/PopupContainer.h"
 #include "web/PrerendererClientImpl.h"
-#include "web/SpeechRecognitionClientProxy.h"
 #include "web/StorageQuotaClientImpl.h"
 #include "web/ValidationMessageClientImpl.h"
 #include "web/ViewportAnchor.h"
@@ -194,8 +194,9 @@ static const float viewportAnchorYCoord = 0;
 
 // Constants for zooming in on a focused text field.
 static const double scrollAndScaleAnimationDurationInSeconds = 0.2;
-static const int minReadableCaretHeight = 18;
-static const float minScaleChangeToTriggerZoom = 1.05f;
+static const int minReadableCaretHeight = 16;
+static const int minReadableCaretHeightForTextArea = 13;
+static const float minScaleChangeToTriggerZoom = 1.5f;
 static const float leftBoxRatio = 0.3f;
 static const int caretPadding = 10;
 
@@ -373,7 +374,6 @@ WebViewImpl::WebViewImpl(WebViewClient* client)
     , m_dragClientImpl(this)
     , m_editorClientImpl(this)
     , m_inspectorClientImpl(this)
-    , m_backForwardClientImpl(this)
     , m_spellCheckerClientImpl(this)
     , m_storageClientImpl(this)
     , m_shouldAutoResize(false)
@@ -427,13 +427,11 @@ WebViewImpl::WebViewImpl(WebViewClient* client)
     pageClients.editorClient = &m_editorClientImpl;
     pageClients.dragClient = &m_dragClientImpl;
     pageClients.inspectorClient = &m_inspectorClientImpl;
-    pageClients.backForwardClient = &m_backForwardClientImpl;
     pageClients.spellCheckerClient = &m_spellCheckerClientImpl;
     pageClients.storageClient = &m_storageClientImpl;
 
     m_page = adoptPtrWillBeNoop(new Page(pageClients));
     MediaKeysController::provideMediaKeysTo(*m_page, &m_mediaKeysClientImpl);
-    provideSpeechRecognitionTo(*m_page, SpeechRecognitionClientProxy::create(client ? client->speechRecognizer() : 0));
     provideNavigatorContentUtilsTo(*m_page, NavigatorContentUtilsClientImpl::create(this));
 
     provideContextFeaturesTo(*m_page, ContextFeaturesClientImpl::create());
@@ -449,7 +447,6 @@ WebViewImpl::WebViewImpl(WebViewClient* client)
     m_page->makeOrdinary();
 
     if (m_client) {
-        providePushControllerTo(*m_page, m_client->webPushClient());
         setDeviceScaleFactor(m_client->screenInfo().deviceScaleFactor);
         setVisibilityState(m_client->visibilityState(), true);
     }
@@ -624,7 +621,8 @@ bool WebViewImpl::scrollBy(const WebFloatSize& delta, const WebFloatSize& veloci
     } else {
         WebGestureEvent syntheticGestureEvent;
 
-        syntheticGestureEvent.type = WebInputEvent::GestureScrollUpdateWithoutPropagation;
+        syntheticGestureEvent.type = WebInputEvent::GestureScrollUpdate;
+        syntheticGestureEvent.data.scrollUpdate.preventPropagation = true;
         syntheticGestureEvent.data.scrollUpdate.deltaX = delta.width;
         syntheticGestureEvent.data.scrollUpdate.deltaY = delta.height;
         syntheticGestureEvent.x = m_positionOnFlingStart.x;
@@ -1086,7 +1084,7 @@ WebRect WebViewImpl::computeBlockBounds(const WebRect& rect, bool ignoreClipping
     // Use the rect-based hit test to find the node.
     IntPoint point = mainFrameImpl()->frameView()->windowToContents(IntPoint(rect.x, rect.y));
     HitTestRequest::HitTestRequestType hitType = HitTestRequest::ReadOnly | HitTestRequest::Active | (ignoreClipping ? HitTestRequest::IgnoreClipping : 0);
-    HitTestResult result = mainFrameImpl()->frame()->eventHandler().hitTestResultAtPoint(point, hitType, IntSize(rect.width, rect.height));
+    HitTestResult result = mainFrameImpl()->frame()->eventHandler().hitTestResultAtPoint(point, hitType, LayoutSize(rect.width, rect.height));
     result.setToShadowHostIfInUserAgentShadowRoot();
 
     Node* node = result.innerNonSharedNode();
@@ -1096,7 +1094,7 @@ WebRect WebViewImpl::computeBlockBounds(const WebRect& rect, bool ignoreClipping
     // Find the block type node based on the hit node.
     // FIXME: This wants to walk composed tree with NodeRenderingTraversal::parent().
     while (node && (!node->renderer() || node->renderer()->isInline()))
-        node = NodeRenderingTraversal::parent(node);
+        node = NodeRenderingTraversal::parent(*node);
 
     // Return the bounding box in the window coordinate system.
     if (node) {
@@ -1220,7 +1218,7 @@ static Node* findCursorDefiningAncestor(Node* node, LocalFrame* frame)
             if (cursor != CURSOR_AUTO || frame->eventHandler().useHandCursor(node, node->isLink()))
                 break;
         }
-        node = NodeRenderingTraversal::parent(node);
+        node = NodeRenderingTraversal::parent(*node);
     }
 
     return node;
@@ -1249,7 +1247,7 @@ Node* WebViewImpl::bestTapNode(const GestureEventWithHitTestResults& targetedTap
     // Walk up the tree until we have a node with an attached renderer
     // FIXME: This wants to walk composed tree with NodeRenderingTraversal::parent().
     while (bestTouchNode && !bestTouchNode->renderer())
-        bestTouchNode = NodeRenderingTraversal::parent(bestTouchNode);
+        bestTouchNode = NodeRenderingTraversal::parent(*bestTouchNode);
 
     Node* cursorDefiningAncestor =
         findCursorDefiningAncestor(bestTouchNode, m_page->deprecatedLocalMainFrame());
@@ -1264,7 +1262,7 @@ Node* WebViewImpl::bestTapNode(const GestureEventWithHitTestResults& targetedTap
     // has hand cursor set.
     do {
         bestTouchNode = cursorDefiningAncestor;
-        cursorDefiningAncestor = findCursorDefiningAncestor(NodeRenderingTraversal::parent(bestTouchNode),
+        cursorDefiningAncestor = findCursorDefiningAncestor(NodeRenderingTraversal::parent(*bestTouchNode),
             m_page->deprecatedLocalMainFrame());
     } while (cursorDefiningAncestor && showsHandCursor(cursorDefiningAncestor, m_page->deprecatedLocalMainFrame()));
 
@@ -1655,6 +1653,7 @@ void WebViewImpl::resizePinchViewport(const WebSize& newSize)
         return;
 
     page()->frameHost().pinchViewport().setSize(newSize);
+    page()->frameHost().pinchViewport().clampToBoundaries();
 }
 
 WebLocalFrameImpl* WebViewImpl::localFrameRootTemporary() const
@@ -1855,7 +1854,7 @@ void WebViewImpl::beginFrame(const WebBeginFrameArgs& frameTime)
             PlatformGestureEvent endScrollEvent(PlatformEvent::GestureScrollEnd,
                 m_positionOnFlingStart, m_globalPositionOnFlingStart,
                 IntSize(), 0, false, false, false, false,
-                0, 0, 0, 0);
+                0, 0, 0, 0, false);
 
             mainFrameImpl()->frame()->eventHandler().handleGestureScrollEnd(endScrollEvent);
         }
@@ -2040,7 +2039,9 @@ static String inputTypeToName(WebInputEvent::Type type)
 
 bool WebViewImpl::handleInputEvent(const WebInputEvent& inputEvent)
 {
-    UserGestureNotifier notifier(m_autofillClient, &m_userGestureObserved);
+    WebAutofillClient* autofillClient = m_autofillClient ? m_autofillClient :
+        mainFrameImpl() ? mainFrameImpl()->autofillClient() : 0;
+    UserGestureNotifier notifier(autofillClient, &m_userGestureObserved);
     // On the first input event since page load, |notifier| instructs the
     // autofill client to unblock values of password input fields of any forms
     // on the page. There is a single input event, GestureTap, which can both
@@ -2048,9 +2049,9 @@ bool WebViewImpl::handleInputEvent(const WebInputEvent& inputEvent)
     // case, the form submission happens before the autofill client is told
     // to unblock the password values, and so the password values are not
     // submitted. To avoid that, GestureTap is handled explicitly:
-    if (inputEvent.type == WebInputEvent::GestureTap && m_autofillClient) {
+    if (inputEvent.type == WebInputEvent::GestureTap && autofillClient) {
         m_userGestureObserved = true;
-        m_autofillClient->firstUserGestureObserved();
+        autofillClient->firstUserGestureObserved();
     }
 
     TRACE_EVENT1("input", "WebViewImpl::handleInputEvent", "type", inputTypeToName(inputEvent.type).ascii());
@@ -2069,8 +2070,8 @@ bool WebViewImpl::handleInputEvent(const WebInputEvent& inputEvent)
     TemporaryChange<const WebInputEvent*> currentEventChange(m_currentInputEvent, &inputEvent);
 
     if (isPointerLocked() && WebInputEvent::isMouseEventType(inputEvent.type)) {
-      pointerLockMouseEvent(inputEvent);
-      return true;
+        pointerLockMouseEvent(inputEvent);
+        return true;
     }
 
     if (m_mouseCaptureNode && WebInputEvent::isMouseEventType(inputEvent.type)) {
@@ -2169,13 +2170,16 @@ void WebViewImpl::setFocus(bool enable)
         if (focusedFrame && focusedFrame->isLocalFrame()) {
             // Finish an ongoing composition to delete the composition node.
             if (toLocalFrame(focusedFrame.get())->inputMethodController().hasComposition()) {
-                if (m_autofillClient)
-                    m_autofillClient->setIgnoreTextChanges(true);
+                WebAutofillClient* autofillClient = m_autofillClient ? m_autofillClient :
+                    WebLocalFrameImpl::fromFrame(toLocalFrame(focusedFrame.get()))->autofillClient();
+
+                if (autofillClient)
+                    autofillClient->setIgnoreTextChanges(true);
 
                 toLocalFrame(focusedFrame.get())->inputMethodController().confirmComposition();
 
-                if (m_autofillClient)
-                    m_autofillClient->setIgnoreTextChanges(false);
+                if (autofillClient)
+                    autofillClient->setIgnoreTextChanges(false);
             }
             m_imeAcceptEvents = false;
         }
@@ -2817,17 +2821,17 @@ void WebViewImpl::clearFocusedElement()
         localFrame->selection().clear();
 }
 
-void WebViewImpl::scrollFocusedNodeIntoRect(const WebRect& rect)
+bool WebViewImpl::scrollFocusedNodeIntoRect(const WebRect& rect)
 {
     LocalFrame* frame = page()->mainFrame() && page()->mainFrame()->isLocalFrame()
         ? page()->deprecatedLocalMainFrame() : 0;
     Element* element = focusedElement();
     if (!frame || !frame->view() || !element)
-        return;
+        return false;
 
     if (!m_webSettings->autoZoomFocusedNodeToLegibleScale()) {
         frame->view()->scrollElementToRect(element, IntRect(rect.x, rect.y, rect.width, rect.height));
-        return;
+        return false;
     }
 
     float scale;
@@ -2835,7 +2839,9 @@ void WebViewImpl::scrollFocusedNodeIntoRect(const WebRect& rect)
     bool needAnimation;
     computeScaleAndScrollForFocusedNode(element, scale, scroll, needAnimation);
     if (needAnimation)
-        startPageScaleAnimation(scroll, false, scale, scrollAndScaleAnimationDurationInSeconds);
+        return startPageScaleAnimation(scroll, false, scale, scrollAndScaleAnimationDurationInSeconds);
+
+    return false;
 }
 
 void WebViewImpl::computeScaleAndScrollForFocusedNode(Node* focusedNode, float& newScale, IntPoint& newScroll, bool& needAnimation)
@@ -2850,12 +2856,24 @@ void WebViewImpl::computeScaleAndScrollForFocusedNode(Node* focusedNode, float& 
     unscaledCaret.scale(1 / pageScaleFactor());
     caret = unscaledCaret;
 
-    // Pick a scale which is reasonably readable. This is the scale at which
-    // the caret height will become minReadableCaretHeight (adjusted for dpi
-    // and font scale factor).
-    newScale = clampPageScaleFactorToLimits(legibleScale() * minReadableCaretHeight / caret.height);
-    newScale = std::max(newScale, pageScaleFactor());
+    if (shouldDisableDesktopWorkarounds()) {
+        newScale = pageScaleFactor();
+    } else {
+        // Pick a scale which is reasonably readable. This is the scale at which
+        // the caret height will become minReadableCaretHeightForNode (adjusted
+        // for dpi and font scale factor).
+        const int minReadableCaretHeightForNode = textboxRect.height() >= 2 * caret.height ? minReadableCaretHeightForTextArea : minReadableCaretHeight;
+        newScale = clampPageScaleFactorToLimits(legibleScale() * minReadableCaretHeightForNode / caret.height);
+        newScale = std::max(newScale, pageScaleFactor());
+    }
     const float deltaScale = newScale / pageScaleFactor();
+
+    needAnimation = false;
+    // If we are at less than the target zoom level, zoom in.
+    if (deltaScale > minScaleChangeToTriggerZoom)
+        needAnimation = true;
+    else
+        newScale = pageScaleFactor();
 
     // Convert the rects to absolute space in the new scale.
     IntRect textboxRectInDocumentCoordinates = textboxRect;
@@ -2865,6 +2883,20 @@ void WebViewImpl::computeScaleAndScrollForFocusedNode(Node* focusedNode, float& 
 
     int viewWidth = m_size.width / newScale;
     int viewHeight = m_size.height / newScale;
+
+    // If the caret is offscreen, then animate.
+    IntRect sizeRect(0, 0, viewWidth, viewHeight);
+    sizeRect.scale(newScale / pageScaleFactor());
+    if (!sizeRect.contains(caret))
+        needAnimation = true;
+
+    // If the box is partially offscreen and it's possible to bring it fully
+    // onscreen, then animate.
+    if (sizeRect.contains(textboxRectInDocumentCoordinates.width(), textboxRectInDocumentCoordinates.height()) && !sizeRect.contains(textboxRect))
+        needAnimation = true;
+
+    if (!needAnimation)
+        return;
 
     if (textboxRectInDocumentCoordinates.width() <= viewWidth) {
         // Field is narrower than screen. Try to leave padding on left so field's
@@ -2886,20 +2918,6 @@ void WebViewImpl::computeScaleAndScrollForFocusedNode(Node* focusedNode, float& 
         // be offscreen, in which case bottom-align the caret.
         newScroll.setY(std::max<int>(textboxRectInDocumentCoordinates.y(), caretInDocumentCoordinates.y() + caretInDocumentCoordinates.height() + caretPadding - viewHeight));
     }
-
-    needAnimation = false;
-    // If we are at less than the target zoom level, zoom in.
-    if (deltaScale > minScaleChangeToTriggerZoom)
-        needAnimation = true;
-    // If the caret is offscreen, then animate.
-    IntRect sizeRect(0, 0, viewWidth, viewHeight);
-    sizeRect.scale(newScale / pageScaleFactor());
-    if (!sizeRect.contains(caret))
-        needAnimation = true;
-    // If the box is partially offscreen and it's possible to bring it fully
-    // onscreen, then animate.
-    if (sizeRect.contains(textboxRectInDocumentCoordinates.width(), textboxRectInDocumentCoordinates.height()) && !sizeRect.contains(textboxRect))
-        needAnimation = true;
 }
 
 void WebViewImpl::advanceFocus(bool reverse)
@@ -3212,6 +3230,24 @@ void WebViewImpl::setIgnoreViewportTagScaleLimits(bool ignore)
     setUserAgentPageScaleConstraints(constraints);
 }
 
+IntSize WebViewImpl::mainFrameSize()
+{
+    if (!pinchVirtualViewportEnabled() || !localFrameRootTemporary())
+        return m_size;
+
+    FrameView* view = localFrameRootTemporary()->frameView();
+
+    if (!view)
+        return m_size;
+
+    int contentAndScrollbarWidth = contentsSize().width();
+
+    if (view && view->verticalScrollbar() && !view->verticalScrollbar()->isOverlayScrollbar())
+        contentAndScrollbarWidth += view->verticalScrollbar()->width();
+
+    return m_pageScaleConstraintsSet.mainFrameSize(contentAndScrollbarWidth);
+}
+
 void WebViewImpl::refreshPageScaleFactorAfterLayout()
 {
     if (!mainFrame() || !page() || !page()->mainFrame() || !page()->mainFrame()->isLocalFrame() || !page()->deprecatedLocalMainFrame()->view())
@@ -3228,13 +3264,8 @@ void WebViewImpl::refreshPageScaleFactorAfterLayout()
         m_pageScaleConstraintsSet.adjustFinalConstraintsToContentsSize(contentsSize(), verticalScrollbarWidth);
     }
 
-    if (pinchVirtualViewportEnabled()) {
-        int contentAndScrollbarWidth = contentsSize().width();
-        if (view->verticalScrollbar() && !view->verticalScrollbar()->isOverlayScrollbar())
-            contentAndScrollbarWidth += view->verticalScrollbar()->width();
-
-        view->resize(m_pageScaleConstraintsSet.mainFrameSize(contentAndScrollbarWidth));
-    }
+    if (pinchVirtualViewportEnabled())
+        view->resize(mainFrameSize());
 
     float newPageScaleFactor = pageScaleFactor();
     if (m_pageScaleConstraintsSet.needsReset() && m_pageScaleConstraintsSet.finalConstraints().initialScale != -1) {
@@ -3258,9 +3289,7 @@ void WebViewImpl::updatePageDefinedViewportConstraints(const ViewportDescription
 
     Document* document = page()->deprecatedLocalMainFrame()->document();
 
-    m_matchesHeuristicsForGpuRasterization = description.maxWidth == Length(DeviceWidth)
-        && ((description.minZoom >= 1.0 && description.minZoomIsExplicit)
-            || !description.userZoom);
+    m_matchesHeuristicsForGpuRasterization = description.maxWidth == Length(DeviceWidth);
     if (m_layerTreeView)
         m_layerTreeView->heuristicsForGpuRasterizationUpdated(m_matchesHeuristicsForGpuRasterization);
 
@@ -3559,7 +3588,9 @@ void WebViewImpl::dragTargetDrop(const WebPoint& clientPoint,
 {
     ASSERT(m_currentDragData);
 
-    UserGestureNotifier notifier(m_autofillClient, &m_userGestureObserved);
+    WebAutofillClient* autofillClient =  m_autofillClient ? m_autofillClient :
+        mainFrameImpl() ? mainFrameImpl()->autofillClient() : 0;
+    UserGestureNotifier notifier(autofillClient, &m_userGestureObserved);
 
     // If this webview transitions from the "drop accepting" state to the "not
     // accepting" state, then our IPC message reply indicating that may be in-
@@ -3733,7 +3764,7 @@ WebAXObject WebViewImpl::accessibilityObject()
         return WebAXObject();
 
     Document* document = mainFrameImpl()->frame()->document();
-    return WebAXObject(document->axObjectCache()->root());
+    return WebAXObject(toAXObjectCacheImpl(document->axObjectCache())->root());
 }
 
 void WebViewImpl::performCustomContextMenuAction(unsigned action)
@@ -4071,6 +4102,27 @@ HitTestResult WebViewImpl::hitTestResultForWindowPos(const IntPoint& pos)
     return result;
 }
 
+WebHitTestResult WebViewImpl::hitTestResultForTap(const WebPoint& tapPointWindowPos, const WebSize& tapArea)
+{
+    if (!m_page->mainFrame()->isLocalFrame())
+        return HitTestResult();
+
+    WebGestureEvent tapEvent;
+    tapEvent.x = tapPointWindowPos.x;
+    tapEvent.y = tapPointWindowPos.y;
+    tapEvent.type = WebInputEvent::GestureTap;
+    tapEvent.data.tap.tapCount = 1;
+    tapEvent.data.tap.width = tapArea.width;
+    tapEvent.data.tap.height = tapArea.height;
+
+    PlatformGestureEventBuilder platformEvent(mainFrameImpl()->frameView(), tapEvent);
+
+    HitTestResult result = m_page->deprecatedLocalMainFrame()->eventHandler().hitTestResultForGestureEvent(platformEvent, HitTestRequest::ReadOnly | HitTestRequest::Active).hitTestResult();
+
+    result.setToShadowHostIfInUserAgentShadowRoot();
+    return result;
+}
+
 void WebViewImpl::setTabsToLinks(bool enable)
 {
     m_tabsToLinks = enable;
@@ -4124,7 +4176,8 @@ void WebViewImpl::setRootGraphicsLayer(GraphicsLayer* layer)
                 GraphicsLayer* rootScrollLayer = compositor()->scrollLayer();
                 ASSERT(rootScrollLayer);
                 WebLayer* pageScaleLayer = rootScrollLayer->parent() ? rootScrollLayer->parent()->platformLayer() : 0;
-                m_layerTreeView->registerViewportLayers(pageScaleLayer, rootScrollLayer->platformLayer(), 0);
+                // Note that it is invalid to have 0 as a scroll elasticity layer when using pinch virtual viewport.
+                m_layerTreeView->registerViewportLayers(0, pageScaleLayer, rootScrollLayer->platformLayer(), 0);
             }
         } else {
             m_layerTreeView->clearRootLayer();
@@ -4393,7 +4446,7 @@ bool WebViewImpl::detectContentOnTouch(const GestureEventWithHitTestResults& tar
 
     // Ignore when tapping on links or nodes listening to click events, unless the click event is on the
     // body element, in which case it's unlikely that the original node itself was intended to be clickable.
-    for (; node && !isHTMLBodyElement(*node); node = NodeRenderingTraversal::parent(node)) {
+    for (; node && !isHTMLBodyElement(*node); node = NodeRenderingTraversal::parent(*node)) {
         if (node->isLink() || node->willRespondToTouchEvents() || node->willRespondToMouseClickEvents())
             return false;
     }
@@ -4482,6 +4535,11 @@ bool WebViewImpl::shouldDisableDesktopWorkarounds()
 
     return mainFrameImpl()->frameView()->layoutSize().width() == m_size.width
         || (constraints.minimumScale == constraints.maximumScale && constraints.minimumScale != -1);
+}
+
+void WebViewImpl::forceNextWebGLContextCreationToFail()
+{
+    WebGLRenderingContext::forceNextWebGLContextCreationToFail();
 }
 
 } // namespace blink

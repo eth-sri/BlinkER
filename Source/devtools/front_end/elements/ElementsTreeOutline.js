@@ -76,6 +76,9 @@ WebInspector.ElementsTreeOutline = function(target, omitRootDOMNode, selectEnabl
 
     this._setPseudoClassCallback = setPseudoClassCallback;
     this._createNodeDecorators();
+
+    this._popoverHelper = new WebInspector.PopoverHelper(this._element, this._getPopoverAnchor.bind(this), this._showPopover.bind(this));
+    this._popoverHelper.setTimeout(0);
 }
 
 /** @typedef {{node: !WebInspector.DOMNode, isCut: boolean}} */
@@ -118,7 +121,7 @@ WebInspector.ElementsTreeOutline.prototype = {
      */
     setWordWrap: function(wrap)
     {
-        this._element.classList.toggle("nowrap", !wrap);
+        this._element.classList.toggle("elements-tree-nowrap", !wrap);
     },
 
     /**
@@ -237,7 +240,7 @@ WebInspector.ElementsTreeOutline.prototype = {
         this._setClipboardData(null);
 
         // Don't prevent the normal copy if the user has a selection.
-        if (!window.getSelection().isCollapsed)
+        if (!event.target.window().getSelection().isCollapsed)
             return;
 
         // Do not interfere with text editing.
@@ -348,8 +351,10 @@ WebInspector.ElementsTreeOutline.prototype = {
     setVisible: function(visible)
     {
         this._visible = visible;
-        if (!this._visible)
+        if (!this._visible) {
+            this._popoverHelper.hidePopover();
             return;
+        }
 
         this._updateModifiedNodes();
         if (this._selectedDOMNode)
@@ -498,22 +503,51 @@ WebInspector.ElementsTreeOutline.prototype = {
 
     /**
      * @param {!WebInspector.DOMNode} node
-     * @return {?TreeElement}
+     * @return {?WebInspector.ElementsTreeElement}
      */
     findTreeElement: function(node)
     {
-        function parentNode(node)
-        {
-            return node.parentNode;
-        }
-
-        var treeElement = TreeOutline.prototype.findTreeElement.call(this, node, parentNode);
+        var treeElement = this._lookUpTreeElement(node);
         if (!treeElement && node.nodeType() === Node.TEXT_NODE) {
             // The text node might have been inlined if it was short, so try to find the parent element.
-            treeElement = TreeOutline.prototype.findTreeElement.call(this, node.parentNode, parentNode);
+            treeElement = this._lookUpTreeElement(node.parentNode);
         }
 
-        return treeElement;
+        return /** @type {?WebInspector.ElementsTreeElement} */ (treeElement);
+    },
+
+    /**
+     * @param {?WebInspector.DOMNode} node
+     * @return {?TreeElement}
+     */
+    _lookUpTreeElement: function(node)
+    {
+        if (!node)
+            return null;
+
+        var cachedElement = this.getCachedTreeElement(node);
+        if (cachedElement)
+            return cachedElement;
+
+        // Walk up the parent pointers from the desired node
+        var ancestors = [];
+        for (var currentNode = node.parentNode; currentNode; currentNode = currentNode.parentNode) {
+            ancestors.push(currentNode);
+            if (this.getCachedTreeElement(currentNode))  // stop climbing as soon as we hit
+                break;
+        }
+
+        if (!currentNode)
+            return null;
+
+        // Walk down to populate each ancestor's children, to fill in the tree and the cache.
+        for (var i = ancestors.length - 1; i >= 0; --i) {
+            var treeElement = this.getCachedTreeElement(ancestors[i]);
+            if (treeElement)
+                treeElement.onpopulate();  // fill the cache with the children of treeElement
+        }
+
+        return this.getCachedTreeElement(node);
     },
 
     /**
@@ -588,6 +622,77 @@ WebInspector.ElementsTreeOutline.prototype = {
         return element;
     },
 
+    /**
+     * @param {!Element} element
+     * @param {!Event} event
+     * @return {!Element|!AnchorBox|undefined}
+     */
+    _getPopoverAnchor: function(element, event)
+    {
+        var anchor = element.enclosingNodeOrSelfWithClass("webkit-html-resource-link");
+        if (!anchor || !anchor.href)
+            return;
+
+        return anchor;
+    },
+
+    /**
+     * @param {!WebInspector.DOMNode} node
+     * @param {function()} callback
+     */
+    _loadDimensionsForNode: function(node, callback)
+    {
+        if (!node.nodeName() || node.nodeName().toLowerCase() !== "img") {
+            callback();
+            return;
+        }
+
+        node.resolveToObject("", resolvedNode);
+
+        function resolvedNode(object)
+        {
+            if (!object) {
+                callback();
+                return;
+            }
+
+            object.callFunctionJSON(dimensions, undefined, callback);
+            object.release();
+
+            /**
+             * @return {!{offsetWidth: number, offsetHeight: number, naturalWidth: number, naturalHeight: number}}
+             * @suppressReceiverCheck
+             * @this {!Element}
+             */
+            function dimensions()
+            {
+                return { offsetWidth: this.offsetWidth, offsetHeight: this.offsetHeight, naturalWidth: this.naturalWidth, naturalHeight: this.naturalHeight };
+            }
+        }
+    },
+
+    /**
+     * @param {!Element} anchor
+     * @param {!WebInspector.Popover} popover
+     */
+    _showPopover: function(anchor, popover)
+    {
+        var listItem = anchor.enclosingNodeOrSelfWithNodeName("li");
+        var node = /** @type {!WebInspector.ElementsTreeElement} */ (listItem.treeElement).node();
+        this._loadDimensionsForNode(node, WebInspector.DOMPresentationUtils.buildImagePreviewContents.bind(WebInspector.DOMPresentationUtils, node.target(), anchor.href, true, showPopover));
+
+        /**
+         * @param {!Element=} contents
+         */
+        function showPopover(contents)
+        {
+            if (!contents)
+                return;
+            popover.setCanShrink(false);
+            popover.show(contents, anchor);
+        }
+    },
+
     _onmousedown: function(event)
     {
         var element = this._treeElementFromEvent(event);
@@ -632,15 +737,12 @@ WebInspector.ElementsTreeOutline.prototype = {
 
     _ondragstart: function(event)
     {
-        if (!window.getSelection().isCollapsed)
+        if (!event.target.window().getSelection().isCollapsed)
             return false;
         if (event.target.nodeName === "A")
             return false;
 
         var treeElement = this._treeElementFromEvent(event);
-        if (!treeElement)
-            return false;
-
         if (!this._isValidDragSourceOrTarget(treeElement))
             return false;
 
@@ -696,10 +798,11 @@ WebInspector.ElementsTreeOutline.prototype = {
         if (!treeElement)
             return false;
 
-        var node = treeElement.representedObject;
-        if (!(node instanceof WebInspector.DOMNode))
+        if (!(treeElement instanceof WebInspector.ElementsTreeElement))
             return false;
+        var elementsTreeElement = /** @type {!WebInspector.ElementsTreeElement} */ (treeElement);
 
+        var node = elementsTreeElement._node;
         if (!node.parentNode || node.parentNode.nodeType() !== Node.ELEMENT_NODE)
             return false;
 
@@ -778,7 +881,7 @@ WebInspector.ElementsTreeOutline.prototype = {
     _contextMenuEventFired: function(event)
     {
         var treeElement = this._treeElementFromEvent(event);
-        if (!treeElement)
+        if (!treeElement || WebInspector.isEditing())
             return;
 
         var contextMenu = new WebInspector.ContextMenu(event);
@@ -1026,7 +1129,7 @@ WebInspector.ElementsTreeElement = function(node, elementCloseTag)
     this._node = node;
 
     this._elementCloseTag = elementCloseTag;
-    this._updateHasChildren();
+    this._updateChildrenDisplayMode();
 
     if (this._node.nodeType() == Node.ELEMENT_NODE && !elementCloseTag)
         this._canAddAttributes = true;
@@ -1048,13 +1151,38 @@ WebInspector.ElementsTreeElement.EditTagBlacklist = [
     "html", "head", "body"
 ].keySet();
 
+/** @enum {number} */
+WebInspector.ElementsTreeElement.ChildrenDisplayMode = {
+    NoChildren: 0,
+    InlineText: 1,
+    HasChildren: 2
+}
+
+/**
+ * @param {!WebInspector.ElementsTreeElement} treeElement
+ */
+WebInspector.ElementsTreeElement.animateOnDOMUpdate = function(treeElement)
+{
+    var tagName = treeElement.listItemElement.querySelector(".webkit-html-tag-name");
+    WebInspector.runCSSAnimationOnce(tagName || treeElement.listItemElement, "dom-update-highlight");
+}
+
 WebInspector.ElementsTreeElement.prototype = {
+    /**
+     * @return {!WebInspector.DOMNode}
+     */
+    node: function()
+    {
+        return this._node;
+    },
+
+    /**
+     * @param {string} searchQuery
+     */
     highlightSearchResults: function(searchQuery)
     {
-        if (this._searchQuery !== searchQuery) {
-            this._updateSearchHighlight(false);
-            delete this._highlightResult; // A new search query.
-        }
+        if (this._searchQuery !== searchQuery)
+            this._hideSearchHighlight();
 
         this._searchQuery = searchQuery;
         this._searchHighlightsVisible = true;
@@ -1064,25 +1192,13 @@ WebInspector.ElementsTreeElement.prototype = {
     hideSearchHighlights: function()
     {
         delete this._searchHighlightsVisible;
-        this._updateSearchHighlight(false);
+        this._hideSearchHighlight();
     },
 
-    _updateSearchHighlight: function(show)
+    _hideSearchHighlight: function()
     {
         if (!this._highlightResult)
             return;
-
-        function updateEntryShow(entry)
-        {
-            switch (entry.type) {
-                case "added":
-                    entry.parent.insertBefore(entry.node, entry.nextSibling);
-                    break;
-                case "changed":
-                    entry.node.textContent = entry.newText;
-                    break;
-            }
-        }
 
         function updateEntryHide(entry)
         {
@@ -1096,14 +1212,10 @@ WebInspector.ElementsTreeElement.prototype = {
             }
         }
 
-        // Preserve the semantic of node by following the order of updates for hide and show.
-        if (show) {
-            for (var i = 0, size = this._highlightResult.length; i < size; ++i)
-                updateEntryShow(this._highlightResult[i]);
-        } else {
-            for (var i = (this._highlightResult.length - 1); i >= 0; --i)
-                updateEntryHide(this._highlightResult[i]);
-        }
+        for (var i = (this._highlightResult.length - 1); i >= 0; --i)
+            updateEntryHide(this._highlightResult[i]);
+
+        delete this._highlightResult;
     },
 
     /**
@@ -1151,7 +1263,7 @@ WebInspector.ElementsTreeElement.prototype = {
 
         this._expandedChildrenLimit = x;
         if (this.treeOutline && !this._updateChildrenInProgress)
-            this._updateChildren(true, this.children);
+            this._updateChildren();
     },
 
     get expandedChildCount()
@@ -1166,7 +1278,7 @@ WebInspector.ElementsTreeElement.prototype = {
 
     /**
      * @param {!WebInspector.DOMNode} child
-     * @return {?WebInspector.ElementsTreeElement}
+     * @return {?TreeElement}
      */
     _showChild: function(child)
     {
@@ -1177,10 +1289,8 @@ WebInspector.ElementsTreeElement.prototype = {
         if (index === -1)
             return null;
 
-        if (index >= this.expandedChildrenLimit) {
-            this._expandedChildrenLimit = index + 1;
-            this._updateChildren(true, this.children);
-        }
+        if (index >= this.expandedChildrenLimit)
+            this.expandedChildrenLimit = index + 1;
 
         // Whether index-th child is visible in the children tree
         return this.expandedChildCount > index ? this.children[index] : null;
@@ -1236,21 +1346,29 @@ WebInspector.ElementsTreeElement.prototype = {
     onpopulate: function()
     {
         this.populated = true;
-        if (this.children.length || !this.hasChildren)
+        if (this.children.length || !this._hasChildTreeElements())
             return;
 
         this.updateChildren();
     },
 
-    /**
-     * @param {boolean=} fullRefresh
-     */
-    updateChildren: function(fullRefresh)
+    updateChildren: function()
     {
-        if (!this.hasChildren)
+        if (!this._hasChildTreeElements())
             return;
         console.assert(!this._elementCloseTag);
-        this._node.getChildNodes(this._updateChildren.bind(this, fullRefresh || false));
+        this._node.getChildNodes(childNodesLoaded.bind(this));
+
+        /**
+         * @this {WebInspector.ElementsTreeElement}
+         * @param {?Array.<!WebInspector.DOMNode>} children
+         */
+        function childNodesLoaded(children)
+        {
+            if (!children)
+                return;
+            this._updateChildren();
+        }
     },
 
     /**
@@ -1277,102 +1395,72 @@ WebInspector.ElementsTreeElement.prototype = {
     },
 
     /**
-     * @param {boolean} fullRefresh
-     * @param {?Array.<!WebInspector.DOMNode>} children
+     * @param {!WebInspector.DOMNode=} node
+     * @return {!WebInspector.ElementsTreeUpdater.UpdateInfo|undefined}
      */
-    _updateChildren: function(fullRefresh, children)
+    _updateInfo: function(node)
     {
-        if (!children || this._updateChildrenInProgress || !this.treeOutline._visible)
+        if (!WebInspector.settings.highlightDOMUpdates.get())
+            return undefined;
+        var updater = this.treeOutline._elementsTreeUpdater;
+        if (!updater)
+            return undefined;
+        var effectiveNode = node || this._node;
+        return updater._recentlyModifiedNodes.get(effectiveNode) || updater._recentlyModifiedParentNodes.get(effectiveNode);
+    },
+
+    _updateChildren: function()
+    {
+        if (this._updateChildrenInProgress || !this.treeOutline._visible)
             return;
 
         this._updateChildrenInProgress = true;
-        var selectedNode = this.treeOutline.selectedDOMNode();
-        var originalScrollTop = 0;
-        if (fullRefresh) {
-            var treeOutlineContainerElement = this.treeOutline.element.parentNode;
-            originalScrollTop = treeOutlineContainerElement.scrollTop;
-            var selectedTreeElement = this.treeOutline.selectedTreeElement;
-            if (selectedTreeElement && selectedTreeElement.hasAncestor(this))
-                this.select();
-            this.removeChildren();
-        }
 
-        /**
-         * @this {WebInspector.ElementsTreeElement}
-         * @return {?WebInspector.ElementsTreeElement}
-         */
-        function updateChildrenOfNode()
-        {
-            var treeOutline = this.treeOutline;
-            var visibleChildren = this._visibleChildren();
-            var treeChildIndex = 0;
-            var elementToSelect = null;
+        // Remove any tree elements that no longer have this node as their parent and save
+        // all existing elements that could be reused. This also removes closing tag element.
+        var existingTreeElements = new Map();
+        for (var i = this.children.length - 1; i >= 0; --i) {
+            var existingTreeElement = this.children[i];
+            var existingNode = existingTreeElement._node;
+            // Skip expand all button.
+            if (!existingNode)
+                continue;
 
-            for (var i = 0; i < visibleChildren.length; ++i) {
-                var child = visibleChildren[i];
-                var currentTreeElement = this.children[treeChildIndex];
-                if (!currentTreeElement || currentTreeElement._node !== child) {
-                    // Find any existing element that is later in the children list.
-                    var existingTreeElement = null;
-                    for (var j = (treeChildIndex + 1), size = this.expandedChildCount; j < size; ++j) {
-                        if (this.children[j]._node === child) {
-                            existingTreeElement = this.children[j];
-                            break;
-                        }
-                    }
-
-                    if (existingTreeElement && existingTreeElement.parent === this) {
-                        // If an existing element was found and it has the same parent, just move it.
-                        this.moveChild(existingTreeElement, treeChildIndex);
-                    } else {
-                        // No existing element found, insert a new element.
-                        if (treeChildIndex < this.expandedChildrenLimit) {
-                            var newElement = this.insertChildElement(child, treeChildIndex);
-                            if (child === selectedNode)
-                                elementToSelect = newElement;
-                            if (this.expandedChildCount > this.expandedChildrenLimit)
-                                this.expandedChildrenLimit++;
-                        }
-                    }
-                }
-
-                ++treeChildIndex;
+            if (existingNode.parentNode === this._node) {
+                existingTreeElements.set(existingNode, existingTreeElement);
+                continue;
             }
-            return elementToSelect;
-        }
-
-        // Remove any tree elements that no longer have this node (or this node's contentDocument) as their parent.
-        for (var i = (this.children.length - 1); i >= 0; --i) {
-            var currentChild = this.children[i];
-            var currentNode = currentChild._node;
-            if (!currentNode)
-                continue;
-            var currentParentNode = currentNode.parentNode;
-
-            if (currentParentNode === this._node)
-                continue;
 
             var selectedTreeElement = this.treeOutline.selectedTreeElement;
-            if (selectedTreeElement && (selectedTreeElement === currentChild || selectedTreeElement.hasAncestor(currentChild)))
+            if (selectedTreeElement && (selectedTreeElement === existingTreeElement || selectedTreeElement.hasAncestor(existingTreeElement)))
                 this.select();
 
             this.removeChildAtIndex(i);
         }
 
-        var elementToSelect = updateChildrenOfNode.call(this);
+        var visibleChildren = this._visibleChildren();
+        for (var i = 0; i < visibleChildren.length && i < this.expandedChildrenLimit; ++i) {
+            var child = visibleChildren[i];
+            if (existingTreeElements.has(child)) {
+                // If an existing element was found, just move it.
+                this.moveChild(existingTreeElements.get(child), i);
+            } else {
+                // No existing element found, insert a new element.
+                var newElement = this.insertChildElement(child, i);
+                var updateRecord = this._updateInfo();
+                if (updateRecord)
+                    WebInspector.ElementsTreeElement.animateOnDOMUpdate(newElement);
+                // If a node was inserted in the middle of existing list dynamically we might need to increase the limit.
+                if (this.expandedChildCount > this.expandedChildrenLimit)
+                    this.expandedChildrenLimit++;
+            }
+        }
+
         this.updateTitle();
         this._adjustCollapsedRange();
 
-        var lastChild = this.children[this.children.length - 1];
-        if (this._node.nodeType() === Node.ELEMENT_NODE && this.hasChildren)
+        if (this._node.nodeType() === Node.ELEMENT_NODE && this._hasChildTreeElements())
             this.insertChildElement(this._node, this.children.length, true);
-
-        // We want to restore the original selection and tree scroll position after a full refresh, if possible.
-        if (fullRefresh && elementToSelect) {
-            elementToSelect.select();
-            if (treeOutlineContainerElement && originalScrollTop <= treeOutlineContainerElement.scrollHeight)
-                treeOutlineContainerElement.scrollTop = originalScrollTop;
-        }
 
         delete this._updateChildrenInProgress;
     },
@@ -1382,8 +1470,8 @@ WebInspector.ElementsTreeElement.prototype = {
         var visibleChildren = this._visibleChildren();
         // Ensure precondition: only the tree elements for node children are found in the tree
         // (not the Expand All button or the closing tag).
-        if (this.expandAllButtonElement && this.expandAllButtonElement.__treeElement.parent)
-            this.removeChild(this.expandAllButtonElement.__treeElement);
+        if (this.expandAllButtonElement && this.expandAllButtonElement.parent)
+            this.removeChild(this.expandAllButtonElement);
 
         const childNodeCount = visibleChildren.length;
 
@@ -1398,23 +1486,23 @@ WebInspector.ElementsTreeElement.prototype = {
                 var button = createElement("button");
                 button.className = "text-button";
                 button.value = "";
-                var item = new TreeElement(button, null, false);
-                item.selectable = false;
-                item.expandAllButton = true;
-                this.insertChild(item, targetButtonIndex);
-                this.expandAllButtonElement = item.listItemElement.firstChild;
-                this.expandAllButtonElement.__treeElement = item;
-                this.expandAllButtonElement.addEventListener("click", this.handleLoadAllChildren.bind(this), false);
-            } else if (!this.expandAllButtonElement.__treeElement.parent)
-                this.insertChild(this.expandAllButtonElement.__treeElement, targetButtonIndex);
-            this.expandAllButtonElement.textContent = WebInspector.UIString("Show All Nodes (%d More)", childNodeCount - expandedChildCount);
+                button.addEventListener("click", this.handleLoadAllChildren.bind(this), false);
+                this.expandAllButtonElement = new TreeElement(button, null, false);
+                this.expandAllButtonElement.selectable = false;
+                this.expandAllButtonElement.expandAllButton = true;
+                this.expandAllButtonElement._button = button;
+                this.insertChild(this.expandAllButtonElement, targetButtonIndex);
+            } else if (!this.expandAllButtonElement.parent)
+                this.insertChild(this.expandAllButtonElement, targetButtonIndex);
+            this.expandAllButtonElement._button.textContent = WebInspector.UIString("Show All Nodes (%d More)", childNodeCount - expandedChildCount);
         } else if (this.expandAllButtonElement)
             delete this.expandAllButtonElement;
     },
 
     handleLoadAllChildren: function()
     {
-        this.expandedChildrenLimit = Math.max(this._visibleChildCount(), this.expandedChildrenLimit + WebInspector.ElementsTreeElement.InitialChildrenLimit);
+        var visibleChildCount = this._visibleChildren().length;
+        this.expandedChildrenLimit = Math.max(visibleChildCount, this.expandedChildrenLimit + WebInspector.ElementsTreeElement.InitialChildrenLimit);
     },
 
     expandRecursively: function()
@@ -1553,7 +1641,7 @@ WebInspector.ElementsTreeElement.prototype = {
         if (this._startEditingTarget(/** @type {!Element} */(event.target)))
             return false;
 
-        if (this.hasChildren && !this.expanded)
+        if (this._hasChildTreeElements() && !this.expanded)
             this.expand();
         return false;
     },
@@ -1563,7 +1651,7 @@ WebInspector.ElementsTreeElement.prototype = {
      */
     hasEditableNode: function()
     {
-        return !this.representedObject.isShadowRoot() && !this.representedObject.ancestorUserAgentShadowRoot();
+        return !this._node.isShadowRoot() && !this._node.ancestorUserAgentShadowRoot();
     },
 
     _insertInLastAttributePosition: function(tag, node)
@@ -1669,23 +1757,23 @@ WebInspector.ElementsTreeElement.prototype = {
     _populateNodeContextMenu: function(contextMenu)
     {
         // Add free-form node-related actions.
-        var openTagElement = this.treeOutline.getCachedTreeElement(this.representedObject) || this;
+        var openTagElement = this.treeOutline.getCachedTreeElement(this._node) || this;
         var isEditable = this.hasEditableNode();
         if (isEditable && !this._editing)
             contextMenu.appendItem(WebInspector.UIString("Edit as HTML"), openTagElement._editAsHTML.bind(openTagElement));
-        var isShadowRoot = this.representedObject.isShadowRoot();
+        var isShadowRoot = this._node.isShadowRoot();
 
         // Place it here so that all "Copy"-ing items stick together.
-        if (this.representedObject.nodeType() === Node.ELEMENT_NODE)
+        if (this._node.nodeType() === Node.ELEMENT_NODE)
             contextMenu.appendItem(WebInspector.UIString(WebInspector.useLowerCaseMenuTitles() ? "Copy CSS path" : "Copy CSS Path"), this._copyCSSPath.bind(this));
         if (!isShadowRoot)
             contextMenu.appendItem(WebInspector.UIString("Copy XPath"), this._copyXPath.bind(this));
         if (!isShadowRoot) {
             var treeOutline = this.treeOutline;
             contextMenu.appendSeparator();
-            contextMenu.appendItem(WebInspector.UIString("Cut"), treeOutline._performCopyOrCut.bind(treeOutline, true, this.representedObject), !this.hasEditableNode());
-            contextMenu.appendItem(WebInspector.UIString("Copy"), treeOutline._performCopyOrCut.bind(treeOutline, false, this.representedObject));
-            contextMenu.appendItem(WebInspector.UIString("Paste"), treeOutline._pasteNode.bind(treeOutline, this.representedObject), !treeOutline._canPaste(this.representedObject));
+            contextMenu.appendItem(WebInspector.UIString("Cut"), treeOutline._performCopyOrCut.bind(treeOutline, true, this._node), !this.hasEditableNode());
+            contextMenu.appendItem(WebInspector.UIString("Copy"), treeOutline._performCopyOrCut.bind(treeOutline, false, this._node));
+            contextMenu.appendItem(WebInspector.UIString("Paste"), treeOutline._pasteNode.bind(treeOutline, this._node), !treeOutline._canPaste(this._node));
         }
 
         if (isEditable)
@@ -1750,6 +1838,8 @@ WebInspector.ElementsTreeElement.prototype = {
 
     _startEditingAttribute: function(attribute, elementForSelection)
     {
+        console.assert(this.listItemElement.isAncestor(attribute));
+
         if (WebInspector.isBeingEdited(attribute))
             return true;
 
@@ -1774,12 +1864,8 @@ WebInspector.ElementsTreeElement.prototype = {
                 removeZeroWidthSpaceRecursive(child);
         }
 
-        var domNode;
-        var listItemElement = attribute.enclosingNodeOrSelfWithNodeName("li");
-        if (attributeName && attributeValueElement && listItemElement && listItemElement.treeElement)
-            domNode = listItemElement.treeElement.representedObject;
-        var attributeValue = domNode ? domNode.getAttribute(attributeName) : undefined;
-        if (typeof attributeValue !== "undefined")
+        var attributeValue = attributeName && attributeValueElement ? this._node.getAttribute(attributeName) : undefined;
+        if (attributeValue !== undefined)
             attributeValueElement.textContent = attributeValue;
 
         // Remove zero-width spaces that were added by nodeTitleInfo.
@@ -1808,7 +1894,7 @@ WebInspector.ElementsTreeElement.prototype = {
 
         this._editing = WebInspector.InplaceEditor.startEditing(attribute, config);
 
-        window.getSelection().setBaseAndExtent(elementForSelection, 0, elementForSelection, 1);
+        this.listItemElement.window().getSelection().setBaseAndExtent(elementForSelection, 0, elementForSelection, 1);
 
         return true;
     },
@@ -1832,7 +1918,7 @@ WebInspector.ElementsTreeElement.prototype = {
             container.textContent = textNode.nodeValue(); // Strip the CSS or JS highlighting if present.
         var config = new WebInspector.InplaceEditor.Config(this._textNodeEditingCommitted.bind(this, textNode), this._editingCancelled.bind(this));
         this._editing = WebInspector.InplaceEditor.startEditing(textNodeElement, config);
-        window.getSelection().setBaseAndExtent(textNodeElement, 0, textNodeElement, 1);
+        this.listItemElement.window().getSelection().setBaseAndExtent(textNodeElement, 0, textNodeElement, 1);
 
         return true;
     },
@@ -1890,7 +1976,7 @@ WebInspector.ElementsTreeElement.prototype = {
 
         var config = new WebInspector.InplaceEditor.Config(editingComitted.bind(this), editingCancelled.bind(this), tagName);
         this._editing = WebInspector.InplaceEditor.startEditing(tagNameElement, config);
-        window.getSelection().setBaseAndExtent(tagNameElement, 0, tagNameElement, 1);
+        this.listItemElement.window().getSelection().setBaseAndExtent(tagNameElement, 0, tagNameElement, 1);
         return true;
     },
 
@@ -2171,8 +2257,7 @@ WebInspector.ElementsTreeElement.prototype = {
             return;
 
         if (onlySearchQueryChanged) {
-            if (this._highlightResult)
-                this._updateSearchHighlight(false);
+            this._hideSearchHighlight();
         } else {
             var nodeInfo = this._nodeTitleInfo(WebInspector.linkifyURLAsNode);
             if (nodeInfo.shadowRoot)
@@ -2293,6 +2378,10 @@ WebInspector.ElementsTreeElement.prototype = {
 
         var attrValueElement = attrSpanElement.createChild("span", "webkit-html-attribute-value");
 
+        var updates = this._updateInfo();
+        if (updates && updates.isAttributeModified(name))
+            WebInspector.runCSSAnimationOnce(hasText ? attrValueElement : attrNameElement, "dom-update-highlight");
+
         /**
          * @this {WebInspector.ElementsTreeElement}
          * @param {string} value
@@ -2364,14 +2453,34 @@ WebInspector.ElementsTreeElement.prototype = {
         tagElement.createTextChild("<");
         var tagNameElement = tagElement.createChild("span", isClosingTag ? "" : "webkit-html-tag-name");
         tagNameElement.textContent = (isClosingTag ? "/" : "") + tagName;
-        if (!isClosingTag && node.hasAttributes()) {
-            var attributes = node.attributes();
-            for (var i = 0; i < attributes.length; ++i) {
-                var attr = attributes[i];
-                tagElement.createTextChild(" ");
-                this._buildAttributeDOM(tagElement, attr.name, attr.value, false, node, linkify);
+        if (!isClosingTag) {
+            if (node.hasAttributes()) {
+                var attributes = node.attributes();
+                for (var i = 0; i < attributes.length; ++i) {
+                    var attr = attributes[i];
+                    tagElement.createTextChild(" ");
+                    this._buildAttributeDOM(tagElement, attr.name, attr.value, false, node, linkify);
+                }
             }
+            var hasUpdates;
+            var updates = this._updateInfo();
+            if (updates) {
+                hasUpdates |= updates.hasRemovedAttributes();
+                var hasInlineText = this._childrenDisplayMode === WebInspector.ElementsTreeElement.ChildrenDisplayMode.InlineText;
+
+                hasUpdates |= (!hasInlineText || this.expanded) && updates.hasChangedChildren();
+
+                // Highlight the tag name, as the inserted node is not visible (either child of a collapsed tree element or empty inline text).
+                hasUpdates |= !this.expanded && updates.hasInsertedNodes() && (!hasInlineText || this._node.firstChild.nodeValue().length === 0);
+
+                // Highlight the tag name, as the inline text node value has been cleared.
+                // The respective empty node will be highlighted, but the highlight will not be visible to the user.
+                hasUpdates |= hasInlineText && (updates.isCharDataModified() || updates.hasChangedChildren()) && this._node.firstChild.nodeValue().length === 0;
+            }
+            if (hasUpdates)
+                WebInspector.runCSSAnimationOnce(tagNameElement, "dom-update-highlight");
         }
+
         tagElement.createTextChild(">");
         parentElement.createTextChild("\u200B");
     },
@@ -2383,7 +2492,6 @@ WebInspector.ElementsTreeElement.prototype = {
     _convertWhitespaceToEntities: function(text)
     {
         var result = "";
-        var resultLength = 0;
         var lastIndexAfterEntity = 0;
         var entityRanges = [];
         var charToEntity = WebInspector.ElementsTreeOutline.MappedCharToEntity;
@@ -2408,7 +2516,7 @@ WebInspector.ElementsTreeElement.prototype = {
     _nodeTitleInfo: function(linkify)
     {
         var node = this._node;
-        var info = {titleDOM: createDocumentFragment(), hasChildren: this.hasChildren};
+        var info = {titleDOM: createDocumentFragment(), hasChildren: this._hasChildTreeElements()};
 
         switch (node.nodeType()) {
             case Node.ATTRIBUTE_NODE:
@@ -2432,28 +2540,36 @@ WebInspector.ElementsTreeElement.prototype = {
 
                 this._buildTagDOM(info.titleDOM, tagName, false, false, linkify);
 
-                var showInlineText = this._showInlineText() && !this.hasChildren;
-                if (!this.expanded && !showInlineText && (this.treeOutline.isXMLMimeType || !WebInspector.ElementsTreeElement.ForbiddenClosingTagElements[tagName])) {
-                    if (this.hasChildren) {
+                switch (this._childrenDisplayMode) {
+                case WebInspector.ElementsTreeElement.ChildrenDisplayMode.HasChildren:
+                    if (!this.expanded) {
                         var textNodeElement = info.titleDOM.createChild("span", "webkit-html-text-node bogus");
                         textNodeElement.textContent = "\u2026";
                         info.titleDOM.createTextChild("\u200B");
+                        this._buildTagDOM(info.titleDOM, tagName, true, false);
                     }
-                    this._buildTagDOM(info.titleDOM, tagName, true, false);
-                }
+                    break;
 
-                // If this element only has a single child that is a text node,
-                // just show that text and the closing tag inline rather than
-                // create a subtree for them
-                if (showInlineText) {
-                    console.assert(!this.hasChildren);
+                case WebInspector.ElementsTreeElement.ChildrenDisplayMode.InlineText:
                     var textNodeElement = info.titleDOM.createChild("span", "webkit-html-text-node");
                     var result = this._convertWhitespaceToEntities(node.firstChild.nodeValue());
                     textNodeElement.textContent = result.text;
                     WebInspector.highlightRangesWithStyleClass(textNodeElement, result.entityRanges, "webkit-html-entity-value");
                     info.titleDOM.createTextChild("\u200B");
-                    this._buildTagDOM(info.titleDOM, tagName, true, false);
                     info.hasChildren = false;
+                    this._buildTagDOM(info.titleDOM, tagName, true, false);
+                    var updates = this._updateInfo();
+                    if (updates && (updates.hasInsertedNodes() || updates.hasChangedChildren()))
+                        WebInspector.runCSSAnimationOnce(textNodeElement, "dom-update-highlight");
+                    updates = this._updateInfo(this._node.firstChild);
+                    if (updates && updates.isCharDataModified())
+                        WebInspector.runCSSAnimationOnce(textNodeElement, "dom-update-highlight");
+                    break;
+
+                case WebInspector.ElementsTreeElement.ChildrenDisplayMode.NoChildren:
+                    if (this.treeOutline.isXMLMimeType || !WebInspector.ElementsTreeElement.ForbiddenClosingTagElements[tagName])
+                        this._buildTagDOM(info.titleDOM, tagName, true, false);
+                    break;
                 }
                 break;
 
@@ -2463,13 +2579,13 @@ WebInspector.ElementsTreeElement.prototype = {
                     newNode.textContent = node.nodeValue();
 
                     var javascriptSyntaxHighlighter = new WebInspector.DOMSyntaxHighlighter("text/javascript", true);
-                    javascriptSyntaxHighlighter.syntaxHighlightNode(newNode);
+                    javascriptSyntaxHighlighter.syntaxHighlightNode(newNode).then(updateSearchHighlight.bind(this)).done();
                 } else if (node.parentNode && node.parentNode.nodeName().toLowerCase() === "style") {
                     var newNode = info.titleDOM.createChild("span", "webkit-html-text-node webkit-html-css-node");
                     newNode.textContent = node.nodeValue();
 
                     var cssSyntaxHighlighter = new WebInspector.DOMSyntaxHighlighter("text/css", true);
-                    cssSyntaxHighlighter.syntaxHighlightNode(newNode);
+                    cssSyntaxHighlighter.syntaxHighlightNode(newNode).then(updateSearchHighlight.bind(this)).done();
                 } else {
                     info.titleDOM.createTextChild("\"");
                     var textNodeElement = info.titleDOM.createChild("span", "webkit-html-text-node");
@@ -2477,6 +2593,9 @@ WebInspector.ElementsTreeElement.prototype = {
                     textNodeElement.textContent = result.text;
                     WebInspector.highlightRangesWithStyleClass(textNodeElement, result.entityRanges, "webkit-html-entity-value");
                     info.titleDOM.createTextChild("\"");
+                    var updates = this._updateInfo();
+                    if (updates && updates.isCharDataModified())
+                        WebInspector.runCSSAnimationOnce(textNodeElement, "dom-update-highlight");
                 }
                 break;
 
@@ -2505,6 +2624,7 @@ WebInspector.ElementsTreeElement.prototype = {
                 var cdataElement = info.titleDOM.createChild("span", "webkit-html-text-node");
                 cdataElement.createTextChild("<![CDATA[" + node.nodeValue() + "]]>");
                 break;
+
             case Node.DOCUMENT_FRAGMENT_NODE:
                 var fragmentElement = info.titleDOM.createChild("span", "webkit-html-fragment");
                 if (node.isInShadowTree()) {
@@ -2519,25 +2639,17 @@ WebInspector.ElementsTreeElement.prototype = {
             default:
                 info.titleDOM.createTextChild(node.nodeNameInCorrectCase().collapseWhitespace());
         }
-        return info;
-    },
 
-    /**
-     * @return {boolean}
-     */
-    _showInlineText: function()
-    {
-        if (this._node.importedDocument() || this._node.templateContent() || this._visibleShadowRoots().length > 0 || this._node.hasPseudoElements())
-            return false;
-        if (this._node.nodeType() !== Node.ELEMENT_NODE)
-            return false;
-        if (!this._node.firstChild || this._node.firstChild !== this._node.lastChild || this._node.firstChild.nodeType() !== Node.TEXT_NODE)
-            return false;
-        var textChild = this._node.firstChild;
-        var maxInlineTextChildLength = 80;
-        if (textChild.nodeValue().length < maxInlineTextChildLength)
-            return true;
-        return false;
+        /**
+         * @this {WebInspector.ElementsTreeElement}
+         */
+        function updateSearchHighlight()
+        {
+            delete this._highlightResult;
+            this._highlightSearchResults();
+        }
+
+        return info;
     },
 
     remove: function()
@@ -2625,10 +2737,7 @@ WebInspector.ElementsTreeElement.prototype = {
     {
         if (!this._searchQuery || !this._searchHighlightsVisible)
             return;
-        if (this._highlightResult) {
-            this._updateSearchHighlight(true);
-            return;
-        }
+        this._hideSearchHighlight();
 
         var text = this.listItemElement.textContent;
         var regexObject = createPlainTextSearchRegex(this._searchQuery, "gi");
@@ -2693,34 +2802,74 @@ WebInspector.ElementsTreeElement.prototype = {
             visibleChildren.push(this._node.importedDocument());
         if (this._node.templateContent())
             visibleChildren.push(this._node.templateContent());
-        var pseudoElements = this._node.pseudoElements();
-        if (pseudoElements[WebInspector.DOMNode.PseudoElementNames.Before])
-            visibleChildren.push(pseudoElements[WebInspector.DOMNode.PseudoElementNames.Before]);
+        var beforePseudoElement = this._node.beforePseudoElement();
+        if (beforePseudoElement)
+            visibleChildren.push(beforePseudoElement);
         if (this._node.childNodeCount())
             visibleChildren = visibleChildren.concat(this._node.children());
-        if (pseudoElements[WebInspector.DOMNode.PseudoElementNames.After])
-            visibleChildren.push(pseudoElements[WebInspector.DOMNode.PseudoElementNames.After]);
+        var afterPseudoElement = this._node.afterPseudoElement();
+        if (afterPseudoElement)
+            visibleChildren.push(afterPseudoElement);
         return visibleChildren;
     },
 
     /**
-     * @return {number}
+     * @return {boolean}
      */
-    _visibleChildCount: function()
+    _hasVisibleChildren: function()
     {
-        var childCount = this._node.childNodeCount() + this._visibleShadowRoots().length;
         if (this._node.importedDocument())
-            ++childCount;
+            return true;
         if (this._node.templateContent())
-            ++childCount;
-        for (var pseudoType in this._node.pseudoElements())
-            ++childCount;
-        return childCount;
+            return true;
+        if (this._node.childNodeCount())
+            return true;
+        if (this._visibleShadowRoots().length)
+            return true;
+        if (this._node.hasPseudoElements())
+            return true;
+        return false;
     },
 
-    _updateHasChildren: function()
+    /**
+     * @return {boolean}
+     */
+    _hasChildTreeElements: function()
     {
-        this.hasChildren = !this._elementCloseTag && !this._showInlineText() && this._visibleChildCount() > 0;
+        return this._childrenDisplayMode === WebInspector.ElementsTreeElement.ChildrenDisplayMode.HasChildren;
+    },
+
+    /**
+     * @return {boolean}
+     */
+    _canShowInlineText: function()
+    {
+        if (this._node.importedDocument() || this._node.templateContent() || this._visibleShadowRoots().length > 0 || this._node.hasPseudoElements())
+            return false;
+        if (this._node.nodeType() !== Node.ELEMENT_NODE)
+            return false;
+        if (!this._node.firstChild || this._node.firstChild !== this._node.lastChild || this._node.firstChild.nodeType() !== Node.TEXT_NODE)
+            return false;
+        var textChild = this._node.firstChild;
+        var maxInlineTextChildLength = 80;
+        if (textChild.nodeValue().length < maxInlineTextChildLength)
+            return true;
+        return false;
+    },
+
+    _updateChildrenDisplayMode: function()
+    {
+        var showInlineText = this._canShowInlineText();
+        var hasChildren = !this._elementCloseTag && this._hasVisibleChildren();
+
+        if (showInlineText)
+            this._childrenDisplayMode = WebInspector.ElementsTreeElement.ChildrenDisplayMode.InlineText;
+        else if (hasChildren)
+            this._childrenDisplayMode = WebInspector.ElementsTreeElement.ChildrenDisplayMode.HasChildren;
+        else
+            this._childrenDisplayMode = WebInspector.ElementsTreeElement.ChildrenDisplayMode.NoChildren;
+
+        this.setHasChildren(this._childrenDisplayMode === WebInspector.ElementsTreeElement.ChildrenDisplayMode.HasChildren);
     },
 
     __proto__: TreeElement.prototype
@@ -2735,18 +2884,18 @@ WebInspector.ElementsTreeUpdater = function(domModel, treeOutline)
 {
     domModel.addEventListener(WebInspector.DOMModel.Events.NodeInserted, this._nodeInserted, this);
     domModel.addEventListener(WebInspector.DOMModel.Events.NodeRemoved, this._nodeRemoved, this);
-    domModel.addEventListener(WebInspector.DOMModel.Events.AttrModified, this._attributesUpdated, this);
-    domModel.addEventListener(WebInspector.DOMModel.Events.AttrRemoved, this._attributesUpdated, this);
+    domModel.addEventListener(WebInspector.DOMModel.Events.AttrModified, this._attributeModified, this);
+    domModel.addEventListener(WebInspector.DOMModel.Events.AttrRemoved, this._attributeRemoved, this);
     domModel.addEventListener(WebInspector.DOMModel.Events.CharacterDataModified, this._characterDataModified, this);
     domModel.addEventListener(WebInspector.DOMModel.Events.DocumentUpdated, this._documentUpdated, this);
     domModel.addEventListener(WebInspector.DOMModel.Events.ChildNodeCountUpdated, this._childNodeCountUpdated, this);
 
     this._domModel = domModel;
     this._treeOutline = treeOutline;
-    /** @type {!Set.<!WebInspector.DOMNode>} */
-    this._recentlyModifiedNodes = new Set();
-    /** @type {!Set.<!WebInspector.DOMNode>} */
-    this._recentlyModifiedParentNodes = new Set();
+    /** @type {!Map.<!WebInspector.DOMNode, !WebInspector.ElementsTreeUpdater.UpdateInfo>} */
+    this._recentlyModifiedNodes = new Map();
+    /** @type {!Map.<!WebInspector.DOMNode, !WebInspector.ElementsTreeUpdater.UpdateInfo>} */
+    this._recentlyModifiedParentNodes = new Map();
 }
 
 WebInspector.ElementsTreeUpdater.prototype = {
@@ -2754,8 +2903,8 @@ WebInspector.ElementsTreeUpdater.prototype = {
     {
         this._domModel.removeEventListener(WebInspector.DOMModel.Events.NodeInserted, this._nodeInserted, this);
         this._domModel.removeEventListener(WebInspector.DOMModel.Events.NodeRemoved, this._nodeRemoved, this);
-        this._domModel.removeEventListener(WebInspector.DOMModel.Events.AttrModified, this._attributesUpdated, this);
-        this._domModel.removeEventListener(WebInspector.DOMModel.Events.AttrRemoved, this._attributesUpdated, this);
+        this._domModel.removeEventListener(WebInspector.DOMModel.Events.AttrModified, this._attributeModified, this);
+        this._domModel.removeEventListener(WebInspector.DOMModel.Events.AttrRemoved, this._attributeRemoved, this);
         this._domModel.removeEventListener(WebInspector.DOMModel.Events.CharacterDataModified, this._characterDataModified, this);
         this._domModel.removeEventListener(WebInspector.DOMModel.Events.DocumentUpdated, this._documentUpdated, this);
         this._domModel.removeEventListener(WebInspector.DOMModel.Events.ChildNodeCountUpdated, this._childNodeCountUpdated, this);
@@ -2763,34 +2912,47 @@ WebInspector.ElementsTreeUpdater.prototype = {
 
     /**
      * @param {?WebInspector.DOMNode} parentNode
+     * @return {!WebInspector.ElementsTreeUpdater.UpdateInfo}
      */
     _parentNodeModified: function(parentNode)
     {
         if (!parentNode)
-            return;
-        this._recentlyModifiedParentNodes.add(parentNode);
+            return new WebInspector.ElementsTreeUpdater.UpdateInfo(); // Bogus info.
+
+        var record = this._recentlyModifiedParentNodes.get(parentNode);
+        if (!record) {
+            record = new WebInspector.ElementsTreeUpdater.UpdateInfo();
+            this._recentlyModifiedParentNodes.set(parentNode, record);
+        }
 
         var treeElement = this._treeOutline.findTreeElement(parentNode);
         if (treeElement) {
-            var oldHasChildren = treeElement.hasChildren;
-            var oldShowInlineText = treeElement._showInlineText();
-            treeElement._updateHasChildren();
-            if (treeElement.hasChildren !== oldHasChildren || oldShowInlineText || treeElement._showInlineText())
-                this._nodeModified(parentNode);
+            var oldDisplayMode = treeElement._childrenDisplayMode;
+            treeElement._updateChildrenDisplayMode();
+            if (treeElement._childrenDisplayMode !== oldDisplayMode)
+                this._nodeModified(parentNode).childrenModified();
         }
 
         if (this._treeOutline._visible)
             this._updateModifiedNodesSoon();
+
+        return record;
     },
 
     /**
      * @param {!WebInspector.DOMNode} node
+     * @return {!WebInspector.ElementsTreeUpdater.UpdateInfo}
      */
     _nodeModified: function(node)
     {
-        this._recentlyModifiedNodes.add(node);
         if (this._treeOutline._visible)
             this._updateModifiedNodesSoon();
+        var record = this._recentlyModifiedNodes.get(node);
+        if (!record) {
+            record = new WebInspector.ElementsTreeUpdater.UpdateInfo();
+            this._recentlyModifiedNodes.set(node, record);
+        }
+        return record;
     },
 
     /**
@@ -2811,10 +2973,19 @@ WebInspector.ElementsTreeUpdater.prototype = {
     /**
      * @param {!WebInspector.Event} event
      */
-    _attributesUpdated: function(event)
+    _attributeModified: function(event)
     {
         var node = /** @type {!WebInspector.DOMNode} */ (event.data.node);
-        this._nodeModified(node);
+        this._nodeModified(node).attributeModified(event.data.name);
+    },
+
+    /**
+     * @param {!WebInspector.Event} event
+     */
+    _attributeRemoved: function(event)
+    {
+        var node = /** @type {!WebInspector.DOMNode} */ (event.data.node);
+        this._nodeModified(node).attributeRemoved(event.data.name);
     },
 
     /**
@@ -2823,8 +2994,8 @@ WebInspector.ElementsTreeUpdater.prototype = {
     _characterDataModified: function(event)
     {
         var node = /** @type {!WebInspector.DOMNode} */ (event.data);
-        this._parentNodeModified(node.parentNode);
-        this._nodeModified(node);
+        this._parentNodeModified(node.parentNode).charDataModified();
+        this._nodeModified(node).charDataModified();
     },
 
     /**
@@ -2833,7 +3004,7 @@ WebInspector.ElementsTreeUpdater.prototype = {
     _nodeInserted: function(event)
     {
         var node = /** @type {!WebInspector.DOMNode} */ (event.data);
-        this._parentNodeModified(node.parentNode);
+        this._parentNodeModified(node.parentNode).nodeInserted(node);
     },
 
     /**
@@ -2844,7 +3015,7 @@ WebInspector.ElementsTreeUpdater.prototype = {
         var node = /** @type {!WebInspector.DOMNode} */ (event.data.node);
         var parentNode = /** @type {!WebInspector.DOMNode} */ (event.data.parent);
         this._treeOutline._resetClipboardIfNeeded(node);
-        this._parentNodeModified(parentNode);
+        this._parentNodeModified(parentNode).childrenModified();
     },
 
     /**
@@ -2870,7 +3041,7 @@ WebInspector.ElementsTreeUpdater.prototype = {
             delete this._updateModifiedNodesTimeout;
         }
 
-        var updatedNodes = this._recentlyModifiedNodes.valuesArray().concat(this._recentlyModifiedParentNodes.valuesArray());
+        var updatedNodes = this._recentlyModifiedNodes.keysArray().concat(this._recentlyModifiedParentNodes.keysArray());
         var hidePanelWhileUpdating = updatedNodes.length > 10;
         if (hidePanelWhileUpdating) {
             var treeOutlineContainerElement = this._treeOutline.element.parentNode;
@@ -2882,16 +3053,14 @@ WebInspector.ElementsTreeUpdater.prototype = {
             // Document's children have changed, perform total update.
             this._treeOutline.update();
         } else {
-            var nodes = this._recentlyModifiedNodes.valuesArray();
-            for (var i = 0, size = nodes.length; i < size; ++i) {
-                var nodeItem = this._treeOutline.findTreeElement(nodes[i]);
+            for (var node of this._recentlyModifiedNodes.keys()) {
+                var nodeItem = this._treeOutline.findTreeElement(node);
                 if (nodeItem)
-                    nodeItem.updateTitle();
+                    nodeItem.updateTitle(false);
             }
 
-            var parentNodes = this._recentlyModifiedParentNodes.valuesArray();
-            for (var i = 0, size = parentNodes.length; i < size; ++i) {
-                var parentNodeItem = this._treeOutline.findTreeElement(parentNodes[i]);
+            for (var node of this._recentlyModifiedParentNodes.keys()) {
+                var parentNodeItem = this._treeOutline.findTreeElement(node);
                 if (parentNodeItem && parentNodeItem.populated)
                     parentNodeItem.updateChildren();
             }
@@ -2916,6 +3085,108 @@ WebInspector.ElementsTreeUpdater.prototype = {
         this._recentlyModifiedNodes.clear();
         this._recentlyModifiedParentNodes.clear();
         delete this._treeOutline._clipboardNodeData;
+    }
+}
+
+/**
+ * @constructor
+ */
+WebInspector.ElementsTreeUpdater.UpdateInfo = function()
+{
+}
+
+WebInspector.ElementsTreeUpdater.UpdateInfo.prototype = {
+    /**
+     * @param {string} attrName
+     */
+    attributeModified: function(attrName)
+    {
+        if (this._removedAttributes && this._removedAttributes.has(attrName))
+            this._removedAttributes.delete(attrName);
+        if (!this._modifiedAttributes)
+            this._modifiedAttributes = /** @type {!Set.<string>} */ (new Set());
+        this._modifiedAttributes.add(attrName);
+    },
+
+    /**
+     * @param {string} attrName
+     */
+    attributeRemoved: function(attrName)
+    {
+        if (this._modifiedAttributes && this._modifiedAttributes.has(attrName))
+            this._modifiedAttributes.delete(attrName);
+        if (!this._removedAttributes)
+            this._removedAttributes = /** @type {!Set.<string>} */ (new Set());
+        this._removedAttributes.add(attrName);
+    },
+
+    /**
+     * @param {!WebInspector.DOMNode} node
+     */
+    nodeInserted: function(node)
+    {
+        if (!this._insertedNodes)
+            this._insertedNodes = /** @type {!Set.<!WebInspector.DOMNode>} */ (new Set());
+        this._insertedNodes.add(/** @type {!WebInspector.DOMNode} */ (node));
+    },
+
+    charDataModified: function()
+    {
+        this._charDataModified = true;
+    },
+
+    childrenModified: function()
+    {
+        this._hasChangedChildren = true;
+    },
+
+    /**
+     * @param {string} attributeName
+     * @return {boolean}
+     */
+    isAttributeModified: function(attributeName)
+    {
+        return this._modifiedAttributes && this._modifiedAttributes.has(attributeName);
+    },
+
+    /**
+     * @return {boolean}
+     */
+    hasRemovedAttributes: function()
+    {
+        return !!this._removedAttributes && !!this._removedAttributes.size;
+    },
+
+    /**
+     * @return {boolean}
+     */
+    hasInsertedNodes: function()
+    {
+        return !!this._insertedNodes && !!this._insertedNodes.size;
+    },
+
+    /**
+     * @return {boolean}
+     */
+    isCharDataModified: function()
+    {
+        return !!this._charDataModified;
+    },
+
+    /**
+     * @return {boolean}
+     */
+    isNodeInserted: function(node)
+    {
+        return !!this._insertedNodes && this._insertedNodes.has(node);
+    },
+
+    /**
+     * @return {boolean}
+     */
+    hasChangedChildren: function()
+    {
+        return !!this._hasChangedChildren;
     }
 }
 

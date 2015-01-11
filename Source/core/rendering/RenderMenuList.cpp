@@ -26,7 +26,6 @@
 #include "core/rendering/RenderMenuList.h"
 
 #include "core/HTMLNames.h"
-#include "core/accessibility/AXMenuList.h"
 #include "core/accessibility/AXObjectCache.h"
 #include "core/css/CSSFontSelector.h"
 #include "core/css/resolver/StyleResolver.h"
@@ -216,14 +215,13 @@ void RenderMenuList::updateFromElement()
         m_optionsChanged = false;
     }
 
-    if (m_popupIsVisible) {
+    if (m_popupIsVisible)
         m_popup->updateFromElement();
-    } else {
-        if (selectElement()->suggestedIndex() >= 0)
-            setTextFromOption(selectElement()->suggestedIndex());
-        else
-            setTextFromOption(selectElement()->selectedIndex());
-    }
+
+    if (selectElement()->suggestedIndex() >= 0)
+        setTextFromOption(selectElement()->suggestedIndex());
+    else
+        setTextFromOption(selectElement()->selectedIndex());
 }
 
 void RenderMenuList::setTextFromOption(int optionIndex)
@@ -568,8 +566,6 @@ int RenderMenuList::selectedIndex() const
 void RenderMenuList::popupDidHide()
 {
     m_popupIsVisible = false;
-    // Ensure the text is updated which wasn't updated when the popup is visible.
-    updateFromElement();
 }
 
 bool RenderMenuList::itemIsSeparator(unsigned listIndex) const

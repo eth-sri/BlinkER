@@ -28,6 +28,9 @@
     'bindings': {
       'filepath': 'Source/bindings',
     },
+    'bluetooth': {
+      'filepath': '[Bb]luetooth'
+    },
     'test_runner': {
       'filepath': 'Tools/DumpRenderTree/chromium/TestRunner',
     },
@@ -70,8 +73,7 @@
                   '|Source/core/svg/graphics/filters'
     },
     'heap': {
-      'filepath': 'Source/heap' \
-                  '|Source/platform/heap',
+      'filepath': 'Source/platform/heap',
     },
     'html': {
       'filepath': 'Source/core/html/'
@@ -82,11 +84,18 @@
     'owners': {
       'filepath': 'OWNERS',
     },
+    'paint': {
+      'filepath' : 'Source/core/paint/'
+    },
     'preloadScanner': {
       'filepath': 'Source/core/html/parser/HTMLPreloadScanner',
     },
     'public_api': {
       'filepath': 'public'
+    },
+    'scheduler': {
+      'filepath': 'Source/platform/scheduler' \
+                  '|Source/core/html/parser/.*Scheduler'
     },
     'serviceworkers' : {
       'filepath': 'Source/modules/serviceworkers' \
@@ -329,6 +338,7 @@
     'bidi': [ 'leviw+bidiwatch@chromium.org' ],
     'bindings': [ 'arv+blink@chromium.org',
                   'blink-reviews-bindings@chromium.org' ],
+    'bluetooth': [ 'scheib+watch@chromium.org' ],
     'canvas': [ 'cabanier@adobe.com', 'aandrey+blink@chromium.org' ],
     'clipboard': [ 'dcheng@chromium.org', ],
     'custom_elements': [ 'dominicc+watchlist@chromium.org', 'dglazkov+blink@chromium.org' ],
@@ -353,7 +363,7 @@
              'rob.buis@samsung.com',
              'blink-reviews-dom@chromium.org' ],
     'events': [ 'eae+blinkwatch@chromium.org', 'dglazkov+blink@chromium.org', 'blink-reviews-events@chromium.org' ],
-    'heap': [ 'ager@chromium.org', 'haraken@chromium.org', 'kouhei+heap@chromium.org' ],
+    'heap': [ 'ager@chromium.org', 'haraken@chromium.org', 'kouhei+heap@chromium.org', 'oilpan-reviews@chromium.org' ],
     'html': [ 'dglazkov+blink@chromium.org', 'blink-reviews-html@chromium.org' ],
     'public_api': [ 'dglazkov+blink@chromium.org' ],
     'workers': [ 'kinuko+worker@chromium.org',
@@ -370,11 +380,14 @@
                    'leviw+renderwatch@chromium.org',
                    'zoltan@webkit.org',
                    'blink-reviews-rendering@chromium.org' ],
+    'paint' : [ 'blink-reviews-paint@chromium.org',
+                'slimming-paint-reviews@chromium.org' ],
     'compositing': [ ],
     'content_security_policy': [ 'mkwst+watchlist-csp@chromium.org' ],
     'prerender': [ 'gavinp+prerender@chromium.org',
                    'yoav@yoav.ws' ],
     'preloadScanner': [ 'yoav@yoav.ws' ],
+    'scheduler': [ 'scheduler-bugs@chromium.org' ],
     'track': [ 'vcarbune@chromium.org', 'silviapf@chromium.org', 'philipj@opera.com', 'glenn@chromium.org', 'fs@opera.com', 'eric.carlson@apple.com' ],
     'media': [ 'feature-media-reviews@chromium.org', 'philipj@opera.com', 'eric.carlson@apple.com' ],
     'media_queries': [ 'kenneth.christiansen@gmail.com',

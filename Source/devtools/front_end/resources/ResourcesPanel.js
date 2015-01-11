@@ -40,7 +40,7 @@ WebInspector.ResourcesPanel = function()
 
     WebInspector.settings.resourcesLastSelectedItem = WebInspector.settings.createSetting("resourcesLastSelectedItem", {});
 
-    this.sidebarElement().classList.add("filter-all", "children", "small", "outline-disclosure");
+    this.panelSidebarElement().classList.add("filter-all", "children", "small", "outline-disclosure");
     this.sidebarTree.element.classList.remove("sidebar-tree");
 
     this.resourcesListTreeElement = new WebInspector.StorageCategoryTreeElement(this, WebInspector.UIString("Frames"), "Frames", ["frame-storage-tree-item"]);
@@ -70,10 +70,10 @@ WebInspector.ResourcesPanel = function()
     }
 
     var mainView = new WebInspector.VBox();
-    this.storageViews = mainView.element.createChild("div", "resources-main diff-container");
-    var statusBarContainer = mainView.element.createChild("div", "resources-status-bar");
-    this.storageViewStatusBarItemsContainer = statusBarContainer.createChild("div", "status-bar");
-    mainView.show(this.mainElement());
+    this.storageViews = mainView.element.createChild("div", "vbox flex-auto");
+    this._storageViewStatusBar = new WebInspector.StatusBar(mainView.element);
+    this._storageViewStatusBar.element.classList.add("resources-status-bar");
+    this.splitView().setMainView(mainView);
 
     /** @type {!Map.<!WebInspector.Database, !Object.<string, !WebInspector.DatabaseTableView>>} */
     this._databaseTableViews = new Map();
@@ -90,8 +90,8 @@ WebInspector.ResourcesPanel = function()
     /** @type {!Object.<string, boolean>} */
     this._domains = {};
 
-    this.sidebarElement().addEventListener("mousemove", this._onmousemove.bind(this), false);
-    this.sidebarElement().addEventListener("mouseleave", this._onmouseleave.bind(this), false);
+    this.panelSidebarElement().addEventListener("mousemove", this._onmousemove.bind(this), false);
+    this.panelSidebarElement().addEventListener("mouseleave", this._onmouseleave.bind(this), false);
 
     /**
      * @this {WebInspector.ResourcesPanel}
@@ -232,7 +232,7 @@ WebInspector.ResourcesPanel.prototype = {
         if (this.visibleView && !(this.visibleView instanceof WebInspector.StorageCategoryView))
             this.visibleView.detach();
 
-        this.storageViewStatusBarItemsContainer.removeChildren();
+        this._storageViewStatusBar.removeStatusBarItems();
 
         if (this.sidebarTree.selectedTreeElement)
             this.sidebarTree.selectedTreeElement.deselect();
@@ -620,10 +620,10 @@ WebInspector.ResourcesPanel.prototype = {
         view.show(this.storageViews);
         this.visibleView = view;
 
-        this.storageViewStatusBarItemsContainer.removeChildren();
-        var statusBarItems = view.statusBarItems || [];
-        for (var i = 0; i < statusBarItems.length; ++i)
-            this.storageViewStatusBarItemsContainer.appendChild(statusBarItems[i]);
+        this._storageViewStatusBar.removeStatusBarItems();
+        var statusBarItems = view.statusBarItems ? view.statusBarItems() : null;
+        for (var i = 0; statusBarItems && i < statusBarItems.length; ++i)
+            this._storageViewStatusBar.appendStatusBarItem(statusBarItems[i]);
     },
 
     closeVisibleView: function()
@@ -753,13 +753,7 @@ WebInspector.ResourcesPanel.prototype = {
 
     _findTreeElementForResource: function(resource)
     {
-        function getParent(object)
-        {
-            // Redirects, XHRs do not belong to the tree, it is fine to silently return false here.
-            return null;
-        }
-
-        return this.sidebarTree.findTreeElement(resource, getParent);
+        return this.sidebarTree.getCachedTreeElement(resource);
     },
 
     showView: function(view)
@@ -1311,7 +1305,7 @@ WebInspector.FrameResourceTreeElement.prototype = {
             this._sourceView = sourceFrame;
             if (this._resource.messages) {
                 for (var i = 0; i < this._resource.messages.length; i++)
-                    this._sourceView.addMessage(this._resource.messages[i]);
+                    this._sourceView.addPersistentMessage(this._resource.messages[i]);
             }
         }
         return this._sourceView;
@@ -2154,6 +2148,14 @@ WebInspector.StorageCategoryView = function()
 }
 
 WebInspector.StorageCategoryView.prototype = {
+    /**
+     * @return {!Array.<!WebInspector.StatusBarItem>}
+     */
+    statusBarItems: function()
+    {
+        return [];
+    },
+
     setText: function(text)
     {
         this._emptyView.text = text;

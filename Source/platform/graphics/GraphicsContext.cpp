@@ -73,13 +73,12 @@ const float cPictureScaleEpsilon = 0.000001;
 namespace blink {
 
 struct GraphicsContext::RecordingState {
-    RecordingState(SkPictureRecorder* recorder, SkCanvas* currentCanvas, const SkMatrix& currentMatrix, bool currentShouldSmoothFonts,
+    RecordingState(SkPictureRecorder* recorder, SkCanvas* currentCanvas, const SkMatrix& currentMatrix,
         PassRefPtr<DisplayList> displayList, RegionTrackingMode trackingMode)
         : m_displayList(displayList)
         , m_recorder(recorder)
         , m_savedCanvas(currentCanvas)
         , m_savedMatrix(currentMatrix)
-        , m_savedShouldSmoothFonts(currentShouldSmoothFonts)
         , m_regionTrackingMode(trackingMode) { }
 
     ~RecordingState() { }
@@ -88,7 +87,6 @@ struct GraphicsContext::RecordingState {
     SkPictureRecorder* m_recorder;
     SkCanvas* m_savedCanvas;
     const SkMatrix m_savedMatrix;
-    bool m_savedShouldSmoothFonts;
     RegionTrackingMode m_regionTrackingMode;
 };
 
@@ -419,19 +417,6 @@ void GraphicsContext::adjustTextRenderMode(SkPaint* paint) const
     paint->setLCDRenderText(couldUseLCDRenderedText());
 }
 
-bool GraphicsContext::couldUseLCDRenderedText() const
-{
-    ASSERT(m_canvas);
-    // Our layers only have a single alpha channel. This means that subpixel
-    // rendered text cannot be composited correctly when the layer is
-    // collapsed. Therefore, subpixel text is contextDisabled when we are drawing
-    // onto a layer.
-    if (contextDisabled() || m_canvas->isDrawingToLayer() || !isCertainlyOpaque())
-        return false;
-
-    return shouldSmoothFonts();
-}
-
 void GraphicsContext::setCompositeOperation(CompositeOperator compositeOperation, WebBlendMode blendMode)
 {
     if (contextDisabled())
@@ -549,7 +534,7 @@ void GraphicsContext::beginRecording(const FloatRect& bounds, uint32_t recordFla
         }
     }
 
-    m_recordingStateStack.append(RecordingState(recorder, savedCanvas, savedMatrix, m_shouldSmoothFonts, displayList,
+    m_recordingStateStack.append(RecordingState(recorder, savedCanvas, savedMatrix, displayList,
         static_cast<RegionTrackingMode>(m_regionTrackingMode)));
 
     // Disable region tracking during recording.
@@ -566,7 +551,6 @@ PassRefPtr<DisplayList> GraphicsContext::endRecording()
 
     m_canvas = recording.m_savedCanvas;
     setRegionTrackingMode(recording.m_regionTrackingMode);
-    setShouldSmoothFonts(recording.m_savedShouldSmoothFonts);
     delete recording.m_recorder;
     m_recordingStateStack.removeLast();
 
@@ -1343,15 +1327,6 @@ void GraphicsContext::drawRRect(const SkRRect& rrect, const SkPaint& paint)
         m_trackedRegion.didDrawBounded(this, rrect.rect(), paint);
 }
 
-void GraphicsContext::didDrawRect(const SkRect& rect, const SkPaint& paint, const SkBitmap* bitmap)
-{
-    if (contextDisabled())
-        return;
-
-    if (regionTrackingEnabled())
-        m_trackedRegion.didDrawRect(this, rect, paint, bitmap);
-}
-
 void GraphicsContext::drawPosText(const void* text, size_t byteLength,
     const SkPoint pos[], const SkRect& textRect, const SkPaint& paint)
 {
@@ -1593,9 +1568,9 @@ void GraphicsContext::clipOut(const Path& pathToClip)
     path.toggleInverseFillType();
 }
 
-void GraphicsContext::clipPath(const Path& pathToClip, WindRule clipRule)
+void GraphicsContext::clipPath(const Path& pathToClip, WindRule clipRule, AntiAliasingMode antiAliasingMode)
 {
-    if (contextDisabled() || pathToClip.isEmpty())
+    if (contextDisabled())
         return;
 
     // Use const_cast and temporarily modify the fill type instead of copying the path.
@@ -1604,7 +1579,7 @@ void GraphicsContext::clipPath(const Path& pathToClip, WindRule clipRule)
 
     SkPath::FillType temporaryFillType = WebCoreWindRuleToSkFillType(clipRule);
     path.setFillType(temporaryFillType);
-    clipPath(path, AntiAliased);
+    clipPath(path, antiAliasingMode);
 
     path.setFillType(previousFillType);
 }
@@ -1627,22 +1602,6 @@ void GraphicsContext::clipOutRoundedRect(const RoundedRect& rect)
         return;
 
     clipRoundedRect(rect, SkRegion::kDifference_Op);
-}
-
-void GraphicsContext::canvasClip(const Path& pathToClip, WindRule clipRule, AntiAliasingMode aa)
-{
-    if (contextDisabled())
-        return;
-
-    // Use const_cast and temporarily modify the fill type instead of copying the path.
-    SkPath& path = const_cast<SkPath&>(pathToClip.skPath());
-    SkPath::FillType previousFillType = path.getFillType();
-
-    SkPath::FillType temporaryFillType = WebCoreWindRuleToSkFillType(clipRule);
-    path.setFillType(temporaryFillType);
-    clipPath(path, aa);
-
-    path.setFillType(previousFillType);
 }
 
 void GraphicsContext::clipRect(const SkRect& rect, AntiAliasingMode aa, SkRegion::Op op)

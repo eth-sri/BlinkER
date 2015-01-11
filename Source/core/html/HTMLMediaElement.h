@@ -102,8 +102,6 @@ public:
     };
     void scheduleDelayedAction(DelayedActionType);
 
-    bool isActive() const { return m_active; }
-
     bool hasRemoteRoutes() const { return m_remoteRoutesAvailable; }
     bool isPlayingRemotely() const { return m_playingRemotely; }
 
@@ -217,7 +215,7 @@ public:
         {
         }
 
-        WillBeHeapVector<RefPtrWillBeMember<TextTrack> > tracks;
+        WillBeHeapVector<RefPtrWillBeMember<TextTrack>> tracks;
         RefPtrWillBeMember<TextTrack> visibleTrack;
         RefPtrWillBeMember<TextTrack> defaultTrack;
         GroupKind kind;
@@ -425,6 +423,8 @@ private:
     // This does not check user gesture restrictions.
     void playInternal();
 
+    void gesturelessInitialPlayHalted();
+    void autoplayMediaEncountered();
     void allowVideoRendering();
 
     void updateVolume();
@@ -552,7 +552,6 @@ private:
     bool m_playing : 1;
     bool m_shouldDelayLoadEvent : 1;
     bool m_haveFiredLoadedData : 1;
-    bool m_active : 1;
     bool m_autoplaying : 1;
     bool m_muted : 1;
     bool m_paused : 1;
@@ -580,11 +579,13 @@ private:
     bool m_closeMediaSourceWhenFinalizing : 1;
 #endif
     double m_lastTextTrackUpdateTime;
+    bool m_initialPlayWithoutUserGestures : 1;
+    bool m_autoplayMediaCounted : 1;
 
     RefPtrWillBeMember<AudioTrackList> m_audioTracks;
     RefPtrWillBeMember<VideoTrackList> m_videoTracks;
     RefPtrWillBeMember<TextTrackList> m_textTracks;
-    WillBeHeapVector<RefPtrWillBeMember<TextTrack> > m_textTracksWhenResourceSelectionBegan;
+    WillBeHeapVector<RefPtrWillBeMember<TextTrack>> m_textTracksWhenResourceSelectionBegan;
 
     CueIntervalTree m_cueTree;
 

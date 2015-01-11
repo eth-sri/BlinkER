@@ -76,13 +76,13 @@ static void checkThatXSSInfosAreSafeToSendToAnotherThread(const XSSInfoStream& i
 
 #endif
 
-void BackgroundHTMLParser::start(PassRefPtr<WeakReference<BackgroundHTMLParser> > reference, PassOwnPtr<Configuration> config)
+void BackgroundHTMLParser::start(PassRefPtr<WeakReference<BackgroundHTMLParser>> reference, PassOwnPtr<Configuration> config)
 {
     new BackgroundHTMLParser(reference, config);
     // Caller must free by calling stop().
 }
 
-BackgroundHTMLParser::BackgroundHTMLParser(PassRefPtr<WeakReference<BackgroundHTMLParser> > reference, PassOwnPtr<Configuration> config)
+BackgroundHTMLParser::BackgroundHTMLParser(PassRefPtr<WeakReference<BackgroundHTMLParser>> reference, PassOwnPtr<Configuration> config)
     : m_weakFactory(reference, this)
     , m_token(adoptPtr(new HTMLToken))
     , m_tokenizer(HTMLTokenizer::create(config->options))
@@ -93,6 +93,7 @@ BackgroundHTMLParser::BackgroundHTMLParser(PassRefPtr<WeakReference<BackgroundHT
     , m_xssAuditor(config->xssAuditor.release())
     , m_preloadScanner(config->preloadScanner.release())
     , m_decoder(config->decoder.release())
+    , m_startingScript(false)
 {
 }
 
@@ -106,7 +107,7 @@ void BackgroundHTMLParser::appendRawBytesFromParserThread(const char* data, int 
     updateDocument(m_decoder->decode(data, dataLength));
 }
 
-void BackgroundHTMLParser::appendRawBytesFromMainThread(PassOwnPtr<Vector<char> > buffer)
+void BackgroundHTMLParser::appendRawBytesFromMainThread(PassOwnPtr<Vector<char>> buffer)
 {
     ASSERT(m_decoder);
     updateDocument(m_decoder->decode(buffer->data(), buffer->size()));
@@ -156,6 +157,7 @@ void BackgroundHTMLParser::resumeFrom(PassOwnPtr<Checkpoint> checkpoint)
     m_treeBuilderSimulator.setState(checkpoint->treeBuilderState);
     m_input.rewindTo(checkpoint->inputCheckpoint, checkpoint->unparsedInput);
     m_preloadScanner->rewindTo(checkpoint->preloadScannerCheckpoint);
+    m_startingScript = false;
     pumpTokenizer();
 }
 
@@ -195,6 +197,8 @@ void BackgroundHTMLParser::markEndOfFile()
 
 void BackgroundHTMLParser::pumpTokenizer()
 {
+    HTMLTreeBuilderSimulator::SimulatedToken simulatedToken = HTMLTreeBuilderSimulator::OtherToken;
+
     // No need to start speculating until the main thread has almost caught up.
     if (m_input.totalCheckpointTokenCount() > outstandingTokenLimit)
         return;
@@ -219,13 +223,21 @@ void BackgroundHTMLParser::pumpTokenizer()
             CompactHTMLToken token(m_token.get(), TextPosition(m_input.current().currentLine(), m_input.current().currentColumn()));
 
             m_preloadScanner->scan(token, m_input.current(), m_pendingPreloads);
+            simulatedToken = m_treeBuilderSimulator.simulate(token, m_tokenizer.get());
+
+            // Break chunks before a script tag is inserted and flag the chunk as starting a script
+            // so the main parser can decide if it should yield before processing the chunk.
+            if (simulatedToken == HTMLTreeBuilderSimulator::ScriptStart) {
+                sendTokensToMainThread();
+                m_startingScript = true;
+            }
 
             m_pendingTokens->append(token);
         }
 
         m_token->clear();
 
-        if (!m_treeBuilderSimulator.simulate(m_pendingTokens->last(), m_tokenizer.get()) || m_pendingTokens->size() >= pendingTokenLimit) {
+        if (simulatedToken == HTMLTreeBuilderSimulator::ScriptEnd || m_pendingTokens->size() >= pendingTokenLimit) {
             sendTokensToMainThread();
             // If we're far ahead of the main thread, yield for a bit to avoid consuming too much memory.
             if (m_input.totalCheckpointTokenCount() > outstandingTokenLimit)
@@ -253,6 +265,8 @@ void BackgroundHTMLParser::sendTokensToMainThread()
     chunk->inputCheckpoint = m_input.createCheckpoint(m_pendingTokens->size());
     chunk->preloadScannerCheckpoint = m_preloadScanner->createCheckpoint();
     chunk->tokens = m_pendingTokens.release();
+    chunk->startingScript = m_startingScript;
+    m_startingScript = false;
     callOnMainThread(bind(&HTMLDocumentParser::didReceiveParsedChunkFromBackgroundParser, m_parser, chunk.release()));
 
     m_pendingTokens = adoptPtr(new CompactHTMLTokenStream);

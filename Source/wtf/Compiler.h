@@ -45,12 +45,6 @@
 
 /* Specific compiler features */
 
-/* There is a bug in clang that comes with Xcode 4.2 where AtomicStrings can't be implicitly converted to Strings
-   in the presence of move constructors and/or move assignment operators. This bug has been fixed in Xcode 4.3 clang, so we
-   check for both cxx_rvalue_references as well as the unrelated cxx_nonstatic_member_init feature which we know was added in 4.3 */
-#define WTF_COMPILER_SUPPORTS_CXX_RVALUE_REFERENCES __has_extension(cxx_rvalue_references) && __has_extension(cxx_nonstatic_member_init)
-
-#define WTF_COMPILER_SUPPORTS_CXX_DELETED_FUNCTIONS __has_extension(cxx_deleted_functions)
 #define WTF_COMPILER_SUPPORTS_CXX_EXPLICIT_CONVERSIONS __has_feature(cxx_explicit_conversions)
 #define WTF_COMPILER_SUPPORTS_BLOCKS __has_feature(blocks)
 #define WTF_COMPILER_SUPPORTS_C_STATIC_ASSERT __has_extension(c_static_assert)
@@ -87,11 +81,7 @@
 #if defined(__GXX_EXPERIMENTAL_CXX0X__) || (defined(__cplusplus) && __cplusplus >= 201103L)
 /* C++11 support */
 #if GCC_VERSION_AT_LEAST(4, 3, 0)
-#define WTF_COMPILER_SUPPORTS_CXX_RVALUE_REFERENCES 1
 #define WTF_COMPILER_SUPPORTS_CXX_STATIC_ASSERT 1
-#endif
-#if GCC_VERSION_AT_LEAST(4, 4, 0)
-#define WTF_COMPILER_SUPPORTS_CXX_DELETED_FUNCTIONS 1
 #endif
 #if GCC_VERSION_AT_LEAST(4, 5, 0)
 #define WTF_COMPILER_SUPPORTS_CXX_EXPLICIT_CONVERSIONS 1
@@ -175,16 +165,6 @@
 /* ALLOW_UNUSED_LOCAL */
 
 #define ALLOW_UNUSED_LOCAL(x) false ? (void)x : (void)0
-
-
-/* WTF_DELETED_FUNCTION */
-
-#if COMPILER_SUPPORTS(CXX_DELETED_FUNCTIONS)
-#define WTF_DELETED_FUNCTION = delete
-#else
-#define WTF_DELETED_FUNCTION
-#endif
-
 
 /* REFERENCED_FROM_ASM */
 

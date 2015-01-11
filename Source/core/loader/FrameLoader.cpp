@@ -74,7 +74,6 @@
 #include "core/loader/ProgressTracker.h"
 #include "core/loader/UniqueIdentifier.h"
 #include "core/loader/appcache/ApplicationCacheHost.h"
-#include "core/page/BackForwardClient.h"
 #include "core/page/Chrome.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/CreateWindow.h"
@@ -185,7 +184,7 @@ void FrameLoader::stopLoading()
 {
     if (m_frame->document() && m_frame->document()->parsing()) {
         finishedParsing();
-        m_frame->document()->setParsing(false);
+        m_frame->document()->setParsingState(Document::FinishedParsing);
     }
 
     if (Document* doc = m_frame->document()) {
@@ -246,8 +245,10 @@ bool FrameLoader::closeURL()
 void FrameLoader::didExplicitOpen()
 {
     // Calling document.open counts as committing the first real document load.
-    if (!m_stateMachine.committedFirstRealDocumentLoad())
+    if (!m_stateMachine.committedFirstRealDocumentLoad()) {
         m_stateMachine.advanceTo(FrameLoaderStateMachine::CommittedFirstRealLoad);
+        m_progressTracker->progressStarted();
+    }
 
     // Prevent window.open(url) -- eg window.open("about:blank") -- from blowing away results
     // from a subsequent window.document.open / window.document.write call.
@@ -368,6 +369,7 @@ void FrameLoader::receivedFirstData()
 
     client()->dispatchDidCommitLoad(m_frame, m_currentItem.get(), historyCommitType);
 
+    TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "CommitLoad", "data", InspectorCommitLoadEvent::data(m_frame));
     InspectorInstrumentation::didCommitLoad(m_frame, m_documentLoader.get());
     m_frame->page()->didCommitLoad(m_frame);
     dispatchDidClearDocumentOfWindowObject();
@@ -405,6 +407,8 @@ void FrameLoader::didBeginDocument(bool dispatch)
 
     if (m_provisionalItem && (m_loadType == FrameLoadTypeBackForward || m_loadType == FrameLoadTypeInitialHistoryLoad))
         m_frame->document()->setStateForNewFormElements(m_provisionalItem->documentState());
+
+    client()->didCreateNewDocument();
 }
 
 void FrameLoader::finishedParsing()
@@ -485,7 +489,7 @@ void FrameLoader::checkCompleted(EventAction *action)
         return;
 
     // Are we still parsing?
-    if (m_frame->document()->parsing())
+    if (m_frame->document()->parsing() || m_frame->document()->isInDOMContentLoaded())
         return;
 
     // Still waiting imports?
@@ -628,7 +632,7 @@ void FrameLoader::loadInSameDocument(const KURL& url, PassRefPtr<SerializedScrip
     bool hashChange = equalIgnoringFragmentIdentifier(url, oldURL) && url.fragmentIdentifier() != oldURL.fragmentIdentifier();
     if (hashChange) {
         m_frame->eventHandler().stopAutoscroll();
-        m_frame->domWindow()->enqueueHashchangeEvent(oldURL, url);
+        m_frame->localDOMWindow()->enqueueHashchangeEvent(oldURL, url);
     }
     m_documentLoader->setIsClientRedirect(clientRedirect == ClientRedirect);
     m_documentLoader->setReplacesCurrentHistoryItem(m_loadType == FrameLoadTypeStandard);
@@ -641,7 +645,7 @@ void FrameLoader::loadInSameDocument(const KURL& url, PassRefPtr<SerializedScrip
     scrollToFragmentWithParentBoundary(url);
     checkCompleted();
 
-    m_frame->domWindow()->statePopped(stateObject ? stateObject : SerializedScriptValue::nullValue());
+    m_frame->localDOMWindow()->statePopped(stateObject ? stateObject : SerializedScriptValue::nullValue());
 }
 
 void FrameLoader::completed(EventAction *action)
@@ -696,7 +700,7 @@ FrameLoadType FrameLoader::determineFrameLoadType(const FrameLoadRequest& reques
 {
     if (m_frame->tree().parent() && !m_stateMachine.committedFirstRealDocumentLoad())
         return FrameLoadTypeInitialInChildFrame;
-    if (!m_frame->tree().parent() && !m_frame->page()->backForward().backForwardListCount())
+    if (!m_frame->tree().parent() && !client()->backForwardLength())
         return FrameLoadTypeStandard;
     if (m_provisionalDocumentLoader && request.substituteData().failingURL() == m_provisionalDocumentLoader->url() && m_loadType == FrameLoadTypeBackForward)
         return FrameLoadTypeBackForward;
@@ -1001,7 +1005,7 @@ void FrameLoader::commitProvisionalLoad()
     // its frame is not in a consistent state for rendering, so avoid setJSStatusBarText
     // since it may cause clients to attempt to render the frame.
     if (!m_stateMachine.creatingInitialEmptyDocument()) {
-        LocalDOMWindow* window = m_frame->domWindow();
+        DOMWindow* window = m_frame->domWindow();
         window->setStatus(String());
         window->setDefaultStatus(String());
     }
@@ -1017,6 +1021,7 @@ FrameLoadType FrameLoader::loadType() const
     return m_loadType;
 }
 
+#if defined(ENABLE_LOAD_COMPLETION_HACKS)
 // This function is an incomprehensible mess and is only used in checkLoadCompleteForThisFrame.
 // If you're thinking of using it elsewhere, stop right now and reconsider your life.
 static bool isDocumentDoneLoading(Document* document)
@@ -1025,10 +1030,8 @@ static bool isDocumentDoneLoading(Document* document)
         return true;
     if (document->loader()->isLoadingMainResource())
         return false;
-    if (!document->loadEventFinished()) {
-        if (document->loader()->isLoading() || document->isDelayingLoadEvent())
-            return false;
-    }
+    if (!document->loadEventFinished())
+        return false;
     if (document->fetcher()->requestCount())
         return false;
     if (document->processingLoadEvent())
@@ -1037,6 +1040,7 @@ static bool isDocumentDoneLoading(Document* document)
         return false;
     return true;
 }
+#endif
 
 bool FrameLoader::checkLoadCompleteForThisFrame()
 {
@@ -1072,8 +1076,16 @@ bool FrameLoader::checkLoadCompleteForThisFrame()
         return true;
     if (m_provisionalDocumentLoader || !m_documentLoader)
         return false;
+
+#if defined(ENABLE_LOAD_COMPLETION_HACKS)
     if (!isDocumentDoneLoading(m_frame->document()) && !m_inStopAllLoaders)
         return false;
+#else
+    if (m_inStopAllLoaders)
+        m_frame->document()->suppressLoadEvent();
+    if (!m_frame->document()->loadEventFinished())
+        return false;
+#endif
 
     m_state = FrameStateComplete;
 
@@ -1089,7 +1101,7 @@ bool FrameLoader::checkLoadCompleteForThisFrame()
         return true;
 
     m_progressTracker->progressCompleted();
-    m_frame->domWindow()->finishedLoading();
+    m_frame->localDOMWindow()->finishedLoading();
 
     const ResourceError& error = m_documentLoader->mainDocumentError();
     if (!error.isNull()) {
@@ -1297,7 +1309,7 @@ bool FrameLoader::dispatchNavigationTransitionData()
 
     Vector<Document::TransitionElementData>::iterator iter = elementData.begin();
     for (; iter != elementData.end(); ++iter)
-        client()->dispatchAddNavigationTransitionData(iter->scope, iter->selector, iter->markup);
+        client()->dispatchAddNavigationTransitionData(*iter);
 
     return true;
 }
@@ -1332,6 +1344,8 @@ void FrameLoader::loadWithNavigationAction(const NavigationAction& action, Frame
     if ((!m_policyDocumentLoader->shouldContinueForNavigationPolicy(request, shouldCheckMainWorldContentSecurityPolicy, isTransitionNavigation) || !shouldClose()) && m_policyDocumentLoader) {
         m_policyDocumentLoader->detachFromFrame();
         m_policyDocumentLoader = nullptr;
+        if (!m_stateMachine.committedFirstRealDocumentLoad())
+            m_state = FrameStateComplete;
         checkCompleted();
         return;
     }
@@ -1378,7 +1392,7 @@ void FrameLoader::loadWithNavigationAction(const NavigationAction& action, Frame
         EventAction *action = m_provisionalEventRacerLog->createEventAction();
         EventActionScope act(action);
 
-        LocalDOMWindow *win = m_frame->domWindow();
+        LocalDOMWindow *win = m_frame->localDOMWindow();
         ASSERT(win);
         if (!win->getCreatorEventAction())
             win->setCreatorEventRacerContext(m_provisionalEventRacerLog, action);

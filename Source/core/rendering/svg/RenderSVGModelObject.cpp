@@ -56,11 +56,6 @@ LayoutRect RenderSVGModelObject::clippedOverflowRectForPaintInvalidation(const R
     return SVGRenderSupport::clippedOverflowRectForPaintInvalidation(this, paintInvalidationContainer, paintInvalidationState);
 }
 
-void RenderSVGModelObject::computeFloatRectForPaintInvalidation(const RenderLayerModelObject* paintInvalidationContainer, FloatRect& paintInvalidationRect, const PaintInvalidationState* paintInvalidationState) const
-{
-    SVGRenderSupport::computeFloatRectForPaintInvalidation(this, paintInvalidationContainer, paintInvalidationRect, paintInvalidationState);
-}
-
 void RenderSVGModelObject::mapLocalToContainer(const RenderLayerModelObject* paintInvalidationContainer, TransformState& transformState, MapCoordinatesFlags, bool* wasFixed, const PaintInvalidationState* paintInvalidationState) const
 {
     SVGRenderSupport::mapLocalToContainer(this, paintInvalidationContainer, transformState, wasFixed, paintInvalidationState);
@@ -118,11 +113,11 @@ bool RenderSVGModelObject::nodeAtPoint(const HitTestRequest&, HitTestResult&, co
     return false;
 }
 
-// The SVG addFocusRingRects() method adds rects in local coordinates so the default absoluteFocusRingQuads
+// The SVG addFocusRingRects() method adds rects in local coordinates so the default absoluteFocusRingBoundingBoxRect
 // returns incorrect values for SVG objects. Overriding this method provides access to the absolute bounds.
-void RenderSVGModelObject::absoluteFocusRingQuads(Vector<FloatQuad>& quads)
+IntRect RenderSVGModelObject::absoluteFocusRingBoundingBoxRect() const
 {
-    quads.append(localToAbsoluteQuad(FloatQuad(paintInvalidationRectInLocalCoordinates())));
+    return localToAbsoluteQuad(FloatQuad(paintInvalidationRectInLocalCoordinates())).enclosingBoundingBox();
 }
 
 void RenderSVGModelObject::invalidateTreeIfNeeded(const PaintInvalidationState& paintInvalidationState)

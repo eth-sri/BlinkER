@@ -60,11 +60,6 @@ namespace blink {
 typedef WillBeHeapHashMap<RawPtrWillBeMember<const RenderBoxModelObject>, RawPtrWillBeMember<RenderBoxModelObject> > ContinuationMap;
 static OwnPtrWillBePersistent<ContinuationMap>* continuationMap = 0;
 
-// This HashMap is similar to the continuation map, but connects first-letter
-// renderers to their remaining text fragments.
-typedef WillBeHeapHashMap<RawPtrWillBeMember<const RenderBoxModelObject>, RawPtrWillBeMember<RenderTextFragment> > FirstLetterRemainingTextMap;
-static OwnPtrWillBePersistent<FirstLetterRemainingTextMap>* firstLetterRemainingTextMap = 0;
-
 void RenderBoxModelObject::setSelectionState(SelectionState state)
 {
     if (state == SelectionInside && selectionState() != SelectionNone)
@@ -113,11 +108,6 @@ void RenderBoxModelObject::willBeDestroyed()
     // A continuation of this RenderObject should be destroyed at subclasses.
     ASSERT(!continuation());
 
-    // If this is a first-letter object with a remaining text fragment then the
-    // entry needs to be cleared from the map.
-    if (firstLetterRemainingText())
-        setFirstLetterRemainingText(0);
-
     RenderLayerModelObject::willBeDestroyed();
 }
 
@@ -155,17 +145,13 @@ static LayoutSize accumulateInFlowPositionOffsets(const RenderObject* child)
     return offset;
 }
 
-bool RenderBoxModelObject::hasAutoHeightOrContainingBlockWithAutoHeight() const
+RenderBlock* RenderBoxModelObject::containingBlockForAutoHeightDetection(Length logicalHeight) const
 {
-    Length logicalHeightLength = style()->logicalHeight();
-    if (logicalHeightLength.isAuto())
-        return true;
-
     // For percentage heights: The percentage is calculated with respect to the height of the generated box's
     // containing block. If the height of the containing block is not specified explicitly (i.e., it depends
     // on content height), and this element is not absolutely positioned, the value computes to 'auto'.
-    if (!logicalHeightLength.isPercent() || isOutOfFlowPositioned() || document().inQuirksMode())
-        return false;
+    if (!logicalHeight.isPercent() || isOutOfFlowPositioned())
+        return 0;
 
     // Anonymous block boxes are ignored when resolving percentage values that would refer to it:
     // the closest non-anonymous ancestor box is used instead.
@@ -178,18 +164,32 @@ bool RenderBoxModelObject::hasAutoHeightOrContainingBlockWithAutoHeight() const
     // what the CSS spec says to do with heights. Basically we
     // don't care if the cell specified a height or not.
     if (cb->isTableCell())
-        return false;
+        return 0;
 
     // Match RenderBox::availableLogicalHeightUsing by special casing
     // the render view. The available height is taken from the frame.
     if (cb->isRenderView())
-        return false;
+        return 0;
 
     if (cb->isOutOfFlowPositioned() && !cb->style()->logicalTop().isAuto() && !cb->style()->logicalBottom().isAuto())
+        return 0;
+
+    return cb;
+}
+
+bool RenderBoxModelObject::hasAutoHeightOrContainingBlockWithAutoHeight() const
+{
+    Length logicalHeightLength = style()->logicalHeight();
+    if (logicalHeightLength.isAuto())
+        return true;
+
+    if (document().inQuirksMode())
         return false;
 
     // If the height of the containing block computes to 'auto', then it hasn't been 'specified explicitly'.
-    return cb->hasAutoHeightOrContainingBlockWithAutoHeight();
+    if (RenderBlock* cb = containingBlockForAutoHeightDetection(logicalHeightLength))
+        return cb->hasAutoHeightOrContainingBlockWithAutoHeight();
+    return false;
 }
 
 LayoutSize RenderBoxModelObject::relativePositionOffset() const
@@ -490,24 +490,6 @@ void RenderBoxModelObject::computeLayerHitTestRects(LayerHitTestRects& rects) co
     // get picked up already by the tree walk.
     if (continuation())
         continuation()->computeLayerHitTestRects(rects);
-}
-
-RenderTextFragment* RenderBoxModelObject::firstLetterRemainingText() const
-{
-    if (!firstLetterRemainingTextMap)
-        return 0;
-    return (*firstLetterRemainingTextMap)->get(this);
-}
-
-void RenderBoxModelObject::setFirstLetterRemainingText(RenderTextFragment* remainingText)
-{
-    if (remainingText) {
-        if (!firstLetterRemainingTextMap)
-            firstLetterRemainingTextMap = new OwnPtrWillBePersistent<FirstLetterRemainingTextMap>(adoptPtrWillBeNoop(new FirstLetterRemainingTextMap));
-        (*firstLetterRemainingTextMap)->set(this, remainingText);
-    } else if (firstLetterRemainingTextMap) {
-        (*firstLetterRemainingTextMap)->remove(this);
-    }
 }
 
 LayoutRect RenderBoxModelObject::localCaretRectForEmptyElement(LayoutUnit width, LayoutUnit textIndentOffset)

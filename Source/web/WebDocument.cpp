@@ -35,7 +35,6 @@
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/V8ElementRegistrationOptions.h"
-#include "core/accessibility/AXObjectCache.h"
 #include "core/css/StyleSheetContents.h"
 #include "core/dom/CSSSelectorWatch.h"
 #include "core/dom/Document.h"
@@ -53,6 +52,8 @@
 #include "core/loader/DocumentLoader.h"
 #include "core/rendering/RenderObject.h"
 #include "core/rendering/RenderView.h"
+#include "modules/accessibility/AXObject.h"
+#include "modules/accessibility/AXObjectCacheImpl.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/WebURL.h"
 #include "public/web/WebAXObject.h"
@@ -289,24 +290,43 @@ void WebDocument::setIsTransitionDocument()
     unwrap<Document>()->setIsTransitionDocument();
 }
 
+// FIXME: This will be removed once the Chrome side implementation is done
 void WebDocument::beginExitTransition(const WebString& cssSelector)
+{
+    beginExitTransition(cssSelector, false);
+}
+
+void WebDocument::beginExitTransition(const WebString& cssSelector, bool exitToNativeApp)
+{
+    RefPtrWillBeRawPtr<Document> document = unwrap<Document>();
+    if (!exitToNativeApp)
+        document->hideTransitionElements(cssSelector);
+    document->styleEngine()->enableExitTransitionStylesheets();
+}
+
+void WebDocument::hideTransitionElements(const WebString& cssSelector)
 {
     RefPtrWillBeRawPtr<Document> document = unwrap<Document>();
     document->hideTransitionElements(cssSelector);
-    document->styleEngine()->enableExitTransitionStylesheets();
+}
+
+void WebDocument::showTransitionElements(const WebString& cssSelector)
+{
+    RefPtrWillBeRawPtr<Document> document = unwrap<Document>();
+    document->showTransitionElements(cssSelector);
 }
 
 WebAXObject WebDocument::accessibilityObject() const
 {
     const Document* document = constUnwrap<Document>();
-    AXObjectCache* cache = document->axObjectCache();
-    return cache ? WebAXObject(cache->getOrCreateAXObjectFromRenderView(document->renderView())) : WebAXObject();
+    AXObjectCacheImpl* cache = toAXObjectCacheImpl(document->axObjectCache());
+    return cache ? WebAXObject(cache->getOrCreate(document->renderView())) : WebAXObject();
 }
 
 WebAXObject WebDocument::accessibilityObjectFromID(int axID) const
 {
     const Document* document = constUnwrap<Document>();
-    AXObjectCache* cache = document->axObjectCache();
+    AXObjectCacheImpl* cache = toAXObjectCacheImpl(document->axObjectCache());
     return cache ? WebAXObject(cache->objectFromAXID(axID)) : WebAXObject();
 }
 

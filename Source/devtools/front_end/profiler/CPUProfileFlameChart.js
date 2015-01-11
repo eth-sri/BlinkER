@@ -129,6 +129,15 @@ WebInspector.CPUFlameChartDataProvider.prototype = {
     },
 
     /**
+     * @param {number} index
+     * @return {boolean}
+     */
+    isTallMarker: function(index)
+    {
+        throw new Error("Unreachable.");
+    },
+
+    /**
      * @return {!WebInspector.FlameChart.TimelineData}
      */
     _calculateTimelineData: function()
@@ -232,7 +241,7 @@ WebInspector.CPUFlameChartDataProvider.prototype = {
             entryInfo.push(row);
         }
 
-        var name = WebInspector.CPUProfileDataModel.beautifyFunctionName(node.functionName);
+        var name = WebInspector.beautifyFunctionName(node.functionName);
         pushEntryInfoRow(WebInspector.UIString("Name"), name);
         var selfTime = this._millisecondsToString(this._entrySelfTimes[entryIndex]);
         var totalTime = this._millisecondsToString(timelineData.entryTotalTimes[entryIndex]);
@@ -264,7 +273,7 @@ WebInspector.CPUFlameChartDataProvider.prototype = {
     entryTitle: function(entryIndex)
     {
         var node = this._entryNodes[entryIndex];
-        return WebInspector.CPUProfileDataModel.beautifyFunctionName(node.functionName);
+        return WebInspector.beautifyFunctionName(node.functionName);
     },
 
     /**
@@ -370,6 +379,7 @@ WebInspector.CPUFlameChartDataProvider.colorGenerator = function()
 
 /**
  * @constructor
+ * @implements {WebInspector.CPUProfileView.Searchable}
  * @extends {WebInspector.VBox}
  * @param {!WebInspector.FlameChartDataProvider} dataProvider
  */
@@ -385,6 +395,8 @@ WebInspector.CPUProfileFlameChart = function(dataProvider)
     this._mainPane.show(this.element);
     this._mainPane.addEventListener(WebInspector.FlameChart.Events.EntrySelected, this._onEntrySelected, this);
     this._overviewPane.addEventListener(WebInspector.OverviewGrid.Events.WindowChanged, this._onWindowChanged, this);
+    this._dataProvider = dataProvider;
+    this._searchResults = [];
 }
 
 WebInspector.CPUProfileFlameChart.prototype = {
@@ -404,8 +416,8 @@ WebInspector.CPUProfileFlameChart.prototype = {
     },
 
     /**
-     * @param {!number} timeLeft
-     * @param {!number} timeRight
+     * @param {number} timeLeft
+     * @param {number} timeRight
      */
     selectRange: function(timeLeft, timeRight)
     {
@@ -424,6 +436,62 @@ WebInspector.CPUProfileFlameChart.prototype = {
     {
         this._overviewPane.update();
         this._mainPane.update();
+    },
+
+    /**
+     * @param {!WebInspector.SearchableView.SearchConfig} searchConfig
+     * @param {boolean} shouldJump
+     * @param {boolean=} jumpBackwards
+     * @return {number}
+     */
+    performSearch: function(searchConfig, shouldJump, jumpBackwards)
+    {
+        var matcher = createPlainTextSearchRegex(searchConfig.query, searchConfig.caseSensitive ? "": "i");
+
+        var selectedEntryIndex = this._searchResultIndex !== -1 ? this._searchResults[this._searchResultIndex] : -1;
+        this._searchResults = [];
+        var entriesCount = this._dataProvider._entryNodes.length;
+        for(var index = 0; index < entriesCount; ++index) {
+            if (this._dataProvider.entryTitle(index).match(matcher))
+                this._searchResults.push(index);
+        }
+
+        if (this._searchResults.length) {
+            this._searchResultIndex = this._searchResults.indexOf(selectedEntryIndex);
+            if (this._searchResultIndex === -1)
+                this._searchResultIndex = jumpBackwards ? this._searchResults.length - 1 : 0;
+            this._mainPane.setSelectedEntry(this._searchResults[this._searchResultIndex]);
+        } else
+            this.searchCanceled();
+
+        return this._searchResults.length;
+    },
+
+    searchCanceled: function()
+    {
+        this._mainPane.setSelectedEntry(-1);
+        this._searchResults = [];
+        this._searchResultIndex = -1;
+    },
+
+    jumpToNextSearchResult: function()
+    {
+        this._searchResultIndex = (this._searchResultIndex + 1) % this._searchResults.length;
+        this._mainPane.setSelectedEntry(this._searchResults[this._searchResultIndex]);
+    },
+
+    jumpToPreviousSearchResult: function()
+    {
+        this._searchResultIndex = (this._searchResultIndex - 1 + this._searchResults.length) % this._searchResults.length;
+        this._mainPane.setSelectedEntry(this._searchResults[this._searchResultIndex]);
+    },
+
+    /**
+     * @return {number}
+     */
+    currentSearchResultIndex: function()
+    {
+        return this._searchResultIndex;
     },
 
     __proto__: WebInspector.VBox.prototype
@@ -548,8 +616,8 @@ WebInspector.CPUProfileFlameChart.OverviewPane.prototype = {
     },
 
     /**
-     * @param {!number} timeLeft
-     * @param {!number} timeRight
+     * @param {number} timeLeft
+     * @param {number} timeRight
      */
     _selectRange: function(timeLeft, timeRight)
     {
@@ -589,7 +657,7 @@ WebInspector.CPUProfileFlameChart.OverviewPane.prototype = {
     {
         if (this._updateTimerId)
             return;
-        this._updateTimerId = requestAnimationFrame(this.update.bind(this));
+        this._updateTimerId = this.element.window().requestAnimationFrame(this.update.bind(this));
     },
 
     update: function()
@@ -659,8 +727,8 @@ WebInspector.CPUProfileFlameChart.OverviewPane.prototype = {
     },
 
     /**
-     * @param {!number} width
-     * @param {!number} height
+     * @param {number} width
+     * @param {number} height
      */
     _resetCanvas: function(width, height)
     {

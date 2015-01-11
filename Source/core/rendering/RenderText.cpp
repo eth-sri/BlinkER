@@ -28,6 +28,7 @@
 #include "core/accessibility/AXObjectCache.h"
 #include "core/dom/Text.h"
 #include "core/editing/TextIterator.h"
+#include "core/editing/VisiblePosition.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/Settings.h"
 #include "core/html/parser/TextResourceDecoder.h"
@@ -326,7 +327,7 @@ String RenderText::plainText() const
 void RenderText::absoluteRects(Vector<IntRect>& rects, const LayoutPoint& accumulatedOffset) const
 {
     for (InlineTextBox* box = firstTextBox(); box; box = box->nextTextBox())
-        rects.append(enclosingIntRect(FloatRect(accumulatedOffset + box->topLeft(), box->size())));
+        rects.append(enclosingIntRect(FloatRect(FloatPoint(accumulatedOffset) + box->topLeft(), box->size())));
 }
 
 static FloatRect localQuadForTextBox(InlineTextBox* box, unsigned start, unsigned end, bool useSelectionHeight)
@@ -603,7 +604,7 @@ PositionWithAffinity RenderText::positionForPoint(const LayoutPoint& point)
 
     LayoutUnit pointLineDirection = firstTextBox()->isHorizontal() ? point.x() : point.y();
     LayoutUnit pointBlockDirection = firstTextBox()->isHorizontal() ? point.y() : point.x();
-    bool blocksAreFlipped = style()->slowIsFlippedBlocksWritingMode();
+    bool blocksAreFlipped = style()->isFlippedBlocksWritingMode();
 
     InlineTextBox* lastBox = 0;
     for (InlineTextBox* box = firstTextBox(); box; box = box->nextTextBox()) {
@@ -809,7 +810,9 @@ void RenderText::trimmedPrefWidths(float leadWidth,
         const Font& font = style()->font(); // FIXME: This ignores first-line.
         if (stripFrontSpaces) {
             const UChar spaceChar = space;
-            float spaceWidth = font.width(constructTextRun(this, font, &spaceChar, 1, style(), direction));
+            TextRun run = constructTextRun(this, font, &spaceChar, 1, style(), direction);
+            run.setUseComplexCodePath(!canUseSimpleFontCodePath());
+            float spaceWidth = font.width(run);
             maxWidth -= spaceWidth;
         } else {
             maxWidth += font.fontDescription().wordSpacing();
@@ -1626,6 +1629,9 @@ LayoutRect RenderText::selectionRectForPaintInvalidation(const RenderLayerModelO
     }
 
     mapRectToPaintInvalidationBacking(paintInvalidationContainer, rect, 0);
+    // FIXME: groupedMapping() leaks the squashing abstraction.
+    if (paintInvalidationContainer->layer()->groupedMapping())
+        RenderLayer::mapRectToPaintBackingCoordinates(paintInvalidationContainer, rect);
     return rect;
 }
 

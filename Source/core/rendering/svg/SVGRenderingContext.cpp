@@ -30,7 +30,6 @@
 #include "core/rendering/RenderLayer.h"
 #include "core/rendering/svg/RenderSVGResourceFilter.h"
 #include "core/rendering/svg/RenderSVGResourceMasker.h"
-#include "core/rendering/svg/SVGRenderSupport.h"
 #include "core/rendering/svg/SVGResources.h"
 #include "core/rendering/svg/SVGResourcesCache.h"
 #include "platform/FloatConversion.h"
@@ -86,7 +85,6 @@ void SVGRenderingContext::prepareToRenderSVGContent(RenderObject* object, PaintI
 
     m_object = object;
     m_paintInfo = &paintInfo;
-    m_filter = 0;
 
     RenderStyle* style = m_object->style();
     ASSERT(style);
@@ -94,12 +92,12 @@ void SVGRenderingContext::prepareToRenderSVGContent(RenderObject* object, PaintI
     const SVGRenderStyle& svgStyle = style->svgStyle();
 
     // Setup transparency layers before setting up SVG resources!
-    bool isRenderingMask = SVGRenderSupport::isRenderingClipPathAsMaskImage(*m_object);
+    bool isRenderingMask = paintInfo.isRenderingClipPathAsMaskImage();
     // RenderLayer takes care of root opacity.
-    float opacity = (object->isSVGRoot() || isRenderingMask) ? 1 : style->opacity();
-    bool hasBlendMode = style->hasBlendMode() && !isRenderingMask;
+    float opacity = object->isSVGRoot() ? 1 : style->opacity();
+    bool hasBlendMode = style->hasBlendMode();
 
-    if (opacity < 1 || hasBlendMode || style->hasIsolation()) {
+    if (!isRenderingMask && (opacity < 1 || hasBlendMode || style->hasIsolation())) {
         FloatRect paintInvalidationRect = m_object->paintInvalidationRectInLocalCoordinates();
         m_paintInfo->context->clip(paintInvalidationRect);
 
@@ -119,39 +117,37 @@ void SVGRenderingContext::prepareToRenderSVGContent(RenderObject* object, PaintI
         m_renderingFlags |= EndOpacityLayer;
     }
 
-    ClipPathOperation* clipPathOperation = style->clipPath();
-    if (clipPathOperation && clipPathOperation->type() == ClipPathOperation::SHAPE) {
-        ShapeClipPathOperation* clipPath = toShapeClipPathOperation(clipPathOperation);
-        m_paintInfo->context->clipPath(clipPath->path(object->objectBoundingBox()), clipPath->windRule());
+    SVGResources* resources = SVGResourcesCache::cachedResourcesForRenderObject(m_object);
+
+    // Prefer a 'clipper' (non-prefixed 'clip-path') to a 'clip shape'
+    // ('-webkit-clip-path'), until these two properties end up being merged
+    // properly.
+    if (RenderSVGResourceClipper* clipper = resources ? resources->clipper() : nullptr) {
+        if (!clipper->applyStatefulResource(m_object, m_paintInfo->context, m_clipperState))
+            return;
+        m_clipper = clipper;
+        m_renderingFlags |= PostApplyResources;
+    } else {
+        ClipPathOperation* clipPathOperation = style->clipPath();
+        if (clipPathOperation && clipPathOperation->type() == ClipPathOperation::SHAPE) {
+            ShapeClipPathOperation* clipPath = toShapeClipPathOperation(clipPathOperation);
+            m_paintInfo->context->clipPath(clipPath->path(object->objectBoundingBox()), clipPath->windRule());
+        }
     }
 
-    SVGResources* resources = SVGResourcesCache::cachedResourcesForRenderObject(m_object);
-    if (!resources) {
-        if (svgStyle.hasFilter())
-            return;
-
+    if (isRenderingMask) {
         m_renderingFlags |= RenderingPrepared;
         return;
     }
 
-    if (!isRenderingMask) {
+    if (resources) {
         if (RenderSVGResourceMasker* masker = resources->masker()) {
             if (!masker->prepareEffect(m_object, m_paintInfo->context))
                 return;
             m_masker = masker;
             m_renderingFlags |= PostApplyResources;
         }
-    }
 
-    RenderSVGResourceClipper* clipper = resources->clipper();
-    if (!clipPathOperation && clipper) {
-        if (!clipper->applyStatefulResource(m_object, m_paintInfo->context, m_clipperState))
-            return;
-        m_clipper = clipper;
-        m_renderingFlags |= PostApplyResources;
-    }
-
-    if (!isRenderingMask) {
         m_filter = resources->filter();
         if (m_filter) {
             m_savedContext = m_paintInfo->context;
@@ -168,6 +164,10 @@ void SVGRenderingContext::prepareToRenderSVGContent(RenderObject* object, PaintI
             // be drawn.
             m_paintInfo->rect = IntRect(m_filter->drawingRegion(m_object));
         }
+    } else {
+        // Broken filter disables rendering.
+        if (svgStyle.hasFilter())
+            return;
     }
 
     m_renderingFlags |= RenderingPrepared;

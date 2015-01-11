@@ -27,8 +27,6 @@
 #include "core/rendering/RenderTableSection.h"
 
 #include "core/paint/TableSectionPainter.h"
-#include <limits>
-#include "core/rendering/GraphicsContextAnnotator.h"
 #include "core/rendering/HitTestResult.h"
 #include "core/rendering/PaintInfo.h"
 #include "core/rendering/RenderTableCell.h"
@@ -37,6 +35,7 @@
 #include "core/rendering/RenderView.h"
 #include "core/rendering/SubtreeLayoutScope.h"
 #include "wtf/HashSet.h"
+#include <limits>
 
 namespace blink {
 
@@ -1263,7 +1262,7 @@ int RenderTableSection::firstLineBoxBaseline() const
     return firstLineBaseline;
 }
 
-void RenderTableSection::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
+void RenderTableSection::paint(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
     TableSectionPainter(*this).paint(paintInfo, paintOffset);
 }
@@ -1373,7 +1372,7 @@ CellSpan RenderTableSection::spannedColumns(const LayoutRect& flippedRect) const
 }
 
 
-void RenderTableSection::paintObject(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
+void RenderTableSection::paintObject(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
     TableSectionPainter(*this).paintObject(paintInfo, paintOffset);
 }

@@ -33,7 +33,13 @@
 
 namespace blink {
 
-const RenderSVGResourceType RenderSVGResourceFilter::s_resourceType = FilterResourceType;
+void FilterData::trace(Visitor* visitor)
+{
+#if ENABLE(OILPAN)
+    visitor->trace(filter);
+    visitor->trace(builder);
+#endif
+}
 
 RenderSVGResourceFilter::RenderSVGResourceFilter(SVGFilterElement* node)
     : RenderSVGResourceContainer(node)
@@ -42,6 +48,14 @@ RenderSVGResourceFilter::RenderSVGResourceFilter(SVGFilterElement* node)
 
 RenderSVGResourceFilter::~RenderSVGResourceFilter()
 {
+}
+
+void RenderSVGResourceFilter::trace(Visitor* visitor)
+{
+#if ENABLE(OILPAN)
+    visitor->trace(m_filter);
+#endif
+    RenderSVGResourceContainer::trace(visitor);
 }
 
 void RenderSVGResourceFilter::destroy()
@@ -70,19 +84,19 @@ void RenderSVGResourceFilter::removeClientFromCache(RenderObject* client, bool m
     markClientForInvalidation(client, markForInvalidation ? BoundariesInvalidation : ParentOnlyInvalidation);
 }
 
-PassRefPtr<SVGFilterBuilder> RenderSVGResourceFilter::buildPrimitives(SVGFilter* filter)
+PassRefPtrWillBeRawPtr<SVGFilterBuilder> RenderSVGResourceFilter::buildPrimitives(SVGFilter* filter)
 {
     SVGFilterElement* filterElement = toSVGFilterElement(element());
     FloatRect targetBoundingBox = filter->targetBoundingBox();
 
     // Add effects to the builder
-    RefPtr<SVGFilterBuilder> builder = SVGFilterBuilder::create(SourceGraphic::create(filter), SourceAlpha::create(filter));
+    RefPtrWillBeRawPtr<SVGFilterBuilder> builder = SVGFilterBuilder::create(SourceGraphic::create(filter), SourceAlpha::create(filter));
     for (SVGElement* element = Traversal<SVGElement>::firstChild(*filterElement); element; element = Traversal<SVGElement>::nextSibling(*element)) {
         if (!element->isFilterEffect() || !element->renderer())
             continue;
 
         SVGFilterPrimitiveStandardAttributes* effectElement = static_cast<SVGFilterPrimitiveStandardAttributes*>(element);
-        RefPtr<FilterEffect> effect = effectElement->build(builder.get(), filter);
+        RefPtrWillBeRawPtr<FilterEffect> effect = effectElement->build(builder.get(), filter);
         if (!effect) {
             builder->clearEffects();
             return nullptr;
@@ -100,7 +114,6 @@ PassRefPtr<SVGFilterBuilder> RenderSVGResourceFilter::buildPrimitives(SVGFilter*
 static void beginDeferredFilter(GraphicsContext* context, FilterData* filterData)
 {
     context->beginRecording(filterData->boundaries);
-    context->setShouldSmoothFonts(false);
     // We pass the boundaries to SkPictureImageFilter so it knows the
     // world-space position of the filter primitives. It gets them
     // from the DisplayList, which also applies the inverse translate
@@ -130,19 +143,6 @@ static void drawDeferredFilter(GraphicsContext* context, FilterData* filterData,
     FloatRect boundaries = filterData->boundaries;
     context->save();
 
-    FloatSize deviceSize = context->getCTM().mapSize(boundaries.size());
-    float scaledArea = deviceSize.width() * deviceSize.height();
-
-    // If area of scaled size is bigger than the upper limit, adjust the scale
-    // to fit. Note that this only really matters in the non-impl-side painting
-    // case, since the impl-side case never allocates a full-sized backing
-    // store, only tile-sized.
-    // FIXME: remove this once all platforms are using impl-side painting.
-    // crbug.com/169282.
-    if (scaledArea > FilterEffect::maxFilterArea()) {
-        float scale = sqrtf(FilterEffect::maxFilterArea() / scaledArea);
-        context->scale(scale, scale);
-    }
     // Clip drawing of filtered image to the minimum required paint rect.
     FilterEffect* lastEffect = filterData->builder->lastEffect();
     context->clipRect(lastEffect->determineAbsolutePaintRect(lastEffect->maxEffectRect()));
@@ -194,7 +194,7 @@ bool RenderSVGResourceFilter::prepareEffect(RenderObject* object, GraphicsContex
         return false; // Already built, or we're in a cycle. Regardless, just do nothing more now.
     }
 
-    OwnPtr<FilterData> filterData(adoptPtr(new FilterData));
+    OwnPtrWillBeRawPtr<FilterData> filterData = FilterData::create();
     FloatRect targetBoundingBox = object->objectBoundingBox();
 
     SVGFilterElement* filterElement = toSVGFilterElement(element());

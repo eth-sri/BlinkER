@@ -40,15 +40,40 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebCrypto.h"
 #include "public/platform/WebCryptoAlgorithm.h"
-#include "wtf/ArrayBufferView.h"
 
 namespace blink {
 
+template <>
+DOMArrayPiece::DOMArrayPiece(const BufferSource& bufferSource)
+{
+    void* data = nullptr;
+    unsigned len = 0;
+
+    if (bufferSource.isArrayBuffer()) {
+        data = bufferSource.getAsArrayBuffer()->data();
+        len = bufferSource.getAsArrayBuffer()->byteLength();
+    } else if (bufferSource.isArrayBufferView()) {
+        data = bufferSource.getAsArrayBufferView()->baseAddress();
+        len = bufferSource.getAsArrayBufferView()->byteLength();
+    }
+    initWithData(data, len);
+}
+
 // Seems like the generated bindings should take care of these however it
 // currently doesn't. See also http://crbug.com/264520
-static bool ensureNotNull(const ArrayPiece& x, const char* paramName, CryptoResult* result)
+static bool ensureNotNull(const DOMArrayPiece& x, const char* paramName, CryptoResult* result)
 {
     if (x.isNull()) {
+        String message = String("Invalid ") + paramName + String(" argument");
+        result->completeWithError(WebCryptoErrorTypeType, WebString(message));
+        return false;
+    }
+    return true;
+}
+
+static bool ensureNotNull(const ArrayBufferOrArrayBufferViewOrDictionary& dictionary, const char* paramName, CryptoResult* result)
+{
+    if (dictionary.isNull()) {
         String message = String("Invalid ") + paramName + String(" argument");
         result->completeWithError(WebCryptoErrorTypeType, WebString(message));
         return false;
@@ -87,7 +112,7 @@ static bool canAccessWebCrypto(ScriptState* scriptState, CryptoResult* result)
     return true;
 }
 
-static ScriptPromise startCryptoOperation(ScriptState* scriptState, const Dictionary& rawAlgorithm, CryptoKey* key, WebCryptoOperation operationType, const ArrayPiece& signature, const ArrayPiece& dataBuffer)
+static ScriptPromise startCryptoOperation(ScriptState* scriptState, const Dictionary& rawAlgorithm, CryptoKey* key, WebCryptoOperation operationType, const DOMArrayPiece& signature, const DOMArrayPiece& dataBuffer)
 {
     RefPtr<CryptoResultImpl> result = CryptoResultImpl::create(scriptState);
     ScriptPromise promise = result->promise();
@@ -180,7 +205,7 @@ static bool copyJwkDictionaryToJson(const Dictionary& dict, CString& jsonUtf8, C
     if (DictionaryHelper::get(dict, "ext", ext))
         jsonObject->setBoolean("ext", ext);
 
-    const char* const propertyNames[] = { "d", "n", "e", "p", "q", "dp", "dq", "qi", "k" };
+    const char* const propertyNames[] = { "d", "n", "e", "p", "q", "dp", "dq", "qi", "k", "crv", "x", "y" };
     for (unsigned i = 0; i < WTF_ARRAY_LENGTH(propertyNames); ++i)
         copyStringProperty(propertyNames[i], dict, jsonObject.get());
 
@@ -195,17 +220,17 @@ SubtleCrypto::SubtleCrypto()
 
 ScriptPromise SubtleCrypto::encrypt(ScriptState* scriptState, const Dictionary& rawAlgorithm, CryptoKey* key, const DOMArrayPiece& data)
 {
-    return startCryptoOperation(scriptState, rawAlgorithm, key, WebCryptoOperationEncrypt, ArrayPiece(), data);
+    return startCryptoOperation(scriptState, rawAlgorithm, key, WebCryptoOperationEncrypt, DOMArrayPiece(), data);
 }
 
 ScriptPromise SubtleCrypto::decrypt(ScriptState* scriptState, const Dictionary& rawAlgorithm, CryptoKey* key, const DOMArrayPiece& data)
 {
-    return startCryptoOperation(scriptState, rawAlgorithm, key, WebCryptoOperationDecrypt, ArrayPiece(), data);
+    return startCryptoOperation(scriptState, rawAlgorithm, key, WebCryptoOperationDecrypt, DOMArrayPiece(), data);
 }
 
 ScriptPromise SubtleCrypto::sign(ScriptState* scriptState, const Dictionary& rawAlgorithm, CryptoKey* key, const DOMArrayPiece& data)
 {
-    return startCryptoOperation(scriptState, rawAlgorithm, key, WebCryptoOperationSign, ArrayPiece(), data);
+    return startCryptoOperation(scriptState, rawAlgorithm, key, WebCryptoOperationSign, DOMArrayPiece(), data);
 }
 
 ScriptPromise SubtleCrypto::verifySignature(ScriptState* scriptState, const Dictionary& rawAlgorithm, CryptoKey* key, const DOMArrayPiece& signature, const DOMArrayPiece& data)
@@ -215,7 +240,7 @@ ScriptPromise SubtleCrypto::verifySignature(ScriptState* scriptState, const Dict
 
 ScriptPromise SubtleCrypto::digest(ScriptState* scriptState, const Dictionary& rawAlgorithm, const DOMArrayPiece& data)
 {
-    return startCryptoOperation(scriptState, rawAlgorithm, 0, WebCryptoOperationDigest, ArrayPiece(), data);
+    return startCryptoOperation(scriptState, rawAlgorithm, nullptr, WebCryptoOperationDigest, DOMArrayPiece(), data);
 }
 
 ScriptPromise SubtleCrypto::generateKey(ScriptState* scriptState, const Dictionary& rawAlgorithm, bool extractable, const Vector<String>& rawKeyUsages)
@@ -238,7 +263,7 @@ ScriptPromise SubtleCrypto::generateKey(ScriptState* scriptState, const Dictiona
     return promise;
 }
 
-ScriptPromise SubtleCrypto::importKey(ScriptState* scriptState, const String& rawFormat, const DOMArrayPiece& keyData, const Dictionary& rawAlgorithm, bool extractable, const Vector<String>& rawKeyUsages)
+ScriptPromise SubtleCrypto::importKey(ScriptState* scriptState, const String& rawFormat, const ArrayBufferOrArrayBufferViewOrDictionary& keyData, const Dictionary& rawAlgorithm, bool extractable, const Vector<String>& rawKeyUsages)
 {
     RefPtr<CryptoResultImpl> result = CryptoResultImpl::create(scriptState);
     ScriptPromise promise = result->promise();
@@ -253,7 +278,12 @@ ScriptPromise SubtleCrypto::importKey(ScriptState* scriptState, const String& ra
     if (!CryptoKey::parseFormat(rawFormat, format, result.get()))
         return promise;
 
-    if (format == WebCryptoKeyFormatJwk) {
+    if (keyData.isDictionary()) {
+        if (format != WebCryptoKeyFormatJwk) {
+            result->completeWithError(WebCryptoErrorTypeData, "Key data must be a buffer for non-JWK formats");
+            return promise;
+        }
+    } else if (format == WebCryptoKeyFormatJwk) {
         result->completeWithError(WebCryptoErrorTypeData, "Key data must be an object for JWK import");
         return promise;
     }
@@ -266,40 +296,23 @@ ScriptPromise SubtleCrypto::importKey(ScriptState* scriptState, const String& ra
     if (!parseAlgorithm(rawAlgorithm, WebCryptoOperationImportKey, algorithm, result.get()))
         return promise;
 
-    Platform::current()->crypto()->importKey(format, keyData.bytes(), keyData.byteLength(), algorithm, extractable, keyUsages, result->result());
-    return promise;
-}
-
-ScriptPromise SubtleCrypto::importKey(ScriptState* scriptState, const String& rawFormat, const Dictionary& keyData, const Dictionary& rawAlgorithm, bool extractable, const Vector<String>& rawKeyUsages)
-{
-    RefPtr<CryptoResultImpl> result = CryptoResultImpl::create(scriptState);
-    ScriptPromise promise = result->promise();
-
-    if (!canAccessWebCrypto(scriptState, result.get()))
-        return promise;
-
-    WebCryptoKeyFormat format;
-    if (!CryptoKey::parseFormat(rawFormat, format, result.get()))
-        return promise;
-
-    WebCryptoKeyUsageMask keyUsages;
-    if (!CryptoKey::parseUsageMask(rawKeyUsages, keyUsages, result.get()))
-        return promise;
-
-    if (format != WebCryptoKeyFormatJwk) {
-        result->completeWithError(WebCryptoErrorTypeData, "Key data must be a buffer for non-JWK formats");
-        return promise;
-    }
-
-    WebCryptoAlgorithm algorithm;
-    if (!parseAlgorithm(rawAlgorithm, WebCryptoOperationImportKey, algorithm, result.get()))
-        return promise;
+    const unsigned char* ptr = nullptr;
+    unsigned len = 0;
 
     CString jsonUtf8;
-    if (!copyJwkDictionaryToJson(keyData, jsonUtf8, result.get()))
-        return promise;
-
-    Platform::current()->crypto()->importKey(format, reinterpret_cast<const unsigned char*>(jsonUtf8.data()), jsonUtf8.length(), algorithm, extractable, keyUsages, result->result());
+    if (keyData.isArrayBuffer()) {
+        ptr = static_cast<const unsigned char*>(keyData.getAsArrayBuffer()->data());
+        len = keyData.getAsArrayBuffer()->byteLength();
+    } else if (keyData.isArrayBufferView()) {
+        ptr = static_cast<const unsigned char*>(keyData.getAsArrayBufferView()->baseAddress());
+        len = keyData.getAsArrayBufferView()->byteLength();
+    } else if (keyData.isDictionary()) {
+        if (!copyJwkDictionaryToJson(keyData.getAsDictionary(), jsonUtf8, result.get()))
+            return promise;
+        ptr = reinterpret_cast<const unsigned char*>(jsonUtf8.data());
+        len = jsonUtf8.length();
+    }
+    Platform::current()->crypto()->importKey(format, ptr, len, algorithm, extractable, keyUsages, result->result());
     return promise;
 }
 
@@ -394,6 +407,28 @@ ScriptPromise SubtleCrypto::unwrapKey(ScriptState* scriptState, const String& ra
         return promise;
 
     Platform::current()->crypto()->unwrapKey(format, wrappedKey.bytes(), wrappedKey.byteLength(), unwrappingKey->key(), unwrapAlgorithm, unwrappedKeyAlgorithm, extractable, keyUsages, result->result());
+    return promise;
+}
+
+ScriptPromise SubtleCrypto::deriveBits(ScriptState* scriptState, const Dictionary& rawAlgorithm, CryptoKey* baseKey, unsigned lengthBits)
+{
+    RefPtr<CryptoResultImpl> result = CryptoResultImpl::create(scriptState);
+    ScriptPromise promise = result->promise();
+
+    if (!canAccessWebCrypto(scriptState, result.get()))
+        return promise;
+
+    if (!ensureNotNull(baseKey, "baseKey", result.get()))
+        return promise;
+
+    WebCryptoAlgorithm algorithm;
+    if (!parseAlgorithm(rawAlgorithm, WebCryptoOperationDeriveBits, algorithm, result.get()))
+        return promise;
+
+    if (!baseKey->canBeUsedForAlgorithm(algorithm, WebCryptoOperationDeriveBits, result.get()))
+        return promise;
+
+    Platform::current()->crypto()->deriveBits(algorithm, baseKey->key(), lengthBits, result->result());
     return promise;
 }
 

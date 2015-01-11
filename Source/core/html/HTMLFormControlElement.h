@@ -34,6 +34,7 @@ class HTMLFormElement;
 class ValidationMessageClient;
 
 enum CheckValidityEventBehavior { CheckValidityDispatchNoEvent, CheckValidityDispatchInvalidEvent };
+enum ValidityRecalcReason { ElementAddition, ElementRemoval, ElementModification };
 
 // HTMLFormControlElement is the default implementation of FormAssociatedElement,
 // and form-associated element implementations should use HTMLFormControlElement
@@ -90,7 +91,7 @@ public:
 
     void updateVisibleValidationMessage();
     void hideVisibleValidationMessage();
-    bool checkValidity(WillBeHeapVector<RefPtrWillBeMember<HTMLFormControlElement> >* unhandledInvalidControls = 0, CheckValidityEventBehavior = CheckValidityDispatchInvalidEvent);
+    bool checkValidity(WillBeHeapVector<RefPtrWillBeMember<HTMLFormControlElement>>* unhandledInvalidControls = 0, CheckValidityEventBehavior = CheckValidityDispatchInvalidEvent);
     bool reportValidity();
     // This must be called only after the caller check the element is focusable.
     void showValidationMessage();
@@ -168,7 +169,9 @@ private:
     ValidationMessageClient* validationMessageClient() const;
 
     // Requests validity recalc for the form owner, if one exists.
-    void formOwnerSetNeedsValidityCheck();
+    // In case of removal, isValid specifies element validity upon removal.
+    // In case of addition and modification, it specifies new validity.
+    void formOwnerSetNeedsValidityCheck(ValidityRecalcReason, bool isValid);
     // Requests validity recalc for all ancestor fieldsets, if exist.
     void fieldSetAncestorsSetNeedsValidityCheck(Node*);
 

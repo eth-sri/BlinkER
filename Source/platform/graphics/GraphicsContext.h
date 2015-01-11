@@ -61,10 +61,6 @@ class KURL;
 class PLATFORM_EXPORT GraphicsContext {
     WTF_MAKE_NONCOPYABLE(GraphicsContext); WTF_MAKE_FAST_ALLOCATED;
 public:
-    enum AntiAliasingMode {
-        NotAntiAliased,
-        AntiAliased
-    };
     enum AccessMode {
         ReadOnly,
         ReadWrite
@@ -155,11 +151,10 @@ public:
     // FIXME: the setter is only used once, at construction time; convert to a constructor param,
     // and possibly consolidate with other flags (paintDisabled, isPrinting, ...)
     void setShouldSmoothFonts(bool smoothFonts) { m_shouldSmoothFonts = smoothFonts; }
-    bool shouldSmoothFonts() const { return m_shouldSmoothFonts; }
 
     // Turn off LCD text for the paint if not supported on this context.
     void adjustTextRenderMode(SkPaint*) const;
-    bool couldUseLCDRenderedText() const;
+    bool couldUseLCDRenderedText() const { return m_isCertainlyOpaque && m_shouldSmoothFonts; }
 
     void setTextDrawingMode(TextDrawingModeFlags mode) { mutableState()->setTextDrawingMode(mode); }
     TextDrawingModeFlags textDrawingMode() const { return immutableState()->textDrawingMode(); }
@@ -178,7 +173,7 @@ public:
     CompositeOperator compositeOperation() const { return immutableState()->compositeOperator(); }
     WebBlendMode blendModeOperation() const { return immutableState()->blendMode(); }
 
-    // Speicy the device scale factor which may change the way document markers
+    // Specify the device scale factor which may change the way document markers
     // and fonts are rendered.
     void setDeviceScaleFactor(float factor) { m_deviceScaleFactor = factor; }
     float deviceScaleFactor() const { return m_deviceScaleFactor; }
@@ -188,7 +183,6 @@ public:
     // the canvas may have transparency (as is the case when rendering
     // to a canvas object).
     void setCertainlyOpaque(bool isOpaque) { m_isCertainlyOpaque = isOpaque; }
-    bool isCertainlyOpaque() const { return m_isCertainlyOpaque; }
 
     // Returns if the context is a printing context instead of a display
     // context. Bitmap shouldn't be resampled when printing to keep the best
@@ -286,11 +280,6 @@ public:
     void drawBitmapRect(const SkBitmap&, const SkRect*, const SkRect&, const SkPaint* = 0);
     void drawOval(const SkRect&, const SkPaint&);
     void drawPath(const SkPath&, const SkPaint&);
-    // After drawing directly to the context's canvas, use this function to notify the context so
-    // it can track the opaque region.
-    // FIXME: this is still needed only because ImageSkia::paintSkBitmap() may need to notify for a
-    //        smaller rect than the one drawn to, due to its clipping logic.
-    void didDrawRect(const SkRect&, const SkPaint&, const SkBitmap* = 0);
     void drawRect(const SkRect&, const SkPaint&);
     void drawPosText(const void* text, size_t byteLength, const SkPoint pos[], const SkRect& textRect, const SkPaint&);
     void drawPosTextH(const void* text, size_t byteLength, const SkScalar xpos[], SkScalar constY, const SkRect& textRect, const SkPaint&);
@@ -302,13 +291,10 @@ public:
     void clipOut(const IntRect& rect) { clipRect(rect, NotAntiAliased, SkRegion::kDifference_Op); }
     void clipOut(const Path&);
     void clipOutRoundedRect(const RoundedRect&);
-    void clipPath(const Path&, WindRule = RULE_EVENODD);
+    void clipPath(const Path&, WindRule = RULE_EVENODD, AntiAliasingMode = AntiAliased);
+    void clipPath(const SkPath&, AntiAliasingMode = NotAntiAliased, SkRegion::Op = SkRegion::kIntersect_Op);
     void clipPolygon(size_t numPoints, const FloatPoint*, bool antialias);
     void clipRect(const SkRect&, AntiAliasingMode = NotAntiAliased, SkRegion::Op = SkRegion::kIntersect_Op);
-    // This clip function is used only by <canvas> code. It allows
-    // implementations to handle clipping on the canvas differently since
-    // the discipline is different.
-    void canvasClip(const Path&, WindRule = RULE_EVENODD, AntiAliasingMode = NotAntiAliased);
 
     void drawText(const Font&, const TextRunPaintInfo&, const FloatPoint&);
     void drawEmphasisMarks(const Font&, const TextRunPaintInfo&, const AtomicString& mark, const FloatPoint&);
@@ -375,10 +361,6 @@ public:
     void scale(float x, float y);
     void rotate(float angleInRadians);
     void translate(float x, float y);
-
-    // This function applies the device scale factor to the context, making the context capable of
-    // acting as a base-level context for a HiDPI environment.
-    void applyDeviceScaleFactor(float deviceScaleFactor) { scale(deviceScaleFactor, deviceScaleFactor); }
     // ---------- End transformation methods -----------------
 
     // URL drawing
@@ -446,7 +428,6 @@ private:
     void drawFocusRingRect(const SkRect&, const Color&, int width);
 
     // SkCanvas wrappers.
-    void clipPath(const SkPath&, AntiAliasingMode = NotAntiAliased, SkRegion::Op = SkRegion::kIntersect_Op);
     void clipRRect(const SkRRect&, AntiAliasingMode = NotAntiAliased, SkRegion::Op = SkRegion::kIntersect_Op);
     void concat(const SkMatrix&);
     void drawRRect(const SkRRect&, const SkPaint&);

@@ -34,6 +34,7 @@
 #include "core/animation/Animation.h"
 #include "core/animation/AnimationTimeline.h"
 #include "core/dom/Document.h"
+#include "core/dom/ExceptionCode.h"
 #include "core/events/AnimationPlayerEvent.h"
 #include "core/frame/UseCounter.h"
 #include "platform/TraceEvent.h"
@@ -598,7 +599,8 @@ void AnimationPlayer::setOutdated()
 
 bool AnimationPlayer::canStartAnimationOnCompositor()
 {
-    if (m_playbackRate == 0 || (std::isinf(sourceEnd()) && m_playbackRate < 0))
+    // FIXME: Timeline playback rates should be compositable
+    if (m_playbackRate == 0 || (std::isinf(sourceEnd()) && m_playbackRate < 0) || (timeline() && timeline()->playbackRate() != 1))
         return false;
 
     return m_timeline && m_content && m_content->isAnimation() && playing();
@@ -701,9 +703,12 @@ double AnimationPlayer::timeToEffectChange()
         return std::numeric_limits<double>::infinity();
     if (!m_content)
         return -currentTimeInternal() / m_playbackRate;
-    if (m_playbackRate > 0)
-        return m_content->timeToForwardsEffectChange() / m_playbackRate;
-    return m_content->timeToReverseEffectChange() / -m_playbackRate;
+    double result = m_playbackRate > 0
+        ? m_content->timeToForwardsEffectChange() / m_playbackRate
+        : m_content->timeToReverseEffectChange() / -m_playbackRate;
+    return !hasActiveAnimationsOnCompositor() && m_content->phase() == AnimationNode::PhaseActive
+        ? 0
+        : result;
 }
 
 void AnimationPlayer::cancel()
@@ -719,6 +724,12 @@ void AnimationPlayer::cancel()
     m_playState = Idle;
     m_startTime = nullValue();
     m_currentTimePending = false;
+
+    // after cancelation, transitions must be downgraded or they'll fail
+    // to be considered when retriggering themselves. This can happen if
+    // the transition is captured through getAnimationPlayers then played.
+    if (m_content && m_content->isAnimation())
+        toAnimation(m_content.get())->downgradeToNormalAnimation();
 }
 
 void AnimationPlayer::uncancel()
@@ -766,6 +777,10 @@ AnimationPlayer::PlayStateUpdateScope::~PlayStateUpdateScope()
         if (isActive) {
             TRACE_EVENT_ASYNC_STEP_INTO0("blink", "Animation", &m_player, playStateString(newPlayState));
         }
+    }
+
+    if (oldPlayState != newPlayState && (oldPlayState == Idle || newPlayState == Idle)) {
+        m_player.setOutdated();
     }
 
     m_player.m_playState = newPlayState;

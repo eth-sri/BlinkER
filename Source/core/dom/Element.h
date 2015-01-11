@@ -48,6 +48,7 @@ class ClientRectList;
 class CustomElementDefinition;
 class DOMStringMap;
 class DOMTokenList;
+class Dictionary;
 class Document;
 class ElementRareData;
 class ElementShadow;
@@ -411,6 +412,7 @@ public:
     virtual bool matchesReadWritePseudoClass() const { return false; }
     virtual bool matchesValidityPseudoClasses() const { return false; }
     bool matches(const String& selectors, ExceptionState&);
+    Element* closest(const String& selectors, ExceptionState&);
     virtual bool shouldAppearIndeterminate() const { return false; }
 
     DOMTokenList& classList();
@@ -477,8 +479,6 @@ public:
     InputMethodContext& inputMethodContext();
     bool hasInputMethodContext() const;
 
-    void setPrefix(const AtomicString&, ExceptionState&);
-
     void synchronizeAttribute(const AtomicString& localName) const;
 
     MutableStylePropertySet& ensureMutableInlineStyle();
@@ -538,9 +538,9 @@ private:
     void clearElementFlag(ElementFlags);
     bool hasElementFlagInternal(ElementFlags) const;
 
-    bool isElementNode() const WTF_DELETED_FUNCTION; // This will catch anyone doing an unnecessary check.
-    bool isDocumentFragment() const WTF_DELETED_FUNCTION; // This will catch anyone doing an unnecessary check.
-    bool isDocumentNode() const WTF_DELETED_FUNCTION; // This will catch anyone doing an unnecessary check.
+    bool isElementNode() const = delete; // This will catch anyone doing an unnecessary check.
+    bool isDocumentFragment() const = delete; // This will catch anyone doing an unnecessary check.
+    bool isDocumentNode() const = delete; // This will catch anyone doing an unnecessary check.
 
     void styleAttributeChanged(const AtomicString& newStyleString, AttributeModificationReason);
 
@@ -555,6 +555,7 @@ private:
     inline void checkForEmptyStyleChange();
 
     void updatePseudoElement(PseudoId, StyleRecalcChange);
+    bool updateFirstLetter(Element*);
 
     inline void createPseudoElementIfNeeded(PseudoId);
 
@@ -826,9 +827,19 @@ inline bool isShadowHost(const Node* node)
     return node && node->isElementNode() && toElement(node)->shadow();
 }
 
+inline bool isShadowHost(const Node& node)
+{
+    return node.isElementNode() && toElement(node).shadow();
+}
+
 inline bool isShadowHost(const Element* element)
 {
     return element && element->shadow();
+}
+
+inline bool isShadowHost(const Element& element)
+{
+    return element.shadow();
 }
 
 inline bool isAtShadowBoundary(const Element* element)

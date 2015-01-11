@@ -31,7 +31,7 @@
 
 namespace blink {
 
-const WrapperTypeInfo V8ArrayBufferView::wrapperTypeInfo = { gin::kEmbedderBlink, 0, V8ArrayBufferView::refObject, V8ArrayBufferView::derefObject, V8ArrayBufferView::trace, 0, 0, 0, V8ArrayBufferView::installConditionallyEnabledMethods, V8ArrayBufferView::installConditionallyEnabledProperties, 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::Independent, WrapperTypeInfo::RefCountedObject };
+const WrapperTypeInfo V8ArrayBufferView::wrapperTypeInfo = { gin::kEmbedderBlink, 0, V8ArrayBufferView::refObject, V8ArrayBufferView::derefObject, V8ArrayBufferView::trace, 0, 0, V8ArrayBufferView::installConditionallyEnabledMethods, V8ArrayBufferView::installConditionallyEnabledProperties, 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent, WrapperTypeInfo::RefCountedObject };
 
 // This static member must be declared by DEFINE_WRAPPERTYPEINFO in TestArrayBufferView.h.
 // For details, see the comment of DEFINE_WRAPPERTYPEINFO in
@@ -46,9 +46,9 @@ bool V8ArrayBufferView::hasInstance(v8::Handle<v8::Value> v8Value, v8::Isolate* 
 TestArrayBufferView* V8ArrayBufferView::toImpl(v8::Handle<v8::Object> object)
 {
     ASSERT(object->IsArrayBufferView());
-    ScriptWrappableBase* scriptWrappableBase = blink::toScriptWrappableBase(object);
-    if (scriptWrappableBase)
-        return scriptWrappableBase->toImpl<TestArrayBufferView>();
+    ScriptWrappable* scriptWrappable = toScriptWrappable(object);
+    if (scriptWrappable)
+        return scriptWrappable->toImpl<TestArrayBufferView>();
 
     if (object->IsInt8Array())
         return V8Int8Array::toImpl(object);
@@ -80,14 +80,14 @@ TestArrayBufferView* V8ArrayBufferView::toImplWithTypeCheck(v8::Isolate* isolate
     return hasInstance(value, isolate) ? toImpl(v8::Handle<v8::Object>::Cast(value)) : 0;
 }
 
-void V8ArrayBufferView::refObject(ScriptWrappableBase* scriptWrappableBase)
+void V8ArrayBufferView::refObject(ScriptWrappable* scriptWrappable)
 {
-    scriptWrappableBase->toImpl<TestArrayBufferView>()->ref();
+    scriptWrappable->toImpl<TestArrayBufferView>()->ref();
 }
 
-void V8ArrayBufferView::derefObject(ScriptWrappableBase* scriptWrappableBase)
+void V8ArrayBufferView::derefObject(ScriptWrappable* scriptWrappable)
 {
-    scriptWrappableBase->toImpl<TestArrayBufferView>()->deref();
+    scriptWrappable->toImpl<TestArrayBufferView>()->deref();
 }
 
 template<>

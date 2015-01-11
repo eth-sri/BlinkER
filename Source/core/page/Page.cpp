@@ -123,7 +123,6 @@ Page::Page(PageClients& pageClients)
     , m_pointerLockController(PointerLockController::create(this))
     , m_undoStack(UndoStack::create())
     , m_mainFrame(nullptr)
-    , m_backForwardClient(pageClients.backForwardClient)
     , m_editorClient(pageClients.editorClient)
     , m_spellCheckerClient(pageClients.spellCheckerClient)
     , m_storageClient(pageClients.storageClient)
@@ -570,7 +569,7 @@ void Page::acceptLanguagesChanged()
     }
 
     for (unsigned i = 0; i < frames.size(); ++i)
-        frames[i]->domWindow()->acceptLanguagesChanged();
+        frames[i]->localDOMWindow()->acceptLanguagesChanged();
 }
 
 PageLifecycleNotifier& Page::lifecycleNotifier()
@@ -642,7 +641,6 @@ Page::PageClients::PageClients()
     , editorClient(nullptr)
     , dragClient(nullptr)
     , inspectorClient(nullptr)
-    , backForwardClient(nullptr)
     , spellCheckerClient(nullptr)
     , storageClient(nullptr)
 {

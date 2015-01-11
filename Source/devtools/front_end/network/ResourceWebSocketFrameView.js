@@ -18,15 +18,18 @@
 
 /**
  * @constructor
- * @extends {WebInspector.SplitView}
+ * @extends {WebInspector.VBox}
  * @param {!WebInspector.NetworkRequest} request
  */
 WebInspector.ResourceWebSocketFrameView = function(request)
 {
-    WebInspector.SplitView.call(this, false, true, "resourceWebSocketFrameViewSplitViewState");
+    WebInspector.VBox.call(this);
     this.registerRequiredCSS("network/webSocketFrameView.css");
     this.element.classList.add("websocket-frame-view");
     this._request = request;
+
+    this._splitView = new WebInspector.SplitView(false, true, "resourceWebSocketFrameSplitViewState");
+    this._splitView.show(this.element);
 
     var columns = [
         {id: "data", title: WebInspector.UIString("Data"), sortable: false, weight: 88},
@@ -44,10 +47,10 @@ WebInspector.ResourceWebSocketFrameView = function(request)
 
     this._dataGrid.setName("ResourceWebSocketFrameView");
     this._dataGrid.addEventListener(WebInspector.DataGrid.Events.SelectedNode, this._onFrameSelected, this);
-    this._dataGrid.show(this.mainElement());
+    this._splitView.setMainView(this._dataGrid);
 
     this._messageView = new WebInspector.EmptyView("Select frame to browse its content.");
-    this._messageView.show(this.sidebarElement());
+    this._splitView.setSidebarView(this._messageView);
 }
 
 /** @enum {number} */
@@ -118,7 +121,7 @@ WebInspector.ResourceWebSocketFrameView.prototype = {
         if (this._dataView)
             this._dataView.detach();
         this._dataView = new WebInspector.ResourceSourceFrame(selectedNode.contentProvider());
-        this._dataView.show(this.sidebarElement());
+        this._splitView.setSidebarView(this._dataView);
     },
 
     refresh: function()
@@ -151,7 +154,7 @@ WebInspector.ResourceWebSocketFrameView.prototype = {
         this._dataGrid.sortNodes(this._timeComparator, !this._dataGrid.isSortOrderAscending());
     },
 
-    __proto__: WebInspector.SplitView.prototype
+    __proto__: WebInspector.VBox.prototype
 }
 
 /**
@@ -163,14 +166,18 @@ WebInspector.ResourceWebSocketFrameNode = function(frame)
 {
     this._frame = frame;
     this._dataText = frame.text;
-    this._length = frame.text.length;
-    this._timeText = (new Date(frame.time * 1000)).toLocaleTimeString();
+    var length = frame.text.length;
+    var time = new Date(frame.time * 1000);
+    var timeText = ("0" + time.getHours()).substr(-2) + ":" + ("0" + time.getMinutes()).substr(-2)+ ":" + ("0" + time.getSeconds()).substr(-2) + "." + ("00" + time.getMilliseconds()).substr(-3);
+    var timeNode = createElement("div");
+    timeNode.createTextChild(timeText);
+    timeNode.title = time.toLocaleString();
 
     this._isTextFrame = frame.opCode === WebInspector.ResourceWebSocketFrameView.OpCodes.TextFrame;
     if (!this._isTextFrame)
         this._dataText = WebInspector.ResourceWebSocketFrameView.opCodeDescription(frame.opCode, frame.mask);
 
-    WebInspector.SortableDataGridNode.call(this, {data: this._dataText, length: this._length, time: this._timeText});
+    WebInspector.SortableDataGridNode.call(this, {data: this._dataText, length: length, time: timeNode});
 }
 
 WebInspector.ResourceWebSocketFrameNode.prototype = {

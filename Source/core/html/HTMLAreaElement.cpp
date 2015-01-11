@@ -78,7 +78,7 @@ bool HTMLAreaElement::mapMouseEvent(LayoutPoint location, const LayoutSize& size
         m_lastSize = size;
     }
 
-    if (!m_region->contains(location))
+    if (!m_region->contains(FloatPoint(location)))
         return false;
 
     result.setInnerNode(this);
@@ -176,7 +176,7 @@ HTMLImageElement* HTMLAreaElement::imageElement() const
 {
     if (HTMLMapElement* mapElement = Traversal<HTMLMapElement>::firstAncestor(*this))
         return mapElement->imageElement();
-    return 0;
+    return nullptr;
 }
 
 bool HTMLAreaElement::isKeyboardFocusable() const

@@ -2,6 +2,7 @@ function initialize_TracingTest()
 {
 
 InspectorTest.preloadPanel("timeline");
+WebInspector.TempFile = InspectorTest.TempFileMock;
 
 InspectorTest.tracingManager = function()
 {
@@ -22,17 +23,17 @@ InspectorTest.tracingModel = function()
 InspectorTest.tracingTimelineModel = function()
 {
     if (!InspectorTest._tracingTimelineModel)
-        InspectorTest._tracingTimelineModel = new WebInspector.TracingTimelineModel(InspectorTest.tracingManager(), InspectorTest.tracingModel(), new WebInspector.TimelineRecordHiddenTypeFilter([]));
+        InspectorTest._tracingTimelineModel = new WebInspector.TimelineModel(InspectorTest.tracingManager(), InspectorTest.tracingModel(), new WebInspector.TimelineRecordHiddenTypeFilter([]));
     return InspectorTest._tracingTimelineModel;
 }
 
-InspectorTest.invokeWithTracing = function(functionName, callback, additionalCategories)
+InspectorTest.invokeWithTracing = function(functionName, callback, additionalCategories, enableJSSampling)
 {
     InspectorTest.tracingTimelineModel().addEventListener(WebInspector.TimelineModel.Events.RecordingStarted, onTracingStarted, this);
     var categories = "-*,disabled-by-default-devtools.timeline*";
     if (additionalCategories)
         categories += "," + additionalCategories;
-    InspectorTest.tracingTimelineModel()._startRecordingWithCategories(categories);
+    InspectorTest.tracingTimelineModel()._startRecordingWithCategories(categories, enableJSSampling);
 
     function onTracingStarted(event)
     {

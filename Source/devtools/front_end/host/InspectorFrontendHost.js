@@ -43,6 +43,7 @@ function InspectorFrontendHostAPI()
 InspectorFrontendHostAPI.ContextMenuDescriptor;
 
 InspectorFrontendHostAPI.Events = {
+    AddExtensions: "addExtensions",
     AppendedToURL: "appendedToURL",
     CanceledSaveURL: "canceledSaveURL",
     ContextMenuCleared: "contextMenuCleared",
@@ -62,12 +63,14 @@ InspectorFrontendHostAPI.Events = {
     RevealSourceLine: "revealSourceLine",
     SavedURL: "savedURL",
     SearchCompleted: "searchCompleted",
+    SetInspectedTabId: "setInspectedTabId",
     SetToolbarColors: "setToolbarColors",
     SetUseSoftMenu: "setUseSoftMenu",
     ShowConsole: "showConsole"
 }
 
 InspectorFrontendHostAPI.EventDescriptors = [
+    [InspectorFrontendHostAPI.Events.AddExtensions, ["extensions"]],
     [InspectorFrontendHostAPI.Events.AppendedToURL, ["url"]],
     [InspectorFrontendHostAPI.Events.CanceledSaveURL, ["url"]],
     [InspectorFrontendHostAPI.Events.ContextMenuCleared, []],
@@ -87,6 +90,7 @@ InspectorFrontendHostAPI.EventDescriptors = [
     [InspectorFrontendHostAPI.Events.RevealSourceLine, ["url", "lineNumber", "columnNumber"]],
     [InspectorFrontendHostAPI.Events.SavedURL, ["url"]],
     [InspectorFrontendHostAPI.Events.SearchCompleted, ["requestId", "fileSystemPath", "files"]],
+    [InspectorFrontendHostAPI.Events.SetInspectedTabId, ["tabId"]],
     [InspectorFrontendHostAPI.Events.SetToolbarColors, ["backgroundColor", "color"]],
     [InspectorFrontendHostAPI.Events.SetUseSoftMenu, ["useSoftMenu"]],
     [InspectorFrontendHostAPI.Events.ShowConsole, []]
@@ -126,25 +130,11 @@ InspectorFrontendHostAPI.prototype = {
     setInspectedPageBounds: function(bounds) { },
 
     /**
-     * Requests inspected page to be placed atop of the inspector frontend
-     * with passed insets from the frontend sides, respecting minimum size passed.
-     * @param {{top: number, left: number, right: number, bottom: number}} insets
-     * @param {{width: number, height: number}} minSize
-     */
-    setContentsResizingStrategy: function(insets, minSize) { },
-
-    /**
      * @param {string} shortcuts
      */
     setWhitelistedShortcuts: function(shortcuts) { },
 
     inspectElementCompleted: function() { },
-
-    /**
-     * @param {number} x
-     * @param {number} y
-     */
-    moveWindowBy: function(x, y) { },
 
     /**
      * @param {string} url
@@ -212,11 +202,6 @@ InspectorFrontendHostAPI.prototype = {
     platform: function() { },
 
     /**
-     * @return {string}
-     */
-    port: function() { },
-
-    /**
      * @param {number} actionCode
      */
     recordActionTaken: function(actionCode) { },
@@ -230,11 +215,6 @@ InspectorFrontendHostAPI.prototype = {
      * @param {string} message
      */
     sendMessageToBackend: function(message) { },
-
-    /**
-     * @param {string} message
-     */
-    sendMessageToEmbedder: function(message) { },
 
     /**
      * @param {boolean} enabled
@@ -257,11 +237,6 @@ InspectorFrontendHostAPI.prototype = {
      * @param {function()} callback
      */
     setIsDocked: function(isDocked, callback) { },
-
-    /**
-     * @param {number} zoom
-     */
-    setZoomFactor: function(zoom) { },
 
     /**
      * @return {number}
@@ -306,7 +281,8 @@ WebInspector.InspectorFrontendHostStub = function()
     function stopEventPropagation(event)
     {
         // Let browser handle Ctrl+/Ctrl- shortcuts in hosted mode.
-        if (event.ctrlKey && (event.keyCode === 187 || event.keyCode === 189))
+        var zoomModifier = WebInspector.isMac() ? event.metaKey : event.ctrlKey;
+        if (zoomModifier && (event.keyCode === 187 || event.keyCode === 189))
             event.stopPropagation();
     }
     document.addEventListener("keydown", stopEventPropagation, true);
@@ -343,14 +319,6 @@ WebInspector.InspectorFrontendHostStub.prototype = {
         return "linux";
     },
 
-    /**
-     * @return {string}
-     */
-    port: function()
-    {
-        return "unknown";
-    },
-
     loadCompleted: function()
     {
     },
@@ -381,25 +349,7 @@ WebInspector.InspectorFrontendHostStub.prototype = {
     {
     },
 
-    /**
-     * Requests inspected page to be placed atop of the inspector frontend
-     * with passed insets from the frontend sides, respecting minimum size passed.
-     * @param {{top: number, left: number, right: number, bottom: number}} insets
-     * @param {{width: number, height: number}} minSize
-     */
-    setContentsResizingStrategy: function(insets, minSize)
-    {
-    },
-
     inspectElementCompleted: function()
-    {
-    },
-
-    /**
-     * @param {number} x
-     * @param {number} y
-     */
-    moveWindowBy: function(x, y)
     {
     },
 
@@ -460,13 +410,6 @@ WebInspector.InspectorFrontendHostStub.prototype = {
      * @param {string} message
      */
     sendMessageToBackend: function(message)
-    {
-    },
-
-    /**
-     * @param {string} message
-     */
-    sendMessageToEmbedder: function(message)
     {
     },
 
@@ -537,13 +480,6 @@ WebInspector.InspectorFrontendHostStub.prototype = {
      * @param {string} query
      */
     searchInPath: function(requestId, fileSystemPath, query)
-    {
-    },
-
-    /**
-     * @param {number} zoom
-     */
-    setZoomFactor: function(zoom)
     {
     },
 
@@ -626,85 +562,84 @@ WebInspector.InspectorFrontendHostStub.prototype = {
  */
 var InspectorFrontendHost = window.InspectorFrontendHost || null;
 
-(function() {
-    if (!InspectorFrontendHost) {
-        // Instantiate stub for web-hosted mode if necessary.
-        InspectorFrontendHost = new WebInspector.InspectorFrontendHostStub();
-    } else {
-        // Otherwise add stubs for missing methods that are declared in the interface.
-        var proto = WebInspector.InspectorFrontendHostStub.prototype;
-        for (var name in proto) {
-            var value = proto[name];
-            if (typeof value !== "function" || InspectorFrontendHost[name])
-                continue;
+(function(){
 
-            InspectorFrontendHost[name] = stub.bind(null, name);
-        }
-    }
-
-    /**
-     * @param {string} name
-     */
-    function stub(name)
+    function initializeInspectorFrontendHost()
     {
-        console.error("Incompatible embedder: method InspectorFrontendHost." + name + " is missing. Using stub instead.");
-        var args = Array.prototype.slice.call(arguments, 1);
-        return proto[name].apply(InspectorFrontendHost, args);
-    }
+        if (!InspectorFrontendHost) {
+            // Instantiate stub for web-hosted mode if necessary.
+            InspectorFrontendHost = new WebInspector.InspectorFrontendHostStub();
+        } else {
+            // Otherwise add stubs for missing methods that are declared in the interface.
+            var proto = WebInspector.InspectorFrontendHostStub.prototype;
+            for (var name in proto) {
+                var value = proto[name];
+                if (typeof value !== "function" || InspectorFrontendHost[name])
+                    continue;
 
-    // Attach the events object.
-    InspectorFrontendHost.events = new WebInspector.Object();
-})();
-
-/**
- * @constructor
- */
-function InspectorFrontendAPIImpl()
-{
-    this._debugFrontend = !!Runtime.queryParam("debugFrontend");
-
-    var descriptors = InspectorFrontendHostAPI.EventDescriptors;
-    for (var i = 0; i < descriptors.length; ++i)
-        this[descriptors[i][0]] = this._dispatch.bind(this, descriptors[i][0], descriptors[i][1], descriptors[i][2]);
-}
-
-InspectorFrontendAPIImpl.prototype = {
-    /**
-     * @param {string} name
-     * @param {!Array.<string>} signature
-     * @param {boolean} runOnceLoaded
-     */
-    _dispatch: function(name, signature, runOnceLoaded)
-    {
-        var params = Array.prototype.slice.call(arguments, 3);
-
-        if (this._debugFrontend)
-            setImmediate(innerDispatch);
-        else
-            innerDispatch();
-
-        function innerDispatch()
-        {
-            // Single argument methods get dispatched with the param.
-            if (signature.length < 2) {
-                InspectorFrontendHost.events.dispatchEventToListeners(name, params[0]);
-                return;
+                InspectorFrontendHost[name] = stub.bind(null, name);
             }
-            var data = {};
-            for (var i = 0; i < signature.length; ++i)
-                data[signature[i]] = params[i];
-            InspectorFrontendHost.events.dispatchEventToListeners(name, data);
         }
-    },
+
+        /**
+         * @param {string} name
+         */
+        function stub(name)
+        {
+            console.error("Incompatible embedder: method InspectorFrontendHost." + name + " is missing. Using stub instead.");
+            var args = Array.prototype.slice.call(arguments, 1);
+            return proto[name].apply(InspectorFrontendHost, args);
+        }
+
+        // Attach the events object.
+        InspectorFrontendHost.events = new WebInspector.Object();
+    }
 
     /**
-     * @param {number} id
-     * @param {?string} error
+     * @constructor
      */
-    embedderMessageAck: function(id, error)
+    function InspectorFrontendAPIImpl()
     {
-        InspectorFrontendHost["embedderMessageAck"](id, error);
-    }
-}
+        this._debugFrontend = !!Runtime.queryParam("debugFrontend");
 
-var InspectorFrontendAPI = new InspectorFrontendAPIImpl();
+        var descriptors = InspectorFrontendHostAPI.EventDescriptors;
+        for (var i = 0; i < descriptors.length; ++i)
+            this[descriptors[i][0]] = this._dispatch.bind(this, descriptors[i][0], descriptors[i][1], descriptors[i][2]);
+    }
+
+    InspectorFrontendAPIImpl.prototype = {
+        /**
+         * @param {string} name
+         * @param {!Array.<string>} signature
+         * @param {boolean} runOnceLoaded
+         */
+        _dispatch: function(name, signature, runOnceLoaded)
+        {
+            var params = Array.prototype.slice.call(arguments, 3);
+
+            if (this._debugFrontend)
+                setImmediate(innerDispatch);
+            else
+                innerDispatch();
+
+            function innerDispatch()
+            {
+                // Single argument methods get dispatched with the param.
+                if (signature.length < 2) {
+                    InspectorFrontendHost.events.dispatchEventToListeners(name, params[0]);
+                    return;
+                }
+                var data = {};
+                for (var i = 0; i < signature.length; ++i)
+                    data[signature[i]] = params[i];
+                InspectorFrontendHost.events.dispatchEventToListeners(name, data);
+            }
+        }
+    }
+
+    if (!window.DevToolsHost) {
+        initializeInspectorFrontendHost();
+        window.InspectorFrontendAPI = new InspectorFrontendAPIImpl();
+    }
+
+})();

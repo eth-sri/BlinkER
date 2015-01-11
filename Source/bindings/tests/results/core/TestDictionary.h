@@ -9,17 +9,19 @@
 
 #include "bindings/core/v8/Nullable.h"
 #include "bindings/core/v8/ScriptValue.h"
+#include "bindings/core/v8/UnionTypesCore.h"
 #include "bindings/tests/idls/core/TestInterfaceGarbageCollected.h"
 #include "bindings/tests/idls/core/TestInterfaceImplementation.h"
 #include "bindings/tests/idls/core/TestInterfaceWillBeGarbageCollected.h"
 #include "core/dom/Element.h"
+#include "core/testing/InternalDictionary.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
 
-class TestDictionary final {
+class TestDictionary {
     ALLOW_ONLY_INLINE_ALLOCATION();
 public:
     TestDictionary();
@@ -53,12 +55,12 @@ public:
     void setTestInterfaceOrNullMember(PassRefPtr<TestInterfaceImplementation> value) { m_testInterfaceOrNullMember = value; }
 
     bool hasTestInterfaceGarbageCollectedMember() const { return m_testInterfaceGarbageCollectedMember; }
-    RawPtr<TestInterfaceGarbageCollected> testInterfaceGarbageCollectedMember() const { return m_testInterfaceGarbageCollectedMember; }
-    void setTestInterfaceGarbageCollectedMember(RawPtr<TestInterfaceGarbageCollected> value) { m_testInterfaceGarbageCollectedMember = value; }
+    TestInterfaceGarbageCollected* testInterfaceGarbageCollectedMember() const { return m_testInterfaceGarbageCollectedMember; }
+    void setTestInterfaceGarbageCollectedMember(TestInterfaceGarbageCollected* value) { m_testInterfaceGarbageCollectedMember = value; }
 
     bool hasTestInterfaceGarbageCollectedOrNullMember() const { return m_testInterfaceGarbageCollectedOrNullMember; }
-    RawPtr<TestInterfaceGarbageCollected> testInterfaceGarbageCollectedOrNullMember() const { return m_testInterfaceGarbageCollectedOrNullMember; }
-    void setTestInterfaceGarbageCollectedOrNullMember(RawPtr<TestInterfaceGarbageCollected> value) { m_testInterfaceGarbageCollectedOrNullMember = value; }
+    TestInterfaceGarbageCollected* testInterfaceGarbageCollectedOrNullMember() const { return m_testInterfaceGarbageCollectedOrNullMember; }
+    void setTestInterfaceGarbageCollectedOrNullMember(TestInterfaceGarbageCollected* value) { m_testInterfaceGarbageCollectedOrNullMember = value; }
 
     bool hasTestInterfaceWillBeGarbageCollectedMember() const { return m_testInterfaceWillBeGarbageCollectedMember; }
     PassRefPtrWillBeRawPtr<TestInterfaceWillBeGarbageCollected> testInterfaceWillBeGarbageCollectedMember() const { return m_testInterfaceWillBeGarbageCollectedMember; }
@@ -96,7 +98,15 @@ public:
     bool createMember() const { return m_createMember.get(); }
     void setCreateMember(bool value) { m_createMember = value; }
 
-    void trace(Visitor*);
+    bool hasDoubleOrStringMember() const { return !m_doubleOrStringMember.isNull(); }
+    const DoubleOrString& doubleOrStringMember() const { return m_doubleOrStringMember; }
+    void setDoubleOrStringMember(const DoubleOrString& value) { m_doubleOrStringMember = value; }
+
+    bool hasInternalDictionarySequenceMember() const { return !m_internalDictionarySequenceMember.isNull(); }
+    const Vector<InternalDictionary>& internalDictionarySequenceMember() const { return m_internalDictionarySequenceMember.get(); }
+    void setInternalDictionarySequenceMember(const Vector<InternalDictionary>& value) { m_internalDictionarySequenceMember = value; }
+
+    virtual void trace(Visitor*);
 
 private:
     Nullable<bool> m_booleanMember;
@@ -117,6 +127,8 @@ private:
     ScriptValue m_objectMember;
     ScriptValue m_objectOrNullMember;
     Nullable<bool> m_createMember;
+    DoubleOrString m_doubleOrStringMember;
+    Nullable<Vector<InternalDictionary> > m_internalDictionarySequenceMember;
 
     friend class V8TestDictionary;
 };

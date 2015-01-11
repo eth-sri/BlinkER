@@ -145,10 +145,10 @@ interface InspectorInstrumentation {
     [DOMDebugger, Debugger, Timeline, Inline=FastReturn]
     void didRemoveTimer([Keep] ExecutionContext*, int timerId);
 
-    [Timeline, Inline=FastReturn]
+    [Debugger, Timeline, Inline=FastReturn]
     InspectorInstrumentationCookie willCallFunction([Keep] ExecutionContext*, int scriptId, const String& scriptName, int scriptLine);
 
-    [Timeline, Inline=FastReturn]
+    [Debugger, Timeline, Inline=FastReturn]
     void didCallFunction(const InspectorInstrumentationCookie&);
 
     [Timeline, Inline=FastReturn]
@@ -205,10 +205,10 @@ interface InspectorInstrumentation {
     [Debugger, Inline=FastReturn]
     void didPerformExecutionContextTask(ExecutionContext*);
 
-    [Timeline, Inline=FastReturn]
+    [Debugger, Timeline, Inline=FastReturn]
     InspectorInstrumentationCookie willEvaluateScript([Keep] LocalFrame*, const String& url, int lineNumber);
 
-    [Timeline, Inline=FastReturn]
+    [Debugger, Timeline, Inline=FastReturn]
     void didEvaluateScript(const InspectorInstrumentationCookie&);
 
     [PageRuntime, Inline=FastReturn]
@@ -452,9 +452,6 @@ interface InspectorInstrumentation {
     [DOM, Inline=FastReturn]
     void pseudoElementDestroyed([Keep] PseudoElement*);
 
-    [DOMDebugger, Inline=FastReturn]
-    void willExecuteCustomElementCallback([Keep] Element*);
-
     [Debugger, Inline=FastReturn]
     int traceAsyncOperationStarting([Keep] ExecutionContext*, const String& operationName);
 
@@ -472,6 +469,9 @@ interface InspectorInstrumentation {
 
     [Debugger, Inline=FastReturn]
     void traceAsyncCallbackCompleted(const InspectorInstrumentationCookie&);
+
+    [Animation, Inline=FastReturn]
+    void didCreateAnimationPlayer(Document*, AnimationPlayer& player);
 }
 
 interface InspectorConsoleInstrumentation {

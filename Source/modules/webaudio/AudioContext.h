@@ -68,6 +68,7 @@ class OscillatorNode;
 class PannerNode;
 class PeriodicWave;
 class ScriptProcessorNode;
+class StereoPannerNode;
 class WaveShaperNode;
 
 // AudioContext is the cornerstone of the web audio API and all AudioNodes are created from it.
@@ -122,6 +123,7 @@ public:
     ScriptProcessorNode* createScriptProcessor(size_t bufferSize, ExceptionState&);
     ScriptProcessorNode* createScriptProcessor(size_t bufferSize, size_t numberOfInputChannels, ExceptionState&);
     ScriptProcessorNode* createScriptProcessor(size_t bufferSize, size_t numberOfInputChannels, size_t numberOfOutputChannels, ExceptionState&);
+    StereoPannerNode* createStereoPanner();
     ChannelSplitterNode* createChannelSplitter(ExceptionState&);
     ChannelSplitterNode* createChannelSplitter(size_t numberOfOutputs, ExceptionState&);
     ChannelMergerNode* createChannelMerger(ExceptionState&);
@@ -273,7 +275,7 @@ private:
     // Oilpan: This Vector holds connection references. We must call
     // AudioNode::makeConnection when we add an AudioNode to this, and must call
     // AudioNode::breakConnection() when we remove an AudioNode from this.
-    HeapVector<Member<AudioNode> > m_referencedNodes;
+    Member<HeapVector<Member<AudioNode>>> m_referencedNodes;
 
     class AudioNodeDisposer {
     public:

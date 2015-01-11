@@ -45,7 +45,6 @@ namespace WTF { template <typename T> class PassRefPtr; }
 namespace blink {
 
 class CryptoResult;
-class WebArrayBuffer;
 class WebString;
 
 enum WebCryptoErrorType {
@@ -85,8 +84,6 @@ public:
     //   "iv must be 16 bytes long".
     BLINK_PLATFORM_EXPORT void completeWithError(WebCryptoErrorType, const WebString&);
 
-    // Note that WebArrayBuffer is NOT safe to create from another thread.
-    BLINK_PLATFORM_EXPORT void completeWithBuffer(const WebArrayBuffer&);
     // Makes a copy of the input data given as a pointer and byte length.
     BLINK_PLATFORM_EXPORT void completeWithBuffer(const void*, unsigned);
     BLINK_PLATFORM_EXPORT void completeWithJson(const char* utf8Data, unsigned length);
@@ -169,10 +166,6 @@ public:
     //     safely copied between threads and accessed. Copying is cheap because
     //     they are internally reference counted.
     //
-    //   * WebArrayBuffer is NOT threadsafe. It should only be created from the
-    //     target Blink thread. This means threaded implementations may have to
-    //     make a copy of the output buffer.
-    //
     // -----------------------
     // Inputs
     // -----------------------
@@ -215,6 +208,7 @@ public:
     virtual void exportKey(WebCryptoKeyFormat, const WebCryptoKey&, WebCryptoResult result) { result.completeWithError(WebCryptoErrorTypeNotSupported, ""); }
     virtual void wrapKey(WebCryptoKeyFormat, const WebCryptoKey& key, const WebCryptoKey& wrappingKey, const WebCryptoAlgorithm&, WebCryptoResult result) { result.completeWithError(WebCryptoErrorTypeNotSupported, ""); }
     virtual void unwrapKey(WebCryptoKeyFormat, const unsigned char* wrappedKey, unsigned wrappedKeySize, const WebCryptoKey&, const WebCryptoAlgorithm& unwrapAlgorithm, const WebCryptoAlgorithm& unwrappedKeyAlgorithm, bool extractable, WebCryptoKeyUsageMask, WebCryptoResult result) { result.completeWithError(WebCryptoErrorTypeNotSupported, ""); }
+    virtual void deriveBits(const WebCryptoAlgorithm&, const WebCryptoKey&, unsigned length, WebCryptoResult result) { result.completeWithError(WebCryptoErrorTypeNotSupported, ""); }
 
     // This is the exception to the "Completing the request" guarantees
     // outlined above. This is useful for Blink internal crypto and is not part
@@ -279,4 +273,4 @@ protected:
 
 } // namespace blink
 
-#endif
+#endif // WebCrypto_h

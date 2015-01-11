@@ -70,9 +70,10 @@ WebInspector.OverridesView = function()
 
     if (WebInspector.overridesSupport.responsiveDesignAvailable()) {
         this._splashScreenElement.createTextChild(WebInspector.UIString("Emulation is currently disabled. Toggle "));
+        var statusBar = new WebInspector.StatusBar(this._splashScreenElement);
         var toggleEmulationButton = new WebInspector.StatusBarButton("", "emulation-status-bar-item");
         toggleEmulationButton.addEventListener("click", this._toggleEmulationEnabled, this);
-        this._splashScreenElement.appendChild(toggleEmulationButton.element);
+        statusBar.appendStatusBarItem(toggleEmulationButton);
         this._splashScreenElement.createTextChild(WebInspector.UIString("in the main toolbar to enable it."));
     } else {
         var toggleEmulationButton = this._splashScreenElement.createChild("button", "text-button overrides-enable-button");
@@ -223,7 +224,7 @@ WebInspector.OverridesView.DeviceTab.prototype = {
         var resolutionFieldset = WebInspector.SettingsUI.createSettingFieldset(WebInspector.overridesSupport.settings.emulateResolution);
         fieldsetElement.appendChild(resolutionFieldset);
 
-        var tableElement = resolutionFieldset.createChild("table", "nowrap");
+        var tableElement = resolutionFieldset.createChild("table");
         var rowElement = tableElement.createChild("tr");
         var cellElement = rowElement.createChild("td");
         cellElement.createTextChild(WebInspector.UIString("Resolution:"));
@@ -258,7 +259,7 @@ WebInspector.OverridesView.DeviceTab.prototype = {
     },
 
     /**
-     * @param {!function(string)} callback
+     * @param {function(string)} callback
      */
     _showTitleDialog: function(callback)
     {
@@ -271,7 +272,7 @@ WebInspector.OverridesView.DeviceTab.prototype = {
 /**
  * @constructor
  * @extends {WebInspector.DialogDelegate}
- * @param {!function(string)} callback
+ * @param {function(string)} callback
  */
 WebInspector.OverridesView.DeviceTab.CustomDeviceTitleDialog = function(callback)
 {

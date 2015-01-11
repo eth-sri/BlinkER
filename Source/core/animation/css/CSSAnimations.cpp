@@ -199,8 +199,11 @@ static void resolveKeyframes(StyleResolver* resolver, const Element* animatingEl
 const StyleRuleKeyframes* CSSAnimations::matchScopedKeyframesRule(StyleResolver* resolver, const Element* element, const StringImpl* animationName)
 {
     // FIXME: This is all implementation detail of style resolver, CSSAnimations shouldn't be reaching into any of it.
-    if (element->document().styleEngine()->hasOnlyScopedResolverForDocument())
-        return element->document().scopedStyleResolver()->keyframeStylesForAnimation(animationName);
+    if (element->document().styleEngine()->onlyDocumentHasStyles()) {
+        if (ScopedStyleResolver* resolver = element->document().scopedStyleResolver())
+            return resolver->keyframeStylesForAnimation(animationName);
+        return nullptr;
+    }
 
     WillBeHeapVector<RawPtrWillBeMember<ScopedStyleResolver>, 8> stack;
     resolver->styleTreeResolveScopedKeyframesRules(element, stack);
@@ -389,8 +392,9 @@ void CSSAnimations::maybeApplyPendingUpdate(Element* element)
 
             newFrames[0]->clearPropertyValue(id);
             RefPtrWillBeRawPtr<InertAnimation> inertAnimationForSampling = InertAnimation::create(oldAnimation->effect(), oldAnimation->specifiedTiming(), false);
-            OwnPtrWillBeRawPtr<WillBeHeapVector<RefPtrWillBeMember<Interpolation>>> sample = inertAnimationForSampling->sample(inheritedTime);
-            ASSERT(sample->size() == 1);
+            OwnPtrWillBeRawPtr<WillBeHeapVector<RefPtrWillBeMember<Interpolation>>> sample = nullptr;
+            inertAnimationForSampling->sample(inheritedTime, sample);
+            ASSERT(sample && sample->size() == 1);
             newFrames[0]->setPropertyValue(id, toLegacyStyleInterpolation(sample->at(0).get())->currentValue());
 
             effect = AnimatableValueKeyframeEffectModel::create(newFrames);

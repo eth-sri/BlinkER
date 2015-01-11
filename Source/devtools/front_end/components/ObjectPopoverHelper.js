@@ -76,11 +76,11 @@ WebInspector.ObjectPopoverHelper.prototype = {
                 return;
 
             var container = createElement("div");
-            container.className = "inline-block";
+            container.className = "object-popover-container";
 
             var title = container.createChild("div", "function-popover-title source-code");
             var functionName = title.createChild("span", "function-name");
-            functionName.textContent = response.functionName || WebInspector.UIString("(anonymous function)");
+            functionName.textContent = WebInspector.beautifyFunctionName(response.functionName);
 
             var rawLocation = response.location;
             var sourceURL = response.sourceURL;
@@ -91,7 +91,7 @@ WebInspector.ObjectPopoverHelper.prototype = {
             }
 
             container.appendChild(popoverContentElement);
-            popover.show(container, anchorElement);
+            popover.showForAnchor(container, anchorElement);
         }
 
         /**
@@ -125,7 +125,7 @@ WebInspector.ObjectPopoverHelper.prototype = {
                     result.functionDetails(didGetDetails.bind(this, result.target(), anchorElement, popoverContentElement));
                     return;
                 }
-                popover.show(popoverContentElement, anchorElement);
+                popover.showForAnchor(popoverContentElement, anchorElement);
             } else {
                 if (result.subtype === "node") {
                     result.highlightAsDOMNode();
@@ -150,7 +150,7 @@ WebInspector.ObjectPopoverHelper.prototype = {
 
                 const popoverWidth = 300;
                 const popoverHeight = 250;
-                popover.show(popoverContentElement, anchorElement, popoverWidth, popoverHeight);
+                popover.showForAnchor(popoverContentElement, anchorElement, popoverWidth, popoverHeight);
             }
         }
         this._queryObject(element, showObjectPopover.bind(this), this._popoverObjectGroup);

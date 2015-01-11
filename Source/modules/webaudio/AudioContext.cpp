@@ -60,6 +60,7 @@
 #include "modules/webaudio/PannerNode.h"
 #include "modules/webaudio/PeriodicWave.h"
 #include "modules/webaudio/ScriptProcessorNode.h"
+#include "modules/webaudio/StereoPannerNode.h"
 #include "modules/webaudio/WaveShaperNode.h"
 #include "platform/audio/FFTFrame.h"
 #include "platform/audio/HRTFPanner.h"
@@ -104,6 +105,7 @@ AudioContext::AudioContext(Document* document)
     , m_audioThread(0)
     , m_isOfflineContext(false)
 {
+    m_referencedNodes = new HeapVector<Member<AudioNode>>();
     m_destinationNode = DefaultAudioDestinationNode::create(this);
 
     initialize();
@@ -124,6 +126,7 @@ AudioContext::AudioContext(Document* document, unsigned numberOfChannels, size_t
     , m_audioThread(0)
     , m_isOfflineContext(true)
 {
+    m_referencedNodes = new HeapVector<Member<AudioNode>>();
     // Create a new destination for offline rendering.
     m_renderTarget = AudioBuffer::create(numberOfChannels, numberOfFrames, sampleRate);
     if (m_renderTarget.get())
@@ -139,7 +142,6 @@ AudioContext::~AudioContext()
 #endif
     // AudioNodes keep a reference to their context, so there should be no way to be in the destructor if there are still AudioNodes around.
     ASSERT(!m_isInitialized);
-    ASSERT(!m_referencedNodes.size());
     ASSERT(!m_finishedNodes.size());
     ASSERT(!m_automaticPullNodes.size());
     if (m_automaticPullNodesNeedUpdating)
@@ -187,6 +189,8 @@ void AudioContext::uninitialize()
     if (!isInitialized())
         return;
 
+    m_isInitialized = false;
+
     // This stops the audio thread and all audio rendering.
     m_destinationNode->uninitialize();
 
@@ -198,7 +202,9 @@ void AudioContext::uninitialize()
     // Get rid of the sources which may still be playing.
     derefUnfinishedSourceNodes();
 
-    m_isInitialized = false;
+    ASSERT(m_listener);
+    m_listener->waitForHRTFDatabaseLoaderThreadCompletion();
+
     clear();
 }
 
@@ -235,7 +241,7 @@ void AudioContext::decodeAudioData(DOMArrayBuffer* audioData, AudioBufferCallbac
             "invalid ArrayBuffer for audioData.");
         return;
     }
-    m_audioDecoder.decodeAsync(audioData->buffer(), sampleRate(), successCallback, errorCallback);
+    m_audioDecoder.decodeAsync(audioData, sampleRate(), successCallback, errorCallback);
 }
 
 AudioBufferSourceNode* AudioContext::createBufferSource()
@@ -264,7 +270,7 @@ MediaElementAudioSourceNode* AudioContext::createMediaElementSource(HTMLMediaEle
     if (mediaElement->audioSourceNode()) {
         exceptionState.throwDOMException(
             InvalidStateError,
-            "invalid HTMLMediaElement.");
+            "HTMLMediaElement already connected previously to a different MediaElementSourceNode.");
         return 0;
     }
 
@@ -363,6 +369,12 @@ ScriptProcessorNode* AudioContext::createScriptProcessor(size_t bufferSize, size
 
     refNode(node); // context keeps reference until we stop making javascript rendering callbacks
     return node;
+}
+
+StereoPannerNode* AudioContext::createStereoPanner()
+{
+    ASSERT(isMainThread());
+    return StereoPannerNode::create(this, m_destinationNode->sampleRate());
 }
 
 BiquadFilterNode* AudioContext::createBiquadFilter()
@@ -526,7 +538,7 @@ PeriodicWave* AudioContext::createPeriodicWave(DOMFloat32Array* real, DOMFloat32
         return 0;
     }
 
-    return PeriodicWave::create(sampleRate(), real->view(), imag->view());
+    return PeriodicWave::create(sampleRate(), real, imag);
 }
 
 void AudioContext::notifyNodeFinishedProcessing(AudioNode* node)
@@ -550,7 +562,7 @@ void AudioContext::refNode(AudioNode* node)
     ASSERT(isMainThread());
     AutoLocker locker(this);
 
-    m_referencedNodes.append(node);
+    m_referencedNodes->append(node);
     node->makeConnection();
 }
 
@@ -558,10 +570,10 @@ void AudioContext::derefNode(AudioNode* node)
 {
     ASSERT(isGraphOwner());
 
-    for (unsigned i = 0; i < m_referencedNodes.size(); ++i) {
-        if (node == m_referencedNodes[i].get()) {
+    for (unsigned i = 0; i < m_referencedNodes->size(); ++i) {
+        if (node == m_referencedNodes->at(i).get()) {
             node->breakConnection();
-            m_referencedNodes.remove(i);
+            m_referencedNodes->remove(i);
             break;
         }
     }
@@ -570,10 +582,10 @@ void AudioContext::derefNode(AudioNode* node)
 void AudioContext::derefUnfinishedSourceNodes()
 {
     ASSERT(isMainThread());
-    for (unsigned i = 0; i < m_referencedNodes.size(); ++i)
-        m_referencedNodes[i]->breakConnection();
+    for (unsigned i = 0; i < m_referencedNodes->size(); ++i)
+        m_referencedNodes->at(i)->breakConnection();
 
-    m_referencedNodes.clear();
+    m_referencedNodes->clear();
 }
 
 void AudioContext::lock()
@@ -839,7 +851,14 @@ void AudioContext::trace(Visitor* visitor)
     visitor->trace(m_renderTarget);
     visitor->trace(m_destinationNode);
     visitor->trace(m_listener);
-    visitor->trace(m_referencedNodes);
+    // trace() can be called in AudioContext constructor, and
+    // m_contextGraphMutex might be unavailable.  We can use m_contextGraphMutex
+    // if m_referencedNodes is not null because m_referencedNodes is initialized
+    // after m_contextGraphMutex.
+    if (m_referencedNodes) {
+        AutoLocker lock(this);
+        visitor->trace(m_referencedNodes);
+    }
     visitor->trace(m_liveNodes);
     visitor->trace(m_liveAudioSummingJunctions);
     EventTargetWithInlineData::trace(visitor);

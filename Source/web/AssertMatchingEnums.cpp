@@ -34,7 +34,6 @@
 #include "config.h"
 
 #include "bindings/core/v8/SerializedScriptValue.h"
-#include "core/accessibility/AXObject.h"
 #include "core/accessibility/AXObjectCache.h"
 #include "core/dom/DocumentMarker.h"
 #include "core/dom/ExceptionCode.h"
@@ -54,6 +53,7 @@
 #include "core/page/PageVisibilityState.h"
 #include "core/rendering/compositing/CompositedSelectionBound.h"
 #include "core/rendering/style/RenderStyleConstants.h"
+#include "modules/accessibility/AXObject.h"
 #include "modules/geolocation/GeolocationError.h"
 #include "modules/geolocation/GeolocationPosition.h"
 #include "modules/indexeddb/IDBKey.h"
@@ -61,7 +61,6 @@
 #include "modules/indexeddb/IDBMetadata.h"
 #include "modules/indexeddb/IndexedDB.h"
 #include "modules/navigatorcontentutils/NavigatorContentUtilsClient.h"
-#include "modules/notifications/NotificationClient.h"
 #include "modules/quota/DeprecatedStorageQuota.h"
 #include "modules/speech/SpeechRecognitionError.h"
 #include "platform/Cursor.h"
@@ -80,6 +79,7 @@
 #include "platform/text/TextChecking.h"
 #include "platform/text/TextDecoration.h"
 #include "platform/weborigin/ReferrerPolicy.h"
+#include "platform/weborigin/SchemeRegistry.h"
 #include "public/platform/WebApplicationCacheHost.h"
 #include "public/platform/WebClipboard.h"
 #include "public/platform/WebCursorInfo.h"
@@ -121,8 +121,8 @@
 #include "public/web/WebInputEvent.h"
 #include "public/web/WebNavigationPolicy.h"
 #include "public/web/WebNavigatorContentUtilsClient.h"
-#include "public/web/WebNotificationPresenter.h"
 #include "public/web/WebPageVisibilityState.h"
+#include "public/web/WebSecurityPolicy.h"
 #include "public/web/WebSerializedScriptValueVersion.h"
 #include "public/web/WebSettings.h"
 #include "public/web/WebSpeechRecognizerClient.h"
@@ -179,7 +179,6 @@ COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleApplication, ApplicationRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleArticle, ArticleRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleBanner, BannerRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleBlockquote, BlockquoteRole);
-COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleBrowser, BrowserRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleBusyIndicator, BusyIndicatorRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleButton, ButtonRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleCanvas, CanvasRole);
@@ -203,7 +202,6 @@ COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleDirectory, DirectoryRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleDisclosureTriangle, DisclosureTriangleRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleDiv, DivRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleDocument, DocumentRole);
-COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleDrawer, DrawerRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleEditableText, EditableTextRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleEmbeddedObject, EmbeddedObjectRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleFigcaption, FigcaptionRole);
@@ -214,13 +212,11 @@ COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleGrid, GridRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleGroup, GroupRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleGrowArea, GrowAreaRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleHeading, HeadingRole);
-COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleHelpTag, HelpTagRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleIframe, IframeRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleIgnored, IgnoredRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleImageMapLink, ImageMapLinkRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleImageMap, ImageMapRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleImage, ImageRole);
-COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleIncrementor, IncrementorRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleInlineTextBox, InlineTextBoxRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleLabel, LabelRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleLegend, LegendRole);
@@ -235,7 +231,6 @@ COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleMain, MainRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleMarquee, MarqueeRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleMathElement, MathElementRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleMath, MathRole);
-COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleMatte, MatteRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleMenuBar, MenuBarRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleMenuButton, MenuButtonRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleMenuItem, MenuItemRole);
@@ -260,14 +255,13 @@ COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleRegion, RegionRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleRootWebArea, RootWebAreaRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleRowHeader, RowHeaderRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleRow, RowRole);
-COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleRulerMarker, RulerMarkerRole);
+COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleRuby, RubyRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleRuler, RulerRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleSVGRoot, SVGRootRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleScrollArea, ScrollAreaRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleScrollBar, ScrollBarRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleSeamlessWebArea, SeamlessWebAreaRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleSearch, SearchRole);
-COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleSheet, SheetRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleSlider, SliderRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleSliderThumb, SliderThumbRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleSpinButtonPart, SpinButtonPartRole);
@@ -276,7 +270,6 @@ COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleSplitGroup, SplitGroupRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleSplitter, SplitterRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleStaticText, StaticTextRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleStatus, StatusRole);
-COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleSystemWide, SystemWideRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleTabGroup, TabGroupRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleTabList, TabListRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleTabPanel, TabPanelRole);
@@ -294,7 +287,6 @@ COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleTreeItem, TreeItemRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleTree, TreeRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleUnknown, UnknownRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleUserInterfaceTooltip, UserInterfaceTooltipRole);
-COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleValueIndicator, ValueIndicatorRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleWebArea, WebAreaRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXRoleWindow, WindowRole);
 
@@ -328,6 +320,14 @@ COMPILE_ASSERT_MATCHING_ENUM(WebAXTextDirectionBT, AccessibilityTextDirectionBot
 COMPILE_ASSERT_MATCHING_ENUM(WebAXExpandedUndefined, ExpandedUndefined);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXExpandedCollapsed, ExpandedCollapsed);
 COMPILE_ASSERT_MATCHING_ENUM(WebAXExpandedExpanded, ExpandedExpanded);
+
+COMPILE_ASSERT_MATCHING_ENUM(WebAXOptionalBoolUndefined, OptionalBoolUndefined);
+COMPILE_ASSERT_MATCHING_ENUM(WebAXOptionalBoolTrue, OptionalBoolTrue);
+COMPILE_ASSERT_MATCHING_ENUM(WebAXOptionalBoolFalse, OptionalBoolFalse);
+
+COMPILE_ASSERT_MATCHING_ENUM(WebAXOrientationUndefined, AccessibilityOrientationUndefined);
+COMPILE_ASSERT_MATCHING_ENUM(WebAXOrientationVertical, AccessibilityOrientationVertical);
+COMPILE_ASSERT_MATCHING_ENUM(WebAXOrientationHorizontal, AccessibilityOrientationHorizontal);
 
 COMPILE_ASSERT_MATCHING_ENUM(WebApplicationCacheHost::Uncached, ApplicationCacheHost::UNCACHED);
 COMPILE_ASSERT_MATCHING_ENUM(WebApplicationCacheHost::Idle, ApplicationCacheHost::IDLE);
@@ -443,10 +443,6 @@ COMPILE_ASSERT_MATCHING_ENUM(WebMouseEvent::ButtonNone, NoButton);
 COMPILE_ASSERT_MATCHING_ENUM(WebMouseEvent::ButtonLeft, LeftButton);
 COMPILE_ASSERT_MATCHING_ENUM(WebMouseEvent::ButtonMiddle, MiddleButton);
 COMPILE_ASSERT_MATCHING_ENUM(WebMouseEvent::ButtonRight, RightButton);
-
-COMPILE_ASSERT_MATCHING_ENUM(WebNotificationPresenter::PermissionAllowed, NotificationClient::PermissionAllowed);
-COMPILE_ASSERT_MATCHING_ENUM(WebNotificationPresenter::PermissionNotAllowed, NotificationClient::PermissionNotAllowed);
-COMPILE_ASSERT_MATCHING_ENUM(WebNotificationPresenter::PermissionDenied, NotificationClient::PermissionDenied);
 
 COMPILE_ASSERT_MATCHING_ENUM(WebScrollbar::Horizontal, HorizontalScrollbar);
 COMPILE_ASSERT_MATCHING_ENUM(WebScrollbar::Vertical, VerticalScrollbar);
@@ -576,8 +572,10 @@ COMPILE_ASSERT_MATCHING_ENUM(WebSpeechRecognizerClient::LanguageNotSupportedErro
 
 COMPILE_ASSERT_MATCHING_ENUM(WebReferrerPolicyAlways, ReferrerPolicyAlways);
 COMPILE_ASSERT_MATCHING_ENUM(WebReferrerPolicyDefault, ReferrerPolicyDefault);
+COMPILE_ASSERT_MATCHING_ENUM(WebReferrerPolicyNoReferrerWhenDowngrade, ReferrerPolicyNoReferrerWhenDowngrade);
 COMPILE_ASSERT_MATCHING_ENUM(WebReferrerPolicyNever, ReferrerPolicyNever);
 COMPILE_ASSERT_MATCHING_ENUM(WebReferrerPolicyOrigin, ReferrerPolicyOrigin);
+COMPILE_ASSERT_MATCHING_ENUM(WebReferrerPolicyOriginWhenCrossOrigin, ReferrerPolicyOriginWhenCrossOrigin);
 
 COMPILE_ASSERT_MATCHING_ENUM(WebContentSecurityPolicyTypeReport, ContentSecurityPolicyHeaderTypeReport);
 COMPILE_ASSERT_MATCHING_ENUM(WebContentSecurityPolicyTypeEnforce, ContentSecurityPolicyHeaderTypeEnforce);
@@ -635,9 +633,14 @@ COMPILE_ASSERT_MATCHING_ENUM(WebSelectionBound::Caret, CompositedSelectionBound:
 COMPILE_ASSERT_MATCHING_ENUM(WebSelectionBound::SelectionLeft, CompositedSelectionBound::SelectionLeft);
 COMPILE_ASSERT_MATCHING_ENUM(WebSelectionBound::SelectionRight, CompositedSelectionBound::SelectionRight);
 
-COMPILE_ASSERT_MATCHING_ENUM(WebSettings::V8CacheOptionsOff, V8CacheOptionsOff);
+COMPILE_ASSERT_MATCHING_ENUM(WebSettings::V8CacheOptionsDefault, V8CacheOptionsDefault);
 COMPILE_ASSERT_MATCHING_ENUM(WebSettings::V8CacheOptionsParse, V8CacheOptionsParse);
 COMPILE_ASSERT_MATCHING_ENUM(WebSettings::V8CacheOptionsCode, V8CacheOptionsCode);
+COMPILE_ASSERT_MATCHING_ENUM(WebSettings::V8CacheOptionsCodeCompressed, V8CacheOptionsCodeCompressed);
+COMPILE_ASSERT_MATCHING_ENUM(WebSettings::V8CacheOptionsNone, V8CacheOptionsNone);
+COMPILE_ASSERT_MATCHING_ENUM(WebSettings::V8CacheOptionsParseMemory, V8CacheOptionsParseMemory);
+COMPILE_ASSERT_MATCHING_ENUM(WebSettings::V8CacheOptionsHeuristics, V8CacheOptionsHeuristics);
+COMPILE_ASSERT_MATCHING_ENUM(WebSettings::V8CacheOptionsHeuristicsMobile, V8CacheOptionsHeuristicsMobile);
 
 COMPILE_ASSERT_MATCHING_ENUM(WebSettings::PointerTypeNone, PointerTypeNone);
 COMPILE_ASSERT_MATCHING_ENUM(WebSettings::PointerTypeCoarse, PointerTypeCoarse);
@@ -645,6 +648,11 @@ COMPILE_ASSERT_MATCHING_ENUM(WebSettings::PointerTypeFine, PointerTypeFine);
 COMPILE_ASSERT_MATCHING_ENUM(WebSettings::HoverTypeNone, HoverTypeNone);
 COMPILE_ASSERT_MATCHING_ENUM(WebSettings::HoverTypeOnDemand, HoverTypeOnDemand);
 COMPILE_ASSERT_MATCHING_ENUM(WebSettings::HoverTypeHover, HoverTypeHover);
+
+COMPILE_ASSERT_MATCHING_ENUM(WebSecurityPolicy::PolicyAreaNone, SchemeRegistry::PolicyAreaNone);
+COMPILE_ASSERT_MATCHING_ENUM(WebSecurityPolicy::PolicyAreaImage, SchemeRegistry::PolicyAreaImage);
+COMPILE_ASSERT_MATCHING_ENUM(WebSecurityPolicy::PolicyAreaStyle, SchemeRegistry::PolicyAreaStyle);
+COMPILE_ASSERT_MATCHING_ENUM(WebSecurityPolicy::PolicyAreaAll, SchemeRegistry::PolicyAreaAll);
 
 COMPILE_ASSERT_MATCHING_UINT64(kSerializedScriptValueVersion, SerializedScriptValue::wireFormatVersion);
 

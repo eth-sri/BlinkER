@@ -149,9 +149,10 @@
 #include "core/rendering/style/StyleInheritedData.h"
 #include "core/timing/Performance.h"
 #include "modules/geolocation/GeolocationController.h"
-#include "modules/notifications/NotificationController.h"
 #include "modules/notifications/NotificationPermissionClient.h"
+#include "modules/push_messaging/PushController.h"
 #include "modules/screen_orientation/ScreenOrientationController.h"
+#include "modules/speech/SpeechRecognitionController.h"
 #include "platform/TraceEvent.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/clipboard/ClipboardUtilities.h"
@@ -175,6 +176,7 @@
 #include "public/platform/WebSize.h"
 #include "public/platform/WebURLError.h"
 #include "public/platform/WebVector.h"
+#include "public/web/WebAutofillClient.h"
 #include "public/web/WebConsoleMessage.h"
 #include "public/web/WebDOMEvent.h"
 #include "public/web/WebDocument.h"
@@ -188,10 +190,12 @@
 #include "public/web/WebPerformance.h"
 #include "public/web/WebPlugin.h"
 #include "public/web/WebPrintParams.h"
+#include "public/web/WebPrintPresetOptions.h"
 #include "public/web/WebRange.h"
 #include "public/web/WebScriptSource.h"
 #include "public/web/WebSecurityOrigin.h"
 #include "public/web/WebSerializedScriptValue.h"
+#include "public/web/WebViewClient.h"
 #include "web/AssociatedURLLoader.h"
 #include "web/CompositionUnderlineVectorBuilder.h"
 #include "web/FindInPageCoordinates.h"
@@ -201,6 +205,7 @@
 #include "web/NotificationPermissionClientImpl.h"
 #include "web/PageOverlay.h"
 #include "web/SharedWorkerRepositoryClientImpl.h"
+#include "web/SpeechRecognitionClientProxy.h"
 #include "web/SuspendableScriptExecutor.h"
 #include "web/TextFinder.h"
 #include "web/WebDataSourceImpl.h"
@@ -332,7 +337,7 @@ public:
 
     float spoolSinglePage(GraphicsContext& graphicsContext, int pageNumber)
     {
-        frame()->document()->dispatchEventsForPrinting();
+        dispatchEventsForPrintingOnAllFrames();
         if (!frame()->document() || !frame()->document()->renderView())
             return 0;
 
@@ -345,7 +350,7 @@ public:
 
     void spoolAllPagesWithBoundaries(GraphicsContext& graphicsContext, const FloatSize& pageSizeInPixels)
     {
-        frame()->document()->dispatchEventsForPrinting();
+        dispatchEventsForPrintingOnAllFrames();
         if (!frame()->document() || !frame()->document()->renderView())
             return;
 
@@ -414,6 +419,18 @@ protected:
     }
 
 private:
+    void dispatchEventsForPrintingOnAllFrames()
+    {
+        WillBeHeapVector<RefPtrWillBeMember<Document>> documents;
+        for (Frame* currentFrame = frame(); currentFrame; currentFrame = currentFrame->tree().traverseNext(frame())) {
+            if (currentFrame->isLocalFrame())
+                documents.append(toLocalFrame(currentFrame)->document());
+        }
+
+        for (auto& doc : documents)
+            doc->dispatchEventsForPrinting();
+    }
+
     // Set when printing.
     float m_printedPageWidth;
 };
@@ -962,7 +979,7 @@ WebURLLoader* WebLocalFrameImpl::createAssociatedURLLoader(const WebURLLoaderOpt
 
 unsigned WebLocalFrameImpl::unloadListenerCount() const
 {
-    return frame()->domWindow()->pendingUnloadEventListeners();
+    return frame()->localDOMWindow()->pendingUnloadEventListeners();
 }
 
 void WebLocalFrameImpl::replaceSelection(const WebString& text)
@@ -1154,11 +1171,7 @@ WebString WebLocalFrameImpl::selectionAsMarkup() const
 
 void WebLocalFrameImpl::selectWordAroundPosition(LocalFrame* frame, VisiblePosition position)
 {
-    VisibleSelection selection(position);
-    selection.expandUsingGranularity(WordGranularity);
-
-    TextGranularity granularity = selection.isRange() ? WordGranularity : CharacterGranularity;
-    frame->selection().setSelection(selection, granularity);
+    frame->selection().selectWordAroundPosition(position);
 }
 
 bool WebLocalFrameImpl::selectWordAroundCaret()
@@ -1166,8 +1179,7 @@ bool WebLocalFrameImpl::selectWordAroundCaret()
     FrameSelection& selection = frame()->selection();
     if (selection.isNone() || selection.isRange())
         return false;
-    selectWordAroundPosition(frame(), selection.selection().visibleStart());
-    return true;
+    return frame()->selection().selectWordAroundPosition(selection.selection().visibleStart());
 }
 
 void WebLocalFrameImpl::selectRange(const WebPoint& base, const WebPoint& extent)
@@ -1340,14 +1352,14 @@ bool WebLocalFrameImpl::isPrintScalingDisabledForPlugin(const WebNode& node)
     return pluginContainer->isPrintScalingDisabled();
 }
 
-int WebLocalFrameImpl::getPrintCopiesForPlugin(const WebNode& node)
+bool WebLocalFrameImpl::getPrintPresetOptionsForPlugin(const WebNode& node, WebPrintPresetOptions* presetOptions)
 {
     WebPluginContainerImpl* pluginContainer = node.isNull() ? pluginContainerFromFrame(frame()) : toWebPluginContainerImpl(node.pluginContainer());
 
     if (!pluginContainer || !pluginContainer->supportsPaginatedPrint())
-        return 1;
+        return false;
 
-    return pluginContainer->getCopiesToPrint();
+    return pluginContainer->getPrintPresetOptionsFromDocument(presetOptions);
 }
 
 bool WebLocalFrameImpl::hasCustomPageSizeStyle(int pageIndex)
@@ -1413,7 +1425,7 @@ void WebLocalFrameImpl::resetMatchCount()
 void WebLocalFrameImpl::dispatchMessageEventWithOriginCheck(const WebSecurityOrigin& intendedTargetOrigin, const WebDOMEvent& event)
 {
     ASSERT(!event.isNull());
-    frame()->domWindow()->dispatchMessageEventWithOriginCheck(intendedTargetOrigin.get(), event, nullptr);
+    frame()->localDOMWindow()->dispatchMessageEventWithOriginCheck(intendedTargetOrigin.get(), event, nullptr);
 }
 
 int WebLocalFrameImpl::findMatchMarkersVersion() const
@@ -1541,6 +1553,7 @@ WebLocalFrameImpl* WebLocalFrameImpl::create(WebFrameClient* client)
 WebLocalFrameImpl::WebLocalFrameImpl(WebFrameClient* client)
     : m_frameLoaderClientImpl(this)
     , m_client(client)
+    , m_autofillClient(0)
     , m_permissionClient(0)
     , m_inputEventsScaleFactorForEmulation(1)
     , m_userMediaClientImpl(this)
@@ -1581,20 +1594,23 @@ void WebLocalFrameImpl::setCoreFrame(PassRefPtrWillBeRawPtr<LocalFrame> frame)
 
     // FIXME: we shouldn't add overhead to every frame by registering these objects when they're not used.
     if (m_frame) {
-        OwnPtr<NotificationPresenterImpl> notificationPresenter = adoptPtr(new NotificationPresenterImpl());
         if (m_client)
-            notificationPresenter->initialize(m_client->notificationPresenter());
+            providePushControllerTo(*m_frame, m_client->pushClient());
 
-        provideNotification(*m_frame, notificationPresenter.release());
         provideNotificationPermissionClientTo(*m_frame, NotificationPermissionClientImpl::create());
         provideUserMediaTo(*m_frame, &m_userMediaClientImpl);
         provideGeolocationTo(*m_frame, m_geolocationClientProxy.get());
         m_geolocationClientProxy->setController(GeolocationController::from(m_frame.get()));
-        provideMIDITo(*m_frame, MIDIClientProxy::create(m_client ? m_client->webMIDIClient() : 0));
+        provideMIDITo(*m_frame, MIDIClientProxy::create(m_client ? m_client->webMIDIClient() : nullptr));
         provideLocalFileSystemTo(*m_frame, LocalFileSystemClient::create());
+        // FIXME: using WebViewClient as a temporary measure if there is no client on the WebFrame.
+        if (m_client && m_client->speechRecognizer())
+            SpeechRecognitionController::provideTo(*m_frame, SpeechRecognitionClientProxy::create(m_client->speechRecognizer()));
+        else
+            SpeechRecognitionController::provideTo(*m_frame, SpeechRecognitionClientProxy::create(viewImpl()->client() ? viewImpl()->client()->speechRecognizer() : nullptr));
 
         if (RuntimeEnabledFeatures::screenOrientationEnabled())
-            ScreenOrientationController::provideTo(*m_frame, m_client ? m_client->webScreenOrientationClient() : 0);
+            ScreenOrientationController::provideTo(*m_frame, m_client ? m_client->webScreenOrientationClient() : nullptr);
     }
 }
 
@@ -1666,7 +1682,7 @@ void WebLocalFrameImpl::createFrameView()
     if (isLocalRoot)
         webView->suppressInvalidations(true);
 
-    frame()->createView(webView->size(), webView->baseBackgroundColor(), webView->isTransparent());
+    frame()->createView(webView->mainFrameSize(), webView->baseBackgroundColor(), webView->isTransparent());
     if (webView->shouldAutoResize() && isLocalRoot)
         frame()->view()->enableAutoSizeMode(webView->minAutoSize(), webView->maxAutoSize());
 
@@ -1855,6 +1871,16 @@ void WebLocalFrameImpl::initializeToReplaceRemoteFrame(WebRemoteFrame* oldWebFra
     m_frame->init();
 }
 
+void WebLocalFrameImpl::setAutofillClient(WebAutofillClient* autofillClient)
+{
+    m_autofillClient = autofillClient;
+}
+
+WebAutofillClient* WebLocalFrameImpl::autofillClient()
+{
+    return m_autofillClient;
+}
+
 void WebLocalFrameImpl::sendPings(const WebNode& linkNode, const WebURL& destinationURL)
 {
     ASSERT(frame());
@@ -1906,7 +1932,7 @@ void WebLocalFrameImpl::sendOrientationChangeEvent()
 
     // Legacy window.orientation API
     if (RuntimeEnabledFeatures::orientationEventEnabled() && frame()->domWindow())
-        frame()->domWindow()->sendOrientationChangeEvent();
+        frame()->localDOMWindow()->sendOrientationChangeEvent();
 }
 
 v8::Handle<v8::Value> WebLocalFrameImpl::executeScriptAndReturnValueForTests(const WebScriptSource& source)

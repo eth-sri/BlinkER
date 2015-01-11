@@ -1,6 +1,9 @@
 {
+    "dependencies": [
+        "platform"
+    ],
     "scripts": [
-        "utilities.js",
+        "WorkerRuntime.js",
         "WebInspector.js",
         "Object.js",
         "NotificationService.js",

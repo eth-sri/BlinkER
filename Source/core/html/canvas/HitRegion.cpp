@@ -45,6 +45,11 @@ void HitRegion::updateAccessibility(Element* canvas)
 
 bool HitRegion::contains(const LayoutPoint& point) const
 {
+    return m_path.contains(FloatPoint(point), m_fillRule);
+}
+
+bool HitRegion::contains(const FloatPoint& point) const
+{
     return m_path.contains(point, m_fillRule);
 }
 
@@ -134,7 +139,7 @@ HitRegion* HitRegionManager::getHitRegionByControl(Element* control) const
     if (control)
         return m_hitRegionControlMap.get(control);
 
-    return 0;
+    return nullptr;
 }
 
 HitRegion* HitRegionManager::getHitRegionAtPoint(const LayoutPoint& point) const
@@ -147,7 +152,7 @@ HitRegion* HitRegionManager::getHitRegionAtPoint(const LayoutPoint& point) const
             return hitRegion.get();
     }
 
-    return 0;
+    return nullptr;
 }
 
 unsigned HitRegionManager::getHitRegionsCount() const

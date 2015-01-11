@@ -7,6 +7,13 @@
 #include "config.h"
 #include "{{header_filename}}"
 
+{% macro assign_and_return_if_hasinstance(member) %}
+if (V8{{member.type_name}}::hasInstance(v8Value, isolate)) {
+    {{member.cpp_local_type}} cppValue = V8{{member.type_name}}::toImpl(v8::Handle<v8::Object>::Cast(v8Value));
+    impl.set{{member.type_name}}(cppValue);
+    return;
+}
+{% endmacro %}
 {% for filename in cpp_includes %}
 #include "{{filename}}"
 {% endfor %}
@@ -20,7 +27,7 @@ namespace blink {
 }
 
 {% for member in container.members %}
-{{member.rvalue_cpp_type}} {{container.cpp_class}}::getAs{{member.type_name}}()
+{{member.rvalue_cpp_type}} {{container.cpp_class}}::getAs{{member.type_name}}() const
 {
     ASSERT(is{{member.type_name}}());
     return m_{{member.cpp_name}};
@@ -45,32 +52,39 @@ void {{container.cpp_class}}::trace(Visitor* visitor)
 {% endif %}
 void V8{{container.cpp_class}}::toImpl(v8::Isolate* isolate, v8::Handle<v8::Value> v8Value, {{container.cpp_class}}& impl, ExceptionState& exceptionState)
 {
-    {# FIXME: We don't follow the spec on handling null and undefined at this
-       moment. Should be fixed once we implement all necessary conversion steps
-       below. #}
     if (v8Value.IsEmpty())
         return;
 
     {# The numbers in the following comments refer to the steps described in
        http://heycam.github.io/webidl/#es-union
+       NOTE: Step 1 (null or undefined) is handled in *OrNull::toImpl()
        FIXME: Implement all necessary steps #}
     {# 3. Platform objects (interfaces) #}
     {% for interface in container.interface_types %}
-    if (V8{{interface.type_name}}::hasInstance(v8Value, isolate)) {
-        {{interface.cpp_local_type}} cppValue = V8{{interface.type_name}}::toImpl(v8::Handle<v8::Object>::Cast(v8Value));
-        impl.set{{interface.type_name}}(cppValue);
-        return;
-    }
+    {{assign_and_return_if_hasinstance(interface) | indent}}
 
     {% endfor %}
+    {# 8. ArrayBuffer #}
+    {% if container.array_buffer_type %}
+    {{assign_and_return_if_hasinstance(container.array_buffer_type) | indent}}
+
+    {% endif %}
+    {# 9., 10. ArrayBufferView #}
+    {# FIXME: Individual typed arrays (e.g. Uint8Array) aren't supported yet. #}
+    {% if container.array_buffer_view_type %}
+    {{assign_and_return_if_hasinstance(container.array_buffer_view_type) | indent}}
+
+    {% endif %}
     {% if container.dictionary_type %}
     {# 12. Dictionaries #}
     {# FIXME: This should also check "object but not Date or RegExp". Add checks
        when we implement conversions for Date and RegExp. #}
     if (isUndefinedOrNull(v8Value) || v8Value->IsObject()) {
-        {{container.dictionary_type.cpp_local_type}} cppValue = V8{{container.dictionary_type.type_name}}::toImpl(isolate, v8Value, exceptionState);
-        if (!exceptionState.hadException())
-            impl.set{{container.dictionary_type.type_name}}(cppValue);
+        {% if container.dictionary_type.type_name != 'Dictionary' %}
+        {{container.dictionary_type.cpp_local_type}} cppValue;
+        {% endif %}
+        {{container.dictionary_type.v8_value_to_local_cpp_value}};
+        impl.set{{container.dictionary_type.type_name}}(cppValue);
         return;
     }
 
@@ -117,24 +131,33 @@ void V8{{container.cpp_class}}::toImpl(v8::Isolate* isolate, v8::Handle<v8::Valu
         return;
     }
 
-    {% endif %}
+    {% else %}
     {# 19. TypeError #}
-    exceptionState.throwTypeError("Not a valid union member.");
+    exceptionState.throwTypeError("The provided value is not of type '{{container.type_string}}'");
+    {% endif %}
 }
 
-v8::Handle<v8::Value> toV8({{container.cpp_class}}& impl, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
+v8::Handle<v8::Value> toV8(const {{container.cpp_class}}& impl, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
 {
-    {# FIXME: We might want to return undefined in some cases #}
-    if (impl.isNull())
+    switch (impl.m_type) {
+    case {{container.cpp_class}}::SpecificTypeNone:
+        {# FIXME: We might want to return undefined in some cases #}
         return v8::Null(isolate);
-
     {% for member in container.members %}
-    if (impl.is{{member.type_name}}())
+    case {{container.cpp_class}}::{{member.specific_type_enum}}:
         return {{member.cpp_value_to_v8_value}};
-
     {% endfor %}
-    ASSERT_NOT_REACHED();
+    default:
+        ASSERT_NOT_REACHED();
+    }
     return v8::Handle<v8::Value>();
+}
+
+{{container.cpp_class}} NativeValueTraits<{{container.cpp_class}}>::nativeValue(const v8::Handle<v8::Value>& value, v8::Isolate* isolate, ExceptionState& exceptionState)
+{
+    {{container.cpp_class}} impl;
+    V8{{container.cpp_class}}::toImpl(isolate, value, impl, exceptionState);
+    return impl;
 }
 
 {% endfor %}

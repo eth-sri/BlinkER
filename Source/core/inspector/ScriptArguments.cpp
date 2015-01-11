@@ -91,7 +91,7 @@ private:
         }
         if (value->IsArray())
             return append(v8::Handle<v8::Array>::Cast(value));
-        if (toDOMWindow(value, m_isolate)) {
+        if (toDOMWindow(m_isolate, value)) {
             m_builder.append("[object Window]");
             return true;
         }
@@ -101,7 +101,7 @@ private:
             && !value->IsNativeError()
             && !value->IsRegExp())
             return append(v8::Handle<v8::Object>::Cast(value)->ObjectProtoToString());
-        return append(value->ToString());
+        return append(value->ToString(m_isolate));
     }
 
     bool append(v8::Handle<v8::Array> array)

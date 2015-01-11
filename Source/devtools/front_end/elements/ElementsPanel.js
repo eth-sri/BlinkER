@@ -45,7 +45,7 @@ WebInspector.ElementsPanel = function()
 
     this._searchableView = new WebInspector.SearchableView(this);
     this._searchableView.setMinimumSize(25, 19);
-    this._searchableView.show(this._splitView.mainElement());
+    this._splitView.setMainView(this._searchableView);
     var stackElement = this._searchableView.element;
 
     this._contentElement = stackElement.createChild("div");
@@ -54,8 +54,6 @@ WebInspector.ElementsPanel = function()
     if (WebInspector.settings.domWordWrap.get())
         this._contentElement.classList.add("elements-wrap");
     WebInspector.settings.domWordWrap.addChangeListener(this._domWordWrapSettingChanged.bind(this));
-
-    this._splitView.sidebarElement().addEventListener("contextmenu", this._sidebarContextMenuEventFired.bind(this), false);
 
     var crumbsContainer = stackElement.createChild("div");
     crumbsContainer.id = "elements-crumbs";
@@ -85,9 +83,6 @@ WebInspector.ElementsPanel = function()
     WebInspector.dockController.addEventListener(WebInspector.DockController.Events.DockSideChanged, this._dockSideChanged.bind(this));
     WebInspector.settings.splitVerticallyWhenDockedToRight.addChangeListener(this._dockSideChanged.bind(this));
     this._dockSideChanged();
-
-    this._popoverHelper = new WebInspector.PopoverHelper(this.element, this._getPopoverAnchor.bind(this), this._showPopover.bind(this));
-    this._popoverHelper.setTimeout(0);
 
     /** @type {!Array.<!WebInspector.ElementsTreeOutline>} */
     this._treeOutlines = [];
@@ -216,7 +211,8 @@ WebInspector.ElementsPanel.prototype = {
             // Detach heavy component on hide
             this._contentElement.removeChild(treeOutline.element);
         }
-        this._popoverHelper.hidePopover();
+        if (this._popoverHelper)
+            this._popoverHelper.hidePopover();
         WebInspector.Panel.prototype.willHide.call(this);
     },
 
@@ -462,55 +458,7 @@ WebInspector.ElementsPanel.prototype = {
         if (!anchor || !anchor.href)
             return;
 
-        var treeOutlineElement = anchor.enclosingNodeOrSelfWithClass("elements-tree-outline");
-        if (!treeOutlineElement)
-            return;
-
-        for (var i = 0; i < this._treeOutlines.length; ++i) {
-            if (this._treeOutlines[i].element !== treeOutlineElement)
-                continue;
-
-            var resource = this._treeOutlines[i].target().resourceTreeModel.resourceForURL(anchor.href);
-            if (!resource || resource.resourceType() !== WebInspector.resourceTypes.Image)
-                return;
-            anchor.removeAttribute("title");
-            return anchor;
-        }
-    },
-
-    /**
-     * @param {!WebInspector.DOMNode} node
-     * @param {function()} callback
-     */
-    _loadDimensionsForNode: function(node, callback)
-    {
-        if (!node.nodeName() || node.nodeName().toLowerCase() !== "img") {
-            callback();
-            return;
-        }
-
-        node.resolveToObject("", resolvedNode);
-
-        function resolvedNode(object)
-        {
-            if (!object) {
-                callback();
-                return;
-            }
-
-            object.callFunctionJSON(dimensions, undefined, callback);
-            object.release();
-
-            /**
-             * @return {!{offsetWidth: number, offsetHeight: number, naturalWidth: number, naturalHeight: number}}
-             * @suppressReceiverCheck
-             * @this {!Element}
-             */
-            function dimensions()
-            {
-                return { offsetWidth: this.offsetWidth, offsetHeight: this.offsetHeight, naturalWidth: this.naturalWidth, naturalHeight: this.naturalHeight };
-            }
-        }
+        return anchor;
     },
 
     /**
@@ -519,16 +467,9 @@ WebInspector.ElementsPanel.prototype = {
      */
     _showPopover: function(anchor, popover)
     {
-        var listItem = anchor.enclosingNodeOrSelfWithNodeName("li");
-        // We get here for CSS properties, too.
-        if (listItem && listItem.treeElement && listItem.treeElement.treeOutline instanceof WebInspector.ElementsTreeOutline) {
-            var node = /** @type {!WebInspector.DOMNode} */ (listItem.treeElement.representedObject);
-            this._loadDimensionsForNode(node, WebInspector.DOMPresentationUtils.buildImagePreviewContents.bind(WebInspector.DOMPresentationUtils, node.target(), anchor.href, true, showPopover));
-        } else {
-            var node = this.selectedDOMNode();
-            if (node)
-                WebInspector.DOMPresentationUtils.buildImagePreviewContents(node.target(), anchor.href, true, showPopover);
-        }
+        var node = this.selectedDOMNode();
+        if (node)
+            WebInspector.DOMPresentationUtils.buildImagePreviewContents(node.target(), anchor.href, true, showPopover);
 
         /**
          * @param {!Element=} contents
@@ -538,7 +479,7 @@ WebInspector.ElementsPanel.prototype = {
             if (!contents)
                 return;
             popover.setCanShrink(false);
-            popover.show(contents, anchor);
+            popover.showForAnchor(contents, anchor);
         }
     },
 
@@ -728,6 +669,10 @@ WebInspector.ElementsPanel.prototype = {
         }
 
         treeOutline.handleShortcut(event);
+        if (event.handled)
+            return;
+
+        WebInspector.Panel.prototype.handleShortcut.call(this, event);
     },
 
     /**
@@ -914,6 +859,11 @@ WebInspector.ElementsPanel.prototype = {
         }
 
         this.sidebarPaneView = new WebInspector.SidebarTabbedPane();
+        this.sidebarPaneView.element.addEventListener("contextmenu", this._sidebarContextMenuEventFired.bind(this), false);
+        if (this._popoverHelper)
+            this._popoverHelper.hidePopover();
+        this._popoverHelper = new WebInspector.PopoverHelper(this.sidebarPaneView.element, this._getPopoverAnchor.bind(this), this._showPopover.bind(this));
+        this._popoverHelper.setTimeout(0);
 
         if (vertically) {
             this._splitView.installResizer(this.sidebarPaneView.headerElement());
@@ -927,16 +877,20 @@ WebInspector.ElementsPanel.prototype = {
             var splitView = new WebInspector.SplitView(true, true, "stylesPaneSplitViewState", 0.5);
             splitView.show(compositePane.bodyElement);
 
-            splitView.mainElement().appendChild(matchedStylePanesWrapper);
-            splitView.sidebarElement().appendChild(computedStylePanesWrapper);
+            var vbox1 = new WebInspector.VBox();
+            vbox1.element.appendChild(matchedStylePanesWrapper);
+            vbox1.element.appendChild(this._matchedStylesFilterBoxContainer);
+            splitView.setMainView(vbox1);
+
+            var vbox2 = new WebInspector.VBox();
+            vbox2.element.appendChild(computedStylePanesWrapper);
+            vbox2.element.appendChild(this._computedStylesFilterBoxContainer);
+            splitView.setSidebarView(vbox2);
 
             this.sidebarPanes.styles.setExpandCallback(expandComposite);
 
             computedPane.show(computedStylePanesWrapper);
             computedPane.setExpandCallback(expandComposite);
-
-            splitView.mainElement().appendChild(this._matchedStylesFilterBoxContainer);
-            splitView.sidebarElement().appendChild(this._computedStylesFilterBoxContainer);
 
             this.sidebarPaneView.addPane(compositePane);
         } else {
@@ -978,7 +932,7 @@ WebInspector.ElementsPanel.prototype = {
         for (var i = 0; i < extensionSidebarPanes.length; ++i)
             this._addExtensionSidebarPane(extensionSidebarPanes[i]);
 
-        this.sidebarPaneView.show(this._splitView.sidebarElement());
+        this._splitView.setSidebarView(this.sidebarPaneView);
         this.sidebarPanes.styles.expand();
     },
 

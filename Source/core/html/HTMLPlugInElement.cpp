@@ -129,7 +129,9 @@ void HTMLPlugInElement::setPersistedPluginWidget(Widget* widget)
 
 bool HTMLPlugInElement::canProcessDrag() const
 {
-    return pluginWidget() && pluginWidget()->isPluginView() && toPluginView(pluginWidget())->canProcessDrag();
+    if (Widget* widget = existingPluginWidget())
+        return widget->isPluginView() && toPluginView(widget)->canProcessDrag();
+    return false;
 }
 
 bool HTMLPlugInElement::willRespondToMouseClickEvents()
@@ -299,7 +301,7 @@ SharedPersistent<v8::Object>* HTMLPlugInElement::pluginWrapper()
 {
     LocalFrame* frame = document().frame();
     if (!frame)
-        return 0;
+        return nullptr;
 
     // If the host dynamically turns off JavaScript (or Java) we will still
     // return the cached allocated Bindings::Instance. Not supporting this
@@ -310,7 +312,7 @@ SharedPersistent<v8::Object>* HTMLPlugInElement::pluginWrapper()
         if (m_persistedPluginWidget)
             plugin = m_persistedPluginWidget.get();
         else
-            plugin = pluginWidget();
+            plugin = pluginWidgetForJSBindings();
 
         if (plugin)
             m_pluginWrapper = frame->script().createPluginWrapper(plugin);
@@ -318,11 +320,18 @@ SharedPersistent<v8::Object>* HTMLPlugInElement::pluginWrapper()
     return m_pluginWrapper.get();
 }
 
-Widget* HTMLPlugInElement::pluginWidget() const
+Widget* HTMLPlugInElement::existingPluginWidget() const
+{
+    if (RenderPart* renderPart = existingRenderPart())
+        return renderPart->widget();
+    return nullptr;
+}
+
+Widget* HTMLPlugInElement::pluginWidgetForJSBindings()
 {
     if (RenderPart* renderPart = renderPartForJSBindings())
         return renderPart->widget();
-    return 0;
+    return nullptr;
 }
 
 bool HTMLPlugInElement::isPresentationAttribute(const QualifiedName& name) const
@@ -390,14 +399,21 @@ RenderPart* HTMLPlugInElement::renderPartForJSBindings() const
 
 bool HTMLPlugInElement::isKeyboardFocusable() const
 {
+    if (useFallbackContent() || usePlaceholderContent())
+        return HTMLElement::isKeyboardFocusable();
+
     if (!document().isActive())
         return false;
-    return pluginWidget() && pluginWidget()->isPluginView() && toPluginView(pluginWidget())->supportsKeyboardFocus();
+
+    if (Widget* widget = existingPluginWidget())
+        return widget->isPluginView() && toPluginView(widget)->supportsKeyboardFocus();
+
+    return false;
 }
 
 bool HTMLPlugInElement::hasCustomFocusLogic() const
 {
-    return !hasAuthorShadowRoot();
+    return !useFallbackContent() && !usePlaceholderContent();
 }
 
 bool HTMLPlugInElement::isPluginElement() const
@@ -441,7 +457,7 @@ RenderEmbeddedObject* HTMLPlugInElement::renderEmbeddedObject() const
     // HTMLObjectElement and HTMLEmbedElement may return arbitrary renderers
     // when using fallback content.
     if (!renderer() || !renderer()->isEmbeddedObject())
-        return 0;
+        return nullptr;
     return toRenderEmbeddedObject(renderer());
 }
 

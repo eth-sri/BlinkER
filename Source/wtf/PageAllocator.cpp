@@ -71,7 +71,11 @@ static bool shouldUseAddressHint()
     // randomness.
     static BOOL bIsWow64 = -1;
     if (bIsWow64 == -1) {
-        IsWow64Process(GetCurrentProcess(), &bIsWow64);
+        BOOL result = IsWow64Process(GetCurrentProcess(), &bIsWow64);
+        if (!result) {
+            ASSERT_NOT_REACHED();
+            bIsWow64 = 0;
+        }
     }
     return !!bIsWow64;
 #else // CPU(32BIT)

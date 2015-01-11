@@ -6,6 +6,7 @@
 #include "core/paint/ReplacedPainter.h"
 
 #include "core/paint/BoxPainter.h"
+#include "core/paint/ObjectPainter.h"
 #include "core/rendering/GraphicsContextAnnotator.h"
 #include "core/rendering/PaintInfo.h"
 #include "core/rendering/RenderLayer.h"
@@ -13,7 +14,7 @@
 
 namespace blink {
 
-void ReplacedPainter::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
+void ReplacedPainter::paint(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
     ANNOTATE_GRAPHICS_CONTEXT(paintInfo, &m_renderReplaced);
 
@@ -35,7 +36,7 @@ void ReplacedPainter::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset
 
     LayoutRect paintRect = LayoutRect(adjustedPaintOffset, m_renderReplaced.size());
     if ((paintInfo.phase == PaintPhaseOutline || paintInfo.phase == PaintPhaseSelfOutline) && m_renderReplaced.style()->outlineWidth())
-        m_renderReplaced.paintOutline(paintInfo, paintRect);
+        ObjectPainter(m_renderReplaced).paintOutline(paintInfo, paintRect);
 
     if (paintInfo.phase != PaintPhaseForeground && paintInfo.phase != PaintPhaseSelection && !m_renderReplaced.canHaveChildren() && paintInfo.phase != PaintPhaseClippingMask)
         return;

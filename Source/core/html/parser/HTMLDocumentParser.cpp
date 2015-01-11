@@ -97,7 +97,7 @@ public:
         if (HTMLParserThread::shared())
             return &HTMLParserThread::shared()->platformThread();
 
-        return 0;
+        return nullptr;
     }
 
 private:
@@ -119,6 +119,7 @@ HTMLDocumentParser::HTMLDocumentParser(HTMLDocument& document, bool reportErrors
     , m_endWasDelayed(false)
     , m_haveBackgroundParser(false)
     , m_pumpSessionNestingLevel(0)
+    , m_pumpSpeculationsSessionNestingLevel(0)
 {
     ASSERT(shouldUseThreading() || (m_token && m_tokenizer));
 }
@@ -137,6 +138,7 @@ HTMLDocumentParser::HTMLDocumentParser(DocumentFragment* fragment, Element* cont
     , m_endWasDelayed(false)
     , m_haveBackgroundParser(false)
     , m_pumpSessionNestingLevel(0)
+    , m_pumpSpeculationsSessionNestingLevel(0)
 {
     ASSERT(!shouldUseThreading());
     bool reportErrors = false; // For now document fragment parsing never reports errors.
@@ -261,15 +263,8 @@ bool HTMLDocumentParser::processingData() const
 
 void HTMLDocumentParser::pumpTokenizerIfPossible()
 {
-    if (isStopped())
+    if (isStopped() || isWaitingForScripts())
         return;
-    if (isWaitingForScripts())
-        return;
-
-    // Once a resume is scheduled, HTMLParserScheduler controls when we next pump.
-    if (isScheduledForResume()) {
-        return;
-    }
 
     pumpTokenizer();
 }
@@ -449,7 +444,7 @@ void HTMLDocumentParser::discardSpeculationsAndResumeFrom(PassOwnPtr<ParsedChunk
     HTMLParserThread::shared()->postTask(bind(&BackgroundHTMLParser::resumeFrom, m_backgroundParser, checkpoint.release()));
 }
 
-void HTMLDocumentParser::processParsedChunkFromBackgroundParser(PassOwnPtr<ParsedChunk> popChunk)
+size_t HTMLDocumentParser::processParsedChunkFromBackgroundParser(PassOwnPtr<ParsedChunk> popChunk)
 {
     TRACE_EVENT0("blink", "HTMLDocumentParser::processParsedChunkFromBackgroundParser");
 
@@ -468,18 +463,22 @@ void HTMLDocumentParser::processParsedChunkFromBackgroundParser(PassOwnPtr<Parse
 
     OwnPtr<ParsedChunk> chunk(popChunk);
     OwnPtr<CompactHTMLTokenStream> tokens = chunk->tokens.release();
+    size_t elementTokenCount = 0;
 
     HTMLParserThread::shared()->postTask(bind(&BackgroundHTMLParser::startedChunkWithCheckpoint, m_backgroundParser, chunk->inputCheckpoint));
 
-    for (XSSInfoStream::const_iterator it = chunk->xssInfos.begin(); it != chunk->xssInfos.end(); ++it) {
-        m_textPosition = (*it)->m_textPosition;
-        m_xssAuditorDelegate.didBlockScript(**it);
+    for (const auto& xssInfo : chunk->xssInfos) {
+        m_textPosition = xssInfo->m_textPosition;
+        m_xssAuditorDelegate.didBlockScript(*xssInfo);
         if (isStopped())
             break;
     }
 
     for (Vector<CompactHTMLToken>::const_iterator it = tokens->begin(); it != tokens->end(); ++it) {
         ASSERT(!isWaitingForScripts());
+
+        if (!chunk->startingScript && (it->type() == HTMLToken::StartTag || it->type() == HTMLToken::EndTag))
+            elementTokenCount++;
 
         if (document()->frame() && document()->frame()->navigationScheduler().locationChangePending()) {
 
@@ -521,6 +520,8 @@ void HTMLDocumentParser::processParsedChunkFromBackgroundParser(PassOwnPtr<Parse
     // This leaves "script", "style" and "svg" nodes text nodes intact.
     if (!isStopped())
         m_treeBuilder->flush(FlushIfAtTextLimit);
+
+    return elementTokenCount;
 }
 
 void HTMLDocumentParser::pumpPendingSpeculations()
@@ -536,22 +537,32 @@ void HTMLDocumentParser::pumpPendingSpeculations()
     ASSERT(!m_lastChunkBeforeScript);
     ASSERT(!isWaitingForScripts());
     ASSERT(!isStopped());
+    ASSERT(!isScheduledForResume());
+    ASSERT(!inPumpSession());
+
+    // Do not allow pumping speculations in nested event loops.
+    if (m_pumpSpeculationsSessionNestingLevel)
+        m_parserScheduler->scheduleForResume();
 
     // FIXME: Pass in current input length.
     TRACE_EVENT_BEGIN1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "ParseHTML", "beginData", InspectorParseHtmlEvent::beginData(document(), lineNumber().zeroBasedInt()));
-    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline.stack"), "CallStack", "stack", InspectorCallStackEvent::currentCallStack());
     // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentationCookie cookie = InspectorInstrumentation::willWriteHTML(document(), lineNumber().zeroBasedInt());
 
-    SpeculationsPumpSession session(contextForParsingSession());
+    SpeculationsPumpSession session(m_pumpSpeculationsSessionNestingLevel, contextForParsingSession());
     while (!m_speculations.isEmpty()) {
-        processParsedChunkFromBackgroundParser(m_speculations.takeFirst());
+        ASSERT(!isScheduledForResume());
+        size_t elementTokenCount = processParsedChunkFromBackgroundParser(m_speculations.takeFirst());
+        session.addedElementTokens(elementTokenCount);
 
-        // Always check isStopped first as m_document may be null.
-        if (isStopped() || isWaitingForScripts())
+        // Always check isParsing first as m_document may be null.
+        // Surprisingly, isScheduledForResume() may be set here as a result of
+        // processParsedChunkFromBackgroundParser running arbitrary javascript
+        // which invokes nested event loops. (e.g. inspector breakpoints)
+        if (!isParsing() || isWaitingForScripts() || isScheduledForResume())
             break;
 
-        if (m_speculations.isEmpty() || m_parserScheduler->yieldIfNeeded(session))
+        if (m_speculations.isEmpty() || m_parserScheduler->yieldIfNeeded(session, m_speculations.first()->startingScript))
             break;
     }
 
@@ -579,7 +590,7 @@ Document* HTMLDocumentParser::contextForParsingSession()
     // The parsing session should interact with the document only when parsing
     // non-fragments. Otherwise, we might delay the load event mistakenly.
     if (isParsingFragment())
-        return 0;
+        return nullptr;
     return document();
 }
 
@@ -594,7 +605,6 @@ static PassRefPtr<MediaValues> createMediaValues(Document* document)
 void HTMLDocumentParser::pumpTokenizer()
 {
     ASSERT(!isStopped());
-    ASSERT(!isScheduledForResume());
 #if !ENABLE(OILPAN)
     // ASSERT that this object is both attached to the Document and protected.
     ASSERT(refCount() >= 2);
@@ -610,7 +620,6 @@ void HTMLDocumentParser::pumpTokenizer()
     // end up parsing the whole buffer in this pump.  We should pass how
     // much we parsed as part of didWriteHTML instead of willWriteHTML.
     TRACE_EVENT_BEGIN1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "ParseHTML", "beginData", InspectorParseHtmlEvent::beginData(document(), m_input.current().currentLine().zeroBasedInt()));
-    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline.stack"), "CallStack", "stack", InspectorCallStackEvent::currentCallStack());
     // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentationCookie cookie = InspectorInstrumentation::willWriteHTML(document(), m_input.current().currentLine().zeroBasedInt());
 
@@ -752,7 +761,7 @@ void HTMLDocumentParser::startBackgroundParser()
     ASSERT(!m_haveBackgroundParser);
     m_haveBackgroundParser = true;
 
-    RefPtr<WeakReference<BackgroundHTMLParser> > reference = WeakReference<BackgroundHTMLParser>::createUnbound();
+    RefPtr<WeakReference<BackgroundHTMLParser>> reference = WeakReference<BackgroundHTMLParser>::createUnbound();
     m_backgroundParser = WeakPtr<BackgroundHTMLParser>(reference);
 
     // TODO(oysteine): Disabled due to crbug.com/398076 until a full fix can be implemented.
@@ -1096,7 +1105,7 @@ void HTMLDocumentParser::appendBytes(const char* data, size_t length)
         if (!m_haveBackgroundParser)
             startBackgroundParser();
 
-        OwnPtr<Vector<char> > buffer = adoptPtr(new Vector<char>(length));
+        OwnPtr<Vector<char>> buffer = adoptPtr(new Vector<char>(length));
         memcpy(buffer->data(), data, length);
         TRACE_EVENT1("net", "HTMLDocumentParser::appendBytes", "size", (unsigned)length);
 

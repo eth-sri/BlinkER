@@ -234,6 +234,7 @@ public:
     bool isPseudoElement() const { return pseudoId() != NOPSEUDO; }
     bool isBeforePseudoElement() const { return pseudoId() == BEFORE; }
     bool isAfterPseudoElement() const { return pseudoId() == AFTER; }
+    bool isFirstLetterPseudoElement() const { return pseudoId() == FIRST_LETTER; }
     virtual PseudoId pseudoId() const { return NOPSEUDO; }
 
     bool isCustomElement() const { return getFlag(CustomElementFlag); }
@@ -668,7 +669,7 @@ public:
     unsigned lengthOfContents() const;
 
     virtual v8::Handle<v8::Object> wrap(v8::Handle<v8::Object> creationContext, v8::Isolate*) override;
-    virtual v8::Handle<v8::Object> associateWithWrapper(const WrapperTypeInfo*, v8::Handle<v8::Object> wrapper, v8::Isolate*) override;
+    virtual v8::Handle<v8::Object> associateWithWrapper(v8::Isolate*, const WrapperTypeInfo*, v8::Handle<v8::Object> wrapper) override;
 
 private:
     enum NodeFlags {
@@ -748,7 +749,7 @@ protected:
 
     virtual void didMoveToNewDocument(Document& oldDocument);
 
-    static void reattachWhitespaceSiblings(Text* start);
+    static void reattachWhitespaceSiblingsIfNeeded(Text* start);
 
 #if !ENABLE(OILPAN)
     void willBeDeletedFromDocument();

@@ -39,7 +39,7 @@ enum BackgroundBleedAvoidance {
     BackgroundBleedNone,
     BackgroundBleedShrinkBackground,
     BackgroundBleedClipBackground,
-    BackgroundBleedBackgroundOverBorder
+    BackgroundBleedBackgroundOverBorder,
 };
 
 enum ContentChangeType {
@@ -48,8 +48,8 @@ enum ContentChangeType {
     CanvasContextChanged
 };
 
+class InlineFlowBox;
 class RenderTextFragment;
-class BackgroundImageGeometry;
 
 // This class is the base for all objects that adhere to the CSS box model as described
 // at http://www.w3.org/TR/CSS21/box.html
@@ -179,13 +179,9 @@ protected:
     LayoutRect localCaretRectForEmptyElement(LayoutUnit width, LayoutUnit textIndentOffset);
 
     bool hasAutoHeightOrContainingBlockWithAutoHeight() const;
+    RenderBlock* containingBlockForAutoHeightDetection(Length logicalHeight) const;
 
 public:
-
-    // For RenderBlocks and RenderInlines with m_style->styleType() == FIRST_LETTER, this tracks their remaining text fragments
-    RenderTextFragment* firstLetterRemainingText() const;
-    void setFirstLetterRemainingText(RenderTextFragment*);
-
     // These functions are only used internally to manipulate the render tree structure via remove/insert/appendChildNode.
     // Since they are typically called only to move objects around within anonymous blocks (which only have layers in
     // the case of column spans), the default for fullRemoveInsert is false rather than true.
@@ -208,7 +204,7 @@ public:
     {
         moveChildrenTo(toBoxModelObject, startChild, endChild, 0, fullRemoveInsert);
     }
-    void moveChildrenTo(RenderBoxModelObject* toBoxModelObject, RenderObject* startChild, RenderObject* endChild, RenderObject* beforeChild, bool fullRemoveInsert = false);
+    virtual void moveChildrenTo(RenderBoxModelObject* toBoxModelObject, RenderObject* startChild, RenderObject* endChild, RenderObject* beforeChild, bool fullRemoveInsert = false);
 
     enum ScaleByEffectiveZoomOrNot { ScaleByEffectiveZoom, DoNotScaleByEffectiveZoom };
     IntSize calculateImageIntrinsicDimensions(StyleImage*, const IntSize& scaledPositioningAreaSize, ScaleByEffectiveZoomOrNot) const;

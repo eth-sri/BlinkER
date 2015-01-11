@@ -54,7 +54,6 @@ axis
 background
 behavior
 bgcolor
-bgproperties
 border
 bordercolor
 capture
@@ -260,7 +259,6 @@ placeholder
 ping
 poster
 preload
-profile
 pseudo
 readonly
 rel

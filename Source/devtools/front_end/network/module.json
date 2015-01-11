@@ -20,8 +20,13 @@
     ],
     "dependencies": ["source_frame"],
     "scripts": [
+        "FilterSuggestionBuilder.js",
+        "HARWriter.js",
         "RequestView.js",
+        "NetworkDataGridNode.js",
         "NetworkItemView.js",
+        "NetworkTimeCalculator.js",
+        "NetworkLogView.js",
         "RequestCookiesView.js",
         "RequestHeadersView.js",
         "RequestHTMLView.js",

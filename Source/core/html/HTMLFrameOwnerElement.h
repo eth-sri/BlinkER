@@ -42,7 +42,7 @@ public:
     virtual ~HTMLFrameOwnerElement();
 
     Frame* contentFrame() const { return m_contentFrame; }
-    LocalDOMWindow* contentWindow() const;
+    DOMWindow* contentWindow() const;
     Document* contentDocument() const;
 
     void setContentFrame(Frame&);
@@ -127,7 +127,7 @@ public:
     }
 
 private:
-    static WillBeHeapHashCountedSet<RawPtrWillBeMember<Node> >& disabledSubtreeRoots();
+    static WillBeHeapHashCountedSet<RawPtrWillBeMember<Node>>& disabledSubtreeRoots();
 
     RawPtrWillBeMember<Node> m_root;
 };

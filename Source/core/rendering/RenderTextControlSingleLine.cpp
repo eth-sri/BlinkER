@@ -66,7 +66,7 @@ inline HTMLElement* RenderTextControlSingleLine::innerSpinButtonElement() const
     return toHTMLElement(inputElement()->userAgentShadowRoot()->getElementById(ShadowElementNames::spinButton()));
 }
 
-void RenderTextControlSingleLine::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
+void RenderTextControlSingleLine::paint(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
     RenderTextControl::paint(paintInfo, paintOffset);
 
@@ -375,15 +375,23 @@ void RenderTextControlSingleLine::autoscroll(const IntPoint& position)
 
 LayoutUnit RenderTextControlSingleLine::scrollWidth() const
 {
-    if (innerEditorElement())
-        return innerEditorElement()->scrollWidth();
+    if (RenderBox* inner = innerEditorElement() ? innerEditorElement()->renderBox() : 0) {
+        // Adjust scrollWidth to inculde input element horizontal paddings and
+        // decoration width
+        LayoutUnit adjustment = clientWidth() - inner->clientWidth();
+        return innerEditorElement()->scrollWidth() + adjustment;
+    }
     return RenderBlockFlow::scrollWidth();
 }
 
 LayoutUnit RenderTextControlSingleLine::scrollHeight() const
 {
-    if (innerEditorElement())
-        return innerEditorElement()->scrollHeight();
+    if (RenderBox* inner = innerEditorElement() ? innerEditorElement()->renderBox() : 0) {
+        // Adjust scrollHeight to include input element vertical paddings and
+        // decoration height
+        LayoutUnit adjustment = clientHeight() - inner->clientHeight();
+        return innerEditorElement()->scrollHeight() + adjustment;
+    }
     return RenderBlockFlow::scrollHeight();
 }
 

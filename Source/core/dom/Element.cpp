@@ -56,6 +56,7 @@
 #include "core/dom/ElementRareData.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/dom/FirstLetterPseudoElement.h"
 #include "core/dom/Fullscreen.h"
 #include "core/dom/MutationObserverInterestGroup.h"
 #include "core/dom/MutationRecord.h"
@@ -66,6 +67,7 @@
 #include "core/dom/RenderTreeBuilder.h"
 #include "core/dom/ScriptableDocumentParser.h"
 #include "core/dom/SelectorQuery.h"
+#include "core/dom/StyleChangeReason.h"
 #include "core/dom/StyleEngine.h"
 #include "core/dom/Text.h"
 #include "core/dom/custom/CustomElement.h"
@@ -80,8 +82,11 @@
 #include "core/eventracer/EventRacerLog.h"
 #include "core/events/EventDispatcher.h"
 #include "core/events/FocusEvent.h"
+#include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
+#include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/PinchViewport.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
@@ -105,6 +110,7 @@
 #include "core/page/Page.h"
 #include "core/page/PointerLockController.h"
 #include "core/rendering/RenderLayer.h"
+#include "core/rendering/RenderTextFragment.h"
 #include "core/rendering/RenderView.h"
 #include "core/rendering/compositing/RenderLayerCompositor.h"
 #include "core/svg/SVGDocumentExtensions.h"
@@ -804,6 +810,11 @@ IntRect Element::boundsInRootViewSpace()
         result.unite(quads[i].enclosingBoundingBox());
 
     result = view->contentsToRootView(result);
+
+    // FIXME: Cleanup pinch viewport coordinate translations. crbug.com/371902.
+    PinchViewport& pinchViewport = document().page()->frameHost().pinchViewport();
+    result = enclosingIntRect(pinchViewport.mainViewToViewportCSSPixels(result));
+
     return result;
 }
 
@@ -1187,34 +1198,6 @@ String Element::nodeName() const
     return m_tagName.toString();
 }
 
-void Element::setPrefix(const AtomicString& prefix, ExceptionState& exceptionState)
-{
-    UseCounter::countDeprecation(document(), UseCounter::ElementSetPrefix);
-
-    if (!prefix.isEmpty() && !Document::isValidName(prefix)) {
-        exceptionState.throwDOMException(InvalidCharacterError, "The prefix '" + prefix + "' is not a valid name.");
-        return;
-    }
-
-    // FIXME: Raise NamespaceError if prefix is malformed per the Namespaces in XML specification.
-
-    const AtomicString& nodeNamespaceURI = namespaceURI();
-    if (nodeNamespaceURI.isEmpty() && !prefix.isEmpty()) {
-        exceptionState.throwDOMException(NamespaceError, "No namespace is set, so a namespace prefix may not be set.");
-        return;
-    }
-
-    if (prefix == xmlAtom && nodeNamespaceURI != XMLNames::xmlNamespaceURI) {
-        exceptionState.throwDOMException(NamespaceError, "The prefix '" + xmlAtom + "' may not be set on namespace '" + nodeNamespaceURI + "'.");
-        return;
-    }
-
-    if (exceptionState.hadException())
-        return;
-
-    m_tagName.setPrefix(prefix.isEmpty() ? AtomicString() : prefix);
-}
-
 const AtomicString& Element::locateNamespacePrefix(const AtomicString& namespaceToLocate) const
 {
     if (!prefix().isNull() && namespaceURI() == namespaceToLocate)
@@ -1235,6 +1218,9 @@ const AtomicString& Element::locateNamespacePrefix(const AtomicString& namespace
 KURL Element::baseURI() const
 {
     const AtomicString& baseAttribute = fastGetAttribute(baseAttr);
+    if (!baseAttribute.isEmpty())
+        UseCounter::count(document(), UseCounter::ElementBaseURIFromXMLBase);
+
     KURL base(KURL(), baseAttribute);
     if (!base.protocol().isEmpty())
         return base;
@@ -1358,7 +1344,7 @@ void Element::attach(const AttachContext& context)
         data->clearComputedStyle();
     }
 
-    RenderTreeBuilder(this, context.resolvedStyle).createRendererForElementIfNeeded();
+    RenderTreeBuilderForElement(*this, context.resolvedStyle).createRendererIfNeeded();
 
     addCallbackSelectors();
 
@@ -1375,6 +1361,11 @@ void Element::attach(const AttachContext& context)
     createPseudoElementIfNeeded(AFTER);
     createPseudoElementIfNeeded(BACKDROP);
 
+    // We create the first-letter element after the :before, :after and
+    // children are attached because the first letter text could come
+    // from any of them.
+    createPseudoElementIfNeeded(FIRST_LETTER);
+
     if (hasRareData() && !renderer()) {
         if (ActiveAnimations* activeAnimations = elementRareData()->activeAnimations()) {
             activeAnimations->cssAnimations().cancel();
@@ -1388,8 +1379,6 @@ void Element::detach(const AttachContext& context)
     HTMLFrameOwnerElement::UpdateSuspendScope suspendWidgetHierarchyUpdates;
     cancelFocusAppearanceUpdate();
     removeCallbackSelectors();
-    if (svgFilterNeedsLayerUpdate())
-        document().unscheduleSVGFilterLayerUpdateHack(*this);
     if (hasRareData()) {
         ElementRareData* data = elementRareData();
         data->clearPseudoElements();
@@ -1416,7 +1405,12 @@ void Element::detach(const AttachContext& context)
         if (ElementShadow* shadow = data->shadow())
             shadow->detach(context);
     }
+
     ContainerNode::detach(context);
+
+    ASSERT(needsAttach());
+    if (svgFilterNeedsLayerUpdate())
+        document().unscheduleSVGFilterLayerUpdateHack(*this);
 }
 
 bool Element::pseudoStyleCacheIsInvalid(const RenderStyle* currentStyle, RenderStyle* newStyle)
@@ -1535,6 +1529,12 @@ void Element::recalcStyle(StyleRecalcChange change, Text* nextTextSibling)
         updatePseudoElement(AFTER, change);
         updatePseudoElement(BACKDROP, change);
 
+        // If our children have changed then we need to force the first-letter
+        // checks as we don't know if they effected the first letter or not.
+        // This can be seen when a child transitions from floating to
+        // non-floating we have to take it into account for the first letter.
+        updatePseudoElement(FIRST_LETTER, childNeedsStyleRecalc() ? Force : change);
+
         clearChildNeedsStyleRecalc();
     }
 
@@ -1542,7 +1542,7 @@ void Element::recalcStyle(StyleRecalcChange change, Text* nextTextSibling)
         didRecalcStyle(change);
 
     if (change == Reattach)
-        reattachWhitespaceSiblings(nextTextSibling);
+        reattachWhitespaceSiblingsIfNeeded(nextTextSibling);
 }
 
 StyleRecalcChange Element::recalcOwnStyle(StyleRecalcChange change)
@@ -2524,7 +2524,10 @@ void Element::updatePseudoElement(PseudoId pseudoId, StyleRecalcChange change)
 {
     ASSERT(!needsStyleRecalc());
     PseudoElement* element = pseudoElement(pseudoId);
+
     if (element && (change == UpdatePseudoElements || element->shouldCallRecalcStyle(change))) {
+        if (pseudoId == FIRST_LETTER && updateFirstLetter(element))
+            return;
 
         // Need to clear the cached style if the PseudoElement wants a recalc so it
         // computes a new style.
@@ -2537,14 +2540,41 @@ void Element::updatePseudoElement(PseudoId pseudoId, StyleRecalcChange change)
         element->recalcStyle(change == UpdatePseudoElements ? Force : change);
 
         // Wait until our parent is not displayed or pseudoElementRendererIsNeeded
-        // is false, otherwise we could continously create and destroy PseudoElements
+        // is false, otherwise we could continuously create and destroy PseudoElements
         // when RenderObject::isChildAllowed on our parent returns false for the
         // PseudoElement's renderer for each style recalc.
         if (!renderer() || !pseudoElementRendererIsNeeded(renderer()->getCachedPseudoStyle(pseudoId)))
             elementRareData()->setPseudoElement(pseudoId, nullptr);
+    } else if (pseudoId == FIRST_LETTER && element && change >= UpdatePseudoElements && !FirstLetterPseudoElement::firstLetterTextRenderer(*element)) {
+        // This can happen if we change to a float, for example. We need to cleanup the
+        // first-letter pseudoElement and then fix the text of the original remaining
+        // text renderer.
+        // This can be seen in Test 7 of fast/css/first-letter-removed-added.html
+        elementRareData()->setPseudoElement(pseudoId, nullptr);
     } else if (change >= UpdatePseudoElements) {
         createPseudoElementIfNeeded(pseudoId);
     }
+}
+
+// If we're updating first letter, and the current first letter renderer
+// is not the same as the one we're currently using we need to re-create
+// the first letter renderer.
+bool Element::updateFirstLetter(Element* element)
+{
+    RenderObject* remainingTextRenderer = FirstLetterPseudoElement::firstLetterTextRenderer(*element);
+    if (!remainingTextRenderer || remainingTextRenderer != toFirstLetterPseudoElement(element)->remainingTextRenderer()
+        || toFirstLetterPseudoElement(element)->needsUpdate()) {
+        // We have to clear out the old first letter here because when it is
+        // disposed it will set the original text back on the remaining text
+        // renderer. If we dispose after creating the new one we will get
+        // incorrect results due to setting the first letter back.
+        if (remainingTextRenderer)
+            element->reattach();
+        else
+            elementRareData()->setPseudoElement(FIRST_LETTER, nullptr);
+        return true;
+    }
+    return false;
 }
 
 void Element::createPseudoElementIfNeeded(PseudoId pseudoId)
@@ -2586,6 +2616,14 @@ bool Element::matches(const String& selectors, ExceptionState& exceptionState)
     if (!selectorQuery)
         return false;
     return selectorQuery->matches(*this);
+}
+
+Element* Element::closest(const String& selectors, ExceptionState& exceptionState)
+{
+    SelectorQuery* selectorQuery = document().selectorQueryCache().add(AtomicString(selectors), document(), exceptionState);
+    if (!selectorQuery)
+        return nullptr;
+    return selectorQuery->closest(*this);
 }
 
 DOMTokenList& Element::classList()
@@ -3280,7 +3318,7 @@ v8::Handle<v8::Object> Element::wrapCustomElement(v8::Handle<v8::Object> creatio
     // object gets associated with the wrapper.
     RefPtrWillBeRawPtr<Element> protect(this);
 
-    ASSERT(!DOMDataStore::containsWrapperNonTemplate(this, isolate));
+    ASSERT(!DOMDataStore::containsWrapper(this, isolate));
 
     ASSERT(!creationContext.IsEmpty());
     v8::Handle<v8::Context> context = creationContext->CreationContext();
@@ -3289,7 +3327,7 @@ v8::Handle<v8::Object> Element::wrapCustomElement(v8::Handle<v8::Object> creatio
         return ContainerNode::wrap(creationContext, isolate);
 
     const WrapperTypeInfo* wrapperType = wrapperTypeInfo();
-    v8::Handle<v8::Object> wrapper = V8DOMWrapper::createWrapper(creationContext, wrapperType, toScriptWrappableBase(), isolate);
+    v8::Handle<v8::Object> wrapper = V8DOMWrapper::createWrapper(isolate, creationContext, wrapperType, this);
     if (wrapper.IsEmpty())
         return v8::Handle<v8::Object>();
 
@@ -3301,7 +3339,7 @@ v8::Handle<v8::Object> Element::wrapCustomElement(v8::Handle<v8::Object> creatio
 
     wrapper->SetPrototype(binding->prototype());
 
-    return V8DOMWrapper::associateObjectWithWrapperNonTemplate(this, wrapperType, wrapper, isolate);
+    return V8DOMWrapper::associateObjectWithWrapper(isolate, this, wrapperType, wrapper);
 }
 
 } // namespace blink

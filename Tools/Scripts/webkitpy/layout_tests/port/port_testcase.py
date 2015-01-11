@@ -129,19 +129,21 @@ class PortTestCase(unittest.TestCase):
                             test_run_results.UNEXPECTED_ERROR_EXIT_STATUS)
         finally:
             out, err, logs = oc.restore_output()
-            self.assertIn('pretty patches', logs)        # And, hereere we should get warnings about both.
+            self.assertIn('pretty patches', logs)        # And, here we should get warnings about both.
             self.assertIn('build requirements', logs)
+
+    def test_default_batch_size(self):
+        port = self.make_port()
+
+        # Test that we set a finite batch size for sanitizer builds.
+        port._options.enable_sanitizer = True
+        sanitized_batch_size = port.default_batch_size()
+        self.assertIsNotNone(sanitized_batch_size)
 
     def test_default_child_processes(self):
         port = self.make_port()
         num_workers = port.default_child_processes()
         self.assertGreaterEqual(num_workers, 1)
-
-        # Test that we reduce the number of workers for sanitizer builds.
-        port._options.enable_sanitizer = True
-        port.host.executive.cpu_count = lambda: 8
-        num_sanitized_workers = port.default_child_processes()
-        self.assertLess(num_sanitized_workers, 8)
 
     def test_default_max_locked_shards(self):
         port = self.make_port()

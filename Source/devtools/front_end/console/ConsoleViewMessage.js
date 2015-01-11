@@ -55,6 +55,7 @@ WebInspector.ConsoleViewMessage = function(consoleMessage, linkifier, nestingLev
         "node": this._formatParameterAsNode,
         "map": this._formatParameterAsObject,
         "set": this._formatParameterAsObject,
+        "iterator": this._formatParameterAsObject,
         "string": this._formatParameterAsString
     };
 }
@@ -166,8 +167,11 @@ WebInspector.ConsoleViewMessage.prototype = {
                         this._messageElement = this._format([consoleMessage.messageText]);
                         break;
                     default:
+                        if (consoleMessage.parameters && consoleMessage.parameters.length === 1 && consoleMessage.parameters[0].type === "string")
+                             this._messageElement = this._tryFormatAsError(/**@type {string} */(consoleMessage.parameters[0].value));
+
                         var args = consoleMessage.parameters || [consoleMessage.messageText];
-                        this._messageElement = this._format(args);
+                        this._messageElement = this._messageElement || this._format(args);
                 }
             } else if (consoleMessage.source === WebInspector.ConsoleMessage.MessageSource.Network) {
                 if (consoleMessage.request) {
@@ -674,7 +678,7 @@ WebInspector.ConsoleViewMessage.prototype = {
 
                 if (columnRendered) {
                     var cellElement = this._renderPropertyPreviewOrAccessor(table, [rowProperty, cellProperty]);
-                    cellElement.classList.add("nowrap-below");
+                    cellElement.classList.add("console-message-nowrap-below");
                     rowValue[cellProperty.name] = cellElement;
                 }
             }
@@ -1110,7 +1114,7 @@ WebInspector.ConsoleViewMessage.prototype = {
                 var frame = stackTrace[i];
 
                 var content = createElementWithClass("div", "stacktrace-entry");
-                var functionName = frame.functionName || WebInspector.UIString("(anonymous function)");
+                var functionName = WebInspector.beautifyFunctionName(frame.functionName);
                 if (frame.scriptId) {
                     var urlElement = this._linkifyCallFrame(frame);
                     if (!urlElement)
@@ -1266,6 +1270,75 @@ WebInspector.ConsoleViewMessage.prototype = {
     {
         return this._message.messageText;
     },
+
+    /**
+     * @param {string} string
+     * @return {?Element}
+     */
+    _tryFormatAsError: function(string)
+    {
+        var errorPrefixes = ["EvalError", "ReferenceError", "SyntaxError", "TypeError", "RangeError", "Error", "URIError"];
+        var target = this._target();
+        if (!target || !errorPrefixes.some(String.prototype.startsWith.bind(new String(string))))
+            return null;
+
+        var lines = string.split("\n");
+        var links = [];
+        var position = 0;
+        for (var i = 0; i < lines.length; ++i) {
+            position += i > 0 ? lines[i - 1].length + 1 : 0;
+            var isCallFrameLine = /^\s*at\s/.test(lines[i]);
+            if (!isCallFrameLine && links.length)
+                return null;
+
+            if (!isCallFrameLine)
+                continue;
+
+            var openBracketIndex = lines[i].indexOf("(");
+            var closeBracketIndex = lines[i].indexOf(")");
+            var hasOpenBracket = openBracketIndex !== -1;
+            var hasCloseBracket = closeBracketIndex !== -1;
+
+            if ((openBracketIndex > closeBracketIndex) ||  (hasOpenBracket ^ hasCloseBracket))
+                return null;
+
+            var left = hasOpenBracket ? openBracketIndex + 1 : lines[i].indexOf("at") + 3;
+            var right = hasOpenBracket ? closeBracketIndex : lines[i].length;
+            var linkCandidate = lines[i].substring(left, right);
+            var splitResult = WebInspector.ParsedURL.splitLineAndColumn(linkCandidate);
+            if (!splitResult)
+                return null;
+
+            var parsed = splitResult.url.asParsedURL();
+            var url;
+            if (parsed)
+                url = parsed.url;
+            else if (target.debuggerModel.scriptsForSourceURL(splitResult.url).length)
+                url = splitResult.url;
+            else if (splitResult.url === "<anonymous>")
+                continue;
+            else
+                return null;
+
+            links.push({url: url, positionLeft: position + left, positionRight: position + right, lineNumber: splitResult.lineNumber, columnNumber: splitResult.columnNumber});
+        }
+
+        if (!links.length)
+            return null;
+
+        var formattedResult = createElement("span");
+        var start = 0;
+        for (var i = 0; i < links.length; ++i) {
+            formattedResult.appendChild(WebInspector.linkifyStringAsFragment(string.substring(start, links[i].positionLeft)));
+            formattedResult.appendChild(this._linkifier.linkifyScriptLocation(target, null, links[i].url, links[i].lineNumber, links[i].columnNumber));
+            start = links[i].positionRight;
+        }
+
+        if (start != string.length)
+            formattedResult.appendChild(WebInspector.linkifyStringAsFragment(string.substring(start)));
+
+        return formattedResult;
+    }
 }
 
 /**

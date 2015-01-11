@@ -78,6 +78,17 @@ SVGUseElement::~SVGUseElement()
 #endif
 }
 
+void SVGUseElement::trace(Visitor* visitor)
+{
+    visitor->trace(m_x);
+    visitor->trace(m_y);
+    visitor->trace(m_width);
+    visitor->trace(m_height);
+    visitor->trace(m_targetElementInstance);
+    SVGGraphicsElement::trace(visitor);
+    SVGURIReference::trace(visitor);
+}
+
 bool SVGUseElement::isSupportedAttribute(const QualifiedName& attrName)
 {
     DEFINE_STATIC_LOCAL(HashSet<QualifiedName>, supportedAttributes, ());
@@ -286,7 +297,7 @@ void SVGUseElement::clearResourceReferences()
 
     // FIXME: We should try to optimize this, to at least allow partial reclones.
     if (ShadowRoot* shadowTreeRootElement = userAgentShadowRoot())
-        shadowTreeRootElement->removeChildren();
+        shadowTreeRootElement->removeChildren(OmitSubtreeModifiedEvent);
 
     m_needsShadowTreeRecreation = false;
     document().unscheduleUseShadowTreeUpdate(*this);
@@ -434,7 +445,7 @@ void SVGUseElement::toClipPath(Path& path)
             // FIXME: Avoid manual resolution of x/y here. Its potentially harmful.
             SVGLengthContext lengthContext(this);
             path.translate(FloatSize(m_x->currentValue()->value(lengthContext), m_y->currentValue()->value(lengthContext)));
-            path.transform(animatedLocalTransform());
+            path.transform(calculateAnimatedLocalTransform());
         }
     }
 }
@@ -748,12 +759,6 @@ void SVGUseElement::setDocumentResource(ResourcePtr<DocumentResource> resource)
     m_resource = resource;
     if (m_resource)
         m_resource->addClient(this);
-}
-
-void SVGUseElement::trace(Visitor* visitor)
-{
-    visitor->trace(m_targetElementInstance);
-    SVGGraphicsElement::trace(visitor);
 }
 
 }

@@ -26,10 +26,11 @@
 #include "platform/LengthFunctions.h"
 #include "platform/geometry/LayoutPoint.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
+#include "platform/graphics/paint/TransparencyDisplayItem.h"
 
 namespace blink {
 
-void BoxPainter::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
+void BoxPainter::paint(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
     LayoutPoint adjustedPaintOffset = paintOffset + m_renderBox.location();
     // default implementation. Just pass paint through to the children
@@ -39,7 +40,7 @@ void BoxPainter::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
         child->paint(childInfo, adjustedPaintOffset);
 }
 
-void BoxPainter::paintBoxDecorationBackground(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
+void BoxPainter::paintBoxDecorationBackground(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
     if (!paintInfo.shouldPaintWithinRoot(&m_renderBox))
         return;
@@ -49,16 +50,28 @@ void BoxPainter::paintBoxDecorationBackground(PaintInfo& paintInfo, const Layout
     paintBoxDecorationBackgroundWithRect(paintInfo, paintOffset, paintRect);
 }
 
-void BoxPainter::paintBoxDecorationBackgroundWithRect(PaintInfo& paintInfo, const LayoutPoint& paintOffset, const LayoutRect& paintRect)
+LayoutRect BoxPainter::boundsForDrawingRecorder(const LayoutPoint& paintOffset)
+{
+    LayoutRect bounds;
+    if (RuntimeEnabledFeatures::slimmingPaintEnabled()) {
+        if (m_renderBox.isDocumentElement()) {
+            // The document element is specified to paint its background infinitely.
+            bounds = m_renderBox.view()->backgroundRect(&m_renderBox);
+        } else {
+            // Use the visual overflow rect here, because it will include overflow introduced by the theme.
+            bounds = m_renderBox.visualOverflowRect();
+            bounds.moveBy(paintOffset);
+        }
+    }
+    return bounds;
+}
+
+void BoxPainter::paintBoxDecorationBackgroundWithRect(const PaintInfo& paintInfo, const LayoutPoint& paintOffset, const LayoutRect& paintRect)
 {
     RenderStyle* style = m_renderBox.style();
-    BoxDecorationData boxDecorationData(*style, m_renderBox.canRenderBorderImage(), m_renderBox.backgroundHasOpaqueTopLayer(), paintInfo.context);
+    BoxDecorationData boxDecorationData(*style, m_renderBox.canRenderBorderImage(), m_renderBox.backgroundHasOpaqueTopLayer(), m_renderBox.backgroundShouldAlwaysBeClipped(), paintInfo.context);
 
-    IntRect snappedPaintRect(pixelSnappedIntRect(paintRect));
-    // The document element is specified to paint its background infinitely.
-    DrawingRecorder recorder(paintInfo.context, &m_renderBox, paintInfo.phase,
-        m_renderBox.isDocumentElement() ? m_renderBox.view()->backgroundRect(&m_renderBox) : snappedPaintRect);
-
+    DrawingRecorder recorder(paintInfo.context, &m_renderBox, paintInfo.phase, boundsForDrawingRecorder(paintOffset));
 
     // FIXME: Should eventually give the theme control over whether the box shadow should paint, since controls could have
     // custom shadows of their own.
@@ -74,6 +87,7 @@ void BoxPainter::paintBoxDecorationBackgroundWithRect(PaintInfo& paintInfo, cons
 
     // If we have a native theme appearance, paint that before painting our background.
     // The theme will tell us whether or not we should also paint the CSS background.
+    IntRect snappedPaintRect(pixelSnappedIntRect(paintRect));
     bool themePainted = boxDecorationData.hasAppearance && !RenderTheme::theme().paint(&m_renderBox, paintInfo, snappedPaintRect);
     if (!themePainted) {
         if (boxDecorationData.bleedAvoidance() == BackgroundBleedBackgroundOverBorder)
@@ -459,11 +473,12 @@ void BoxPainter::paintFillLayerExtended(RenderBoxModelObject& obj, const PaintIn
             CompositeOperator compositeOp = op == CompositeSourceOver ? bgLayer.composite() : op;
             RenderObject* clientForBackgroundImage = backgroundObject ? backgroundObject : &obj;
             RefPtr<Image> image = bgImage->image(clientForBackgroundImage, geometry.tileSize());
-            InterpolationQuality interpolationQuality = chooseInterpolationQuality(obj, context, image.get(), &bgLayer, geometry.tileSize());
+            InterpolationQuality interpolationQuality = chooseInterpolationQuality(obj, context, image.get(), &bgLayer, LayoutSize(geometry.tileSize()));
             if (bgLayer.maskSourceType() == MaskLuminance)
                 context->setColorFilter(ColorFilterLuminanceToAlpha);
             InterpolationQuality previousInterpolationQuality = context->imageInterpolationQuality();
             context->setImageInterpolationQuality(interpolationQuality);
+            TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "PaintImage", "data", InspectorPaintImageEvent::data(obj, *bgImage));
             context->drawTiledImage(image.get(), geometry.destRect(), geometry.phase(), geometry.tileSize(),
                 compositeOp, bgLayer.blendMode(), geometry.spaceSize());
             context->setImageInterpolationQuality(previousInterpolationQuality);
@@ -486,6 +501,7 @@ void BoxPainter::paintFillLayerExtended(RenderBoxModelObject& obj, const PaintIn
             RootInlineBox& root = box->root();
             box->paint(info, LayoutPoint(scrolledPaintRect.x() - box->x(), scrolledPaintRect.y() - box->y()), root.lineTop(), root.lineBottom());
         } else {
+            // FIXME: this should only have an effect for the line box list within |obj|. Change this to create a LineBoxListPainter directly.
             LayoutSize localOffset = obj.isBox() ? toRenderBox(&obj)->locationOffset() : LayoutSize();
             obj.paint(info, scrolledPaintRect.location() - localOffset);
         }
@@ -495,7 +511,7 @@ void BoxPainter::paintFillLayerExtended(RenderBoxModelObject& obj, const PaintIn
     }
 }
 
-void BoxPainter::paintMask(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
+void BoxPainter::paintMask(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
     if (!paintInfo.shouldPaintWithinRoot(&m_renderBox) || m_renderBox.style()->visibility() != VISIBLE || paintInfo.phase != PaintPhaseMask)
         return;
@@ -527,7 +543,6 @@ void BoxPainter::paintMaskImages(const PaintInfo& paintInfo, const LayoutRect& p
 
         paintInfo.context->setCompositeOperation(CompositeDestinationIn);
         paintInfo.context->beginTransparencyLayer(1);
-        compositeOp = CompositeSourceOver;
     }
 
     if (allMaskImagesLoaded) {
@@ -539,17 +554,13 @@ void BoxPainter::paintMaskImages(const PaintInfo& paintInfo, const LayoutRect& p
         paintInfo.context->endLayer();
 }
 
-void BoxPainter::paintClippingMask(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
+void BoxPainter::paintClippingMask(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
     if (!paintInfo.shouldPaintWithinRoot(&m_renderBox) || m_renderBox.style()->visibility() != VISIBLE || paintInfo.phase != PaintPhaseClippingMask)
         return;
 
     if (!m_renderBox.layer() || m_renderBox.layer()->compositingState() != PaintsIntoOwnBacking)
         return;
-
-    // We should never have this state in this function. A layer with a mask
-    // should have always created its own backing if it became composited.
-    ASSERT(m_renderBox.layer()->compositingState() != HasOwnBackingButPaintsIntoAncestor);
 
     LayoutRect paintRect = LayoutRect(paintOffset, m_renderBox.size());
     paintInfo.context->fillRect(pixelSnappedIntRect(paintRect), Color::black);
@@ -814,7 +825,7 @@ IntSize BoxPainter::calculateFillTileSize(const RenderBoxModelObject& obj, const
     imageIntrinsicSize.scale(1 / image->imageScaleFactor(), 1 / image->imageScaleFactor());
     switch (type) {
     case SizeLength: {
-        LayoutSize tileSize = positioningAreaSize;
+        LayoutSize tileSize(positioningAreaSize);
 
         Length layerWidth = fillLayer.size().size.width();
         Length layerHeight = fillLayer.size().size.height();
@@ -834,14 +845,22 @@ IntSize BoxPainter::calculateFillTileSize(const RenderBoxModelObject& obj, const
         // If one of the values is auto we have to use the appropriate
         // scale to maintain our aspect ratio.
         if (layerWidth.isAuto() && !layerHeight.isAuto()) {
-            if (imageIntrinsicSize.height())
-                tileSize.setWidth(imageIntrinsicSize.width() * tileSize.height() / imageIntrinsicSize.height());
+            if (imageIntrinsicSize.height()) {
+                LayoutUnit adjustedWidth = imageIntrinsicSize.width() * tileSize.height() / imageIntrinsicSize.height();
+                if (imageIntrinsicSize.width() >= 1 && adjustedWidth < 1)
+                    adjustedWidth = 1;
+                tileSize.setWidth(adjustedWidth);
+            }
         } else if (!layerWidth.isAuto() && layerHeight.isAuto()) {
-            if (imageIntrinsicSize.width())
-                tileSize.setHeight(imageIntrinsicSize.height() * tileSize.width() / imageIntrinsicSize.width());
+            if (imageIntrinsicSize.width()) {
+                LayoutUnit adjustedHeight = imageIntrinsicSize.height() * tileSize.width() / imageIntrinsicSize.width();
+                if (imageIntrinsicSize.height() >= 1 && adjustedHeight < 1)
+                    adjustedHeight = 1;
+                tileSize.setHeight(adjustedHeight);
+            }
         } else if (layerWidth.isAuto() && layerHeight.isAuto()) {
             // If both width and height are auto, use the image's intrinsic size.
-            tileSize = imageIntrinsicSize;
+            tileSize = LayoutSize(imageIntrinsicSize);
         }
 
         tileSize.clampNegativeToZero();
@@ -953,6 +972,7 @@ bool BoxPainter::paintNinePieceImage(RenderBoxModelObject& obj, GraphicsContext*
     float topSideScale = drawTop ? (float)topWidth / topSlice : 1;
     float bottomSideScale = drawBottom ? (float)bottomWidth / bottomSlice : 1;
 
+    TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "PaintImage", "data", InspectorPaintImageEvent::data(obj, *styleImage));
     if (drawLeft) {
         // Paint the top and bottom left corners.
 
@@ -1155,7 +1175,7 @@ bool BoxPainter::shouldAntialiasLines(GraphicsContext* context)
     return !context->getCTM().isIdentityOrTranslationOrFlipped();
 }
 
-static bool borderWillArcInnerEdge(const LayoutSize& firstRadius, const FloatSize& secondRadius)
+static bool borderWillArcInnerEdge(const IntSize& firstRadius, const FloatSize& secondRadius)
 {
     return !firstRadius.isZero() || !secondRadius.isZero();
 }
@@ -1340,21 +1360,21 @@ static bool allCornersClippedOut(const RoundedRect& border, const LayoutRect& cl
 
     RoundedRect::Radii radii = border.radii();
 
-    LayoutRect topLeftRect(boundingRect.location(), radii.topLeft());
+    LayoutRect topLeftRect(boundingRect.location(), LayoutSize(radii.topLeft()));
     if (clipRect.intersects(topLeftRect))
         return false;
 
-    LayoutRect topRightRect(boundingRect.location(), radii.topRight());
+    LayoutRect topRightRect(boundingRect.location(), LayoutSize(radii.topRight()));
     topRightRect.setX(boundingRect.maxX() - topRightRect.width());
     if (clipRect.intersects(topRightRect))
         return false;
 
-    LayoutRect bottomLeftRect(boundingRect.location(), radii.bottomLeft());
+    LayoutRect bottomLeftRect(boundingRect.location(), LayoutSize(radii.bottomLeft()));
     bottomLeftRect.setY(boundingRect.maxY() - bottomLeftRect.height());
     if (clipRect.intersects(bottomLeftRect))
         return false;
 
-    LayoutRect bottomRightRect(boundingRect.location(), radii.bottomRight());
+    LayoutRect bottomRightRect(boundingRect.location(), LayoutSize(radii.bottomRight()));
     bottomRightRect.setX(boundingRect.maxX() - bottomRightRect.width());
     bottomRightRect.setY(boundingRect.maxY() - bottomRightRect.height());
     if (clipRect.intersects(bottomRightRect))
@@ -1993,10 +2013,10 @@ void BoxPainter::clipBorderSidePolygon(GraphicsContext* graphicsContext, const R
     //
     switch (side) {
     case BSTop:
-        quad[0] = outerRect.minXMinYCorner();
-        quad[1] = innerRect.minXMinYCorner();
-        quad[2] = innerRect.maxXMinYCorner();
-        quad[3] = outerRect.maxXMinYCorner();
+        quad[0] = FloatPoint(outerRect.minXMinYCorner());
+        quad[1] = FloatPoint(innerRect.minXMinYCorner());
+        quad[2] = FloatPoint(innerRect.maxXMinYCorner());
+        quad[3] = FloatPoint(outerRect.maxXMinYCorner());
 
         if (!innerBorder.radii().topLeft().isZero()) {
             findIntersection(quad[0], quad[1],
@@ -2022,10 +2042,10 @@ void BoxPainter::clipBorderSidePolygon(GraphicsContext* graphicsContext, const R
         break;
 
     case BSLeft:
-        quad[0] = outerRect.minXMinYCorner();
-        quad[1] = innerRect.minXMinYCorner();
-        quad[2] = innerRect.minXMaxYCorner();
-        quad[3] = outerRect.minXMaxYCorner();
+        quad[0] = FloatPoint(outerRect.minXMinYCorner());
+        quad[1] = FloatPoint(innerRect.minXMinYCorner());
+        quad[2] = FloatPoint(innerRect.minXMaxYCorner());
+        quad[3] = FloatPoint(outerRect.minXMaxYCorner());
 
         if (!innerBorder.radii().topLeft().isZero()) {
             findIntersection(quad[0], quad[1],
@@ -2051,10 +2071,10 @@ void BoxPainter::clipBorderSidePolygon(GraphicsContext* graphicsContext, const R
         break;
 
     case BSBottom:
-        quad[0] = outerRect.minXMaxYCorner();
-        quad[1] = innerRect.minXMaxYCorner();
-        quad[2] = innerRect.maxXMaxYCorner();
-        quad[3] = outerRect.maxXMaxYCorner();
+        quad[0] = FloatPoint(outerRect.minXMaxYCorner());
+        quad[1] = FloatPoint(innerRect.minXMaxYCorner());
+        quad[2] = FloatPoint(innerRect.maxXMaxYCorner());
+        quad[3] = FloatPoint(outerRect.maxXMaxYCorner());
 
         if (!innerBorder.radii().bottomLeft().isZero()) {
             findIntersection(quad[0], quad[1],
@@ -2080,10 +2100,10 @@ void BoxPainter::clipBorderSidePolygon(GraphicsContext* graphicsContext, const R
         break;
 
     case BSRight:
-        quad[0] = outerRect.maxXMinYCorner();
-        quad[1] = innerRect.maxXMinYCorner();
-        quad[2] = innerRect.maxXMaxYCorner();
-        quad[3] = outerRect.maxXMaxYCorner();
+        quad[0] = FloatPoint(outerRect.maxXMinYCorner());
+        quad[1] = FloatPoint(innerRect.maxXMinYCorner());
+        quad[2] = FloatPoint(innerRect.maxXMaxYCorner());
+        quad[3] = FloatPoint(outerRect.maxXMaxYCorner());
 
         if (!innerBorder.radii().topRight().isZero()) {
             findIntersection(quad[0], quad[1],

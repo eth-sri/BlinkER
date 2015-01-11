@@ -81,7 +81,6 @@ public:
     void schedulePageBlock(Document*);
     void scheduleFormSubmission(PassRefPtrWillBeRawPtr<FormSubmission>);
     void scheduleReload();
-    void scheduleHistoryNavigation(int steps);
 
     void startTimer();
     void cancel();
@@ -89,7 +88,7 @@ public:
     void trace(Visitor*);
 
 private:
-    bool shouldScheduleNavigation() const;
+    bool shouldScheduleReload() const;
     bool shouldScheduleNavigation(const String& url) const;
 
     void timerFired(EventRacerTimer<NavigationScheduler>*);

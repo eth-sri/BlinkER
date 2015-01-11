@@ -26,7 +26,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 <head>
 <script>
 
-InspectorFrontendAPI = {};
+DevToolsAPI = {};
 
 InspectorTest = {};
 InspectorTest._dispatchTable = [];
@@ -76,7 +76,7 @@ InspectorTest.sendCommand = function(method, params, handler)
         InspectorTest._collectedMessages.push({"side": "frontend", "message": JSON.stringify(messageObject)});
     if (InspectorTest._dumpInspectorProtocolMessages)
         testRunner.logToStderr("frontend: " + JSON.stringify(messageObject));
-    InspectorFrontendHost.sendMessageToBackend(JSON.stringify(messageObject));
+    DevToolsHost.sendMessageToBackend(JSON.stringify(messageObject));
 
     return this._requestId;
 }
@@ -153,14 +153,14 @@ InspectorTest.wrapCallback = function(callback)
 InspectorTest.sendRawCommand = function(command, handler)
 {
     this._dispatchTable[++this._requestId] = handler;
-    InspectorFrontendHost.sendMessageToBackend(command);
+    DevToolsHost.sendMessageToBackend(command);
     return this._requestId;
 }
 
 /**
  * @param {string|!Object} messageOrObject
  */
-InspectorFrontendAPI.dispatchMessage = function(messageOrObject)
+DevToolsAPI.dispatchMessage = function(messageOrObject)
 {
     var messageObject = (typeof messageOrObject === "string" ? JSON.parse(messageOrObject) : messageOrObject);
     if (InspectorTest._collectProtocolMessages)

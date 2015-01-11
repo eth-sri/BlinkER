@@ -155,6 +155,9 @@ public:
     virtual void setPermissionClient(WebPermissionClient*) = 0;
     virtual void setSharedWorkerRepositoryClient(WebSharedWorkerRepositoryClient*) = 0;
 
+    // The security origin of this frame.
+    BLINK_EXPORT WebSecurityOrigin securityOrigin() const;
+
     // Geometry -----------------------------------------------------------
 
     // NOTE: These routines do not force page layout so their results may
@@ -495,9 +498,6 @@ public:
     // plugin whose content indicates that printed output should not be scaled,
     // return true, otherwise return false.
     virtual bool isPrintScalingDisabledForPlugin(const WebNode& = WebNode()) = 0;
-
-    // Returns the number of copies to be printed.
-    virtual int getPrintCopiesForPlugin(const WebNode& = WebNode()) = 0;
 
     // CSS3 Paged Media ----------------------------------------------------
 

@@ -27,8 +27,6 @@
 
 namespace blink {
 
-const RenderSVGResourceType RenderSVGResourceRadialGradient::s_resourceType = RadialGradientResourceType;
-
 RenderSVGResourceRadialGradient::RenderSVGResourceRadialGradient(SVGRadialGradientElement* node)
     : RenderSVGResourceGradient(node)
 {
@@ -36,6 +34,12 @@ RenderSVGResourceRadialGradient::RenderSVGResourceRadialGradient(SVGRadialGradie
 
 RenderSVGResourceRadialGradient::~RenderSVGResourceRadialGradient()
 {
+}
+
+void RenderSVGResourceRadialGradient::trace(Visitor* visitor)
+{
+    visitor->trace(m_attributes);
+    RenderSVGResourceGradient::trace(visitor);
 }
 
 bool RenderSVGResourceRadialGradient::collectGradientAttributes(SVGGradientElement* gradientElement)

@@ -34,7 +34,6 @@
 #include "platform/graphics/ImageBuffer.h"
 
 #include "GrContext.h"
-#include "platform/MIMETypeRegistry.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/BitmapImage.h"
 #include "platform/graphics/GraphicsContext.h"
@@ -45,19 +44,15 @@
 #include "platform/graphics/gpu/Extensions3DUtil.h"
 #include "platform/graphics/skia/NativeImageSkia.h"
 #include "platform/graphics/skia/SkiaUtils.h"
-#include "platform/image-encoders/skia/JPEGImageEncoder.h"
-#include "platform/image-encoders/skia/PNGImageEncoder.h"
-#include "platform/image-encoders/skia/WEBPImageEncoder.h"
+#include "platform/image-encoders/ImageEncoder.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebExternalTextureMailbox.h"
 #include "public/platform/WebGraphicsContext3D.h"
 #include "public/platform/WebGraphicsContext3DProvider.h"
 #include "third_party/skia/include/core/SkPicture.h"
 #include "third_party/skia/include/effects/SkTableColorFilter.h"
+#include "wtf/ArrayBufferContents.h"
 #include "wtf/MathExtras.h"
-#include "wtf/Vector.h"
-#include "wtf/text/Base64.h"
-#include "wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -82,7 +77,6 @@ ImageBuffer::ImageBuffer(PassOwnPtr<ImageBufferSurface> surface)
 {
     if (m_surface->canvas()) {
         m_context = adoptPtr(new GraphicsContext(m_surface->canvas()));
-        m_context->setCertainlyOpaque(m_surface->opacityMode() == Opaque);
         m_context->setAccelerated(m_surface->isAccelerated());
     }
     m_surface->setImageBuffer(this);
@@ -136,6 +130,13 @@ void ImageBuffer::notifySurfaceInvalid()
 {
     if (m_client)
         m_client->notifySurfaceInvalid();
+}
+
+void ImageBuffer::resetCanvas(SkCanvas* canvas)
+{
+    context()->resetCanvas(canvas);
+    if (m_client)
+        m_client->restoreCanvasMatrixClipStack();
 }
 
 PassRefPtr<SkImage> ImageBuffer::newImageSnapshot() const
@@ -235,7 +236,7 @@ void ImageBuffer::didModifyBackingTexture()
     m_surface->didModifyBackingTexture();
 }
 
-bool ImageBuffer::copyRenderingResultsFromDrawingBuffer(DrawingBuffer* drawingBuffer, bool fromFrontBuffer)
+bool ImageBuffer::copyRenderingResultsFromDrawingBuffer(DrawingBuffer* drawingBuffer, SourceDrawingBuffer sourceBuffer)
 {
     if (!drawingBuffer)
         return false;
@@ -249,7 +250,7 @@ bool ImageBuffer::copyRenderingResultsFromDrawingBuffer(DrawingBuffer* drawingBu
 
     m_surface->invalidateCachedBitmap();
     bool result = drawingBuffer->copyToPlatformTexture(context3D, tex, GL_RGBA,
-        GL_UNSIGNED_BYTE, 0, true, false, fromFrontBuffer);
+        GL_UNSIGNED_BYTE, 0, true, false, sourceBuffer);
 
     if (result) {
         m_surface->didModifyBackingTexture();
@@ -341,32 +342,41 @@ PassRefPtr<SkColorFilter> ImageBuffer::createColorSpaceFilter(ColorSpace srcColo
     return adoptRef(SkTableColorFilter::CreateARGB(0, lut, lut, lut));
 }
 
-PassRefPtr<Uint8ClampedArray> ImageBuffer::getImageData(Multiply multiplied, const IntRect& rect) const
+bool ImageBuffer::getImageData(Multiply multiplied, const IntRect& rect, WTF::ArrayBufferContents& contents) const
 {
-    if (!isSurfaceValid())
-        return Uint8ClampedArray::create(rect.width() * rect.height() * 4);
+    Checked<int, RecordOverflow> dataSize = 4;
+    dataSize *= rect.width();
+    dataSize *= rect.height();
+    if (dataSize.hasOverflowed())
+        return false;
 
-    float area = 4.0f * rect.width() * rect.height();
-    if (area > static_cast<float>(std::numeric_limits<int>::max()))
-        return nullptr;
+    if (!isSurfaceValid()) {
+        WTF::ArrayBufferContents result(rect.width() * rect.height(), 4, WTF::ArrayBufferContents::ZeroInitialize);
+        result.transfer(contents);
+        return true;
+    }
 
-    RefPtr<Uint8ClampedArray> result = Uint8ClampedArray::createUninitialized(rect.width() * rect.height() * 4);
-
-    if (rect.x() < 0
+    const bool hasStrayArea =
+        rect.x() < 0
         || rect.y() < 0
         || rect.maxX() > m_surface->size().width()
-        || rect.maxY() > m_surface->size().height())
-        result->zeroFill();
+        || rect.maxY() > m_surface->size().height();
+    WTF::ArrayBufferContents result(
+        rect.width() * rect.height(), 4,
+        hasStrayArea
+        ? WTF::ArrayBufferContents::ZeroInitialize
+        : WTF::ArrayBufferContents::DontInitialize);
 
     SkAlphaType alphaType = (multiplied == Premultiplied) ? kPremul_SkAlphaType : kUnpremul_SkAlphaType;
     SkImageInfo info = SkImageInfo::Make(rect.width(), rect.height(), kRGBA_8888_SkColorType, alphaType);
 
     m_surface->willAccessPixels();
-    context()->readPixels(info, result->data(), 4 * rect.width(), rect.x(), rect.y());
-    return result.release();
+    context()->readPixels(info, result.data(), 4 * rect.width(), rect.x(), rect.y());
+    result.transfer(contents);
+    return true;
 }
 
-void ImageBuffer::putByteArray(Multiply multiplied, Uint8ClampedArray* source, const IntSize& sourceSize, const IntRect& sourceRect, const IntPoint& destPoint)
+void ImageBuffer::putByteArray(Multiply multiplied, const unsigned char* source, const IntSize& sourceSize, const IntRect& sourceRect, const IntPoint& destPoint)
 {
     if (!isSurfaceValid())
         return;
@@ -389,7 +399,7 @@ void ImageBuffer::putByteArray(Multiply multiplied, Uint8ClampedArray* source, c
     ASSERT(originY < sourceRect.maxY());
 
     const size_t srcBytesPerRow = 4 * sourceSize.width();
-    const void* srcAddr = source->data() + originY * srcBytesPerRow + originX * 4;
+    const void* srcAddr = source + originY * srcBytesPerRow + originX * 4;
     SkAlphaType alphaType = (multiplied == Premultiplied) ? kPremul_SkAlphaType : kUnpremul_SkAlphaType;
     SkImageInfo info = SkImageInfo::Make(sourceRect.width(), sourceRect.height(), kRGBA_8888_SkColorType, alphaType);
 
@@ -398,52 +408,12 @@ void ImageBuffer::putByteArray(Multiply multiplied, Uint8ClampedArray* source, c
     context()->writePixels(info, srcAddr, srcBytesPerRow, destX, destY);
 }
 
-template <typename T>
-static bool encodeImage(T& source, const String& mimeType, const double* quality, Vector<char>* output)
-{
-    Vector<unsigned char>* encodedImage = reinterpret_cast<Vector<unsigned char>*>(output);
-
-    if (mimeType == "image/jpeg") {
-        int compressionQuality = JPEGImageEncoder::DefaultCompressionQuality;
-        if (quality && *quality >= 0.0 && *quality <= 1.0)
-            compressionQuality = static_cast<int>(*quality * 100 + 0.5);
-        if (!JPEGImageEncoder::encode(source, compressionQuality, encodedImage))
-            return false;
-    } else if (mimeType == "image/webp") {
-        int compressionQuality = WEBPImageEncoder::DefaultCompressionQuality;
-        if (quality && *quality >= 0.0 && *quality <= 1.0)
-            compressionQuality = static_cast<int>(*quality * 100 + 0.5);
-        if (!WEBPImageEncoder::encode(source, compressionQuality, encodedImage))
-            return false;
-    } else {
-        if (!PNGImageEncoder::encode(source, encodedImage))
-            return false;
-        ASSERT(mimeType == "image/png");
-    }
-
-    return true;
-}
-
 String ImageBuffer::toDataURL(const String& mimeType, const double* quality) const
 {
-    ASSERT(MIMETypeRegistry::isSupportedImageMIMETypeForEncoding(mimeType));
-
-    Vector<char> encodedImage;
-    if (!isSurfaceValid() || !encodeImage(m_surface->bitmap(), mimeType, quality, &encodedImage))
+    if (!isSurfaceValid())
         return "data:,";
 
-    return "data:" + mimeType + ";base64," + base64Encode(encodedImage);
-}
-
-String ImageDataToDataURL(const ImageDataBuffer& imageData, const String& mimeType, const double* quality)
-{
-    ASSERT(MIMETypeRegistry::isSupportedImageMIMETypeForEncoding(mimeType));
-
-    Vector<char> encodedImage;
-    if (!encodeImage(imageData, mimeType, quality, &encodedImage))
-        return "data:,";
-
-    return "data:" + mimeType + ";base64," + base64Encode(encodedImage);
+    return ImageEncoder::toDataURL(m_surface->bitmap(), mimeType, quality);
 }
 
 } // namespace blink

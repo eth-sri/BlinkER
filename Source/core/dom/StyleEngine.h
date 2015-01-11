@@ -85,11 +85,9 @@ public:
     void modifiedStyleSheet(StyleSheet*);
     void addStyleSheetCandidateNode(Node*, bool createdByParser);
     void removeStyleSheetCandidateNode(Node*);
-    void removeStyleSheetCandidateNode(Node*, ContainerNode* scopingNode, TreeScope&);
+    void removeStyleSheetCandidateNode(Node*, TreeScope&);
     void modifiedStyleSheetCandidateNode(Node*);
     void enableExitTransitionStylesheets();
-    void addXSLStyleSheet(ProcessingInstruction*, bool createdByParser);
-    void removeXSLStyleSheet(ProcessingInstruction*);
 
     void invalidateInjectedStyleSheetCache();
     void updateInjectedStyleSheetCache() const;
@@ -170,9 +168,7 @@ public:
     PassRefPtrWillBeRawPtr<CSSStyleSheet> createSheet(Element*, const String& text, TextPosition startPosition, bool createdByParser);
     void removeSheet(StyleSheetContents*);
 
-    void addScopedStyleResolver(const ScopedStyleResolver* resolver) { m_scopedStyleResolvers.add(resolver); }
-    void removeScopedStyleResolver(const ScopedStyleResolver* resolver) { m_scopedStyleResolvers.remove(resolver); }
-    bool hasOnlyScopedResolverForDocument() const { return m_scopedStyleResolvers.size() == 1; }
+    bool onlyDocumentHasStyles() const { return m_activeTreeScopes.isEmpty(); }
     void collectScopedStyleFeaturesTo(RuleFeatureSet&) const;
 
     virtual void trace(Visitor*) override;
@@ -188,7 +184,6 @@ private:
     TreeScopeStyleSheetCollection* styleSheetCollectionFor(TreeScope&);
     bool shouldUpdateDocumentStyleSheetCollection(StyleResolverUpdateMode) const;
     bool shouldUpdateShadowTreeStyleSheetCollection(StyleResolverUpdateMode) const;
-    bool shouldApplyXSLTransform() const;
 
     void markTreeScopeDirty(TreeScope&);
 
@@ -232,8 +227,6 @@ private:
 
     typedef WillBeHeapHashMap<RawPtrWillBeWeakMember<TreeScope>, OwnPtrWillBeMember<ShadowTreeStyleSheetCollection> > StyleSheetCollectionMap;
     StyleSheetCollectionMap m_styleSheetCollectionMap;
-    typedef WillBeHeapHashSet<RawPtrWillBeMember<const ScopedStyleResolver> > ScopedStyleResolverSet;
-    ScopedStyleResolverSet m_scopedStyleResolvers;
 
     bool m_documentScopeDirty;
     TreeScopeSet m_dirtyTreeScopes;
@@ -257,8 +250,6 @@ private:
 
     WillBeHeapHashMap<AtomicString, RawPtrWillBeMember<StyleSheetContents> > m_textToSheetCache;
     WillBeHeapHashMap<RawPtrWillBeMember<StyleSheetContents>, AtomicString> m_sheetToTextCache;
-
-    RefPtrWillBeMember<ProcessingInstruction> m_xslStyleSheet;
 };
 
 }

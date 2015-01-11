@@ -64,14 +64,12 @@
     color: inherit;
 }
 
-.profiles.panel .status-bar {
-    border-bottom: 1px solid rgb(202, 202, 202);
-    border-top: none;
-}
-
 .profiles-status-bar {
+    display: flex;
     background-color: #eee;
-    flex: 0 0 23px;
+    flex: 0 0 25px;
+    flex-direction: row;
+    border-bottom: 1px solid rgb(202, 202, 202);
 }
 
 .profile-launcher-view-tree-item > .icon {
@@ -160,18 +158,6 @@
 
 .data-grid:focus tr.selected .profile-node-file {
     color: white;
-}
-
-.focus-profile-node-status-bar-item .glyph {
-    -webkit-mask-position: -96px 0;
-}
-
-.exclude-profile-node-status-bar-item .glyph {
-    -webkit-mask-position: -128px 0;
-}
-
-.reset-profile-status-bar-item .glyph {
-    -webkit-mask-position: 0 0;
 }
 
 .profile-launcher-view-content {

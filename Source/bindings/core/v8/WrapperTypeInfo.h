@@ -40,7 +40,7 @@ namespace blink {
 
 class ActiveDOMObject;
 class EventTarget;
-class ScriptWrappableBase;
+class ScriptWrappable;
 
 static const int v8DOMWrapperTypeIndex = static_cast<int>(gin::kWrapperInfoIndex);
 static const int v8DOMWrapperObjectIndex = static_cast<int>(gin::kEncodedValueIndex);
@@ -49,18 +49,17 @@ static const int v8PrototypeTypeIndex = 0;
 static const int v8PrototypeInternalFieldcount = 1;
 
 typedef v8::Handle<v8::FunctionTemplate> (*DomTemplateFunction)(v8::Isolate*);
-typedef void (*RefObjectFunction)(ScriptWrappableBase*);
-typedef void (*DerefObjectFunction)(ScriptWrappableBase*);
-typedef void (*TraceFunction)(Visitor*, ScriptWrappableBase*);
+typedef void (*RefObjectFunction)(ScriptWrappable*);
+typedef void (*DerefObjectFunction)(ScriptWrappable*);
+typedef void (*TraceFunction)(Visitor*, ScriptWrappable*);
 typedef ActiveDOMObject* (*ToActiveDOMObjectFunction)(v8::Handle<v8::Object>);
-typedef EventTarget* (*ToEventTargetFunction)(v8::Handle<v8::Object>);
-typedef void (*ResolveWrapperReachabilityFunction)(ScriptWrappableBase*, const v8::Persistent<v8::Object>&, v8::Isolate*);
+typedef void (*ResolveWrapperReachabilityFunction)(v8::Isolate*, ScriptWrappable*, const v8::Persistent<v8::Object>&);
 typedef void (*InstallConditionallyEnabledMethodsFunction)(v8::Handle<v8::Object>, v8::Isolate*);
 typedef void (*InstallConditionallyEnabledPropertiesFunction)(v8::Handle<v8::Object>, v8::Isolate*);
 
-inline void setObjectGroup(ScriptWrappableBase* scriptWrappableBase, const v8::Persistent<v8::Object>& wrapper, v8::Isolate* isolate)
+inline void setObjectGroup(v8::Isolate* isolate, ScriptWrappable* scriptWrappable, const v8::Persistent<v8::Object>& wrapper)
 {
-    isolate->SetObjectGroupId(wrapper, v8::UniqueId(reinterpret_cast<intptr_t>(scriptWrappableBase)));
+    isolate->SetObjectGroupId(wrapper, v8::UniqueId(reinterpret_cast<intptr_t>(scriptWrappable)));
 }
 
 // This struct provides a way to store a bunch of information that is helpful when unwrapping
@@ -75,6 +74,11 @@ struct WrapperTypeInfo {
     enum WrapperClassId {
         NodeClassId = 1, // NodeClassId must be smaller than ObjectClassId.
         ObjectClassId,
+    };
+
+    enum EventTargetInheritance {
+        NotInheritFromEventTarget,
+        InheritFromEventTarget,
     };
 
     enum Lifetime {
@@ -92,7 +96,6 @@ struct WrapperTypeInfo {
     {
         return reinterpret_cast<const WrapperTypeInfo*>(v8::External::Cast(*typeInfoWrapper)->Value());
     }
-
 
     bool equals(const WrapperTypeInfo* that) const
     {
@@ -121,22 +124,22 @@ struct WrapperTypeInfo {
         return domTemplateFunction(isolate);
     }
 
-    void refObject(ScriptWrappableBase* scriptWrappableBase) const
+    void refObject(ScriptWrappable* scriptWrappable) const
     {
         ASSERT(refObjectFunction);
-        refObjectFunction(scriptWrappableBase);
+        refObjectFunction(scriptWrappable);
     }
 
-    void derefObject(ScriptWrappableBase* scriptWrappableBase) const
+    void derefObject(ScriptWrappable* scriptWrappable) const
     {
         ASSERT(derefObjectFunction);
-        derefObjectFunction(scriptWrappableBase);
+        derefObjectFunction(scriptWrappable);
     }
 
-    void trace(Visitor* visitor, ScriptWrappableBase* scriptWrappableBase) const
+    void trace(Visitor* visitor, ScriptWrappable* scriptWrappable) const
     {
         ASSERT(traceFunction);
-        return traceFunction(visitor, scriptWrappableBase);
+        return traceFunction(visitor, scriptWrappable);
     }
 
     void installConditionallyEnabledMethods(v8::Handle<v8::Object> prototypeTemplate, v8::Isolate* isolate) const
@@ -158,19 +161,14 @@ struct WrapperTypeInfo {
         return toActiveDOMObjectFunction(object);
     }
 
-    EventTarget* toEventTarget(v8::Handle<v8::Object> object) const
-    {
-        if (!toEventTargetFunction)
-            return 0;
-        return toEventTargetFunction(object);
-    }
+    EventTarget* toEventTarget(v8::Handle<v8::Object>) const;
 
-    void visitDOMWrapper(ScriptWrappableBase* scriptWrappableBase, const v8::Persistent<v8::Object>& wrapper, v8::Isolate* isolate) const
+    void visitDOMWrapper(v8::Isolate* isolate, ScriptWrappable* scriptWrappable, const v8::Persistent<v8::Object>& wrapper) const
     {
         if (!visitDOMWrapperFunction)
-            setObjectGroup(scriptWrappableBase, wrapper, isolate);
+            setObjectGroup(isolate, scriptWrappable, wrapper);
         else
-            visitDOMWrapperFunction(scriptWrappableBase, wrapper, isolate);
+            visitDOMWrapperFunction(isolate, scriptWrappable, wrapper);
     }
 
     // This field must be the first member of the struct WrapperTypeInfo. This is also checked by a COMPILE_ASSERT() below.
@@ -181,15 +179,15 @@ struct WrapperTypeInfo {
     const DerefObjectFunction derefObjectFunction;
     const TraceFunction traceFunction;
     const ToActiveDOMObjectFunction toActiveDOMObjectFunction;
-    const ToEventTargetFunction toEventTargetFunction;
     const ResolveWrapperReachabilityFunction visitDOMWrapperFunction;
     InstallConditionallyEnabledMethodsFunction installConditionallyEnabledMethodsFunction;
     const InstallConditionallyEnabledPropertiesFunction installConditionallyEnabledPropertiesFunction;
     const WrapperTypeInfo* parentClass;
-    const WrapperTypePrototype wrapperTypePrototype;
-    const WrapperClassId wrapperClassId;
-    const Lifetime lifetime;
-    const GCType gcType;
+    const unsigned wrapperTypePrototype : 1; // WrapperTypePrototype
+    const unsigned wrapperClassId : 2; // WrapperClassId
+    const unsigned eventTargetInheritance : 1; // EventTargetInheritance
+    const unsigned lifetime : 1; // Lifetime
+    const unsigned gcType : 2; // GCType
 };
 
 COMPILE_ASSERT(offsetof(struct WrapperTypeInfo, ginEmbedder) == offsetof(struct gin::WrapperInfo, embedder), wrapper_type_info_compatible_to_gin);
@@ -208,14 +206,14 @@ inline T* getInternalField(v8::Handle<v8::Object> wrapper)
     return static_cast<T*>(wrapper->GetAlignedPointerFromInternalField(offset));
 }
 
-inline ScriptWrappableBase* toScriptWrappableBase(const v8::Persistent<v8::Object>& wrapper)
+inline ScriptWrappable* toScriptWrappable(const v8::Persistent<v8::Object>& wrapper)
 {
-    return getInternalField<ScriptWrappableBase, v8DOMWrapperObjectIndex>(wrapper);
+    return getInternalField<ScriptWrappable, v8DOMWrapperObjectIndex>(wrapper);
 }
 
-inline ScriptWrappableBase* toScriptWrappableBase(v8::Handle<v8::Object> wrapper)
+inline ScriptWrappable* toScriptWrappable(v8::Handle<v8::Object> wrapper)
 {
-    return getInternalField<ScriptWrappableBase, v8DOMWrapperObjectIndex>(wrapper);
+    return getInternalField<ScriptWrappable, v8DOMWrapperObjectIndex>(wrapper);
 }
 
 inline const WrapperTypeInfo* toWrapperTypeInfo(const v8::Persistent<v8::Object>& wrapper)
@@ -230,7 +228,7 @@ inline const WrapperTypeInfo* toWrapperTypeInfo(v8::Handle<v8::Object> wrapper)
 
 inline void releaseObject(v8::Handle<v8::Object> wrapper)
 {
-    toWrapperTypeInfo(wrapper)->derefObject(toScriptWrappableBase(wrapper));
+    toWrapperTypeInfo(wrapper)->derefObject(toScriptWrappable(wrapper));
 }
 
 } // namespace blink

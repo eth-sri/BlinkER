@@ -76,12 +76,8 @@ public:
     // Update layout on the underlying tree, and return true if this object is
     // still valid (not detached). Note that calling this method
     // can cause other WebAXObjects to become invalid, too,
-    // so always call isDetached if updateBackingStoreAndCheckValidity
-    // has been called on any object, or if any other WebCore code has run.
+    // so always call isDetached if any other WebCore code has run.
     BLINK_EXPORT bool updateLayoutAndCheckValidity();
-
-    // FIXME: Deprecated - remove once callers use updateLayoutAndCheckValidity, instead.
-    BLINK_EXPORT bool updateBackingStoreAndCheckValidity();
 
     BLINK_EXPORT WebString accessibilityDescription() const;
     BLINK_EXPORT unsigned childCount() const;
@@ -90,6 +86,7 @@ public:
     BLINK_EXPORT WebAXObject parentObject() const;
 
     BLINK_EXPORT bool isAnchor() const;
+    BLINK_EXPORT WebAXOptionalBool isAriaGrabbed() const;
     BLINK_EXPORT bool isAriaReadOnly() const;
     BLINK_EXPORT bool isButtonStateMixed() const;
     BLINK_EXPORT bool isChecked() const;
@@ -98,6 +95,7 @@ public:
     BLINK_EXPORT bool isControl() const;
     BLINK_EXPORT bool isEnabled() const;
     BLINK_EXPORT WebAXExpanded isExpanded() const;
+    BLINK_EXPORT WebAXOrientation orientation() const;
     BLINK_EXPORT bool isFocused() const;
     BLINK_EXPORT bool isHovered() const;
     BLINK_EXPORT bool isIndeterminate() const;
@@ -205,6 +203,10 @@ public:
     BLINK_EXPORT unsigned cellColumnSpan() const;
     BLINK_EXPORT unsigned cellRowIndex() const;
     BLINK_EXPORT unsigned cellRowSpan() const;
+
+    // Load inline text boxes for just this subtree, even if
+    // settings->inlineTextBoxAccessibilityEnabled() is false.
+    BLINK_EXPORT void loadInlineTextBoxes() const;
 
     // For an inline text box.
     BLINK_EXPORT WebAXTextDirection textDirection() const;

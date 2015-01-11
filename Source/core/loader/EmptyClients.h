@@ -33,7 +33,6 @@
 #include "core/eventracer/EventRacerLogClient.h"
 #include "core/inspector/InspectorClient.h"
 #include "core/loader/FrameLoaderClient.h"
-#include "core/page/BackForwardClient.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/ContextMenuClient.h"
 #include "core/page/DragClient.h"
@@ -158,7 +157,7 @@ public:
     virtual void needTouchEvents(bool) override { }
     virtual void setTouchAction(TouchAction touchAction) override { };
 
-    virtual void didAssociateFormControls(const WillBeHeapVector<RefPtrWillBeMember<Element> >&) override { }
+    virtual void didAssociateFormControls(const WillBeHeapVector<RefPtrWillBeMember<Element> >&, LocalFrame* frame) override { }
 
     virtual void annotatedRegionsChanged() override { }
     virtual bool paintCustomOverhangArea(GraphicsContext*, const IntRect&, const IntRect&, const IntRect&) override { return false; }
@@ -236,6 +235,7 @@ public:
 
     virtual ObjectContentType objectContentType(const KURL&, const String&, bool) override { return ObjectContentType(); }
 
+    virtual void didCreateNewDocument() override { }
     virtual void dispatchDidClearWindowObjectInMainWorld() override { }
     virtual void documentElementAvailable() override { }
 
@@ -327,13 +327,6 @@ public:
 
     virtual void highlight() override { }
     virtual void hideHighlight() override { }
-};
-
-class EmptyBackForwardClient final : public BackForwardClient {
-public:
-    virtual int backListCount() override { return 0; }
-    virtual int forwardListCount() override { return 0; }
-    virtual int backForwardListCount() override { return 0; }
 };
 
 class EmptyStorageClient final : public StorageClient {

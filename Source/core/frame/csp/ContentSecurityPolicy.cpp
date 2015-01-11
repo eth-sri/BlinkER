@@ -376,13 +376,11 @@ bool checkDigest(const String& source, uint8_t hashAlgorithmsUsed, const CSPDire
 
     StringUTF8Adaptor normalizedSource(source, StringUTF8Adaptor::Normalize, WTF::EntitiesForUnencodables);
 
-    // See comment in CSPSourceList::parseHash about why we are using this sizeof
-    // calculation instead of WTF_ARRAY_LENGTH.
-    for (size_t i = 0; i < (sizeof(kAlgorithmMap) / sizeof(kAlgorithmMap[0])); i++) {
+    for (const auto& algorithmMap : kAlgorithmMap) {
         DigestValue digest;
-        if (kAlgorithmMap[i].cspHashAlgorithm & hashAlgorithmsUsed) {
-            bool digestSuccess = computeDigest(kAlgorithmMap[i].algorithm, normalizedSource.data(), normalizedSource.length(), digest);
-            if (digestSuccess && isAllowedByAllWithHash<allowed>(policies, CSPHashValue(kAlgorithmMap[i].cspHashAlgorithm, digest)))
+        if (algorithmMap.cspHashAlgorithm & hashAlgorithmsUsed) {
+            bool digestSuccess = computeDigest(algorithmMap.algorithm, normalizedSource.data(), normalizedSource.length(), digest);
+            if (digestSuccess && isAllowedByAllWithHash<allowed>(policies, CSPHashValue(algorithmMap.cspHashAlgorithm, digest)))
                 return true;
         }
     }
@@ -482,11 +480,15 @@ bool ContentSecurityPolicy::allowChildFrameFromSource(const KURL& url, ContentSe
 
 bool ContentSecurityPolicy::allowImageFromSource(const KURL& url, ContentSecurityPolicy::ReportingStatus reportingStatus) const
 {
+    if (SchemeRegistry::schemeShouldBypassContentSecurityPolicy(url.protocol(), SchemeRegistry::PolicyAreaImage))
+        return true;
     return isAllowedByAllWithURL<&CSPDirectiveList::allowImageFromSource>(m_policies, url, reportingStatus);
 }
 
 bool ContentSecurityPolicy::allowStyleFromSource(const KURL& url, ContentSecurityPolicy::ReportingStatus reportingStatus) const
 {
+    if (SchemeRegistry::schemeShouldBypassContentSecurityPolicy(url.protocol(), SchemeRegistry::PolicyAreaStyle))
+        return true;
     return isAllowedByAllWithURL<&CSPDirectiveList::allowStyleFromSource>(m_policies, url, reportingStatus);
 }
 
@@ -664,7 +666,7 @@ void ContentSecurityPolicy::reportViolation(const String& directiveText, const S
     SecurityPolicyViolationEventInit violationData;
     gatherSecurityPolicyViolationEventData(violationData, document, directiveText, effectiveDirective, blockedURL, header);
 
-    frame->domWindow()->enqueueDocumentEvent(SecurityPolicyViolationEvent::create(EventTypeNames::securitypolicyviolation, violationData));
+    frame->localDOMWindow()->enqueueDocumentEvent(SecurityPolicyViolationEvent::create(EventTypeNames::securitypolicyviolation, violationData));
 
     if (reportEndpoints.isEmpty())
         return;

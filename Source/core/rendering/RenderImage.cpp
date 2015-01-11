@@ -38,6 +38,7 @@
 #include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLMapElement.h"
+#include "core/page/Page.h"
 #include "core/paint/ImagePainter.h"
 #include "core/rendering/HitTestResult.h"
 #include "core/rendering/PaintInfo.h"
@@ -50,12 +51,10 @@
 
 namespace blink {
 
-float deviceScaleFactor(LocalFrame*);
-
 using namespace HTMLNames;
 
 RenderImage::RenderImage(Element* element)
-    : RenderReplaced(element, IntSize())
+    : RenderReplaced(element, LayoutSize())
     , m_didIncrementVisuallyNonEmptyPixelCount(false)
     , m_isGeneratedContent(false)
     , m_imageDevicePixelRatio(1.0f)
@@ -105,8 +104,9 @@ IntSize RenderImage::imageSizeForError(ImageResource* newImage) const
         pair<Image*, float> brokenImageAndImageScaleFactor = ImageResource::brokenImage(deviceScaleFactor);
         imageSize = brokenImageAndImageScaleFactor.first->size();
         imageSize.scale(1 / brokenImageAndImageScaleFactor.second);
-    } else
+    } else {
         imageSize = newImage->imageForRenderer(this)->size();
+    }
 
     // imageSize() returns 0 for the error image. We need the true size of the
     // error image, so we have to get it by grabbing image() directly.
@@ -117,12 +117,12 @@ IntSize RenderImage::imageSizeForError(ImageResource* newImage) const
 // image size changed.
 bool RenderImage::setImageSizeForAltText(ImageResource* newImage /* = 0 */)
 {
-    IntSize imageSize;
-    if (newImage && newImage->imageForRenderer(this))
-        imageSize = imageSizeForError(newImage);
-    else if (!m_altText.isEmpty() || newImage) {
+    LayoutSize imageSize;
+    if (newImage && newImage->imageForRenderer(this)) {
+        imageSize = LayoutSize(imageSizeForError(newImage));
+    } else if (!m_altText.isEmpty() || newImage) {
         // If we'll be displaying either text or an image, add a little padding.
-        imageSize = IntSize(paddingWidth, paddingHeight);
+        imageSize = LayoutSize(paddingWidth, paddingHeight);
     }
 
     // we have an alt and the user meant it (its not a text we invented)
@@ -130,7 +130,7 @@ bool RenderImage::setImageSizeForAltText(ImageResource* newImage /* = 0 */)
         FontCachePurgePreventer fontCachePurgePreventer;
 
         const Font& font = style()->font();
-        IntSize paddedTextSize(paddingWidth + std::min(ceilf(font.width(constructTextRun(this, font, m_altText, style()))), maxAltTextWidth), paddingHeight + std::min(font.fontMetrics().height(), maxAltTextHeight));
+        LayoutSize paddedTextSize(paddingWidth + std::min(ceilf(font.width(constructTextRun(this, font, m_altText, style()))), maxAltTextWidth), paddingHeight + std::min(font.fontMetrics().height(), maxAltTextHeight));
         imageSize = imageSize.expandedTo(paddedTextSize);
     }
 
@@ -234,7 +234,7 @@ void RenderImage::paintInvalidationOrMarkForLayout(bool imageSizeChangedToAccomo
     if (rect) {
         // The image changed rect is in source image coordinates (without zoom),
         // so map from the bounds of the image to the contentsBox.
-        const LayoutSize imageSizeWithoutZoom = m_imageResource->imageSize(1 / style()->effectiveZoom());
+        const FloatSize imageSizeWithoutZoom(m_imageResource->imageSize(1 / style()->effectiveZoom()));
         paintInvalidationRect = enclosingIntRect(mapRect(*rect, FloatRect(FloatPoint(), imageSizeWithoutZoom), contentBoxRect()));
         // Guard against too-large changed rects.
         paintInvalidationRect.intersect(contentBoxRect());
@@ -270,12 +270,12 @@ void RenderImage::notifyFinished(Resource* newImage)
     }
 }
 
-void RenderImage::paintReplaced(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
+void RenderImage::paintReplaced(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
     ImagePainter(*this).paintReplaced(paintInfo, paintOffset);
 }
 
-void RenderImage::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
+void RenderImage::paint(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
     ImagePainter(*this).paint(paintInfo, paintOffset);
 }

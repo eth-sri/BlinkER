@@ -36,7 +36,6 @@ class GraphicsContextStateSaver;
 class PaintInvalidationState;
 class LayoutRect;
 struct PaintInfo;
-class Path;
 class RenderGeometryMap;
 class RenderLayerModelObject;
 class RenderObject;
@@ -55,9 +54,6 @@ public:
 
     // Helper function determining whether overflow is hidden.
     static bool isOverflowHidden(const RenderObject*);
-
-    // Returns true if we're currently within the rendering of a clip-path as a mask.
-    static bool isRenderingClipPathAsMaskImage(const RenderObject&);
 
     // Calculates the paintInvalidationRect in combination with filter, clipper and masker in local coordinates.
     static void intersectPaintInvalidationRectWithResources(const RenderObject*, FloatRect&);
@@ -79,7 +75,7 @@ public:
 
     // Important functions used by nearly all SVG renderers centralizing coordinate transformations / paint invalidation rect calculations
     static LayoutRect clippedOverflowRectForPaintInvalidation(const RenderObject*, const RenderLayerModelObject* paintInvalidationContainer, const PaintInvalidationState*);
-    static void computeFloatRectForPaintInvalidation(const RenderObject*, const RenderLayerModelObject* paintInvalidationContainer, FloatRect&, const PaintInvalidationState*);
+    static const RenderSVGRoot& mapRectToSVGRootForPaintInvalidation(const RenderObject*, const FloatRect& localPaintInvalidationRect, LayoutRect&);
     static void mapLocalToContainer(const RenderObject*, const RenderLayerModelObject* paintInvalidationContainer, TransformState&, bool* wasFixed = 0, const PaintInvalidationState* = 0);
     static const RenderObject* pushMappingToContainer(const RenderObject*, const RenderLayerModelObject* ancestorToStopAt, RenderGeometryMap&);
 
@@ -87,10 +83,10 @@ public:
     static void applyStrokeStyleToContext(GraphicsContext*, const RenderStyle*, const RenderObject*);
     static void applyStrokeStyleToStrokeData(StrokeData*, const RenderStyle*, const RenderObject*);
 
-    // Update the GC state (on |stateSaver.context()|) for painting |renderer|
+    // Update the GC state (on |paintInfo.context|) for painting |renderer|
     // using |style|. |resourceMode| is used to decide between fill/stroke.
     // Previous state will be saved (if needed) using |stateSaver|.
-    static bool updateGraphicsContext(GraphicsContextStateSaver&, RenderStyle*, RenderObject&, RenderSVGResourceMode, const AffineTransform* additionalPaintServerTransform = 0);
+    static bool updateGraphicsContext(const PaintInfo&, GraphicsContextStateSaver&, RenderStyle*, RenderObject&, RenderSVGResourceMode, const AffineTransform* additionalPaintServerTransform = 0);
 
     // Determines if any ancestor's transform has changed.
     static bool transformToRootChanged(RenderObject*);

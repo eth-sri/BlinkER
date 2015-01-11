@@ -83,7 +83,6 @@
 #include "core/loader/MixedContentChecker.h"
 #include "core/loader/SinkDocument.h"
 #include "core/loader/appcache/ApplicationCache.h"
-#include "core/page/BackForwardClient.h"
 #include "core/page/Chrome.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/CreateWindow.h"
@@ -645,8 +644,9 @@ void LocalDOMWindow::sendOrientationChangeEvent()
     dispatchEvent(Event::create(EventTypeNames::orientationchange));
 
     for (size_t i = 0; i < childFrames.size(); ++i) {
-        if (childFrames[i]->domWindow())
-            childFrames[i]->domWindow()->sendOrientationChangeEvent();
+        if (!childFrames[i]->isLocalFrame())
+            continue;
+        toLocalFrame(childFrames[i].get())->localDOMWindow()->sendOrientationChangeEvent();
     }
 }
 
@@ -1014,7 +1014,7 @@ void LocalDOMWindow::close(ExecutionContext* context)
     Settings* settings = frame()->settings();
     bool allowScriptsToCloseWindows = settings && settings->allowScriptsToCloseWindows();
 
-    if (!(page->openedByDOM() || page->backForward().backForwardListCount() <= 1 || allowScriptsToCloseWindows)) {
+    if (!page->openedByDOM() && frame()->loader().client()->backForwardLength() > 1 && !allowScriptsToCloseWindows) {
         frameConsole()->addMessage(ConsoleMessage::create(JSMessageSource, WarningMessageLevel, "Scripts may close only the windows that were opened by it."));
         return;
     }
@@ -1152,13 +1152,21 @@ int LocalDOMWindow::innerHeight() const
     if (!view)
         return 0;
 
+    FrameHost* host = frame()->host();
+    if (!host)
+        return 0;
+
     // FIXME: This is potentially too much work. We really only need to know the dimensions of the parent frame's renderer.
     if (Frame* parent = frame()->tree().parent()) {
         if (parent && parent->isLocalFrame())
             toLocalFrame(parent)->document()->updateLayoutIgnorePendingStylesheets();
     }
 
-    return adjustForAbsoluteZoom(view->visibleContentRect(IncludeScrollbars).height(), frame()->pageZoomFactor());
+    FloatSize viewportSize = host->settings().pinchVirtualViewportEnabled() && frame()->isMainFrame()
+        ? host->pinchViewport().visibleRect().size()
+        : view->visibleContentRect(IncludeScrollbars).size();
+
+    return adjustForAbsoluteZoom(expandedIntSize(viewportSize).height(), frame()->pageZoomFactor());
 }
 
 int LocalDOMWindow::innerWidth() const
@@ -1170,13 +1178,21 @@ int LocalDOMWindow::innerWidth() const
     if (!view)
         return 0;
 
+    FrameHost* host = frame()->host();
+    if (!host)
+        return 0;
+
     // FIXME: This is potentially too much work. We really only need to know the dimensions of the parent frame's renderer.
     if (Frame* parent = frame()->tree().parent()) {
         if (parent && parent->isLocalFrame())
             toLocalFrame(parent)->document()->updateLayoutIgnorePendingStylesheets();
     }
 
-    return adjustForAbsoluteZoom(view->visibleContentRect(IncludeScrollbars).width(), frame()->pageZoomFactor());
+    FloatSize viewportSize = host->settings().pinchVirtualViewportEnabled() && frame()->isMainFrame()
+        ? host->pinchViewport().visibleRect().size()
+        : view->visibleContentRect(IncludeScrollbars).size();
+
+    return adjustForAbsoluteZoom(expandedIntSize(viewportSize).width(), frame()->pageZoomFactor());
 }
 
 int LocalDOMWindow::screenX() const
@@ -1216,9 +1232,18 @@ double LocalDOMWindow::scrollX() const
     if (!view)
         return 0;
 
+    FrameHost* host = frame()->host();
+    if (!host)
+        return 0;
+
     frame()->document()->updateLayoutIgnorePendingStylesheets();
 
-    return adjustScrollForAbsoluteZoom(view->scrollX(), frame()->pageZoomFactor());
+    double viewportX = view->scrollX();
+
+    if (host->settings().pinchVirtualViewportEnabled() && frame()->isMainFrame())
+        viewportX += host->pinchViewport().location().x();
+
+    return adjustScrollForAbsoluteZoom(viewportX, frame()->pageZoomFactor());
 }
 
 double LocalDOMWindow::scrollY() const
@@ -1230,9 +1255,18 @@ double LocalDOMWindow::scrollY() const
     if (!view)
         return 0;
 
+    FrameHost* host = frame()->host();
+    if (!host)
+        return 0;
+
     frame()->document()->updateLayoutIgnorePendingStylesheets();
 
-    return adjustScrollForAbsoluteZoom(view->scrollY(), frame()->pageZoomFactor());
+    double viewportY = view->scrollY();
+
+    if (host->settings().pinchVirtualViewportEnabled() && frame()->isMainFrame())
+        viewportY += host->pinchViewport().location().y();
+
+    return adjustScrollForAbsoluteZoom(viewportY, frame()->pageZoomFactor());
 }
 
 bool LocalDOMWindow::closed() const
@@ -1350,9 +1384,7 @@ StyleMedia* LocalDOMWindow::styleMedia() const
 
 PassRefPtrWillBeRawPtr<CSSStyleDeclaration> LocalDOMWindow::getComputedStyle(Element* elt, const String& pseudoElt) const
 {
-    if (!elt)
-        return nullptr;
-
+    ASSERT(elt);
     return CSSComputedStyleDeclaration::create(elt, false, pseudoElt);
 }
 
@@ -1397,6 +1429,26 @@ static bool scrollBehaviorFromScrollOptions(const ScrollOptions& scrollOptions, 
     return false;
 }
 
+// FIXME: This class shouldn't be explicitly moving the viewport around. crbug.com/371896
+static void scrollViewportTo(LocalFrame* frame, DoublePoint offset, ScrollBehavior scrollBehavior)
+{
+    FrameView* view = frame->view();
+    if (!view)
+        return;
+
+    FrameHost* host = frame->host();
+    if (!host)
+        return;
+
+    view->setScrollPosition(offset, scrollBehavior);
+
+    if (host->settings().pinchVirtualViewportEnabled() && frame->isMainFrame()) {
+        PinchViewport& pinchViewport = frame->host()->pinchViewport();
+        DoubleSize excessDelta = offset - DoublePoint(pinchViewport.visibleRectInDocument().location());
+        pinchViewport.move(FloatPoint(excessDelta.width(), excessDelta.height()));
+    }
+}
+
 void LocalDOMWindow::scrollBy(double x, double y, ScrollBehavior scrollBehavior) const
 {
     if (!isCurrentlyDisplayedInFrame())
@@ -1408,11 +1460,19 @@ void LocalDOMWindow::scrollBy(double x, double y, ScrollBehavior scrollBehavior)
     if (!view)
         return;
 
+    FrameHost* host = frame()->host();
+    if (!host)
+        return;
+
     if (std::isnan(x) || std::isnan(y))
         return;
 
+    DoublePoint currentOffset = host->settings().pinchVirtualViewportEnabled() && frame()->isMainFrame()
+        ? DoublePoint(host->pinchViewport().visibleRectInDocument().location())
+        : view->scrollPositionDouble();
+
     DoubleSize scaledOffset(x * frame()->pageZoomFactor(), y * frame()->pageZoomFactor());
-    view->scrollBy(scaledOffset, scrollBehavior);
+    scrollViewportTo(frame(), currentOffset + scaledOffset, scrollBehavior);
 }
 
 void LocalDOMWindow::scrollBy(double x, double y, const ScrollOptions& scrollOptions, ExceptionState &exceptionState) const
@@ -1430,15 +1490,11 @@ void LocalDOMWindow::scrollTo(double x, double y, ScrollBehavior scrollBehavior)
 
     document()->updateLayoutIgnorePendingStylesheets();
 
-    RefPtrWillBeRawPtr<FrameView> view = frame()->view();
-    if (!view)
-        return;
-
     if (std::isnan(x) || std::isnan(y))
         return;
 
     DoublePoint layoutPos(x * frame()->pageZoomFactor(), y * frame()->pageZoomFactor());
-    view->setScrollPosition(layoutPos, scrollBehavior);
+    scrollViewportTo(frame(), layoutPos, scrollBehavior);
 }
 
 void LocalDOMWindow::scrollTo(double x, double y, const ScrollOptions& scrollOptions, ExceptionState& exceptionState) const
@@ -1855,24 +1911,25 @@ PassRefPtrWillBeRawPtr<LocalDOMWindow> LocalDOMWindow::open(const String& urlStr
     }
     // FIXME: Navigating RemoteFrames is not yet supported.
     if (targetFrame && targetFrame->isLocalFrame()) {
-        if (!activeDocument->canNavigate(*targetFrame))
+        LocalFrame* localTargetFrame = toLocalFrame(targetFrame);
+        if (!activeDocument->canNavigate(*localTargetFrame))
             return nullptr;
 
         KURL completedURL = firstFrame->document()->completeURL(urlString);
 
-        if (targetFrame->domWindow()->isInsecureScriptAccess(*callingWindow, completedURL))
-            return targetFrame->domWindow();
+        if (localTargetFrame->localDOMWindow()->isInsecureScriptAccess(*callingWindow, completedURL))
+            return localTargetFrame->localDOMWindow();
 
         if (urlString.isEmpty())
-            return targetFrame->domWindow();
+            return localTargetFrame->localDOMWindow();
 
-        toLocalFrame(targetFrame)->navigationScheduler().scheduleLocationChange(activeDocument, completedURL, false);
-        return targetFrame->domWindow();
+        localTargetFrame->navigationScheduler().scheduleLocationChange(activeDocument, completedURL, false);
+        return localTargetFrame->localDOMWindow();
     }
 
     WindowFeatures windowFeatures(windowFeaturesString);
     LocalFrame* result = createWindow(urlString, frameName, windowFeatures, *callingWindow, *firstFrame, *frame());
-    return result ? result->domWindow() : 0;
+    return result ? result->localDOMWindow() : 0;
 }
 
 void LocalDOMWindow::showModalDialog(const String& urlString, const String& dialogFeaturesString,
@@ -1890,7 +1947,7 @@ void LocalDOMWindow::showModalDialog(const String& urlString, const String& dial
     if (!canShowModalDialogNow(frame()) || !enteredWindow->allowPopUp())
         return;
 
-    UseCounter::countDeprecation(this, UseCounter::ShowModalDialog);
+    UseCounter::countDeprecation(frame(), UseCounter::ShowModalDialog);
 
     WindowFeatures windowFeatures(dialogFeaturesString, screenAvailableRect(frame()->view()));
     LocalFrame* dialogFrame = createWindow(urlString, emptyAtom, windowFeatures,
@@ -1901,7 +1958,7 @@ void LocalDOMWindow::showModalDialog(const String& urlString, const String& dial
     dialogFrame->host()->chrome().runModal();
 }
 
-LocalDOMWindow* LocalDOMWindow::anonymousIndexedGetter(uint32_t index)
+DOMWindow* LocalDOMWindow::anonymousIndexedGetter(uint32_t index)
 {
     if (!frame())
         return 0;

@@ -50,7 +50,9 @@ PassOwnPtr<ResourceRequest> ResourceRequest::adopt(PassOwnPtr<CrossThreadResourc
     request->setReportUploadProgress(data->m_reportUploadProgress);
     request->setHasUserGesture(data->m_hasUserGesture);
     request->setDownloadToFile(data->m_downloadToFile);
+    request->setUseStreamOnResponse(data->m_useStreamOnResponse);
     request->setSkipServiceWorker(data->m_skipServiceWorker);
+    request->setShouldResetAppCache(data->m_shouldResetAppCache);
     request->setRequestorID(data->m_requestorID);
     request->setRequestorProcessID(data->m_requestorProcessID);
     request->setAppCacheHostID(data->m_appCacheHostID);
@@ -59,6 +61,7 @@ PassOwnPtr<ResourceRequest> ResourceRequest::adopt(PassOwnPtr<CrossThreadResourc
     request->setFetchRequestMode(data->m_fetchRequestMode);
     request->setFetchCredentialsMode(data->m_fetchCredentialsMode);
     request->m_referrerPolicy = data->m_referrerPolicy;
+    request->m_checkForBrowserSideNavigation = data->m_checkForBrowserSideNavigation;
     return request.release();
 }
 
@@ -80,7 +83,9 @@ PassOwnPtr<CrossThreadResourceRequestData> ResourceRequest::copyData() const
     data->m_reportUploadProgress = m_reportUploadProgress;
     data->m_hasUserGesture = m_hasUserGesture;
     data->m_downloadToFile = m_downloadToFile;
+    data->m_useStreamOnResponse = m_useStreamOnResponse;
     data->m_skipServiceWorker = m_skipServiceWorker;
+    data->m_shouldResetAppCache = m_shouldResetAppCache;
     data->m_requestorID = m_requestorID;
     data->m_requestorProcessID = m_requestorProcessID;
     data->m_appCacheHostID = m_appCacheHostID;
@@ -89,6 +94,7 @@ PassOwnPtr<CrossThreadResourceRequestData> ResourceRequest::copyData() const
     data->m_fetchRequestMode = m_fetchRequestMode;
     data->m_fetchCredentialsMode = m_fetchCredentialsMode;
     data->m_referrerPolicy = m_referrerPolicy;
+    data->m_checkForBrowserSideNavigation = m_checkForBrowserSideNavigation;
     return data.release();
 }
 
@@ -410,20 +416,23 @@ void ResourceRequest::initialize(const KURL& url)
     m_reportRawHeaders = false;
     m_hasUserGesture = false;
     m_downloadToFile = false;
+    m_useStreamOnResponse = false;
     m_skipServiceWorker = false;
+    m_shouldResetAppCache = false;
     m_priority = ResourceLoadPriorityLowest;
     m_intraPriorityValue = 0;
     m_requestorID = 0;
     m_requestorProcessID = 0;
     m_appCacheHostID = 0;
-    m_requestContext = blink::WebURLRequest::RequestContextUnspecified;
-    m_frameType = blink::WebURLRequest::FrameTypeNone;
-    m_fetchRequestMode = blink::WebURLRequest::FetchRequestModeNoCORS;
+    m_requestContext = WebURLRequest::RequestContextUnspecified;
+    m_frameType = WebURLRequest::FrameTypeNone;
+    m_fetchRequestMode = WebURLRequest::FetchRequestModeNoCORS;
     // Contrary to the Fetch spec, we default to same-origin mode here, and deal
     // with CORS modes in updateRequestForAccessControl if we're called in a
     // context which requires it.
-    m_fetchCredentialsMode = blink::WebURLRequest::FetchCredentialsModeSameOrigin;
+    m_fetchCredentialsMode = WebURLRequest::FetchCredentialsModeSameOrigin;
     m_referrerPolicy = ReferrerPolicyDefault;
+    m_checkForBrowserSideNavigation = true;
 }
 
 // This is used by the loader to control the number of issued parallel load requests.
@@ -435,4 +444,4 @@ unsigned initializeMaximumHTTPConnectionCountPerHost()
     return 10000;
 }
 
-}
+} // namespace blink

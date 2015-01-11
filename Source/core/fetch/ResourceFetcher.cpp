@@ -170,7 +170,8 @@ static Resource* resourceFromDataURIRequest(const ResourceRequest& request, cons
 
     Resource* resource = createResource(Resource::Image, request, charset);
     resource->setOptions(resourceOptions);
-    resource->responseReceived(response);
+    // FIXME: We should provide a body stream here.
+    resource->responseReceived(response, nullptr);
     if (data->size())
         resource->setResourceBuffer(data);
     resource->setCacheIdentifier(cacheIdentifier);
@@ -436,7 +437,7 @@ void ResourceFetcher::preCacheSubstituteDataForMainResource(const FetchRequest& 
     resource->setNeedsSynchronousCacheHit(substituteData.forceSynchronousLoad());
     resource->setOptions(request.options());
     resource->setDataBufferingPolicy(BufferData);
-    resource->responseReceived(response);
+    resource->responseReceived(response, nullptr);
     if (substituteData.content()->size())
         resource->setResourceBuffer(substituteData.content());
     resource->setCacheIdentifier(cacheIdentifier);
@@ -590,7 +591,9 @@ bool ResourceFetcher::canRequest(Resource::Type type, const ResourceRequest& res
             effectiveFrame = toLocalFrame(frame()->tree().parent());
     }
 
-    return !MixedContentChecker::shouldBlockFetch(effectiveFrame, resourceRequest, url);
+    MixedContentChecker::ReportingStatus mixedContentReporting = forPreload ?
+        MixedContentChecker::SuppressReport : MixedContentChecker::SendReport;
+    return !MixedContentChecker::shouldBlockFetch(effectiveFrame, resourceRequest, url, mixedContentReporting);
 }
 
 bool ResourceFetcher::canAccessResource(Resource* resource, SecurityOrigin* sourceOrigin, const KURL& url) const
@@ -611,7 +614,9 @@ bool ResourceFetcher::canAccessResource(Resource* resource, SecurityOrigin* sour
             toFontResource(resource)->setCORSFailed();
         if (frame() && frame()->document()) {
             String resourceType = Resource::resourceTypeToString(resource->type(), resource->options().initiatorInfo);
-            frame()->document()->addConsoleMessage(ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, resourceType + " from origin '" + SecurityOrigin::create(url)->toString() + "' has been blocked from loading by Cross-Origin Resource Sharing policy: " + errorDescription));
+            RefPtrWillBeRawPtr<ConsoleMessage> consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, resourceType + " from origin '" + SecurityOrigin::create(url)->toString() + "' has been blocked from loading by Cross-Origin Resource Sharing policy: " + errorDescription);
+            consoleMessage->markAsAsync();
+            frame()->document()->addConsoleMessage(consoleMessage);
         }
         return false;
     }
@@ -673,8 +678,13 @@ void ResourceFetcher::maybeNotifyInsecureContent(const Resource* resource) const
     // As a side effect browser will be notified.
     MixedContentChecker::shouldBlockFetch(frame(),
                                           resource->lastResourceRequest(),
-                                          resource->lastResourceRequest().url());
+                                          resource->lastResourceRequest().url(),
+                                          MixedContentChecker::SendReport);
 }
+
+// Limit the number of URLs in m_validatedURLs to avoid memory bloat.
+// http://crbug.com/52411
+static const int kMaxValidatedURLsSize = 10000;
 
 void ResourceFetcher::requestLoadStarted(Resource* resource, const FetchRequest& request, ResourceLoadStartType type)
 {
@@ -693,6 +703,9 @@ void ResourceFetcher::requestLoadStarted(Resource* resource, const FetchRequest&
             m_resourceTimingReportTimer.startOneShot(0, FROM_HERE);
     }
 
+    if (m_validatedURLs.size() >= kMaxValidatedURLsSize) {
+        m_validatedURLs.clear();
+    }
     m_validatedURLs.add(request.resourceRequest().url());
 }
 
@@ -887,6 +900,7 @@ ResourcePtr<Resource> ResourceFetcher::createResourceForRevalidation(const Fetch
     ASSERT(resource->isLoaded());
     ASSERT(resource->canUseCacheValidator());
     ASSERT(!resource->resourceToRevalidate());
+    ASSERT(!isControlledByServiceWorker());
 
     ResourceRequest revalidatingRequest(resource->resourceRequest());
     revalidatingRequest.clearHTTPReferrer();
@@ -1076,7 +1090,8 @@ ResourceFetcher::RevalidationPolicy ResourceFetcher::determineRevalidationPolicy
     if (cachePolicy == CachePolicyRevalidate || existingResource->mustRevalidateDueToCacheHeaders()
         || request.cacheControlContainsNoCache()) {
         // See if the resource has usable ETag or Last-modified headers.
-        if (existingResource->canUseCacheValidator())
+        // If the page is controlled by the ServiceWorker, we choose the Reload policy because the revalidation headers should not be exposed to the ServiceWorker.(crbug.com/429570)
+        if (existingResource->canUseCacheValidator() && !isControlledByServiceWorker())
             return Revalidate;
 
         // No, must reload.
@@ -1156,24 +1171,11 @@ void ResourceFetcher::redirectReceived(Resource* resource, const ResourceRespons
         it->value->addRedirect(redirectResponse);
 }
 
-void ResourceFetcher::didLoadResource(Resource* resource)
+void ResourceFetcher::didLoadResource()
 {
-    RefPtr<DocumentLoader> protectDocumentLoader(m_documentLoader);
-    RefPtrWillBeRawPtr<Document> protectDocument(m_document.get());
-
-    if (resource && resource->response().isHTTP() && ((!resource->errorOccurred() && !resource->wasCanceled()) || resource->response().httpStatusCode() == 304) && document()) {
-        ResourceTimingInfoMap::iterator it = m_resourceTimingInfoMap.find(resource);
-        if (it != m_resourceTimingInfoMap.end()) {
-            RefPtr<ResourceTimingInfo> info = it->value;
-            m_resourceTimingInfoMap.remove(it);
-            populateResourceTiming(info.get(), resource, false);
-            reportResourceTiming(info.get(), document(), resource->type() == Resource::MainResource);
-        }
-    }
-
+    scheduleDocumentResourcesGC();
     if (frame())
         frame()->loader().loadDone();
-    scheduleDocumentResourcesGC();
 }
 
 void ResourceFetcher::scheduleDocumentResourcesGC()
@@ -1240,18 +1242,19 @@ void ResourceFetcher::decrementRequestCount(const Resource* res)
 
 void ResourceFetcher::preload(Resource::Type type, FetchRequest& request, const String& charset)
 {
-    requestPreload(type, request, charset);
-}
-
-void ResourceFetcher::requestPreload(Resource::Type type, FetchRequest& request, const String& charset)
-{
     // Ensure main resources aren't preloaded, since the cache can't actually reuse the preload.
     if (type == Resource::MainResource)
         return;
 
+    ASSERT(type == Resource::Script || type == Resource::CSSStyleSheet || type == Resource::Image);
+
     String encoding;
-    if (type == Resource::Script || type == Resource::CSSStyleSheet)
+    if (type == Resource::Script || type == Resource::CSSStyleSheet) {
         encoding = charset.isEmpty() ? m_document->charset().string() : charset;
+
+        // RequestContext for Resource::Image is set in fetchImage below.
+        determineRequestContext(request.mutableResourceRequest(), type);
+    }
 
     request.setCharset(encoding);
     request.setForPreload(true);
@@ -1260,7 +1263,7 @@ void ResourceFetcher::requestPreload(Resource::Type type, FetchRequest& request,
     // Loading images involves several special cases, so use dedicated fetch method instead.
     if (type == Resource::Image)
         resource = fetchImage(request);
-    if (!resource)
+    else
         resource = requestResource(type, request);
     if (!resource || (m_preloads && m_preloads->contains(resource.get())))
         return;
@@ -1307,9 +1310,21 @@ void ResourceFetcher::clearPreloads()
     m_preloads.clear();
 }
 
-void ResourceFetcher::didFinishLoading(const Resource* resource, double finishTime, int64_t encodedDataLength)
+void ResourceFetcher::didFinishLoading(Resource* resource, double finishTime, int64_t encodedDataLength)
 {
     TRACE_EVENT_ASYNC_END0("net", "Resource", resource);
+    RefPtrWillBeRawPtr<Document> protectDocument(document());
+    RefPtr<DocumentLoader> protectDocumentLoader(m_documentLoader);
+
+    if (resource && resource->response().isHTTP() && resource->response().httpStatusCode() < 400 && document()) {
+        ResourceTimingInfoMap::iterator it = m_resourceTimingInfoMap.find(resource);
+        if (it != m_resourceTimingInfoMap.end()) {
+            RefPtr<ResourceTimingInfo> info = it->value;
+            m_resourceTimingInfoMap.remove(it);
+            populateResourceTiming(info.get(), resource, false);
+            reportResourceTiming(info.get(), document(), resource->type() == Resource::MainResource);
+        }
+    }
     context().dispatchDidFinishLoading(m_documentLoader, resource->identifier(), finishTime, encodedDataLength);
 }
 
@@ -1336,11 +1351,13 @@ void ResourceFetcher::didReceiveResponse(const Resource* resource, const Resourc
     MixedContentChecker::checkMixedPrivatePublic(frame(), response.remoteIPAddress());
 
     // If the response is fetched via ServiceWorker, the original URL of the response could be different from the URL of the request.
+    // We check the URL not to load the resources which are forbidden by the page CSP. This behavior is not specified in the CSP specification yet.
     if (response.wasFetchedViaServiceWorker()) {
-        if (!canRequest(resource->type(), resource->resourceRequest(), response.url(), resource->options(), false, FetchRequest::UseDefaultOriginRestrictionForType)) {
+        const KURL& originalURL = response.originalURLViaServiceWorker();
+        if (!canRequest(resource->type(), resource->resourceRequest(), originalURL, resource->options(), false, FetchRequest::UseDefaultOriginRestrictionForType)) {
             resource->loader()->cancel();
             bool isInternalRequest = resource->options().initiatorInfo.name == FetchInitiatorTypeNames::internal;
-            context().dispatchDidFail(m_documentLoader, resource->identifier(), ResourceError(errorDomainBlinkInternal, 0, response.url().string(), "Unsafe attempt to load URL " + response.url().elidedString() + " fetched by a ServiceWorker."), isInternalRequest);
+            context().dispatchDidFail(m_documentLoader, resource->identifier(), ResourceError(errorDomainBlinkInternal, 0, originalURL.string(), "Unsafe attempt to load URL " + originalURL.elidedString() + " fetched by a ServiceWorker."), isInternalRequest);
             return;
         }
     }

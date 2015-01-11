@@ -459,11 +459,6 @@ bool RenderLayerCompositor::allocateOrClearCompositedLayerMapping(RenderLayer* l
         break;
     }
 
-    if (layer->hasCompositedLayerMapping() && layer->compositedLayerMapping()->updateRequiresOwnBackingStoreForIntrinsicReasons()) {
-        compositedLayerMappingChanged = true;
-        layer->compositedLayerMapping()->setNeedsGraphicsLayerUpdate(GraphicsLayerUpdateSubtree);
-    }
-
     if (compositedLayerMappingChanged && layer->renderer()->isRenderPart()) {
         RenderLayerCompositor* innerCompositor = frameContentsCompositor(toRenderPart(layer->renderer()));
         if (innerCompositor && innerCompositor->staleInCompositingMode())
@@ -906,7 +901,7 @@ bool RenderLayerCompositor::requiresScrollCornerLayer() const
 void RenderLayerCompositor::updateOverflowControlsLayers()
 {
 #if USE(RUBBER_BANDING)
-    if (m_renderView.frame()->isLocalRoot()) {
+    if (m_renderView.frame()->isLocalRoot() && !m_renderView.document().settings()->rubberBandingOnCompositorThread()) {
         if (!m_layerForOverhangShadow) {
             m_layerForOverhangShadow = GraphicsLayer::create(graphicsLayerFactory(), this);
             OverscrollTheme::theme()->setUpOverhangShadowLayer(m_layerForOverhangShadow.get());
@@ -976,6 +971,7 @@ void RenderLayerCompositor::ensureRootLayer()
     if (expectedAttachment == m_rootLayerAttachment)
          return;
 
+    Settings* settings = m_renderView.document().settings();
     if (!m_rootContentLayer) {
         m_rootContentLayer = GraphicsLayer::create(graphicsLayerFactory(), this);
         IntRect overflowRect = m_renderView.pixelSnappedLayoutOverflowRect();
@@ -983,8 +979,11 @@ void RenderLayerCompositor::ensureRootLayer()
         m_rootContentLayer->setPosition(FloatPoint());
         m_rootContentLayer->setOwnerNodeId(InspectorNodeIds::idForNode(m_renderView.generatingNode()));
 
-        // Need to clip to prevent transformed content showing outside this frame
-        m_rootContentLayer->setMasksToBounds(true);
+        // FIXME: with rootLayerScrolls, we probably don't even need m_rootContentLayer?
+        if (!(settings && settings->rootLayerScrolls())) {
+            // Need to clip to prevent transformed content showing outside this frame
+            m_rootContentLayer->setMasksToBounds(true);
+        }
     }
 
     if (!m_overflowControlsHostLayer) {

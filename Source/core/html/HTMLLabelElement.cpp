@@ -68,7 +68,7 @@ LabelableElement* HTMLLabelElement::control() const
             if (element.supportLabels())
                 return &element;
         }
-        return 0;
+        return nullptr;
     }
 
     if (Element* element = treeScope().getElementById(controlId)) {
@@ -76,7 +76,7 @@ LabelableElement* HTMLLabelElement::control() const
             return toLabelableElement(element);
     }
 
-    return 0;
+    return nullptr;
 }
 
 HTMLFormElement* HTMLLabelElement::formOwner() const
@@ -160,7 +160,7 @@ void HTMLLabelElement::defaultEventHandler(Event* evt)
             if (LocalFrame* frame = document().frame()) {
                 // Check if there is a selection and click is not on the
                 // selection.
-                if (frame->selection().isRange() && !frame->eventHandler().mouseDownWasSingleClickInSelection())
+                if (!Position::nodeIsUserSelectNone(this) && frame->selection().isRange() && !frame->eventHandler().mouseDownWasSingleClickInSelection())
                     isLabelTextSelected = true;
                 // If selection is there and is single click i.e. text is
                 // selected by dragging over label text, then return.

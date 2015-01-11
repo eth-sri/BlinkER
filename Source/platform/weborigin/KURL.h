@@ -50,11 +50,6 @@ public:
     KURL(const KURL&);
     KURL& operator=(const KURL&);
 
-#if COMPILER_SUPPORTS(CXX_RVALUE_REFERENCES)
-    KURL(KURL&&);
-    KURL& operator=(KURL&&);
-#endif
-
     // The argument is an absolute URL string. The string is assumed to be
     // output of KURL::string() called on a valid KURL object, or indiscernible
     // from such. It is usually best to avoid repeatedly parsing a string,
@@ -176,10 +171,6 @@ public:
     const url::Parsed& parsed() const { return m_parsed; }
 
     const KURL* innerURL() const { return m_innerURL.get(); }
-
-#ifndef NDEBUG
-    void print() const;
-#endif
 
     bool isSafeToSendToAnotherThread() const;
 

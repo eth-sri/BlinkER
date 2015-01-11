@@ -12,6 +12,7 @@
 #include "core/dom/ExceptionCode.h"
 #include "core/fetch/FetchUtils.h"
 #include "core/fileapi/Blob.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/loader/ThreadableLoader.h"
 #include "core/loader/ThreadableLoaderClient.h"
 #include "modules/serviceworkers/FetchRequestData.h"
@@ -28,7 +29,7 @@ class FetchManager::Loader : public ThreadableLoaderClient {
 public:
     Loader(ExecutionContext*, FetchManager*, PassRefPtr<ScriptPromiseResolver>, const FetchRequestData*);
     ~Loader();
-    virtual void didReceiveResponse(unsigned long, const ResourceResponse&);
+    virtual void didReceiveResponse(unsigned long, const ResourceResponse&, PassOwnPtr<WebDataConsumerHandle>);
     virtual void didFinishLoading(unsigned long, double);
     virtual void didFail(const ResourceError&);
     virtual void didFailAccessControlCheck(const ResourceError&);
@@ -40,9 +41,9 @@ public:
 
 private:
     void performBasicFetch();
-    void performNetworkError();
+    void performNetworkError(const String& message);
     void performHTTPFetch();
-    void failed();
+    void failed(const String& message);
     void notifyFinished();
 
     ExecutionContext* m_executionContext;
@@ -75,8 +76,10 @@ FetchManager::Loader::~Loader()
         m_loader->cancel();
 }
 
-void FetchManager::Loader::didReceiveResponse(unsigned long, const ResourceResponse& response)
+void FetchManager::Loader::didReceiveResponse(unsigned long, const ResourceResponse& response, PassOwnPtr<WebDataConsumerHandle> handle)
 {
+    // FIXME: Use |handle|.
+    ASSERT_UNUSED(handle, !handle);
     m_response = response;
 }
 
@@ -118,17 +121,17 @@ void FetchManager::Loader::didFinishLoading(unsigned long, double)
 
 void FetchManager::Loader::didFail(const ResourceError& error)
 {
-    failed();
+    failed("Fetch API cannot load " + error.failingURL() + ". " + error.localizedDescription());
 }
 
 void FetchManager::Loader::didFailAccessControlCheck(const ResourceError& error)
 {
-    failed();
+    failed("Fetch API cannot load " + error.failingURL() + ". " + error.localizedDescription());
 }
 
 void FetchManager::Loader::didFailRedirectCheck()
 {
-    failed();
+    failed("Fetch API cannot load " + m_request->url().string() + ". Redirects are not yet supported.");
 }
 
 void FetchManager::Loader::didDownloadData(int dataLength)
@@ -155,11 +158,16 @@ void FetchManager::Loader::start()
     // "4. Let response be the value corresponding to the first matching
     // statement:"
 
-    // "- should fetching |request| be blocked as mixed content returns blocked
-    //  - should fetching |request| be blocked as content security returns
-    //    blocked
-    //      A network error."
-    // We do mixed content checking and CSP checking in ResourceFetcher.
+    // "- should fetching |request| be blocked as mixed content returns blocked"
+    // We do mixed content checking in ResourceFetcher.
+
+    // "- should fetching |request| be blocked as content security returns
+    //    blocked"
+    if (!ContentSecurityPolicy::shouldBypassMainWorld(m_executionContext) && !m_executionContext->contentSecurityPolicy()->allowConnectToSource(m_request->url())) {
+        // "A network error."
+        performNetworkError("Refused to connect to '" + m_request->url().elidedString() + "' because it violates the document's Content Security Policy.");
+        return;
+    }
 
     // "- |request|'s url's origin is |request|'s origin and the |CORS flag| is
     //    unset"
@@ -175,14 +183,14 @@ void FetchManager::Loader::start()
     }
 
     // "- |request|'s mode is |same-origin|"
-    if (m_request->mode() == FetchRequestData::SameOriginMode) {
+    if (m_request->mode() == WebURLRequest::FetchRequestModeSameOrigin) {
         // "A network error."
-        performNetworkError();
+        performNetworkError("Fetch API cannot load " + m_request->url().string() + ". Request mode is \"same-origin\" but the URL\'s origin is not same as the request origin " + m_request->origin()->toString() + ".");
         return;
     }
 
     // "- |request|'s mode is |no CORS|"
-    if (m_request->mode() == FetchRequestData::NoCORSMode) {
+    if (m_request->mode() == WebURLRequest::FetchRequestModeNoCORS) {
         // "Set |request|'s response tainting to |opaque|."
         m_request->setResponseTainting(FetchRequestData::OpaqueTainting);
         // "The result of performing a basic fetch using |request|."
@@ -193,7 +201,7 @@ void FetchManager::Loader::start()
     // "- |request|'s url's scheme is not one of 'http' and 'https'"
     if (!m_request->url().protocolIsInHTTPFamily()) {
         // "A network error."
-        performNetworkError();
+        performNetworkError("Fetch API cannot load " + m_request->url().string() + ". URL scheme must be \"http\" or \"https\" for CORS request.");
         return;
     }
 
@@ -201,7 +209,7 @@ void FetchManager::Loader::start()
     // "- |request|'s unsafe request flag is set and either |request|'s method
     // is not a simple method or a header in |request|'s header list is not a
     // simple header"
-    if (m_request->mode() == FetchRequestData::CORSWithForcedPreflight
+    if (m_request->mode() == WebURLRequest::FetchRequestModeCORSWithForcedPreflight
         || (m_request->unsafeRequestFlag()
             && (!FetchUtils::isSimpleMethod(m_request->method())
                 || m_request->headerList()->containsNonSimpleHeader()))) {
@@ -247,13 +255,13 @@ void FetchManager::Loader::performBasicFetch()
         performHTTPFetch();
     } else {
         // FIXME: implement other protocols.
-        performNetworkError();
+        performNetworkError("Fetch API cannot load " + m_request->url().string() + ". URL scheme \"" + m_request->url().protocol() + "\" is not supported.");
     }
 }
 
-void FetchManager::Loader::performNetworkError()
+void FetchManager::Loader::performNetworkError(const String& message)
 {
-    failed();
+    failed(message);
 }
 
 void FetchManager::Loader::performHTTPFetch()
@@ -303,12 +311,13 @@ void FetchManager::Loader::performHTTPFetch()
     // and the |CORS flag| is unset, and unset otherwise.
     ResourceLoaderOptions resourceLoaderOptions;
     resourceLoaderOptions.dataBufferingPolicy = DoNotBufferData;
-    if (m_request->credentials() == FetchRequestData::IncludeCredentials
-        || (m_request->credentials() == FetchRequestData::SameOriginCredentials && !m_corsFlag)) {
+    if (m_request->credentials() == WebURLRequest::FetchCredentialsModeInclude
+        || (m_request->credentials() == WebURLRequest::FetchCredentialsModeSameOrigin && !m_corsFlag)) {
         resourceLoaderOptions.allowCredentials = AllowStoredCredentials;
     }
 
     ThreadableLoaderOptions threadableLoaderOptions;
+    threadableLoaderOptions.contentSecurityPolicyEnforcement = ContentSecurityPolicy::shouldBypassMainWorld(m_executionContext) ? DoNotEnforceContentSecurityPolicy : EnforceConnectSrcDirective;
     if (m_corsPreflightFlag)
         threadableLoaderOptions.preflightPolicy = ForcePreflight;
     if (m_corsFlag)
@@ -316,11 +325,10 @@ void FetchManager::Loader::performHTTPFetch()
     else
         threadableLoaderOptions.crossOriginRequestPolicy = AllowCrossOriginRequests;
 
-
     m_loader = ThreadableLoader::create(*m_executionContext, this, request, threadableLoaderOptions, resourceLoaderOptions);
 }
 
-void FetchManager::Loader::failed()
+void FetchManager::Loader::failed(const String& message)
 {
     if (m_failed)
         return;
@@ -329,7 +337,7 @@ void FetchManager::Loader::failed()
     m_failed = true;
     ScriptState* state = m_resolver->scriptState();
     ScriptState::Scope scope(state);
-    m_resolver->reject(V8ThrowException::createTypeError(state->isolate(), "Failed to fetch"));
+    m_resolver->reject(V8ThrowException::createTypeError(state->isolate(), message));
     notifyFinished();
 }
 

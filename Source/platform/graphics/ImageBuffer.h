@@ -41,7 +41,12 @@
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/PassRefPtr.h"
-#include "wtf/Uint8ClampedArray.h"
+
+namespace WTF {
+
+class ArrayBufferContents;
+
+} // namespace WTF
 
 namespace blink {
 
@@ -82,8 +87,12 @@ public:
     bool isAccelerated() const { return m_surface->isAccelerated(); }
     bool isSurfaceValid() const;
     bool restoreSurface() const;
+    bool needsClipTracking() const { return m_surface->needsClipTracking(); }
 
     void setIsHidden(bool hidden) { m_surface->setIsHidden(hidden); }
+
+    // Called by subclasses of ImageBufferSurface to install a new canvas object
+    void resetCanvas(SkCanvas*);
 
     void willDrawVideo() { m_surface->willDrawVideo(); }
 
@@ -102,9 +111,9 @@ public:
     // or return CopyBackingStore if it doesn't.
     static BackingStoreCopy fastCopyImageMode();
 
-    PassRefPtr<Uint8ClampedArray> getImageData(Multiply, const IntRect&) const;
+    bool getImageData(Multiply, const IntRect&, WTF::ArrayBufferContents&) const;
 
-    void putByteArray(Multiply, Uint8ClampedArray*, const IntSize& sourceSize, const IntRect& sourceRect, const IntPoint& destPoint);
+    void putByteArray(Multiply, const unsigned char* source, const IntSize& sourceSize, const IntRect& sourceRect, const IntPoint& destPoint);
 
     String toDataURL(const String& mimeType, const double* quality = 0) const;
     AffineTransform baseTransform() const { return AffineTransform(); }
@@ -120,7 +129,7 @@ public:
     Platform3DObject getBackingTexture();
     void didModifyBackingTexture();
 
-    bool copyRenderingResultsFromDrawingBuffer(DrawingBuffer*, bool fromFrontBuffer = false);
+    bool copyRenderingResultsFromDrawingBuffer(DrawingBuffer*, SourceDrawingBuffer);
 
     void flush();
 
@@ -145,17 +154,6 @@ private:
     OwnPtr<GraphicsContext> m_context;
     ImageBufferClient* m_client;
 };
-
-struct ImageDataBuffer {
-    ImageDataBuffer(const IntSize& size, PassRefPtr<Uint8ClampedArray> data) : m_size(size), m_data(data) { }
-    IntSize size() const { return m_size; }
-    unsigned char* data() const { return m_data->data(); }
-
-    IntSize m_size;
-    RefPtr<Uint8ClampedArray> m_data;
-};
-
-String PLATFORM_EXPORT ImageDataToDataURL(const ImageDataBuffer&, const String& mimeType, const double* quality);
 
 } // namespace blink
 

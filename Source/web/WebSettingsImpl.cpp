@@ -176,6 +176,11 @@ void WebSettingsImpl::setAccessibilityEnabled(bool enabled)
     m_settings->setAccessibilityEnabled(enabled);
 }
 
+void WebSettingsImpl::setAccessibilityPasswordValuesEnabled(bool enabled)
+{
+    m_settings->setAccessibilityPasswordValuesEnabled(enabled);
+}
+
 void WebSettingsImpl::setInlineTextBoxAccessibilityEnabled(bool enabled)
 {
     m_settings->setInlineTextBoxAccessibilityEnabled(enabled);
@@ -239,6 +244,16 @@ void WebSettingsImpl::setIgnoreMainFrameOverflowHiddenQuirk(bool ignoreMainFrame
 void WebSettingsImpl::setReportScreenSizeInPhysicalPixelsQuirk(bool reportScreenSizeInPhysicalPixelsQuirk)
 {
     m_settings->setReportScreenSizeInPhysicalPixelsQuirk(reportScreenSizeInPhysicalPixelsQuirk);
+}
+
+void WebSettingsImpl::setRootLayerScrolls(bool rootLayerScrolls)
+{
+    m_settings->setRootLayerScrolls(rootLayerScrolls);
+}
+
+void WebSettingsImpl::setRubberBandingOnCompositorThread(bool rubberBandingOnCompositorThread)
+{
+    m_settings->setRubberBandingOnCompositorThread(rubberBandingOnCompositorThread);
 }
 
 void WebSettingsImpl::setClobberUserAgentInitialScaleQuirk(bool clobberUserAgentInitialScaleQuirk)

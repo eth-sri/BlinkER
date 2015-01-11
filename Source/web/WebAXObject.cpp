@@ -32,12 +32,7 @@
 #include "public/web/WebAXObject.h"
 
 #include "core/HTMLNames.h"
-#include "core/accessibility/AXObject.h"
 #include "core/accessibility/AXObjectCache.h"
-#include "core/accessibility/AXTable.h"
-#include "core/accessibility/AXTableCell.h"
-#include "core/accessibility/AXTableColumn.h"
-#include "core/accessibility/AXTableRow.h"
 #include "core/css/CSSPrimitiveValueMappings.h"
 #include "core/dom/Document.h"
 #include "core/dom/Node.h"
@@ -45,6 +40,11 @@
 #include "core/page/EventHandler.h"
 #include "core/rendering/RenderView.h"
 #include "core/rendering/style/RenderStyle.h"
+#include "modules/accessibility/AXObject.h"
+#include "modules/accessibility/AXTable.h"
+#include "modules/accessibility/AXTableCell.h"
+#include "modules/accessibility/AXTableColumn.h"
+#include "modules/accessibility/AXTableRow.h"
 #include "platform/PlatformKeyboardEvent.h"
 #include "public/platform/WebPoint.h"
 #include "public/platform/WebRect.h"
@@ -110,11 +110,6 @@ bool WebAXObject::updateLayoutAndCheckValidity()
 
     // Doing a layout can cause this object to be invalid, so check again.
     return !isDetached();
-}
-
-bool WebAXObject::updateBackingStoreAndCheckValidity()
-{
-    return updateLayoutAndCheckValidity();
 }
 
 WebString WebAXObject::accessibilityDescription() const
@@ -216,6 +211,14 @@ bool WebAXObject::isAnchor() const
         return 0;
 
     return m_private->isAnchor();
+}
+
+WebAXOptionalBool WebAXObject::isAriaGrabbed() const
+{
+    if (isDetached())
+        return WebAXOptionalBoolUndefined;
+
+    return static_cast<WebAXOptionalBool>(m_private->isAriaGrabbed());
 }
 
 bool WebAXObject::isAriaReadOnly() const
@@ -392,6 +395,14 @@ bool WebAXObject::isVertical() const
         return 0;
 
     return m_private->orientation() == AccessibilityOrientationVertical;
+}
+
+WebAXOrientation WebAXObject::orientation() const
+{
+    if (isDetached())
+        return WebAXOrientationUndefined;
+
+    return static_cast<WebAXOrientation>(m_private->orientation());
 }
 
 bool WebAXObject::isVisible() const
@@ -1148,6 +1159,14 @@ unsigned WebAXObject::cellRowSpan() const
     pair<unsigned, unsigned> rowRange;
     toAXTableCell(m_private.get())->rowIndexRange(rowRange);
     return rowRange.second;
+}
+
+void WebAXObject::loadInlineTextBoxes() const
+{
+    if (isDetached())
+        return;
+
+    m_private->loadInlineTextBoxes();
 }
 
 WebAXTextDirection WebAXObject::textDirection() const

@@ -6,10 +6,12 @@
 #include "core/paint/InlinePainter.h"
 
 #include "core/paint/BoxPainter.h"
+#include "core/paint/DrawingRecorder.h"
 #include "core/paint/LineBoxListPainter.h"
 #include "core/paint/ObjectPainter.h"
 #include "core/rendering/GraphicsContextAnnotator.h"
 #include "core/rendering/PaintInfo.h"
+#include "core/rendering/RenderBlock.h"
 #include "core/rendering/RenderInline.h"
 #include "core/rendering/RenderTheme.h"
 #include "core/rendering/RootInlineBox.h"
@@ -17,17 +19,26 @@
 
 namespace blink {
 
-void InlinePainter::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
+void InlinePainter::paint(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
     ANNOTATE_GRAPHICS_CONTEXT(paintInfo, &m_renderInline);
     LineBoxListPainter(*m_renderInline.lineBoxes()).paint(&m_renderInline, paintInfo, paintOffset);
 }
 
-void InlinePainter::paintOutline(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
+void InlinePainter::paintOutline(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
     RenderStyle* styleToUse = m_renderInline.style();
     if (!styleToUse->hasOutline())
         return;
+
+    LayoutRect bounds;
+    if (RuntimeEnabledFeatures::slimmingPaintEnabled()) {
+        // FIXME: Use tighter bounds.
+        RenderBlock* cb = m_renderInline.containingBlock();
+        bounds = cb->visualOverflowRect();
+        bounds.moveBy(paintOffset);
+    }
+    DrawingRecorder recorder(paintInfo.context, &m_renderInline, paintInfo.phase, bounds);
 
     if (styleToUse->outlineStyleIsAuto()) {
         if (RenderTheme::theme().shouldDrawDefaultFocusRing(&m_renderInline)) {

@@ -342,7 +342,7 @@ WebInspector.RemoteObjectImpl.prototype = {
     /**
      * @param {boolean} ownProperties
      * @param {boolean} accessorPropertiesOnly
-     * @param {?function(?Array.<!WebInspector.RemoteObjectProperty>, ?Array.<!WebInspector.RemoteObjectProperty>)} callback
+     * @param {function(?Array.<!WebInspector.RemoteObjectProperty>, ?Array.<!WebInspector.RemoteObjectProperty>)} callback
      */
     doGetProperties: function(ownProperties, accessorPropertiesOnly, callback)
     {
@@ -397,7 +397,7 @@ WebInspector.RemoteObjectImpl.prototype = {
     },
 
     /**
-     * @param {!RuntimeAgent.CallArgument} name
+     * @param {string|!RuntimeAgent.CallArgument} name
      * @param {string} value
      * @param {function(string=)} callback
      */
@@ -423,6 +423,9 @@ WebInspector.RemoteObjectImpl.prototype = {
                 return;
             }
 
+            if (typeof name === "string")
+                name = WebInspector.RemoteObject.toCallArgument(name);
+
             this.doSetObjectPropertyValue(result, name, callback);
 
             if (result.objectId)
@@ -437,7 +440,7 @@ WebInspector.RemoteObjectImpl.prototype = {
      */
     doSetObjectPropertyValue: function(result, name, callback)
     {
-        // This assignment may be for a regular (data) property, and for an acccessor property (with getter/setter).
+        // This assignment may be for a regular (data) property, and for an accessor property (with getter/setter).
         // Note the sensitive matter about accessor property: the property may be physically defined in some proto object,
         // but logically it is bound to the object in question. JavaScript passes this object to getters/setters, not the object
         // where property was defined; so do we.
@@ -726,10 +729,10 @@ WebInspector.ScopeRemoteObject = function(target, objectId, scopeRef, type, subt
 
 WebInspector.ScopeRemoteObject.prototype = {
     /**
+     * @override
      * @param {boolean} ownProperties
      * @param {boolean} accessorPropertiesOnly
      * @param {function(?Array.<!WebInspector.RemoteObjectProperty>, ?Array.<!WebInspector.RemoteObjectProperty>)} callback
-     * @override
      */
     doGetProperties: function(ownProperties, accessorPropertiesOnly, callback)
     {
@@ -763,12 +766,12 @@ WebInspector.ScopeRemoteObject.prototype = {
     /**
      * @override
      * @param {!RuntimeAgent.RemoteObject} result
-     * @param {string} name
+     * @param {!RuntimeAgent.CallArgument} name
      * @param {function(string=)} callback
      */
     doSetObjectPropertyValue: function(result, name, callback)
     {
-        this._debuggerAgent.setVariableValue(this._scopeRef.number, name, WebInspector.RemoteObject.toCallArgument(result), this._scopeRef.callFrameId, this._scopeRef.functionId, setVariableValueCallback.bind(this));
+        this._debuggerAgent.setVariableValue(this._scopeRef.number, /** @type {string} */ (name.value), WebInspector.RemoteObject.toCallArgument(result), this._scopeRef.callFrameId, this._scopeRef.functionId, setVariableValueCallback.bind(this));
 
         /**
          * @param {?Protocol.Error} error
@@ -986,11 +989,11 @@ WebInspector.LocalJSONObject.prototype = {
     },
 
     /**
-     * @param {function(!Array.<!WebInspector.RemoteObjectProperty>)} callback
+     * @param {function(?Array.<!WebInspector.RemoteObjectProperty>, ?Array.<!WebInspector.RemoteObjectProperty>)} callback
      */
     getOwnProperties: function(callback)
     {
-        callback(this._children());
+        callback(this._children(), null);
     },
 
     /**

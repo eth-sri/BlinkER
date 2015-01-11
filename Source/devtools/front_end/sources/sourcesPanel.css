@@ -27,21 +27,17 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-.scripts-pause-on-exceptions-status-bar-item .glyph {
-    -webkit-mask-position: -256px 0;
-}
-
-.scripts-pause-on-exceptions-status-bar-item.toggled-on .glyph {
-    background-color: rgb(66, 129, 235);
-}
-
 .scripts-debug-toolbar {
     position: absolute;
     top: 0;
     width: 100%;
     background-color: #eee;
-    overflow: hidden;
-    white-space: nowrap;
+    border-bottom: 1px solid rgb(163, 163, 163);
+}
+
+.scripts-debug-toolbar /deep/ .status-bar-shadow {
+    margin-top: -1px;
+    height: 23px;
 }
 
 .scripts-debug-toolbar-drawer {
@@ -72,42 +68,6 @@
     height: 24px;
 }
 
-.scripts-run-snippet .glyph {
-    -webkit-mask-position: -64px -48px;
-}
-
-.scripts-pause .glyph {
-    -webkit-mask-position: -32px -72px;
-}
-
-.scripts-pause.toggled-on .glyph {
-    -webkit-mask-position: 0 -72px;
-}
-
-.scripts-step-over .glyph {
-    -webkit-mask-position: -128px -72px;
-}
-
-.scripts-step-into .glyph {
-    -webkit-mask-position: -64px -72px;
-}
-
-.scripts-step-out .glyph {
-    -webkit-mask-position: -96px -72px;
-}
-
-.scripts-long-resume .glyph {
-    -webkit-mask-position: -64px -48px;
-}
-
-.scripts-toggle-breakpoints.toggled-on .glyph {
-    -webkit-mask-position: -32px 0;
-}
-
-.scripts-toggle-breakpoints .glyph {
-    -webkit-mask-position: 0 -24px;
-}
-
 #shared-workers-list {
     margin: 5px 0 5px 20px;
     font-style:italic;
@@ -123,11 +83,11 @@
     margin-right: 36px;
 }
 
-.panel.sources .split-view button.scripts-debugger-show-hide-button.right-sidebar-show-hide-button.toggled-hide {
+.panel.sources .split-view /deep/ button.scripts-debugger-show-hide-button.right-sidebar-show-hide-button.toggled-hide {
     margin-right: 15px;
 }
 
-.panel.sources .split-view #scripts-debug-sidebar-resizer-widget.ns-resizer-widget {
+.dock-to-right .panel.sources .split-view #scripts-debug-sidebar-resizer-widget {
     transform: rotate(90deg);
     right: 17px;
     bottom: 4px;
@@ -140,14 +100,8 @@
     bottom: 0;
 }
 
-.panel.sources .scripts-debugger-show-hide-button {
+.panel.sources /deep/ .scripts-debugger-show-hide-button {
     display: block;
-}
-
-.panel.sources button.status-bar-item.scripts-navigator-show-hide-button {
-    display: block;
-    top: 4px;
-    left: 4px;
 }
 
 .panel.sources .navigator-tabbed-pane .tabbed-pane-header {

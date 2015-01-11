@@ -95,6 +95,7 @@ public:
     virtual void setMainFrame(WebFrame*) = 0;
 
     // Initializes the various client interfaces.
+    // FIXME: remove. See http://crbug.com/425756
     virtual void setAutofillClient(WebAutofillClient*) = 0;
     virtual void setCredentialManagerClient(WebCredentialManagerClient*) = 0;
     virtual void setDevToolsAgentClient(WebDevToolsAgentClient*) = 0;
@@ -181,8 +182,8 @@ public:
     virtual void clearFocusedElement() = 0;
 
     // Scrolls the node currently in focus into |rect|, where |rect| is in
-    // window space.
-    virtual void scrollFocusedNodeIntoRect(const WebRect&) { }
+    // window space. Returns true if an animation was started.
+    virtual bool scrollFocusedNodeIntoRect(const WebRect&) { return false; }
 
     // Advance the focus of the WebView forward to the next element or to the
     // previous element in the tab sequence (if reverse is true).
@@ -318,6 +319,11 @@ public:
 
     // Do a hit test at given point and return the HitTestResult.
     virtual WebHitTestResult hitTestResultAt(const WebPoint&) = 0;
+
+    // Do a hit test equivalent to what would be done for a GestureTap event
+    // that has width/height corresponding to the supplied |tapArea|.
+    virtual WebHitTestResult hitTestResultForTap(const WebPoint& tapPoint,
+        const WebSize& tapArea) = 0;
 
     // Copy to the clipboard the image located at a particular point in the
     // WebView (if there is such an image)
@@ -487,6 +493,10 @@ public:
     virtual void acceptLanguagesChanged() = 0;
 
     // Testing functionality for TestRunner ---------------------------------
+
+    // Force the webgl context to fail so that webglcontextcreationerror
+    // event gets generated/tested.
+    virtual void forceNextWebGLContextCreationToFail() = 0;
 
 protected:
     ~WebView() {}
