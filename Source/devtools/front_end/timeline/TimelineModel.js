@@ -50,6 +50,7 @@ WebInspector.TimelineModel = function(tracingManager, tracingModel, recordFilter
 }
 
 WebInspector.TimelineModel.RecordType = {
+    Task: "Task",
     Program: "Program",
     EventDispatch: "EventDispatch",
 
@@ -74,7 +75,9 @@ WebInspector.TimelineModel.RecordType = {
     ScrollLayer: "ScrollLayer",
     CompositeLayers: "CompositeLayers",
 
+    ScheduleStyleInvalidationTracking: "ScheduleStyleInvalidationTracking",
     StyleRecalcInvalidationTracking: "StyleRecalcInvalidationTracking",
+    StyleInvalidatorInvalidationTracking: "StyleInvalidatorInvalidationTracking",
     LayoutInvalidationTracking: "LayoutInvalidationTracking",
     LayerInvalidationTracking: "LayerInvalidationTracking",
     PaintInvalidationTracking: "PaintInvalidationTracking",
@@ -411,6 +414,11 @@ WebInspector.TimelineModel.prototype = {
             disabledByDefault("devtools.timeline.frame"),
             WebInspector.TracingModel.ConsoleEventCategory
         ];
+        if (Runtime.experiments.isEnabled("timelineFlowEvents")) {
+            categoriesArray.push(disabledByDefault("toplevel.flow"),
+                                 disabledByDefault("ipc.flow"),
+                                 disabledByDefault("devtools.timeline.top-level-task"));
+        }
         if (captureCauses || enableJSSampling)
             categoriesArray.push(disabledByDefault("devtools.timeline.stack"));
         if (captureCauses && Runtime.experiments.isEnabled("timelineInvalidationTracking"))
@@ -568,14 +576,14 @@ WebInspector.TimelineModel.prototype = {
     _stopProfilingOnTarget: function(target)
     {
         /**
-         * @param {!{profile: !ProfilerAgent.CPUProfile}} value
-         * @return {!ProfilerAgent.CPUProfile}
+         * @param {?{profile: !ProfilerAgent.CPUProfile}} value
+         * @return {?ProfilerAgent.CPUProfile}
          */
         function extractProfile(value)
         {
-            return value.profile;
+            return value && value.profile;
         }
-        return target.profilerAgent().stop().then(extractProfile).then(this._addCpuProfile.bind(this, target.id())).catchAndReport();
+        return target.profilerAgent().stop().then(extractProfile).then(this._addCpuProfile.bind(this, target.id()));
     },
 
     /**
@@ -636,10 +644,12 @@ WebInspector.TimelineModel.prototype = {
 
     /**
      * @param {number} targetId
-     * @param {!ProfilerAgent.CPUProfile} cpuProfile
+     * @param {?ProfilerAgent.CPUProfile} cpuProfile
      */
     _addCpuProfile: function(targetId, cpuProfile)
     {
+        if (!cpuProfile)
+            return;
         if (!this._cpuProfiles)
             this._cpuProfiles = new Map();
         this._cpuProfiles.set(targetId, cpuProfile);
@@ -647,6 +657,7 @@ WebInspector.TimelineModel.prototype = {
 
     _didStopRecordingTraceEvents: function()
     {
+        this._injectCpuProfileEvents();
         this._tracingModel.tracingComplete();
 
         var metaEvents = this._tracingModel.devtoolsPageMetadataEvents();
@@ -657,27 +668,15 @@ WebInspector.TimelineModel.prototype = {
             var metaEvent = metaEvents[i];
             var process = metaEvent.thread.process();
             var startTime = metaEvent.startTime;
-
             var endTime = Infinity;
             if (i + 1 < length)
                 endTime = metaEvents[i + 1].startTime;
+            this._currentPage = metaEvent.args["data"] && metaEvent.args["data"]["page"];
 
-            var threads = process.sortedThreads();
-            for (var j = 0; j < threads.length; j++) {
-                var thread = threads[j];
-                var workerId = 0;
-                if (thread.name() === "WebCore: Worker") {
-                    for (var k = 0; k < workerMetadataEvents.length; ++k) {
-                        var eventData = workerMetadataEvents[k].args["data"];
-                        if (eventData["workerThreadId"] === thread.id()) {
-                            workerId = eventData["workerId"];
-                            break;
-                        }
-                    }
-                    if (!workerId)
-                        continue;
-                }
-                this._processThreadEvents(startTime, endTime, metaEvent.thread, thread, workerId);
+            for (var thread of process.sortedThreads()) {
+                if (thread.name() === "WebCore: Worker" && !workerMetadataEvents.some(function(e) { return e.args["data"]["workerThreadId"] === thread.id(); }))
+                    continue;
+                this._processThreadEvents(startTime, endTime, metaEvent.thread, thread);
             }
         }
         this._inspectedTargetEvents.sort(WebInspector.TracingModel.Event.compareStartTime);
@@ -692,23 +691,45 @@ WebInspector.TimelineModel.prototype = {
     },
 
     /**
-     * @param {!ProfilerAgent.CPUProfile} cpuProfile
+     * @param {number} pid
+     * @param {number} tid
+     * @param {?ProfilerAgent.CPUProfile} cpuProfile
      */
-    _injectCpuProfileEvent: function(cpuProfile)
+    _injectCpuProfileEvent: function(pid, tid, cpuProfile)
     {
-        var metaEvent = this._tracingModel.devtoolsPageMetadataEvents().peekLast();
-        if (!metaEvent)
+        if (!cpuProfile)
             return;
         var cpuProfileEvent = /** @type {!WebInspector.TracingManager.EventPayload} */ ({
             cat: WebInspector.TracingModel.DevToolsMetadataEventCategory,
             ph: WebInspector.TracingModel.Phase.Instant,
             ts: this._tracingModel.maximumRecordTime() * 1000,
-            pid: metaEvent.thread.process().id(),
-            tid: metaEvent.thread.id(),
+            pid: pid,
+            tid: tid,
             name: WebInspector.TimelineModel.RecordType.CpuProfile,
             args: { data: { cpuProfile: cpuProfile } }
         });
         this._tracingModel.addEvents([cpuProfileEvent]);
+    },
+
+    _injectCpuProfileEvents: function()
+    {
+        if (!this._cpuProfiles)
+            return;
+        var mainMetaEvent = this._tracingModel.devtoolsPageMetadataEvents().peekLast();
+        var pid = mainMetaEvent.thread.process().id();
+        var mainTarget = WebInspector.targetManager.mainTarget();
+        var mainCpuProfile = this._cpuProfiles.get(mainTarget.id());
+        this._injectCpuProfileEvent(pid, mainMetaEvent.thread.id(), mainCpuProfile);
+        var workerMetadataEvents = this._tracingModel.devtoolsWorkerMetadataEvents();
+        for (var metaEvent of workerMetadataEvents) {
+            var workerId = metaEvent.args["data"]["workerId"];
+            var target = WebInspector.workerTargetManager.targetByWorkerId(workerId);
+            if (!target)
+                continue;
+            var cpuProfile = this._cpuProfiles.get(target.id());
+            this._injectCpuProfileEvent(pid, metaEvent.args["data"]["workerThreadId"], cpuProfile);
+        }
+        this._cpuProfiles = null;
     },
 
     _insertFirstPaintEvent: function()
@@ -824,6 +845,7 @@ WebInspector.TimelineModel.prototype = {
         this._eventStack = [];
         this._hadCommitLoad = false;
         this._firstCompositeLayers = null;
+        this._currentPage = null;
     },
 
     /**
@@ -831,17 +853,15 @@ WebInspector.TimelineModel.prototype = {
      * @param {?number} endTime
      * @param {!WebInspector.TracingModel.Thread} mainThread
      * @param {!WebInspector.TracingModel.Thread} thread
-     * @param {number} workerId
      */
-    _processThreadEvents: function(startTime, endTime, mainThread, thread, workerId)
+    _processThreadEvents: function(startTime, endTime, mainThread, thread)
     {
         var events = thread.events();
 
-        var target = thread === mainThread ? WebInspector.targetManager.mainTarget() : WebInspector.workerTargetManager.targetByWorkerId(workerId);
-        if (target && this._cpuProfiles) {
-            var cpuProfile = this._cpuProfiles.get(target.id());
+        var cpuProfileEvent = events.peekLast();
+        if (cpuProfileEvent && cpuProfileEvent.name === WebInspector.TimelineModel.RecordType.CpuProfile) {
+            var cpuProfile = cpuProfileEvent.args["data"]["cpuProfile"];
             if (cpuProfile) {
-                this._cpuProfiles.delete(target.id());
                 var jsSamples = WebInspector.TimelineJSProfileProcessor.generateTracingEventsFromCpuProfile(cpuProfile, thread);
                 events = events.mergeOrdered(jsSamples, WebInspector.TracingModel.Event.orderedCompareStartTime);
                 var jsFrameEvents = WebInspector.TimelineJSProfileProcessor.generateJSFrameEvents(events);
@@ -867,7 +887,8 @@ WebInspector.TimelineModel.prototype = {
             var event = events[i];
             if (endTime && event.startTime >= endTime)
                 break;
-            this._processEvent(event);
+            if (!this._processEvent(event))
+                continue;
             threadEvents.push(event);
             this._inspectedTargetEvents.push(event);
         }
@@ -875,6 +896,7 @@ WebInspector.TimelineModel.prototype = {
 
     /**
      * @param {!WebInspector.TracingModel.Event} event
+     * @return {boolean}
      */
     _processEvent: function(event)
     {
@@ -901,13 +923,9 @@ WebInspector.TimelineModel.prototype = {
             event.stackTrace = eventData["stackTrace"];
 
         switch (event.name) {
-        case recordTypes.CpuProfile:
-            this._cpuProfile = event.args["data"]["cpuProfile"];
-            break;
-
         case recordTypes.ResourceSendRequest:
             this._sendRequestEvents[event.args["data"]["requestId"]] = event;
-            event.imageURL = event.args["data"]["url"];
+            event.url = event.args["data"]["url"];
             break;
 
         case recordTypes.ResourceReceiveResponse:
@@ -915,7 +933,7 @@ WebInspector.TimelineModel.prototype = {
         case recordTypes.ResourceFinish:
             event.initiator = this._sendRequestEvents[event.args["data"]["requestId"]];
             if (event.initiator)
-                event.imageURL = event.initiator.imageURL;
+                event.url = event.initiator.url;
             break;
 
         case recordTypes.TimerInstall:
@@ -945,11 +963,13 @@ WebInspector.TimelineModel.prototype = {
             this._lastRecalculateStylesEvent = event;
             break;
 
+        case recordTypes.ScheduleStyleInvalidationTracking:
         case recordTypes.StyleRecalcInvalidationTracking:
+        case recordTypes.StyleInvalidatorInvalidationTracking:
         case recordTypes.LayoutInvalidationTracking:
         case recordTypes.LayerInvalidationTracking:
         case recordTypes.PaintInvalidationTracking:
-            this._invalidationTracker.addInvalidation(event);
+            this._invalidationTracker.addInvalidation(new WebInspector.InvalidationTrackingEvent(event));
             break;
 
         case recordTypes.InvalidateLayout:
@@ -993,7 +1013,7 @@ WebInspector.TimelineModel.prototype = {
             break;
 
         case recordTypes.SetLayerTreeId:
-            this._inspectedTargetLayerTreeId = event.args["layerTreeId"];
+            this._inspectedTargetLayerTreeId = event.args["layerTreeId"] || event.args["data"]["layerTreeId"];
             break;
 
         case recordTypes.Paint:
@@ -1024,7 +1044,7 @@ WebInspector.TimelineModel.prototype = {
 
         case recordTypes.PaintImage:
             event.backendNodeId = event.args["data"]["nodeId"];
-            event.imageURL = event.args["data"]["url"];
+            event.url = event.args["data"]["url"];
             break;
 
         case recordTypes.DecodeImage:
@@ -1037,7 +1057,7 @@ WebInspector.TimelineModel.prototype = {
             if (!paintImageEvent)
                 break;
             event.backendNodeId = paintImageEvent.backendNodeId;
-            event.imageURL = paintImageEvent.imageURL;
+            event.url = paintImageEvent.url;
             break;
 
         case recordTypes.DrawLazyPixelRef:
@@ -1046,10 +1066,20 @@ WebInspector.TimelineModel.prototype = {
                 break;
             this._paintImageEventByPixelRefId[event.args["LazyPixelRef"]] = paintImageEvent;
             event.backendNodeId = paintImageEvent.backendNodeId;
-            event.imageURL = paintImageEvent.imageURL;
+            event.url = paintImageEvent.url;
+            break;
+
+        case recordTypes.MarkDOMContent:
+        case recordTypes.MarkLoad:
+            var page = event.args["data"] && event.args["data"]["page"];
+            if (page && page !== this._currentPage)
+                return false;
             break;
 
         case recordTypes.CommitLoad:
+            var page = event.args["data"] && event.args["data"]["page"];
+            if (page && page !== this._currentPage)
+                return false;
             if (!event.args["data"]["isMainFrame"])
                 break;
             this._hadCommitLoad = true;
@@ -1061,6 +1091,7 @@ WebInspector.TimelineModel.prototype = {
                 this._firstCompositeLayers = event;
             break;
         }
+        return true;
     },
 
     /**
@@ -1301,6 +1332,7 @@ WebInspector.TimelineRecordHiddenEmptyTypeFilter = function(recordTypes)
 
 WebInspector.TimelineRecordHiddenEmptyTypeFilter.prototype = {
     /**
+     * @override
      * @param {!WebInspector.TimelineModel.Record} record
      * @return {boolean}
      */
@@ -1324,6 +1356,7 @@ WebInspector.TimelineRecordHiddenTypeFilter = function(recordTypes)
 
 WebInspector.TimelineRecordHiddenTypeFilter.prototype = {
     /**
+     * @override
      * @param {!WebInspector.TimelineModel.Record} record
      * @return {boolean}
      */
@@ -1347,6 +1380,7 @@ WebInspector.TimelineRecordVisibleTypeFilter = function(recordTypes)
 
 WebInspector.TimelineRecordVisibleTypeFilter.prototype = {
     /**
+     * @override
      * @param {!WebInspector.TimelineModel.Record} record
      * @return {boolean}
      */
@@ -1371,12 +1405,16 @@ WebInspector.TimelineModelLoadFromFileDelegate = function(model, progress)
 }
 
 WebInspector.TimelineModelLoadFromFileDelegate.prototype = {
+    /**
+     * @override
+     */
     onTransferStarted: function()
     {
         this._progress.setTitle(WebInspector.UIString("Loading\u2026"));
     },
 
     /**
+     * @override
      * @param {!WebInspector.ChunkedReader} reader
      */
     onChunkTransferred: function(reader)
@@ -1395,12 +1433,16 @@ WebInspector.TimelineModelLoadFromFileDelegate.prototype = {
         }
     },
 
+    /**
+     * @override
+     */
     onTransferFinished: function()
     {
         this._progress.done();
     },
 
     /**
+     * @override
      * @param {!WebInspector.ChunkedReader} reader
      * @param {!Event} event
      */
@@ -1449,6 +1491,7 @@ WebInspector.TraceEventNameFilter = function(eventNames)
 
 WebInspector.TraceEventNameFilter.prototype = {
     /**
+     * @override
      * @param {!WebInspector.TracingModel.Event} event
      * @return {boolean}
      */
@@ -1465,7 +1508,7 @@ WebInspector.TraceEventNameFilter.prototype = {
  */
 WebInspector.InclusiveTraceEventNameFilter = function(includeNames)
 {
-    WebInspector.TraceEventNameFilter.call(this, includeNames)
+    WebInspector.TraceEventNameFilter.call(this, includeNames);
 }
 
 WebInspector.InclusiveTraceEventNameFilter.prototype = {
@@ -1476,7 +1519,9 @@ WebInspector.InclusiveTraceEventNameFilter.prototype = {
      */
     accept: function(event)
     {
-        return event.category === WebInspector.TracingModel.ConsoleEventCategory || !!this._eventNames[event.name];
+        return event.category === WebInspector.TracingModel.ConsoleEventCategory
+            || event.category === WebInspector.TracingModel.TopLevelEventCategory
+            || !!this._eventNames[event.name];
     },
     __proto__: WebInspector.TraceEventNameFilter.prototype
 }
@@ -1488,7 +1533,7 @@ WebInspector.InclusiveTraceEventNameFilter.prototype = {
  */
 WebInspector.ExclusiveTraceEventNameFilter = function(excludeNames)
 {
-    WebInspector.TraceEventNameFilter.call(this, excludeNames)
+    WebInspector.TraceEventNameFilter.call(this, excludeNames);
 }
 
 WebInspector.ExclusiveTraceEventNameFilter.prototype = {
@@ -1501,6 +1546,7 @@ WebInspector.ExclusiveTraceEventNameFilter.prototype = {
     {
         return !this._eventNames[event.name];
     },
+
     __proto__: WebInspector.TraceEventNameFilter.prototype
 }
 
@@ -1523,6 +1569,7 @@ WebInspector.TracingModelLoader = function(model, reader, progress)
 
 WebInspector.TracingModelLoader.prototype = {
     /**
+     * @override
      * @param {string} chunk
      */
     write: function(chunk)
@@ -1533,7 +1580,7 @@ WebInspector.TracingModelLoader.prototype = {
         do {
             index = lastIndex;
             lastIndex = WebInspector.TextUtils.findBalancedCurlyBrackets(data, index);
-        } while (lastIndex !== -1)
+        } while (lastIndex !== -1);
 
         var json = data.slice(0, index) + "]";
         this._buffer = data.slice(index);
@@ -1588,6 +1635,9 @@ WebInspector.TracingModelLoader.prototype = {
         return typeof item === "string" && item.indexOf("Chrome") !== -1;
     },
 
+    /**
+     * @override
+     */
     close: function()
     {
         this._loader.finish();
@@ -1606,26 +1656,34 @@ WebInspector.TracingTimelineSaver = function(stream)
 }
 
 WebInspector.TracingTimelineSaver.prototype = {
+    /**
+     * @override
+     */
     onTransferStarted: function()
     {
         this._stream.write("[");
     },
 
+    /**
+     * @override
+     */
     onTransferFinished: function()
     {
         this._stream.write("]");
     },
 
     /**
+     * @override
      * @param {!WebInspector.ChunkedReader} reader
      */
     onChunkTransferred: function(reader) { },
 
     /**
+     * @override
      * @param {!WebInspector.ChunkedReader} reader
      * @param {!Event} event
      */
-    onError: function(reader, event) { },
+    onError: function(reader, event) { }
 }
 
 /**
@@ -1634,20 +1692,47 @@ WebInspector.TracingTimelineSaver.prototype = {
  */
 WebInspector.InvalidationTrackingEvent = function(event)
 {
+    /** @type {string} */
     this.type = event.name;
-    this.frameId = event.args["data"]["frame"];
-    this.nodeId = event.args["data"]["nodeId"];
-    this.nodeName = event.args["data"]["nodeName"];
-    this.paintId = event.args["data"]["paintId"];
+    /** @type {number} */
+    this.startTime = event.startTime;
+    /** @type {!WebInspector.TracingModel.Event} */
+    this._tracingEvent = event;
 
-    var reason = event.args["data"]["reason"];
-    var stackTrace = event.args["data"]["stackTrace"];
+    var eventData = event.args["data"];
 
-    if (!reason && stackTrace && this.type === WebInspector.TimelineModel.RecordType.LayoutInvalidationTracking)
-        reason = "Layout forced";
+    /** @type {number} */
+    this.frame = eventData["frame"];
+    /** @type {?number} */
+    this.nodeId = eventData["nodeId"];
+    /** @type {?string} */
+    this.nodeName = eventData["nodeName"];
+    /** @type {?number} */
+    this.paintId = eventData["paintId"];
+    /** @type {?number} */
+    this.invalidationSet = eventData["invalidationSet"];
+    /** @type {?string} */
+    this.invalidatedSelectorId = eventData["invalidatedSelectorId"];
+    /** @type {?string} */
+    this.changedId = eventData["changedId"];
+    /** @type {?string} */
+    this.changedClass = eventData["changedClass"];
+    /** @type {?string} */
+    this.changedAttribute = eventData["changedAttribute"];
+    /** @type {?string} */
+    this.changedPseudo = eventData["changedPseudo"];
+    /** @type {?string} */
+    this.selectorPart = eventData["selectorPart"];
+    /** @type {?string} */
+    this.extraData = eventData["extraData"];
+    /** @type {?Array.<!Object.<string, number>>} */
+    this.invalidationList = eventData["invalidationList"];
+    /** @type {!WebInspector.InvalidationCause} */
+    this.cause = {reason: eventData["reason"], stackTrace: eventData["stackTrace"]};
 
-    if (reason || stackTrace)
-        this.cause = {reason: reason, stackTrace: stackTrace};
+    // FIXME: Move this to TimelineUIUtils.js.
+    if (!this.cause.reason && this.cause.stackTrace && this.type === WebInspector.TimelineModel.RecordType.LayoutInvalidationTracking)
+        this.cause.reason = "Layout forced";
 }
 
 /** @typedef {{reason: string, stackTrace: ?Array.<!ConsoleAgent.CallFrame>}} */
@@ -1663,11 +1748,10 @@ WebInspector.InvalidationTracker = function()
 
 WebInspector.InvalidationTracker.prototype = {
     /**
-     * @param {!WebInspector.TracingModel.Event} event
+     * @param {!WebInspector.InvalidationTrackingEvent} invalidation
      */
-    addInvalidation: function(event)
+    addInvalidation: function(invalidation)
     {
-        var invalidation = new WebInspector.InvalidationTrackingEvent(event);
         this._startNewFrameIfNeeded();
 
         if (!invalidation.nodeId && !invalidation.paintId) {
@@ -1680,21 +1764,31 @@ WebInspector.InvalidationTracker.prototype = {
         // we can use to update the paintId for all other invalidation tracking
         // events.
         var recordTypes = WebInspector.TimelineModel.RecordType;
-        if (invalidation.type === recordTypes.PaintInvalidationTracking) {
-            this._forAllInvalidations(updatePaintId);
+        if (invalidation.type === recordTypes.PaintInvalidationTracking && invalidation.nodeId) {
+            var invalidations = this._invalidationsByNodeId[invalidation.nodeId] || [];
+            for (var i = 0; i < invalidations.length; ++i)
+                invalidations[i].paintId = invalidation.paintId;
 
             // PaintInvalidationTracking is only used for updating paintIds.
             return;
         }
 
-        // StyleRecalcInvalidationTracking events can occur before and during
-        // recalc style. didRecalcStyle handles StyleRecalcInvalidationTracking
-        // events that occur before the recalc style event but we need to handle
-        // StyleRecalcInvalidationTracking events during recalc style here.
-        if (invalidation.type === recordTypes.StyleRecalcInvalidationTracking) {
-            var duringRecalcStyle = event.startTime && this._lastRecalcStyle
-                && event.startTime >= this._lastRecalcStyle.startTime
-                && event.startTime <= this._lastRecalcStyle.endTime;
+        // Suppress StyleInvalidator StyleRecalcInvalidationTracking invalidations because they
+        // will be handled by StyleInvalidatorInvalidationTracking.
+        // FIXME: Investigate if we can remove StyleInvalidator invalidations entirely.
+        if (invalidation.type === recordTypes.StyleRecalcInvalidationTracking && invalidation.cause.reason === "StyleInvalidator")
+            return;
+
+        // Style invalidation events can occur before and during recalc style. didRecalcStyle
+        // handles style invalidations that occur before the recalc style event but we need to
+        // handle style recalc invalidations during recalc style here.
+        var styleRecalcInvalidation = (invalidation.type === recordTypes.ScheduleStyleInvalidationTracking
+            || invalidation.type === recordTypes.StyleInvalidatorInvalidationTracking
+            || invalidation.type === recordTypes.StyleRecalcInvalidationTracking);
+        if (styleRecalcInvalidation) {
+            var duringRecalcStyle = invalidation.startTime && this._lastRecalcStyle
+                && invalidation.startTime >= this._lastRecalcStyle.startTime
+                && invalidation.startTime <= this._lastRecalcStyle.endTime;
             if (duringRecalcStyle)
                 this._associateWithLastRecalcStyleEvent(invalidation);
         }
@@ -1704,15 +1798,11 @@ WebInspector.InvalidationTracker.prototype = {
             this._invalidations[invalidation.type].push(invalidation);
         else
             this._invalidations[invalidation.type] = [ invalidation ];
-
-
-        /**
-         * @param {!WebInspector.InvalidationTrackingEvent} invalidationToUpdate
-         */
-        function updatePaintId(invalidationToUpdate)
-        {
-            if (invalidationToUpdate.nodeId === invalidation.nodeId)
-                invalidationToUpdate.paintId = invalidation.paintId;
+        if (invalidation.nodeId) {
+            if (this._invalidationsByNodeId[invalidation.nodeId])
+                this._invalidationsByNodeId[invalidation.nodeId].push(invalidation);
+            else
+                this._invalidationsByNodeId[invalidation.nodeId] = [ invalidation ];
         }
     },
 
@@ -1722,8 +1812,11 @@ WebInspector.InvalidationTracker.prototype = {
     didRecalcStyle: function(recalcStyleEvent)
     {
         this._lastRecalcStyle = recalcStyleEvent;
-        this._forAllInvalidations(this._associateWithLastRecalcStyleEvent,
-            [WebInspector.TimelineModel.RecordType.StyleRecalcInvalidationTracking]);
+        var types = [WebInspector.TimelineModel.RecordType.ScheduleStyleInvalidationTracking,
+                WebInspector.TimelineModel.RecordType.StyleInvalidatorInvalidationTracking,
+                WebInspector.TimelineModel.RecordType.StyleRecalcInvalidationTracking];
+        for (var invalidation of this._invalidationsOfTypes(types))
+            this._associateWithLastRecalcStyleEvent(invalidation);
     },
 
     /**
@@ -1733,9 +1826,74 @@ WebInspector.InvalidationTracker.prototype = {
     {
         if (invalidation.linkedRecalcStyleEvent)
             return;
+
+        var recordTypes = WebInspector.TimelineModel.RecordType;
         var recalcStyleFrameId = this._lastRecalcStyle.args["beginData"]["frame"];
-        this._addInvalidationToEvent(this._lastRecalcStyle, recalcStyleFrameId, invalidation);
+        if (invalidation.type === recordTypes.StyleInvalidatorInvalidationTracking) {
+            // Instead of calling _addInvalidationToEvent directly, we create synthetic
+            // StyleRecalcInvalidationTracking events which will be added in _addInvalidationToEvent.
+            this._addSyntheticStyleRecalcInvalidations(this._lastRecalcStyle, recalcStyleFrameId, invalidation);
+        } else if (invalidation.type === recordTypes.ScheduleStyleInvalidationTracking) {
+            // ScheduleStyleInvalidationTracking events are only used for adding information to
+            // StyleInvalidatorInvalidationTracking events. See: _addSyntheticStyleRecalcInvalidations.
+        } else {
+            this._addInvalidationToEvent(this._lastRecalcStyle, recalcStyleFrameId, invalidation);
+        }
+
         invalidation.linkedRecalcStyleEvent = true;
+    },
+
+    /**
+     * @param {!WebInspector.TracingModel.Event} event
+     * @param {number} frameId
+     * @param {!WebInspector.InvalidationTrackingEvent} styleInvalidatorInvalidation
+     */
+    _addSyntheticStyleRecalcInvalidations: function(event, frameId, styleInvalidatorInvalidation)
+    {
+        if (!styleInvalidatorInvalidation.invalidationList) {
+            this._addSyntheticStyleRecalcInvalidation(styleInvalidatorInvalidation._tracingEvent, styleInvalidatorInvalidation);
+            return;
+        }
+        if (!styleInvalidatorInvalidation.nodeId) {
+            console.error("Invalidation lacks node information.");
+            console.error(invalidation);
+            return;
+        }
+        for (var i = 0; i < styleInvalidatorInvalidation.invalidationList.length; i++) {
+            var setId = styleInvalidatorInvalidation.invalidationList[i]["id"];
+            var lastScheduleStyleRecalculation;
+            var nodeInvalidations = this._invalidationsByNodeId[styleInvalidatorInvalidation.nodeId];
+            for (var j = 0; j < nodeInvalidations.length; j++) {
+                var invalidation = nodeInvalidations[j];
+                if (invalidation.frame !== frameId || invalidation.invalidationSet !== setId || invalidation.type !== WebInspector.TimelineModel.RecordType.ScheduleStyleInvalidationTracking)
+                    continue;
+                lastScheduleStyleRecalculation = invalidation;
+            }
+            if (!lastScheduleStyleRecalculation) {
+                console.error("Failed to lookup the event that scheduled a style invalidator invalidation.");
+                continue;
+            }
+            this._addSyntheticStyleRecalcInvalidation(lastScheduleStyleRecalculation._tracingEvent, styleInvalidatorInvalidation);
+        }
+    },
+
+    /**
+     * @param {!WebInspector.TracingModel.Event} baseEvent
+     * @param {!WebInspector.InvalidationTrackingEvent} styleInvalidatorInvalidation
+     */
+    _addSyntheticStyleRecalcInvalidation: function(baseEvent, styleInvalidatorInvalidation)
+    {
+        var invalidation = new WebInspector.InvalidationTrackingEvent(baseEvent);
+        invalidation.type = WebInspector.TimelineModel.RecordType.StyleRecalcInvalidationTracking;
+        invalidation.synthetic = true;
+        if (styleInvalidatorInvalidation.cause.reason)
+            invalidation.cause.reason = styleInvalidatorInvalidation.cause.reason;
+        if (styleInvalidatorInvalidation.selectorPart)
+            invalidation.selectorPart = styleInvalidatorInvalidation.selectorPart;
+
+        this.addInvalidation(invalidation);
+        if (!invalidation.linkedRecalcStyleEvent)
+            this._associateWithLastRecalcStyleEvent(invalidation);
     },
 
     /**
@@ -1744,18 +1902,9 @@ WebInspector.InvalidationTracker.prototype = {
     didLayout: function(layoutEvent)
     {
         var layoutFrameId = layoutEvent.args["beginData"]["frame"];
-        this._forAllInvalidations(associateWithLayoutEvent,
-            [WebInspector.TimelineModel.RecordType.LayoutInvalidationTracking]);
-
-        /**
-         * @param {!WebInspector.InvalidationTrackingEvent} invalidation
-         * @suppressReceiverCheck
-         * @this {WebInspector.InvalidationTracker}
-         */
-        function associateWithLayoutEvent(invalidation)
-        {
+        for (var invalidation of this._invalidationsOfTypes([WebInspector.TimelineModel.RecordType.LayoutInvalidationTracking])) {
             if (invalidation.linkedLayoutEvent)
-                return;
+                continue;
             this._addInvalidationToEvent(layoutEvent, layoutFrameId, invalidation);
             invalidation.linkedLayoutEvent = true;
         }
@@ -1780,15 +1929,10 @@ WebInspector.InvalidationTracker.prototype = {
 
         var effectivePaintId = this._lastPaintWithLayer.args["data"]["nodeId"];
         var paintFrameId = paintEvent.args["data"]["frame"];
-        this._forAllInvalidations(associateWithPaintEvent);
-
-        /**
-         * @param {!WebInspector.InvalidationTrackingEvent} invalidation
-         * @suppressReceiverCheck
-         * @this {WebInspector.InvalidationTracker}
-         */
-        function associateWithPaintEvent(invalidation)
-        {
+        var types = [WebInspector.TimelineModel.RecordType.StyleRecalcInvalidationTracking,
+            WebInspector.TimelineModel.RecordType.LayoutInvalidationTracking,
+            WebInspector.TimelineModel.RecordType.PaintInvalidationTracking];
+        for (var invalidation of this._invalidationsOfTypes(types)) {
             if (invalidation.paintId === effectivePaintId)
                 this._addInvalidationToEvent(paintEvent, paintFrameId, invalidation);
         }
@@ -1801,7 +1945,7 @@ WebInspector.InvalidationTracker.prototype = {
      */
     _addInvalidationToEvent: function(event, eventFrameId, invalidation)
     {
-        if (eventFrameId !== invalidation.frameId)
+        if (eventFrameId !== invalidation.frame)
             return;
         if (!event.invalidationTrackingEvents)
             event.invalidationTrackingEvents = [ invalidation ];
@@ -1810,25 +1954,23 @@ WebInspector.InvalidationTracker.prototype = {
     },
 
     /**
-     * @param {function(!WebInspector.InvalidationTrackingEvent)} callback
      * @param {!Array.<string>=} types
+     * @return {!Iterator.<!WebInspector.InvalidationTrackingEvent>}
      */
-    _forAllInvalidations: function(callback, types)
+    _invalidationsOfTypes: function(types)
     {
+        var invalidations = this._invalidations;
         if (!types)
-            types = Object.keys(this._invalidations);
-        types.forEach(forAllInvalidationsOfType, this);
-
-        /**
-         * @param {string} type
-         * @this {WebInspector.InvalidationTracker}
-         */
-        function forAllInvalidationsOfType(type)
+            types = Object.keys(invalidations);
+        function* generator()
         {
-            var invalidations = this._invalidations[type];
-            if (invalidations)
-                invalidations.forEach(callback, this);
+            for (var i = 0; i < types.length; ++i) {
+                var invalidationList = invalidations[types[i]] || [];
+                for (var j = 0; j < invalidationList.length; ++j)
+                    yield invalidationList[j];
+            }
         }
+        return generator();
     },
 
     _startNewFrameIfNeeded: function()
@@ -1841,8 +1983,10 @@ WebInspector.InvalidationTracker.prototype = {
 
     _initializePerFrameState: function()
     {
-        /** @type {!Object.<string, ?Array.<!WebInspector.InvalidationTrackingEvent>>} */
+        /** @type {!Object.<string, !Array.<!WebInspector.InvalidationTrackingEvent>>} */
         this._invalidations = {};
+        /** @type {!Object.<number, !Array.<!WebInspector.InvalidationTrackingEvent>>} */
+        this._invalidationsByNodeId = {};
 
         this._lastRecalcStyle = undefined;
         this._lastPaintWithLayer = undefined;

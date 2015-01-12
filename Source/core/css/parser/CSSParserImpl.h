@@ -9,13 +9,15 @@
 #include "core/css/CSSProperty.h"
 #include "core/css/CSSPropertySourceData.h"
 #include "core/css/parser/CSSParserMode.h"
-#include "core/css/parser/CSSParserToken.h"
+#include "core/css/parser/CSSParserTokenRange.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
 
+class ImmutableStylePropertySet;
+class Element;
 class MutableStylePropertySet;
 
 class CSSParserImpl {
@@ -23,15 +25,23 @@ class CSSParserImpl {
 public:
     CSSParserImpl(const CSSParserContext&, const String&);
     static bool parseValue(MutableStylePropertySet*, CSSPropertyID, const String&, bool important, const CSSParserContext&);
+    static PassRefPtrWillBeRawPtr<ImmutableStylePropertySet> parseInlineStyleDeclaration(const String&, Element*);
+    static bool parseDeclaration(MutableStylePropertySet*, const String&, const CSSParserContext&);
 
 private:
-    void consumeDeclarationValue(CSSParserTokenIterator start, CSSParserTokenIterator end, CSSPropertyID, bool important, CSSRuleSourceData::Type);
+    // FIXME: We should use a CSSRule::Type here
+    void consumeDeclarationList(CSSParserTokenRange, CSSRuleSourceData::Type);
+    void consumeDeclaration(CSSParserTokenRange, CSSRuleSourceData::Type);
+    void consumeDeclarationValue(CSSParserTokenRange, CSSPropertyID, bool important, CSSRuleSourceData::Type);
 
     // FIXME: Can we build StylePropertySets directly?
     // FIXME: Investigate using a smaller inline buffer
     WillBeHeapVector<CSSProperty, 256> m_parsedProperties;
     Vector<CSSParserToken> m_tokens;
     CSSParserContext m_context;
+
+    // FIXME: We need to store a context style sheet, similar to the Bison parser
+    // for at least crbug.com/9877 and marking that we've seen rem units.
 };
 
 } // namespace blink

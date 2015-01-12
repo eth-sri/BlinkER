@@ -263,8 +263,8 @@ static void frameContentAsPlainText(size_t maxChars, LocalFrame* frame, StringBu
         // Ignore the text of non-visible frames.
         RenderView* contentRenderer = curLocalChild->contentRenderer();
         RenderPart* ownerRenderer = curLocalChild->ownerRenderer();
-        if (!contentRenderer || !contentRenderer->width() || !contentRenderer->height()
-            || (contentRenderer->x() + contentRenderer->width() <= 0) || (contentRenderer->y() + contentRenderer->height() <= 0)
+        if (!contentRenderer || !contentRenderer->size().width() || !contentRenderer->size().height()
+            || (contentRenderer->location().x() + contentRenderer->size().width() <= 0) || (contentRenderer->location().y() + contentRenderer->size().height() <= 0)
             || (ownerRenderer && ownerRenderer->style() && ownerRenderer->style()->visibility() != VISIBLE)) {
             continue;
         }
@@ -799,7 +799,12 @@ void WebLocalFrameImpl::collectGarbage()
 bool WebLocalFrameImpl::checkIfRunInsecureContent(const WebURL& url) const
 {
     ASSERT(frame());
-    return frame()->loader().mixedContentChecker()->canFrameInsecureContent(frame()->document()->securityOrigin(), url);
+
+    // This is only called (eventually, through proxies and delegates and IPC) from
+    // PluginURLFetcher::OnReceivedRedirect for redirects of NPAPI resources.
+    //
+    // FIXME: Remove this method entirely once we smother NPAPI.
+    return MixedContentChecker::shouldBlockFetch(frame(), WebURLRequest::RequestContextObject, WebURLRequest::FrameTypeNone, url);
 }
 
 v8::Handle<v8::Value> WebLocalFrameImpl::executeScriptAndReturnValue(const WebScriptSource& source)
@@ -1166,7 +1171,7 @@ WebString WebLocalFrameImpl::selectionAsMarkup() const
     if (!range)
         return WebString();
 
-    return createMarkup(range.get(), 0, AnnotateForInterchange, false, ResolveNonLocalURLs);
+    return createMarkup(range.get(), AnnotateForInterchange, false, ResolveNonLocalURLs);
 }
 
 void WebLocalFrameImpl::selectWordAroundPosition(LocalFrame* frame, VisiblePosition position)
@@ -1327,7 +1332,7 @@ float WebLocalFrameImpl::printPage(int page, WebCanvas* canvas)
 #if ENABLE(PRINTING)
     ASSERT(m_printContext && page >= 0 && frame() && frame()->document());
 
-    GraphicsContext graphicsContext(canvas);
+    GraphicsContext graphicsContext(canvas, nullptr);
     graphicsContext.setPrinting(true);
     return m_printContext->spoolSinglePage(graphicsContext, page);
 #else
@@ -1487,7 +1492,7 @@ WebString WebLocalFrameImpl::contentAsMarkup() const
 
 WebString WebLocalFrameImpl::renderTreeAsText(RenderAsTextControls toShow) const
 {
-    RenderAsTextBehavior behavior = RenderAsTextBehaviorNormal;
+    RenderAsTextBehavior behavior = RenderAsTextShowAllLayers;
 
     if (toShow & RenderAsTextDebug)
         behavior |= RenderAsTextShowCompositedLayers | RenderAsTextShowAddresses | RenderAsTextShowIDAndClass | RenderAsTextShowLayerNesting;
@@ -1507,7 +1512,7 @@ void WebLocalFrameImpl::printPagesWithBoundaries(WebCanvas* canvas, const WebSiz
 {
     ASSERT(m_printContext);
 
-    GraphicsContext graphicsContext(canvas);
+    GraphicsContext graphicsContext(canvas, nullptr);
     graphicsContext.setPrinting(true);
 
     m_printContext->spoolAllPagesWithBoundaries(graphicsContext, FloatSize(pageSizeInPixels.width, pageSizeInPixels.height));
@@ -1652,7 +1657,7 @@ PassRefPtrWillBeRawPtr<LocalFrame> WebLocalFrameImpl::createChildFrame(const Fra
     if (childItem)
         child->loader().loadHistoryItem(childItem.get(), FrameLoadTypeInitialHistoryLoad);
     else
-        child->loader().load(FrameLoadRequest(request.originDocument(), request.resourceRequest(), "_self"));
+        child->loader().load(FrameLoadRequest(request.originDocument(), request.resourceRequest(), "_self", request.shouldCheckMainWorldContentSecurityPolicy()));
 
     // Note a synchronous navigation (about:blank) would have already processed
     // onload, so it is possible for the child frame to have already been
@@ -1893,7 +1898,7 @@ bool WebLocalFrameImpl::isLoading() const
 {
     if (!frame() || !frame()->document())
         return false;
-    return frame()->loader().stateMachine()->isDisplayingInitialEmptyDocument() || !frame()->document()->loadEventFinished();
+    return frame()->loader().stateMachine()->isDisplayingInitialEmptyDocument() || frame()->loader().provisionalDocumentLoader() || !frame()->document()->loadEventFinished();
 }
 
 bool WebLocalFrameImpl::isResourceLoadInProgress() const

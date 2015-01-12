@@ -71,8 +71,6 @@ public:
 
     static void computeContainerBoundingBoxes(const RenderObject* container, FloatRect& objectBoundingBox, bool& objectBoundingBoxValid, FloatRect& strokeBoundingBox, FloatRect& paintInvalidationBoundingBox);
 
-    static bool paintInfoIntersectsPaintInvalidationRect(const FloatRect& localPaintInvalidationRect, const AffineTransform& localTransform, const PaintInfo&);
-
     // Important functions used by nearly all SVG renderers centralizing coordinate transformations / paint invalidation rect calculations
     static LayoutRect clippedOverflowRectForPaintInvalidation(const RenderObject*, const RenderLayerModelObject* paintInvalidationContainer, const PaintInvalidationState*);
     static const RenderSVGRoot& mapRectToSVGRootForPaintInvalidation(const RenderObject*, const FloatRect& localPaintInvalidationRect, LayoutRect&);
@@ -98,10 +96,29 @@ public:
     // can/will be rendered as part of a <text>.
     static bool isRenderableTextNode(const RenderObject*);
 
+    // Determines whether a svg node should isolate or not based on RenderStyle.
+    static bool willIsolateBlendingDescendantsForStyle(const RenderStyle*);
+    static bool willIsolateBlendingDescendantsForObject(const RenderObject*);
+    template<typename RenderObjectType>
+    static bool computeHasNonIsolatedBlendingDescendants(const RenderObjectType*);
+    static bool isIsolationRequired(const RenderObject*);
+
 private:
     static void updateObjectBoundingBox(FloatRect& objectBoundingBox, bool& objectBoundingBoxValid, RenderObject* other, FloatRect otherBoundingBox);
     static bool layoutSizeOfNearestViewportChanged(const RenderObject* start);
 };
+
+template <typename RenderObjectType>
+bool SVGRenderSupport::computeHasNonIsolatedBlendingDescendants(const RenderObjectType* object)
+{
+    for (RenderObject* child = object->firstChild(); child; child = child->nextSibling()) {
+        if (child->isBlendingAllowed() && child->style()->hasBlendMode())
+            return true;
+        if (child->hasNonIsolatedBlendingDescendants() && !willIsolateBlendingDescendantsForObject(child))
+            return true;
+    }
+    return false;
+}
 
 } // namespace blink
 

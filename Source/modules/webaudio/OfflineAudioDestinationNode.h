@@ -52,6 +52,7 @@ public:
 
     // AudioDestinationNode
     virtual void startRendering() override;
+    virtual void stopRendering() override;
 
     virtual float sampleRate()  const override { return m_renderTarget->sampleRate(); }
 
@@ -59,6 +60,12 @@ public:
 
 private:
     OfflineAudioDestinationNode(AudioContext*, AudioBuffer* renderTarget);
+
+    void offlineRender();
+    void offlineRenderInternal();
+
+    // For completion callback on main thread.
+    void notifyComplete();
 
     // This AudioNode renders into this AudioBuffer.
     Member<AudioBuffer> m_renderTarget;
@@ -68,10 +75,6 @@ private:
     // Rendering thread.
     OwnPtr<WebThread> m_renderThread;
     bool m_startedRendering;
-    void offlineRender();
-
-    // For completion callback on main thread.
-    void notifyComplete();
 };
 
 } // namespace blink

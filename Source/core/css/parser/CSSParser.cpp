@@ -11,6 +11,8 @@
 #include "core/css/StyleSheetContents.h"
 #include "core/css/parser/CSSParserFastPaths.h"
 #include "core/css/parser/CSSParserImpl.h"
+#include "core/css/parser/CSSSelectorParser.h"
+#include "core/css/parser/CSSTokenizer.h"
 
 namespace blink {
 
@@ -21,11 +23,20 @@ CSSParser::CSSParser(const CSSParserContext& context)
 
 bool CSSParser::parseDeclaration(MutableStylePropertySet* propertySet, const String& declaration, CSSParserObserver* observer, StyleSheetContents* styleSheet)
 {
+    // FIXME: Add inspector observer support in the new CSS parser
+    if (!observer && RuntimeEnabledFeatures::newCSSParserEnabled())
+        return CSSParserImpl::parseDeclaration(propertySet, declaration, m_bisonParser.m_context);
     return m_bisonParser.parseDeclaration(propertySet, declaration, observer, styleSheet);
 }
 
 void CSSParser::parseSelector(const String& selector, CSSSelectorList& selectorList)
 {
+    if (RuntimeEnabledFeatures::newCSSParserEnabled()) {
+        Vector<CSSParserToken> tokens;
+        CSSTokenizer::tokenize(selector, tokens);
+        CSSSelectorParser::parseSelector(tokens, m_bisonParser.m_context, selectorList);
+        return;
+    }
     m_bisonParser.parseSelector(selector, selectorList);
 }
 
@@ -80,6 +91,8 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSParser::parseSingleValue(CSSPropertyID prope
 
 PassRefPtrWillBeRawPtr<ImmutableStylePropertySet> CSSParser::parseInlineStyleDeclaration(const String& styleString, Element* element)
 {
+    if (RuntimeEnabledFeatures::newCSSParserEnabled())
+        return CSSParserImpl::parseInlineStyleDeclaration(styleString, element);
     return BisonCSSParser::parseInlineStyleDeclaration(styleString, element);
 }
 

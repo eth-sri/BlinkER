@@ -30,8 +30,8 @@
 #include "bindings/core/v8/V8DOMWrapper.h"
 #include "core/HTMLNames.h"
 #include "core/XMLNames.h"
-#include "core/accessibility/AXObjectCache.h"
 #include "core/css/resolver/StyleResolver.h"
+#include "core/dom/AXObjectCache.h"
 #include "core/dom/Attr.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/ChildListMutationScope.h"
@@ -87,7 +87,6 @@
 #include "core/page/ContextMenuController.h"
 #include "core/page/EventHandler.h"
 #include "core/page/Page.h"
-#include "core/rendering/FlowThreadController.h"
 #include "core/rendering/RenderBox.h"
 #include "core/svg/graphics/SVGImage.h"
 #include "platform/EventDispatchForbiddenScope.h"
@@ -110,7 +109,7 @@ struct SameSizeAsNode : NODE_BASE_CLASSES {
     void* m_pointer[8];
 };
 
-COMPILE_ASSERT(sizeof(Node) <= sizeof(SameSizeAsNode), Node_should_stay_small);
+static_assert(sizeof(Node) <= sizeof(SameSizeAsNode), "Node should stay small");
 
 #if !ENABLE(OILPAN)
 void* Node::operator new(size_t size)
@@ -970,12 +969,7 @@ void Node::reattachWhitespaceSiblingsIfNeeded(Text* start)
 {
     for (Node* sibling = start; sibling; sibling = sibling->nextSibling()) {
         if (sibling->isTextNode() && toText(sibling)->containsOnlyWhitespace()) {
-            bool hadRenderer = !!sibling->renderer();
             toText(sibling)->reattachIfNeeded();
-            // If sibling's renderer status didn't change we don't need to continue checking
-            // other siblings since their renderer status won't change either.
-            if (!!sibling->renderer() == hadRenderer)
-                return;
         } else if (sibling->renderer()) {
             return;
         }
@@ -1061,6 +1055,11 @@ bool Node::canStartSelection() const
             return false;
     }
     return parentOrShadowHostNode() ? parentOrShadowHostNode()->canStartSelection() : true;
+}
+
+bool Node::canParticipateInComposedTree() const
+{
+    return !isShadowRoot() && !isActiveInsertionPoint(*this);
 }
 
 Element* Node::shadowHost() const
@@ -2071,15 +2070,15 @@ void Node::notifyMutationObserversNodeWillDetach()
     }
 }
 
-void Node::handleLocalEvents(Event* event)
+void Node::handleLocalEvents(Event& event)
 {
     if (!hasEventTargetData())
         return;
 
-    if (isDisabledFormControl(this) && event->isMouseEvent())
+    if (isDisabledFormControl(this) && event.isMouseEvent())
         return;
 
-    fireEventListeners(event);
+    fireEventListeners(&event);
 }
 
 void Node::dispatchScopedEvent(PassRefPtrWillBeRawPtr<Event> event)
@@ -2089,16 +2088,16 @@ void Node::dispatchScopedEvent(PassRefPtrWillBeRawPtr<Event> event)
 
 void Node::dispatchScopedEventDispatchMediator(PassRefPtrWillBeRawPtr<EventDispatchMediator> eventDispatchMediator)
 {
-    EventDispatcher::dispatchScopedEvent(this, eventDispatchMediator);
+    EventDispatcher::dispatchScopedEvent(*this, eventDispatchMediator);
 }
 
 bool Node::dispatchEvent(PassRefPtrWillBeRawPtr<Event> event)
 {
     if (event->isMouseEvent())
-        return EventDispatcher::dispatchEvent(this, MouseEventDispatchMediator::create(static_pointer_cast<MouseEvent>(event), MouseEventDispatchMediator::SyntheticMouseEvent));
+        return EventDispatcher::dispatchEvent(*this, MouseEventDispatchMediator::create(static_pointer_cast<MouseEvent>(event), MouseEventDispatchMediator::SyntheticMouseEvent));
     if (event->isTouchEvent())
         return dispatchTouchEvent(static_pointer_cast<TouchEvent>(event));
-    return EventDispatcher::dispatchEvent(this, EventDispatchMediator::create(event));
+    return EventDispatcher::dispatchEvent(*this, EventDispatchMediator::create(event));
 }
 
 void Node::dispatchSubtreeModifiedEvent()
@@ -2125,13 +2124,13 @@ bool Node::dispatchDOMActivateEvent(int detail, PassRefPtrWillBeRawPtr<Event> un
 
 bool Node::dispatchKeyEvent(const PlatformKeyboardEvent& event)
 {
-    return EventDispatcher::dispatchEvent(this, KeyboardEventDispatchMediator::create(KeyboardEvent::create(event, document().domWindow())));
+    return EventDispatcher::dispatchEvent(*this, KeyboardEventDispatchMediator::create(KeyboardEvent::create(event, document().domWindow())));
 }
 
 bool Node::dispatchMouseEvent(const PlatformMouseEvent& event, const AtomicString& eventType,
     int detail, Node* relatedTarget)
 {
-    return EventDispatcher::dispatchEvent(this, MouseEventDispatchMediator::create(MouseEvent::create(eventType, document().domWindow(), event, detail, relatedTarget)));
+    return EventDispatcher::dispatchEvent(*this, MouseEventDispatchMediator::create(MouseEvent::create(eventType, document().domWindow(), event, detail, relatedTarget)));
 }
 
 bool Node::dispatchGestureEvent(const PlatformGestureEvent& event)
@@ -2139,22 +2138,22 @@ bool Node::dispatchGestureEvent(const PlatformGestureEvent& event)
     RefPtrWillBeRawPtr<GestureEvent> gestureEvent = GestureEvent::create(document().domWindow(), event);
     if (!gestureEvent.get())
         return false;
-    return EventDispatcher::dispatchEvent(this, GestureEventDispatchMediator::create(gestureEvent));
+    return EventDispatcher::dispatchEvent(*this, GestureEventDispatchMediator::create(gestureEvent));
 }
 
 bool Node::dispatchTouchEvent(PassRefPtrWillBeRawPtr<TouchEvent> event)
 {
-    return EventDispatcher::dispatchEvent(this, TouchEventDispatchMediator::create(event));
+    return EventDispatcher::dispatchEvent(*this, TouchEventDispatchMediator::create(event));
 }
 
 void Node::dispatchSimulatedClick(Event* underlyingEvent, SimulatedClickMouseEventOptions eventOptions)
 {
-    EventDispatcher::dispatchSimulatedClick(this, underlyingEvent, eventOptions);
+    EventDispatcher::dispatchSimulatedClick(*this, underlyingEvent, eventOptions);
 }
 
 bool Node::dispatchWheelEvent(const PlatformWheelEvent& event)
 {
-    return EventDispatcher::dispatchEvent(this, WheelEventDispatchMediator::create(event, document().domWindow()));
+    return EventDispatcher::dispatchEvent(*this, WheelEventDispatchMediator::create(event, document().domWindow()));
 }
 
 void Node::dispatchInputEvent()

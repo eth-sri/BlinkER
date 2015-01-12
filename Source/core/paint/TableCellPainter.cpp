@@ -7,7 +7,7 @@
 
 #include "core/paint/BlockPainter.h"
 #include "core/paint/BoxPainter.h"
-#include "core/paint/DrawingRecorder.h"
+#include "core/paint/RenderDrawingRecorder.h"
 #include "core/rendering/PaintInfo.h"
 #include "core/rendering/RenderTableCell.h"
 
@@ -131,7 +131,9 @@ void TableCellPainter::paintCollapsedBorders(const PaintInfo& paintInfo, const L
     if (!m_renderTableCell.table()->currentBorderValue())
         return;
 
-    DrawingRecorder recorder(paintInfo.context, &m_renderTableCell, paintInfo.phase, paintRect);
+    RenderDrawingRecorder recorder(paintInfo.context, m_renderTableCell, paintInfo.phase, paintRect);
+    if (recorder.canUseCachedDrawing())
+        return;
 
     const RenderStyle* styleForCellFlow = m_renderTableCell.styleForCellFlow();
     CollapsedBorderValue leftVal = cachedCollapsedLeftBorder(styleForCellFlow);
@@ -174,7 +176,7 @@ void TableCellPainter::paintCollapsedBorders(const PaintInfo& paintInfo, const L
     for (CollapsedBorder* border = borders.nextBorder(); border; border = borders.nextBorder()) {
         if (border->borderValue.isSameIgnoringColor(*m_renderTableCell.table()->currentBorderValue())) {
             ObjectPainter::drawLineForBoxSide(graphicsContext, border->x1, border->y1, border->x2, border->y2, border->side,
-                border->borderValue.color().resolve(m_renderTableCell.style()->visitedDependentColor(CSSPropertyColor)), border->style, 0, 0, antialias);
+                border->borderValue.color().resolve(m_renderTableCell.resolveColor(CSSPropertyColor)), border->style, 0, 0, antialias);
         }
     }
 }
@@ -205,9 +207,8 @@ void TableCellPainter::paintBackgroundsBehindCell(const PaintInfo& paintInfo, co
         bool shouldClip = backgroundObject->hasLayer() && (backgroundObject == &m_renderTableCell || backgroundObject == m_renderTableCell.parent()) && tableElt->collapseBorders();
         GraphicsContextStateSaver stateSaver(*paintInfo.context, shouldClip);
         if (shouldClip) {
-            LayoutRect clipRect(paintRect.location().x() + m_renderTableCell.borderLeft(), paintRect.location().y() + m_renderTableCell.borderTop(),
-                m_renderTableCell.width() - m_renderTableCell.borderLeft() - m_renderTableCell.borderRight(),
-                m_renderTableCell.height() - m_renderTableCell.borderTop() - m_renderTableCell.borderBottom());
+            LayoutRect clipRect(paintRect.location(), m_renderTableCell.size());
+            clipRect.contract(m_renderTableCell.borderBoxExtent());
             paintInfo.context->clip(clipRect);
         }
         BoxPainter(m_renderTableCell).paintFillLayers(paintInfo, c, bgLayer, paintRect, BackgroundBleedNone, CompositeSourceOver, backgroundObject);
@@ -224,7 +225,10 @@ void TableCellPainter::paintBoxDecorationBackground(const PaintInfo& paintInfo, 
         return;
 
     LayoutRect paintRect = paintBounds(paintOffset, DoNotAddOffsetFromParent);
-    DrawingRecorder recorder(paintInfo.context, &m_renderTableCell, paintInfo.phase, pixelSnappedIntRect(paintRect));
+    RenderDrawingRecorder recorder(paintInfo.context, m_renderTableCell, paintInfo.phase, pixelSnappedIntRect(paintRect));
+    if (recorder.canUseCachedDrawing())
+        return;
+
     BoxPainter::paintBoxShadow(paintInfo, paintRect, m_renderTableCell.style(), Normal);
 
     // Paint our cell background.

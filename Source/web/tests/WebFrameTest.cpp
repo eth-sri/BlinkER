@@ -2074,7 +2074,7 @@ TEST_F(WebFrameTest, pageScaleFactorScalesPaintClip)
     bitmap.eraseColor(0);
     SkCanvas canvas(bitmap);
 
-    GraphicsContext context(&canvas);
+    GraphicsContext context(&canvas, nullptr);
     context.setRegionTrackingMode(GraphicsContext::RegionTrackingOpaque);
 
     EXPECT_RECT_EQ(IntRect(0, 0, 0, 0), context.opaqueRegion().asRect());
@@ -4278,7 +4278,6 @@ public:
     CompositedSelectionBoundsTestLayerTreeView() : m_selectionCleared(false) { }
     virtual ~CompositedSelectionBoundsTestLayerTreeView() { }
 
-    virtual void setSurfaceReady()  override { }
     virtual void setRootLayer(const WebLayer&)  override { }
     virtual void clearRootLayer()  override { }
     virtual void setViewportSize(const WebSize& deviceViewportSize)  override { }
@@ -4862,7 +4861,7 @@ TEST_F(WebFrameTest, NavigateToSandboxedMarkup)
     WebViewImpl* webViewImpl = webViewHelper.initializeAndLoad("about:blank", true, &webFrameClient);
     WebLocalFrameImpl* frame = toWebLocalFrameImpl(webViewHelper.webView()->mainFrame());
 
-    frame->document().setIsTransitionDocument();
+    frame->document().setIsTransitionDocument(true);
 
     std::string markup("<div id='foo'></div><script>document.getElementById('foo').setAttribute('dir', 'rtl')</script>");
     frame->navigateToSandboxedMarkup(WebData(markup.data(), markup.length()));
@@ -5506,7 +5505,7 @@ TEST_F(WebFrameTest, SimulateFragmentAnchorMiddleClick)
     destination.setFragmentIdentifier("test");
 
     RefPtrWillBeRawPtr<Event> event = MouseEvent::create(EventTypeNames::click, false, false,
-        document->domWindow(), 0, 0, 0, 0, 0, 0, 0, false, false, false, false, 1, nullptr, nullptr);
+        document->domWindow(), 0, 0, 0, 0, 0, 0, 0, false, false, false, false, 1, 0, nullptr, nullptr);
     FrameLoadRequest frameRequest(document, ResourceRequest(destination));
     frameRequest.setTriggeringEvent(event);
     toLocalFrame(webViewHelper.webViewImpl()->page()->mainFrame())->loader().load(frameRequest);
@@ -5555,7 +5554,7 @@ TEST_F(WebFrameTest, ModifiedClickNewWindow)
 
     // ctrl+click event
     RefPtrWillBeRawPtr<Event> event = MouseEvent::create(EventTypeNames::click, false, false,
-        document->domWindow(), 0, 0, 0, 0, 0, 0, 0, true, false, false, false, 0, nullptr, nullptr);
+        document->domWindow(), 0, 0, 0, 0, 0, 0, 0, true, false, false, false, 0, 0, nullptr, nullptr);
     FrameLoadRequest frameRequest(document, ResourceRequest(destination));
     frameRequest.setTriggeringEvent(event);
     UserGestureIndicator gesture(DefinitelyProcessingUserGesture);
@@ -5918,7 +5917,7 @@ public:
         m_frame = 0;
     }
 
-    void didStartProvisionalLoad(WebLocalFrame* frame, bool isTransitionNavigation)
+    void didStartProvisionalLoad(WebLocalFrame* frame, bool isTransitionNavigation, double)
     {
         WebDataSource* ds = frame->provisionalDataSource();
         m_replacesCurrentHistoryItem = ds->replacesCurrentHistoryItem();
@@ -6877,7 +6876,7 @@ public:
         m_navigationalDataReceivedCount++;
     }
 
-    virtual void didStartProvisionalLoad(WebLocalFrame* localFrame, bool isTransitionNavigation) override
+    virtual void didStartProvisionalLoad(WebLocalFrame* localFrame, bool isTransitionNavigation, double) override
     {
         m_provisionalLoadCount++;
         m_wasLastProvisionalLoadATransition = isTransitionNavigation;

@@ -13,7 +13,7 @@
 #include "core/editing/InputMethodController.h"
 #include "core/frame/LocalFrame.h"
 #include "core/paint/BoxPainter.h"
-#include "core/paint/DrawingRecorder.h"
+#include "core/paint/RenderDrawingRecorder.h"
 #include "core/paint/TextPainter.h"
 #include "core/rendering/InlineTextBox.h"
 #include "core/rendering/PaintInfo.h"
@@ -56,13 +56,8 @@ void InlineTextBoxPainter::paint(const PaintInfo& paintInfo, const LayoutPoint& 
     LayoutUnit paintEnd = m_inlineTextBox.isHorizontal() ? paintInfo.rect.maxX() : paintInfo.rect.maxY();
     LayoutUnit paintStart = m_inlineTextBox.isHorizontal() ? paintInfo.rect.x() : paintInfo.rect.y();
 
-    // When subpixel font scaling is enabled text runs are positioned at
-    // subpixel boundaries on the x-axis and thus there is no reason to
-    // snap the x value. We still round the y-axis to ensure consistent
-    // line heights.
-    LayoutPoint adjustedPaintOffset = RuntimeEnabledFeatures::subpixelFontScalingEnabled()
-        ? LayoutPoint(paintOffset.x(), paintOffset.y().round())
-        : roundedIntPoint(paintOffset);
+    // We round the y-axis to ensure consistent line heights.
+    LayoutPoint adjustedPaintOffset = LayoutPoint(paintOffset.x(), paintOffset.y().round());
 
     if (logicalStart >= paintEnd || logicalStart + logicalExtent <= paintStart)
         return;
@@ -78,9 +73,12 @@ void InlineTextBoxPainter::paint(const PaintInfo& paintInfo, const LayoutPoint& 
 
     // The text clip phase already has a DrawingRecorder. Text clips are initiated only in BoxPainter::paintLayerExtended, which is already
     // within a DrawingRecorder.
-    OwnPtr<DrawingRecorder> drawingRecorder;
-    if (RuntimeEnabledFeatures::slimmingPaintEnabled() && paintInfo.phase != PaintPhaseTextClip)
-        drawingRecorder = adoptPtr(new DrawingRecorder(paintInfo.context, &m_inlineTextBox.renderer(), paintInfo.phase, pixelSnappedIntRect(adjustedPaintOffset, logicalVisualOverflow.size())));
+    OwnPtr<RenderDrawingRecorder> drawingRecorder;
+    if (RuntimeEnabledFeatures::slimmingPaintEnabled() && paintInfo.phase != PaintPhaseTextClip) {
+        drawingRecorder = adoptPtr(new RenderDrawingRecorder(paintInfo.context, m_inlineTextBox.renderer(), paintInfo.phase, pixelSnappedIntRect(adjustedPaintOffset, logicalVisualOverflow.size())));
+        if (drawingRecorder->canUseCachedDrawing())
+            return;
+    }
 
     if (m_inlineTextBox.truncation() != cNoTruncation) {
         if (m_inlineTextBox.renderer().containingBlock()->style()->isLeftToRightDirection() != m_inlineTextBox.isLeftToRightDirection()) {

@@ -49,13 +49,9 @@ class WebDevToolsAgent;
 class WebDevToolsAgentClient;
 class WebDragData;
 class WebFrame;
-class WebFrameClient;
-class WebGraphicsContext3D;
 class WebHitTestResult;
-class WebNode;
 class WebPageOverlay;
 class WebPrerendererClient;
-class WebRange;
 class WebSettings;
 class WebSpellCheckClient;
 class WebString;
@@ -95,8 +91,6 @@ public:
     virtual void setMainFrame(WebFrame*) = 0;
 
     // Initializes the various client interfaces.
-    // FIXME: remove. See http://crbug.com/425756
-    virtual void setAutofillClient(WebAutofillClient*) = 0;
     virtual void setCredentialManagerClient(WebCredentialManagerClient*) = 0;
     virtual void setDevToolsAgentClient(WebDevToolsAgentClient*) = 0;
     virtual void setPrerendererClient(WebPrerendererClient*) = 0;
@@ -459,11 +453,6 @@ public:
     virtual void setShowFPSCounter(bool) = 0;
     virtual void setContinuousPaintingEnabled(bool) = 0;
     virtual void setShowScrollBottleneckRects(bool) = 0;
-
-    // Compute the bounds of the root element of the current selection and fills
-    // the out-parameter on success. |bounds| coordinates will be relative to
-    // the contents window and will take into account the current scale level.
-    virtual void getSelectionRootBounds(WebRect& bounds) const = 0;
 
     // Visibility -----------------------------------------------------------
 

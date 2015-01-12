@@ -54,7 +54,10 @@ connecting
 contextlost
 contextmenu
 contextrestored
+controllerchange
 copy
+crossoriginconnect
+crossoriginmessage
 cuechange
 cut
 datachannel
@@ -154,7 +157,6 @@ popstate
 progress
 push
 ratechange
-ready
 readystatechange
 removesourcebuffer
 removestream

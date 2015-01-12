@@ -68,14 +68,6 @@
     height: 100%;
 }
 
-#timeline-overview-grid #resources-graphs {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 80px;
-}
-
 #timeline-container {
     border-right: 0 none transparent;
     overflow-y: scroll;
@@ -88,7 +80,7 @@
 
 .timeline-view {
     flex: auto;
-    overflow: hidden;
+    overflow: auto;
 }
 
 .timeline-view-stack {
@@ -366,14 +358,6 @@
     min-height: 100%;
 }
 
-#resources-graphs {
-    position: absolute;
-    left: 0;
-    right: 0;
-    max-height: 100%;
-    top: 112px;
-}
-
 .memory-graph-label {
     position: absolute;
     left: 5px;
@@ -596,12 +580,6 @@
     vertical-align: top;
 }
 
-.timeline-details .record-title {
-    float: left;
-    padding: 5px 10px 5px 10px;
-    font-weight: bold;
-}
-
 .timeline-details-title {
     border-bottom: 1px solid #B8B8B8;
     font-weight: bold;
@@ -646,7 +624,7 @@
 .timeline-details-view-row-title {
     font-weight: bold;
     color: rgb(48, 57, 66);
-    width: 130px;
+    width: 170px;
     line-height: 24px;
     padding-left: 10px;
     flex: none;
@@ -714,15 +692,6 @@
     margin-left:  5px;
 }
 
-.timeline-range-summary {
-    align-items: left;
-    margin: 6px;
-}
-
-.timeline-range-summary > div {
-    flex-shrink: 0;
-}
-
 .timeline-aggregated-info-legend > div {
     overflow: hidden;
     white-space: nowrap;
@@ -734,11 +703,6 @@
 }
 
 .timeline-progress-pane {
-    position: absolute;
-    top: 0px;
-    right: 0px;
-    bottom: 0px;
-    left: 0px;
     color: #777;
     background-color: rgba(255, 255, 255, 0.8);
     font-size: 30px;
@@ -755,6 +719,7 @@
 .layer-tree.outline-disclosure > ol,
 .profiler-log-view > ol {
     margin-left: -12px
+    overflow: auto;
 }
 
 .layer-tree.outline-disclosure ol.children,
@@ -869,16 +834,28 @@
 
 .profiler-log-view.section .properties {
     display: block;
-    padding-right: 0px !important;
+    padding-right: 0 !important;
 }
 
 .paint-profiler-image-view {
     overflow: hidden;
 }
 
+.paint-profiler-image-view .paint-profiler-image-container {
+    -webkit-transform-origin: 0 0;
+}
+
+.paint-profiler-image-view .paint-profiler-image-container div {
+    border-color: rgba(100, 100, 100, 0.4);
+    border-style: solid;
+    z-index: 100;
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
 .paint-profiler-image-view img {
     border: solid 1px black;
-    -webkit-transform-origin: 0px 0px;
 }
 
 .layer-details-view ul {
@@ -911,4 +888,25 @@
 .timeline-paint-profiler-log-split > div:last-child {
     background-color: #eee;
     z-index: 0;
+}
+
+.timeline-gap {
+    flex: none;
+}
+
+.invalidations-group {
+    margin-top: 4px;
+    line-height: normal;
+}
+
+.invalidations-group > .header {
+    padding-left: 0;
+}
+
+.invalidations-group > .content {
+    margin-left: 25px;
+}
+
+.invalidations-group > .content > .node-list {
+    border-left: 1px solid #e1e1e1;
 }

@@ -6,20 +6,27 @@
 #include "platform/graphics/paint/DrawingDisplayItem.h"
 
 #include "platform/graphics/GraphicsContext.h"
+#include "public/platform/WebDisplayItemList.h"
 
 namespace blink {
 
 void DrawingDisplayItem::replay(GraphicsContext* context)
 {
-    context->drawPicture(m_picture.get(), m_location);
+    context->drawPicture(m_picture.get());
+}
+
+void DrawingDisplayItem::appendToWebDisplayItemList(WebDisplayItemList* list) const
+{
+    // FIXME: the offset is no longer necessary and should be removed.
+    // FIXME: SkPictures are immutable - update WebDisplayItemList to take a const SkPicture*
+    list->appendDrawingItem(const_cast<SkPicture*>(m_picture.get()), FloatPoint());
 }
 
 #ifndef NDEBUG
-WTF::String DrawingDisplayItem::asDebugString() const
+void DrawingDisplayItem::dumpPropertiesAsDebugString(WTF::StringBuilder& stringBuilder) const
 {
-    return String::format("{%s, type: \"%s\", location: [%f,%f]}",
-        clientDebugString().utf8().data(), typeAsDebugString(type()).utf8().data(),
-        m_location.x(), m_location.y());
+    DisplayItem::dumpPropertiesAsDebugString(stringBuilder);
+    stringBuilder.append(WTF::String::format(", location: [%f,%f]", m_picture->cullRect().x(), m_picture->cullRect().y()));
 }
 #endif
 

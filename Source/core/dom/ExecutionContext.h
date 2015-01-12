@@ -133,6 +133,13 @@ public:
     virtual EventTarget* errorEventTarget() = 0;
     virtual EventQueue* eventQueue() const = 0;
 
+    void enforceStrictMixedContentChecking() { m_strictMixedContentCheckingEnforced = true; }
+    bool shouldEnforceStrictMixedContentChecking() const { return m_strictMixedContentCheckingEnforced; }
+
+    void allowWindowFocus();
+    void consumeWindowFocus();
+    bool isWindowFocusAllowed() const;
+
 protected:
     ExecutionContext();
     virtual ~ExecutionContext();
@@ -160,7 +167,7 @@ private:
     SandboxFlags m_sandboxFlags;
 
     int m_circularSequentialID;
-    typedef HashMap<int, OwnPtr<DOMTimer> > TimeoutMap;
+    typedef WillBeHeapHashMap<int, RefPtrWillBeMember<DOMTimer> > TimeoutMap;
     TimeoutMap m_timeouts;
     int m_timerNestingLevel;
 
@@ -171,12 +178,20 @@ private:
     bool m_activeDOMObjectsAreSuspended;
     bool m_activeDOMObjectsAreStopped;
 
-    OwnPtr<PublicURLManager> m_publicURLManager;
+    OwnPtrWillBeMember<PublicURLManager> m_publicURLManager;
+
+    bool m_strictMixedContentCheckingEnforced;
 
     // The location of this member is important; to make sure contextDestroyed() notification on
     // ExecutionContext's members (notably m_timeouts) is called before they are destructed,
     // m_lifecycleNotifer should be placed *after* such members.
     OwnPtr<ContextLifecycleNotifier> m_lifecycleNotifier;
+
+    // Counter that keeps track of how many window focus calls are allowed for
+    // this ExecutionContext. Callers are expected to call |allowWindowFocus()|
+    // and |consumeWindowFocus()| in order to increment and decrement the
+    // counter.
+    int m_windowFocusTokens;
 };
 
 } // namespace blink

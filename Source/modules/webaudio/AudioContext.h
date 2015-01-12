@@ -25,6 +25,8 @@
 #ifndef AudioContext_h
 #define AudioContext_h
 
+#include "bindings/core/v8/ScriptPromise.h"
+#include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "core/dom/ActiveDOMObject.h"
 #include "core/dom/DOMTypedArray.h"
 #include "core/events/EventListener.h"
@@ -74,11 +76,20 @@ class WaveShaperNode;
 // AudioContext is the cornerstone of the web audio API and all AudioNodes are created from it.
 // For thread safety between the audio thread and the main thread, it has a rendering graph locking mechanism.
 
-class AudioContext : public RefCountedGarbageCollectedWillBeGarbageCollectedFinalized<AudioContext>, public ActiveDOMObject, public EventTargetWithInlineData {
+class AudioContext : public RefCountedGarbageCollectedEventTargetWithInlineData<AudioContext>, public ActiveDOMObject {
     DEFINE_EVENT_TARGET_REFCOUNTING_WILL_BE_REMOVED(RefCountedGarbageCollected<AudioContext>);
     DEFINE_WRAPPERTYPEINFO();
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(AudioContext);
 public:
+    // The state of an audio context.  On creation, the state is Suspended. The state is Running if
+    // audio is being processed (audio graph is being pulled for data). The state is Closed if the
+    // audio context has been closed.  The valid transitions are from Suspended to either Running or
+    // Closed; Running to Suspended or Closed. Once Closed, there are no valid transitions.
+    enum AudioContextState {
+        Suspended,
+        Running,
+        Closed
+    };
+
     // Create an AudioContext for rendering to the audio hardware.
     static AudioContext* create(Document&, ExceptionState&);
 
@@ -94,9 +105,15 @@ public:
     virtual bool hasPendingActivity() const override;
 
     AudioDestinationNode* destination() { return m_destinationNode.get(); }
+    // currentSampleFrame() returns the current sample frame. It should only be called from the
+    // audio thread.
     size_t currentSampleFrame() const { return m_destinationNode->currentSampleFrame(); }
+    // cachedSampleFrame() is like currentSampleFrame() but must be called from the main thread to
+    // get the sample frame. It might be slightly behind curentSampleFrame() due to locking.
+    size_t cachedSampleFrame() const;
     double currentTime() const { return m_destinationNode->currentTime(); }
     float sampleRate() const { return m_destinationNode->sampleRate(); }
+    String state() const;
 
     AudioBuffer* createBuffer(unsigned numberOfChannels, size_t numberOfFrames, float sampleRate, ExceptionState&);
 
@@ -131,7 +148,15 @@ public:
     OscillatorNode* createOscillator();
     PeriodicWave* createPeriodicWave(DOMFloat32Array* real, DOMFloat32Array* imag, ExceptionState&);
 
-    // When a source node has no more processing to do (has finished playing), then it tells the context to dereference it.
+    // Suspend/Resume
+    ScriptPromise suspendContext(ScriptState*);
+    ScriptPromise resumeContext(ScriptState*);
+
+    // When a source node has started processing and needs to be protected,
+    // this method tells the context to protect the node.
+    void notifyNodeStartedProcessing(AudioNode*);
+    // When a source node has no more processing to do (has finished playing),
+    // this method tells the context to dereference the node.
     void notifyNodeFinishedProcessing(AudioNode*);
 
     // Called at the start of each render quantum.
@@ -227,9 +252,11 @@ public:
     virtual ExecutionContext* executionContext() const override final;
 
     DEFINE_ATTRIBUTE_EVENT_LISTENER(complete);
+    DEFINE_ATTRIBUTE_EVENT_LISTENER(statechange);
 
     void startRendering();
     void fireCompletionEvent();
+    void notifyStateChange();
 
     static unsigned s_hardwareContextCount;
 
@@ -275,7 +302,29 @@ private:
     // Oilpan: This Vector holds connection references. We must call
     // AudioNode::makeConnection when we add an AudioNode to this, and must call
     // AudioNode::breakConnection() when we remove an AudioNode from this.
-    Member<HeapVector<Member<AudioNode>>> m_referencedNodes;
+    HeapVector<Member<AudioNode>> m_referencedNodes;
+
+    // Stop rendering the audio graph.
+    void stopRendering();
+
+    // Handle Promises for resume() and suspend()
+    void resolvePromisesForResume();
+    void resolvePromisesForResumeOnMainThread();
+
+    void resolvePromisesForSuspend();
+    void resolvePromisesForSuspendOnMainThread();
+
+    // Vector of promises created by resume(). It takes time to handle them, so we collect all of
+    // the promises here until they can be resolved or rejected.
+    WillBeHeapVector<RefPtrWillBeMember<ScriptPromiseResolver> > m_resumeResolvers;
+    // Like m_resumeResolvers but for suspend().
+    WillBeHeapVector<RefPtrWillBeMember<ScriptPromiseResolver> > m_suspendResolvers;
+    void rejectPendingResolvers();
+
+    // True if we're in the process of resolving promises for resume().  Resolving can take some
+    // time and the audio context process loop is very fast, so we don't want to call resolve an
+    // excessive number of times.
+    bool m_isResolvingResumePromises;
 
     class AudioNodeDisposer {
     public:
@@ -328,6 +377,7 @@ private:
     unsigned m_connectionCount;
 
     // Graph locking.
+    bool m_didInitializeContextGraphMutex;
     RecursiveMutex m_contextGraphMutex;
     volatile ThreadIdentifier m_audioThread;
 
@@ -341,12 +391,18 @@ private:
 
     bool m_isOfflineContext;
 
+    AudioContextState m_contextState;
+    void setContextState(AudioContextState);
+
     AsyncAudioDecoder m_audioDecoder;
 
     // Collection of nodes where the channel count mode has changed. We want the channel count mode
     // to change in the pre- or post-rendering phase so as not to disturb the running audio thread.
     GC_PLUGIN_IGNORE("http://crbug.com/404527")
     HashSet<AudioNode*> m_deferredCountModeChange;
+
+    // Follows the destination's currentSampleFrame, but might be slightly behind due to locking.
+    size_t m_cachedSampleFrame;
 
     // This is considering 32 is large enough for multiple channels audio.
     // It is somewhat arbitrary and could be increased if necessary.

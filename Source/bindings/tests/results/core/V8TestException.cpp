@@ -31,7 +31,7 @@ namespace TestExceptionV8Internal {
 
 static void readonlyUnsignedShortAttributeAttributeGetter(const v8::PropertyCallbackInfo<v8::Value>& info)
 {
-    v8::Handle<v8::Object> holder = info.Holder();
+    v8::Local<v8::Object> holder = info.Holder();
     TestException* impl = V8TestException::toImpl(holder);
     v8SetReturnValueUnsigned(info, impl->readonlyUnsignedShortAttribute());
 }
@@ -45,7 +45,7 @@ static void readonlyUnsignedShortAttributeAttributeGetterCallback(v8::Local<v8::
 
 static void readonlyStringAttributeAttributeGetter(const v8::PropertyCallbackInfo<v8::Value>& info)
 {
-    v8::Handle<v8::Object> holder = info.Holder();
+    v8::Local<v8::Object> holder = info.Holder();
     TestException* impl = V8TestException::toImpl(holder);
     v8SetReturnValueString(info, impl->readonlyStringAttribute(), info.GetIsolate());
 }
@@ -77,16 +77,15 @@ static const V8DOMConfiguration::AttributeConfiguration V8TestExceptionAttribute
     {"readonlyStringAttribute", TestExceptionV8Internal::readonlyStringAttributeAttributeGetterCallback, 0, 0, 0, 0, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::ExposedToAllScripts, V8DOMConfiguration::OnInstance},
 };
 
-static void installV8TestExceptionTemplate(v8::Handle<v8::FunctionTemplate> functionTemplate, v8::Isolate* isolate)
+static void installV8TestExceptionTemplate(v8::Local<v8::FunctionTemplate> functionTemplate, v8::Isolate* isolate)
 {
     functionTemplate->ReadOnlyPrototype();
 
     v8::Local<v8::Signature> defaultSignature;
-    defaultSignature = V8DOMConfiguration::installDOMClassTemplate(functionTemplate, "TestException", v8::Local<v8::FunctionTemplate>(), V8TestException::internalFieldCount,
+    defaultSignature = V8DOMConfiguration::installDOMClassTemplate(isolate, functionTemplate, "TestException", v8::Local<v8::FunctionTemplate>(), V8TestException::internalFieldCount,
         V8TestExceptionAttributes, WTF_ARRAY_LENGTH(V8TestExceptionAttributes),
         0, 0,
-        0, 0,
-        isolate);
+        0, 0);
     v8::Local<v8::ObjectTemplate> instanceTemplate = functionTemplate->InstanceTemplate();
     ALLOW_UNUSED_LOCAL(instanceTemplate);
     v8::Local<v8::ObjectTemplate> prototypeTemplate = functionTemplate->PrototypeTemplate();
@@ -95,7 +94,7 @@ static void installV8TestExceptionTemplate(v8::Handle<v8::FunctionTemplate> func
         {"UNSIGNED_SHORT_CONSTANT", 1, 0, 0, V8DOMConfiguration::ConstantTypeUnsignedShort},
     };
     V8DOMConfiguration::installConstants(isolate, functionTemplate, prototypeTemplate, V8TestExceptionConstants, WTF_ARRAY_LENGTH(V8TestExceptionConstants));
-    static const V8DOMConfiguration::MethodConfiguration toStringMethodConfiguration = {
+    const V8DOMConfiguration::MethodConfiguration toStringMethodConfiguration = {
         "toString", TestExceptionV8Internal::toStringMethodCallback, 0, 0, V8DOMConfiguration::ExposedToAllScripts,
     };
     V8DOMConfiguration::installMethod(prototypeTemplate, defaultSignature, static_cast<v8::PropertyAttribute>(v8::DontDelete | v8::DontEnum), toStringMethodConfiguration, isolate);
@@ -104,24 +103,24 @@ static void installV8TestExceptionTemplate(v8::Handle<v8::FunctionTemplate> func
     functionTemplate->Set(v8AtomicString(isolate, "toString"), V8PerIsolateData::from(isolate)->toStringTemplate());
 }
 
-v8::Handle<v8::FunctionTemplate> V8TestException::domTemplate(v8::Isolate* isolate)
+v8::Local<v8::FunctionTemplate> V8TestException::domTemplate(v8::Isolate* isolate)
 {
     return V8DOMConfiguration::domClassTemplate(isolate, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), installV8TestExceptionTemplate);
 }
 
-bool V8TestException::hasInstance(v8::Handle<v8::Value> v8Value, v8::Isolate* isolate)
+bool V8TestException::hasInstance(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
 {
     return V8PerIsolateData::from(isolate)->hasInstance(&wrapperTypeInfo, v8Value);
 }
 
-v8::Handle<v8::Object> V8TestException::findInstanceInPrototypeChain(v8::Handle<v8::Value> v8Value, v8::Isolate* isolate)
+v8::Local<v8::Object> V8TestException::findInstanceInPrototypeChain(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
 {
     return V8PerIsolateData::from(isolate)->findInstanceInPrototypeChain(&wrapperTypeInfo, v8Value);
 }
 
-TestException* V8TestException::toImplWithTypeCheck(v8::Isolate* isolate, v8::Handle<v8::Value> value)
+TestException* V8TestException::toImplWithTypeCheck(v8::Isolate* isolate, v8::Local<v8::Value> value)
 {
-    return hasInstance(value, isolate) ? toImpl(v8::Handle<v8::Object>::Cast(value)) : 0;
+    return hasInstance(value, isolate) ? toImpl(v8::Local<v8::Object>::Cast(value)) : 0;
 }
 
 void V8TestException::refObject(ScriptWrappable* scriptWrappable)
@@ -132,12 +131,6 @@ void V8TestException::refObject(ScriptWrappable* scriptWrappable)
 void V8TestException::derefObject(ScriptWrappable* scriptWrappable)
 {
     scriptWrappable->toImpl<TestException>()->deref();
-}
-
-template<>
-v8::Handle<v8::Value> toV8NoInline(TestException* impl, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
-{
-    return toV8(impl, creationContext, isolate);
 }
 
 } // namespace blink

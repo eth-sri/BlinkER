@@ -63,7 +63,6 @@ class LocalDOMWindow;
 class LocalFrame;
 class Node;
 class Page;
-class PagePopupController;
 class PluginPlaceholderOptions;
 class PrivateScriptTest;
 class Range;
@@ -119,12 +118,11 @@ public:
     bool hasSelectorForPseudoClassInShadow(Element* host, const String& pseudoClass, ExceptionState&);
     unsigned short compareTreeScopePosition(const Node*, const Node*, ExceptionState&) const;
 
-    // FIXME: Rename these functions if walker is preferred.
-    Node* nextSiblingByWalker(Node*);
-    Node* firstChildByWalker(Node*);
-    Node* lastChildByWalker(Node*);
-    Node* nextNodeByWalker(Node*);
-    Node* previousNodeByWalker(Node*);
+    Node* nextSiblingInComposedTree(Node*, ExceptionState&);
+    Node* firstChildInComposedTree(Node*, ExceptionState&);
+    Node* lastChildInComposedTree(Node*, ExceptionState&);
+    Node* nextInComposedTree(Node*, ExceptionState&);
+    Node* previousInComposedTree(Node*, ExceptionState&);
 
     unsigned updateStyleAndReturnAffectedElementCount(ExceptionState&) const;
     unsigned needsLayoutCount(ExceptionState&) const;
@@ -137,8 +135,6 @@ public:
     bool hasAutofocusRequest();
     Vector<String> formControlStateOfHistoryItem(ExceptionState&);
     void setFormControlStateOfHistoryItem(const Vector<String>&, ExceptionState&);
-    void setEnableMockPagePopup(bool, ExceptionState&);
-    PassRefPtrWillBeRawPtr<PagePopupController> pagePopupController();
     DOMWindow* pagePopupWindow() const;
 
     PassRefPtrWillBeRawPtr<ClientRect> absoluteCaretBounds(ExceptionState&);
@@ -186,6 +182,11 @@ public:
     unsigned scrollEventHandlerCount(Document*);
     unsigned touchEventHandlerCount(Document*);
     LayerRectList* touchEventTargetLayerRects(Document*, ExceptionState&);
+
+    AtomicString htmlNamespace();
+    Vector<AtomicString> htmlTags();
+    AtomicString svgNamespace();
+    Vector<AtomicString> svgTags();
 
     // This is used to test rect based hit testing like what's done on touch screens.
     PassRefPtrWillBeRawPtr<StaticNodeList> nodesFromRect(Document*, int x, int y, unsigned topPadding, unsigned rightPadding,
@@ -329,6 +330,7 @@ public:
     PassRefPtrWillBeRawPtr<ClientRectList> getTransitionElementRects();
     void hideAllTransitionElements();
     void showAllTransitionElements();
+    void setExitTransitionStylesheetsEnabled(bool);
 
     unsigned countHitRegions(CanvasRenderingContext2D*);
 
@@ -336,6 +338,11 @@ public:
     void forcePluginPlaceholder(HTMLElement* plugin, const PluginPlaceholderOptions&, ExceptionState&);
 
     Iterator* iterator(ScriptState*, ExceptionState&);
+
+    // Scheudle a forced Blink GC run (Oilpan) at the end of event loop.
+    // Note: This is designed to be only used from PerformanceTests/BlinkGC to explicitly measure only Blink GC time.
+    //       Normal LayoutTests should use gc() instead as it would trigger both Blink GC and V8 GC.
+    void forceBlinkGCWithoutV8GC();
 
 private:
     explicit Internals(Document*);

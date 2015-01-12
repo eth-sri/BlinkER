@@ -29,6 +29,7 @@
 #include "core/html/HTMLContentElement.h"
 #include "core/html/HTMLDetailsElement.h"
 #include "core/html/shadow/DetailsMarkerControl.h"
+#include "core/html/shadow/ShadowElementNames.h"
 #include "core/rendering/RenderBlockFlow.h"
 
 namespace blink {
@@ -54,7 +55,9 @@ RenderObject* HTMLSummaryElement::createRenderer(RenderStyle*)
 
 void HTMLSummaryElement::didAddUserAgentShadowRoot(ShadowRoot& root)
 {
-    root.appendChild(DetailsMarkerControl::create(document()));
+    RefPtrWillBeRawPtr<DetailsMarkerControl> markerControl = DetailsMarkerControl::create(document());
+    markerControl->setIdAttribute(ShadowElementNames::detailsMarker());
+    root.appendChild(markerControl);
     root.appendChild(HTMLContentElement::create(document()));
 }
 
@@ -64,6 +67,11 @@ HTMLDetailsElement* HTMLSummaryElement::detailsElement() const
     if (isHTMLDetailsElement(parent))
         return toHTMLDetailsElement(parent);
     return nullptr;
+}
+
+Element* HTMLSummaryElement::markerControl()
+{
+    return ensureUserAgentShadowRoot().getElementById(ShadowElementNames::detailsMarker());
 }
 
 bool HTMLSummaryElement::isMainSummary() const

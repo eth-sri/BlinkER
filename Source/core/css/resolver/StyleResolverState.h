@@ -45,6 +45,7 @@ class StyleResolverState {
     STACK_ALLOCATED();
     WTF_MAKE_NONCOPYABLE(StyleResolverState);
 public:
+    StyleResolverState(Document&, const ElementResolveContext&, RenderStyle* parentStyle);
     StyleResolverState(Document&, Element*, RenderStyle* parentStyle = 0);
     ~StyleResolverState();
 
@@ -94,9 +95,6 @@ public:
     bool applyPropertyToRegularStyle() const { return m_applyPropertyToRegularStyle; }
     bool applyPropertyToVisitedLinkStyle() const { return m_applyPropertyToVisitedLinkStyle; }
 
-    // Holds all attribute names found while applying "content" properties that contain an "attr()" value.
-    Vector<AtomicString>& contentAttrValues() { return m_contentAttrValues; }
-
     void cacheUserAgentBorderAndBackground()
     {
         // RenderTheme only needs the cached style if it has an appearance,
@@ -113,8 +111,6 @@ public:
     }
 
     ElementStyleResources& elementStyleResources() { return m_elementStyleResources; }
-    const CSSToStyleMap& styleMap() const { return m_styleMap; }
-    CSSToStyleMap& styleMap() { return m_styleMap; }
 
     // FIXME: Once styleImage can be made to not take a StyleResolverState
     // this convenience function should be removed. As-is, without this, call
@@ -145,8 +141,8 @@ private:
 
     CSSToLengthConversionData m_cssToLengthConversionData;
 
-    // m_parentStyle is not always just element->parentNode()->style()
-    // so we keep it separate from m_elementContext.
+    // m_parentStyle is not always just ElementResolveContext::parentStyle,
+    // so we keep it separate.
     RefPtr<RenderStyle> m_parentStyle;
 
     OwnPtrWillBeMember<CSSAnimationUpdate> m_animationUpdate;
@@ -159,10 +155,6 @@ private:
     OwnPtr<CachedUAStyle> m_cachedUAStyle;
 
     ElementStyleResources m_elementStyleResources;
-    // CSSToStyleMap is a pure-logic class and only contains
-    // a back-pointer to this object.
-    CSSToStyleMap m_styleMap;
-    Vector<AtomicString> m_contentAttrValues;
 };
 
 } // namespace blink

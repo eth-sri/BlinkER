@@ -347,7 +347,7 @@ TEST_F(WebViewTest, SetBaseBackgroundColorAndBlendWithExistingContent)
     SkCanvas canvas(bitmap);
     canvas.clear(kAlphaRed);
 
-    GraphicsContext context(&canvas);
+    GraphicsContext context(&canvas, nullptr);
 
     // Paint the root of the main frame in the way that CompositedLayerMapping would.
     FrameView* view = m_webViewHelper.webViewImpl()->mainFrameImpl()->frameView();
@@ -1644,14 +1644,14 @@ TEST_F(WebViewTest, SmartClipData)
         "normal; font-variant: normal; font-weight: normal; letter-spacing: "
         "normal; line-height: normal; orphans: auto; text-align: start; "
         "text-indent: 0px; text-transform: none; white-space: normal; widows: "
-        "auto; word-spacing: 0px; -webkit-text-stroke-width: 0px;\">Air "
+        "1; word-spacing: 0px; -webkit-text-stroke-width: 0px;\">Air "
         "conditioner</div><div id=\"div5\" style=\"padding: 10px; margin: "
         "10px; border: 2px solid rgb(135, 206, 235); float: left; width: "
         "190px; height: 30px; color: rgb(0, 0, 0); font-family: myahem; "
         "font-size: 8px; font-style: normal; font-variant: normal; "
         "font-weight: normal; letter-spacing: normal; line-height: normal; "
         "orphans: auto; text-align: start; text-indent: 0px; text-transform: "
-        "none; white-space: normal; widows: auto; word-spacing: 0px; "
+        "none; white-space: normal; widows: 1; word-spacing: 0px; "
         "-webkit-text-stroke-width: 0px;\">Price 10,000,000won</div>";
     WebString clipText;
     WebString clipHtml;
@@ -1950,85 +1950,12 @@ void WebViewTest::testSelectionRootBounds(const char* htmlFile, float pageScaleF
     EXPECT_TRUE(frame->frame()->document()->isHTMLDocument());
     HTMLDocument* document = toHTMLDocument(frame->frame()->document());
 
-    WebRect expectedRootBounds = ExpectedRootBounds(document, webView->pageScaleFactor());
-    WebRect actualRootBounds;
-    webView->getSelectionRootBounds(actualRootBounds);
-    ASSERT_EQ(expectedRootBounds, actualRootBounds);
-
     WebRect anchor, focus;
     webView->selectionBounds(anchor, focus);
-    IntRect expectedIntRect = expectedRootBounds;
+    IntRect expectedIntRect = ExpectedRootBounds(document, webView->pageScaleFactor());
     ASSERT_TRUE(expectedIntRect.contains(anchor));
     // The "overflow" tests have the focus boundary outside of the element box.
     ASSERT_EQ(url.find("overflow") == std::string::npos, expectedIntRect.contains(focus));
-}
-
-TEST_F(WebViewTest, GetSelectionRootBounds)
-{
-    // Register all the pages we will be using.
-    registerMockedHttpURLLoad("select_range_basic.html");
-    registerMockedHttpURLLoad("select_range_div_editable.html");
-    registerMockedHttpURLLoad("select_range_scroll.html");
-    registerMockedHttpURLLoad("select_range_span_editable.html");
-    registerMockedHttpURLLoad("select_range_input.html");
-    registerMockedHttpURLLoad("select_range_input_overflow.html");
-    registerMockedHttpURLLoad("select_range_textarea.html");
-    registerMockedHttpURLLoad("select_range_textarea_overflow.html");
-    registerMockedHttpURLLoad("select_range_iframe.html");
-    registerMockedHttpURLLoad("select_range_iframe_div_editable.html");
-    registerMockedHttpURLLoad("select_range_iframe_scroll.html");
-    registerMockedHttpURLLoad("select_range_iframe_span_editable.html");
-    registerMockedHttpURLLoad("select_range_iframe_input.html");
-    registerMockedHttpURLLoad("select_range_iframe_input_overflow.html");
-    registerMockedHttpURLLoad("select_range_iframe_textarea.html");
-    registerMockedHttpURLLoad("select_range_iframe_textarea_overflow.html");
-
-    // Test with simple pages.
-    testSelectionRootBounds("select_range_basic.html", 1.0f);
-    testSelectionRootBounds("select_range_div_editable.html", 1.0f);
-    testSelectionRootBounds("select_range_scroll.html", 1.0f);
-    testSelectionRootBounds("select_range_span_editable.html", 1.0f);
-    testSelectionRootBounds("select_range_input.html", 1.0f);
-    testSelectionRootBounds("select_range_input_overflow.html", 1.0f);
-    testSelectionRootBounds("select_range_textarea.html", 1.0f);
-    testSelectionRootBounds("select_range_textarea_overflow.html", 1.0f);
-
-    // Test with the same pages as above in iframes.
-    testSelectionRootBounds("select_range_iframe.html", 1.0f);
-    testSelectionRootBounds("select_range_iframe_div_editable.html", 1.0f);
-    testSelectionRootBounds("select_range_iframe_scroll.html", 1.0f);
-    testSelectionRootBounds("select_range_iframe_span_editable.html", 1.0f);
-    testSelectionRootBounds("select_range_iframe_input.html", 1.0f);
-    testSelectionRootBounds("select_range_iframe_input_overflow.html", 1.0f);
-    testSelectionRootBounds("select_range_iframe_textarea.html", 1.0f);
-    testSelectionRootBounds("select_range_iframe_textarea_overflow.html", 1.0f);
-
-    // Basic page with scale factor.
-    testSelectionRootBounds("select_range_basic.html", 0.0f);
-    testSelectionRootBounds("select_range_basic.html", 0.1f);
-    testSelectionRootBounds("select_range_basic.html", 1.5f);
-    testSelectionRootBounds("select_range_basic.html", 2.0f);
-}
-
-TEST_F(WebViewTest, GetSelectionRootBoundsBrokenHeight)
-{
-    WebSize contentSize = WebSize(640, 480);
-
-    registerMockedHttpURLLoad("select_range_basic_broken_height.html");
-
-    WebView* webView = m_webViewHelper.initializeAndLoad(m_baseURL + "select_range_basic_broken_height.html", true);
-    webView->resize(contentSize);
-    webView->setPageScaleFactor(1.0f, WebPoint(0, 0));
-    webView->layout();
-    runPendingTasks();
-
-    WebLocalFrameImpl* frame = toWebLocalFrameImpl(webView->mainFrame());
-    EXPECT_TRUE(frame->frame()->document()->isHTMLDocument());
-
-    WebRect expectedRootBounds = WebRect(0, 0, contentSize.width, contentSize.height);
-    WebRect actualRootBounds;
-    webView->getSelectionRootBounds(actualRootBounds);
-    ASSERT_EQ(expectedRootBounds, actualRootBounds);
 }
 
 class NonUserInputTextUpdateWebViewClient : public FrameTestHelpers::TestWebViewClient {
@@ -2234,5 +2161,21 @@ TEST_F(WebViewTest, AutoResizeSubtreeLayout)
     // merely a dummy. The real test is that we don't trigger asserts in debug builds.
     EXPECT_FALSE(frameView->needsLayout());
 };
+
+TEST_F(WebViewTest, PreferredSize)
+{
+    std::string url = m_baseURL + "specify_size.html?100px:100px";
+    URLTestHelpers::registerMockedURLLoad(toKURL(url), "specify_size.html");
+    WebView* webView = m_webViewHelper.initializeAndLoad(url, true);
+
+    WebSize size = webView->contentsPreferredMinimumSize();
+    EXPECT_EQ(100, size.width);
+    EXPECT_EQ(100, size.height);
+
+    webView->setZoomLevel(WebView::zoomFactorToZoomLevel(2.0));
+    size = webView->contentsPreferredMinimumSize();
+    EXPECT_EQ(200, size.width);
+    EXPECT_EQ(200, size.height);
+}
 
 } // namespace

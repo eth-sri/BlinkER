@@ -6,16 +6,22 @@
 #define DisplayItem_h
 
 #include "platform/PlatformExport.h"
+#include "wtf/Assertions.h"
+#include "wtf/PassOwnPtr.h"
 
 #ifndef NDEBUG
+#include "wtf/text/StringBuilder.h"
 #include "wtf/text/WTFString.h"
 #endif
+
 
 namespace blink {
 
 class GraphicsContext;
+class WebDisplayItemList;
 
-typedef void* DisplayItemClient;
+class DisplayItemClientInternalVoid;
+typedef DisplayItemClientInternalVoid* DisplayItemClient;
 
 class PLATFORM_EXPORT DisplayItem {
 public:
@@ -63,16 +69,33 @@ public:
         ClipBoxTextClip,
         ClipBoxClippingMask,
         BeginTransform,
-        EndTransform
+        EndTransform,
+        ScrollbarCorner,
+        Scrollbar,
+        Resizer,
+        ColumnRules,
+        ClipNodeImage,
+        ClipFrameToVisibleContentRect,
+        ClipFrameScrollbars,
+        FloatClipForeground,
+        FloatClipSelection,
+        FloatClipSelfOutline,
+        EndFloatClip
     };
+
+    // Create a dummy display item which just holds the id but has no display operation.
+    // It helps a CachedDisplayItem to match the corresponding original empty display item.
+    static PassOwnPtr<DisplayItem> create(DisplayItemClient client, Type type) { return adoptPtr(new DisplayItem(client, type)); }
 
     virtual ~DisplayItem() { }
 
-    virtual void replay(GraphicsContext*) = 0;
+    virtual void replay(GraphicsContext*) { }
 
     DisplayItemClient client() const { return m_id.client; }
     Type type() const { return m_id.type; }
     bool idsEqual(const DisplayItem& other) const { return m_id.client == other.m_id.client && m_id.type == other.m_id.type; }
+
+    virtual void appendToWebDisplayItemList(WebDisplayItemList*) const { }
 
 #ifndef NDEBUG
     static WTF::String typeAsDebugString(DisplayItem::Type);
@@ -80,20 +103,28 @@ public:
     void setClientDebugString(const WTF::String& clientDebugString) { m_clientDebugString = clientDebugString; }
     const WTF::String& clientDebugString() const { return m_clientDebugString; }
 
-    virtual WTF::String asDebugString() const;
+    WTF::String asDebugString() const;
+    virtual const char* name() const { return "Dummy"; }
+    virtual void dumpPropertiesAsDebugString(WTF::StringBuilder&) const;
 #endif
+
+    virtual bool isCached() const { return false; }
 
 protected:
     DisplayItem(DisplayItemClient client, Type type)
         : m_id(client, type)
-    { }
+    {
+        ASSERT(client);
+    }
 
 private:
     struct Id {
         Id(DisplayItemClient c, Type t)
             : client(c)
             , type(t)
-        { }
+        {
+            ASSERT(client);
+        }
 
         const DisplayItemClient client;
         const Type type;

@@ -68,6 +68,8 @@ public:
 
     virtual void scheduleAnimation() override;
 
+    void scheduleAnimationForFrame(LocalFrame* localRoot);
+
     void contentsSizeChanged(LocalFrame*, const IntSize&) const;
 
     void setCursor(const Cursor&);
@@ -109,7 +111,7 @@ public:
 
     IntRect windowResizerRect() const;
 
-    void mouseDidMoveOverElement(const HitTestResult&, unsigned modifierFlags);
+    void mouseDidMoveOverElement(const HitTestResult&);
 
     void setToolTip(const HitTestResult&);
 
@@ -125,7 +127,7 @@ public:
     void dispatchViewportPropertiesDidChange(const ViewportDescription&) const;
 
     bool hasOpenedPopup() const;
-    PassRefPtrWillBeRawPtr<PopupMenu> createPopupMenu(LocalFrame&, PopupMenuClient*) const;
+    PassRefPtrWillBeRawPtr<PopupMenu> createPopupMenu(LocalFrame&, PopupMenuClient*);
 
     void registerPopupOpeningObserver(PopupOpeningObserver*);
     void unregisterPopupOpeningObserver(PopupOpeningObserver*);

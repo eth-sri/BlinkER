@@ -349,6 +349,7 @@ inline static CSSParserValue makeIdentValue(CSSParserString string)
 %type <integer> unary_operator
 %type <integer> maybe_unary_operator
 %type <character> operator
+%type <character> slash_operator
 
 %type <valueList> expr
 %type <value> term
@@ -465,24 +466,10 @@ semi_or_eof:
   | TOKEN_EOF
   ;
 
-before_charset_rule:
-  /* empty */ {
-      parser->startRule();
-      parser->startRuleHeader(CSSRuleSourceData::CHARSET_RULE);
-  }
-
 maybe_charset:
     /* empty */
-  | before_charset_rule CHARSET_SYM maybe_space STRING maybe_space semi_or_eof {
-       if (parser->m_styleSheet)
-           parser->m_styleSheet->parserSetEncodingFromCharsetRule($4);
-       parser->endRuleHeader();
-       parser->startRuleBody();
-       parser->endRule(true);
-    }
-  | before_charset_rule CHARSET_SYM at_rule_recovery {
-       parser->endRule(false);
-  }
+  | CHARSET_SYM maybe_space STRING maybe_space semi_or_eof
+  | CHARSET_SYM at_rule_recovery
   ;
 
 rule_list:
@@ -742,7 +729,7 @@ at_rule_header_end_maybe_space:
     ;
 
 media_rule_start:
-    before_media_rule MEDIA_SYM maybe_space;
+    MEDIA_SYM maybe_space before_media_rule;
 
 media:
     media_rule_start maybe_media_list '{' at_rule_header_end at_rule_body_start maybe_space block_rule_body closing_brace {
@@ -1610,6 +1597,12 @@ expr:
         $$ = $1;
         $$->addValue(parser->sinkFloatingValue($2));
     }
+     | expr slash_operator slash_operator term {
+         $$ = $1;
+         $$->addValue(makeOperatorValue($2));
+         $$->addValue(makeOperatorValue($3));
+         $$->addValue(parser->sinkFloatingValue($4));
+     }
   ;
 
 expr_recovery:
@@ -1618,10 +1611,14 @@ expr_recovery:
     }
   ;
 
+slash_operator:
+      '/' maybe_space {
+          $$ = '/';
+      }
+   ;
+ 
 operator:
-    '/' maybe_space {
-        $$ = '/';
-    }
+    slash_operator
   | ',' maybe_space {
         $$ = ',';
     }

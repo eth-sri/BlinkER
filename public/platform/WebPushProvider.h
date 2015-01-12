@@ -17,6 +17,7 @@ struct WebPushRegistration;
 
 typedef WebCallbacks<WebPushRegistration, WebPushError> WebPushRegistrationCallbacks;
 typedef WebCallbacks<WebPushPermissionStatus, void> WebPushPermissionStatusCallbacks;
+typedef WebCallbacks<bool, WebPushError> WebPushUnregisterCallbacks;
 
 class WebPushProvider {
 public:
@@ -26,9 +27,17 @@ public:
     // Does not take ownership of the WebServiceWorkerRegistration.
     virtual void registerPushMessaging(WebServiceWorkerRegistration*, WebPushRegistrationCallbacks*) { BLINK_ASSERT_NOT_REACHED(); }
 
+    // Takes ownership of the WebPushRegistrationCallbacks.
+    // Does not take ownership of the WebServiceWorkerRegistration.
+    virtual void getRegistration(WebServiceWorkerRegistration*, WebPushRegistrationCallbacks*) { BLINK_ASSERT_NOT_REACHED(); }
+
     // Takes ownership of the WebPushPermissionStatusCallbacks.
     // Does not take ownership of the WebServiceWorkerRegistration.
     virtual void getPermissionStatus(WebServiceWorkerRegistration*, WebPushPermissionStatusCallbacks*) { BLINK_ASSERT_NOT_REACHED(); }
+
+    // Takes ownership if the WebPushUnregisterCallbacks.
+    // Does not take ownership of the WebServiceWorkerRegistration.
+    virtual void unregister(WebServiceWorkerRegistration*, WebPushUnregisterCallbacks* callback) { BLINK_ASSERT_NOT_REACHED(); }
 };
 
 } // namespace blink

@@ -9,6 +9,7 @@
 #include "core/rendering/PaintInfo.h"
 #include "core/rendering/RenderBlockFlow.h"
 #include "core/rendering/RenderLayer.h"
+#include "platform/graphics/paint/ClipRecorderStack.h"
 
 namespace blink {
 
@@ -28,8 +29,8 @@ void BlockFlowPainter::paintFloats(const PaintInfo& paintInfo, const LayoutPoint
             // FIXME: LayoutPoint version of xPositionForFloatIncludingMargin would make this much cleaner.
             LayoutPoint childPoint = m_renderBlockFlow.flipFloatForWritingModeForChild(
                 floatingObject, LayoutPoint(paintOffset.x()
-                + m_renderBlockFlow.xPositionForFloatIncludingMargin(floatingObject) - floatingObject->renderer()->x(), paintOffset.y()
-                + m_renderBlockFlow.yPositionForFloatIncludingMargin(floatingObject) - floatingObject->renderer()->y()));
+                + m_renderBlockFlow.xPositionForFloatIncludingMargin(floatingObject) - floatingObject->renderer()->location().x(), paintOffset.y()
+                + m_renderBlockFlow.yPositionForFloatIncludingMargin(floatingObject) - floatingObject->renderer()->location().y()));
             floatingObject->renderer()->paint(currentPaintInfo, childPoint);
             if (!preservePhase) {
                 currentPaintInfo.phase = PaintPhaseChildBlockBackgrounds;
@@ -51,7 +52,7 @@ void BlockFlowPainter::paintSelection(const PaintInfo& paintInfo, const LayoutPo
         LayoutUnit lastTop = 0;
         LayoutUnit lastLeft = m_renderBlockFlow.logicalLeftSelectionOffset(&m_renderBlockFlow, lastTop);
         LayoutUnit lastRight = m_renderBlockFlow.logicalRightSelectionOffset(&m_renderBlockFlow, lastTop);
-        GraphicsContextStateSaver stateSaver(*paintInfo.context);
+        ClipRecorderStack clipRecorderStack(paintInfo.context);
 
         LayoutRect gapRectsBounds = m_renderBlockFlow.selectionGaps(&m_renderBlockFlow, paintOffset, LayoutSize(), lastTop, lastLeft, lastRight, &paintInfo);
         if (!gapRectsBounds.isEmpty()) {

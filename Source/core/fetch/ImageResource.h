@@ -86,7 +86,7 @@ public:
 
     static void updateBitmapImages(HashSet<ImageResource*>&, bool redecodeImages = false);
 
-    bool isAccessAllowed(SecurityOrigin*);
+    bool isAccessAllowed(ExecutionContext*, SecurityOrigin*);
 
     virtual void didAddClient(ResourceClient*) override;
     virtual void didRemoveClient(ResourceClient*) override;
@@ -110,6 +110,7 @@ public:
 
     virtual bool shouldPauseAnimation(const blink::Image*) override;
     virtual void animationAdvanced(const blink::Image*) override;
+    virtual void imageAnimationPolicy(const blink::Image*, ImageAnimationPolicy&) override;
     virtual void changedInRect(const blink::Image*, const IntRect&) override;
 
 protected:

@@ -112,13 +112,13 @@ public:
     virtual void invalidateContentsAndRootView(const IntRect&) override;
     virtual void invalidateContentsForSlowScroll(const IntRect&) override;
     virtual void scheduleAnimation() override;
+    virtual void scheduleAnimationForFrame(LocalFrame* localRoot) override;
     virtual IntRect rootViewToScreen(const IntRect&) const override;
     virtual WebScreenInfo screenInfo() const override;
     virtual void contentsSizeChanged(LocalFrame*, const IntSize&) const override;
     virtual void deviceOrPageScaleFactorChanged() const override;
     virtual void layoutUpdated(LocalFrame*) const override;
-    virtual void mouseDidMoveOverElement(
-        const HitTestResult&, unsigned modifierFlags) override;
+    virtual void mouseDidMoveOverElement(const HitTestResult&) override;
     virtual void setToolTip(const WTF::String& tooltipText, TextDirection) override;
     virtual void dispatchViewportPropertiesDidChange(const ViewportDescription&) const override;
     virtual void print(LocalFrame*) override;
@@ -135,7 +135,7 @@ public:
     virtual GraphicsLayerFactory* graphicsLayerFactory() const override;
 
     // Pass 0 as the GraphicsLayer to detatch the root layer.
-    virtual void attachRootGraphicsLayer(GraphicsLayer*) override;
+    virtual void attachRootGraphicsLayer(GraphicsLayer*, LocalFrame* localRoot) override;
 
     virtual void enterFullScreenForElement(Element*) override;
     virtual void exitFullScreenForElement(Element*) override;
@@ -152,17 +152,17 @@ public:
     void setNewWindowNavigationPolicy(WebNavigationPolicy);
 
     virtual bool hasOpenedPopup() const override;
-    virtual PassRefPtrWillBeRawPtr<PopupMenu> createPopupMenu(LocalFrame&, PopupMenuClient*) const override;
+    virtual PassRefPtrWillBeRawPtr<PopupMenu> createPopupMenu(LocalFrame&, PopupMenuClient*) override;
     PagePopup* openPagePopup(PagePopupClient*, const IntRect&);
     void closePagePopup(PagePopup*);
-    virtual void setPagePopupDriver(PagePopupDriver*) override;
-    virtual void resetPagePopupDriver() override;
-    virtual PagePopupDriver* pagePopupDriver() const override { return m_pagePopupDriver; }
+    virtual DOMWindow* pagePopupWindowForTesting() const override;
 
     virtual bool shouldRunModalDialogDuringPageDismissal(const DialogType&, const String& dialogMessage, Document::PageDismissalType) const override;
 
     virtual bool requestPointerLock() override;
     virtual void requestPointerUnlock() override;
+
+    virtual bool shouldDisableDesktopWorkarounds() override;
 
     // AutofillClient pass throughs:
     virtual void didAssociateFormControls(const WillBeHeapVector<RefPtrWillBeMember<Element> >&, LocalFrame*) override;
@@ -170,7 +170,7 @@ public:
     virtual void didChangeValueInTextField(HTMLFormControlElement&) override;
     virtual void didEndEditingOnTextField(HTMLInputElement&) override;
     virtual void openTextDataListChooser(HTMLInputElement&) override;
-    virtual void textFieldDataListChanged(HTMLFormControlElement&) override;
+    virtual void textFieldDataListChanged(HTMLInputElement&) override;
 
     virtual void didCancelCompositionOnSelectionChange() override;
     virtual void willSetInputMethodState() override;

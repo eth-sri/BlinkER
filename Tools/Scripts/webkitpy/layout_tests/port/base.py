@@ -1505,7 +1505,7 @@ class Port(object):
         """Returns the port's driver implementation."""
         return driver.Driver
 
-    def _output_contains_sanitizer_messages(self, output):
+    def output_contains_sanitizer_messages(self, output):
         if not output:
             return None
         if 'AddressSanitizer' in output:
@@ -1515,7 +1515,7 @@ class Port(object):
         return None
 
     def _get_crash_log(self, name, pid, stdout, stderr, newer_than):
-        if self._output_contains_sanitizer_messages(stderr):
+        if self.output_contains_sanitizer_messages(stderr):
             # Running the symbolizer script can take a lot of memory, so we need to
             # serialize access to it across all the concurrently running drivers.
 
@@ -1552,7 +1552,24 @@ class Port(object):
             # For example, to turn on force-compositing-mode in the svg/ directory:
             # PhysicalTestSuite('svg',
             #                   ['--force-compositing-mode']),
-            ]
+            PhysicalTestSuite('compositing', ['--enable-impl-side-painting']),
+            PhysicalTestSuite('css1', ['--enable-impl-side-painting']),
+            PhysicalTestSuite('css2.1', ['--enable-impl-side-painting']),
+            PhysicalTestSuite('css3', ['--enable-impl-side-painting']),
+            PhysicalTestSuite('cssom', ['--enable-impl-side-painting']),
+            PhysicalTestSuite('css-parser', ['--enable-impl-side-painting']),
+            PhysicalTestSuite('editing', ['--enable-impl-side-painting']),
+            PhysicalTestSuite('fast', ['--enable-impl-side-painting']),
+            PhysicalTestSuite('ietestcenter', ['--enable-impl-side-painting']),
+            PhysicalTestSuite('inspector', ['--enable-impl-side-painting']),
+            PhysicalTestSuite('media', ['--enable-impl-side-painting']),
+            PhysicalTestSuite('scrollbars', ['--enable-impl-side-painting']),
+            PhysicalTestSuite('scrollingcoordinator',
+                              ['--enable-impl-side-painting']),
+            PhysicalTestSuite('svg', ['--enable-impl-side-painting']),
+            PhysicalTestSuite('tables', ['--enable-impl-side-painting']),
+            PhysicalTestSuite('transforms', ['--enable-impl-side-painting']),
+        ]
 
     def virtual_test_suites(self):
         if self._virtual_test_suites is None:

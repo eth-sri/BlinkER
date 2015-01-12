@@ -91,16 +91,6 @@ public:
     bool reachedTerminalState() const { return m_state == Terminated; }
     const ResourceRequest& request() const { return m_request; }
 
-    class RequestCountTracker {
-    public:
-        RequestCountTracker(ResourceLoaderHost*, Resource*);
-        RequestCountTracker(const RequestCountTracker&);
-        ~RequestCountTracker();
-    private:
-        ResourceLoaderHost* m_host;
-        Resource* m_resource;
-    };
-
 private:
     ResourceLoader(ResourceLoaderHost*, Resource*, const ResourceLoaderOptions&);
 
@@ -110,8 +100,6 @@ private:
     void didFinishLoadingOnePart(double finishTime, int64_t encodedDataLength);
 
     bool responseNeedsAccessControlCheck() const;
-
-    void didComplete();
 
     ResourceRequest& applyOptions(ResourceRequest&) const;
 
@@ -150,8 +138,6 @@ private:
     // Used for sanity checking to make sure we don't experience illegal state
     // transitions.
     ConnectionState m_connectionState;
-
-    OwnPtr<RequestCountTracker> m_requestCountTracker;
 
     RefPtr<EventRacerLog> m_log;
     EventAction *m_eventAction;

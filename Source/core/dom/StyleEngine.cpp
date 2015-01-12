@@ -33,6 +33,7 @@
 #include "core/css/CSSStyleSheet.h"
 #include "core/css/FontFaceCache.h"
 #include "core/css/StyleSheetContents.h"
+#include "core/css/resolver/ScopedStyleResolver.h"
 #include "core/dom/DocumentStyleSheetCollector.h"
 #include "core/dom/Element.h"
 #include "core/dom/ProcessingInstruction.h"
@@ -59,7 +60,6 @@ StyleEngine::StyleEngine(Document& document)
     , m_documentStyleSheetCollection(DocumentStyleSheetCollection::create(document))
     , m_documentScopeDirty(true)
     , m_usesSiblingRules(false)
-    , m_usesSiblingRulesOverride(false)
     , m_usesFirstLineRules(false)
     , m_usesFirstLetterRules(false)
     , m_usesRemUnits(false)
@@ -329,10 +329,10 @@ void StyleEngine::modifiedStyleSheetCandidateNode(Node* node)
     markTreeScopeDirty(treeScope);
 }
 
-void StyleEngine::enableExitTransitionStylesheets()
+void StyleEngine::setExitTransitionStylesheetsEnabled(bool enabled)
 {
     TreeScopeStyleSheetCollection* collection = ensureStyleSheetCollectionFor(*m_document);
-    collection->enableExitTransitionStylesheets();
+    collection->setExitTransitionStyleshetsEnabled(enabled);
 }
 
 bool StyleEngine::shouldUpdateDocumentStyleSheetCollection(StyleResolverUpdateMode updateMode) const
@@ -435,6 +435,8 @@ const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet> > StyleEngine::activeSt
 void StyleEngine::didRemoveShadowRoot(ShadowRoot* shadowRoot)
 {
     m_styleSheetCollectionMap.remove(shadowRoot);
+    m_activeTreeScopes.remove(shadowRoot);
+    m_dirtyTreeScopes.remove(shadowRoot);
 }
 
 void StyleEngine::appendActiveAuthorStyleSheets()
@@ -631,7 +633,7 @@ PassRefPtrWillBeRawPtr<CSSStyleSheet> StyleEngine::createSheet(Element* e, const
 PassRefPtrWillBeRawPtr<CSSStyleSheet> StyleEngine::parseSheet(Element* e, const String& text, TextPosition startPosition, bool createdByParser)
 {
     RefPtrWillBeRawPtr<CSSStyleSheet> styleSheet = nullptr;
-    styleSheet = CSSStyleSheet::createInline(e, KURL(), startPosition, e->document().inputEncoding());
+    styleSheet = CSSStyleSheet::createInline(e, KURL(), startPosition, e->document().characterSet());
     styleSheet->contents()->parseStringAtPosition(text, startPosition, createdByParser);
     return styleSheet;
 }
@@ -670,6 +672,13 @@ void StyleEngine::fontsNeedUpdate(CSSFontSelector*)
     if (m_resolver)
         m_resolver->invalidateMatchedPropertiesCache();
     document().setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::Fonts));
+}
+
+void StyleEngine::platformColorsChanged()
+{
+    if (m_resolver)
+        m_resolver->invalidateMatchedPropertiesCache();
+    document().setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::PlatformColorChange));
 }
 
 void StyleEngine::trace(Visitor* visitor)

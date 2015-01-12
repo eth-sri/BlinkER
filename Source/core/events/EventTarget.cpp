@@ -136,6 +136,17 @@ void eventTargetAccess(PassRefPtr<EventRacerLog> lg, Operation::Type op, EventTa
 
 }
 
+bool EventTarget::addEventListener()
+{
+    UseCounter::count(executionContext(), UseCounter::AddEventListenerNoArguments);
+    return false;
+}
+
+bool EventTarget::addEventListener(const AtomicString& eventType)
+{
+    UseCounter::count(executionContext(), UseCounter::AddEventListenerOneArgument);
+    return false;
+}
 
 bool EventTarget::addEventListener(const AtomicString& eventType, PassRefPtr<EventListener> lstnr, bool useCapture)
 {
@@ -165,6 +176,18 @@ bool EventTarget::addEventListener(const AtomicString& eventType, PassRefPtr<Eve
         activityLogger->logEvent("blinkAddEventListener", argv.size(), argv.data());
     }
     return ensureEventTargetData().eventListenerMap.add(eventType, listener, useCapture);
+}
+
+bool EventTarget::removeEventListener()
+{
+    UseCounter::count(executionContext(), UseCounter::RemoveEventListenerNoArguments);
+    return false;
+}
+
+bool EventTarget::removeEventListener(const AtomicString& eventType)
+{
+    UseCounter::count(executionContext(), UseCounter::RemoveEventListenerOneArgument);
+    return false;
 }
 
 bool EventTarget::removeEventListener(const AtomicString& eventType, PassRefPtr<EventListener> listener, bool useCapture)
@@ -520,5 +543,25 @@ void EventTarget::removeAllEventListeners()
         }
     }
 }
+
+#if ENABLE(OILPAN)
+void EventTarget::mark(Visitor* visitor) const
+{
+    if (Node* node = const_cast<EventTarget*>(this)->toNode())
+        DefaultTraceTrait<Node>::mark(visitor, node);
+    else
+        DefaultTraceTrait<EventTarget>::mark(visitor, this);
+}
+
+#if ENABLE(ASSERT)
+void EventTarget::checkGCInfo() const
+{
+    if (Node* node = const_cast<EventTarget*>(this)->toNode())
+        DefaultTraceTrait<Node>::checkGCInfo(node);
+    else
+        DefaultTraceTrait<EventTarget>::checkGCInfo(this);
+}
+#endif // ENABLE(ASSERT)
+#endif // ENABLE(OILPAN)
 
 } // namespace blink

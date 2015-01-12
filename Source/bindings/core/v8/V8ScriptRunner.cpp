@@ -41,6 +41,12 @@
 #include "platform/TraceEvent.h"
 #include "third_party/snappy/src/snappy.h"
 
+#if defined(WTF_OS_WIN)
+#include <malloc.h>
+#else
+#include <alloca.h>
+#endif
+
 namespace blink {
 
 namespace {
@@ -147,6 +153,26 @@ v8::Local<v8::Script> postStreamCompile(ScriptResource* resource, ScriptStreamer
     // streamer is started. Here we only need to get the data out.
     const v8::ScriptCompiler::CachedData* newCachedData = streamer->source()->GetCachedData();
     if (newCachedData) {
+        // Sanity check: when we associate cached data with the Resource, the
+        // encoding (which is also stored in the cache) must match the
+        // Streamer's view. For debugging purposes: If this is not true, produce
+        // a crash. FIXME: Remove debugging code after investigating why this
+        // happens.
+        v8::ScriptCompiler::StreamedSource::Encoding encoding;
+        if (!ScriptStreamer::convertEncoding(resource->encoding().ascii().data(), &encoding)
+            || streamer->encoding() != encoding) {
+            // For debugging, write the resource URL, the current encoding and
+            // the previous encoding on stack so that it can be read from the
+            // crash dump.
+            size_t urlLength = resource->url().string().ascii().length();
+            size_t encodingLength = resource->encoding().ascii().length();
+            char* ptr = reinterpret_cast<char*>(alloca(urlLength + encodingLength + 1));
+            memcpy(ptr, resource->url().string().ascii().data(), urlLength);
+            memcpy(ptr + urlLength, resource->encoding().ascii().data(), encodingLength);
+            *(ptr + urlLength + encodingLength) = static_cast<char>(streamer->encoding());
+            RELEASE_ASSERT_NOT_REACHED();
+        }
+
         resource->clearCachedMetadata();
         resource->setCachedMetadata(streamer->cachedDataType(), reinterpret_cast<const char*>(newCachedData->data), newCachedData->length, Resource::CacheLocally);
     }
@@ -166,7 +192,7 @@ static const int kCacheTagKindSize = 2;
 
 unsigned cacheTag(CacheTagKind kind)
 {
-    COMPILE_ASSERT((1 << kCacheTagKindSize) >= CacheTagLast, Cache_tag_Last_must_be_large_enough);
+    static_assert((1 << kCacheTagKindSize) >= CacheTagLast, "CacheTagLast must be large enough");
 
     static unsigned v8CacheDataVersion = v8::ScriptCompiler::CachedDataVersionTag() << kCacheTagKindSize;
     return v8CacheDataVersion | kind;

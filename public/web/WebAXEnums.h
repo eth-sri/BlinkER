@@ -71,7 +71,8 @@ enum WebAXEvent {
 // These values must match blink::AccessibilityRole values.
 // Enforced in AssertMatchingEnums.cpp.
 enum WebAXRole {
-    WebAXRoleAlertDialog = 1,
+    WebAXRoleUnknown = 0,
+    WebAXRoleAlertDialog,
     WebAXRoleAlert,
     WebAXRoleAnnotation,
     WebAXRoleApplication,
@@ -81,6 +82,7 @@ enum WebAXRole {
     WebAXRoleBusyIndicator,
     WebAXRoleButton,
     WebAXRoleCanvas,
+    WebAXRoleCaption,
     WebAXRoleCell,
     WebAXRoleCheckBox,
     WebAXRoleColorWell,
@@ -101,7 +103,6 @@ enum WebAXRole {
     WebAXRoleDisclosureTriangle,
     WebAXRoleDiv,
     WebAXRoleDocument,
-    WebAXRoleEditableText,
     WebAXRoleEmbeddedObject,
     WebAXRoleFigcaption,
     WebAXRoleFigure,
@@ -109,8 +110,8 @@ enum WebAXRole {
     WebAXRoleForm,
     WebAXRoleGrid,
     WebAXRoleGroup,
-    WebAXRoleGrowArea,
     WebAXRoleHeading,
+    WebAXRoleIframePresentational,
     WebAXRoleIframe,
     WebAXRoleIgnored,
     WebAXRoleImageMapLink,
@@ -128,7 +129,6 @@ enum WebAXRole {
     WebAXRoleLog,
     WebAXRoleMain,
     WebAXRoleMarquee,
-    WebAXRoleMathElement,
     WebAXRoleMath,
     WebAXRoleMenuBar,
     WebAXRoleMenuButton,
@@ -165,7 +165,6 @@ enum WebAXRole {
     WebAXRoleSliderThumb,
     WebAXRoleSpinButtonPart,
     WebAXRoleSpinButton,
-    WebAXRoleSplitGroup,
     WebAXRoleSplitter,
     WebAXRoleStaticText,
     WebAXRoleStatus,
@@ -184,7 +183,6 @@ enum WebAXRole {
     WebAXRoleTreeGrid,
     WebAXRoleTreeItem,
     WebAXRoleTree,
-    WebAXRoleUnknown,
     WebAXRoleUserInterfaceTooltip,
     WebAXRoleWebArea,
     WebAXRoleWindow,
@@ -247,6 +245,17 @@ enum WebAXOrientation {
     WebAXOrientationUndefined = 0,
     WebAXOrientationVertical,
     WebAXOrientationHorizontal,
+};
+
+// Only used by HTML form controls and any other element that has
+// an aria-invalid attribute specified.
+enum WebAXInvalidState {
+    WebAXInvalidStateUndefined = 0,
+    WebAXInvalidStateFalse,
+    WebAXInvalidStateTrue,
+    WebAXInvalidStateSpelling,
+    WebAXInvalidStateGrammar,
+    WebAXInvalidStateOther
 };
 
 } // namespace blink

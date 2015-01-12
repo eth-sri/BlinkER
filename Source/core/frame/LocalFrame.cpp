@@ -57,6 +57,7 @@
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
+#include "core/paint/TransformRecorder.h"
 #include "core/rendering/HitTestResult.h"
 #include "core/rendering/RenderLayer.h"
 #include "core/rendering/RenderView.h"
@@ -64,8 +65,10 @@
 #include "core/svg/SVGDocumentExtensions.h"
 #include "platform/DragImage.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "platform/ScriptForbiddenScope.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/ImageBuffer.h"
+#include "platform/graphics/paint/ClipRecorder.h"
 #include "platform/text/TextStream.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/StdLibExtras.h"
@@ -196,10 +199,11 @@ void LocalFrame::createView(const IntSize& viewportSize, const Color& background
 
 LocalFrame::~LocalFrame()
 {
-#if ENABLE(OILPAN)
     // Verify that the FrameView has been cleared as part of detaching
     // the frame owner.
     ASSERT(!m_view);
+
+#if !ENABLE(OILPAN)
     // Oilpan: see setDOMWindow() comment why it is acceptable not to
     // mirror the non-Oilpan call below.
     //
@@ -207,11 +211,6 @@ LocalFrame::~LocalFrame()
     // frame object keep weak references to the frame; those will be
     // automatically cleared by the garbage collector. Hence, explicit
     // frameDestroyed() notifications aren't needed.
-#else
-    // FIXME: follow Oilpan and clear the FrameView and FrameLoader
-    // during FrameOwner detachment instead, see LocalFrame::disconnectOwnerElement().
-    setView(nullptr);
-    m_loader.clear();
     setDOMWindow(nullptr);
 
     for (const auto& frameDestructionObserver : m_destructionObservers)
@@ -251,6 +250,15 @@ void LocalFrame::navigate(Document& originDocument, const KURL& url, bool lockBa
     m_navigationScheduler.scheduleLocationChange(&originDocument, url.string(), lockBackForwardList);
 }
 
+void LocalFrame::reload(ReloadPolicy reloadPolicy, ClientRedirectPolicy clientRedirectPolicy)
+{
+    ASSERT(clientRedirectPolicy == NotClientRedirect || reloadPolicy == NormalReload);
+    if (clientRedirectPolicy == NotClientRedirect)
+        m_loader.reload(reloadPolicy);
+    else
+        m_navigationScheduler.scheduleReload();
+}
+
 void LocalFrame::detach()
 {
     // A lot of the following steps can result in the current frame being
@@ -266,24 +274,28 @@ void LocalFrame::detach()
     if (!client())
         return;
     m_loader.detach();
-    setView(nullptr);
-    willDetachFrameHost();
     // Notify ScriptController that the frame is closing, since its cleanup ends up calling
     // back to FrameLoaderClient via WindowProxy.
     script().clearForClose();
+    ScriptForbiddenScope forbidScript;
+    setView(nullptr);
+    willDetachFrameHost();
     InspectorInstrumentation::frameDetachedFromParent(this);
     Frame::detach();
-#if ENABLE(OILPAN)
     // Clear the FrameLoader right here rather than during
     // finalization. Too late to access various heap objects at that
     // stage.
-    loader().clear();
-#endif
+    m_loader.clear();
 }
 
 SecurityContext* LocalFrame::securityContext() const
 {
     return document();
+}
+
+bool LocalFrame::checkLoadComplete()
+{
+    return loader().checkLoadCompleteForThisFrame();
 }
 
 void LocalFrame::disconnectOwnerElement()
@@ -345,10 +357,8 @@ void LocalFrame::setDOMWindow(PassRefPtrWillBeRawPtr<LocalDOMWindow> domWindow)
     //    die with the window. And the registered DOMWindowProperty instances that don't,
     //    only keep a weak reference to this frame, so there's no need to be
     //    explicitly notified that this frame is going away.
-    if (m_domWindow && host()) {
+    if (m_domWindow && host())
         host()->consoleMessageStorage().frameWindowDiscarded(m_domWindow.get());
-        InspectorInstrumentation::frameWindowDiscarded(this, m_domWindow.get());
-    }
     if (domWindow)
         script().clearWindowProxy();
 
@@ -599,9 +609,13 @@ PassOwnPtr<DragImage> LocalFrame::nodeImage(Node& node)
     OwnPtr<ImageBuffer> buffer = ImageBuffer::create(paintingRect.size());
     if (!buffer)
         return nullptr;
-    buffer->context()->scale(deviceScaleFactor, deviceScaleFactor);
-    buffer->context()->translate(-paintingRect.x(), -paintingRect.y());
-    buffer->context()->clip(FloatRect(0, 0, paintingRect.maxX(), paintingRect.maxY()));
+
+    AffineTransform transform;
+    transform.scale(deviceScaleFactor, deviceScaleFactor);
+    transform.translate(-paintingRect.x(), -paintingRect.y());
+    TransformRecorder transformRecorder(*buffer->context(), renderer->displayItemClient(), transform);
+
+    ClipRecorder clipRecorder(renderer->displayItemClient(), buffer->context(), DisplayItem::ClipNodeImage, LayoutRect(0, 0, paintingRect.maxX(), paintingRect.maxY()));
 
     m_view->paintContents(buffer->context(), paintingRect);
 

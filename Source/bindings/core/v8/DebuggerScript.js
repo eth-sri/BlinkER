@@ -89,6 +89,31 @@ DebuggerScript.getFunctionScopes = function(fun)
     return result;
 }
 
+DebuggerScript.getGeneratorObjectDetails = function(object)
+{
+    var mirror = MakeMirror(object, true /* transient */);
+    if (!mirror.isGenerator())
+        return null;
+    var funcMirror = mirror.func();
+    if (!funcMirror.resolved())
+        return null;
+    var result = {
+        "function": funcMirror.value(),
+        "functionName": DebuggerScript._displayFunctionName(funcMirror) || "",
+        "status": mirror.status()
+    };
+    var script = funcMirror.script();
+    var location = mirror.sourceLocation() || funcMirror.sourceLocation();
+    if (script && location) {
+        result["location"] = {
+            "scriptId": String(script.id()),
+            "lineNumber": location.line,
+            "columnNumber": location.column
+        };
+    }
+    return result;
+}
+
 DebuggerScript.getCollectionEntries = function(object)
 {
     var mirror = MakeMirror(object, true /* transient */);
@@ -276,6 +301,11 @@ DebuggerScript.stepOutOfFunction = function(execState, callFrame)
     execState.prepareStep(Debug.StepAction.StepOut, 1);
 }
 
+DebuggerScript.clearStepping = function()
+{
+    Debug.clearStepping();
+}
+
 // Returns array in form:
 //      [ 0, <v8_result_report> ] in case of success
 //   or [ 1, <general_error_message>, <compiler_message>, <line_number>, <column_number> ] in case of compile error, numbers are 1-based.
@@ -355,6 +385,17 @@ DebuggerScript.isEvalCompilation = function(eventData)
 {
     var script = eventData.script();
     return (script.compilationType() === Debug.ScriptCompilationType.Eval);
+}
+
+DebuggerScript._displayFunctionName = function(funcMirror)
+{
+    if (!funcMirror.resolved())
+        return undefined
+    var displayName;
+    var valueMirror = funcMirror.property("displayName").value();
+    if (valueMirror && valueMirror.isString())
+        displayName = valueMirror.value();
+    return displayName || funcMirror.name() || funcMirror.inferredName();
 }
 
 // NOTE: This function is performance critical, as it can be run on every
@@ -458,14 +499,7 @@ DebuggerScript._frameMirrorToJSCallFrame = function(frameMirror, callerFrame, sc
 
     function functionName()
     {
-        var func = ensureFuncMirror();
-        if (!func.resolved())
-            return undefined;
-        var displayName;
-        var valueMirror = func.property("displayName").value();
-        if (valueMirror && valueMirror.isString())
-            displayName = valueMirror.value();
-        return displayName || func.name() || func.inferredName();
+        return DebuggerScript._displayFunctionName(ensureFuncMirror());
     }
 
     function evaluate(expression, scopeExtension)

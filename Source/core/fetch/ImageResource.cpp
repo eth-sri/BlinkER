@@ -56,7 +56,10 @@ ImageResource::ImageResource(const ResourceRequest& resourceRequest)
 
 ImageResource::ImageResource(blink::Image* image)
     : Resource(ResourceRequest(""), Image)
+    , m_devicePixelRatioHeaderValue(1.0)
     , m_image(image)
+    , m_loadingMultipartContent(false)
+    , m_hasDevicePixelRatioHeaderValue(false)
 {
     WTF_LOG(Timers, "new ImageResource(Image) %p", this);
     setStatus(Cached);
@@ -470,6 +473,18 @@ void ImageResource::animationAdvanced(const blink::Image* image)
     notifyObservers();
 }
 
+void ImageResource::imageAnimationPolicy(const blink::Image* image, ImageAnimationPolicy& policy)
+{
+    if (!image || image != m_image)
+        return;
+
+    ResourceClientWalker<ImageResourceClient> w(m_clients);
+    while (ImageResourceClient* c = w.next()) {
+        if (c->getImageAnimationPolicy(this, policy))
+            return;
+    }
+}
+
 void ImageResource::changedInRect(const blink::Image* image, const IntRect& rect)
 {
     if (!image || image != m_image)
@@ -487,13 +502,13 @@ bool ImageResource::currentFrameKnownToBeOpaque(const RenderObject* renderer)
     return image->currentFrameKnownToBeOpaque();
 }
 
-bool ImageResource::isAccessAllowed(SecurityOrigin* securityOrigin)
+bool ImageResource::isAccessAllowed(ExecutionContext* context, SecurityOrigin* securityOrigin)
 {
     if (response().wasFetchedViaServiceWorker())
         return response().serviceWorkerResponseType() != WebServiceWorkerResponseTypeOpaque;
     if (!image()->currentFrameHasSingleSecurityOrigin())
         return false;
-    if (passesAccessControlCheck(securityOrigin))
+    if (passesAccessControlCheck(context, securityOrigin))
         return true;
     return !securityOrigin->taintsCanvas(response().url());
 }

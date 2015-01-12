@@ -55,10 +55,10 @@ FAIL childWindow.navigator.presentation.session should be null. Threw exception 
 PASS childWindow.navigator.product is window.navigator.product
 PASS childWindow.navigator.productSub is window.navigator.productSub
 FAIL childWindow.navigator.serviceWorker.controller should be null. Threw exception TypeError: Cannot read property 'controller' of null
+FAIL childWindow.navigator.serviceWorker.oncontrollerchange should be null. Threw exception TypeError: Cannot read property 'oncontrollerchange' of null
 PASS childWindow.navigator.userAgent is ''
 PASS childWindow.navigator.vendor is window.navigator.vendor
 PASS childWindow.navigator.vendorSub is ''
-FAIL childWindow.offscreenBuffering should be false. Was true.
 PASS childWindow.onabort is null
 PASS childWindow.onanimationend is null
 PASS childWindow.onanimationiteration is null

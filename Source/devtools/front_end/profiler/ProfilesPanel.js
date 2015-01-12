@@ -389,13 +389,6 @@ WebInspector.ProfileHeader.prototype = {
     },
 
     /**
-     * @param {!Function} callback
-     */
-    load: function(callback)
-    {
-    },
-
-    /**
      * @return {boolean}
      */
     canSaveToFile: function()
@@ -448,7 +441,6 @@ WebInspector.ProfilesPanel = function()
     this.splitView().setMainView(mainView);
 
     this.profilesItemTreeElement = new WebInspector.ProfilesSidebarTreeElement(this);
-    this.sidebarTree.setFocusable(false);
     this.sidebarTree.appendChild(this.profilesItemTreeElement);
 
     this.profileViews = createElement("div");
@@ -497,6 +489,7 @@ WebInspector.ProfilesPanel = function()
 
 WebInspector.ProfilesPanel.prototype = {
     /**
+     * @override
      * @return {?WebInspector.SearchableView}
      */
     searchableView: function()
@@ -669,7 +662,7 @@ WebInspector.ProfilesPanel.prototype = {
     {
         this._launcherView.addProfileType(profileType);
         var profileTypeSection = new WebInspector.ProfileTypeSidebarSection(this, profileType);
-        this._typeIdToSidebarSection[profileType.id] = profileTypeSection
+        this._typeIdToSidebarSection[profileType.id] = profileTypeSection;
         this.sidebarTree.appendChild(profileTypeSection);
         profileTypeSection.childrenListElement.addEventListener("contextmenu", this._handleContextMenuEvent.bind(this), true);
 
@@ -777,6 +770,7 @@ WebInspector.ProfilesPanel.prototype = {
     },
 
     /**
+     * @override
      * @param {?WebInspector.ProfileHeader} profile
      * @return {?WebInspector.View}
      */
@@ -810,6 +804,7 @@ WebInspector.ProfilesPanel.prototype = {
     },
 
     /**
+     * @override
      * @param {!HeapProfilerAgent.HeapSnapshotObjectId} snapshotObjectId
      * @param {string} perspectiveName
      */
@@ -904,7 +899,7 @@ WebInspector.ProfilesPanel.prototype = {
                 this.showObject(result, viewName);
         }
 
-        contextMenu.appendItem(WebInspector.UIString(WebInspector.useLowerCaseMenuTitles() ? "Reveal in Summary view" : "Reveal in Summary View"), revealInView.bind(this, "Summary"));
+        contextMenu.appendItem(WebInspector.UIString.capitalize("Reveal in Summary ^view"), revealInView.bind(this, "Summary"));
     },
 
     __proto__: WebInspector.PanelWithSidebarTree.prototype
@@ -1064,6 +1059,7 @@ WebInspector.ProfilesPanel.ContextMenuProvider = function()
 
 WebInspector.ProfilesPanel.ContextMenuProvider.prototype = {
     /**
+     * @override
      * @param {!Event} event
      * @param {!WebInspector.ContextMenu} contextMenu
      * @param {!Object} target
@@ -1127,6 +1123,7 @@ WebInspector.ProfileSidebarTreeElement.prototype = {
     },
 
     /**
+     * @override
      * @return {boolean}
      */
     onselect: function()
@@ -1136,6 +1133,7 @@ WebInspector.ProfileSidebarTreeElement.prototype = {
     },
 
     /**
+     * @override
      * @return {boolean}
      */
     ondelete: function()
@@ -1183,6 +1181,7 @@ WebInspector.ProfileGroupSidebarTreeElement = function(dataDisplayDelegate, titl
 
 WebInspector.ProfileGroupSidebarTreeElement.prototype = {
     /**
+     * @override
      * @return {boolean}
      */
     onselect: function()
@@ -1211,6 +1210,7 @@ WebInspector.ProfilesSidebarTreeElement = function(panel)
 
 WebInspector.ProfilesSidebarTreeElement.prototype = {
     /**
+     * @override
      * @return {boolean}
      */
     onselect: function()
@@ -1252,6 +1252,7 @@ WebInspector.ProfilesPanelFactory = function()
 
 WebInspector.ProfilesPanelFactory.prototype = {
     /**
+     * @override
      * @return {!WebInspector.Panel}
      */
     createPanel: function()

@@ -25,7 +25,7 @@
 #include "config.h"
 #include "core/rendering/RenderText.h"
 
-#include "core/accessibility/AXObjectCache.h"
+#include "core/dom/AXObjectCache.h"
 #include "core/dom/Text.h"
 #include "core/editing/TextIterator.h"
 #include "core/editing/VisiblePosition.h"
@@ -63,7 +63,7 @@ struct SameSizeAsRenderText : public RenderObject {
     void* pointers[2];
 };
 
-COMPILE_ASSERT(sizeof(RenderText) == sizeof(SameSizeAsRenderText), RenderText_should_stay_small);
+static_assert(sizeof(RenderText) == sizeof(SameSizeAsRenderText), "RenderText should stay small");
 
 class SecureTextTimer;
 typedef HashMap<RenderText*, SecureTextTimer*> SecureTextTimerMap;
@@ -721,23 +721,31 @@ ALWAYS_INLINE float RenderText::widthFromCache(const Font& f, int start, int len
     }
 
     if (f.isFixedPitch() && f.fontDescription().variant() == FontVariantNormal && m_isAllASCII && (!glyphOverflow || !glyphOverflow->computeBounds)) {
+        bool missingGlyph = false;
         float monospaceCharacterWidth = f.spaceWidth();
         float w = 0;
         bool isSpace;
         ASSERT(m_text);
         StringImpl& text = *m_text.impl();
+        RenderStyle* renderStyle = style();
         for (int i = start; i < start + len; i++) {
             char c = text[i];
+            // If glyph is not present in primary font then we cannot calculate width based on primary
+            // font property, we need to call "width" method of Font Object.
+            if (!f.primaryFontHasGlyphForCharacter(text[i])) {
+                missingGlyph = true;
+                break;
+            }
             if (c <= space) {
                 if (c == space || c == newlineCharacter) {
                     w += monospaceCharacterWidth;
                     isSpace = true;
                 } else if (c == characterTabulation) {
-                    if (style()->collapseWhiteSpace()) {
+                    if (renderStyle->collapseWhiteSpace()) {
                         w += monospaceCharacterWidth;
                         isSpace = true;
                     } else {
-                        w += f.tabWidth(style()->tabSize(), xPos + w);
+                        w += f.tabWidth(renderStyle->tabSize(), xPos + w);
                         isSpace = false;
                     }
                 } else
@@ -749,7 +757,8 @@ ALWAYS_INLINE float RenderText::widthFromCache(const Font& f, int start, int len
             if (isSpace && i > start)
                 w += f.fontDescription().wordSpacing();
         }
-        return w;
+        if (!missingGlyph)
+            return w;
     }
 
     TextRun run = constructTextRun(const_cast<RenderText*>(this), f, this, start, len, style(), textDirection);
@@ -760,7 +769,6 @@ ALWAYS_INLINE float RenderText::widthFromCache(const Font& f, int start, int len
     run.setUseComplexCodePath(!canUseSimpleFontCodePath());
     run.setTabSize(!style()->collapseWhiteSpace(), style()->tabSize());
     run.setXPos(xPos);
-    FontCachePurgePreventer fontCachePurgePreventer;
     return f.width(run, fallbackFonts, glyphOverflow);
 }
 
@@ -1008,7 +1016,7 @@ void RenderText::computePreferredLogicalWidths(float leadWidth, HashSet<const Si
             continue;
         }
 
-        bool hasBreak = breakAll || isBreakable(breakIterator, i, nextBreakable);
+        bool hasBreak = isBreakable(breakIterator, i, nextBreakable, breakAll ? LineBreakType::BreakAll : LineBreakType::Normal);
         bool betweenWords = true;
         int j = i;
         while (c != newlineCharacter && c != space && c != characterTabulation && (c != softHyphen)) {

@@ -271,7 +271,7 @@ void WebDevToolsAgentImpl::continueProgram()
 
 void WebDevToolsAgentImpl::didBeginFrame(int frameId)
 {
-    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "BeginMainThreadFrame", "layerTreeId", m_layerTreeId);
+    TRACE_EVENT_INSTANT2(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "BeginMainThreadFrame", "layerTreeId", m_layerTreeId, "data", InspectorBeginFrameEvent::data(frameId));
     if (InspectorController* ic = inspectorController())
         ic->didBeginFrame(frameId);
 }
@@ -362,7 +362,7 @@ bool WebDevToolsAgentImpl::handleInputEvent(Page* page, const WebInputEvent& inp
     return false;
 }
 
-void WebDevToolsAgentImpl::didLayout()
+void WebDevToolsAgentImpl::willLayout()
 {
     m_webViewDidLayoutOnceAfterLoad = true;
 }
@@ -549,7 +549,7 @@ void WebDevToolsAgentImpl::paintPageOverlay(WebCanvas* canvas)
 {
     InspectorController* ic = inspectorController();
     if (ic) {
-        GraphicsContext context(canvas);
+        GraphicsContext context(canvas, nullptr);
         context.setCertainlyOpaque(false);
         ic->drawHighlight(context);
     }

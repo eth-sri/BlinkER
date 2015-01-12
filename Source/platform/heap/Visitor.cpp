@@ -37,19 +37,19 @@
 namespace blink {
 
 #if ENABLE(ASSERT)
-void Visitor::checkGCInfo(const void* payload, const GCInfo* gcInfo)
+void assertObjectHasGCInfo(const void* payload, const GCInfo* gcInfo)
 {
-    FinalizedHeapObjectHeader::fromPayload(payload)->checkHeader();
+    GeneralHeapObjectHeader::fromPayload(payload)->checkHeader();
 #if !defined(COMPONENT_BUILD)
     // On component builds we cannot compare the gcInfos as they are statically
     // defined in each of the components and hence will not match.
     BaseHeapPage* page = pageFromObject(payload);
-    ASSERT(page->orphaned() || FinalizedHeapObjectHeader::fromPayload(payload)->gcInfo() == gcInfo);
+    ASSERT(page->orphaned() || GeneralHeapObjectHeader::fromPayload(payload)->gcInfo() == gcInfo);
 #endif
 }
 
 #define DEFINE_VISITOR_CHECK_MARKER(Type)                                \
-    void Visitor::checkGCInfo(const Type* payload, const GCInfo* gcInfo) \
+    void assertObjectHasGCInfo(const Type* payload, const GCInfo* gcInfo) \
     {                                                                    \
         HeapObjectHeader::fromPayload(payload)->checkHeader();           \
         Type* object = const_cast<Type*>(payload);                       \

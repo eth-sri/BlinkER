@@ -49,7 +49,6 @@ enum ContentChangeType {
 };
 
 class InlineFlowBox;
-class RenderTextFragment;
 
 // This class is the base for all objects that adhere to the CSS box model as described
 // at http://www.w3.org/TR/CSS21/box.html
@@ -113,6 +112,7 @@ public:
 
     int borderWidth() const { return borderLeft() + borderRight(); }
     int borderHeight() const { return borderTop() + borderBottom(); }
+    LayoutBoxExtent borderBoxExtent() const { return LayoutBoxExtent(borderTop(), borderRight(), borderBottom(), borderLeft()); }
 
     LayoutUnit borderAndPaddingStart() const { return borderStart() + paddingStart(); }
     LayoutUnit borderAndPaddingBefore() const { return borderBefore() + paddingBefore(); }
@@ -124,12 +124,12 @@ public:
     LayoutUnit borderAndPaddingLogicalWidth() const { return borderStart() + borderEnd() + paddingStart() + paddingEnd(); }
     LayoutUnit borderAndPaddingLogicalLeft() const { return style()->isHorizontalWritingMode() ? borderLeft() + paddingLeft() : borderTop() + paddingTop(); }
 
-
     LayoutUnit borderLogicalLeft() const { return style()->isHorizontalWritingMode() ? borderLeft() : borderTop(); }
 
     LayoutUnit paddingLogicalWidth() const { return paddingStart() + paddingEnd(); }
     LayoutUnit paddingLogicalHeight() const { return paddingBefore() + paddingAfter(); }
 
+    virtual LayoutBoxExtent marginBox() const = 0;
     virtual LayoutUnit marginTop() const = 0;
     virtual LayoutUnit marginBottom() const = 0;
     virtual LayoutUnit marginLeft() const = 0;

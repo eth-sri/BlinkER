@@ -16,6 +16,22 @@
             "type": "@WebInspector.Revealer",
             "contextTypes": ["WebInspector.NetworkRequest"],
             "className": "WebInspector.NetworkPanel.RequestRevealer"
+        },
+        {
+            "type": "ui-setting",
+            "section": "Network",
+            "title": "Show primary load waterfall",
+            "settingName": "networkShowPrimaryLoadWaterfall",
+            "settingType": "checkbox",
+            "experiment": "showPrimaryLoadWaterfallInNetworkTimeline"
+        },
+        {
+            "type": "ui-setting",
+            "section": "Network",
+            "title": "Show request timing directly in timeline",
+            "settingName": "networkShowRequestTimingInTimeline",
+            "settingType": "checkbox",
+            "experiment": "requestTimingInNetworkTimeline"
         }
     ],
     "dependencies": ["source_frame"],

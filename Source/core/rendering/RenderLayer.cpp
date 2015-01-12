@@ -72,6 +72,7 @@
 #include "core/rendering/compositing/CompositedLayerMapping.h"
 #include "core/rendering/compositing/RenderLayerCompositor.h"
 #include "core/rendering/svg/ReferenceFilterBuilder.h"
+#include "core/rendering/svg/RenderSVGRoot.h"
 #include "platform/LengthFunctions.h"
 #include "platform/Partitions.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -110,6 +111,9 @@ RenderLayer::RenderLayer(RenderLayerModelObject* renderer, LayerType type)
     , m_hasVisibleDescendant(false)
     , m_hasVisibleNonLayerContent(false)
     , m_isPaginated(false)
+#if ENABLE(ASSERT)
+    , m_needsPositionUpdate(true)
+#endif
     , m_3DTransformedDescendantStatusDirty(true)
     , m_has3DTransformedDescendant(false)
     , m_containsDirtyOverlayScrollbars(false)
@@ -232,7 +236,7 @@ void RenderLayer::setSubpixelAccumulation(const LayoutSize& size)
 
 void RenderLayer::updateLayerPositionsAfterLayout()
 {
-    TRACE_EVENT0("blink", "RenderLayer::updateLayerPositionsAfterLayout");
+    TRACE_EVENT0("blink,benchmark", "RenderLayer::updateLayerPositionsAfterLayout");
 
     m_clipper.clearClipRectsIncludingDescendants();
     updateLayerPositionRecursive();
@@ -248,6 +252,8 @@ void RenderLayer::updateLayerPositionsAfterLayout()
 
 void RenderLayer::updateLayerPositionRecursive()
 {
+    updateLayerPosition();
+
     if (m_reflectionInfo)
         m_reflectionInfo->reflection()->layout();
 
@@ -299,6 +305,21 @@ bool RenderLayer::scrollsWithRespectTo(const RenderLayer* other) const
     if (scrollsWithViewport() != other->scrollsWithViewport())
         return true;
     return ancestorScrollingLayer() != other->ancestorScrollingLayer();
+}
+
+void RenderLayer::updateLayerPositionsAfterOverflowScroll()
+{
+    m_clipper.clearClipRectsIncludingDescendants();
+    updateLayerPositionsAfterScrollRecursive();
+}
+
+void RenderLayer::updateLayerPositionsAfterScrollRecursive()
+{
+    if (updateLayerPosition())
+        m_renderer->setPreviousPaintInvalidationRect(m_renderer->boundsRectForPaintInvalidation(m_renderer->containerForPaintInvalidation()));
+
+    for (RenderLayer* child = firstChild(); child; child = child->nextSibling())
+        child->updateLayerPositionsAfterScrollRecursive();
 }
 
 void RenderLayer::updateTransformationMatrix()
@@ -441,10 +462,7 @@ static void convertFromFlowThreadToVisualBoundingBoxInAncestor(const RenderLayer
     }
     // The ancestor layer is also inside the pagination layer, so we need to subtract the visual
     // distance from the ancestor layer to the pagination layer.
-    LayoutPoint offsetFromPaginationLayerToAncestor;
-    ancestorLayer->convertToLayerCoords(paginationLayer, offsetFromPaginationLayerToAncestor);
-    offsetFromPaginationLayerToAncestor = flowThread->flowThreadPointToVisualPoint(offsetFromPaginationLayerToAncestor);
-    rect.moveBy(-offsetFromPaginationLayerToAncestor);
+    rect.moveBy(-ancestorLayer->visualOffsetFromAncestor(paginationLayer));
 }
 
 bool RenderLayer::useRegionBasedColumns() const
@@ -781,19 +799,7 @@ bool RenderLayer::update3DTransformedDescendantStatus()
     return has3DTransform();
 }
 
-IntSize RenderLayer::size() const
-{
-    if (renderer()->isInline() && renderer()->isRenderInline())
-        return toRenderInline(renderer())->linesBoundingBox().size();
-
-    // FIXME: Is snapping the size really needed here?
-    if (RenderBox* box = renderBox())
-        return pixelSnappedIntSize(box->size(), box->location());
-
-    return IntSize();
-}
-
-LayoutPoint RenderLayer::location() const
+bool RenderLayer::updateLayerPosition()
 {
     LayoutPoint localPoint;
     LayoutPoint inlineBoundingBoxOffset; // We don't put this into the RenderLayer x/y for inlines, so we need to subtract it out when done.
@@ -801,9 +807,11 @@ LayoutPoint RenderLayer::location() const
     if (renderer()->isInline() && renderer()->isRenderInline()) {
         RenderInline* inlineFlow = toRenderInline(renderer());
         IntRect lineBox = inlineFlow->linesBoundingBox();
+        m_size = lineBox.size();
         inlineBoundingBoxOffset = lineBox.location();
         localPoint.moveBy(inlineBoundingBoxOffset);
     } else if (RenderBox* box = renderBox()) {
+        m_size = pixelSnappedIntSize(box->size(), box->location());
         localPoint.moveBy(box->topLeftLocation());
     }
 
@@ -859,17 +867,27 @@ LayoutPoint RenderLayer::location() const
         }
     }
 
-    localPoint.move(offsetForInFlowPosition());
+    bool positionOrOffsetChanged = false;
+    if (renderer()->isRelPositioned()) {
+        LayoutSize newOffset = toRenderBoxModelObject(renderer())->offsetForInFlowPosition();
+        positionOrOffsetChanged = newOffset != m_offsetForInFlowPosition;
+        m_offsetForInFlowPosition = newOffset;
+        localPoint.move(m_offsetForInFlowPosition);
+    } else {
+        m_offsetForInFlowPosition = LayoutSize();
+    }
 
     // FIXME: We'd really like to just get rid of the concept of a layer rectangle and rely on the renderers.
     localPoint.moveBy(-inlineBoundingBoxOffset);
 
-    return localPoint;
-}
+    if (m_location != localPoint)
+        positionOrOffsetChanged = true;
+    m_location = localPoint;
 
-const LayoutSize RenderLayer::offsetForInFlowPosition() const
-{
-    return renderer()->isRelPositioned() ? toRenderBoxModelObject(renderer())->offsetForInFlowPosition() : LayoutSize();
+#if ENABLE(ASSERT)
+    m_needsPositionUpdate = false;
+#endif
+    return positionOrOffsetChanged;
 }
 
 TransformationMatrix RenderLayer::perspectiveTransform() const
@@ -1040,6 +1058,15 @@ void RenderLayer::didUpdateCompositingInputs()
     m_childNeedsCompositingInputsUpdate = false;
     if (m_scrollableArea)
         m_scrollableArea->updateNeedsCompositedScrolling();
+}
+
+bool RenderLayer::hasNonIsolatedDescendantWithBlendMode() const
+{
+    if (descendantDependentCompositingInputs().hasNonIsolatedDescendantWithBlendMode)
+        return true;
+    if (renderer()->isSVGRoot())
+        return toRenderSVGRoot(renderer())->hasNonIsolatedBlendingDescendants();
+    return false;
 }
 
 void RenderLayer::setCompositingReasons(CompositingReasons reasons, CompositingReasons mask)
@@ -1360,7 +1387,7 @@ static inline const RenderLayer* accumulateOffsetTowardsAncestor(const RenderLay
     }
 
     RenderLayer* parentLayer;
-    if (position == AbsolutePosition || position == FixedPosition) {
+    if (position == AbsolutePosition) {
         // Do what enclosingPositionedAncestor() does, but check for ancestorLayer along the way.
         parentLayer = layer->parent();
         bool foundAncestorFirst = false;
@@ -1424,6 +1451,34 @@ void RenderLayer::convertToLayerCoords(const RenderLayer* ancestorLayer, LayoutR
     rect.moveBy(delta);
 }
 
+LayoutPoint RenderLayer::visualOffsetFromAncestor(const RenderLayer* ancestorLayer) const
+{
+    RenderLayer* paginationLayer = enclosingPaginationLayer();
+    LayoutPoint offset;
+    if (!paginationLayer || paginationLayer == this) {
+        convertToLayerCoords(ancestorLayer, offset);
+        return offset;
+    }
+
+    RenderFlowThread* flowThread = toRenderFlowThread(paginationLayer->renderer());
+    convertToLayerCoords(paginationLayer, offset);
+    offset = flowThread->flowThreadPointToVisualPoint(offset);
+    if (ancestorLayer == paginationLayer)
+        return offset;
+
+    // FIXME: Handle nested fragmentation contexts (crbug.com/423076). For now just give up if there
+    // are different pagination layers involved.
+    if (!ancestorLayer->enclosingPaginationLayer() || ancestorLayer->enclosingPaginationLayer() != paginationLayer) {
+        // The easy case. The ancestor layer is not within the pagination layer.
+        offset.moveBy(paginationLayer->visualOffsetFromAncestor(ancestorLayer));
+    } else {
+        // The ancestor layer is also inside the pagination layer, so we need to subtract the visual
+        // distance from the ancestor layer to the pagination layer.
+        offset.moveBy(-ancestorLayer->visualOffsetFromAncestor(paginationLayer));
+    }
+    return offset;
+}
+
 void RenderLayer::didUpdateNeedsCompositedScrolling()
 {
     updateSelfPaintingLayer();
@@ -1460,7 +1515,7 @@ void RenderLayer::updateScrollableArea()
 
 bool RenderLayer::hasOverflowControls() const
 {
-    return m_scrollableArea && (m_scrollableArea->hasScrollbar() || m_scrollableArea->hasScrollCorner() || renderer()->style()->resize() != RESIZE_NONE);
+    return m_scrollableArea && (m_scrollableArea->hasScrollbar() || m_scrollableArea->scrollCorner() || renderer()->style()->resize() != RESIZE_NONE);
 }
 
 void RenderLayer::collectFragments(LayerFragments& fragments, const RenderLayer* rootLayer, const LayoutRect& dirtyRect,
@@ -1491,7 +1546,7 @@ void RenderLayer::collectFragments(LayerFragments& fragments, const RenderLayer*
     ClipRect backgroundRectInFlowThread;
     ClipRect foregroundRectInFlowThread;
     ClipRect outlineRectInFlowThread;
-    clipper().calculateRects(paginationClipRectsContext, PaintInfo::infiniteRect(), layerBoundsInFlowThread, backgroundRectInFlowThread, foregroundRectInFlowThread,
+    clipper().calculateRects(paginationClipRectsContext, LayoutRect::infiniteIntRect(), layerBoundsInFlowThread, backgroundRectInFlowThread, foregroundRectInFlowThread,
         outlineRectInFlowThread, &offsetWithinPaginatedLayer);
 
     // Take our bounding box within the flow thread and clip it.
@@ -2339,7 +2394,7 @@ LayoutRect RenderLayer::boundingBoxForCompositing(const RenderLayer* ancestorLay
         return LayoutRect();
 
     LayoutRect result = clipper().localClipRect();
-    if (result == PaintInfo::infiniteRect()) {
+    if (result == LayoutRect::infiniteIntRect()) {
         LayoutPoint origin;
         result = physicalBoundingBox(ancestorLayer, &origin);
 
@@ -2382,7 +2437,6 @@ CompositingState RenderLayer::compositingState() const
     // can get out of sync from the real actual compositing state.
 
     if (m_groupedMapping) {
-        ASSERT(compositor()->layerSquashingEnabled());
         ASSERT(!m_compositedLayerMapping);
         return PaintsIntoGroupedBacking;
     }
@@ -2582,7 +2636,7 @@ bool RenderLayer::hasNonEmptyChildRenderers() const
             if (child->isRenderInline() || !child->isBox())
                 return true;
 
-            if (toRenderBox(child)->width() > 0 || toRenderBox(child)->height() > 0)
+            if (!toRenderBox(child)->size().isEmpty())
                 return true;
         }
     }

@@ -80,7 +80,6 @@
 #include "public/platform/WebURL.h"
 #include "public/platform/WebURLError.h"
 #include "public/platform/WebURLRequest.h"
-#include "public/platform/WebVector.h"
 #include "public/web/WebElement.h"
 #include "public/web/WebInputEvent.h"
 #include "public/web/WebPlugin.h"
@@ -916,7 +915,7 @@ void WebPluginContainerImpl::handleGestureEvent(GestureEvent* event)
         return;
     }
 
-    if (webEvent.type == WebInputEvent::GestureScrollUpdate || webEvent.type == WebInputEvent::GestureScrollUpdateWithoutPropagation) {
+    if (webEvent.type == WebInputEvent::GestureScrollUpdate) {
         if (!m_scrollbarGroup)
             return;
         if (gestureScrollHelper(m_scrollbarGroup.get(), ScrollLeft, ScrollRight, webEvent.data.scrollUpdate.deltaX))

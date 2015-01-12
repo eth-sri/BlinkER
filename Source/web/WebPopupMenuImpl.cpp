@@ -54,7 +54,6 @@
 #include "web/PopupContainer.h"
 #include "web/PopupMenuChromium.h"
 #include "web/WebInputEventConversion.h"
-#include <skia/ext/platform_canvas.h>
 
 namespace blink {
 
@@ -217,7 +216,7 @@ void WebPopupMenuImpl::paintContents(WebCanvas* canvas, const WebRect& rect, boo
         return;
 
     if (!rect.isEmpty()) {
-        GraphicsContext context(canvas,
+        GraphicsContext context(canvas, nullptr,
             contextStatus == WebContentLayerClient::GraphicsContextEnabled ? GraphicsContext::NothingDisabled : GraphicsContext::FullyDisabled);
         m_widget->paint(&context, rect);
     }
@@ -229,7 +228,7 @@ void WebPopupMenuImpl::paint(WebCanvas* canvas, const WebRect& rect)
         return;
 
     if (!rect.isEmpty()) {
-        GraphicsContext context(canvas);
+        GraphicsContext context(canvas, nullptr);
         float scaleFactor = m_client->deviceScaleFactor();
         context.scale(scaleFactor, scaleFactor);
         m_widget->paint(&context, rect);
@@ -293,7 +292,6 @@ bool WebPopupMenuImpl::handleInputEvent(const WebInputEvent& inputEvent)
     case WebInputEvent::GestureScrollBegin:
     case WebInputEvent::GestureScrollEnd:
     case WebInputEvent::GestureScrollUpdate:
-    case WebInputEvent::GestureScrollUpdateWithoutPropagation:
     case WebInputEvent::GestureFlingStart:
     case WebInputEvent::GestureFlingCancel:
     case WebInputEvent::GestureTap:

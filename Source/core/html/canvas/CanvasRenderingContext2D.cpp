@@ -66,6 +66,7 @@
 #include "platform/geometry/FloatQuad.h"
 #include "platform/graphics/DrawLooperBuilder.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
+#include "platform/text/BidiTextRun.h"
 #include "platform/text/TextRun.h"
 #include "wtf/ArrayBufferContents.h"
 #include "wtf/CheckedArithmetic.h"
@@ -90,14 +91,13 @@ static bool contextLostRestoredEventsEnabled()
     return RuntimeEnabledFeatures::experimentalCanvasFeaturesEnabled();
 }
 
-CanvasRenderingContext2D::CanvasRenderingContext2D(HTMLCanvasElement* canvas, const Canvas2DContextAttributes* attrs, Document& document)
+CanvasRenderingContext2D::CanvasRenderingContext2D(HTMLCanvasElement* canvas, const CanvasContextCreationAttributes& attrs, Document& document)
     : CanvasRenderingContext(canvas)
     , m_usesCSSCompatibilityParseMode(document.inQuirksMode())
     , m_clipAntialiasing(NotAntiAliased)
-    , m_hasAlpha(!attrs || attrs->alpha())
+    , m_hasAlpha(attrs.alpha())
     , m_isContextLost(false)
     , m_contextRestorable(true)
-    , m_storageMode(!attrs ? PersistentStorage : attrs->parsedStorage())
     , m_tryRestoreContextAttemptCount(0)
     , m_dispatchContextLostEventTimer(this, &CanvasRenderingContext2D::dispatchContextLostEvent)
     , m_dispatchContextRestoredEventTimer(this, &CanvasRenderingContext2D::dispatchContextRestoredEvent)
@@ -2010,10 +2010,16 @@ PassRefPtrWillBeRawPtr<TextMetrics> CanvasRenderingContext2D::measureText(const 
     if (!canvas()->document().frame())
         return metrics.release();
 
-    FontCachePurgePreventer fontCachePurgePreventer;
     canvas()->document().updateRenderTreeIfNeeded();
     const Font& font = accessFont();
-    const TextRun textRun(text, 0, 0, TextRun::AllowTrailingExpansion | TextRun::ForbidLeadingExpansion, toTextDirection(state().m_direction), false, true, true);
+
+    bool hasStrongDirectionality;
+    TextDirection direction;
+    if (state().m_direction == DirectionInherit)
+        direction = determineDirectionality(text, hasStrongDirectionality);
+    else
+        direction = toTextDirection(state().m_direction);
+    const TextRun textRun(text, 0, 0, TextRun::AllowTrailingExpansion | TextRun::ForbidLeadingExpansion, direction, false, true, true);
     FloatRect textBounds = font.selectionRectForText(textRun, FloatPoint(), font.fontDescription().computedSize(), 0, -1, true);
 
     // x direction
@@ -2227,11 +2233,9 @@ void CanvasRenderingContext2D::setImageSmoothingEnabled(bool enabled)
         c->setImageInterpolationQuality(enabled ? CanvasDefaultInterpolationQuality : InterpolationNone);
 }
 
-PassRefPtrWillBeRawPtr<Canvas2DContextAttributes> CanvasRenderingContext2D::getContextAttributes() const
+void CanvasRenderingContext2D::getContextAttributes(Canvas2DContextAttributes& attrs) const
 {
-    RefPtrWillBeRawPtr<Canvas2DContextAttributes> attributes = Canvas2DContextAttributes::create();
-    attributes->setAlpha(m_hasAlpha);
-    return attributes.release();
+    attrs.setAlpha(m_hasAlpha);
 }
 
 void CanvasRenderingContext2D::drawFocusIfNeeded(Element* element)

@@ -30,6 +30,7 @@
 #include "core/InternalSettingsGenerated.h"
 #include "core/editing/EditingBehaviorTypes.h"
 #include "platform/geometry/IntSize.h"
+#include "platform/graphics/ImageAnimationPolicy.h"
 #include "platform/heap/Handle.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
@@ -73,6 +74,7 @@ public:
         bool m_originalLayerSquashingEnabled;
         bool m_originalPseudoClassesInMatchingCriteriaInAuthorShadowTreesEnabled;
         bool m_originalImageColorProfilesEnabled;
+        ImageAnimationPolicy m_originalImageAnimationPolicy;
     };
 
     static PassRefPtrWillBeRawPtr<InternalSettings> create(Page& page)
@@ -107,10 +109,6 @@ public:
     void setTextAutosizingWindowSizeOverride(int width, int height, ExceptionState&);
     void setViewportEnabled(bool, ExceptionState&);
 
-    // FIXME: This is a temporary flag and should be removed once squashing is
-    // ready (crbug.com/261605).
-    void setLayerSquashingEnabled(bool, ExceptionState&);
-
     // FIXME: The following are RuntimeEnabledFeatures and likely
     // cannot be changed after process start. These setters should
     // be removed or moved onto internals.runtimeFlags:
@@ -121,6 +119,7 @@ public:
     void setLaxMixedContentCheckingEnabled(bool);
     void setPseudoClassesInMatchingCriteriaInAuthorShadowTreesEnabled(bool);
     void setImageColorProfilesEnabled(bool);
+    void setImageAnimationPolicy(const String&, ExceptionState&);
 
     virtual void trace(Visitor*) override;
 

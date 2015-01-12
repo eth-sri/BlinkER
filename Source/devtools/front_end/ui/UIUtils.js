@@ -554,14 +554,6 @@ Number.withThousandsSeparator = function(num)
 }
 
 /**
- * @return {boolean}
- */
-WebInspector.useLowerCaseMenuTitles = function()
-{
-    return WebInspector.platform() === "windows";
-}
-
-/**
  * @param {string} format
  * @param {?ArrayLike} substitutions
  * @param {!Object.<string, function(string, ...):*>} formatters
@@ -579,7 +571,7 @@ WebInspector.formatLocalized = function(format, substitutions, formatters, initi
  */
 WebInspector.openLinkExternallyLabel = function()
 {
-    return WebInspector.UIString(WebInspector.useLowerCaseMenuTitles() ? "Open link in new tab" : "Open Link in New Tab");
+    return WebInspector.UIString.capitalize("Open ^link in ^new ^tab");
 }
 
 /**
@@ -587,7 +579,7 @@ WebInspector.openLinkExternallyLabel = function()
  */
 WebInspector.copyLinkAddressLabel = function()
 {
-    return WebInspector.UIString(WebInspector.useLowerCaseMenuTitles() ? "Copy link address" : "Copy Link Address");
+    return WebInspector.UIString.capitalize("Copy ^link ^address");
 }
 
 /**
@@ -635,7 +627,7 @@ WebInspector.installComponentRootStyles = function(element)
  */
 WebInspector.uninstallComponentRootStyles = function(element)
 {
-    var wasInstalled = element.classList.remove("component-root", "platform-" + WebInspector.platform());
+    element.classList.remove("component-root", "platform-" + WebInspector.platform());
 }
 
 /**
@@ -758,24 +750,27 @@ WebInspector.setToolbarColors = function(document, backgroundColor, color)
         WebInspector._themeStyleElement = createElement("style");
         document.head.appendChild(WebInspector._themeStyleElement);
     }
-    var parsedColor = WebInspector.Color.parse(color);
-    var shadowColor = parsedColor ? parsedColor.invert().setAlpha(0.33).asString(WebInspector.Color.Format.RGBA) : "white";
-    var prefix = WebInspector.isMac() ? "body:not(.undocked)" : "";
+    var colorWithAlpha = WebInspector.Color.parse(color).setAlpha(0.8).asString(WebInspector.Color.Format.RGBA);
+    var prefix = WebInspector.isMac() ? "body:not(.undocked)" : "body";
     WebInspector._themeStyleElement.textContent =
         String.sprintf(
-            "%s .toolbar-colors {" +
+            "%s .inspector-view-tabbed-pane.tabbed-pane::shadow .tabbed-pane-header {" +
             "    background-image: none !important;" +
             "    background-color: %s !important;" +
             "    color: %s !important;" +
-            "}", prefix, backgroundColor, color) +
+            "}", prefix, backgroundColor, colorWithAlpha) +
         String.sprintf(
-             "%s .toolbar-colors button.status-bar-item .glyph, %s .toolbar-colors button.status-bar-item .long-click-glyph {" +
-             "   background-color: %s;" +
-             "}", prefix, prefix, color) +
+            "%s .inspector-view-tabbed-pane.tabbed-pane::shadow .tabbed-pane-header-tab:hover {" +
+             "   color: %s;" +
+             "}", prefix, color) +
         String.sprintf(
-             "%s .toolbar-colors button.status-bar-item .glyph.shadow, %s .toolbar-colors button.status-bar-item .long-click-glyph.shadow {" +
+             "%s .inspector-view-toolbar.status-bar::shadow .status-bar-item {" +
+             "   color: %s;" +
+             "}", prefix, colorWithAlpha) +
+        String.sprintf(
+             "%s .inspector-view-toolbar.status-bar::shadow .status-bar-button-theme {" +
              "   background-color: %s;" +
-             "}", prefix, prefix, shadowColor);
+             "}", prefix, colorWithAlpha);
 }
 
 WebInspector.resetToolbarColors = function()
@@ -964,13 +959,10 @@ WebInspector.measurePreferredSize = function(element, containerElement)
 {
     containerElement = containerElement || element.ownerDocument.body;
     containerElement.appendChild(element);
-    var fakingComponentRoot = WebInspector.installComponentRootStyles(element);
     element.positionAt(0, 0);
     var result = new Size(element.offsetWidth, element.offsetHeight);
     element.positionAt(undefined, undefined);
     element.remove();
-    if (fakingComponentRoot)
-        WebInspector.uninstallComponentRootStyles(element);
     return result;
 }
 
@@ -1258,3 +1250,144 @@ WebInspector.beautifyFunctionName = function(name)
 {
     return name || WebInspector.UIString("(anonymous function)");
 }
+
+/**
+ * @param {string} localName
+ * @param {string} typeExtension
+ * @param {function(new:T)} extendedType
+ * @param {!Object.<string, function(...*)>} protoTemplate
+ * @param {string=} styleSheet
+ * @suppressGlobalPropertiesCheck
+ * @template T
+ */
+function registerCustomElement(localName, typeExtension, extendedType, protoTemplate, styleSheet)
+{
+    var proto = Object.create(extendedType.prototype);
+    for (var p in protoTemplate)
+        proto[p] = protoTemplate[p];
+
+    if (!protoTemplate["createdCallback"]) {
+        /**
+         * @this {Element}
+         */
+        proto.createdCallback = function() {
+            var root = this.createShadowRoot();
+            root.appendChild(createElement("content"));
+            if (styleSheet)
+                root.appendChild(WebInspector.View.createStyleElement(styleSheet));
+        };
+    }
+    document.registerElement(typeExtension, {
+        prototype: proto,
+        extends: localName
+    });
+}
+
+/**
+ * @param {string} text
+ * @param {function(!Event)=} clickHandler
+ * @param {string=} className
+ * @param {string=} title
+ * @return {!Element}
+ */
+function createTextButton(text, clickHandler, className, title)
+{
+    var element = createElementWithClass("button", className || "", "text-button");
+    element.textContent = text;
+    if (clickHandler)
+        element.addEventListener("click", clickHandler, false);
+    if (title)
+        element.title = title;
+    return element;
+}
+
+/**
+ * @param {string} name
+ * @param {string} title
+ * @param {boolean=} checked
+ * @return {!Element}
+ */
+function createRadioLabel(name, title, checked)
+{
+    var element = createElement("label", "dt-radio");
+    element.radioElement.name = name;
+    element.radioElement.checked = !!checked;
+    element.createTextChild(title);
+    return element;
+}
+
+/**
+ * @param {string=} title
+ * @param {boolean=} checked
+ * @return {!Element}
+ */
+function createCheckboxLabel(title, checked)
+{
+    var element = createElement("label", "dt-checkbox");
+    element.checkboxElement.checked = !!checked;
+    if (title !== undefined) {
+        element.textElement = element.createChild("div", "dt-checkbox-text");
+        element.textElement.textContent = title;
+    }
+    return element;
+}
+
+;(function() {
+    registerCustomElement("button", "text-button", HTMLButtonElement, {
+        /**
+         * @this {Element}
+         */
+        createdCallback: function()
+        {
+            this.type = "button";
+            var root = this.createShadowRoot();
+            root.appendChild(WebInspector.View.createStyleElement("ui/textButton.css"));
+            root.createChild("content");
+        }
+    }, "ui/textButton.css");
+
+    registerCustomElement("label", "dt-radio", HTMLLabelElement, {
+        /**
+         * @this {Element}
+         */
+        createdCallback: function()
+        {
+            this.radioElement = this.createChild("input", "dt-radio-button");
+            this.radioElement.type = "radio";
+
+            var root = this.createShadowRoot();
+            root.appendChild(WebInspector.View.createStyleElement("ui/radioButton.css"));
+            root.createChild("content").select = ".dt-radio-button";
+            root.createChild("content");
+            this.addEventListener("click", radioClickHandler, false);
+        }
+    });
+
+    /**
+     * @param {!Event} event
+     * @suppressReceiverCheck
+     * @this {Element}
+     */
+    function radioClickHandler(event)
+    {
+        if (this.radioElement.checked || this.radioElement.disabled)
+            return;
+        this.radioElement.checked = true;
+        this.radioElement.dispatchEvent(new Event("change"));
+    }
+
+    registerCustomElement("label", "dt-checkbox", HTMLLabelElement, {
+        /**
+         * @this {Element}
+         */
+        createdCallback: function()
+        {
+            var root = this.createShadowRoot();
+            root.appendChild(WebInspector.View.createStyleElement("ui/checkboxTextLabel.css"));
+            this.checkboxElement = this.createChild("input", "dt-checkbox-button");
+            this.checkboxElement.type = "checkbox";
+            root.createChild("content").select = ".dt-checkbox-button";
+            root.createChild("content");
+        }
+    });
+})();

@@ -41,7 +41,6 @@ namespace blink {
 
 class CacheStorage;
 class Dictionary;
-class FetchManager;
 class Request;
 class ScriptPromise;
 class ScriptState;
@@ -61,18 +60,18 @@ public:
     virtual bool isServiceWorkerGlobalScope() const override { return true; }
 
     // WorkerGlobalScope
-    virtual void stopFetch() override;
     virtual void didEvaluateWorkerScript() override;
 
     // ServiceWorkerGlobalScope.idl
     ServiceWorkerClients* clients();
-    String scope(ExecutionContext*);
 
     CacheStorage* caches(ExecutionContext*);
 
     ScriptPromise fetch(ScriptState*, const RequestInfo&, const Dictionary&, ExceptionState&);
 
     void close(ExceptionState&);
+
+    ScriptPromise skipWaiting(ScriptState*);
 
     // EventTarget
     virtual bool addEventListener(const AtomicString& eventType, PassRefPtr<EventListener>, bool useCapture = false) override;
@@ -90,12 +89,13 @@ public:
     virtual void trace(Visitor*) override;
 
 private:
+    class SkipWaitingCallback;
+
     ServiceWorkerGlobalScope(const KURL&, const String& userAgent, ServiceWorkerThread*, double timeOrigin, const SecurityOrigin*, PassOwnPtrWillBeRawPtr<WorkerClients>);
     virtual void importScripts(const Vector<String>& urls, ExceptionState&) override;
     virtual void logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtrWillBeRawPtr<ScriptCallStack>) override;
 
     PersistentWillBeMember<ServiceWorkerClients> m_clients;
-    OwnPtr<FetchManager> m_fetchManager;
     PersistentWillBeMember<CacheStorage> m_caches;
     bool m_didEvaluateScript;
     bool m_hadErrorInTopLevelEventHandler;

@@ -54,4 +54,4 @@ private:
 
 } // namespace blink
 
-#endif
+#endif // SampledEffect_h

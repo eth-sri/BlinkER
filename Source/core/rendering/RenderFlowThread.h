@@ -65,6 +65,7 @@ public:
     virtual LayerType layerTypeRequired() const override final { return NormalLayer; }
 
     virtual void flowThreadDescendantWasInserted(RenderObject*) { }
+    virtual void flowThreadDescendantWillBeRemoved(RenderObject*) { }
 
     virtual bool nodeAtPoint(const HitTestRequest&, HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction) override final;
 
@@ -106,10 +107,6 @@ public:
         return flowThreadPoint + columnOffset(flowThreadPoint);
     }
 
-    void pushFlowThreadLayoutState(const RenderObject&);
-    void popFlowThreadLayoutState();
-    LayoutUnit offsetFromLogicalTopOfFirstRegion(const RenderBlock*) const;
-
     // Used to estimate the maximum height of the flow thread.
     static LayoutUnit maxLogicalHeight() { return LayoutUnit::max() / 2; }
 
@@ -119,12 +116,6 @@ protected:
     void updateRegionsFlowThreadPortionRect();
 
     virtual RenderMultiColumnSet* columnSetAtBlockOffset(LayoutUnit) const = 0;
-
-    bool cachedOffsetFromLogicalTopOfFirstRegion(const RenderBox*, LayoutUnit&) const;
-    void setOffsetFromLogicalTopOfFirstRegion(const RenderBox*, LayoutUnit);
-    void clearOffsetFromLogicalTopOfFirstRegion(const RenderBox*);
-
-    const RenderBox* currentStatePusherRenderBox() const;
 
     RenderMultiColumnSetList m_multiColumnSetList;
 
@@ -150,13 +141,6 @@ protected:
         RenderRegion* m_result;
     };
 
-    // Stack of objects that pushed a LayoutState object on the RenderView. The
-    // objects on the stack are the ones that are curently in the process of being
-    // laid out.
-    ListHashSet<const RenderObject*> m_statePusherObjectsStack;
-    typedef HashMap<const RenderBox*, LayoutUnit> RenderBoxToOffsetMap;
-    RenderBoxToOffsetMap m_boxesToOffsetMap;
-
     MultiColumnSetIntervalTree m_multiColumnSetIntervalTree;
 
     bool m_regionsInvalidated : 1;
@@ -165,16 +149,6 @@ protected:
 };
 
 DEFINE_RENDER_OBJECT_TYPE_CASTS(RenderFlowThread, isRenderFlowThread());
-
-class CurrentRenderFlowThreadMaintainer {
-    WTF_MAKE_NONCOPYABLE(CurrentRenderFlowThreadMaintainer);
-public:
-    CurrentRenderFlowThreadMaintainer(RenderFlowThread*);
-    ~CurrentRenderFlowThreadMaintainer();
-private:
-    RenderFlowThread* m_renderFlowThread;
-    RenderFlowThread* m_previousRenderFlowThread;
-};
 
 // These structures are used by PODIntervalTree for debugging.
 #ifndef NDEBUG

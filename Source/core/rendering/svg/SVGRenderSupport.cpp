@@ -187,11 +187,6 @@ void SVGRenderSupport::computeContainerBoundingBoxes(const RenderObject* contain
     paintInvalidationBoundingBox = strokeBoundingBox;
 }
 
-bool SVGRenderSupport::paintInfoIntersectsPaintInvalidationRect(const FloatRect& localPaintInvalidationRect, const AffineTransform& localTransform, const PaintInfo& paintInfo)
-{
-    return localTransform.mapRect(localPaintInvalidationRect).intersects(paintInfo.rect);
-}
-
 const RenderSVGRoot* SVGRenderSupport::findTreeRootObject(const RenderObject* start)
 {
     while (start && !start->isSVGRoot())
@@ -448,6 +443,29 @@ bool SVGRenderSupport::isRenderableTextNode(const RenderObject* object)
     ASSERT(object->isText());
     // <br> is marked as text, but is not handled by the SVG rendering code-path.
     return object->isSVGInlineText() && !toRenderSVGInlineText(object)->hasEmptyText();
+}
+
+bool SVGRenderSupport::willIsolateBlendingDescendantsForStyle(const RenderStyle* style)
+{
+    ASSERT(style);
+    const SVGRenderStyle& svgStyle = style->svgStyle();
+
+    return style->hasIsolation() || style->opacity() < 1 || style->hasBlendMode()
+        || svgStyle.hasFilter() || svgStyle.hasMasker() || svgStyle.hasClipper();
+}
+
+bool SVGRenderSupport::willIsolateBlendingDescendantsForObject(const RenderObject* object)
+{
+    if (object->isSVGHiddenContainer())
+        return false;
+    if (!object->isSVGRoot() && !object->isSVGContainer())
+        return false;
+    return willIsolateBlendingDescendantsForStyle(object->style());
+}
+
+bool SVGRenderSupport::isIsolationRequired(const RenderObject* object)
+{
+    return willIsolateBlendingDescendantsForObject(object) && object->hasNonIsolatedBlendingDescendants();
 }
 
 }

@@ -125,6 +125,13 @@ DOMTimer::~DOMTimer()
 {
 }
 
+void DOMTimer::dispose()
+{
+    m_action = nullptr;
+    m_userGestureToken = nullptr;
+    stop();
+}
+
 int DOMTimer::timeoutID() const
 {
     return m_timeoutID;
@@ -133,6 +140,7 @@ int DOMTimer::timeoutID() const
 void DOMTimer::didFire()
 {
     ExecutionContext* context = executionContext();
+    ASSERT(context);
     context->setTimerNestingLevel(m_nestingLevel);
     ASSERT(!context->activeDOMObjectsAreSuspended());
     // Only the first execution of a multi-shot timer should get an affirmative user gesture indicator.
@@ -169,16 +177,15 @@ void DOMTimer::didFire()
 
     WTF_LOG(Timers, "DOMTimer::fired: m_timeoutID = %d, one-shot, m_action = %p", m_timeoutID, m_action.get());
 
-    // Delete timer before executing the action for one-shot timers.
-    OwnPtr<ScheduledAction> action = m_action.release();
-
     log->logOperation(log->getCurrentAction(), Operation::WRITE_MEMORY,
                       log->getStrings(VAR_STRINGS).putf("Timer:%d",  m_timeoutID));
     log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE, "undefined");
 
-    LifecycleContext<ExecutionContext>::Observer observer(context);
+    RefPtrWillBeRawPtr<DOMTimer> protect(this);
 
-    // This timer is being deleted; no access to member variables allowed after this point.
+    // Unregister the timer from ExecutionContext before executing the action
+    // for one-shot timers.
+    OwnPtr<ScheduledAction> action = m_action.release();
     context->removeTimeoutByID(m_timeoutID);
 
     action->execute(context);
@@ -186,8 +193,9 @@ void DOMTimer::didFire()
     InspectorInstrumentation::didFireTimer(cookie);
     TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "UpdateCounters", "data", InspectorUpdateCountersEvent::data());
 
-    if (observer.lifecycleContext())
-        context->setTimerNestingLevel(0);
+    // ExecutionContext might be already gone when we executed action->execute().
+    if (executionContext())
+        executionContext()->setTimerNestingLevel(0);
 }
 
 void DOMTimer::contextDestroyed()

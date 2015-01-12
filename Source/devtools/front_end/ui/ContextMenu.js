@@ -180,6 +180,7 @@ WebInspector.ContextSubMenuItem.prototype = {
     },
 
     /**
+     * @override
      * @return {!InspectorFrontendHostAPI.ContextMenuDescriptor}
      */
     _buildDescriptor: function()
@@ -253,7 +254,7 @@ WebInspector.ContextMenu.prototype = {
 
     show: function()
     {
-        Promise.all(this._pendingPromises).then(populateAndShow.bind(this)).done();
+        Promise.all(this._pendingPromises).then(populateAndShow.bind(this));
         WebInspector.ContextMenu._pendingMenu = this;
 
         /**

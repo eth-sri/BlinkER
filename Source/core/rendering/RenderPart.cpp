@@ -25,7 +25,7 @@
 #include "config.h"
 #include "core/rendering/RenderPart.h"
 
-#include "core/accessibility/AXObjectCache.h"
+#include "core/dom/AXObjectCache.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLFrameElementBase.h"
@@ -208,6 +208,10 @@ void RenderPart::styleDidChange(StyleDifference diff, const RenderStyle* oldStyl
 
     if (!widget)
         return;
+
+    // If the iframe has custom scrollbars, recalculate their style.
+    if (widget && widget->isFrameView())
+        toFrameView(widget)->recalculateCustomScrollbarStyle();
 
     if (style()->visibility() != VISIBLE) {
         widget->hide();

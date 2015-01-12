@@ -40,6 +40,7 @@ WebInspector.InplaceFormatterEditorAction.prototype = {
     },
 
     /**
+     * @override
      * @param {!WebInspector.SourcesView} sourcesView
      * @return {!WebInspector.StatusBarButton}
      */
@@ -55,7 +56,7 @@ WebInspector.InplaceFormatterEditorAction.prototype = {
         this._button = new WebInspector.StatusBarButton(WebInspector.UIString("Format"), "format-status-bar-item");
         this._button.setToggled(false);
         this._button.addEventListener("click", this._formatSourceInPlace, this);
-        this._updateButton(null);
+        this._updateButton(sourcesView.currentUISourceCode());
 
         return this._button;
     },
@@ -91,9 +92,8 @@ WebInspector.InplaceFormatterEditorAction.prototype = {
          */
         function contentLoaded(content)
         {
-            var formatter = WebInspector.Formatter.createFormatter(uiSourceCode.contentType());
             var highlighterType = WebInspector.SourcesView.uiSourceCodeHighlighterType(uiSourceCode);
-            formatter.formatContent(highlighterType, content || "", innerCallback.bind(this));
+            WebInspector.Formatter.format(uiSourceCode.contentType(), highlighterType, content || "", innerCallback.bind(this));
         }
 
         /**

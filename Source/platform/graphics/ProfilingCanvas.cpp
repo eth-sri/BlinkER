@@ -57,22 +57,19 @@ AutoStamper::~AutoStamper()
     if (m_profilingCanvas->m_depthCount)
         return;
     double delta = WTF::monotonicallyIncreasingTime() - m_startTime;
-    m_profilingCanvas->m_timings->append(delta);
+    if (m_profilingCanvas->m_timings)
+        m_profilingCanvas->m_timings->append(delta);
 }
 
-ProfilingCanvas::ProfilingCanvas(SkBitmap bitmap) : InterceptingCanvas(bitmap)
+ProfilingCanvas::ProfilingCanvas(SkBitmap bitmap)
+    : InterceptingCanvas(bitmap)
+    , m_timings(nullptr)
 {
 }
 
 void ProfilingCanvas::setTimings(Vector<double>* timings)
 {
     m_timings = timings;
-}
-
-void ProfilingCanvas::clear(SkColor color)
-{
-    AutoStamper stamper(this);
-    this->SkCanvas::clear(color);
 }
 
 void ProfilingCanvas::drawPaint(const SkPaint& paint)
@@ -122,12 +119,6 @@ void ProfilingCanvas::drawBitmapRectToRect(const SkBitmap& bitmap, const SkRect*
 {
     AutoStamper stamper(this);
     this->SkCanvas::drawBitmapRectToRect(bitmap, src, dst, paint, flags);
-}
-
-void ProfilingCanvas::drawBitmapMatrix(const SkBitmap& bitmap, const SkMatrix& m, const SkPaint* paint)
-{
-    AutoStamper stamper(this);
-    this->SkCanvas::drawBitmapMatrix(bitmap, m, paint);
 }
 
 void ProfilingCanvas::drawBitmapNine(const SkBitmap& bitmap, const SkIRect& center, const SkRect& dst, const SkPaint* paint)
@@ -207,18 +198,6 @@ void ProfilingCanvas::onDrawTextBlob(const SkTextBlob *blob, SkScalar x, SkScala
 {
     AutoStamper stamper(this);
     this->SkCanvas::onDrawTextBlob(blob, x, y, paint);
-}
-
-void ProfilingCanvas::onPushCull(const SkRect& cullRect)
-{
-    AutoStamper stamper(this);
-    this->SkCanvas::onPushCull(cullRect);
-}
-
-void ProfilingCanvas::onPopCull()
-{
-    AutoStamper stamper(this);
-    this->SkCanvas::onPopCull();
 }
 
 void ProfilingCanvas::onClipRect(const SkRect& rect, SkRegion::Op op, ClipEdgeStyle edgeStyle)

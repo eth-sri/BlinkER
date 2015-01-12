@@ -42,6 +42,7 @@
 #include "core/dom/Element.h"
 #include "core/dom/Fullscreen.h"
 #include "core/dom/StyleEngine.h"
+#include "core/events/Event.h"
 #include "core/html/HTMLAllCollection.h"
 #include "core/html/HTMLBodyElement.h"
 #include "core/html/HTMLCollection.h"
@@ -284,16 +285,12 @@ WebSize WebDocument::maximumScrollOffset() const
     return WebSize();
 }
 
-void WebDocument::setIsTransitionDocument()
+void WebDocument::setIsTransitionDocument(bool isTransitionDocument)
 {
-    // This ensures the transition UA stylesheet gets applied.
-    unwrap<Document>()->setIsTransitionDocument();
-}
-
-// FIXME: This will be removed once the Chrome side implementation is done
-void WebDocument::beginExitTransition(const WebString& cssSelector)
-{
-    beginExitTransition(cssSelector, false);
+    // When isTransitionDocument is true, it ensures the transition UA
+    // stylesheet gets applied. When isTransitionDocument is false, it ensures
+    // the transition UA stylesheet is not applied when reverting the transition.
+    unwrap<Document>()->setIsTransitionDocument(isTransitionDocument);
 }
 
 void WebDocument::beginExitTransition(const WebString& cssSelector, bool exitToNativeApp)
@@ -301,7 +298,13 @@ void WebDocument::beginExitTransition(const WebString& cssSelector, bool exitToN
     RefPtrWillBeRawPtr<Document> document = unwrap<Document>();
     if (!exitToNativeApp)
         document->hideTransitionElements(cssSelector);
-    document->styleEngine()->enableExitTransitionStylesheets();
+    document->styleEngine()->setExitTransitionStylesheetsEnabled(true);
+}
+
+void WebDocument::revertExitTransition()
+{
+    RefPtrWillBeRawPtr<Document> document = unwrap<Document>();
+    document->styleEngine()->setExitTransitionStylesheetsEnabled(false);
 }
 
 void WebDocument::hideTransitionElements(const WebString& cssSelector)

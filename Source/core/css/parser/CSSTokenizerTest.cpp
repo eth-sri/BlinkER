@@ -63,9 +63,6 @@ void testTokens(const String& string, const CSSParserToken& token1, const CSSPar
 
     Vector<CSSParserToken> actualTokens;
     CSSTokenizer::tokenize(string, actualTokens);
-    ASSERT_FALSE(actualTokens.isEmpty());
-    ASSERT_EQ(EOFToken, actualTokens.last().type());
-    actualTokens.removeLast();
 
     ASSERT_EQ(expectedTokens.size(), actualTokens.size());
     for (size_t i = 0; i < expectedTokens.size(); ++i)
@@ -73,6 +70,7 @@ void testTokens(const String& string, const CSSParserToken& token1, const CSSPar
 }
 
 static CSSParserToken ident(const String& string) { return CSSParserToken(IdentToken, string); }
+static CSSParserToken atKeyword(const String& string) { return CSSParserToken(AtKeywordToken, string); }
 static CSSParserToken string(const String& string) { return CSSParserToken(StringToken, string); }
 static CSSParserToken function(const String& string) { return CSSParserToken(FunctionToken, string); }
 static CSSParserToken url(const String& string) { return CSSParserToken(UrlToken, string); }
@@ -103,6 +101,12 @@ DEFINE_STATIC_LOCAL(CSSParserToken, whitespace, (WhitespaceToken));
 DEFINE_STATIC_LOCAL(CSSParserToken, colon, (ColonToken));
 DEFINE_STATIC_LOCAL(CSSParserToken, semicolon, (SemicolonToken));
 DEFINE_STATIC_LOCAL(CSSParserToken, comma, (CommaToken));
+DEFINE_STATIC_LOCAL(CSSParserToken, includeMatch, (IncludeMatchToken));
+DEFINE_STATIC_LOCAL(CSSParserToken, dashMatch, (DashMatchToken));
+DEFINE_STATIC_LOCAL(CSSParserToken, prefixMatch, (PrefixMatchToken));
+DEFINE_STATIC_LOCAL(CSSParserToken, suffixMatch, (SuffixMatchToken));
+DEFINE_STATIC_LOCAL(CSSParserToken, substringMatch, (SubstringMatchToken));
+DEFINE_STATIC_LOCAL(CSSParserToken, column, (ColumnToken));
 DEFINE_STATIC_LOCAL(CSSParserToken, leftParenthesis, (LeftParenthesisToken));
 DEFINE_STATIC_LOCAL(CSSParserToken, rightParenthesis, (RightParenthesisToken));
 DEFINE_STATIC_LOCAL(CSSParserToken, leftBracket, (LeftBracketToken));
@@ -135,14 +139,31 @@ TEST(CSSTokenizerTest, SingleCharacterTokens)
     TEST_TOKENS(",,", comma, comma);
 }
 
+TEST(CSSTokenizerTest, MultipleCharacterTokens)
+{
+    TEST_TOKENS("~=", includeMatch);
+    TEST_TOKENS("|=", dashMatch);
+    TEST_TOKENS("^=", prefixMatch);
+    TEST_TOKENS("$=", suffixMatch);
+    TEST_TOKENS("*=", substringMatch);
+    TEST_TOKENS("||", column);
+    TEST_TOKENS("|||", column, delim('|'));
+}
+
 TEST(CSSTokenizerTest, DelimiterToken)
 {
+    TEST_TOKENS("^", delim('^'));
     TEST_TOKENS("*", delim('*'));
     TEST_TOKENS("%", delim('%'));
     TEST_TOKENS("~", delim('~'));
     TEST_TOKENS("&", delim('&'));
+    TEST_TOKENS("|", delim('|'));
     TEST_TOKENS("\x7f", delim('\x7f'));
     TEST_TOKENS("\1", delim('\x1'));
+    TEST_TOKENS("~-", delim('~'), delim('-'));
+    TEST_TOKENS("^|", delim('^'), delim('|'));
+    TEST_TOKENS("$~", delim('$'), delim('~'));
+    TEST_TOKENS("*^", delim('*'), delim('^'));
 }
 
 TEST(CSSTokenizerTest, WhitespaceTokens)
@@ -218,6 +239,23 @@ TEST(CSSTokenizerTest, FunctionToken)
     TEST_TOKENS("foo(  \'bar.gif\'", function("foo"), whitespace, string("bar.gif"));
     // To simplify implementation we drop the whitespace in function(url),whitespace,string()
     TEST_TOKENS("url(  \'bar.gif\'", function("url"), string("bar.gif"));
+}
+
+TEST(CSSTokenizerTest, AtKeywordToken)
+{
+    TEST_TOKENS("@at-keyword", atKeyword("at-keyword"));
+    TEST_TOKENS("@testing123", atKeyword("testing123"));
+    TEST_TOKENS("@hello!", atKeyword("hello"), delim('!'));
+    TEST_TOKENS("@-text", atKeyword("-text"));
+    TEST_TOKENS("@--abc", atKeyword("--abc"));
+    TEST_TOKENS("@--", atKeyword("--"));
+    TEST_TOKENS("@--11", atKeyword("--11"));
+    TEST_TOKENS("@---", atKeyword("---"));
+    TEST_TOKENS("@\\ ", atKeyword(" "));
+    TEST_TOKENS("@-\\ ", atKeyword("- "));
+    TEST_TOKENS("@@", delim('@'), delim('@'));
+    TEST_TOKENS("@2", delim('@'), number(IntegerValueType, 2));
+    TEST_TOKENS("@-1", delim('@'), number(IntegerValueType, -1));
 }
 
 TEST(CSSTokenizerTest, UrlToken)

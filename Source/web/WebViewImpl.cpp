@@ -61,6 +61,7 @@
 #include "core/html/HTMLPlugInElement.h"
 #include "core/html/HTMLTextAreaElement.h"
 #include "core/html/canvas/WebGLRenderingContext.h"
+#include "core/html/forms/PopupMenuClient.h"
 #include "core/html/ime/InputMethodContext.h"
 #include "core/inspector/InspectorController.h"
 #include "core/loader/DocumentLoader.h"
@@ -103,7 +104,6 @@
 #include "platform/PlatformKeyboardEvent.h"
 #include "platform/PlatformMouseEvent.h"
 #include "platform/PlatformWheelEvent.h"
-#include "platform/PopupMenuClient.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/TraceEvent.h"
 #include "platform/UserGestureIndicator.h"
@@ -220,16 +220,16 @@ static WillBeHeapVector<RawPtrWillBeMember<ScopedPageLoadDeferrer> >& pageLoadDe
 
 // Ensure that the WebDragOperation enum values stay in sync with the original
 // DragOperation constants.
-#define COMPILE_ASSERT_MATCHING_ENUM(coreName) \
-    COMPILE_ASSERT(int(coreName) == int(Web##coreName), dummy##coreName)
-COMPILE_ASSERT_MATCHING_ENUM(DragOperationNone);
-COMPILE_ASSERT_MATCHING_ENUM(DragOperationCopy);
-COMPILE_ASSERT_MATCHING_ENUM(DragOperationLink);
-COMPILE_ASSERT_MATCHING_ENUM(DragOperationGeneric);
-COMPILE_ASSERT_MATCHING_ENUM(DragOperationPrivate);
-COMPILE_ASSERT_MATCHING_ENUM(DragOperationMove);
-COMPILE_ASSERT_MATCHING_ENUM(DragOperationDelete);
-COMPILE_ASSERT_MATCHING_ENUM(DragOperationEvery);
+#define STATIC_ASSERT_MATCHING_ENUM(coreName) \
+    static_assert(int(coreName) == int(Web##coreName), "DragOperation and WebDragOperation enum mismatch: " #coreName)
+STATIC_ASSERT_MATCHING_ENUM(DragOperationNone);
+STATIC_ASSERT_MATCHING_ENUM(DragOperationCopy);
+STATIC_ASSERT_MATCHING_ENUM(DragOperationLink);
+STATIC_ASSERT_MATCHING_ENUM(DragOperationGeneric);
+STATIC_ASSERT_MATCHING_ENUM(DragOperationPrivate);
+STATIC_ASSERT_MATCHING_ENUM(DragOperationMove);
+STATIC_ASSERT_MATCHING_ENUM(DragOperationDelete);
+STATIC_ASSERT_MATCHING_ENUM(DragOperationEvery);
 
 static bool shouldUseExternalPopupMenus = false;
 
@@ -335,11 +335,6 @@ void WebViewImpl::setMainFrame(WebFrame* frame)
         toWebRemoteFrameImpl(frame)->initializeCoreFrame(&page()->frameHost(), 0, nullAtom);
 }
 
-void WebViewImpl::setAutofillClient(WebAutofillClient* autofillClient)
-{
-    m_autofillClient = autofillClient;
-}
-
 void WebViewImpl::setCredentialManagerClient(WebCredentialManagerClient* webCredentialManagerClient)
 {
     ASSERT(m_page);
@@ -367,7 +362,6 @@ void WebViewImpl::setSpellCheckClient(WebSpellCheckClient* spellCheckClient)
 
 WebViewImpl::WebViewImpl(WebViewClient* client)
     : m_client(client)
-    , m_autofillClient(0)
     , m_spellCheckClient(0)
     , m_chromeClientImpl(this)
     , m_contextMenuClientImpl(this)
@@ -535,17 +529,17 @@ void WebViewImpl::handleMouseDown(LocalFrame& mainFrame, const WebMouseEvent& ev
     }
 
     // Dispatch the contextmenu event regardless of if the click was swallowed.
-#if OS(WIN)
-    // On Windows, we handle it on mouse up, not down.
-#elif OS(MACOSX)
-    if (event.button == WebMouseEvent::ButtonRight
-        || (event.button == WebMouseEvent::ButtonLeft
-            && event.modifiers & WebMouseEvent::ControlKey))
-        mouseContextMenu(event);
+    if (!page()->settings().showContextMenuOnMouseUp()) {
+#if OS(MACOSX)
+        if (event.button == WebMouseEvent::ButtonRight
+            || (event.button == WebMouseEvent::ButtonLeft
+                && event.modifiers & WebMouseEvent::ControlKey))
+            mouseContextMenu(event);
 #else
-    if (event.button == WebMouseEvent::ButtonRight)
-        mouseContextMenu(event);
+        if (event.button == WebMouseEvent::ButtonRight)
+            mouseContextMenu(event);
 #endif
+    }
 }
 
 void WebViewImpl::mouseContextMenu(const WebMouseEvent& event)
@@ -585,12 +579,12 @@ void WebViewImpl::handleMouseUp(LocalFrame& mainFrame, const WebMouseEvent& even
 {
     PageWidgetEventHandler::handleMouseUp(mainFrame, event);
 
-#if OS(WIN)
-    // Dispatch the contextmenu event regardless of if the click was swallowed.
-    // On Mac/Linux, we handle it on mouse down, not up.
-    if (event.button == WebMouseEvent::ButtonRight)
-        mouseContextMenu(event);
-#endif
+    if (page()->settings().showContextMenuOnMouseUp()) {
+        // Dispatch the contextmenu event regardless of if the click was swallowed.
+        // On Mac/Linux, we handle it on mouse down, not up.
+        if (event.button == WebMouseEvent::ButtonRight)
+            mouseContextMenu(event);
+    }
 }
 
 bool WebViewImpl::handleMouseWheel(LocalFrame& mainFrame, const WebMouseWheelEvent& event)
@@ -692,7 +686,6 @@ bool WebViewImpl::handleGestureEvent(const WebGestureEvent& event)
         m_client->cancelScheduledContentIntents();
     case WebInputEvent::GestureScrollEnd:
     case WebInputEvent::GestureScrollUpdate:
-    case WebInputEvent::GestureScrollUpdateWithoutPropagation:
     case WebInputEvent::GesturePinchEnd:
     case WebInputEvent::GesturePinchUpdate:
     case WebInputEvent::GestureFlingStart:
@@ -917,35 +910,6 @@ void WebViewImpl::setShowScrollBottleneckRects(bool show)
     if (m_layerTreeView)
         m_layerTreeView->setShowScrollBottleneckRects(show);
     m_showScrollBottleneckRects = show;
-}
-
-void WebViewImpl::getSelectionRootBounds(WebRect& bounds) const
-{
-    const Frame* frame = focusedCoreFrame();
-    if (!frame || !frame->isLocalFrame())
-        return;
-
-    Element* root = toLocalFrame(frame)->selection().rootEditableElementOrDocumentElement();
-    if (!root)
-        return;
-
-    // If the selection is inside a form control, the root will be a <div> that
-    // behaves as the editor but we want to return the actual element's bounds.
-    // In practice, that means <textarea> and <input> controls that behave like
-    // a text field.
-    Element* shadowHost = root->shadowHost();
-    if (shadowHost
-        && (isHTMLTextAreaElement(*shadowHost)
-            || (isHTMLInputElement(*shadowHost) && toHTMLInputElement(*shadowHost).isTextField())))
-        root = shadowHost;
-
-    IntRect boundingBox = isHTMLHtmlElement(root)
-        ? IntRect(IntPoint(0, 0), root->document().frame()->view()->contentsSize())
-        : root->pixelSnappedBoundingBox();
-
-    boundingBox = root->document().frame()->view()->contentsToWindow(boundingBox);
-    boundingBox.scale(pageScaleFactor());
-    bounds = boundingBox;
 }
 
 void WebViewImpl::acceptLanguagesChanged()
@@ -1592,7 +1556,7 @@ void WebViewImpl::closePagePopup(PagePopup* popup)
     m_pagePopup = nullptr;
 }
 
-LocalDOMWindow* WebViewImpl::pagePopupWindow()
+LocalDOMWindow* WebViewImpl::pagePopupWindow() const
 {
     return m_pagePopup ? m_pagePopup->window() : nullptr;
 }
@@ -1733,11 +1697,15 @@ void WebViewImpl::didUpdateTopControls()
 
         pinchViewport.setTopControlsAdjustment(topControlsViewportAdjustment);
 
+// On ChromeOS the pinch viewport can change size independent of the layout viewport due to the
+// on screen keyboard so we should only set the FrameView adjustment on Android.
+#if OS(ANDROID)
         // Shrink the FrameView by the amount that will maintain the aspect-ratio with the PinchViewport.
         float aspectRatio = pinchViewport.visibleRect().width() / pinchViewport.visibleRect().height();
         float newHeight = view->unscaledVisibleContentSize(ExcludeScrollbars).width() / aspectRatio;
         float adjustment = newHeight - view->unscaledVisibleContentSize(ExcludeScrollbars).height();
         view->setTopControlsViewportAdjustment(adjustment);
+#endif
     }
 }
 
@@ -1782,6 +1750,9 @@ void WebViewImpl::resize(const WebSize& newSize)
     m_fullscreenController->updateSize();
 
     if (settings()->viewportEnabled()) {
+        PinchViewport& pinchViewport = page()->frameHost().pinchViewport();
+        FloatPoint viewportOffsetBeforeResize = pinchViewport.visibleRectInDocument().location();
+
         // Relayout immediately to recalculate the minimum scale limit.
         if (view->needsLayout())
             view->layout();
@@ -1798,6 +1769,9 @@ void WebViewImpl::resize(const WebSize& newSize)
             viewportAnchor.computeOrigins(*view, pinchViewportSize,
                 mainFrameOrigin, pinchViewportOrigin);
             scrollAndRescaleViewports(newPageScaleFactor, mainFrameOrigin, pinchViewportOrigin);
+        } else {
+            FloatSize deltaFromResize = viewportOffsetBeforeResize - pinchViewport.visibleRectInDocument().location();
+            pinchViewport.move(FloatPoint(deltaFromResize));
         }
     }
 
@@ -1873,25 +1847,20 @@ void WebViewImpl::beginFrame(const WebBeginFrameArgs& frameTime)
     }
 }
 
-void WebViewImpl::didCommitFrameToCompositor()
-{
-    // TODO: Remove this function.
-}
-
 void WebViewImpl::layout()
 {
     TRACE_EVENT0("blink", "WebViewImpl::layout");
     if (!localFrameRootTemporary())
         return;
 
+    if (m_devToolsAgent)
+        m_devToolsAgent->willLayout();
+
     PageWidgetDelegate::layout(*m_page, *localFrameRootTemporary()->frame());
     updateLayerTreeBackgroundColor();
 
     for (size_t i = 0; i < m_linkHighlights.size(); ++i)
         m_linkHighlights[i]->updateGeometry();
-
-    if (m_devToolsAgent)
-        m_devToolsAgent->didLayout();
 }
 
 void WebViewImpl::paint(WebCanvas* canvas, const WebRect& rect)
@@ -2039,8 +2008,7 @@ static String inputTypeToName(WebInputEvent::Type type)
 
 bool WebViewImpl::handleInputEvent(const WebInputEvent& inputEvent)
 {
-    WebAutofillClient* autofillClient = m_autofillClient ? m_autofillClient :
-        mainFrameImpl() ? mainFrameImpl()->autofillClient() : 0;
+    WebAutofillClient* autofillClient = mainFrameImpl() ? mainFrameImpl()->autofillClient() : 0;
     UserGestureNotifier notifier(autofillClient, &m_userGestureObserved);
     // On the first input event since page load, |notifier| instructs the
     // autofill client to unblock values of password input fields of any forms
@@ -2170,8 +2138,7 @@ void WebViewImpl::setFocus(bool enable)
         if (focusedFrame && focusedFrame->isLocalFrame()) {
             // Finish an ongoing composition to delete the composition node.
             if (toLocalFrame(focusedFrame.get())->inputMethodController().hasComposition()) {
-                WebAutofillClient* autofillClient = m_autofillClient ? m_autofillClient :
-                    WebLocalFrameImpl::fromFrame(toLocalFrame(focusedFrame.get()))->autofillClient();
+                WebAutofillClient* autofillClient = WebLocalFrameImpl::fromFrame(toLocalFrame(focusedFrame.get()))->autofillClient();
 
                 if (autofillClient)
                     autofillClient->setIgnoreTextChanges(true);
@@ -3372,10 +3339,9 @@ WebSize WebViewImpl::contentsPreferredMinimumSize()
         return WebSize();
 
     layout();
-    FontCachePurgePreventer fontCachePurgePreventer; // Required by minPreferredLogicalWidth().
-    IntSize preferredMinimumSize(document->renderView()->minPreferredLogicalWidth(), document->documentElement()->scrollHeight());
-    preferredMinimumSize.scale(zoomLevelToZoomFactor(zoomLevel()));
-    return preferredMinimumSize;
+    int widthScaled = document->renderView()->minPreferredLogicalWidth(); // Already accounts for zoom.
+    int heightScaled = static_cast<int>(document->documentElement()->scrollHeight() * zoomLevelToZoomFactor(zoomLevel()));
+    return IntSize(widthScaled, heightScaled);
 }
 
 float WebViewImpl::minimumPageScaleFactor() const
@@ -3588,8 +3554,7 @@ void WebViewImpl::dragTargetDrop(const WebPoint& clientPoint,
 {
     ASSERT(m_currentDragData);
 
-    WebAutofillClient* autofillClient =  m_autofillClient ? m_autofillClient :
-        mainFrameImpl() ? mainFrameImpl()->autofillClient() : 0;
+    WebAutofillClient* autofillClient = mainFrameImpl() ? mainFrameImpl()->autofillClient() : 0;
     UserGestureNotifier notifier(autofillClient, &m_userGestureObserved);
 
     // If this webview transitions from the "drop accepting" state to the "not
@@ -3820,7 +3785,7 @@ void WebViewImpl::extractSmartClipData(WebRect rect, WebString& clipText, WebStr
     if (!range)
         return;
 
-    clipHtml = createMarkup(range.get(), 0, AnnotateForInterchange, false, ResolveNonLocalURLs);
+    clipHtml = createMarkup(range.get(), AnnotateForInterchange, false, ResolveNonLocalURLs);
 }
 
 void WebViewImpl::hidePopups()
@@ -4336,12 +4301,16 @@ void WebViewImpl::updateMainFrameScrollPosition(const IntPoint& scrollPosition, 
 void WebViewImpl::applyViewportDeltas(
     const WebSize& pinchViewportDelta,
     const WebSize& mainFrameDelta,
+    const WebFloatSize& elasticOverscrollDelta,
     float pageScaleDelta,
     float topControlsDelta)
 {
     ASSERT(pinchVirtualViewportEnabled());
 
-    if (!mainFrameImpl() || !mainFrameImpl()->frameView())
+    if (!mainFrameImpl())
+        return;
+    FrameView* frameView = mainFrameImpl()->frameView();
+    if (!frameView)
         return;
 
     setTopControlsContentOffset(m_topControlsContentOffset + topControlsDelta);
@@ -4352,6 +4321,8 @@ void WebViewImpl::applyViewportDeltas(
 
     if (pageScaleDelta != 1)
         m_doubleTapZoomPending = false;
+
+    frameView->setElasticOverscroll(elasticOverscrollDelta + frameView->elasticOverscroll());
 
     IntPoint mainFrameScrollOffset = IntPoint(mainFrame()->scrollOffset());
     mainFrameScrollOffset.move(mainFrameDelta.width, mainFrameDelta.height);

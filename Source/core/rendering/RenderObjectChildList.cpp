@@ -27,7 +27,7 @@
 #include "config.h"
 #include "core/rendering/RenderObjectChildList.h"
 
-#include "core/accessibility/AXObjectCache.h"
+#include "core/dom/AXObjectCache.h"
 #include "core/rendering/RenderCounter.h"
 #include "core/rendering/RenderLayer.h"
 #include "core/rendering/RenderObject.h"
@@ -174,7 +174,7 @@ void RenderObjectChildList::insertChildNode(RenderObject* owner, RenderObject* n
         cache->childrenChanged(owner);
 }
 
-void RenderObjectChildList::invalidatePaintOnRemoval(RenderObject& oldChild)
+void RenderObjectChildList::invalidatePaintOnRemoval(const RenderObject& oldChild)
 {
     if (!oldChild.isRooted())
         return;

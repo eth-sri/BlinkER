@@ -245,7 +245,7 @@ InspectorBackendClass._generateCommands = function(schema) {
     }
     function generateEnum(enumName, items)
     {
-        var members = []
+        var members = [];
         for (var m = 0; m < items.length; ++m) {
             var value = items[m];
             var name = value.replace(/-(\w)/g, toUpperCase.bind(null, 1)).toTitleCase();
@@ -352,7 +352,7 @@ InspectorBackendClass.Connection.prototype = {
         }
 
         for (var domain in dispatcherPrototypes)
-            this._dispatchers[domain] = Object.create(dispatcherPrototypes[domain])
+            this._dispatchers[domain] = Object.create(dispatcherPrototypes[domain]);
 
     },
 
@@ -562,10 +562,10 @@ InspectorBackendClass.Connection.prototype = {
 
     _runPendingCallbacks: function()
     {
-        var keys = Object.keys(this._callbacks).map(function(num) {return parseInt(num, 10)});
+        var keys = Object.keys(this._callbacks).map(function(num) { return parseInt(num, 10); });
         for (var i = 0; i < keys.length; ++i) {
             var callback = this._callbacks[keys[i]];
-            this._dispatchConnectionErrorResponse(callback.domain, callback.methodName, callback)
+            this._dispatchConnectionErrorResponse(callback.domain, callback.methodName, callback);
         }
         this._callbacks = {};
     },
@@ -614,8 +614,8 @@ InspectorBackendClass.MainConnection = function()
 }
 
 InspectorBackendClass.MainConnection.prototype = {
-
     /**
+     * @override
      * @param {!Object} messageObject
      */
     sendMessage: function(messageObject)
@@ -686,7 +686,7 @@ InspectorBackendClass.WebSocketConnection.prototype = {
      */
     _onMessage: function(message)
     {
-        var data = /** @type {string} */ (message.data)
+        var data = /** @type {string} */ (message.data);
         this.dispatch(data);
     },
 
@@ -699,6 +699,7 @@ InspectorBackendClass.WebSocketConnection.prototype = {
     },
 
     /**
+     * @override
      * @param {!Object} messageObject
      */
     sendMessage: function(messageObject)
@@ -721,13 +722,12 @@ InspectorBackendClass.StubConnection = function()
 }
 
 InspectorBackendClass.StubConnection.prototype = {
-
     /**
+     * @override
      * @param {!Object} messageObject
      */
     sendMessage: function(messageObject)
     {
-        var message = JSON.stringify(messageObject);
         setTimeout(this._echoResponse.bind(this, messageObject), 0);
     },
 
@@ -736,7 +736,7 @@ InspectorBackendClass.StubConnection.prototype = {
      */
     _echoResponse: function(messageObject)
     {
-        this.dispatch(messageObject)
+        this.dispatch(messageObject);
     },
 
     __proto__: InspectorBackendClass.Connection.prototype
@@ -911,7 +911,7 @@ InspectorBackendClass.AgentPrototype.prototype = {
         }
         var params = this._prepareParameters(method, signature, args, false, onError);
         if (errorMessage)
-            return Promise.rejectWithError(errorMessage);
+            return Promise.reject(new Error(errorMessage));
         else
             return new Promise(promiseAction.bind(this));
 
@@ -928,10 +928,12 @@ InspectorBackendClass.AgentPrototype.prototype = {
              */
             function callback(error, result)
             {
-                if (error)
-                    reject(new Error(error));
-                else
-                    resolve(replyArgs.length ? result : undefined);
+                if (error) {
+                    console.error(error);
+                    resolve(null);
+                    return;
+                }
+                resolve(replyArgs.length ? result : undefined);
             }
             this._connection._wrapCallbackAndSendMessageObject(this._domain, method, params, callback);
         }
@@ -1000,7 +1002,7 @@ InspectorBackendClass.DispatcherPrototype.prototype = {
      */
     registerEvent: function(eventName, params)
     {
-        this._eventArgs[eventName] = params
+        this._eventArgs[eventName] = params;
     },
 
     /**

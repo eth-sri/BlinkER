@@ -23,6 +23,7 @@ InspectorTest.timelinePropertyFormatters = {
     columnNumber: "formatAsTypeName",
     frameId: "formatAsTypeName",
     frame: "formatAsTypeName",
+    page: "formatAsTypeName",
     encodedDataLength: "formatAsTypeName",
     identifier: "formatAsTypeName",
     clip: "formatAsTypeName",
@@ -33,6 +34,30 @@ InspectorTest.timelinePropertyFormatters = {
     networkTime: "formatAsTypeName",
     thread: "formatAsTypeName"
 };
+
+InspectorTest.InvalidationFormatters = {
+    _tracingEvent: "skip",
+    cause: "formatAsInvalidationCause",
+    frame: "skip",
+    invalidatedSelectorId: "skip",
+    invalidationList: "skip",
+    invalidationSet: "skip",
+    linkedRecalcStyleEvent: "skip",
+    linkedLayoutEvent: "skip",
+    nodeId: "skip",
+    paintId: "skip",
+    startTime: "skip",
+};
+
+InspectorTest.formatters.formatAsInvalidationCause = function(cause)
+{
+    if (!cause)
+        return "<undefined>";
+    var stackTrace;
+    if (cause.stackTrace && cause.stackTrace.length)
+        stackTrace = InspectorTest.formatters.formatAsURL(cause.stackTrace[0].url) + ":" + cause.stackTrace[0].lineNumber;
+    return "{reason: " + cause.reason + ", stackTrace: " + stackTrace + "}";
+}
 
 InspectorTest.switchTimelineToWaterfallMode = function()
 {
@@ -182,7 +207,7 @@ InspectorTest.dumpTimelineRecord = function(record, detailsCallback, level, filt
         message = message + "> ";
     if (record.type() === WebInspector.TimelineModel.RecordType.TimeStamp
         || record.type() === WebInspector.TimelineModel.RecordType.ConsoleTime) {
-        message += WebInspector.TimelineUIUtils.titleForRecord(record);
+        message += WebInspector.TimelineUIUtils.eventTitle(record.traceEvent());
     } else  {
         message += record.type();
     }
@@ -232,7 +257,7 @@ InspectorTest.dumpPresentationRecord = function(presentationRecord, detailsCallb
         message += record.type() + " x " + presentationRecord.presentationChildren().length;
     } else if (record.type() === WebInspector.TimelineModel.RecordType.TimeStamp
         || record.type() === WebInspector.TimelineModel.RecordType.ConsoleTime) {
-        message += WebInspector.TimelineUIUtils.titleForRecord(record);
+        message += WebInspector.TimelineUIUtils.eventTitle(record.traceEvent());
     } else {
         message += record.type();
     }
@@ -261,7 +286,7 @@ InspectorTest.printTimelineRecordProperties = function(record)
     var names = ["data", "endTime", "frameId", "stackTrace", "startTime", "thread", "type"];
     for (var i = 0; i < names.length; i++) {
         var name = names[i];
-        var value = record[name].call(record)
+        var value = record[name].call(record);
         if (value)
             object[name] = value;
     }
@@ -369,3 +394,21 @@ InspectorTest.FakeFileReader.prototype = {
 };
 
 };
+
+function generateFrames(count, callback)
+{
+    if (!window.testRunner) {
+        callback();
+        return;
+    }
+    makeFrame();
+    function makeFrame()
+    {
+        document.body.style.backgroundColor = count & 1 ? "rgb(200, 200, 200)" : "rgb(240, 240, 240)";
+        if (!--count) {
+            callback();
+            return;
+        }
+        testRunner.displayAsyncThen(requestAnimationFrame.bind(window, makeFrame));
+    }
+}

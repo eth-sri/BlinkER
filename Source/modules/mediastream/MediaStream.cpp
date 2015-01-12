@@ -260,9 +260,9 @@ void MediaStream::stop()
     if (ended())
         return;
 
-    MediaStreamCenter::instance().didStopLocalMediaStream(descriptor());
-
     streamEnded();
+
+    MediaStreamCenter::instance().didStopLocalMediaStream(descriptor());
 }
 
 void MediaStream::trackEnded()
@@ -392,7 +392,7 @@ void MediaStream::trace(Visitor* visitor)
     visitor->trace(m_audioTracks);
     visitor->trace(m_videoTracks);
     visitor->trace(m_scheduledEvents);
-    EventTargetWithInlineData::trace(visitor);
+    RefCountedGarbageCollectedEventTargetWithInlineData<MediaStream>::trace(visitor);
 }
 
 } // namespace blink

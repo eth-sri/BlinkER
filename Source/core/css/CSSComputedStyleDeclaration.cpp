@@ -37,6 +37,7 @@
 #include "core/css/CSSGridLineNamesValue.h"
 #include "core/css/CSSGridTemplateAreasValue.h"
 #include "core/css/CSSLineBoxContainValue.h"
+#include "core/css/CSSPathValue.h"
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSPrimitiveValueMappings.h"
 #include "core/css/CSSPropertyMetadata.h"
@@ -59,6 +60,7 @@
 #include "core/rendering/RenderGrid.h"
 #include "core/rendering/style/ContentData.h"
 #include "core/rendering/style/CounterContent.h"
+#include "core/rendering/style/PathStyleMotionPath.h"
 #include "core/rendering/style/RenderStyle.h"
 #include "core/rendering/style/ShadowList.h"
 #include "core/rendering/style/ShapeValue.h"
@@ -763,7 +765,7 @@ static PassRefPtrWillBeRawPtr<CSSValue> computedTransform(RenderObject* renderer
         box = pixelSnappedIntRect(toRenderBox(renderer)->borderBoxRect());
 
     TransformationMatrix transform;
-    style.applyTransform(transform, LayoutSize(box.size()), RenderStyle::ExcludeTransformOrigin);
+    style.applyTransform(transform, LayoutSize(box.size()), RenderStyle::ExcludeTransformOrigin, RenderStyle::ExcludeMotionPath);
 
     // FIXME: Need to print out individual functions (https://bugs.webkit.org/show_bug.cgi?id=23924)
     RefPtrWillBeRawPtr<CSSValueList> list = CSSValueList::createSpaceSeparated();
@@ -1402,7 +1404,7 @@ static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> valueForLineHeight(RenderStyle&
 
 static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> valueForFontSize(RenderStyle& style)
 {
-    return zoomAdjustedPixelValue(RuntimeEnabledFeatures::subpixelFontScalingEnabled() ? style.fontDescription().computedSize() : style.fontDescription().computedPixelSize(), style);
+    return zoomAdjustedPixelValue(style.fontDescription().computedSize(), style);
 }
 
 static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> valueForFontStretch(RenderStyle& style)
@@ -1505,6 +1507,9 @@ static bool isLayoutDependent(CSSPropertyID propertyID, PassRefPtr<RenderStyle> 
     case CSSPropertyWebkitTransform:
     case CSSPropertyTransformOrigin:
     case CSSPropertyWebkitTransformOrigin:
+    case CSSPropertyMotionPath:
+    case CSSPropertyMotionPosition:
+    case CSSPropertyMotionRotation:
     case CSSPropertyWidth:
     case CSSPropertyWebkitFilter:
         return true;
@@ -2312,8 +2317,6 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValu
         case CSSPropertyWhiteSpace:
             return cssValuePool().createValue(style->whiteSpace());
         case CSSPropertyWidows:
-            if (style->hasAutoWidows())
-                return cssValuePool().createIdentifierValue(CSSValueAuto);
             return cssValuePool().createValue(style->widows(), CSSPrimitiveValue::CSS_NUMBER);
         case CSSPropertyWidth:
             if (renderer) {
@@ -2720,6 +2723,33 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValu
         case CSSPropertyBackgroundRepeatX:
         case CSSPropertyBackgroundRepeatY:
             break;
+
+        case CSSPropertyMotion:
+            ASSERT(RuntimeEnabledFeatures::cssMotionPathEnabled());
+            return valuesForShorthandProperty(motionShorthand());
+
+        case CSSPropertyMotionPath: {
+            ASSERT(RuntimeEnabledFeatures::cssMotionPathEnabled());
+            const StyleMotionPath* styleMotionPath = style->motionPath();
+            if (!styleMotionPath)
+                return cssValuePool().createIdentifierValue(CSSValueNone);
+
+            ASSERT(styleMotionPath->isPathStyleMotionPath());
+            return CSSPathValue::create(toPathStyleMotionPath(styleMotionPath)->pathString());
+        }
+
+        case CSSPropertyMotionPosition:
+            ASSERT(RuntimeEnabledFeatures::cssMotionPathEnabled());
+            return zoomAdjustedPixelValueForLength(style->motionPosition(), *style);
+
+        case CSSPropertyMotionRotation: {
+            ASSERT(RuntimeEnabledFeatures::cssMotionPathEnabled());
+            RefPtrWillBeRawPtr<CSSValueList> list = CSSValueList::createSpaceSeparated();
+            if (style->motionRotationType() == MotionRotationAuto)
+                list->append(cssValuePool().createIdentifierValue(CSSValueAuto));
+            list->append(cssValuePool().createValue(style->motionRotation(), CSSPrimitiveValue::CSS_DEG));
+            return list.release();
+        }
 
         /* Unimplemented CSS 3 properties (including CSS3 shorthand properties) */
         case CSSPropertyWebkitTextEmphasis:

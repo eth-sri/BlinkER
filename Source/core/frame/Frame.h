@@ -28,6 +28,7 @@
 #ifndef Frame_h
 #define Frame_h
 
+#include "core/frame/FrameTypes.h"
 #include "core/page/FrameTree.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
@@ -61,6 +62,7 @@ public:
     virtual DOMWindow* domWindow() const = 0;
 
     virtual void navigate(Document& originDocument, const KURL&, bool lockBackForwardList) = 0;
+    virtual void reload(ReloadPolicy, ClientRedirectPolicy) = 0;
 
     virtual void detach();
     void detachChildren();
@@ -99,6 +101,8 @@ public:
     // it can be removed and its callers can be converted to use the isRemoteFrame()
     // method.
     bool isRemoteFrameTemporary() const { return m_remotePlatformLayer; }
+
+    virtual bool checkLoadComplete() = 0;
 
 protected:
     Frame(FrameClient*, FrameHost*, FrameOwner*);

@@ -166,8 +166,8 @@ static RenderBoxModelObject* nextContinuation(RenderObject* renderer)
     return 0;
 }
 
-AXRenderObject::AXRenderObject(RenderObject* renderer)
-    : AXNodeObject(renderer->node())
+AXRenderObject::AXRenderObject(RenderObject* renderer, AXObjectCacheImpl* axObjectCache)
+    : AXNodeObject(renderer->node(), axObjectCache)
     , m_renderer(renderer)
     , m_cachedElementRectDirty(true)
 {
@@ -176,9 +176,9 @@ AXRenderObject::AXRenderObject(RenderObject* renderer)
 #endif
 }
 
-PassRefPtr<AXRenderObject> AXRenderObject::create(RenderObject* renderer)
+PassRefPtr<AXRenderObject> AXRenderObject::create(RenderObject* renderer, AXObjectCacheImpl* axObjectCache)
 {
-    return adoptRef(new AXRenderObject(renderer));
+    return adoptRef(new AXRenderObject(renderer, axObjectCache));
 }
 
 AXRenderObject::~AXRenderObject()
@@ -253,6 +253,17 @@ ScrollableArea* AXRenderObject::getScrollableAreaIfScrollable() const
     return box->scrollableArea();
 }
 
+static bool isImageOrAltText(RenderBoxModelObject* box, Node* node)
+{
+    if (box && box->isImage())
+        return true;
+    if (isHTMLImageElement(node))
+        return true;
+    if (isHTMLInputElement(node) && toHTMLInputElement(node)->hasFallbackContent())
+        return true;
+    return false;
+}
+
 AccessibilityRole AXRenderObject::determineAccessibilityRole()
 {
     if (!m_renderer)
@@ -264,89 +275,29 @@ AccessibilityRole AXRenderObject::determineAccessibilityRole()
     Node* node = m_renderer->node();
     RenderBoxModelObject* cssBox = renderBoxModelObject();
 
-    if (node && node->isLink()) {
-        if (cssBox && cssBox->isImage())
-            return ImageMapRole;
-        return LinkRole;
-    }
     if ((cssBox && cssBox->isListItem()) || isHTMLLIElement(node))
         return ListItemRole;
     if (m_renderer->isListMarker())
         return ListMarkerRole;
-    if (isHTMLButtonElement(node))
-        return buttonRoleType();
-    if (isHTMLDetailsElement(node))
-        return DetailsRole;
-    if (isHTMLSummaryElement(node)) {
-        if (node->parentElement() && isHTMLDetailsElement(node->parentElement()))
-            return DisclosureTriangleRole;
-        return UnknownRole;
-    }
     if (isHTMLLegendElement(node))
         return LegendRole;
     if (m_renderer->isText())
         return StaticTextRole;
-    if (cssBox && cssBox->isImage()) {
+    if (cssBox && isImageOrAltText(cssBox, node)) {
+        if (node && node->isLink())
+            return ImageMapRole;
         if (isHTMLInputElement(node))
             return ariaHasPopup() ? PopUpButtonRole : ButtonRole;
         if (isSVGImage())
             return SVGRootRole;
         return ImageRole;
     }
-
     // Note: if JavaScript is disabled, the renderer won't be a RenderHTMLCanvas.
     if (isHTMLCanvasElement(node) && m_renderer->isCanvas())
         return CanvasRole;
 
     if (cssBox && cssBox->isRenderView())
         return WebAreaRole;
-
-    if (cssBox && cssBox->isTextArea())
-        return TextAreaRole;
-
-    if (isHTMLInputElement(node)) {
-        HTMLInputElement& input = toHTMLInputElement(*node);
-        const AtomicString& type = input.type();
-        if (type == InputTypeNames::button) {
-            if ((node->parentNode() && isHTMLMenuElement(node->parentNode())) || (parentObject() && parentObject()->roleValue() == MenuRole))
-                return MenuItemRole;
-            return buttonRoleType();
-        }
-        if (type == InputTypeNames::checkbox) {
-            if ((node->parentNode() && isHTMLMenuElement(node->parentNode())) || (parentObject() && parentObject()->roleValue() == MenuRole))
-                return MenuItemCheckBoxRole;
-            return CheckBoxRole;
-        }
-        if (type == InputTypeNames::date)
-            return DateRole;
-        if (type == InputTypeNames::datetime
-            || type == InputTypeNames::datetime_local
-            || type == InputTypeNames::month
-            || type == InputTypeNames::week)
-            return DateTimeRole;
-        if (type == InputTypeNames::radio) {
-            if ((node->parentNode() && isHTMLMenuElement(node->parentNode())) || (parentObject() && parentObject()->roleValue() == MenuRole))
-                return MenuItemRadioRole;
-            return RadioButtonRole;
-        }
-        if (type == InputTypeNames::file)
-            return ButtonRole;
-        if (type == InputTypeNames::number)
-            return SpinButtonRole;
-        if (input.isTextButton())
-            return buttonRoleType();
-        if (type == InputTypeNames::color)
-            return ColorWellRole;
-        if (type == InputTypeNames::time)
-            return TimeRole;
-        return TextFieldRole;
-    }
-
-    if (cssBox && cssBox->isMenuList())
-        return PopUpButtonRole;
-
-    if (headingLevel())
-        return HeadingRole;
 
     if (m_renderer->isSVGImage())
         return ImageRole;
@@ -355,9 +306,6 @@ AccessibilityRole AXRenderObject::determineAccessibilityRole()
 
     if (node && node->hasTagName(ddTag))
         return DescriptionListDetailRole;
-
-    if (node && node->hasTagName(dlTag))
-        return DescriptionListRole;
 
     if (node && node->hasTagName(dtTag))
         return DescriptionListTermRole;
@@ -375,32 +323,11 @@ AccessibilityRole AXRenderObject::determineAccessibilityRole()
     if (m_renderer->isHR())
         return SplitterRole;
 
-    if (isHTMLOutputElement(node))
-        return StatusRole;
-
-    if (isHTMLParagraphElement(node))
-        return ParagraphRole;
-
-    if (isHTMLLabelElement(node))
-        return LabelRole;
-
-    if (isHTMLRubyElement(node))
-        return RubyRole;
-
-    if (isHTMLDivElement(node))
-        return DivRole;
-
-    if (isHTMLMeterElement(node))
-        return MeterRole;
-
     if (isHTMLFormElement(node))
         return FormRole;
 
     if (node && node->hasTagName(articleTag))
         return ArticleRole;
-
-    if (node && node->hasTagName(blockquoteTag))
-        return BlockquoteRole;
 
     if (node && node->hasTagName(mainTag))
         return MainRole;
@@ -427,17 +354,12 @@ AccessibilityRole AXRenderObject::determineAccessibilityRole()
     if (isHTMLHtmlElement(node))
         return IgnoredRole;
 
-    if (node && node->hasTagName(iframeTag))
+    if (node && node->hasTagName(iframeTag)) {
+        const AtomicString& ariaRole = getAttribute(roleAttr);
+        if (ariaRole == "none" || ariaRole == "presentation")
+            return IframePresentationalRole;
         return IframeRole;
-
-    if (isEmbeddedObject())
-        return EmbeddedObjectRole;
-
-    if (node && node->hasTagName(figcaptionTag))
-        return FigcaptionRole;
-
-    if (node && node->hasTagName(figureTag))
-        return FigureRole;
+    }
 
     // There should only be one banner/contentInfo per page. If header/footer are being used within an article or section
     // then it should not be exposed as whole page's banner/contentInfo
@@ -446,8 +368,9 @@ AccessibilityRole AXRenderObject::determineAccessibilityRole()
     if (node && node->hasTagName(footerTag) && !isDescendantOfElementType(articleTag) && !isDescendantOfElementType(sectionTag))
         return FooterRole;
 
-    if (isHTMLAnchorElement(node) && isClickable())
-        return LinkRole;
+    AccessibilityRole role = AXNodeObject::determineAccessibilityRoleUtil();
+    if (role != UnknownRole)
+        return role;
 
     if (m_renderer->isRenderBlockFlow())
         return GroupRole;
@@ -774,7 +697,7 @@ bool AXRenderObject::computeAccessibilityIsIgnored() const
         if (isNativeImage() && m_renderer->isImage()) {
             // check for one-dimensional image
             RenderImage* image = toRenderImage(m_renderer);
-            if (image->height() <= 1 || image->width() <= 1)
+            if (image->size().height() <= 1 || image->size().width() <= 1)
                 return true;
 
             // check whether rendered image was stretched from one-dimensional file image
@@ -790,7 +713,7 @@ bool AXRenderObject::computeAccessibilityIsIgnored() const
         if (canvasHasFallbackContent())
             return false;
         RenderHTMLCanvas* canvas = toRenderHTMLCanvas(m_renderer);
-        if (canvas->height() <= 1 || canvas->width() <= 1)
+        if (canvas->size().height() <= 1 || canvas->size().width() <= 1)
             return true;
         // Otherwise fall through; use presence of help text, title, or description to decide.
     }
@@ -1405,7 +1328,7 @@ AXObject* AXRenderObject::accessibilityHitTest(const IntPoint& point) const
     if (!obj)
         return 0;
 
-    AXObject* result = toAXObjectCacheImpl(obj->document().axObjectCache())->getOrCreate(obj);
+    AXObject* result = axObjectCache()->getOrCreate(obj);
     result->updateChildrenIfNecessary();
 
     // Allow the element to perform any hit-testing it might need to do to reach non-render children.
@@ -1730,7 +1653,7 @@ void AXRenderObject::setSelectedTextRange(const PlainTextRange& range)
 {
     if (isNativeTextControl() && m_renderer->isTextControl()) {
         HTMLTextFormControlElement* textControl = toRenderTextControl(m_renderer)->textFormControlElement();
-        textControl->setSelectionRange(range.start, range.start + range.length);
+        textControl->setSelectionRange(range.start, range.start + range.length, SelectionHasNoDirection, NotDispatchSelectEvent);
         return;
     }
 

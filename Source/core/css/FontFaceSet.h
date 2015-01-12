@@ -58,11 +58,11 @@ class FontsReadyPromiseResolver;
 class ExecutionContext;
 
 #if ENABLE(OILPAN)
-class FontFaceSet final : public GarbageCollectedFinalized<FontFaceSet>, public HeapSupplement<Document>, public ActiveDOMObject, public EventTargetWithInlineData {
+class FontFaceSet final : public EventTargetWithInlineData, public HeapSupplement<Document>, public ActiveDOMObject {
     USING_GARBAGE_COLLECTED_MIXIN(FontFaceSet);
     typedef HeapSupplement<Document> SupplementType;
 #else
-class FontFaceSet final : public RefCountedSupplement<Document, FontFaceSet>, public ActiveDOMObject, public EventTargetWithInlineData {
+class FontFaceSet final : public EventTargetWithInlineData, public RefCountedSupplement<Document, FontFaceSet>, public ActiveDOMObject {
     DEFINE_EVENT_TARGET_REFCOUNTING(RefCounted<FontFaceSet>);
     typedef RefCountedSupplement<Document, FontFaceSet> SupplementType;
 #endif
@@ -150,7 +150,7 @@ private:
 
     WillBeHeapHashSet<RefPtrWillBeMember<FontFace> > m_loadingFonts;
     bool m_shouldFireLoadingEvent;
-    Vector<OwnPtr<FontsReadyPromiseResolver> > m_readyResolvers;
+    WillBeHeapVector<OwnPtrWillBeMember<FontsReadyPromiseResolver> > m_readyResolvers;
     FontFaceArray m_loadedFonts;
     FontFaceArray m_failedFonts;
     WillBeHeapListHashSet<RefPtrWillBeMember<FontFace> > m_nonCSSConnectedFaces;

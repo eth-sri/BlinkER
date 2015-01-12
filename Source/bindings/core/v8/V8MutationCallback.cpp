@@ -45,6 +45,10 @@ V8MutationCallback::V8MutationCallback(v8::Handle<v8::Function> callback, v8::Ha
     m_callback.setWeak(this, &setWeakCallback);
 }
 
+V8MutationCallback::~V8MutationCallback()
+{
+}
+
 void V8MutationCallback::call(const WillBeHeapVector<RefPtrWillBeMember<MutationRecord> >& mutations, MutationObserver* observer)
 {
     if (!canInvokeCallback())
@@ -69,7 +73,7 @@ void V8MutationCallback::call(const WillBeHeapVector<RefPtrWillBeMember<Mutation
         return;
 
     v8::Handle<v8::Object> thisObject = v8::Handle<v8::Object>::Cast(observerHandle);
-    v8::Handle<v8::Value> argv[] = { v8Array(mutations, m_scriptState->context()->Global(), isolate), observerHandle };
+    v8::Handle<v8::Value> argv[] = { toV8(mutations, m_scriptState->context()->Global(), isolate), observerHandle };
 
     v8::TryCatch exceptionCatcher;
     exceptionCatcher.SetVerbose(true);

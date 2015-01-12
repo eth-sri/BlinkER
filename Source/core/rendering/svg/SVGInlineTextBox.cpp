@@ -45,7 +45,7 @@ struct ExpectedSVGInlineTextBoxSize : public InlineTextBox {
     Vector<SVGTextFragment> vector;
 };
 
-COMPILE_ASSERT(sizeof(SVGInlineTextBox) == sizeof(ExpectedSVGInlineTextBoxSize), SVGInlineTextBox_is_not_of_expected_size);
+static_assert(sizeof(SVGInlineTextBox) == sizeof(ExpectedSVGInlineTextBoxSize), "SVGInlineTextBox has an unexpected size");
 
 SVGInlineTextBox::SVGInlineTextBox(RenderObject& object, int start, unsigned short length)
     : InlineTextBox(object, start, length)
@@ -110,8 +110,6 @@ FloatRectWillBeLayoutRect SVGInlineTextBox::selectionRectForTextFragment(const S
     ASSERT(startPosition < endPosition);
     ASSERT(style);
 
-    FontCachePurgePreventer fontCachePurgePreventer;
-
     RenderSVGInlineText& textRenderer = toRenderSVGInlineText(this->renderer());
 
     FloatWillBeLayoutUnit scalingFactor = textRenderer.scalingFactor();
@@ -170,7 +168,6 @@ LayoutRect SVGInlineTextBox::localSelectionRect(int startPosition, int endPositi
 
 void SVGInlineTextBox::paint(const PaintInfo& paintInfo, const LayoutPoint& paintOffset, LayoutUnit, LayoutUnit)
 {
-
     SVGInlineTextBoxPainter(*this).paint(paintInfo, paintOffset);
 }
 

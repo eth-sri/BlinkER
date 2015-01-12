@@ -45,9 +45,6 @@
 
 namespace blink {
 
-namespace {
-} // namespace
-
 MixedContentChecker::MixedContentChecker(LocalFrame* frame)
     : m_frame(frame)
 {
@@ -58,11 +55,26 @@ FrameLoaderClient* MixedContentChecker::client() const
     return m_frame->loader().client();
 }
 
+static void measureStricterVersionOfIsMixedContent(LocalFrame* frame, const KURL& url)
+{
+    // We're currently only checking for mixed content in `https://*` contexts.
+    // What about other "secure" contexts the SchemeRegistry knows about? We'll
+    // use this method to measure the occurance of non-webby mixed content to
+    // make sure we're not breaking the world without realizing it.
+    SecurityOrigin* origin = frame->document()->securityOrigin();
+    if (MixedContentChecker::isMixedContent(origin, url)) {
+        if (frame->document()->securityOrigin()->protocol() != "https")
+            UseCounter::count(frame, UseCounter::MixedContentInNonHTTPSFrameThatRestrictsMixedContent);
+    } else if (!SecurityOrigin::isSecure(url) && SchemeRegistry::shouldTreatURLSchemeAsSecure(origin->protocol())) {
+        UseCounter::count(frame, UseCounter::MixedContentInSecureFrameThatDoesNotRestrictMixedContent);
+    }
+}
+
 // static
 bool MixedContentChecker::isMixedContent(SecurityOrigin* securityOrigin, const KURL& url)
 {
-    if (securityOrigin->protocol() != "https")
-        return false; // We only care about HTTPS security origins.
+    if (!SchemeRegistry::shouldTreatURLSchemeAsRestrictingMixedContent(securityOrigin->protocol()))
+        return false;
 
     // We're in a secure context, so |url| is mixed content if it's insecure.
     return !SecurityOrigin::isSecure(url);
@@ -213,7 +225,54 @@ void MixedContentChecker::logToConsole(LocalFrame* frame, const KURL& url, WebUR
 }
 
 // static
-bool MixedContentChecker::shouldBlockFetch(LocalFrame* frame, const ResourceRequest& resourceRequest, const KURL& url, MixedContentChecker::ReportingStatus reportingStatus)
+void MixedContentChecker::count(LocalFrame* frame, WebURLRequest::RequestContext requestContext)
+{
+    UseCounter::count(frame, UseCounter::MixedContentPresent);
+
+    // Roll blockable content up into a single counter, count unblocked types individually so we
+    // can determine when they can be safely moved to the blockable category:
+    ContextType contextType = contextTypeFromContext(requestContext);
+    if (contextType == ContextTypeBlockable || contextType == ContextTypeBlockableUnlessLax) {
+        UseCounter::count(frame, UseCounter::MixedContentBlockable);
+        return;
+    }
+
+    UseCounter::Feature feature;
+    switch (requestContext) {
+    case WebURLRequest::RequestContextAudio:
+        feature = UseCounter::MixedContentAudio;
+        break;
+    case WebURLRequest::RequestContextDownload:
+        feature = UseCounter::MixedContentDownload;
+        break;
+    case WebURLRequest::RequestContextFavicon:
+        feature = UseCounter::MixedContentFavicon;
+        break;
+    case WebURLRequest::RequestContextImage:
+        feature = UseCounter::MixedContentImage;
+        break;
+    case WebURLRequest::RequestContextInternal:
+        feature = UseCounter::MixedContentInternal;
+        break;
+    case WebURLRequest::RequestContextPlugin:
+        feature = UseCounter::MixedContentPlugin;
+        break;
+    case WebURLRequest::RequestContextPrefetch:
+        feature = UseCounter::MixedContentPrefetch;
+        break;
+    case WebURLRequest::RequestContextVideo:
+        feature = UseCounter::MixedContentVideo;
+        break;
+
+    default:
+        ASSERT_NOT_REACHED();
+        return;
+    }
+    UseCounter::count(frame, feature);
+}
+
+// static
+bool MixedContentChecker::shouldBlockFetch(LocalFrame* frame, WebURLRequest::RequestContext requestContext, WebURLRequest::FrameType frameType, const KURL& url, MixedContentChecker::ReportingStatus reportingStatus)
 {
     // No frame, no mixed content:
     if (!frame)
@@ -228,24 +287,31 @@ bool MixedContentChecker::shouldBlockFetch(LocalFrame* frame, const ResourceRequ
             return false;
 
         LocalFrame* localTop = toLocalFrame(top);
-        if (frame != localTop && shouldBlockFetch(localTop, resourceRequest, url, reportingStatus))
+        if (frame != localTop && shouldBlockFetch(localTop, requestContext, frameType, url, reportingStatus))
             return true;
     }
 
     // We only care about subresource loads; top-level navigations cannot be mixed content.
-    if (resourceRequest.frameType() == WebURLRequest::FrameTypeTopLevel)
+    if (frameType == WebURLRequest::FrameTypeTopLevel)
         return false;
 
     // No mixed content, no problem.
+    measureStricterVersionOfIsMixedContent(frame, url);
     if (!isMixedContent(frame->document()->securityOrigin(), url))
         return false;
+
+    MixedContentChecker::count(frame, requestContext);
 
     Settings* settings = frame->settings();
     FrameLoaderClient* client = frame->loader().client();
     SecurityOrigin* securityOrigin = frame->document()->securityOrigin();
     bool allowed = false;
 
-    ContextType contextType = contextTypeFromContext(resourceRequest.requestContext());
+    // If we're in strict mode, we'll automagically fail everything, and intentionally skip
+    // the client checks in order to prevent degrading the site's security UI.
+    bool strictMode = frame->document()->shouldEnforceStrictMixedContentChecking();
+
+    ContextType contextType = contextTypeFromContext(requestContext);
     if (contextType == ContextTypeBlockableUnlessLax)
         contextType = RuntimeEnabledFeatures::laxMixedContentCheckingEnabled() ? ContextTypeOptionallyBlockable : ContextTypeBlockable;
 
@@ -255,24 +321,26 @@ bool MixedContentChecker::shouldBlockFetch(LocalFrame* frame, const ResourceRequ
     //
     // FIXME: Remove this temporary hack once we have a reasonable API for launching external applications
     // via URLs. http://crbug.com/318788 and https://crbug.com/393481
-    if (resourceRequest.frameType() == WebURLRequest::FrameTypeNested && !SchemeRegistry::shouldTreatURLSchemeAsCORSEnabled(url.protocol()))
+    if (frameType == WebURLRequest::FrameTypeNested && !SchemeRegistry::shouldTreatURLSchemeAsCORSEnabled(url.protocol()))
         contextType = ContextTypeOptionallyBlockable;
 
     switch (contextType) {
     case ContextTypeOptionallyBlockable:
-        allowed = client->allowDisplayingInsecureContent(settings && settings->allowDisplayOfInsecureContent(), securityOrigin, url);
+        allowed = !strictMode && client->allowDisplayingInsecureContent(settings && settings->allowDisplayOfInsecureContent(), securityOrigin, url);
         if (allowed)
             client->didDisplayInsecureContent();
         break;
 
     case ContextTypeBlockable:
-        allowed = client->allowRunningInsecureContent(settings && settings->allowRunningOfInsecureContent(), securityOrigin, url);
+        allowed = !strictMode && client->allowRunningInsecureContent(settings && settings->allowRunningOfInsecureContent(), securityOrigin, url);
         if (allowed)
             client->didRunInsecureContent(securityOrigin, url);
         break;
 
     case ContextTypeShouldBeBlockable:
-        return false;
+        allowed = true;
+        client->didDisplayInsecureContent();
+        break;
 
     case ContextTypeBlockableUnlessLax:
         // We map this to either OptionallyBlockable or Blockable above.
@@ -281,11 +349,11 @@ bool MixedContentChecker::shouldBlockFetch(LocalFrame* frame, const ResourceRequ
     };
 
     if (reportingStatus == SendReport)
-        logToConsole(frame, url, resourceRequest.requestContext(), allowed);
+        logToConsole(frame, url, requestContext, allowed);
     return !allowed;
 }
 
-bool MixedContentChecker::canDisplayInsecureContentInternal(SecurityOrigin* securityOrigin, const KURL& url, const MixedContentType type) const
+bool MixedContentChecker::canDisplayInsecureContent(SecurityOrigin* securityOrigin, const KURL& url, const MixedContentType type) const
 {
     // Check the top frame if it differs from MixedContentChecker's m_frame.
     if (!m_frame->tree().top()->isLocalFrame()) {
@@ -295,7 +363,7 @@ bool MixedContentChecker::canDisplayInsecureContentInternal(SecurityOrigin* secu
         return false;
     }
     Frame* top = m_frame->tree().top();
-    if (top != m_frame && !toLocalFrame(top)->loader().mixedContentChecker()->canDisplayInsecureContent(toLocalFrame(top)->document()->securityOrigin(), url))
+    if (top != m_frame && !toLocalFrame(top)->loader().mixedContentChecker()->canDisplayInsecureContent(toLocalFrame(top)->document()->securityOrigin(), url, type))
         return false;
 
     // Just count these for the moment, don't block them.
@@ -316,7 +384,7 @@ bool MixedContentChecker::canDisplayInsecureContentInternal(SecurityOrigin* secu
     return allowed;
 }
 
-bool MixedContentChecker::canRunInsecureContentInternal(SecurityOrigin* securityOrigin, const KURL& url, const MixedContentType type) const
+bool MixedContentChecker::canRunInsecureContent(SecurityOrigin* securityOrigin, const KURL& url, const MixedContentType type) const
 {
     // Check the top frame if it differs from MixedContentChecker's m_frame.
     if (!m_frame->tree().top()->isLocalFrame()) {
@@ -326,7 +394,7 @@ bool MixedContentChecker::canRunInsecureContentInternal(SecurityOrigin* security
         return true;
     }
     Frame* top = m_frame->tree().top();
-    if (top != m_frame && !toLocalFrame(top)->loader().mixedContentChecker()->canRunInsecureContent(toLocalFrame(top)->document()->securityOrigin(), url))
+    if (top != m_frame && !toLocalFrame(top)->loader().mixedContentChecker()->canRunInsecureContent(toLocalFrame(top)->document()->securityOrigin(), url, type))
         return false;
 
     // Just count these for the moment, don't block them.
@@ -348,23 +416,11 @@ bool MixedContentChecker::canRunInsecureContentInternal(SecurityOrigin* security
     return allowed;
 }
 
-bool MixedContentChecker::canFrameInsecureContent(SecurityOrigin* securityOrigin, const KURL& url) const
-{
-    // If we're dealing with a CORS-enabled scheme, then block mixed frames as active content. Otherwise,
-    // treat frames as passive content.
-    //
-    // FIXME: Remove this temporary hack once we have a reasonable API for launching external applications
-    // via URLs. http://crbug.com/318788 and https://crbug.com/393481
-    if (SchemeRegistry::shouldTreatURLSchemeAsCORSEnabled(url.protocol()))
-        return canRunInsecureContentInternal(securityOrigin, url, MixedContentChecker::Execution);
-    return canDisplayInsecureContentInternal(securityOrigin, url, MixedContentChecker::Display);
-}
-
 bool MixedContentChecker::canConnectInsecureWebSocket(SecurityOrigin* securityOrigin, const KURL& url) const
 {
     if (RuntimeEnabledFeatures::laxMixedContentCheckingEnabled())
-        return canDisplayInsecureContentInternal(securityOrigin, url, MixedContentChecker::WebSocket);
-    return canRunInsecureContentInternal(securityOrigin, url, MixedContentChecker::WebSocket);
+        return canDisplayInsecureContent(securityOrigin, url, MixedContentChecker::WebSocket);
+    return canRunInsecureContent(securityOrigin, url, MixedContentChecker::WebSocket);
 }
 
 bool MixedContentChecker::canSubmitToInsecureForm(SecurityOrigin* securityOrigin, const KURL& url) const
@@ -378,7 +434,7 @@ bool MixedContentChecker::canSubmitToInsecureForm(SecurityOrigin* securityOrigin
     // If lax mixed content checking is enabled (noooo!), skip this check entirely.
     if (RuntimeEnabledFeatures::laxMixedContentCheckingEnabled())
         return true;
-    return canDisplayInsecureContentInternal(securityOrigin, url, MixedContentChecker::Submission);
+    return canDisplayInsecureContent(securityOrigin, url, MixedContentChecker::Submission);
 }
 
 void MixedContentChecker::logWarning(bool allowed, const KURL& target, const MixedContentType type) const

@@ -48,6 +48,7 @@
 #include "wtf/Vector.h"
 #include "wtf/text/CString.h"
 #include "wtf/text/WTFString.h"
+#include <stdint.h>
 
 namespace blink {
 
@@ -82,9 +83,6 @@ public:
     virtual void close(int code, const String& reason) override;
     virtual void fail(const String& reason, MessageLevel, const String&, unsigned lineNumber) override;
     virtual void disconnect() override;
-
-    virtual void suspend() override;
-    virtual void resume() override;
 
     virtual void trace(Visitor*) override;
 
@@ -174,15 +172,15 @@ private:
     Vector<char> m_receivingMessageData;
 
     bool m_receivingMessageTypeIsText;
-    int64_t m_sendingQuota;
-    int64_t m_receivedDataSizeForFlowControl;
+    uint64_t m_sendingQuota;
+    uint64_t m_receivedDataSizeForFlowControl;
     size_t m_sentSizeOfTopMessage;
 
     String m_sourceURLAtConstruction;
     unsigned m_lineNumberAtConstruction;
     RefPtr<WebSocketHandshakeRequest> m_handshakeRequest;
 
-    static const int64_t receivedDataSizeForFlowControlHighWaterMark = 1 << 15;
+    static const uint64_t receivedDataSizeForFlowControlHighWaterMark = 1 << 15;
 };
 
 } // namespace blink

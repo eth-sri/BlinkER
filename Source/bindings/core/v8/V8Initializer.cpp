@@ -52,6 +52,7 @@
 #include "platform/EventDispatchForbiddenScope.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/TraceEvent.h"
+#include "platform/heap/AddressSanitizer.h"
 #include "platform/scheduler/Scheduler.h"
 #include "public/platform/Platform.h"
 #include "wtf/RefPtr.h"
@@ -482,7 +483,8 @@ static void messageHandlerInWorker(v8::Handle<v8::Message> message, v8::Handle<v
     if (ExecutionContext* context = scriptState->executionContext()) {
         String errorMessage = toCoreString(message->Get());
         TOSTRING_VOID(V8StringResource<>, sourceURL, message->GetScriptOrigin().ResourceName());
-        int scriptId = message->GetScriptOrigin().ScriptID()->Value();
+        int scriptId = 0;
+        RefPtrWillBeRawPtr<ScriptCallStack> callStack = extractCallStack(isolate, message, &scriptId);
 
         RefPtrWillBeRawPtr<ErrorEvent> event = ErrorEvent::create(errorMessage, sourceURL, message->GetLineNumber(), message->GetStartColumn() + 1, &DOMWrapperWorld::current(isolate));
         AccessControlStatus corsStatus = message->IsSharedCrossOrigin() ? SharableCrossOrigin : NotSharableCrossOrigin;
@@ -491,7 +493,7 @@ static void messageHandlerInWorker(v8::Handle<v8::Message> message, v8::Handle<v
         // the error event from the v8::Message, quietly leave.
         if (!v8::V8::IsExecutionTerminating(isolate)) {
             V8ErrorHandler::storeExceptionOnErrorEventWrapper(isolate, event.get(), data, scriptState->context()->Global());
-            context->reportException(event.release(), scriptId, nullptr, corsStatus);
+            context->reportException(event.release(), scriptId, callStack, corsStatus);
         }
     }
 
@@ -500,6 +502,10 @@ static void messageHandlerInWorker(v8::Handle<v8::Message> message, v8::Handle<v
 
 static const int kWorkerMaxStackSize = 500 * 1024;
 
+// This function uses a local stack variable to determine the isolate's stack limit. AddressSanitizer may
+// relocate that local variable to a fake stack, which may lead to problems during JavaScript execution.
+// Therefore we disable AddressSanitizer for V8Initializer::initializeWorker().
+NO_SANITIZE_ADDRESS
 void V8Initializer::initializeWorker(v8::Isolate* isolate)
 {
     initializeV8Common(isolate);

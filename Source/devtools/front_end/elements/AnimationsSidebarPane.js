@@ -44,6 +44,7 @@ WebInspector.AnimationsSidebarPane._showSubtreeAnimationsCheckbox = function(set
 
 WebInspector.AnimationsSidebarPane.prototype = {
     /**
+     * @override
      * @param {?WebInspector.DOMNode} node
      */
     setNode: function(node)
@@ -99,6 +100,7 @@ WebInspector.AnimationsSidebarPane.prototype = {
     },
 
     /**
+     * @override
      * @param {!WebInspector.Throttler.FinishCallback} finishCallback
      * @protected
      */
@@ -162,7 +164,7 @@ WebInspector.AnimationSection = function(parentPane, stylesPane, animationPlayer
 
     this.element = createElement("div");
     this.element.appendChild(this._createHeader());
-    this.bodyElement = this.element.createChild("div", "animationSectionBody");
+    this.bodyElement = this.element.createChild("div", "animation-section-body");
     this.bodyElement.appendChild(this._createAnimationControls());
     this.bodyElement.appendChild(this._propertiesElement);
     this.bodyElement.appendChild(this._keyframesElement);
@@ -294,8 +296,8 @@ WebInspector.AnimationSection.prototype = {
          */
         function nodeResolved(node)
         {
-            headerElement.addEventListener("mouseover", node.highlight.bind(node, undefined, undefined), false);
-            headerElement.addEventListener("mouseleave", node.domModel().hideDOMNodeHighlight.bind(node.domModel()), false);
+            headerElement.createTextChild(" - ");
+            headerElement.appendChild(WebInspector.DOMPresentationUtils.linkifyNodeReference(node));
         }
 
         var headerElement = createElementWithClass("div", "sidebar-separator");
@@ -386,14 +388,14 @@ WebInspector.AnimationSection.prototype = {
                 model.setIsAttribute(true);
                 model.setEditable(true);
                 var styleSection = new WebInspector.StylePropertiesSection(this._stylesPane, model);
-                styleSection.expanded = true;
+                styleSection.expand();
                 this._keyframesElement.appendChild(styleSection.element);
             }
         }
     }
 }
 
-WebInspector.AnimationsSidebarPane._globalPlaybackRates = [0.1, 0.25, 0.5, 1.0, 2.0];
+WebInspector.AnimationsSidebarPane.GlobalPlaybackRates = [0.1, 0.25, 0.5, 1.0];
 
 /**
  * @constructor
@@ -407,13 +409,13 @@ WebInspector.AnimationsSidebarPane.GlobalAnimationControls = function(showSubtre
 
     var labelElement = createElement("div");
     labelElement.createTextChild("Global playback:");
-    this.appendStatusBarItem(new WebInspector.StatusBarItem(labelElement));
+    this.appendStatusBarItem(new WebInspector.StatusBarItemWrapper(labelElement));
 
     this._pauseButton = new WebInspector.StatusBarButton("", "pause-status-bar-item");
     this._pauseButton.addEventListener("click", this._pauseHandler.bind(this), this);
     this.appendStatusBarItem(this._pauseButton);
     this._playbackRateButtons = [];
-    WebInspector.AnimationsSidebarPane._globalPlaybackRates.forEach(this._createPlaybackRateButton.bind(this));
+    WebInspector.AnimationsSidebarPane.GlobalPlaybackRates.forEach(this._createPlaybackRateButton.bind(this));
 
     var subtreeCheckboxLabel = WebInspector.UIString("Show subtree animations");
     this._showSubtreeAnimationsCheckbox = new WebInspector.StatusBarCheckbox(subtreeCheckboxLabel, subtreeCheckboxLabel, showSubtreeAnimationsSetting);

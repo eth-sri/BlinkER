@@ -81,7 +81,7 @@ webkit.org/b/90488 [ Release ] http/tests/inspector/compiler-source-mapping-debu
 webkit.org/b/90488 [ Debug ] http/tests/inspector-enabled/ [ Slow ]
 webkit.org/b/90488 [ Debug ] inspector-protocol/ [ Slow ]
 webkit.org/b/90488 [ Debug ] virtual/deferred/inspector/ [ Slow ]
-webkit.org/b/90488 [ Debug ] virtual/implsidepainting/inspector/ [ Slow ]
+webkit.org/b/90488 inspector/sources/debugger/frameworks-dom-xhr-event-breakpoints.html [ Slow ]
 crbug.com/243492 http/tests/inspector-enabled/injected-script-discard.html [ Slow ]
 crbug.com/246190 [ Release ] http/tests/inspector/indexeddb/ [ Slow ]
 crbug.com/247466 [ Release ] inspector/sources/debugger/dom-breakpoints.html [ Slow ]
@@ -98,10 +98,10 @@ crbug.com/247466 [ Debug ] inspector-enabled/sources/debugger/script-formatter-b
 crbug.com/247466 [ Debug ] inspector-enabled/sources/debugger/script-formatter-breakpoints-4.html [ Slow ]
 crbug.com/394210 [ Release ] inspector/profiler/webgl/webgl-profiler-api-changes.html [ Slow ]
 crbug.com/420008 [ Release ] inspector/tracing [ Slow ]
-crbug.com/420008 [ Release ] virtual/implsidepainting/inspector/tracing [ Slow ]
 crbug.com/420008 [ Release ] virtual/deferred/inspector/tracing [ Slow ]
 crbug.com/420008 [ Release ] inspector/editor/text-editor-word-jumps.html [ Slow ]
 crbug.com/420008 [ Release ] http/tests/inspector/console-xhr-logging.html [ Slow ]
+
 # inspector tests below are slow on LinuxASAN
 crbug.com/247466 [ Linux Release ] inspector/sources/debugger/debugger-activation-crash2.html [ Slow ]
 
@@ -130,11 +130,13 @@ crbug.com/248938 virtual/threaded/animations/cross-fade-webkit-mask-image.html [
 crbug.com/248938 virtual/threaded/animations/missing-values-last-keyframe.html [ Slow ]
 crbug.com/248938 virtual/threaded/animations/transition-and-animation-1.html [ Slow ]
 crbug.com/248938 virtual/threaded/animations/3d/replace-filling-transform.html [ Slow ]
-crbug.com/248938 virtual/threaded/animations/animation-welcome-safari.html [ Slow ]
 crbug.com/311482 virtual/threaded/animations/interpolation/filter-interpolation.html [ Slow ]
 crbug.com/311482 virtual/threaded/animations/keyframes-unprefixed-03.html [ Slow ]
 
 crbug.com/258896 animations/animation-direction-reverse-fill-mode.html [ Slow ]
+
+# This test has to generate >250MB of data which takes ~6s in both release and debug.
+crbug.com/420240 http/tests/xmlhttprequest/xmlhttprequest-json-response-overflow.html [ Slow ]
 
 # FIXME: These tests might still be buggy and time out. They were marked as Slow on 9/20/2013.
 # Double-check the data after they've been running another week or so.
@@ -153,7 +155,6 @@ crbug.com/241869 [ Debug ] css3/flexbox/multiline-justify-content.html [ Slow ]
 crbug.com/243249 http/tests/misc/submit-post-keygen.html [ Slow ]
 crbug.com/245154 editing/selection/move-by-character-brute-force.html [ Slow ]
 crbug.com/246749 inspector/extensions/extensions-panel.html [ Slow ]
-crbug.com/248969 [ Debug ] printing/page-count-with-one-word.html [ Slow ]
 
 crbug.com/336481 inspector/jump-to-previous-editing-location.html [ Slow ]
 

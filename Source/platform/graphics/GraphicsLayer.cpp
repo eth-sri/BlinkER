@@ -256,6 +256,11 @@ void GraphicsLayer::setReplicatedByLayer(GraphicsLayer* layer)
 
 void GraphicsLayer::setOffsetFromRenderer(const IntSize& offset, ShouldSetNeedsDisplay shouldSetNeedsDisplay)
 {
+    setOffsetDoubleFromRenderer(offset);
+}
+
+void GraphicsLayer::setOffsetDoubleFromRenderer(const DoubleSize& offset, ShouldSetNeedsDisplay shouldSetNeedsDisplay)
+{
     if (offset == m_offsetFromRenderer)
         return;
 
@@ -274,20 +279,12 @@ void GraphicsLayer::paintGraphicsLayerContents(GraphicsContext& context, const I
         m_debugInfo.clearAnnotatedInvalidateRects();
     incrementPaintCount();
     m_client->paintContents(this, context, m_paintingPhase, clip);
-
+#ifndef NDEBUG
     if (m_displayItemList) {
         ASSERT(RuntimeEnabledFeatures::slimmingPaintEnabled());
-#ifndef NDEBUG
         context.fillRect(clip, Color(0xFF, 0, 0));
-#endif
-        // FIXME: This is incorrect for squashed layers.
-        // We should do proper translation in CompositedLayerMapping once transform paint item is implemented.
-        context.translate(-m_offsetFromRenderer.width(), -m_offsetFromRenderer.height());
-        const PaintList& paintList = m_displayItemList->paintList();
-        for (PaintList::const_iterator it = paintList.begin(); it != paintList.end(); ++it)
-            (*it)->replay(&context);
-        context.translate(m_offsetFromRenderer.width(), m_offsetFromRenderer.height());
     }
+#endif
 }
 
 void GraphicsLayer::updateChildList()
@@ -905,6 +902,9 @@ void GraphicsLayer::setNeedsDisplay()
         addRepaintRect(FloatRect(FloatPoint(), m_size));
         for (size_t i = 0; i < m_linkHighlights.size(); ++i)
             m_linkHighlights[i]->invalidate();
+
+        if (RuntimeEnabledFeatures::slimmingPaintEnabled())
+            displayItemList()->invalidateAll();
     }
 }
 
@@ -1010,6 +1010,12 @@ void GraphicsLayer::setFilters(const FilterOperations& filters)
     m_layer->layer()->setFilters(*webFilters);
 }
 
+void GraphicsLayer::setFilterLevel(SkPaint::FilterLevel filterLevel)
+{
+    if (m_imageLayer)
+        m_imageLayer->setNearestNeighbor(filterLevel == SkPaint::kNone_FilterLevel);
+}
+
 void GraphicsLayer::setPaintingPhase(GraphicsLayerPaintingPhase phase)
 {
     if (m_paintingPhase == phase)
@@ -1072,12 +1078,13 @@ void GraphicsLayer::didScroll()
     }
 }
 
-DisplayItemList& GraphicsLayer::displayItemList()
+DisplayItemList* GraphicsLayer::displayItemList()
 {
-    ASSERT(RuntimeEnabledFeatures::slimmingPaintEnabled());
+    if (!RuntimeEnabledFeatures::slimmingPaintEnabled())
+        return 0;
     if (!m_displayItemList)
-        m_displayItemList = adoptPtr(new DisplayItemList());
-    return *m_displayItemList;
+        m_displayItemList = DisplayItemList::create();
+    return m_displayItemList.get();
 }
 
 } // namespace blink

@@ -23,7 +23,7 @@
 
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/accessibility/AXObjectCache.h"
+#include "core/dom/AXObjectCache.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/events/Event.h"
 #include "core/frame/FrameView.h"
@@ -238,7 +238,7 @@ Widget* HTMLFrameOwnerElement::ownedWidget() const
     return m_widget.get();
 }
 
-bool HTMLFrameOwnerElement::loadOrRedirectSubframe(const KURL& url, const AtomicString& frameName, bool lockBackForwardList)
+bool HTMLFrameOwnerElement::loadOrRedirectSubframe(const KURL& url, const AtomicString& frameName, bool lockBackForwardList, ContentSecurityPolicyDisposition shouldCheckContentSecurityPolicy)
 {
     RefPtrWillBeRawPtr<LocalFrame> parentFrame = document().frame();
     if (contentFrame()) {
@@ -254,7 +254,7 @@ bool HTMLFrameOwnerElement::loadOrRedirectSubframe(const KURL& url, const Atomic
     if (!SubframeLoadingDisabler::canLoadFrame(*this))
         return false;
 
-    return parentFrame->loader().client()->createFrame(url, frameName, this);
+    return parentFrame->loader().client()->createFrame(url, frameName, this, shouldCheckContentSecurityPolicy);
 }
 
 void HTMLFrameOwnerElement::trace(Visitor* visitor)

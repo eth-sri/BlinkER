@@ -170,7 +170,7 @@ void ScriptDebugServer::setPauseOnExceptionsState(PauseOnExceptionsState pauseOn
 
 void ScriptDebugServer::setPauseOnNextStatement(bool pause)
 {
-    ASSERT(!isPaused());
+    ASSERT(!m_runningNestedMessageLoop);
     if (pause)
         v8::Debug::DebugBreak(m_isolate);
     else
@@ -249,6 +249,16 @@ void ScriptDebugServer::stepOutOfFunction()
     v8::Handle<v8::Value> argv[] = { m_executionState };
     callDebuggerMethod(stepOutV8MethodName, 1, argv);
     continueProgram();
+}
+
+void ScriptDebugServer::clearStepping()
+{
+    ensureDebuggerScriptCompiled();
+    v8::HandleScope scope(m_isolate);
+    v8::Context::Scope contextScope(v8::Debug::GetDebugContext());
+
+    v8::Handle<v8::Value> argv[] = { v8Undefined() };
+    callDebuggerMethod("clearStepping", 0, argv);
 }
 
 bool ScriptDebugServer::setScriptSource(const String& sourceID, const String& newContent, bool preview, String* error, RefPtr<TypeBuilder::Debugger::SetScriptSourceError>& errorData, ScriptValue* newCallFrames, RefPtr<JSONObject>* result)
@@ -342,7 +352,7 @@ PassRefPtrWillBeRawPtr<JavaScriptCallFrame> ScriptDebugServer::toJavaScriptCallF
 PassRefPtrWillBeRawPtr<JavaScriptCallFrame> ScriptDebugServer::wrapCallFrames(int maximumLimit, ScopeInfoDetails scopeDetails)
 {
     const int scopeBits = 2;
-    COMPILE_ASSERT(NoScopes < (1 << scopeBits), not_enough_bits_to_encode_ScopeInfoDetails);
+    static_assert(NoScopes < (1 << scopeBits), "there must be enough bits to encode ScopeInfoDetails");
 
     ASSERT(maximumLimit >= 0);
     int data = (maximumLimit << scopeBits) | scopeDetails;
@@ -392,6 +402,10 @@ ScriptValue ScriptDebugServer::currentCallFramesForAsyncStack()
 
 PassRefPtrWillBeRawPtr<JavaScriptCallFrame> ScriptDebugServer::callFrameNoScopes(int index)
 {
+    if (!m_isolate->InContext())
+        return nullptr;
+    v8::HandleScope handleScope(m_isolate);
+
     v8::Handle<v8::Value> currentCallFrameV8;
     if (m_executionState.IsEmpty()) {
         v8::Handle<v8::Function> currentCallFrameFunction = v8::Local<v8::Function>::Cast(m_debuggerScript.newLocal(m_isolate)->Get(v8AtomicString(m_isolate, "currentCallFrameByIndex")));
@@ -545,7 +559,7 @@ void ScriptDebugServer::handleV8AsyncTaskEvent(ScriptDebugListener* listener, Sc
 
     m_pausedScriptState = pausedScriptState;
     m_executionState = executionState;
-    listener->didReceiveV8AsyncTaskEvent(pausedScriptState->executionContext(), type, name, id);
+    listener->didReceiveV8AsyncTaskEvent(pausedScriptState, type, name, id);
     m_pausedScriptState.clear();
     m_executionState.Clear();
 }
@@ -574,15 +588,15 @@ void ScriptDebugServer::dispatchDidParseSource(ScriptDebugListener* listener, v8
     String sourceID = String::number(id->Int32Value());
 
     ScriptDebugListener::Script script;
-    script.url = toCoreStringWithUndefinedOrNullCheck(object->Get(v8AtomicString(m_isolate, "name")));
-    script.sourceURL = toCoreStringWithUndefinedOrNullCheck(object->Get(v8AtomicString(m_isolate, "sourceURL")));
-    script.sourceMappingURL = toCoreStringWithUndefinedOrNullCheck(object->Get(v8AtomicString(m_isolate, "sourceMappingURL")));
-    script.source = toCoreStringWithUndefinedOrNullCheck(object->Get(v8AtomicString(m_isolate, "source")));
-    script.startLine = object->Get(v8AtomicString(m_isolate, "startLine"))->ToInteger(m_isolate)->Value();
-    script.startColumn = object->Get(v8AtomicString(m_isolate, "startColumn"))->ToInteger(m_isolate)->Value();
-    script.endLine = object->Get(v8AtomicString(m_isolate, "endLine"))->ToInteger(m_isolate)->Value();
-    script.endColumn = object->Get(v8AtomicString(m_isolate, "endColumn"))->ToInteger(m_isolate)->Value();
-    script.isContentScript = object->Get(v8AtomicString(m_isolate, "isContentScript"))->ToBoolean(m_isolate)->Value();
+    script.setURL(toCoreStringWithUndefinedOrNullCheck(object->Get(v8AtomicString(m_isolate, "name"))))
+        .setSourceURL(toCoreStringWithUndefinedOrNullCheck(object->Get(v8AtomicString(m_isolate, "sourceURL"))))
+        .setSourceMappingURL(toCoreStringWithUndefinedOrNullCheck(object->Get(v8AtomicString(m_isolate, "sourceMappingURL"))))
+        .setSource(toCoreStringWithUndefinedOrNullCheck(object->Get(v8AtomicString(m_isolate, "source"))))
+        .setStartLine(object->Get(v8AtomicString(m_isolate, "startLine"))->ToInteger(m_isolate)->Value())
+        .setStartColumn(object->Get(v8AtomicString(m_isolate, "startColumn"))->ToInteger(m_isolate)->Value())
+        .setEndLine(object->Get(v8AtomicString(m_isolate, "endLine"))->ToInteger(m_isolate)->Value())
+        .setEndColumn(object->Get(v8AtomicString(m_isolate, "endColumn"))->ToInteger(m_isolate)->Value())
+        .setIsContentScript(object->Get(v8AtomicString(m_isolate, "isContentScript"))->ToBoolean(m_isolate)->Value());
 
     listener->didParseSource(sourceID, script, compileResult);
 }
@@ -614,6 +628,14 @@ v8::Local<v8::Value> ScriptDebugServer::functionScopes(v8::Handle<v8::Function> 
 
     v8::Handle<v8::Value> argv[] = { function };
     return callDebuggerMethod("getFunctionScopes", 1, argv);
+}
+
+v8::Local<v8::Value> ScriptDebugServer::generatorObjectDetails(v8::Handle<v8::Object>& object)
+{
+    ensureDebuggerScriptCompiled();
+
+    v8::Handle<v8::Value> argv[] = { object };
+    return callDebuggerMethod("getGeneratorObjectDetails", 1, argv);
 }
 
 v8::Local<v8::Value> ScriptDebugServer::collectionEntries(v8::Handle<v8::Object>& object)

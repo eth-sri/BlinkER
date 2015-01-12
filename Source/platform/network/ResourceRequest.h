@@ -47,6 +47,12 @@ enum ResourceRequestCachePolicy {
     ReloadBypassingCache, // end-to-end reload
 };
 
+enum InputToLoadPerfMetricReportPolicy {
+    NoReport, // Don't report metrics for this ResourceRequest.
+    ReportLink, // Report metrics for this request as initiated by a link click.
+    ReportIntent, // Report metrics for this request as initiated by an intent.
+};
+
 struct CrossThreadResourceRequestData;
 
 class PLATFORM_EXPORT ResourceRequest {
@@ -212,6 +218,12 @@ public:
     bool checkForBrowserSideNavigation() const { return m_checkForBrowserSideNavigation; }
     void setCheckForBrowserSideNavigation(bool check) { m_checkForBrowserSideNavigation = check; }
 
+    double uiStartTime() const { return m_uiStartTime; }
+    void setUIStartTime(double uiStartTime) { m_uiStartTime = uiStartTime; }
+
+    InputToLoadPerfMetricReportPolicy inputPerfMetricReportPolicy() const { return m_inputPerfMetricReportPolicy; }
+    void setInputPerfMetricReportPolicy(InputToLoadPerfMetricReportPolicy inputPerfMetricReportPolicy) { m_inputPerfMetricReportPolicy = inputPerfMetricReportPolicy; }
+
 private:
     void initialize(const KURL&);
 
@@ -244,6 +256,8 @@ private:
     WebURLRequest::FetchCredentialsMode m_fetchCredentialsMode;
     ReferrerPolicy m_referrerPolicy;
     bool m_checkForBrowserSideNavigation;
+    double m_uiStartTime;
+    InputToLoadPerfMetricReportPolicy m_inputPerfMetricReportPolicy;
 
     mutable CacheControlHeader m_cacheControlHeaderCache;
 
@@ -286,6 +300,8 @@ public:
     WebURLRequest::FetchCredentialsMode m_fetchCredentialsMode;
     ReferrerPolicy m_referrerPolicy;
     bool m_checkForBrowserSideNavigation;
+    double m_uiStartTime;
+    InputToLoadPerfMetricReportPolicy m_inputPerfMetricReportPolicy;
 };
 
 unsigned initializeMaximumHTTPConnectionCountPerHost();

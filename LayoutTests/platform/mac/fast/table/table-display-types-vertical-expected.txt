@@ -1,6 +1,6 @@
-layer at (0,0) size 785x1166
-  RenderView at (0,0) size 785x600
-layer at (0,0) size 785x1166
+layer at (0,0) size 800x600 clip at (0,0) size 785x600 scrollHeight 1166
+  RenderView at (0,0) size 800x600
+layer at (0,0) size 785x1166 backgroundClip at (0,0) size 785x600 clip at (0,0) size 785x600 outlineClip at (0,0) size 785x600
   RenderBlock {HTML} at (0,0) size 785x1166
     RenderBody {BODY} at (8,10) size 769x1148
       RenderTable {TABLE} at (10,0) size 84x120 [border: (1px solid #000000)]
@@ -174,7 +174,7 @@ layer at (0,0) size 785x1166
                 text run at (1,369) width 60: "velit esse"
                 text run at (1,385) width 86: "cillum dolore"
                 text run at (1,401) width 93: "eu fugiat nulla"
-                text run at (1,417) width 54: "pariatur."
+                text run at (1,417) width 53: "pariatur."
                 text run at (1,433) width 92: "Excepteur sint"
                 text run at (1,449) width 56: "occaecat"
                 text run at (1,465) width 87: "cupidatat non"

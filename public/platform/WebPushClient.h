@@ -7,28 +7,21 @@
 
 #include "public/platform/WebCallbacks.h"
 #include "public/platform/WebPushError.h"
-#include "public/platform/WebPushPermissionStatus.h"
 
 namespace blink {
 
-class WebServiceWorkerProvider;
+class WebServiceWorkerRegistration;
 struct WebPushRegistration;
 
 typedef WebCallbacks<WebPushRegistration, WebPushError> WebPushRegistrationCallbacks;
-typedef WebCallbacks<WebPushPermissionStatus, void> WebPushPermissionStatusCallback;
-typedef WebCallbacks<void, void> WebPushPermissionRequestCallbacks;
 
 class WebPushClient {
 public:
     virtual ~WebPushClient() { }
 
-    // Ownership of the callback is transferred to the client.
-    // Ownership of the WebServiceWorkerProvider is not transferred.
-    virtual void registerPushMessaging(WebPushRegistrationCallbacks*, WebServiceWorkerProvider*) { }
-
-    // Ownership of the callback is transferred to the client.
-    // Ownership of the WebServiceWorkerProvider is not transferred.
-    virtual void getPermissionStatus(WebPushPermissionStatusCallback*, WebServiceWorkerProvider*) { }
+    // Ownership of the WebServiceWorkerRegistration is not transferred.
+    // Ownership of the callbacks is transferred to the client.
+    virtual void registerPushMessaging(WebServiceWorkerRegistration*, WebPushRegistrationCallbacks*) { }
 };
 
 } // namespace blink

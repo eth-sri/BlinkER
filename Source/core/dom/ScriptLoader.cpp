@@ -254,10 +254,13 @@ bool ScriptLoader::prepareScript(const TextPosition& scriptStartPosition, Legacy
         m_pendingScript.watchForLoad(this);
     } else if (client->hasSourceAttribute()) {
         m_pendingScript = PendingScript(m_element, m_resource.get());
+#if 0
+        // FIXME(chill): enable streaming
         LocalFrame* frame = m_element->document().frame();
         if (frame) {
             ScriptStreamer::startStreaming(m_pendingScript, frame->settings(), ScriptState::forMainWorld(frame), PendingScript::Async);
         }
+#endif
         contextDocument->scriptRunner()->queueScriptForExecution(this, ScriptRunner::ASYNC_EXECUTION);
         // Note that watchForLoad can immediately call notifyFinished.
         m_pendingScript.watchForLoad(this);
@@ -346,7 +349,7 @@ void ScriptLoader::executeScript(const ScriptSourceCode& sourceCode, double* com
             return;
         }
 
-        if (!SubresourceIntegrity::CheckSubresourceIntegrity(*m_element, sourceCode.source(), sourceCode.resource()->url()))
+        if (!SubresourceIntegrity::CheckSubresourceIntegrity(*m_element, sourceCode.source(), sourceCode.resource()->url(), sourceCode.resource()->mimeType()))
             return;
     }
 
@@ -364,7 +367,7 @@ void ScriptLoader::executeScript(const ScriptSourceCode& sourceCode, double* com
         contextDocument->pushCurrentScript(toHTMLScriptElement(m_element));
 
     AccessControlStatus corsCheck = NotSharableCrossOrigin;
-    if (!m_isExternalScript || (sourceCode.resource() && sourceCode.resource()->passesAccessControlCheck(m_element->document().securityOrigin())))
+    if (!m_isExternalScript || (sourceCode.resource() && sourceCode.resource()->passesAccessControlCheck(&m_element->document(), m_element->document().securityOrigin())))
         corsCheck = SharableCrossOrigin;
 
     // Create a script from the script element node, using the script

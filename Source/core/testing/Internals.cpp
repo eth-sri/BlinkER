@@ -36,7 +36,9 @@
 #include "bindings/core/v8/SerializedScriptValueFactory.h"
 #include "bindings/core/v8/V8IteratorResultValue.h"
 #include "bindings/core/v8/V8ThrowException.h"
+#include "core/HTMLNames.h"
 #include "core/InternalRuntimeFlags.h"
+#include "core/SVGNames.h"
 #include "core/animation/AnimationTimeline.h"
 #include "core/css/StyleSheetContents.h"
 #include "core/css/resolver/StyleResolver.h"
@@ -108,7 +110,6 @@
 #include "core/page/FocusController.h"
 #include "core/page/NetworkStateNotifier.h"
 #include "core/page/Page.h"
-#include "core/page/PagePopupController.h"
 #include "core/page/PrintContext.h"
 #include "core/plugins/testing/DictionaryPluginPlaceholder.h"
 #include "core/plugins/testing/DocumentFragmentPluginPlaceholder.h"
@@ -124,7 +125,6 @@
 #include "core/testing/InternalSettings.h"
 #include "core/testing/LayerRect.h"
 #include "core/testing/LayerRectList.h"
-#include "core/testing/MockPagePopupDriver.h"
 #include "core/testing/PluginPlaceholderOptions.h"
 #include "core/testing/PrivateScriptTest.h"
 #include "core/testing/TypeConversions.h"
@@ -139,6 +139,7 @@
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/filters/FilterOperation.h"
 #include "platform/graphics/filters/FilterOperations.h"
+#include "platform/heap/Handle.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebConnectionType.h"
@@ -179,11 +180,6 @@ private:
 };
 
 } // namespace
-
-// FIXME: oilpan: These will be removed soon.
-static MockPagePopupDriver* s_pagePopupDriver = 0;
-
-using namespace HTMLNames;
 
 static bool markerTypesFrom(const String& markerType, DocumentMarker::MarkerTypes& result)
 {
@@ -227,9 +223,6 @@ void Internals::resetToConsistentState(Page* page)
     page->setIsCursorVisible(true);
     page->setPageScaleFactor(1, IntPoint(0, 0));
     blink::overrideUserPreferredLanguages(Vector<AtomicString>());
-    delete s_pagePopupDriver;
-    s_pagePopupDriver = 0;
-    page->chrome().client().resetPagePopupDriver();
     if (!page->deprecatedLocalMainFrame()->spellChecker().isContinuousSpellCheckingEnabled())
         page->deprecatedLocalMainFrame()->spellChecker().toggleContinuousSpellChecking();
     if (page->deprecatedLocalMainFrame()->editor().isOverwriteModeEnabled())
@@ -482,33 +475,53 @@ size_t Internals::countElementShadow(const Node* root, ExceptionState& exception
     return toShadowRoot(root)->childShadowRootCount();
 }
 
-Node* Internals::nextSiblingByWalker(Node* node)
+Node* Internals::nextSiblingInComposedTree(Node* node, ExceptionState& exceptionState)
 {
     ASSERT(node);
+    if (!node->canParticipateInComposedTree()) {
+        exceptionState.throwDOMException(InvalidAccessError, "The node argument doesn't particite in the composed tree.");
+        return 0;
+    }
     return ComposedTreeTraversal::nextSibling(*node);
 }
 
-Node* Internals::firstChildByWalker(Node* node)
+Node* Internals::firstChildInComposedTree(Node* node, ExceptionState& exceptionState)
 {
     ASSERT(node);
+    if (!node->canParticipateInComposedTree()) {
+        exceptionState.throwDOMException(InvalidAccessError, "The node argument doesn't particite in the composed tree");
+        return 0;
+    }
     return ComposedTreeTraversal::firstChild(*node);
 }
 
-Node* Internals::lastChildByWalker(Node* node)
+Node* Internals::lastChildInComposedTree(Node* node, ExceptionState& exceptionState)
 {
     ASSERT(node);
+    if (!node->canParticipateInComposedTree()) {
+        exceptionState.throwDOMException(InvalidAccessError, "The node argument doesn't particite in the composed tree.");
+        return 0;
+    }
     return ComposedTreeTraversal::lastChild(*node);
 }
 
-Node* Internals::nextNodeByWalker(Node* node)
+Node* Internals::nextInComposedTree(Node* node, ExceptionState& exceptionState)
 {
     ASSERT(node);
+    if (!node->canParticipateInComposedTree()) {
+        exceptionState.throwDOMException(InvalidAccessError, "The node argument doesn't particite in the composed tree.");
+        return 0;
+    }
     return ComposedTreeTraversal::next(*node);
 }
 
-Node* Internals::previousNodeByWalker(Node* node)
+Node* Internals::previousInComposedTree(Node* node, ExceptionState& exceptionState)
 {
     ASSERT(node);
+    if (!node->canParticipateInComposedTree()) {
+        exceptionState.throwDOMException(InvalidAccessError, "The node argument doesn't particite in the composed tree.");
+        return 0;
+    }
     return ComposedTreeTraversal::previous(*node);
 }
 
@@ -658,38 +671,14 @@ void Internals::setFormControlStateOfHistoryItem(const Vector<String>& state, Ex
     mainItem->setDocumentState(state);
 }
 
-void Internals::setEnableMockPagePopup(bool enabled, ExceptionState& exceptionState)
-{
-    Document* document = contextDocument();
-    if (!document || !document->page())
-        return;
-    Page* page = document->page();
-    if (!enabled) {
-        page->chrome().client().resetPagePopupDriver();
-        return;
-    }
-    if (!s_pagePopupDriver)
-        s_pagePopupDriver = MockPagePopupDriver::create(page->deprecatedLocalMainFrame()).leakPtr();
-    page->chrome().client().setPagePopupDriver(s_pagePopupDriver);
-}
-
-PassRefPtrWillBeRawPtr<PagePopupController> Internals::pagePopupController()
-{
-    return s_pagePopupDriver ? s_pagePopupDriver->pagePopupController() : 0;
-}
-
 DOMWindow* Internals::pagePopupWindow() const
 {
     Document* document = contextDocument();
     if (!document)
         return nullptr;
-    Page* page = document->page();
-    if (!page)
-        return nullptr;
-    PagePopupDriver* pagePopupDriver = page->chrome().client().pagePopupDriver();
-    if (!pagePopupDriver)
-        return nullptr;
-    return pagePopupDriver->pagePopupWindow();
+    if (Page* page = document->page())
+        return page->chrome().client().pagePopupWindowForTesting();
+    return nullptr;
 }
 
 PassRefPtrWillBeRawPtr<ClientRect> Internals::absoluteCaretBounds(ExceptionState& exceptionState)
@@ -946,8 +935,8 @@ void Internals::scrollElementToRect(Element* element, long x, long y, long w, lo
         exceptionState.throwDOMException(InvalidNodeTypeError, element ? "No view can be obtained from the provided element's document." : ExceptionMessages::argumentNullOrIncorrectType(1, "Element"));
         return;
     }
-    FrameView* frameView = element->document().view();
-    frameView->scrollElementToRect(element, IntRect(x, y, w, h));
+    FrameView* mainFrame = toLocalFrame(element->document().page()->mainFrame())->view();
+    mainFrame->scrollElementToRect(element, IntRect(x, y, w, h));
 }
 
 PassRefPtrWillBeRawPtr<Range> Internals::rangeFromLocationAndLength(Element* scope, int rangeLocation, int rangeLength)
@@ -1334,6 +1323,34 @@ LayerRectList* Internals::touchEventTargetLayerRects(Document* document, Excepti
     }
 
     return nullptr;
+}
+
+AtomicString Internals::htmlNamespace()
+{
+    return HTMLNames::xhtmlNamespaceURI;
+}
+
+Vector<AtomicString> Internals::htmlTags()
+{
+    Vector<AtomicString> tags(HTMLNames::HTMLTagsCount);
+    OwnPtr<const HTMLQualifiedName*[]> qualifiedNames = HTMLNames::getHTMLTags();
+    for (size_t i = 0; i < HTMLNames::HTMLTagsCount; ++i)
+        tags[i] = qualifiedNames[i]->localName();
+    return tags;
+}
+
+AtomicString Internals::svgNamespace()
+{
+    return SVGNames::svgNamespaceURI;
+}
+
+Vector<AtomicString> Internals::svgTags()
+{
+    Vector<AtomicString> tags(SVGNames::SVGTagsCount);
+    OwnPtr<const SVGQualifiedName*[]> qualifiedNames = SVGNames::getSVGTags();
+    for (size_t i = 0; i < SVGNames::SVGTagsCount; ++i)
+        tags[i] = qualifiedNames[i]->localName();
+    return tags;
 }
 
 PassRefPtrWillBeRawPtr<StaticNodeList> Internals::nodesFromRect(Document* document, int centerX, int centerY, unsigned topPadding, unsigned rightPadding,
@@ -1993,7 +2010,7 @@ PassRefPtr<SerializedScriptValue> Internals::deserializeBuffer(PassRefPtr<DOMArr
 
 void Internals::forceReload(bool endToEnd)
 {
-    frame()->loader().reload(endToEnd ? EndToEndReload : NormalReload);
+    frame()->reload(endToEnd ? EndToEndReload : NormalReload, NotClientRedirect);
 }
 
 PassRefPtrWillBeRawPtr<ClientRect> Internals::selectionBounds(ExceptionState& exceptionState)
@@ -2137,7 +2154,7 @@ private:
 
 ScriptPromise Internals::createResolvedPromise(ScriptState* scriptState, ScriptValue value)
 {
-    RefPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(scriptState);
+    RefPtrWillBeRawPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(scriptState);
     ScriptPromise promise = resolver->promise();
     resolver->resolve(value);
     return promise;
@@ -2145,7 +2162,7 @@ ScriptPromise Internals::createResolvedPromise(ScriptState* scriptState, ScriptV
 
 ScriptPromise Internals::createRejectedPromise(ScriptState* scriptState, ScriptValue value)
 {
-    RefPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(scriptState);
+    RefPtrWillBeRawPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(scriptState);
     ScriptPromise promise = resolver->promise();
     resolver->reject(value);
     return promise;
@@ -2323,6 +2340,11 @@ void Internals::showAllTransitionElements()
         frame()->document()->showTransitionElements(AtomicString(iter->selector));
 }
 
+void Internals::setExitTransitionStylesheetsEnabled(bool enabled)
+{
+    frame()->document()->styleEngine()->setExitTransitionStylesheetsEnabled(enabled);
+}
+
 void Internals::forcePluginPlaceholder(HTMLElement* element, PassRefPtrWillBeRawPtr<DocumentFragment> fragment, ExceptionState& exceptionState)
 {
     if (!element->isPluginElement()) {
@@ -2344,6 +2366,11 @@ void Internals::forcePluginPlaceholder(HTMLElement* element, const PluginPlaceho
 Iterator* Internals::iterator(ScriptState* scriptState, ExceptionState& exceptionState)
 {
     return new InternalsIterator;
+}
+
+void Internals::forceBlinkGCWithoutV8GC()
+{
+    ThreadState::current()->scheduleGC(ThreadState::ForcedGC);
 }
 
 } // namespace blink

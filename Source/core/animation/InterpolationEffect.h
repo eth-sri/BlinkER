@@ -64,6 +64,6 @@ private:
     WillBeHeapVector<OwnPtrWillBeMember<InterpolationRecord> > m_interpolations;
 };
 
-}
+} // namespace blink
 
-#endif
+#endif // InterpolationEffect_h

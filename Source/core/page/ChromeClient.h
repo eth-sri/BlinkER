@@ -22,17 +22,17 @@
 #ifndef ChromeClient_h
 #define ChromeClient_h
 
-#include "core/accessibility/AXObjectCache.h"
+#include "core/dom/AXObjectCache.h"
 #include "core/inspector/ConsoleAPITypes.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/NavigationPolicy.h"
 #include "core/frame/ConsoleTypes.h"
+#include "core/html/forms/PopupMenuClient.h"
 #include "core/page/FocusType.h"
 #include "core/rendering/style/RenderStyleConstants.h"
 #include "platform/Cursor.h"
 #include "platform/HostWindow.h"
 #include "platform/PopupMenu.h"
-#include "platform/PopupMenuClient.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollTypes.h"
 #include "wtf/Forward.h"
@@ -141,13 +141,15 @@ public:
     virtual void scheduleAnimation() = 0;
     // End methods used by HostWindow.
 
+    virtual void scheduleAnimationForFrame(LocalFrame*) { }
+
     virtual void dispatchViewportPropertiesDidChange(const ViewportDescription&) const { }
 
     virtual void contentsSizeChanged(LocalFrame*, const IntSize&) const = 0;
     virtual void deviceOrPageScaleFactorChanged() const { }
     virtual void layoutUpdated(LocalFrame*) const { }
 
-    virtual void mouseDidMoveOverElement(const HitTestResult&, unsigned modifierFlags) = 0;
+    virtual void mouseDidMoveOverElement(const HitTestResult&) = 0;
 
     virtual void setToolTip(const String&, TextDirection) = 0;
 
@@ -177,8 +179,10 @@ public:
     // Allows ports to customize the type of graphics layers created by this page.
     virtual GraphicsLayerFactory* graphicsLayerFactory() const { return nullptr; }
 
-    // Pass 0 as the GraphicsLayer to detatch the root layer.
-    virtual void attachRootGraphicsLayer(GraphicsLayer*) = 0;
+    // Pass 0 as the GraphicsLayer to detach the root layer.
+    // This sets the graphics layer for the LocalFrame's WebWidget, if it has one. Otherwise
+    // it sets it for the WebViewImpl.
+    virtual void attachRootGraphicsLayer(GraphicsLayer*, LocalFrame* localRoot) = 0;
 
     virtual void enterFullScreenForElement(Element*) { }
     virtual void exitFullScreenForElement(Element*) { }
@@ -192,11 +196,8 @@ public:
 
     // Checks if there is an opened popup, called by RenderMenuList::showPopup().
     virtual bool hasOpenedPopup() const = 0;
-    virtual PassRefPtrWillBeRawPtr<PopupMenu> createPopupMenu(LocalFrame&, PopupMenuClient*) const = 0;
-    // For testing.
-    virtual void setPagePopupDriver(PagePopupDriver*) = 0;
-    virtual void resetPagePopupDriver() = 0;
-    virtual PagePopupDriver* pagePopupDriver() const = 0;
+    virtual PassRefPtrWillBeRawPtr<PopupMenu> createPopupMenu(LocalFrame&, PopupMenuClient*) = 0;
+    virtual DOMWindow* pagePopupWindowForTesting() const = 0;
 
     virtual void postAccessibilityNotification(AXObject*, AXObjectCache::AXNotification) { }
     virtual String acceptLanguages() = 0;
@@ -214,6 +215,11 @@ public:
     virtual bool requestPointerLock() { return false; }
     virtual void requestPointerUnlock() { }
 
+    // Heuristic-based function for determining if we should disable workarounds
+    // for viewing websites that are not optimized for mobile devices, e.g.,
+    // for disabling touch adjustment or link disambiguation.
+    virtual bool shouldDisableDesktopWorkarounds() { return false; }
+
     virtual FloatSize minimumWindowSize() const { return FloatSize(100, 100); }
 
     virtual bool isChromeClientImpl() const { return false; }
@@ -222,7 +228,7 @@ public:
     virtual void didChangeValueInTextField(HTMLFormControlElement&) { }
     virtual void didEndEditingOnTextField(HTMLInputElement&) { }
     virtual void handleKeyboardEventOnTextField(HTMLInputElement&, KeyboardEvent&) { }
-    virtual void textFieldDataListChanged(HTMLFormControlElement&) { }
+    virtual void textFieldDataListChanged(HTMLInputElement&) { }
 
     // Input mehtod editor related functions.
     virtual void didCancelCompositionOnSelectionChange() { }

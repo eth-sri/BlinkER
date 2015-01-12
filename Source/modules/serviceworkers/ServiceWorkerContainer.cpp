@@ -37,17 +37,20 @@
 #include "bindings/core/v8/SerializedScriptValue.h"
 #include "bindings/core/v8/SerializedScriptValueFactory.h"
 #include "core/dom/DOMException.h"
+#include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/MessagePort.h"
 #include "core/events/MessageEvent.h"
 #include "core/frame/LocalDOMWindow.h"
+#include "modules/EventTargetModules.h"
 #include "modules/serviceworkers/ServiceWorker.h"
 #include "modules/serviceworkers/ServiceWorkerContainerClient.h"
 #include "modules/serviceworkers/ServiceWorkerError.h"
 #include "modules/serviceworkers/ServiceWorkerRegistration.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "public/platform/WebServiceWorker.h"
+#include "public/platform/WebServiceWorkerClientsInfo.h"
 #include "public/platform/WebServiceWorkerProvider.h"
 #include "public/platform/WebServiceWorkerRegistration.h"
 #include "public/platform/WebString.h"
@@ -59,7 +62,7 @@ namespace blink {
 // when nullptr is given to onSuccess.
 class GetRegistrationCallback : public WebServiceWorkerProvider::WebServiceWorkerGetRegistrationCallbacks {
 public:
-    explicit GetRegistrationCallback(PassRefPtr<ScriptPromiseResolver> resolver)
+    explicit GetRegistrationCallback(PassRefPtrWillBeRawPtr<ScriptPromiseResolver> resolver)
         : m_resolver(resolver)
         , m_adapter(m_resolver) { }
     virtual ~GetRegistrationCallback() { }
@@ -72,7 +75,7 @@ public:
     }
     virtual void onError(WebServiceWorkerError* error) override { m_adapter.onError(error); }
 private:
-    RefPtr<ScriptPromiseResolver> m_resolver;
+    RefPtrWillBePersistent<ScriptPromiseResolver> m_resolver;
     CallbackPromiseAdapter<ServiceWorkerRegistration, ServiceWorkerError> m_adapter;
     WTF_MAKE_NONCOPYABLE(GetRegistrationCallback);
 };
@@ -100,12 +103,13 @@ void ServiceWorkerContainer::trace(Visitor* visitor)
     visitor->trace(m_controller);
     visitor->trace(m_readyRegistration);
     visitor->trace(m_ready);
+    RefCountedGarbageCollectedEventTargetWithInlineData<ServiceWorkerContainer>::trace(visitor);
 }
 
 ScriptPromise ServiceWorkerContainer::registerServiceWorker(ScriptState* scriptState, const String& url, const RegistrationOptions& options)
 {
     ASSERT(RuntimeEnabledFeatures::serviceWorkerEnabled());
-    RefPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(scriptState);
+    RefPtrWillBeRawPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(scriptState);
     ScriptPromise promise = resolver->promise();
 
     if (!m_provider) {
@@ -143,11 +147,6 @@ ScriptPromise ServiceWorkerContainer::registerServiceWorker(ScriptState* scriptS
         return promise;
     }
 
-    if (!patternURL.string().startsWith(scriptURL.baseAsString())) {
-        resolver->reject(DOMException::create(SecurityError, "The scope must be under the directory of the script URL."));
-        return promise;
-    }
-
     m_provider->registerServiceWorker(patternURL, scriptURL, new CallbackPromiseAdapter<ServiceWorkerRegistration, ServiceWorkerError>(resolver));
 
     return promise;
@@ -169,7 +168,7 @@ private:
 ScriptPromise ServiceWorkerContainer::getRegistration(ScriptState* scriptState, const String& documentURL)
 {
     ASSERT(RuntimeEnabledFeatures::serviceWorkerEnabled());
-    RefPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(scriptState);
+    RefPtrWillBeRawPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(scriptState);
     ScriptPromise promise = resolver->promise();
 
     if (!m_provider) {
@@ -232,13 +231,15 @@ static void deleteIfNoExistingOwner(WebServiceWorker* serviceWorker)
         delete serviceWorker;
 }
 
-void ServiceWorkerContainer::setController(WebServiceWorker* serviceWorker)
+void ServiceWorkerContainer::setController(WebServiceWorker* serviceWorker, bool shouldNotifyControllerChange)
 {
     if (!executionContext()) {
         deleteIfNoExistingOwner(serviceWorker);
         return;
     }
     m_controller = ServiceWorker::from(executionContext(), serviceWorker);
+    if (shouldNotifyControllerChange)
+        dispatchEvent(Event::create(EventTypeNames::controllerchange));
 }
 
 void ServiceWorkerContainer::setReadyRegistration(WebServiceWorkerRegistration* registration)
@@ -269,6 +270,30 @@ void ServiceWorkerContainer::dispatchMessageEvent(const WebString& message, cons
     OwnPtrWillBeRawPtr<MessagePortArray> ports = MessagePort::toMessagePortArray(executionContext(), webChannels);
     RefPtr<SerializedScriptValue> value = SerializedScriptValueFactory::instance().createFromWire(message);
     executionContext()->executingWindow()->dispatchEvent(MessageEvent::create(ports.release(), value));
+}
+
+const AtomicString& ServiceWorkerContainer::interfaceName() const
+{
+    return EventTargetNames::ServiceWorkerContainer;
+}
+
+bool ServiceWorkerContainer::getClientInfo(WebServiceWorkerClientInfo* info)
+{
+    ExecutionContext* context = executionContext();
+    // FIXME: Make this work for non-document context (e.g. shared workers).
+    if (!context || !context->isDocument())
+        return false;
+    Document* document = toDocument(context);
+    info->visibilityState = document->visibilityState();
+    info->isFocused = document->hasFocus();
+    info->url = document->url();
+    if (!document->frame())
+        info->frameType = WebURLRequest::FrameTypeNone;
+    else if (document->frame()->isMainFrame())
+        info->frameType = WebURLRequest::FrameTypeTopLevel;
+    else
+        info->frameType = WebURLRequest::FrameTypeNested;
+    return true;
 }
 
 ServiceWorkerContainer::ServiceWorkerContainer(ExecutionContext* executionContext)

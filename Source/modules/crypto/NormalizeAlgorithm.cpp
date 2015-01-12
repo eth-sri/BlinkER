@@ -84,7 +84,7 @@ const AlgorithmNameMapping algorithmNameMappings[] = {
 
 // Reminder to update the table mapping names to IDs whenever adding a new
 // algorithm ID.
-COMPILE_ASSERT(WebCryptoAlgorithmIdLast + 1 == WTF_ARRAY_LENGTH(algorithmNameMappings), UPDATE_algorithmNameMappings);
+static_assert(WebCryptoAlgorithmIdLast + 1 == WTF_ARRAY_LENGTH(algorithmNameMappings), "algorithmNameMappings needs to be updated");
 
 #if ENABLE(ASSERT)
 
@@ -195,21 +195,15 @@ bool lookupAlgorithmIdByName(const String& algorithmName, WebCryptoAlgorithmId& 
     return true;
 }
 
-void setSyntaxError(const String& message, AlgorithmError* error)
+void setTypeError(const String& message, AlgorithmError* error)
 {
-    error->errorType = WebCryptoErrorTypeSyntax;
+    error->errorType = WebCryptoErrorTypeType;
     error->errorDetails = message;
 }
 
 void setNotSupportedError(const String& message, AlgorithmError* error)
 {
     error->errorType = WebCryptoErrorTypeNotSupported;
-    error->errorDetails = message;
-}
-
-void setDataError(const String& message, AlgorithmError* error)
-{
-    error->errorType = WebCryptoErrorTypeData;
     error->errorDetails = message;
 }
 
@@ -296,7 +290,7 @@ bool getOptionalBufferSource(const Dictionary& raw, const char* propertyName, bo
     }
 
     if (hasProperty) {
-        setSyntaxError(context.toString(propertyName, "Not a BufferSource"), error);
+        setTypeError(context.toString(propertyName, "Not a BufferSource"), error);
         return false;
     }
     return true;
@@ -307,7 +301,7 @@ bool getBufferSource(const Dictionary& raw, const char* propertyName, BufferSour
     bool hasProperty;
     bool ok = getOptionalBufferSource(raw, propertyName, hasProperty, buffer, context, error);
     if (!hasProperty) {
-        setSyntaxError(context.toString(propertyName, "Missing required property"), error);
+        setTypeError(context.toString(propertyName, "Missing required property"), error);
         return false;
     }
     return ok;
@@ -316,7 +310,7 @@ bool getBufferSource(const Dictionary& raw, const char* propertyName, BufferSour
 bool getUint8Array(const Dictionary& raw, const char* propertyName, RefPtr<DOMUint8Array>& array, const ErrorContext& context, AlgorithmError* error)
 {
     if (!DictionaryHelper::get(raw, propertyName, array) || !array) {
-        setSyntaxError(context.toString(propertyName, "Missing or not a Uint8Array"), error);
+        setTypeError(context.toString(propertyName, "Missing or not a Uint8Array"), error);
         return false;
     }
     return true;
@@ -348,14 +342,14 @@ bool getOptionalInteger(const Dictionary& raw, const char* propertyName, bool& h
         return true;
 
     if (!ok || std::isnan(number)) {
-        setSyntaxError(context.toString(propertyName, "Is not a number"), error);
+        setTypeError(context.toString(propertyName, "Is not a number"), error);
         return false;
     }
 
     number = trunc(number);
 
     if (std::isinf(number) || number < minValue || number > maxValue) {
-        setSyntaxError(context.toString(propertyName, "Outside of numeric range"), error);
+        setTypeError(context.toString(propertyName, "Outside of numeric range"), error);
         return false;
     }
 
@@ -370,7 +364,7 @@ bool getInteger(const Dictionary& raw, const char* propertyName, double& value, 
         return false;
 
     if (!hasProperty) {
-        setSyntaxError(context.toString(propertyName, "Missing required property"), error);
+        setTypeError(context.toString(propertyName, "Missing required property"), error);
         return false;
     }
 
@@ -414,6 +408,39 @@ bool getOptionalUint32(const Dictionary& raw, const char* propertyName, bool& ha
     return true;
 }
 
+bool getOptionalUint8(const Dictionary& raw, const char* propertyName, bool& hasValue, uint8_t& value, const ErrorContext& context, AlgorithmError* error)
+{
+    double number;
+    if (!getOptionalInteger(raw, propertyName, hasValue, number, 0, 0xFF, context, error))
+        return false;
+    if (hasValue)
+        value = number;
+    return true;
+}
+
+bool getAlgorithmIdentifier(const Dictionary& raw, const char* propertyName, AlgorithmIdentifier& value, const ErrorContext& context, AlgorithmError* error)
+{
+    // FIXME: This is not correct: http://crbug.com/438060
+    //   (1) It may retrieve the property twice from the dictionary, whereas it
+    //       should be reading the v8 value once to avoid issues with getters.
+    //   (2) The value is stringified (whereas the spec says it should be an
+    //       instance of DOMString).
+    Dictionary dictionary;
+    if (DictionaryHelper::get(raw, propertyName, dictionary) && !dictionary.isUndefinedOrNull()) {
+        value.setDictionary(dictionary);
+        return true;
+    }
+
+    String algorithmName;
+    if (!DictionaryHelper::get(raw, propertyName, algorithmName)) {
+        setTypeError(context.toString(propertyName, "Missing or not an AlgorithmIdentifier"), error);
+        return false;
+    }
+
+    value.setString(algorithmName);
+    return true;
+}
+
 // Defined by the WebCrypto spec as:
 //
 //    dictionary AesCbcParams : Algorithm {
@@ -426,10 +453,6 @@ bool parseAesCbcParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithmParams>& 
         return false;
 
     DOMArrayPiece iv(ivBufferSource);
-    if (iv.byteLength() != 16) {
-        setDataError(context.toString("iv", "Must be 16 bytes"), error);
-        return false;
-    }
 
     params = adoptPtr(new WebCryptoAesCbcParams(iv.bytes(), iv.byteLength()));
     return true;
@@ -438,7 +461,7 @@ bool parseAesCbcParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithmParams>& 
 // Defined by the WebCrypto spec as:
 //
 //    dictionary AesKeyGenParams : Algorithm {
-//      [EnforceRange] unsigned short length;
+//      [EnforceRange] required unsigned short length;
 //    };
 bool parseAesKeyGenParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithmParams>& params, const ErrorContext& context, AlgorithmError* error)
 {
@@ -450,43 +473,48 @@ bool parseAesKeyGenParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithmParams
     return true;
 }
 
-bool parseAlgorithm(const Dictionary&, WebCryptoOperation, WebCryptoAlgorithm&, ErrorContext, AlgorithmError*);
+bool parseAlgorithmIdentifier(const AlgorithmIdentifier&, WebCryptoOperation, WebCryptoAlgorithm&, ErrorContext, AlgorithmError*);
 
 bool parseHash(const Dictionary& raw, WebCryptoAlgorithm& hash, ErrorContext context, AlgorithmError* error)
 {
-    Dictionary rawHash;
-    if (!DictionaryHelper::get(raw, "hash", rawHash)) {
-        setSyntaxError(context.toString("hash", "Missing or not a dictionary"), error);
+    AlgorithmIdentifier rawHash;
+    if (!getAlgorithmIdentifier(raw, "hash", rawHash, context, error))
         return false;
-    }
 
     context.add("hash");
-    return parseAlgorithm(rawHash, WebCryptoOperationDigest, hash, context, error);
+    return parseAlgorithmIdentifier(rawHash, WebCryptoOperationDigest, hash, context, error);
 }
 
 // Defined by the WebCrypto spec as:
 //
 //    dictionary HmacImportParams : Algorithm {
-//      AlgorithmIdentifier hash;
+//      HashAlgorithmIdentifier hash;
+//      [EnforceRange] unsigned long length;
 //    };
+//
+// FIXME: http://crbug.com/438475: The current implementation differs from the
+// spec in that the "hash" parameter is required. This seems more sensible, and
+// is being proposed as a change to the spec. (https://www.w3.org/Bugs/Public/show_bug.cgi?id=27448).
 bool parseHmacImportParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithmParams>& params, const ErrorContext& context, AlgorithmError* error)
 {
     WebCryptoAlgorithm hash;
     if (!parseHash(raw, hash, context, error))
         return false;
 
-    params = adoptPtr(new WebCryptoHmacImportParams(hash));
+    bool hasLength;
+    uint32_t length = 0;
+    if (!getOptionalUint32(raw, "length", hasLength, length, context, error))
+        return false;
+
+    params = adoptPtr(new WebCryptoHmacImportParams(hash, hasLength, length));
     return true;
 }
 
 // Defined by the WebCrypto spec as:
 //
 //    dictionary HmacKeyGenParams : Algorithm {
-//      AlgorithmIdentifier hash;
-//      // The length (in bits) of the key to generate. If unspecified, the
-//      // recommended length will be used, which is the size of the associated hash function's block
-//      // size.
-//      unsigned long length;
+//      required HashAlgorithmIdentifier hash;
+//      [EnforceRange] unsigned long length;
 //    };
 bool parseHmacKeyGenParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithmParams>& params, const ErrorContext& context, AlgorithmError* error)
 {
@@ -505,8 +533,8 @@ bool parseHmacKeyGenParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithmParam
 
 // Defined by the WebCrypto spec as:
 //
-//    dictionary RsaHashedImportParams {
-//      AlgorithmIdentifier hash;
+//    dictionary RsaHashedImportParams : Algorithm {
+//      required HashAlgorithmIdentifier hash;
 //    };
 bool parseRsaHashedImportParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithmParams>& params, const ErrorContext& context, AlgorithmError* error)
 {
@@ -520,13 +548,13 @@ bool parseRsaHashedImportParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithm
 
 // Defined by the WebCrypto spec as:
 //
-//    dictionary RsaHashedKeyGenParams : RsaKeyGenParams {
-//      AlgorithmIdentifier hash;
+//    dictionary RsaKeyGenParams : Algorithm {
+//      [EnforceRange] required unsigned long modulusLength;
+//      required BigInteger publicExponent;
 //    };
 //
-//    dictionary RsaKeyGenParams : Algorithm {
-//      unsigned long modulusLength;
-//      BigInteger publicExponent;
+//    dictionary RsaHashedKeyGenParams : RsaKeyGenParams {
+//      required HashAlgorithmIdentifier hash;
 //    };
 bool parseRsaHashedKeyGenParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithmParams>& params, const ErrorContext& context, AlgorithmError* error)
 {
@@ -550,7 +578,7 @@ bool parseRsaHashedKeyGenParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithm
 //
 //    dictionary AesCtrParams : Algorithm {
 //      required BufferSource counter;
-//      [EnforceRange] octet length;
+//      [EnforceRange] required octet length;
 //    };
 bool parseAesCtrParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithmParams>& params, const ErrorContext& context, AlgorithmError* error)
 {
@@ -572,7 +600,7 @@ bool parseAesCtrParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithmParams>& 
 //     dictionary AesGcmParams : Algorithm {
 //       required BufferSource iv;
 //       BufferSource additionalData;
-//       [EnforceRange] octet tagLength;  // May be 0-128
+//       [EnforceRange] octet tagLength;
 //     }
 bool parseAesGcmParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithmParams>& params, const ErrorContext& context, AlgorithmError* error)
 {
@@ -585,9 +613,9 @@ bool parseAesGcmParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithmParams>& 
     if (!getOptionalBufferSource(raw, "additionalData", hasAdditionalData, additionalDataBufferSource, context, error))
         return false;
 
-    double tagLength;
+    uint8_t tagLength = 0;
     bool hasTagLength;
-    if (!getOptionalInteger(raw, "tagLength", hasTagLength, tagLength, 0, 128, context, error))
+    if (!getOptionalUint8(raw, "tagLength", hasTagLength, tagLength, context, error))
         return false;
 
     DOMArrayPiece iv(ivBufferSource);
@@ -656,13 +684,13 @@ const CurveNameMapping curveNameMappings[] = {
 };
 
 // Reminder to update curveNameMappings when adding a new curve.
-COMPILE_ASSERT(WebCryptoNamedCurveLast + 1 == WTF_ARRAY_LENGTH(curveNameMappings), UPDATE_curveNameMappings);
+static_assert(WebCryptoNamedCurveLast + 1 == WTF_ARRAY_LENGTH(curveNameMappings), "curveNameMappings needs to be updated");
 
 bool parseNamedCurve(const Dictionary& raw, WebCryptoNamedCurve& namedCurve, ErrorContext context, AlgorithmError* error)
 {
     String namedCurveString;
     if (!DictionaryHelper::get(raw, "namedCurve", namedCurveString)) {
-        setSyntaxError(context.toString("namedCurve", "Missing or not a string"), error);
+        setTypeError(context.toString("namedCurve", "Missing or not a string"), error);
         return false;
     }
 
@@ -716,17 +744,32 @@ bool parseEcdhKeyDeriveParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithmPa
 {
     v8::Local<v8::Value> v8Value;
     if (!raw.get("public", v8Value)) {
-        setSyntaxError(context.toString("public", "Missing required property"), error);
+        setTypeError(context.toString("public", "Missing required property"), error);
         return false;
     }
 
     CryptoKey* cryptoKey = V8CryptoKey::toImplWithTypeCheck(raw.isolate(), v8Value);
     if (!cryptoKey) {
-        setSyntaxError(context.toString("public", "Must be a CryptoKey"), error);
+        setTypeError(context.toString("public", "Must be a CryptoKey"), error);
         return false;
     }
 
     params = adoptPtr(new WebCryptoEcdhKeyDeriveParams(cryptoKey->key()));
+    return true;
+}
+
+// Defined by the WebCrypto spec as:
+//
+//    dictionary AesDerivedKeyParams : Algorithm {
+//      [EnforceRange] required unsigned short length;
+//    };
+bool parseAesDerivedKeyParams(const Dictionary& raw, OwnPtr<WebCryptoAlgorithmParams>& params, const ErrorContext& context, AlgorithmError* error)
+{
+    uint16_t length;
+    if (!getUint16(raw, "length", length, context, error))
+        return false;
+
+    params = adoptPtr(new WebCryptoAesDerivedKeyParams(length));
     return true;
 }
 
@@ -777,6 +820,9 @@ bool parseAlgorithmParams(const Dictionary& raw, WebCryptoAlgorithmParamsType ty
     case WebCryptoAlgorithmParamsTypeEcdhKeyDeriveParams:
         context.add("EcdhKeyDeriveParams");
         return parseEcdhKeyDeriveParams(raw, params, context, error);
+    case WebCryptoAlgorithmParamsTypeAesDerivedKeyParams:
+        context.add("AesDerivedKeyParams");
+        return parseAesDerivedKeyParams(raw, params, context, error);
     }
     ASSERT_NOT_REACHED();
     return false;
@@ -799,8 +845,8 @@ const char* operationToString(WebCryptoOperation op)
         return "generateKey";
     case WebCryptoOperationImportKey:
         return "importKey";
-    case WebCryptoOperationDeriveKey:
-        return "deriveKey";
+    case WebCryptoOperationGetKeyLength:
+        return "get key length";
     case WebCryptoOperationDeriveBits:
         return "deriveBits";
     case WebCryptoOperationWrapKey:
@@ -811,25 +857,10 @@ const char* operationToString(WebCryptoOperation op)
     return 0;
 }
 
-bool parseAlgorithm(const Dictionary& raw, WebCryptoOperation op, WebCryptoAlgorithm& algorithm, ErrorContext context, AlgorithmError* error)
+bool parseAlgorithmDictionary(const String& algorithmName, const Dictionary& raw, WebCryptoOperation op, WebCryptoAlgorithm& algorithm, ErrorContext context, AlgorithmError* error)
 {
-    context.add("Algorithm");
-
-    if (!raw.isObject()) {
-        setSyntaxError(context.toString("Not an object"), error);
-        return false;
-    }
-
-    String algorithmName;
-    if (!DictionaryHelper::get(raw, "name", algorithmName)) {
-        setSyntaxError(context.toString("name", "Missing or not a string"), error);
-        return false;
-    }
-
     WebCryptoAlgorithmId algorithmId;
     if (!lookupAlgorithmIdByName(algorithmName, algorithmId)) {
-        // FIXME: The spec says to return a SyntaxError if the input contains
-        //        any non-ASCII characters.
         setNotSupportedError(context.toString("Unrecognized name"), error);
         return false;
     }
@@ -855,11 +886,37 @@ bool parseAlgorithm(const Dictionary& raw, WebCryptoOperation op, WebCryptoAlgor
     return true;
 }
 
+bool parseAlgorithmIdentifier(const AlgorithmIdentifier& raw, WebCryptoOperation op, WebCryptoAlgorithm& algorithm, ErrorContext context, AlgorithmError* error)
+{
+    context.add("Algorithm");
+
+    // If the AlgorithmIdentifier is a String, treat it the same as a Dictionary with a "name" attribute and nothing else.
+    if (raw.isString()) {
+        return parseAlgorithmDictionary(raw.getAsString(), Dictionary(), op, algorithm, context, error);
+    }
+
+    Dictionary params = raw.getAsDictionary();
+
+    // Get the name of the algorithm from the AlgorithmIdentifier.
+    if (!params.isObject()) {
+        setTypeError(context.toString("Not an object"), error);
+        return false;
+    }
+
+    String algorithmName;
+    if (!DictionaryHelper::get(params, "name", algorithmName)) {
+        setTypeError(context.toString("name", "Missing or not a string"), error);
+        return false;
+    }
+
+    return parseAlgorithmDictionary(algorithmName, params, op, algorithm, context, error);
+}
+
 } // namespace
 
-bool normalizeAlgorithm(const Dictionary& raw, WebCryptoOperation op, WebCryptoAlgorithm& algorithm, AlgorithmError* error)
+bool normalizeAlgorithm(const AlgorithmIdentifier& raw, WebCryptoOperation op, WebCryptoAlgorithm& algorithm, AlgorithmError* error)
 {
-    return parseAlgorithm(raw, op, algorithm, ErrorContext(), error);
+    return parseAlgorithmIdentifier(raw, op, algorithm, ErrorContext(), error);
 }
 
 } // namespace blink

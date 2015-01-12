@@ -79,16 +79,10 @@ AutoLogger::~AutoLogger()
         m_canvas->m_log->pushObject(m_logItem);
 }
 
-LoggingCanvas::LoggingCanvas(int width, int height) : InterceptingCanvas(width, height)
+LoggingCanvas::LoggingCanvas(int width, int height)
+    : InterceptingCanvas(width, height)
+    , m_log(JSONArray::create())
 {
-    m_log = JSONArray::create();
-}
-
-void LoggingCanvas::clear(SkColor color)
-{
-    AutoLogger logger(this);
-    logger.logItemWithParams("clear")->setString("color", stringForSkColor(color));
-    this->SkCanvas::clear(color);
 }
 
 void LoggingCanvas::drawPaint(const SkPaint& paint)
@@ -168,17 +162,6 @@ void LoggingCanvas::drawBitmapRectToRect(const SkBitmap& bitmap, const SkRect* s
         params->setObject("paint", objectForSkPaint(*paint));
     params->setNumber("flags", flags);
     this->SkCanvas::drawBitmapRectToRect(bitmap, src, dst, paint, flags);
-}
-
-void LoggingCanvas::drawBitmapMatrix(const SkBitmap& bitmap, const SkMatrix& m, const SkPaint* paint)
-{
-    AutoLogger logger(this);
-    RefPtr<JSONObject> params = logger.logItemWithParams("drawBitmapMatrix");
-    params->setObject("bitmap", objectForSkBitmap(bitmap));
-    params->setArray("matrix", arrayForSkMatrix(m));
-    if (paint)
-        params->setObject("paint", objectForSkPaint(*paint));
-    this->SkCanvas::drawBitmapMatrix(bitmap, m, paint);
 }
 
 void LoggingCanvas::drawBitmapNine(const SkBitmap& bitmap, const SkIRect& center, const SkRect& dst, const SkPaint* paint)
@@ -310,21 +293,6 @@ void LoggingCanvas::onDrawTextBlob(const SkTextBlob *blob, SkScalar x, SkScalar 
     params->setNumber("y", y);
     params->setObject("paint", objectForSkPaint(paint));
     this->SkCanvas::onDrawTextBlob(blob, x, y, paint);
-}
-
-void LoggingCanvas::onPushCull(const SkRect& cullRect)
-{
-    AutoLogger logger(this);
-    RefPtr<JSONObject> params = logger.logItemWithParams("pushCull");
-    params->setObject("cullRect", objectForSkRect(cullRect));
-    this->SkCanvas::onPushCull(cullRect);
-}
-
-void LoggingCanvas::onPopCull()
-{
-    AutoLogger logger(this);
-    logger.logItem("popCull");
-    this->SkCanvas::onPopCull();
 }
 
 void LoggingCanvas::onClipRect(const SkRect& rect, SkRegion::Op op, ClipEdgeStyle style)
@@ -486,9 +454,10 @@ PassRefPtr<JSONArray> LoggingCanvas::arrayForSkPoints(size_t count, const SkPoin
 
 PassRefPtr<JSONObject> LoggingCanvas::objectForSkPicture(const SkPicture& picture)
 {
+    const SkIRect bounds = picture.cullRect().roundOut();
     RefPtr<JSONObject> pictureItem = JSONObject::create();
-    pictureItem->setNumber("width", picture.width());
-    pictureItem->setNumber("height", picture.height());
+    pictureItem->setNumber("width", bounds.width());
+    pictureItem->setNumber("height", bounds.height());
     return pictureItem.release();
 }
 

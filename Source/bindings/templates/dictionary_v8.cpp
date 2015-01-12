@@ -13,12 +13,18 @@
 
 namespace blink {
 
-void {{v8_class}}::toImpl(v8::Isolate* isolate, v8::Handle<v8::Value> v8Value, {{cpp_class}}& impl, ExceptionState& exceptionState)
+{% macro convert_and_set_member(member) %}
+{% endmacro %}
+void {{v8_class}}::toImpl(v8::Isolate* isolate, v8::Local<v8::Value> v8Value, {{cpp_class}}& impl, ExceptionState& exceptionState)
 {
     if (isUndefinedOrNull(v8Value))
         return;
     if (!v8Value->IsObject()) {
+        {% if use_permissive_dictionary_conversion %}
+        // Do nothing.
+        {% else %}
         exceptionState.throwTypeError("cannot convert to dictionary.");
+        {% endif %}
         return;
     }
 
@@ -28,39 +34,58 @@ void {{v8_class}}::toImpl(v8::Isolate* isolate, v8::Handle<v8::Value> v8Value, {
         return;
 
     {% endif %}
+    {# Declare local variables only when the dictionary has members to avoid unused variable warnings. #}
+    {% if members %}
     v8::Local<v8::Object> v8Object = v8Value->ToObject(isolate);
     v8::TryCatch block;
+    {% endif %}
     {% for member in members %}
     v8::Local<v8::Value> {{member.name}}Value = v8Object->Get(v8String(isolate, "{{member.name}}"));
-    if (!{{member.name}}Value.IsEmpty() && !isUndefinedOrNull({{member.name}}Value)) {
-    {% if member.use_output_parameter_for_result %}
-        {{member.cpp_type}} {{member.name}};
+    if (block.HasCaught()) {
+        exceptionState.rethrowV8Exception(block.Exception());
+        return;
+    }
+    if ({{member.name}}Value.IsEmpty() || {{member.name}}Value->IsUndefined()) {
+        // Do nothing.
+    {% if member.is_nullable %}
+    } else if ({{member.name}}Value->IsNull()) {
+        impl.{{member.null_setter_name}}();
     {% endif %}
+    } else {
+        {% if member.deprecate_as %}
+        UseCounter::countDeprecationIfNotPrivateScript(isolate, callingExecutionContext(isolate), UseCounter::{{member.deprecate_as}});
+        {% endif %}
+        {% if member.use_output_parameter_for_result %}
+        {{member.cpp_type}} {{member.name}};
+        {% endif %}
         {{member.v8_value_to_local_cpp_value}};
-    {% if member.enum_validation_expression %}
+        {% if member.is_interface_type %}
+        if (!{{member.name}} && !{{member.name}}Value->IsNull()) {
+            exceptionState.throwTypeError("member {{member.name}} is not of type {{member.idl_type}}.");
+            return;
+        }
+        {% endif %}
+        {% if member.enum_validation_expression %}
         String string = {{member.name}};
         if (!({{member.enum_validation_expression}})) {
             exceptionState.throwTypeError("member {{member.name}} ('" + string + "') is not a valid enum value.");
             return;
         }
-    {% elif member.is_object %}
+        {% elif member.is_object %}
         if (!{{member.name}}.isObject()) {
             exceptionState.throwTypeError("member {{member.name}} is not an object.");
             return;
         }
-    {% endif %}
+        {% endif %}
         impl.{{member.setter_name}}({{member.name}});
-    } else if (block.HasCaught()) {
-        exceptionState.rethrowV8Exception(block.Exception());
-        return;
     }
 
     {% endfor %}
 }
 
-v8::Handle<v8::Value> toV8(const {{cpp_class}}& impl, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
+v8::Local<v8::Value> toV8(const {{cpp_class}}& impl, v8::Local<v8::Object> creationContext, v8::Isolate* isolate)
 {
-    v8::Handle<v8::Object> v8Object = v8::Object::New(isolate);
+    v8::Local<v8::Object> v8Object = v8::Object::New(isolate);
     {% if parent_v8_class %}
     toV8{{parent_cpp_class}}(impl, v8Object, creationContext, isolate);
     {% endif %}
@@ -68,13 +93,7 @@ v8::Handle<v8::Value> toV8(const {{cpp_class}}& impl, v8::Handle<v8::Object> cre
     return v8Object;
 }
 
-template<>
-v8::Handle<v8::Value> toV8NoInline(const {{cpp_class}}* impl, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
-{
-    return toV8(*impl, creationContext, isolate);
-}
-
-void toV8{{cpp_class}}(const {{cpp_class}}& impl, v8::Handle<v8::Object> dictionary, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
+void toV8{{cpp_class}}(const {{cpp_class}}& impl, v8::Local<v8::Object> dictionary, v8::Local<v8::Object> creationContext, v8::Isolate* isolate)
 {
     {% for member in members %}
     if (impl.{{member.has_method_name}}()) {
@@ -91,7 +110,7 @@ void toV8{{cpp_class}}(const {{cpp_class}}& impl, v8::Handle<v8::Object> diction
     {% endfor %}
 }
 
-{{cpp_class}} NativeValueTraits<{{cpp_class}}>::nativeValue(const v8::Handle<v8::Value>& value, v8::Isolate* isolate, ExceptionState& exceptionState)
+{{cpp_class}} NativeValueTraits<{{cpp_class}}>::nativeValue(const v8::Local<v8::Value>& value, v8::Isolate* isolate, ExceptionState& exceptionState)
 {
     {{cpp_class}} impl;
     {{v8_class}}::toImpl(isolate, value, impl, exceptionState);

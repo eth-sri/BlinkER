@@ -345,12 +345,22 @@ InspectorOverlay::InspectorOverlay(Page* page, InspectorClient* client)
     , m_omitTooltip(false)
     , m_timer(this, &InspectorOverlay::onTimer)
     , m_activeProfilerCount(0)
+    , m_updating(false)
 {
 }
 
 InspectorOverlay::~InspectorOverlay()
 {
     ASSERT(!m_overlayPage);
+}
+
+void InspectorOverlay::trace(Visitor* visitor)
+{
+    visitor->trace(m_page);
+    visitor->trace(m_highlightNode);
+    visitor->trace(m_eventTargetNode);
+    visitor->trace(m_overlayPage);
+    visitor->trace(m_overlayHost);
 }
 
 void InspectorOverlay::paint(GraphicsContext& context)
@@ -365,6 +375,11 @@ void InspectorOverlay::paint(GraphicsContext& context)
 
 void InspectorOverlay::invalidate()
 {
+    // Don't invalidate during an update, because that will lead to Document::scheduleRenderTreeUpdate
+    // being called within Document::updateRenderTree which violates document lifecycle expectations.
+    if (m_updating)
+        return;
+
     m_client->highlight();
 }
 
@@ -477,6 +492,8 @@ bool InspectorOverlay::isEmpty()
 
 void InspectorOverlay::update()
 {
+    TemporaryChange<bool> scoped(m_updating, true);
+
     if (isEmpty()) {
         m_client->hideHighlight();
         return;
@@ -751,8 +768,8 @@ Page* InspectorOverlay::overlayPage()
     ScriptState* scriptState = ScriptState::forMainWorld(frame.get());
     ASSERT(scriptState->contextIsValid());
     ScriptState::Scope scope(scriptState);
-    v8::Handle<v8::Object> global = scriptState->context()->Global();
-    v8::Handle<v8::Value> overlayHostObj = toV8(m_overlayHost.get(), global, isolate);
+    v8::Local<v8::Object> global = scriptState->context()->Global();
+    v8::Local<v8::Value> overlayHostObj = toV8(m_overlayHost.get(), global, isolate);
     global->Set(v8::String::NewFromUtf8(isolate, "InspectorOverlayHost"), overlayHostObj);
 
 #if OS(WIN)

@@ -46,6 +46,7 @@
 #include "core/css/CSSInheritedValue.h"
 #include "core/css/CSSInitialValue.h"
 #include "core/css/CSSLineBoxContainValue.h"
+#include "core/css/CSSPathValue.h"
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSReflectValue.h"
 #include "core/css/CSSSVGDocumentValue.h"
@@ -53,6 +54,7 @@
 #include "core/css/CSSTimingFunctionValue.h"
 #include "core/css/CSSTransformValue.h"
 #include "core/css/CSSUnicodeRangeValue.h"
+#include "core/css/CSSUnsetValue.h"
 #include "core/css/CSSValueList.h"
 
 namespace blink {
@@ -62,7 +64,7 @@ struct SameSizeAsCSSValue : public RefCountedWillBeGarbageCollectedFinalized<Sam
     uint32_t bitfields;
 };
 
-COMPILE_ASSERT(sizeof(CSSValue) <= sizeof(SameSizeAsCSSValue), CSS_value_should_stay_small);
+static_assert(sizeof(CSSValue) <= sizeof(SameSizeAsCSSValue), "CSSValue should stay small");
 
 bool CSSValue::isImplicitInitialValue() const
 {
@@ -121,10 +123,14 @@ bool CSSValue::equals(const CSSValue& other) const
             return compareCSSValues<CSSInheritedValue>(*this, other);
         case InitialClass:
             return compareCSSValues<CSSInitialValue>(*this, other);
+        case UnsetClass:
+            return compareCSSValues<CSSUnsetValue>(*this, other);
         case GridLineNamesClass:
             return compareCSSValues<CSSGridLineNamesValue>(*this, other);
         case GridTemplateAreasClass:
             return compareCSSValues<CSSGridTemplateAreasValue>(*this, other);
+        case PathClass:
+            return compareCSSValues<CSSPathValue>(*this, other);
         case PrimitiveClass:
             return compareCSSValues<CSSPrimitiveValue>(*this, other);
         case ReflectClass:
@@ -191,12 +197,16 @@ String CSSValue::cssText() const
         return toCSSImageValue(this)->customCSSText();
     case InheritedClass:
         return toCSSInheritedValue(this)->customCSSText();
+    case UnsetClass:
+        return toCSSUnsetValue(this)->customCSSText();
     case InitialClass:
         return toCSSInitialValue(this)->customCSSText();
     case GridLineNamesClass:
         return toCSSGridLineNamesValue(this)->customCSSText();
     case GridTemplateAreasClass:
         return toCSSGridTemplateAreasValue(this)->customCSSText();
+    case PathClass:
+        return toCSSPathValue(this)->customCSSText();
     case PrimitiveClass:
         return toCSSPrimitiveValue(this)->customCSSText();
     case ReflectClass:
@@ -272,11 +282,17 @@ void CSSValue::destroy()
     case InitialClass:
         delete toCSSInitialValue(this);
         return;
+    case UnsetClass:
+        delete toCSSUnsetValue(this);
+        return;
     case GridLineNamesClass:
         delete toCSSGridLineNamesValue(this);
         return;
     case GridTemplateAreasClass:
         delete toCSSGridTemplateAreasValue(this);
+        return;
+    case PathClass:
+        delete toCSSPathValue(this);
         return;
     case PrimitiveClass:
         delete toCSSPrimitiveValue(this);
@@ -366,11 +382,17 @@ void CSSValue::finalizeGarbageCollectedObject()
     case InitialClass:
         toCSSInitialValue(this)->~CSSInitialValue();
         return;
+    case UnsetClass:
+        toCSSUnsetValue(this)->~CSSUnsetValue();
+        return;
     case GridLineNamesClass:
         toCSSGridLineNamesValue(this)->~CSSGridLineNamesValue();
         return;
     case GridTemplateAreasClass:
         toCSSGridTemplateAreasValue(this)->~CSSGridTemplateAreasValue();
+        return;
+    case PathClass:
+        toCSSPathValue(this)->~CSSPathValue();
         return;
     case PrimitiveClass:
         toCSSPrimitiveValue(this)->~CSSPrimitiveValue();
@@ -460,11 +482,17 @@ void CSSValue::trace(Visitor* visitor)
     case InitialClass:
         toCSSInitialValue(this)->traceAfterDispatch(visitor);
         return;
+    case UnsetClass:
+        toCSSUnsetValue(this)->traceAfterDispatch(visitor);
+        return;
     case GridLineNamesClass:
         toCSSGridLineNamesValue(this)->traceAfterDispatch(visitor);
         return;
     case GridTemplateAreasClass:
         toCSSGridTemplateAreasValue(this)->traceAfterDispatch(visitor);
+        return;
+    case PathClass:
+        toCSSPathValue(this)->traceAfterDispatch(visitor);
         return;
     case PrimitiveClass:
         toCSSPrimitiveValue(this)->traceAfterDispatch(visitor);

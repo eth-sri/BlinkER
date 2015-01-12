@@ -59,6 +59,7 @@ WebInspector.CPUProfilerModel.prototype = {
     },
 
     /**
+     * @override
      * @param {string} id
      * @param {!DebuggerAgent.Location} scriptLocation
      * @param {!ProfilerAgent.CPUProfile} cpuProfile
@@ -67,7 +68,7 @@ WebInspector.CPUProfilerModel.prototype = {
     consoleProfileFinished: function(id, scriptLocation, cpuProfile, title)
     {
         // Make sure ProfilesPanel is initialized and CPUProfileType is created.
-        self.runtime.loadModulePromise("profiler").then(dispatchEvent.bind(this)).done();
+        self.runtime.loadModulePromise("profiler").then(dispatchEvent.bind(this));
         /**
          * @this {WebInspector.CPUProfilerModel}
          */
@@ -79,6 +80,7 @@ WebInspector.CPUProfilerModel.prototype = {
     },
 
     /**
+     * @override
      * @param {string} id
      * @param {!DebuggerAgent.Location} scriptLocation
      * @param {string=} title
@@ -86,13 +88,13 @@ WebInspector.CPUProfilerModel.prototype = {
     consoleProfileStarted: function(id, scriptLocation, title)
     {
         // Make sure ProfilesPanel is initialized and CPUProfileType is created.
-        self.runtime.loadModulePromise("profiler").then(dispatchEvent.bind(this)).done();
+        self.runtime.loadModulePromise("profiler").then(dispatchEvent.bind(this));
         /**
          * @this {WebInspector.CPUProfilerModel}
          */
         function dispatchEvent()
         {
-            var debuggerLocation = WebInspector.DebuggerModel.Location.fromPayload(this.target(), scriptLocation)
+            var debuggerLocation = WebInspector.DebuggerModel.Location.fromPayload(this.target(), scriptLocation);
             this.dispatchEventToListeners(WebInspector.CPUProfilerModel.EventTypes.ConsoleProfileStarted, {protocolId: id, scriptLocation: debuggerLocation, title: title});
         }
     },

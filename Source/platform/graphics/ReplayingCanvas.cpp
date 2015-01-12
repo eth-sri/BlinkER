@@ -83,12 +83,6 @@ bool ReplayingCanvas::abortDrawing()
     return m_abortDrawing;
 }
 
-void ReplayingCanvas::clear(SkColor color)
-{
-    AutoReplayer replayer(this);
-    this->SkCanvas::clear(color);
-}
-
 void ReplayingCanvas::drawPaint(const SkPaint& paint)
 {
     AutoReplayer replayer(this);
@@ -136,12 +130,6 @@ void ReplayingCanvas::drawBitmapRectToRect(const SkBitmap& bitmap, const SkRect*
 {
     AutoReplayer replayer(this);
     this->SkCanvas::drawBitmapRectToRect(bitmap, src, dst, paint, flags);
-}
-
-void ReplayingCanvas::drawBitmapMatrix(const SkBitmap& bitmap, const SkMatrix& m, const SkPaint* paint)
-{
-    AutoReplayer replayer(this);
-    this->SkCanvas::drawBitmapMatrix(bitmap, m, paint);
 }
 
 void ReplayingCanvas::drawBitmapNine(const SkBitmap& bitmap, const SkIRect& center, const SkRect& dst, const SkPaint* paint)
@@ -221,18 +209,6 @@ void ReplayingCanvas::onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScala
 {
     AutoReplayer replayer(this);
     this->SkCanvas::onDrawTextBlob(blob, x, y, paint);
-}
-
-void ReplayingCanvas::onPushCull(const SkRect& cullRect)
-{
-    AutoReplayer replayer(this);
-    this->SkCanvas::onPushCull(cullRect);
-}
-
-void ReplayingCanvas::onPopCull()
-{
-    AutoReplayer replayer(this);
-    this->SkCanvas::onPopCull();
 }
 
 void ReplayingCanvas::onClipRect(const SkRect& rect, SkRegion::Op op, ClipEdgeStyle edgeStyle)

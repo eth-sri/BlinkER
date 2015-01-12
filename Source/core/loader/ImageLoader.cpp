@@ -68,8 +68,7 @@ static ImageLoader::BypassMainWorldBehavior shouldBypassMainWorldCSP(ImageLoader
 {
     ASSERT(loader);
     ASSERT(loader->element());
-    ASSERT(loader->element()->document().frame());
-    if (loader->element()->document().frame()->script().shouldBypassMainWorldCSP())
+    if (loader->element()->document().frame() && loader->element()->document().frame()->script().shouldBypassMainWorldCSP())
         return ImageLoader::BypassMainWorldCSP;
     return ImageLoader::DoNotBypassMainWorldCSP;
 }
@@ -272,6 +271,7 @@ void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior, Up
     AtomicString imageSourceURL = m_element->imageSourceURL();
     KURL url = imageSourceToKURL(imageSourceURL);
     ResourcePtr<ImageResource> newImage = 0;
+    RefPtrWillBeRawPtr<Element> protectElement(m_element.get());
     if (!url.isNull()) {
         // Unlike raw <img>, we block mixed content inside of <picture> or <img srcset>.
         ResourceLoaderOptions resourceLoaderOptions = ResourceFetcher::defaultResourceOptions();
@@ -295,9 +295,12 @@ void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior, Up
         } else {
             clearFailedLoadURL();
         }
-    } else if (!imageSourceURL.isNull()) {
-        // Fire an error event if the url string is not empty, but the KURL is.
-        dispatchErrorEvent();
+    } else {
+        if (!imageSourceURL.isNull()) {
+            // Fire an error event if the url string is not empty, but the KURL is.
+            dispatchErrorEvent();
+        }
+        noImageResourceToLoad();
     }
 
     ImageResource* oldImage = m_image.get();
@@ -342,7 +345,7 @@ void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior, Up
     updatedHasPendingEvent();
 }
 
-void ImageLoader::updateFromElement(UpdateFromElementBehavior updateBehavior, LoadType loadType)
+void ImageLoader::updateFromElement(UpdateFromElementBehavior updateBehavior)
 {
     AtomicString imageSourceURL = m_element->imageSourceURL();
     m_suppressErrorEvents = (updateBehavior == UpdateSizeChanged);
@@ -361,7 +364,7 @@ void ImageLoader::updateFromElement(UpdateFromElementBehavior updateBehavior, Lo
     }
 
     KURL url = imageSourceToKURL(imageSourceURL);
-    if (imageSourceURL.isNull() || url.isNull() || shouldLoadImmediately(url, loadType)) {
+    if (shouldLoadImmediately(url)) {
         doUpdateFromElement(DoNotBypassMainWorldCSP, updateBehavior);
         return;
     }
@@ -385,14 +388,16 @@ KURL ImageLoader::imageSourceToKURL(AtomicString imageSourceURL) const
     return url;
 }
 
-bool ImageLoader::shouldLoadImmediately(const KURL& url, LoadType loadType) const
+bool ImageLoader::shouldLoadImmediately(const KURL& url) const
 {
-    return (m_loadingImageDocument
-        || isHTMLObjectElement(m_element)
-        || isHTMLEmbedElement(m_element)
-        || url.protocolIsData()
-        || memoryCache()->resourceForURL(url, m_element->document().fetcher()->getCacheIdentifier())
-        || loadType == ForceLoadImmediately);
+    // We force any image loads which might require alt content through the asynchronous path so that we can add the shadow DOM
+    // for the alt-text content when style recalc is over and DOM mutation is allowed again.
+    if (!url.isNull()) {
+        Resource* resource = memoryCache()->resourceForURL(url, m_element->document().fetcher()->getCacheIdentifier());
+        if (resource && !resource->errorOccurred())
+            return true;
+    }
+    return (m_loadingImageDocument || isHTMLObjectElement(m_element) || isHTMLEmbedElement(m_element) || url.protocolIsData());
 }
 
 void ImageLoader::notifyFinished(Resource* resource)
@@ -608,5 +613,4 @@ ImageLoader::ImageLoaderClientRemover::~ImageLoaderClientRemover()
     m_loader.willRemoveClient(m_client);
 }
 #endif
-
 }

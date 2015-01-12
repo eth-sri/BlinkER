@@ -54,10 +54,10 @@ PASS childWindow.navigator.presentation.session is null
 PASS childWindow.navigator.product is window.navigator.product
 PASS childWindow.navigator.productSub is window.navigator.productSub
 PASS childWindow.navigator.serviceWorker.controller is null
+PASS childWindow.navigator.serviceWorker.oncontrollerchange is null
 PASS childWindow.navigator.userAgent is ''
 PASS childWindow.navigator.vendor is window.navigator.vendor
 PASS childWindow.navigator.vendorSub is ''
-FAIL childWindow.offscreenBuffering should be false. Was true.
 PASS childWindow.onabort is null
 PASS childWindow.onanimationend is null
 PASS childWindow.onanimationiteration is null

@@ -41,6 +41,7 @@
 #include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
+#include <stdint.h>
 
 namespace blink {
 
@@ -73,8 +74,6 @@ public:
     virtual void close(int code, const String& reason) override;
     virtual void fail(const String& reason, MessageLevel, const String&, unsigned) override;
     virtual void disconnect() override; // Will suppress didClose().
-    virtual void suspend() override { }
-    virtual void resume() override { }
 
     virtual void trace(Visitor*) override;
 
@@ -98,7 +97,6 @@ public:
         void send(const String& message);
         void sendArrayBuffer(PassOwnPtr<Vector<char> >);
         void sendBlob(PassRefPtr<BlobDataHandle>);
-        void bufferedAmount();
         void close(int code, const String& reason);
         void fail(const String& reason, MessageLevel, const String& sourceURL, unsigned lineNumber);
         void disconnect();
@@ -109,7 +107,7 @@ public:
         virtual void didConnect(const String& subprotocol, const String& extensions) override;
         virtual void didReceiveTextMessage(const String& payload) override;
         virtual void didReceiveBinaryMessage(PassOwnPtr<Vector<char> >) override;
-        virtual void didConsumeBufferedAmount(unsigned) override;
+        virtual void didConsumeBufferedAmount(uint64_t) override;
         virtual void didStartClosingHandshake() override;
         virtual void didClose(ClosingHandshakeCompletionStatus, unsigned short code, const String& reason) override;
         virtual void didError() override;
@@ -136,7 +134,6 @@ public:
         void send(const String& message);
         void send(const DOMArrayBuffer&, unsigned byteOffset, unsigned byteLength);
         void send(PassRefPtr<BlobDataHandle>);
-        unsigned long bufferedAmount();
         void close(int code, const String& reason);
         void fail(const String& reason, MessageLevel, const String& sourceURL, unsigned lineNumber);
         void disconnect();

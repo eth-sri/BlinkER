@@ -46,6 +46,8 @@ RenderSVGRoot::RenderSVGRoot(SVGElement* node)
     , m_isLayoutSizeChanged(false)
     , m_needsBoundariesOrTransformUpdate(true)
     , m_hasBoxDecorationBackground(false)
+    , m_hasNonIsolatedBlendingDescendants(false)
+    , m_hasNonIsolatedBlendingDescendantsDirty(false)
 {
 }
 
@@ -247,12 +249,42 @@ void RenderSVGRoot::addChild(RenderObject* child, RenderObject* beforeChild)
 {
     RenderReplaced::addChild(child, beforeChild);
     SVGResourcesCache::clientWasAddedToTree(child, child->style());
+
+    bool shouldIsolateDescendants = (child->isBlendingAllowed() && child->style()->hasBlendMode()) || child->hasNonIsolatedBlendingDescendants();
+    if (shouldIsolateDescendants)
+        descendantIsolationRequirementsChanged(DescendantIsolationRequired);
 }
 
 void RenderSVGRoot::removeChild(RenderObject* child)
 {
     SVGResourcesCache::clientWillBeRemovedFromTree(child);
     RenderReplaced::removeChild(child);
+
+    bool hadNonIsolatedDescendants = (child->isBlendingAllowed() && child->style()->hasBlendMode()) || child->hasNonIsolatedBlendingDescendants();
+    if (hadNonIsolatedDescendants)
+        descendantIsolationRequirementsChanged(DescendantIsolationNeedsUpdate);
+}
+
+bool RenderSVGRoot::hasNonIsolatedBlendingDescendants() const
+{
+    if (m_hasNonIsolatedBlendingDescendantsDirty) {
+        m_hasNonIsolatedBlendingDescendants = SVGRenderSupport::computeHasNonIsolatedBlendingDescendants(this);
+        m_hasNonIsolatedBlendingDescendantsDirty = false;
+    }
+    return m_hasNonIsolatedBlendingDescendants;
+}
+
+void RenderSVGRoot::descendantIsolationRequirementsChanged(DescendantIsolationState state)
+{
+    switch (state) {
+    case DescendantIsolationRequired:
+        m_hasNonIsolatedBlendingDescendants = true;
+        m_hasNonIsolatedBlendingDescendantsDirty = false;
+        break;
+    case DescendantIsolationNeedsUpdate:
+        m_hasNonIsolatedBlendingDescendantsDirty = true;
+        break;
+    }
 }
 
 void RenderSVGRoot::insertedIntoTree()
@@ -287,10 +319,10 @@ const AffineTransform& RenderSVGRoot::localToParentTransform() const
 {
     // Slightly optimized version of m_localToParentTransform = AffineTransform::translation(x(), y()) * m_localToBorderBoxTransform;
     m_localToParentTransform = m_localToBorderBoxTransform;
-    if (x())
-        m_localToParentTransform.setE(m_localToParentTransform.e() + roundToInt(x()));
-    if (y())
-        m_localToParentTransform.setF(m_localToParentTransform.f() + roundToInt(y()));
+    if (location().x())
+        m_localToParentTransform.setE(m_localToParentTransform.e() + roundToInt(location().x()));
+    if (location().y())
+        m_localToParentTransform.setF(m_localToParentTransform.f() + roundToInt(location().y()));
     return m_localToParentTransform;
 }
 

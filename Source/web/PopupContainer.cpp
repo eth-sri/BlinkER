@@ -34,6 +34,7 @@
 #include "core/dom/Document.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/html/forms/PopupMenuClient.h"
 #include "core/page/Chrome.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
@@ -43,7 +44,6 @@
 #include "platform/PlatformScreen.h"
 #include "platform/PlatformTouchEvent.h"
 #include "platform/PlatformWheelEvent.h"
-#include "platform/PopupMenuClient.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/GraphicsContext.h"
@@ -327,8 +327,7 @@ bool PopupContainer::handleGestureEvent(const PlatformGestureEvent& gestureEvent
         handleMouseReleaseEvent(fakeMouseUp);
         return true;
     }
-    case PlatformEvent::GestureScrollUpdate:
-    case PlatformEvent::GestureScrollUpdateWithoutPropagation: {
+    case PlatformEvent::GestureScrollUpdate: {
         PlatformWheelEvent syntheticWheelEvent(gestureEvent.position(), gestureEvent.globalPosition(), gestureEvent.deltaX(), gestureEvent.deltaY(), gestureEvent.deltaX() / 120.0f, gestureEvent.deltaY() / 120.0f, ScrollByPixelWheelEvent, gestureEvent.shiftKey(), gestureEvent.ctrlKey(), gestureEvent.altKey(), gestureEvent.metaKey());
         handleWheelEvent(syntheticWheelEvent);
         return true;

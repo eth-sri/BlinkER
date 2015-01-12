@@ -48,6 +48,7 @@
 #include "core/eventracer/EventRacerJoinActions.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/html/CollectionType.h"
+#include "core/html/parser/ParserSynchronizationPolicy.h"
 #include "core/page/FocusType.h"
 #include "core/page/PageVisibilityState.h"
 #include "platform/Length.h"
@@ -319,7 +320,6 @@ public:
 
     String defaultCharset() const;
 
-    AtomicString inputEncoding() const { return Document::encodingName(); }
     AtomicString charset() const { return Document::encodingName(); }
     AtomicString characterSet() const { return Document::encodingName(); }
 
@@ -349,6 +349,8 @@ public:
     void setHasXMLDeclaration(bool hasXMLDeclaration) { m_hasXMLDeclaration = hasXMLDeclaration ? 1 : 0; }
 
     virtual KURL baseURI() const override final;
+
+    String origin() const { return securityOrigin()->toString(); }
 
     String visibilityState() const;
     bool hidden() const;
@@ -385,7 +387,7 @@ public:
     bool isMobileDocument() const { return m_isMobileDocument; }
 
     bool isTransitionDocument() const { return m_isTransitionDocument; }
-    void setIsTransitionDocument() { m_isTransitionDocument = true; }
+    void setIsTransitionDocument(bool isTransitionDocument) { m_isTransitionDocument = isTransitionDocument; }
     void hideTransitionElements(const AtomicString& cssSelector);
     void showTransitionElements(const AtomicString& cssSelector);
 
@@ -509,7 +511,7 @@ public:
     DocumentLoader* loader() const;
 
     void open(Document* ownerDocument = nullptr, ExceptionState& = ASSERT_NO_EXCEPTION);
-    PassRefPtrWillBeRawPtr<DocumentParser> implicitOpen();
+    PassRefPtrWillBeRawPtr<DocumentParser> implicitOpen(ParserSynchronizationPolicy);
 
     // close() is the DOM API document.close()
     void close(ExceptionState& = ASSERT_NO_EXCEPTION);
@@ -662,7 +664,7 @@ public:
     void nodeChildrenWillBeRemoved(ContainerNode&);
     // nodeWillBeRemoved is only safe when removing one node at a time.
     void nodeWillBeRemoved(Node&);
-    bool canReplaceChild(const Node& newChild, const Node& oldChild) const;
+    bool canAcceptChild(const Node& newChild, const Node* oldChild, ExceptionState&) const;
 
     void didInsertText(Node*, unsigned offset, unsigned length);
     void didRemoveText(Node*, unsigned offset, unsigned length);
@@ -793,7 +795,7 @@ public:
 
     DocumentMarkerController& markers() const { return *m_markers; }
 
-    bool execCommand(const String& command, bool userInterface = false, const String& value = String());
+    bool execCommand(const String& command, bool showUI, const String& value);
     bool queryCommandEnabled(const String& command);
     bool queryCommandIndeterm(const String& command);
     bool queryCommandState(const String& command);
@@ -1012,7 +1014,10 @@ public:
     Document& ensureTemplateDocument();
     Document* templateDocumentHost() { return m_templateDocumentHost; }
 
+    // TODO(thestig): Rename these and related functions, since we can call them
+    // for labels and input fields outside of forms as well.
     void didAssociateFormControl(Element*);
+    void removeFormAssociation(Element*);
 
     virtual void addConsoleMessage(PassRefPtrWillBeRawPtr<ConsoleMessage>) override final;
 
@@ -1050,6 +1055,8 @@ public:
 
     AtomicString convertLocalName(const AtomicString&);
 
+    void platformColorsChanged();
+
     virtual v8::Handle<v8::Object> wrap(v8::Handle<v8::Object> creationContext, v8::Isolate*) override;
     virtual v8::Handle<v8::Object> associateWithWrapper(v8::Isolate*, const WrapperTypeInfo*, v8::Handle<v8::Object> wrapper) override;
 
@@ -1068,9 +1075,9 @@ protected:
 
     bool importContainerNodeChildren(ContainerNode* oldContainerNode, PassRefPtrWillBeRawPtr<ContainerNode> newContainerNode, ExceptionState&);
     void lockCompatibilityMode() { m_compatibilityModeLocked = true; }
+    ParserSynchronizationPolicy parserSynchronizationPolicy() const { return m_parserSyncPolicy; }
 
 private:
-    friend class Node;
     friend class IgnoreDestructiveWriteCountIncrementer;
 
     bool isDocumentFragment() const = delete; // This will catch anyone doing an unnecessary check.
@@ -1382,6 +1389,8 @@ private:
     DocumentVisibilityObserverSet m_visibilityObservers;
 
     int m_styleRecalcElementCounter;
+
+    ParserSynchronizationPolicy m_parserSyncPolicy;
 
     EventRacerJoinActions m_loadEventDelayActions;
 };

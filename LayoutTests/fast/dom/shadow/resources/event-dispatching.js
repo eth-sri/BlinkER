@@ -72,7 +72,7 @@ function recordEvent(event)
     }
     var eventString = '';
     if (event.currentTarget)
-        eventString += ' @' + event.currentTarget.id;
+        eventString += ' @' + (event.currentTarget.id || event.currentTarget);
     if (event.target)
         eventString += ' (target: ' + event.target.id + ')';
     if (event.relatedTarget)
@@ -121,7 +121,7 @@ function dumpComposedShadowTree(node, indent)
     indent = indent || "";
     var output = indent + dumpNode(node) + "\n";
     var child;
-    for (child = internals.firstChildByWalker(node); child; child = internals.nextSiblingByWalker(child))
+    for (child = internals.firstChildInComposedTree(node); child; child = internals.nextSiblingInComposedTree(child))
          output += dumpComposedShadowTree(child, indent + "\t");
     return output;
 }
@@ -129,18 +129,22 @@ function dumpComposedShadowTree(node, indent)
 function addEventListeners(nodes)
 {
     for (var i = 0; i < nodes.length; ++i) {
-        var node = getNodeInTreeOfTrees(nodes[i]);
-        node.addEventListener('click', recordEvent, false);
-        node.addEventListener('dragstart', recordEvent, false);
-        node.addEventListener('mouseout', recordEvent, false);
-        node.addEventListener('mouseover', recordEvent, false);
-        node.addEventListener('mousewheel', recordEvent, false);
-        node.addEventListener('touchstart', recordEvent, false);
-        node.addEventListener('gesturetap', recordEvent, false);
-        // <content> might be an inactive insertion point, so style it also.
-        if (node.tagName == 'DIV' || node.tagName == 'DETAILS' || node.tagName == 'SUMMARY' || node.tagName == 'CONTENT')
-            node.setAttribute('style', 'padding-top: ' + defaultPaddingSize + 'px;');
+        addEventListenersToNode(getNodeInTreeOfTrees(nodes[i]));
     }
+}
+
+function addEventListenersToNode(node)
+{
+    node.addEventListener('click', recordEvent, false);
+    node.addEventListener('dragstart', recordEvent, false);
+    node.addEventListener('mouseout', recordEvent, false);
+    node.addEventListener('mouseover', recordEvent, false);
+    node.addEventListener('mousewheel', recordEvent, false);
+    node.addEventListener('touchstart', recordEvent, false);
+    node.addEventListener('gesturetap', recordEvent, false);
+    // <content> might be an inactive insertion point, so style it also.
+    if (node.tagName == 'DIV' || node.tagName == 'DETAILS' || node.tagName == 'SUMMARY' || node.tagName == 'CONTENT')
+        node.setAttribute('style', 'padding-top: ' + defaultPaddingSize + 'px;');
 }
 
 function debugDispatchedEvent(eventType)

@@ -39,6 +39,7 @@
 #include "platform/fonts/shaping/SimpleShaper.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/graphics/GraphicsContext.h"
+#include "platform/graphics/GraphicsContextStateSaver.h"
 #include "platform/text/TextRun.h"
 #include "wtf/MainThread.h"
 #include "wtf/StdLibExtras.h"
@@ -74,11 +75,6 @@ Font& Font::operator=(const Font& other)
 
 bool Font::operator==(const Font& other) const
 {
-    // Our FontData don't have to be checked, since checking the font description will be fine.
-    // FIXME: This does not work if the font was made with the FontPlatformData constructor.
-    if (loadingCustomFonts() || other.loadingCustomFonts())
-        return false;
-
     FontSelector* first = m_fontFallbackList ? m_fontFallbackList->fontSelector() : 0;
     FontSelector* second = other.m_fontFallbackList ? other.m_fontFallbackList->fontSelector() : 0;
 
@@ -218,6 +214,8 @@ static inline void updateGlyphOverflowFromBounds(const IntRectExtent& glyphBound
 
 float Font::width(const TextRun& run, HashSet<const SimpleFontData*>* fallbackFonts, GlyphOverflow* glyphOverflow) const
 {
+    FontCachePurgePreventer purgePreventer;
+
     CodePath codePathToUse = codePath(TextRunPaintInfo(run));
     if (codePathToUse != ComplexPath) {
         // The simple path can optimize the case where glyph overflow is not observable.
@@ -258,6 +256,12 @@ float Font::width(const TextRun& run, HashSet<const SimpleFontData*>* fallbackFo
     return result;
 }
 
+static bool requiresRecomputingBounds(const Font& font)
+{
+    const FontDescription& fontDescription = font.fontDescription();
+    return fontDescription.letterSpacing() < 0 || fontDescription.wordSpacing() < 0;
+}
+
 PassTextBlobPtr Font::buildTextBlob(const GlyphBuffer& glyphBuffer, const FloatRect& bounds,
     bool couldUseLCD) const
 {
@@ -265,6 +269,9 @@ PassTextBlobPtr Font::buildTextBlob(const GlyphBuffer& glyphBuffer, const FloatR
 
     SkTextBlobBuilder builder;
     SkRect skBounds = bounds;
+    // FIXME: Identify these cases earlier on and avoid using bounds that are
+    // not visually correct in other places.
+    const SkRect* skBoundsPtr = requiresRecomputingBounds(*this) ? nullptr : &skBounds;
     bool hasVerticalOffsets = glyphBuffer.hasVerticalOffsets();
 
     unsigned i = 0;
@@ -291,8 +298,8 @@ PassTextBlobPtr Font::buildTextBlob(const GlyphBuffer& glyphBuffer, const FloatR
         unsigned count = i - start;
 
         const SkTextBlobBuilder::RunBuffer& buffer = hasVerticalOffsets
-            ? builder.allocRunPos(paint, count, &skBounds)
-            : builder.allocRunPosH(paint, count, 0, &skBounds);
+            ? builder.allocRunPos(paint, count, skBoundsPtr)
+            : builder.allocRunPosH(paint, count, 0, skBoundsPtr);
 
         const uint16_t* glyphs = glyphBuffer.glyphs(start);
         const float* offsets = glyphBuffer.offsets(start);
@@ -319,6 +326,8 @@ FloatRect Font::selectionRectForText(const TextRun& run, const FloatPoint& point
     runInfo.from = from;
     runInfo.to = to;
 
+    FontCachePurgePreventer purgePreventer;
+
     if (codePath(runInfo) != ComplexPath)
         return pixelSnappedSelectionRect(selectionRectForSimpleText(run, point, h, from, to, accountForGlyphBounds));
     return pixelSnappedSelectionRect(selectionRectForComplexText(run, point, h, from, to));
@@ -326,6 +335,8 @@ FloatRect Font::selectionRectForText(const TextRun& run, const FloatPoint& point
 
 int Font::offsetForPosition(const TextRun& run, float x, bool includePartialGlyphs) const
 {
+    FontCachePurgePreventer purgePreventer;
+
     if (codePath(TextRunPaintInfo(run)) != ComplexPath && !fontDescription().typesettingFeatures())
         return offsetForPositionForSimpleText(run, x, includePartialGlyphs);
 
@@ -340,6 +351,9 @@ CodePath Font::codePath(const TextRunPaintInfo& runInfo) const
         return ComplexPath;
 
     if (m_fontDescription.featureSettings() && m_fontDescription.featureSettings()->size() > 0 && m_fontDescription.letterSpacing() == 0)
+        return ComplexPath;
+
+    if (m_fontDescription.orientation() == Vertical)
         return ComplexPath;
 
     if (m_fontDescription.widthVariant() != RegularWidth)
@@ -378,7 +392,7 @@ static inline std::pair<GlyphData, GlyphPage*> glyphDataAndPageForNonCJKCharacte
 {
     if (orientation == NonCJKGlyphOrientationUpright || Character::shouldIgnoreRotation(character)) {
         RefPtr<SimpleFontData> uprightFontData = data.fontData->uprightOrientationFontData();
-        GlyphPageTreeNode* uprightNode = GlyphPageTreeNode::getRootChild(uprightFontData.get(), pageNumber);
+        GlyphPageTreeNode* uprightNode = GlyphPageTreeNode::getNormalRootChild(uprightFontData.get(), pageNumber);
         GlyphPage* uprightPage = uprightNode->page();
         if (uprightPage) {
             GlyphData uprightData = uprightPage->glyphDataForCharacter(character);
@@ -392,7 +406,7 @@ static inline std::pair<GlyphData, GlyphPage*> glyphDataAndPageForNonCJKCharacte
         }
     } else if (orientation == NonCJKGlyphOrientationVerticalRight) {
         RefPtr<SimpleFontData> verticalRightFontData = data.fontData->verticalRightOrientationFontData();
-        GlyphPageTreeNode* verticalRightNode = GlyphPageTreeNode::getRootChild(verticalRightFontData.get(), pageNumber);
+        GlyphPageTreeNode* verticalRightNode = GlyphPageTreeNode::getNormalRootChild(verticalRightFontData.get(), pageNumber);
         GlyphPage* verticalRightPage = verticalRightNode->page();
         if (verticalRightPage) {
             GlyphData verticalRightData = verticalRightPage->glyphDataForCharacter(character);
@@ -434,7 +448,7 @@ std::pair<GlyphData, GlyphPage*> Font::glyphDataAndPageForCharacter(UChar32& c, 
 
     unsigned pageNumber = (c / GlyphPage::size);
 
-    GlyphPageTreeNode* node = m_fontFallbackList->getPageNode(pageNumber);
+    GlyphPageTreeNodeBase* node = m_fontFallbackList->getPageNode(pageNumber);
     if (!node) {
         node = GlyphPageTreeNode::getRootChild(fontDataAt(0), pageNumber);
         m_fontFallbackList->setPageNode(pageNumber, node);
@@ -444,7 +458,7 @@ std::pair<GlyphData, GlyphPage*> Font::glyphDataAndPageForCharacter(UChar32& c, 
     if (variant == NormalVariant) {
         // Fastest loop, for the common case (normal variant).
         while (true) {
-            page = node->page();
+            page = node->page(m_fontDescription.script());
             if (page) {
                 GlyphData data = page->glyphDataForCharacter(c);
                 if (data.fontData && (data.fontData->platformData().orientation() == Horizontal || data.fontData->isTextOrientationFallback()))
@@ -470,13 +484,13 @@ std::pair<GlyphData, GlyphPage*> Font::glyphDataAndPageForCharacter(UChar32& c, 
             }
 
             // Proceed with the fallback list.
-            node = node->getChild(fontDataAt(node->level()), pageNumber);
+            node = toGlyphPageTreeNode(node)->getChild(fontDataAt(node->level()), pageNumber);
             m_fontFallbackList->setPageNode(pageNumber, node);
         }
     }
     if (variant != NormalVariant) {
         while (true) {
-            page = node->page();
+            page = node->page(m_fontDescription.script());
             if (page) {
                 GlyphData data = page->glyphDataForCharacter(c);
                 if (data.fontData) {
@@ -486,7 +500,7 @@ std::pair<GlyphData, GlyphPage*> Font::glyphDataAndPageForCharacter(UChar32& c, 
                     if (!variantFontData)
                         return std::make_pair(data, page);
 
-                    GlyphPageTreeNode* variantNode = GlyphPageTreeNode::getRootChild(variantFontData.get(), pageNumber);
+                    GlyphPageTreeNode* variantNode = GlyphPageTreeNode::getNormalRootChild(variantFontData.get(), pageNumber);
                     GlyphPage* variantPage = variantNode->page();
                     if (variantPage) {
                         GlyphData data = variantPage->glyphDataForCharacter(c);
@@ -504,7 +518,7 @@ std::pair<GlyphData, GlyphPage*> Font::glyphDataAndPageForCharacter(UChar32& c, 
             }
 
             // Proceed with the fallback list.
-            node = node->getChild(fontDataAt(node->level()), pageNumber);
+            node = toGlyphPageTreeNode(node)->getChild(fontDataAt(node->level()), pageNumber);
             m_fontFallbackList->setPageNode(pageNumber, node);
         }
     }
@@ -557,7 +571,7 @@ bool Font::primaryFontHasGlyphForCharacter(UChar32 character) const
 {
     unsigned pageNumber = (character / GlyphPage::size);
 
-    GlyphPageTreeNode* node = GlyphPageTreeNode::getRootChild(primaryFont(), pageNumber);
+    GlyphPageTreeNode* node = GlyphPageTreeNode::getNormalRootChild(primaryFont(), pageNumber);
     GlyphPage* page = node->page();
 
     return page && page->glyphForCharacter(character);
@@ -704,61 +718,11 @@ void Font::paintGlyphsHorizontal(GraphicsContext* gc, const SimpleFontData* font
     }
 }
 
-void Font::paintGlyphsVertical(GraphicsContext* gc, const SimpleFontData* font,
-    const GlyphBuffer& glyphBuffer, unsigned from, unsigned numGlyphs, const FloatPoint& point,
-    const FloatRect& textRect) const
-{
-    const OpenTypeVerticalData* verticalData = font->verticalData();
-
-    SkAutoSTMalloc<32, SkPoint> storage(numGlyphs);
-    SkPoint* pos = storage.get();
-
-    // Bend over backwards to preserve legacy rounding.
-    float initialAdvance = glyphBuffer.xOffsetAt(from);
-    FloatPoint adjustedPoint(point.x() + initialAdvance, point.y());
-
-    AffineTransform savedMatrix = gc->getCTM();
-    gc->concatCTM(AffineTransform(0, -1, 1, 0, adjustedPoint.x(), adjustedPoint.y()));
-    gc->concatCTM(AffineTransform(1, 0, 0, 1, -adjustedPoint.x(), -adjustedPoint.y()));
-
-    const unsigned kMaxBufferLength = 256;
-    Vector<FloatPoint, kMaxBufferLength> translations;
-
-    const FontMetrics& metrics = font->fontMetrics();
-    float verticalOriginX = adjustedPoint.x() + metrics.floatAscent() - metrics.floatAscent(IdeographicBaseline);
-
-    unsigned glyphIndex = 0;
-    while (glyphIndex < numGlyphs) {
-        unsigned chunkLength = std::min(kMaxBufferLength, numGlyphs - glyphIndex);
-
-        const Glyph* glyphs = glyphBuffer.glyphs(from + glyphIndex);
-
-        translations.resize(chunkLength);
-        verticalData->getVerticalTranslationsForGlyphs(font, glyphs, chunkLength,
-            reinterpret_cast<float*>(&translations[0]));
-
-        for (unsigned i = 0; i < chunkLength; ++i, ++glyphIndex) {
-            SkScalar x = verticalOriginX + lroundf(translations[i].x());
-            SkScalar y = adjustedPoint.y() - SkIntToScalar(
-                -lroundf(glyphBuffer.xOffsetAt(from + glyphIndex) - initialAdvance - translations[i].y()));
-            pos[i].set(x, y);
-        }
-        paintGlyphs(gc, font, glyphs, chunkLength, pos, textRect);
-    }
-
-    gc->setCTM(savedMatrix);
-}
-
 void Font::drawGlyphs(GraphicsContext* gc, const SimpleFontData* font,
     const GlyphBuffer& glyphBuffer, unsigned from, unsigned numGlyphs,
     const FloatPoint& point, const FloatRect& textRect) const
 {
     ASSERT(glyphBuffer.size() >= from + numGlyphs);
-
-    if (font->platformData().orientation() == Vertical && font->verticalData()) {
-        paintGlyphsVertical(gc, font, glyphBuffer, from, numGlyphs, point, textRect);
-        return;
-    }
 
     if (!glyphBuffer.hasVerticalOffsets()) {
         SkAutoSTMalloc<64, SkScalar> storage(numGlyphs);
@@ -771,12 +735,23 @@ void Font::drawGlyphs(GraphicsContext* gc, const SimpleFontData* font,
         return;
     }
 
+    bool drawVertically = font->platformData().orientation() == Vertical && font->verticalData();
+
+    GraphicsContextStateSaver stateSaver(*gc, false);
+    if (drawVertically) {
+        stateSaver.save();
+        gc->concatCTM(AffineTransform(0, -1, 1, 0, point.x(), point.y()));
+        gc->concatCTM(AffineTransform(1, 0, 0, 1, -point.x(), -point.y()));
+    }
+
+    const float verticalBaselineXOffset = drawVertically ? SkFloatToScalar(font->fontMetrics().floatAscent() - font->fontMetrics().floatAscent(IdeographicBaseline)) : 0;
+
     ASSERT(glyphBuffer.hasVerticalOffsets());
     SkAutoSTMalloc<32, SkPoint> storage(numGlyphs);
     SkPoint* pos = storage.get();
     for (unsigned i = 0; i < numGlyphs; i++) {
         pos[i].set(
-            SkFloatToScalar(point.x() + glyphBuffer.xOffsetAt(from + i)),
+            SkFloatToScalar(point.x() + verticalBaselineXOffset + glyphBuffer.xOffsetAt(from + i)),
             SkFloatToScalar(point.y() + glyphBuffer.yOffsetAt(from + i)));
     }
 
@@ -805,10 +780,10 @@ float Font::floatWidthForComplexText(const TextRun& run, HashSet<const SimpleFon
     if (!shaper.shape())
         return 0;
 
-    glyphBounds->setTop(floorf(-shaper.glyphBoundingBox().top()));
-    glyphBounds->setBottom(ceilf(shaper.glyphBoundingBox().bottom()));
-    glyphBounds->setLeft(std::max<int>(0, floorf(-shaper.glyphBoundingBox().left())));
-    glyphBounds->setRight(std::max<int>(0, ceilf(shaper.glyphBoundingBox().right() - shaper.totalWidth())));
+    glyphBounds->setTop(ceilf(-shaper.glyphBoundingBox().y()));
+    glyphBounds->setBottom(ceilf(shaper.glyphBoundingBox().maxY()));
+    glyphBounds->setLeft(std::max<int>(0, ceilf(-shaper.glyphBoundingBox().x())));
+    glyphBounds->setRight(std::max<int>(0, ceilf(shaper.glyphBoundingBox().maxX() - shaper.totalWidth())));
 
     return shaper.totalWidth();
 }
@@ -837,6 +812,9 @@ void Font::drawGlyphBuffer(GraphicsContext* context,
     const TextRunPaintInfo& runInfo, const GlyphBuffer& glyphBuffer,
     const FloatPoint& point) const
 {
+    if (!glyphBuffer.size())
+        return;
+
     // Draw each contiguous run of glyphs that use the same font data.
     const SimpleFontData* fontData = glyphBuffer.fontDataAt(0);
     unsigned lastFrom = 0;
@@ -858,14 +836,12 @@ void Font::drawGlyphBuffer(GraphicsContext* context,
         runInfo.bounds);
 }
 
-inline static float offsetToMiddleOfGlyph(const SimpleFontData* fontData, Glyph glyph)
+inline static float offsetToMiddleOfGlyph(const SimpleFontData* fontData, Glyph glyph, FontOrientation orientation = Horizontal)
 {
-    if (fontData->platformData().orientation() == Horizontal) {
-        FloatRect bounds = fontData->boundsForGlyph(glyph);
+    FloatRect bounds = fontData->boundsForGlyph(glyph);
+    if (orientation == Horizontal)
         return bounds.x() + bounds.width() / 2;
-    }
-    // FIXME: Use glyph bounds once they make sense for vertical fonts.
-    return fontData->widthForGlyph(glyph) / 2;
+    return bounds.y() + bounds.height() / 2;
 }
 
 void Font::drawEmphasisMarks(GraphicsContext* context, const TextRunPaintInfo& runInfo, const GlyphBuffer& glyphBuffer, const AtomicString& mark, const FloatPoint& point) const
@@ -882,7 +858,7 @@ void Font::drawEmphasisMarks(GraphicsContext* context, const TextRunPaintInfo& r
         return;
 
     GlyphBuffer markBuffer;
-    float midMarkOffset = offsetToMiddleOfGlyph(markFontData, markGlyphData.glyph);
+    bool drawVertically = markFontData->platformData().orientation() == Vertical && markFontData->verticalData();
     for (unsigned i = 0; i < glyphBuffer.size(); ++i) {
         // Skip marks for suppressed glyphs.
         if (!glyphBuffer.glyphAt(i))
@@ -893,7 +869,12 @@ void Font::drawEmphasisMarks(GraphicsContext* context, const TextRunPaintInfo& r
         // is left to do is adjust for 1/2 mark width.
         // FIXME: we could avoid this by passing some additional info to the shaper,
         //        and perform all adjustments at buffer build time.
-        markBuffer.add(markGlyphData.glyph, markFontData, glyphBuffer.xOffsetAt(i) - midMarkOffset);
+        if (!drawVertically) {
+            markBuffer.add(markGlyphData.glyph, markFontData, glyphBuffer.xOffsetAt(i) - offsetToMiddleOfGlyph(markFontData, markGlyphData.glyph));
+        } else {
+            markBuffer.add(markGlyphData.glyph, markFontData, FloatPoint(- offsetToMiddleOfGlyph(markFontData, markGlyphData.glyph),
+                glyphBuffer.xOffsetAt(i) - offsetToMiddleOfGlyph(markFontData, markGlyphData.glyph, Vertical)));
+        }
     }
 
     drawGlyphBuffer(context, runInfo, markBuffer, point);

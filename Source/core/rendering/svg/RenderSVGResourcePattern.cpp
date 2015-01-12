@@ -23,11 +23,13 @@
 #include "core/rendering/svg/RenderSVGResourcePattern.h"
 
 #include "core/dom/ElementTraversal.h"
+#include "core/paint/TransformRecorder.h"
 #include "core/rendering/svg/SVGRenderingContext.h"
 #include "core/svg/SVGFitToViewBox.h"
 #include "core/svg/SVGPatternElement.h"
-#include "platform/graphics/DisplayList.h"
 #include "platform/graphics/GraphicsContext.h"
+#include "platform/graphics/paint/DisplayItemList.h"
+#include "third_party/skia/include/core/SkPicture.h"
 
 namespace blink {
 
@@ -109,7 +111,7 @@ PassOwnPtr<PatternData> RenderSVGResourcePattern::buildPatternData(const RenderO
     }
 
     OwnPtr<PatternData> patternData = adoptPtr(new PatternData);
-    patternData->pattern = Pattern::createDisplayListPattern(asDisplayList(tileBounds, tileTransform));
+    patternData->pattern = Pattern::createPicturePattern(asPicture(tileBounds, tileTransform));
 
     // Compute pattern space transformation.
     patternData->transform.translate(tileBounds.x(), tileBounds.y());
@@ -143,7 +145,7 @@ SVGPaintServer RenderSVGResourcePattern::preparePaintServer(const RenderObject& 
         return SVGPaintServer::invalid();
 
     PatternData* patternData = patternForRenderer(object);
-    if (!patternData)
+    if (!patternData || !patternData->pattern)
         return SVGPaintServer::invalid();
 
     patternData->pattern->setPatternSpaceTransform(patternData->transform);
@@ -151,7 +153,7 @@ SVGPaintServer RenderSVGResourcePattern::preparePaintServer(const RenderObject& 
     return SVGPaintServer(patternData->pattern);
 }
 
-PassRefPtr<DisplayList> RenderSVGResourcePattern::asDisplayList(const FloatRect& tileBounds,
+PassRefPtr<const SkPicture> RenderSVGResourcePattern::asPicture(const FloatRect& tileBounds,
     const AffineTransform& tileTransform) const
 {
     ASSERT(!m_shouldCollectPatternAttributes);
@@ -160,10 +162,12 @@ PassRefPtr<DisplayList> RenderSVGResourcePattern::asDisplayList(const FloatRect&
     if (m_attributes.patternContentUnits() == SVGUnitTypes::SVG_UNIT_TYPE_OBJECTBOUNDINGBOX)
         contentTransform = tileTransform;
 
-    // Draw the content into a DisplayList.
-    GraphicsContext recordingContext(nullptr);
+    // Draw the content into a Picture.
+    OwnPtr<DisplayItemList> displayItemList;
+    if (RuntimeEnabledFeatures::slimmingPaintEnabled())
+        displayItemList = DisplayItemList::create();
+    GraphicsContext recordingContext(nullptr, displayItemList.get());
     recordingContext.beginRecording(FloatRect(FloatPoint(), tileBounds.size()));
-    recordingContext.concatCTM(tileTransform);
 
     ASSERT(m_attributes.patternContentElement());
     RenderSVGResourceContainer* patternRenderer =
@@ -172,9 +176,15 @@ PassRefPtr<DisplayList> RenderSVGResourcePattern::asDisplayList(const FloatRect&
     ASSERT(!patternRenderer->needsLayout());
 
     SubtreeContentTransformScope contentTransformScope(contentTransform);
-    for (RenderObject* child = patternRenderer->firstChild(); child; child = child->nextSibling())
-        SVGRenderingContext::renderSubtree(&recordingContext, child);
 
+    {
+        TransformRecorder transformRecorder(recordingContext, patternRenderer->displayItemClient(), tileTransform);
+        for (RenderObject* child = patternRenderer->firstChild(); child; child = child->nextSibling())
+            SVGRenderingContext::renderSubtree(&recordingContext, child);
+    }
+
+    if (displayItemList)
+        displayItemList->replay(&recordingContext);
     return recordingContext.endRecording();
 }
 

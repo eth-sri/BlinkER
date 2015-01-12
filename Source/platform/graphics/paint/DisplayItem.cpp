@@ -55,6 +55,17 @@ WTF::String DisplayItem::typeAsDebugString(DisplayItem::Type type)
     case ClipBoxClippingMask: return "ClipBoxClippingMask";
     case BeginTransform: return "BeginTransform";
     case EndTransform: return "EndTransform";
+    case ScrollbarCorner: return "ScrollbarCorner";
+    case Scrollbar: return "Scrollbar";
+    case Resizer: return "Resizer";
+    case ColumnRules: return "ColumnRules";
+    case ClipNodeImage: return "ClipNodeImage";
+    case ClipFrameToVisibleContentRect: return "ClipFrameToVisibleContentRect";
+    case ClipFrameScrollbars: return "ClipFrameScrollbars";
+    case FloatClipForeground: return "FloatClipForeground";
+    case FloatClipSelection: return "FloatClipSelection";
+    case FloatClipSelfOutline: return "FloatClipSelfOutline";
+    case EndFloatClip: return "EndFloatClip";
     }
     ASSERT_NOT_REACHED();
     return "Unknown";
@@ -62,7 +73,26 @@ WTF::String DisplayItem::typeAsDebugString(DisplayItem::Type type)
 
 WTF::String DisplayItem::asDebugString() const
 {
-    return String::format("{%s, type: \"%s\"}", clientDebugString().utf8().data(), typeAsDebugString(type()).utf8().data());
+    WTF::StringBuilder stringBuilder;
+    stringBuilder.append('{');
+    dumpPropertiesAsDebugString(stringBuilder);
+    stringBuilder.append('}');
+    return stringBuilder.toString();
+}
+
+void DisplayItem::dumpPropertiesAsDebugString(WTF::StringBuilder& stringBuilder) const
+{
+    stringBuilder.append("name: \"");
+    stringBuilder.append(name());
+    stringBuilder.append("\", ");
+    stringBuilder.append(String::format("client: \"%p\", ", client()));
+    if (!clientDebugString().isEmpty()) {
+        stringBuilder.append(clientDebugString());
+        stringBuilder.append(", ");
+    }
+    stringBuilder.append("type: \"");
+    stringBuilder.append(typeAsDebugString(type()));
+    stringBuilder.append('"');
 }
 
 #endif

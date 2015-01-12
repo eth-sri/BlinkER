@@ -246,6 +246,12 @@ void DocumentThreadableLoader::setDefersLoading(bool value)
         resource()->setDefersLoading(value);
 }
 
+// In this method, we can clear |request| to tell content::WebURLLoaderImpl of
+// Chromium not to follow the redirect. This works only when this method is
+// called by RawResource::willSendRequest(). If called by
+// RawResource::didAddClient(), clearing |request| won't be propagated
+// to content::WebURLLoaderImpl. So, this loader must also get detached from
+// the resource by calling clearResource().
 void DocumentThreadableLoader::redirectReceived(Resource* resource, ResourceRequest& request, const ResourceResponse& redirectResponse)
 {
     ASSERT(m_client);
@@ -254,16 +260,12 @@ void DocumentThreadableLoader::redirectReceived(Resource* resource, ResourceRequ
 
     RefPtr<DocumentThreadableLoader> protect(this);
 
-    // FIXME: Support redirect in Fetch API.
-    if (resource->resourceRequest().requestContext() == blink::WebURLRequest::RequestContextFetch) {
-        m_client->didFailRedirectCheck();
-        request = ResourceRequest();
-        return;
-    }
-
     if (!isAllowedByContentSecurityPolicy(request.url())) {
         m_client->didFailRedirectCheck();
+
+        clearResource();
         request = ResourceRequest();
+
         m_requestStartedSeconds = 0.0;
         return;
     }
@@ -287,7 +289,7 @@ void DocumentThreadableLoader::redirectReceived(Resource* resource, ResourceRequ
 
         if (m_simpleRequest) {
             allowRedirect = CrossOriginAccessControl::isLegalRedirectLocation(request.url(), accessControlErrorDescription)
-                && (m_sameOriginRequest || passesAccessControlCheck(redirectResponse, effectiveAllowCredentials(), securityOrigin(), accessControlErrorDescription));
+                && (m_sameOriginRequest || passesAccessControlCheck(&m_document, redirectResponse, effectiveAllowCredentials(), securityOrigin(), accessControlErrorDescription));
         } else {
             accessControlErrorDescription = "The request was redirected to '"+ request.url().string() + "', which is disallowed for cross-origin requests that require preflight.";
         }
@@ -330,7 +332,10 @@ void DocumentThreadableLoader::redirectReceived(Resource* resource, ResourceRequ
     } else {
         m_client->didFailRedirectCheck();
     }
+
+    clearResource();
     request = ResourceRequest();
+
     m_requestStartedSeconds = 0.0;
 }
 
@@ -365,7 +370,7 @@ void DocumentThreadableLoader::handlePreflightResponse(const ResourceResponse& r
 {
     String accessControlErrorDescription;
 
-    if (!passesAccessControlCheck(response, effectiveAllowCredentials(), securityOrigin(), accessControlErrorDescription)) {
+    if (!passesAccessControlCheck(&m_document, response, effectiveAllowCredentials(), securityOrigin(), accessControlErrorDescription)) {
         handlePreflightFailure(response.url().string(), accessControlErrorDescription);
         return;
     }
@@ -421,7 +426,7 @@ void DocumentThreadableLoader::handleResponse(unsigned long identifier, const Re
 
     if (!m_sameOriginRequest && m_options.crossOriginRequestPolicy == UseAccessControl) {
         String accessControlErrorDescription;
-        if (!passesAccessControlCheck(response, effectiveAllowCredentials(), securityOrigin(), accessControlErrorDescription)) {
+        if (!passesAccessControlCheck(&m_document, response, effectiveAllowCredentials(), securityOrigin(), accessControlErrorDescription)) {
             reportResponseReceived(identifier, response);
             m_client->didFailAccessControlCheck(ResourceError(errorDomainBlinkInternal, 0, response.url().string(), accessControlErrorDescription));
             return;

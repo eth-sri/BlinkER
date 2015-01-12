@@ -29,7 +29,7 @@
 #ifndef AXObjectCacheImpl_h
 #define AXObjectCacheImpl_h
 
-#include "core/accessibility/AXObjectCache.h"
+#include "core/dom/AXObjectCache.h"
 #include "core/rendering/RenderText.h"
 #include "modules/accessibility/AXObject.h"
 #include "platform/Timer.h"
@@ -59,7 +59,7 @@ public:
     explicit AXObjectCacheImpl(Document&);
     ~AXObjectCacheImpl();
 
-    static AXObject* focusedUIElementForPage(const Page*);
+    AXObject* focusedUIElementForPage(const Page*);
 
     virtual void selectionChanged(Node*) override;
     virtual void childrenChanged(Node*) override;
@@ -103,6 +103,9 @@ public:
     void handleLayoutComplete(RenderObject*) override;
     void handleScrolledToAnchor(const Node* anchorNode) override;
 
+    virtual const AtomicString& computedRoleForNode(Node*) override;
+    virtual String computedNameForNode(Node*) override;
+
     // Returns the root object for the entire document.
     AXObject* rootObject();
 
@@ -122,11 +125,11 @@ public:
     AXObject* get(Widget*);
     AXObject* get(AbstractInlineTextBox*);
 
+    AXObject* firstAccessibleObjectFromNode(const Node*);
+
     void remove(AXID);
     void remove(AbstractInlineTextBox*);
 
-    void detachWrapper(AXObject*);
-    void attachWrapper(AXObject*);
     void childrenChanged(AXObject*);
     void selectedChildrenChanged(RenderObject*);
 
@@ -143,8 +146,6 @@ public:
     bool isIDinUse(AXID id) const { return m_idsInUse.contains(id); }
 
     AXID platformGenerateAXID() const;
-
-    bool nodeHasRole(Node*, const AtomicString& role);
 
     // Counts the number of times the document has been modified. Some attribute values are cached
     // as long as the modification count hasn't changed.
@@ -164,6 +165,10 @@ protected:
     void removeNodeForUse(Node* n) { m_textMarkerNodes.remove(n); }
     bool isNodeInUse(Node* n) { return m_textMarkerNodes.contains(n); }
 
+    PassRefPtr<AXObject> createFromRenderer(RenderObject*);
+    PassRefPtr<AXObject> createFromNode(Node*);
+    PassRefPtr<AXObject> createFromInlineTextBox(AbstractInlineTextBox*);
+
 private:
     Document& m_document;
     HashMap<AXID, RefPtr<AXObject> > m_objects;
@@ -180,7 +185,7 @@ private:
     Vector<pair<RefPtr<AXObject>, AXNotification> > m_notificationsToPost;
     void notificationPostTimerFired(Timer<AXObjectCacheImpl>*);
 
-    static AXObject* focusedImageMapUIElement(HTMLAreaElement*);
+    AXObject* focusedImageMapUIElement(HTMLAreaElement*);
 
     AXID getAXID(AXObject*);
 

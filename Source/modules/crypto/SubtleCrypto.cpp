@@ -91,7 +91,7 @@ static bool ensureNotNull(CryptoKey* key, const char* paramName, CryptoResult* r
     return true;
 }
 
-static bool parseAlgorithm(const Dictionary& raw, WebCryptoOperation op, WebCryptoAlgorithm& algorithm, CryptoResult* result)
+static bool parseAlgorithm(const AlgorithmIdentifier& raw, WebCryptoOperation op, WebCryptoAlgorithm& algorithm, CryptoResult* result)
 {
     AlgorithmError error;
     bool success = normalizeAlgorithm(raw, op, algorithm, &error);
@@ -110,57 +110,6 @@ static bool canAccessWebCrypto(ScriptState* scriptState, CryptoResult* result)
     }
 
     return true;
-}
-
-static ScriptPromise startCryptoOperation(ScriptState* scriptState, const Dictionary& rawAlgorithm, CryptoKey* key, WebCryptoOperation operationType, const DOMArrayPiece& signature, const DOMArrayPiece& dataBuffer)
-{
-    RefPtr<CryptoResultImpl> result = CryptoResultImpl::create(scriptState);
-    ScriptPromise promise = result->promise();
-
-    if (!canAccessWebCrypto(scriptState, result.get()))
-        return promise;
-
-    bool requiresKey = operationType != WebCryptoOperationDigest;
-
-    if (requiresKey && !ensureNotNull(key, "key", result.get()))
-        return promise;
-    if (operationType == WebCryptoOperationVerify && !ensureNotNull(signature, "signature", result.get()))
-        return promise;
-    if (!ensureNotNull(dataBuffer, "dataBuffer", result.get()))
-        return promise;
-
-    WebCryptoAlgorithm algorithm;
-    if (!parseAlgorithm(rawAlgorithm, operationType, algorithm, result.get()))
-        return promise;
-
-    if (requiresKey && !key->canBeUsedForAlgorithm(algorithm, operationType, result.get()))
-        return promise;
-
-    const unsigned char* data = dataBuffer.bytes();
-    unsigned dataSize = dataBuffer.byteLength();
-
-    switch (operationType) {
-    case WebCryptoOperationEncrypt:
-        Platform::current()->crypto()->encrypt(algorithm, key->key(), data, dataSize, result->result());
-        break;
-    case WebCryptoOperationDecrypt:
-        Platform::current()->crypto()->decrypt(algorithm, key->key(), data, dataSize, result->result());
-        break;
-    case WebCryptoOperationSign:
-        Platform::current()->crypto()->sign(algorithm, key->key(), data, dataSize, result->result());
-        break;
-    case WebCryptoOperationVerify:
-        Platform::current()->crypto()->verifySignature(algorithm, key->key(), signature.bytes(), signature.byteLength(), data, dataSize, result->result());
-        break;
-    case WebCryptoOperationDigest:
-        Platform::current()->crypto()->digest(algorithm, data, dataSize, result->result());
-        break;
-    default:
-        ASSERT_NOT_REACHED();
-        return ScriptPromise();
-    }
-
-    return promise;
 }
 
 static bool copyStringProperty(const char* property, const Dictionary& source, JSONObject* destination)
@@ -193,7 +142,7 @@ static bool copyJwkDictionaryToJson(const Dictionary& dict, CString& jsonUtf8, C
     RefPtr<JSONObject> jsonObject = JSONObject::create();
 
     if (!copyStringProperty("kty", dict, jsonObject.get())) {
-        result->completeWithError(WebCryptoErrorTypeData, "The required JWK property \"kty\" was missing");
+        result->completeWithError(WebCryptoErrorTypeData, "The required JWK member \"kty\" was missing");
         return false;
     }
 
@@ -218,34 +167,126 @@ SubtleCrypto::SubtleCrypto()
 {
 }
 
-ScriptPromise SubtleCrypto::encrypt(ScriptState* scriptState, const Dictionary& rawAlgorithm, CryptoKey* key, const DOMArrayPiece& data)
+ScriptPromise SubtleCrypto::encrypt(ScriptState* scriptState, const AlgorithmIdentifier& rawAlgorithm, CryptoKey* key, const DOMArrayPiece& data)
 {
-    return startCryptoOperation(scriptState, rawAlgorithm, key, WebCryptoOperationEncrypt, DOMArrayPiece(), data);
+    RefPtrWillBeRawPtr<CryptoResultImpl> result = CryptoResultImpl::create(scriptState);
+    ScriptPromise promise = result->promise();
+
+    if (!canAccessWebCrypto(scriptState, result.get()))
+        return promise;
+
+    if (!ensureNotNull(key, "key", result.get()))
+        return promise;
+    if (!ensureNotNull(data, "dataBuffer", result.get()))
+        return promise;
+
+    WebCryptoAlgorithm algorithm;
+    if (!parseAlgorithm(rawAlgorithm, WebCryptoOperationEncrypt, algorithm, result.get()))
+        return promise;
+
+    if (!key->canBeUsedForAlgorithm(algorithm, WebCryptoKeyUsageEncrypt, result.get()))
+        return promise;
+
+    Platform::current()->crypto()->encrypt(algorithm, key->key(), data.bytes(), data.byteLength(), result->result());
+    return promise;
 }
 
-ScriptPromise SubtleCrypto::decrypt(ScriptState* scriptState, const Dictionary& rawAlgorithm, CryptoKey* key, const DOMArrayPiece& data)
+ScriptPromise SubtleCrypto::decrypt(ScriptState* scriptState, const AlgorithmIdentifier& rawAlgorithm, CryptoKey* key, const DOMArrayPiece& data)
 {
-    return startCryptoOperation(scriptState, rawAlgorithm, key, WebCryptoOperationDecrypt, DOMArrayPiece(), data);
+    RefPtrWillBeRawPtr<CryptoResultImpl> result = CryptoResultImpl::create(scriptState);
+    ScriptPromise promise = result->promise();
+
+    if (!canAccessWebCrypto(scriptState, result.get()))
+        return promise;
+
+    if (!ensureNotNull(key, "key", result.get()))
+        return promise;
+    if (!ensureNotNull(data, "dataBuffer", result.get()))
+        return promise;
+
+    WebCryptoAlgorithm algorithm;
+    if (!parseAlgorithm(rawAlgorithm, WebCryptoOperationDecrypt, algorithm, result.get()))
+        return promise;
+
+    if (!key->canBeUsedForAlgorithm(algorithm, WebCryptoKeyUsageDecrypt, result.get()))
+        return promise;
+
+    Platform::current()->crypto()->decrypt(algorithm, key->key(), data.bytes(), data.byteLength(), result->result());
+    return promise;
 }
 
-ScriptPromise SubtleCrypto::sign(ScriptState* scriptState, const Dictionary& rawAlgorithm, CryptoKey* key, const DOMArrayPiece& data)
+ScriptPromise SubtleCrypto::sign(ScriptState* scriptState, const AlgorithmIdentifier& rawAlgorithm, CryptoKey* key, const DOMArrayPiece& data)
 {
-    return startCryptoOperation(scriptState, rawAlgorithm, key, WebCryptoOperationSign, DOMArrayPiece(), data);
+    RefPtrWillBeRawPtr<CryptoResultImpl> result = CryptoResultImpl::create(scriptState);
+    ScriptPromise promise = result->promise();
+
+    if (!canAccessWebCrypto(scriptState, result.get()))
+        return promise;
+
+    if (!ensureNotNull(key, "key", result.get()))
+        return promise;
+    if (!ensureNotNull(data, "dataBuffer", result.get()))
+        return promise;
+
+    WebCryptoAlgorithm algorithm;
+    if (!parseAlgorithm(rawAlgorithm, WebCryptoOperationSign, algorithm, result.get()))
+        return promise;
+
+    if (!key->canBeUsedForAlgorithm(algorithm, WebCryptoKeyUsageSign, result.get()))
+        return promise;
+
+    Platform::current()->crypto()->sign(algorithm, key->key(), data.bytes(), data.byteLength(), result->result());
+    return promise;
 }
 
-ScriptPromise SubtleCrypto::verifySignature(ScriptState* scriptState, const Dictionary& rawAlgorithm, CryptoKey* key, const DOMArrayPiece& signature, const DOMArrayPiece& data)
+ScriptPromise SubtleCrypto::verifySignature(ScriptState* scriptState, const AlgorithmIdentifier& rawAlgorithm, CryptoKey* key, const DOMArrayPiece& signature, const DOMArrayPiece& data)
 {
-    return startCryptoOperation(scriptState, rawAlgorithm, key, WebCryptoOperationVerify, signature, data);
+    RefPtrWillBeRawPtr<CryptoResultImpl> result = CryptoResultImpl::create(scriptState);
+    ScriptPromise promise = result->promise();
+
+    if (!canAccessWebCrypto(scriptState, result.get()))
+        return promise;
+
+    if (!ensureNotNull(key, "key", result.get()))
+        return promise;
+    if (!ensureNotNull(data, "dataBuffer", result.get()))
+        return promise;
+    if (!ensureNotNull(signature, "signature", result.get()))
+        return promise;
+
+    WebCryptoAlgorithm algorithm;
+    if (!parseAlgorithm(rawAlgorithm, WebCryptoOperationVerify, algorithm, result.get()))
+        return promise;
+
+    if (!key->canBeUsedForAlgorithm(algorithm, WebCryptoKeyUsageVerify, result.get()))
+        return promise;
+
+    Platform::current()->crypto()->verifySignature(algorithm, key->key(), signature.bytes(), signature.byteLength(), data.bytes(), data.byteLength(), result->result());
+    return promise;
 }
 
-ScriptPromise SubtleCrypto::digest(ScriptState* scriptState, const Dictionary& rawAlgorithm, const DOMArrayPiece& data)
+ScriptPromise SubtleCrypto::digest(ScriptState* scriptState, const AlgorithmIdentifier& rawAlgorithm, const DOMArrayPiece& data)
 {
-    return startCryptoOperation(scriptState, rawAlgorithm, nullptr, WebCryptoOperationDigest, DOMArrayPiece(), data);
+    RefPtrWillBeRawPtr<CryptoResultImpl> result = CryptoResultImpl::create(scriptState);
+    ScriptPromise promise = result->promise();
+
+    if (!canAccessWebCrypto(scriptState, result.get()))
+        return promise;
+
+    if (!ensureNotNull(data, "dataBuffer", result.get()))
+        return promise;
+
+    WebCryptoAlgorithm algorithm;
+    if (!parseAlgorithm(rawAlgorithm, WebCryptoOperationDigest, algorithm, result.get()))
+        return promise;
+
+    Platform::current()->crypto()->digest(algorithm, data.bytes(), data.byteLength(), result->result());
+    return promise;
 }
 
-ScriptPromise SubtleCrypto::generateKey(ScriptState* scriptState, const Dictionary& rawAlgorithm, bool extractable, const Vector<String>& rawKeyUsages)
+ScriptPromise SubtleCrypto::generateKey(ScriptState* scriptState, const AlgorithmIdentifier& rawAlgorithm, bool extractable, const Vector<String>& rawKeyUsages)
 {
-    RefPtr<CryptoResultImpl> result = CryptoResultImpl::create(scriptState);
+    RefPtrWillBeRawPtr<CryptoResultImpl> result = CryptoResultImpl::create(scriptState);
     ScriptPromise promise = result->promise();
 
     if (!canAccessWebCrypto(scriptState, result.get()))
@@ -263,9 +304,9 @@ ScriptPromise SubtleCrypto::generateKey(ScriptState* scriptState, const Dictiona
     return promise;
 }
 
-ScriptPromise SubtleCrypto::importKey(ScriptState* scriptState, const String& rawFormat, const ArrayBufferOrArrayBufferViewOrDictionary& keyData, const Dictionary& rawAlgorithm, bool extractable, const Vector<String>& rawKeyUsages)
+ScriptPromise SubtleCrypto::importKey(ScriptState* scriptState, const String& rawFormat, const ArrayBufferOrArrayBufferViewOrDictionary& keyData, const AlgorithmIdentifier& rawAlgorithm, bool extractable, const Vector<String>& rawKeyUsages)
 {
-    RefPtr<CryptoResultImpl> result = CryptoResultImpl::create(scriptState);
+    RefPtrWillBeRawPtr<CryptoResultImpl> result = CryptoResultImpl::create(scriptState);
     ScriptPromise promise = result->promise();
 
     if (!canAccessWebCrypto(scriptState, result.get()))
@@ -318,7 +359,7 @@ ScriptPromise SubtleCrypto::importKey(ScriptState* scriptState, const String& ra
 
 ScriptPromise SubtleCrypto::exportKey(ScriptState* scriptState, const String& rawFormat, CryptoKey* key)
 {
-    RefPtr<CryptoResultImpl> result = CryptoResultImpl::create(scriptState);
+    RefPtrWillBeRawPtr<CryptoResultImpl> result = CryptoResultImpl::create(scriptState);
     ScriptPromise promise = result->promise();
 
     if (!canAccessWebCrypto(scriptState, result.get()))
@@ -340,9 +381,9 @@ ScriptPromise SubtleCrypto::exportKey(ScriptState* scriptState, const String& ra
     return promise;
 }
 
-ScriptPromise SubtleCrypto::wrapKey(ScriptState* scriptState, const String& rawFormat, CryptoKey* key, CryptoKey* wrappingKey, const Dictionary& rawWrapAlgorithm)
+ScriptPromise SubtleCrypto::wrapKey(ScriptState* scriptState, const String& rawFormat, CryptoKey* key, CryptoKey* wrappingKey, const AlgorithmIdentifier& rawWrapAlgorithm)
 {
-    RefPtr<CryptoResultImpl> result = CryptoResultImpl::create(scriptState);
+    RefPtrWillBeRawPtr<CryptoResultImpl> result = CryptoResultImpl::create(scriptState);
     ScriptPromise promise = result->promise();
 
     if (!canAccessWebCrypto(scriptState, result.get()))
@@ -367,16 +408,16 @@ ScriptPromise SubtleCrypto::wrapKey(ScriptState* scriptState, const String& rawF
         return promise;
     }
 
-    if (!wrappingKey->canBeUsedForAlgorithm(wrapAlgorithm, WebCryptoOperationWrapKey, result.get()))
+    if (!wrappingKey->canBeUsedForAlgorithm(wrapAlgorithm, WebCryptoKeyUsageWrapKey, result.get()))
         return promise;
 
     Platform::current()->crypto()->wrapKey(format, key->key(), wrappingKey->key(), wrapAlgorithm, result->result());
     return promise;
 }
 
-ScriptPromise SubtleCrypto::unwrapKey(ScriptState* scriptState, const String& rawFormat, const DOMArrayPiece& wrappedKey, CryptoKey* unwrappingKey, const Dictionary& rawUnwrapAlgorithm, const Dictionary& rawUnwrappedKeyAlgorithm, bool extractable, const Vector<String>& rawKeyUsages)
+ScriptPromise SubtleCrypto::unwrapKey(ScriptState* scriptState, const String& rawFormat, const DOMArrayPiece& wrappedKey, CryptoKey* unwrappingKey, const AlgorithmIdentifier& rawUnwrapAlgorithm, const AlgorithmIdentifier& rawUnwrappedKeyAlgorithm, bool extractable, const Vector<String>& rawKeyUsages)
 {
-    RefPtr<CryptoResultImpl> result = CryptoResultImpl::create(scriptState);
+    RefPtrWillBeRawPtr<CryptoResultImpl> result = CryptoResultImpl::create(scriptState);
     ScriptPromise promise = result->promise();
 
     if (!canAccessWebCrypto(scriptState, result.get()))
@@ -403,16 +444,16 @@ ScriptPromise SubtleCrypto::unwrapKey(ScriptState* scriptState, const String& ra
     if (!parseAlgorithm(rawUnwrappedKeyAlgorithm, WebCryptoOperationImportKey, unwrappedKeyAlgorithm, result.get()))
         return promise;
 
-    if (!unwrappingKey->canBeUsedForAlgorithm(unwrapAlgorithm, WebCryptoOperationUnwrapKey, result.get()))
+    if (!unwrappingKey->canBeUsedForAlgorithm(unwrapAlgorithm, WebCryptoKeyUsageUnwrapKey, result.get()))
         return promise;
 
     Platform::current()->crypto()->unwrapKey(format, wrappedKey.bytes(), wrappedKey.byteLength(), unwrappingKey->key(), unwrapAlgorithm, unwrappedKeyAlgorithm, extractable, keyUsages, result->result());
     return promise;
 }
 
-ScriptPromise SubtleCrypto::deriveBits(ScriptState* scriptState, const Dictionary& rawAlgorithm, CryptoKey* baseKey, unsigned lengthBits)
+ScriptPromise SubtleCrypto::deriveBits(ScriptState* scriptState, const AlgorithmIdentifier& rawAlgorithm, CryptoKey* baseKey, unsigned lengthBits)
 {
-    RefPtr<CryptoResultImpl> result = CryptoResultImpl::create(scriptState);
+    RefPtrWillBeRawPtr<CryptoResultImpl> result = CryptoResultImpl::create(scriptState);
     ScriptPromise promise = result->promise();
 
     if (!canAccessWebCrypto(scriptState, result.get()))
@@ -425,10 +466,44 @@ ScriptPromise SubtleCrypto::deriveBits(ScriptState* scriptState, const Dictionar
     if (!parseAlgorithm(rawAlgorithm, WebCryptoOperationDeriveBits, algorithm, result.get()))
         return promise;
 
-    if (!baseKey->canBeUsedForAlgorithm(algorithm, WebCryptoOperationDeriveBits, result.get()))
+    if (!baseKey->canBeUsedForAlgorithm(algorithm, WebCryptoKeyUsageDeriveBits, result.get()))
         return promise;
 
     Platform::current()->crypto()->deriveBits(algorithm, baseKey->key(), lengthBits, result->result());
+    return promise;
+}
+
+ScriptPromise SubtleCrypto::deriveKey(ScriptState* scriptState, const AlgorithmIdentifier& rawAlgorithm, CryptoKey* baseKey, const AlgorithmIdentifier& rawDerivedKeyType, bool extractable, const Vector<String>& rawKeyUsages)
+{
+    RefPtr<CryptoResultImpl> result = CryptoResultImpl::create(scriptState);
+    ScriptPromise promise = result->promise();
+
+    if (!canAccessWebCrypto(scriptState, result.get()))
+        return promise;
+
+    if (!ensureNotNull(baseKey, "baseKey", result.get()))
+        return promise;
+
+    WebCryptoKeyUsageMask keyUsages;
+    if (!CryptoKey::parseUsageMask(rawKeyUsages, keyUsages, result.get()))
+        return promise;
+
+    WebCryptoAlgorithm algorithm;
+    if (!parseAlgorithm(rawAlgorithm, WebCryptoOperationDeriveBits, algorithm, result.get()))
+        return promise;
+
+    if (!baseKey->canBeUsedForAlgorithm(algorithm, WebCryptoKeyUsageDeriveKey, result.get()))
+        return promise;
+
+    WebCryptoAlgorithm importAlgorithm;
+    if (!parseAlgorithm(rawDerivedKeyType, WebCryptoOperationImportKey, importAlgorithm, result.get()))
+        return promise;
+
+    WebCryptoAlgorithm keyLengthAlgorithm;
+    if (!parseAlgorithm(rawDerivedKeyType, WebCryptoOperationGetKeyLength, keyLengthAlgorithm, result.get()))
+        return promise;
+
+    Platform::current()->crypto()->deriveKey(algorithm, baseKey->key(), importAlgorithm, keyLengthAlgorithm, extractable, keyUsages, result->result());
     return promise;
 }
 

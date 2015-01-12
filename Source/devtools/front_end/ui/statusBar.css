@@ -4,6 +4,10 @@
  * found in the LICENSE file.
  */
 
+:host {
+    flex: none;
+}
+
 .status-bar-shadow {
     position: relative;
     white-space: nowrap;
@@ -33,6 +37,7 @@
 .status-bar-shadow > div {
     display: inline-flex;
     overflow: visible;
+    margin: 0 2px;
 }
 
 .status-bar-item {
@@ -52,10 +57,6 @@
     overflow: hidden;
     margin-left: 6px;
     -webkit-user-select: text;
-}
-
-#drawer-view-anchor {
-    display: inline-block;
 }
 
 .status-bar-item:active {
@@ -92,11 +93,11 @@
 }
 
 .narrow button.status-bar-item .glyph {
-    margin-left: -4px;
+    margin: 0 -3px;
 }
 
 button.status-bar-item {
-    width: 32px;
+    width: 30px;
 }
 
 button.status-bar-item.toggled-on .glyph {
@@ -192,6 +193,7 @@ select.status-bar-item {
     right: 0;
     bottom: 0;
     left: 0;
+    margin: 0 -1px;
 }
 
 @media (-webkit-min-device-pixel-ratio: 1.5) {
@@ -199,13 +201,6 @@ select.status-bar-item {
     -webkit-mask-image: url(Images/statusbarButtonGlyphs_2x.png);
 }
 } /* media */
-
-.alternate-status-bar-buttons-bar {
-    position: absolute;
-    width: 31px;
-    bottom: -3px;
-    background: white;
-}
 
 .status-bar-item.emulate-active {
     background-color: rgb(163,163,163);
@@ -264,7 +259,7 @@ select.status-bar-item {
 }
 
 .emulation-status-bar-item .glyph {
-    -webkit-mask-position: -160px 0px;
+    -webkit-mask-position: -160px 0;
 }
 
 .emulation-status-bar-item.warning::after {
@@ -320,7 +315,7 @@ select.status-bar-item {
 }
 
 .screencast-status-bar-item.toggled-disabled .glyph {
-    -webkit-mask-position: 0px -120px;
+    -webkit-mask-position: 0 -120px;
 }
 
 .record-status-bar-item .glyph {

@@ -41,7 +41,7 @@ static void constructor(const v8::FunctionCallbackInfo<v8::Value>& info)
         TOSTRING_VOID_INTERNAL(stringArg, info[0]);
     }
     RefPtr<TestInterfaceConstructor3> impl = TestInterfaceConstructor3::create(stringArg);
-    v8::Handle<v8::Object> wrapper = info.Holder();
+    v8::Local<v8::Object> wrapper = info.Holder();
     impl->associateWithWrapper(info.GetIsolate(), &V8TestInterfaceConstructor3::wrapperTypeInfo, wrapper);
     v8SetReturnValue(info, wrapper);
 }
@@ -64,16 +64,15 @@ void V8TestInterfaceConstructor3::constructorCallback(const v8::FunctionCallback
     TestInterfaceConstructor3V8Internal::constructor(info);
 }
 
-static void installV8TestInterfaceConstructor3Template(v8::Handle<v8::FunctionTemplate> functionTemplate, v8::Isolate* isolate)
+static void installV8TestInterfaceConstructor3Template(v8::Local<v8::FunctionTemplate> functionTemplate, v8::Isolate* isolate)
 {
     functionTemplate->ReadOnlyPrototype();
 
     v8::Local<v8::Signature> defaultSignature;
-    defaultSignature = V8DOMConfiguration::installDOMClassTemplate(functionTemplate, "TestInterfaceConstructor3", v8::Local<v8::FunctionTemplate>(), V8TestInterfaceConstructor3::internalFieldCount,
+    defaultSignature = V8DOMConfiguration::installDOMClassTemplate(isolate, functionTemplate, "TestInterfaceConstructor3", v8::Local<v8::FunctionTemplate>(), V8TestInterfaceConstructor3::internalFieldCount,
         0, 0,
         0, 0,
-        0, 0,
-        isolate);
+        0, 0);
     functionTemplate->SetCallHandler(V8TestInterfaceConstructor3::constructorCallback);
     functionTemplate->SetLength(1);
     v8::Local<v8::ObjectTemplate> instanceTemplate = functionTemplate->InstanceTemplate();
@@ -85,24 +84,24 @@ static void installV8TestInterfaceConstructor3Template(v8::Handle<v8::FunctionTe
     functionTemplate->Set(v8AtomicString(isolate, "toString"), V8PerIsolateData::from(isolate)->toStringTemplate());
 }
 
-v8::Handle<v8::FunctionTemplate> V8TestInterfaceConstructor3::domTemplate(v8::Isolate* isolate)
+v8::Local<v8::FunctionTemplate> V8TestInterfaceConstructor3::domTemplate(v8::Isolate* isolate)
 {
     return V8DOMConfiguration::domClassTemplate(isolate, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), installV8TestInterfaceConstructor3Template);
 }
 
-bool V8TestInterfaceConstructor3::hasInstance(v8::Handle<v8::Value> v8Value, v8::Isolate* isolate)
+bool V8TestInterfaceConstructor3::hasInstance(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
 {
     return V8PerIsolateData::from(isolate)->hasInstance(&wrapperTypeInfo, v8Value);
 }
 
-v8::Handle<v8::Object> V8TestInterfaceConstructor3::findInstanceInPrototypeChain(v8::Handle<v8::Value> v8Value, v8::Isolate* isolate)
+v8::Local<v8::Object> V8TestInterfaceConstructor3::findInstanceInPrototypeChain(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
 {
     return V8PerIsolateData::from(isolate)->findInstanceInPrototypeChain(&wrapperTypeInfo, v8Value);
 }
 
-TestInterfaceConstructor3* V8TestInterfaceConstructor3::toImplWithTypeCheck(v8::Isolate* isolate, v8::Handle<v8::Value> value)
+TestInterfaceConstructor3* V8TestInterfaceConstructor3::toImplWithTypeCheck(v8::Isolate* isolate, v8::Local<v8::Value> value)
 {
-    return hasInstance(value, isolate) ? toImpl(v8::Handle<v8::Object>::Cast(value)) : 0;
+    return hasInstance(value, isolate) ? toImpl(v8::Local<v8::Object>::Cast(value)) : 0;
 }
 
 void V8TestInterfaceConstructor3::refObject(ScriptWrappable* scriptWrappable)
@@ -113,12 +112,6 @@ void V8TestInterfaceConstructor3::refObject(ScriptWrappable* scriptWrappable)
 void V8TestInterfaceConstructor3::derefObject(ScriptWrappable* scriptWrappable)
 {
     scriptWrappable->toImpl<TestInterfaceConstructor3>()->deref();
-}
-
-template<>
-v8::Handle<v8::Value> toV8NoInline(TestInterfaceConstructor3* impl, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
-{
-    return toV8(impl, creationContext, isolate);
 }
 
 } // namespace blink

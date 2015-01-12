@@ -31,8 +31,6 @@
 
 #include "core/rendering/RenderFlowThread.h"
 
-#include "core/rendering/FlowThreadController.h"
-#include "core/rendering/PaintInfo.h"
 #include "core/rendering/RenderMultiColumnSet.h"
 #include "core/rendering/RenderView.h"
 
@@ -64,27 +62,6 @@ void RenderFlowThread::invalidateRegions()
 
     m_regionsInvalidated = true;
 }
-
-class CurrentRenderFlowThreadDisabler {
-    WTF_MAKE_NONCOPYABLE(CurrentRenderFlowThreadDisabler);
-public:
-    CurrentRenderFlowThreadDisabler(RenderView* view)
-        : m_view(view)
-        , m_renderFlowThread(0)
-    {
-        m_renderFlowThread = m_view->flowThreadController()->currentRenderFlowThread();
-        if (m_renderFlowThread)
-            view->flowThreadController()->setCurrentRenderFlowThread(0);
-    }
-    ~CurrentRenderFlowThreadDisabler()
-    {
-        if (m_renderFlowThread)
-            m_view->flowThreadController()->setCurrentRenderFlowThread(m_renderFlowThread);
-    }
-private:
-    RenderView* m_view;
-    RenderFlowThread* m_renderFlowThread;
-};
 
 void RenderFlowThread::validateRegions()
 {
@@ -126,10 +103,7 @@ void RenderFlowThread::mapRectToPaintInvalidationBacking(const RenderLayerModelO
 void RenderFlowThread::layout()
 {
     m_pageLogicalSizeChanged = m_regionsInvalidated && everHadLayout();
-
-    CurrentRenderFlowThreadMaintainer currentFlowThreadSetter(this);
     RenderBlockFlow::layout();
-
     m_pageLogicalSizeChanged = false;
 }
 
@@ -232,7 +206,7 @@ LayoutRect RenderFlowThread::fragmentsBoundingBox(const LayoutRect& layerBoundin
     for (RenderMultiColumnSetList::const_iterator iter = m_multiColumnSetList.begin(); iter != m_multiColumnSetList.end(); ++iter) {
         RenderMultiColumnSet* columnSet = *iter;
         LayerFragments fragments;
-        columnSet->collectLayerFragments(fragments, layerBoundingBox, PaintInfo::infiniteRect());
+        columnSet->collectLayerFragments(fragments, layerBoundingBox, LayoutRect::infiniteIntRect());
         for (size_t i = 0; i < fragments.size(); ++i) {
             const LayerFragment& fragment = fragments.at(i);
             LayoutRect fragmentRect(layerBoundingBox);
@@ -245,107 +219,6 @@ LayoutRect RenderFlowThread::fragmentsBoundingBox(const LayoutRect& layerBoundin
     return result;
 }
 
-bool RenderFlowThread::cachedOffsetFromLogicalTopOfFirstRegion(const RenderBox* box, LayoutUnit& result) const
-{
-    RenderBoxToOffsetMap::const_iterator offsetIterator = m_boxesToOffsetMap.find(box);
-    if (offsetIterator == m_boxesToOffsetMap.end())
-        return false;
-
-    result = offsetIterator->value;
-    return true;
-}
-
-void RenderFlowThread::setOffsetFromLogicalTopOfFirstRegion(const RenderBox* box, LayoutUnit offset)
-{
-    m_boxesToOffsetMap.set(box, offset);
-}
-
-void RenderFlowThread::clearOffsetFromLogicalTopOfFirstRegion(const RenderBox* box)
-{
-    ASSERT(m_boxesToOffsetMap.contains(box));
-    m_boxesToOffsetMap.remove(box);
-}
-
-const RenderBox* RenderFlowThread::currentStatePusherRenderBox() const
-{
-    const RenderObject* currentObject = m_statePusherObjectsStack.isEmpty() ? 0 : m_statePusherObjectsStack.last();
-    if (currentObject && currentObject->isBox())
-        return toRenderBox(currentObject);
-
-    return 0;
-}
-
-void RenderFlowThread::pushFlowThreadLayoutState(const RenderObject& object)
-{
-    if (const RenderBox* currentBoxDescendant = currentStatePusherRenderBox()) {
-        LayoutState* layoutState = currentBoxDescendant->view()->layoutState();
-        if (layoutState && layoutState->isPaginated()) {
-            ASSERT(layoutState->renderer() == currentBoxDescendant);
-            LayoutSize offsetDelta = layoutState->layoutOffset() - layoutState->pageOffset();
-            setOffsetFromLogicalTopOfFirstRegion(currentBoxDescendant, currentBoxDescendant->isHorizontalWritingMode() ? offsetDelta.height() : offsetDelta.width());
-        }
-    }
-
-    ASSERT(!m_statePusherObjectsStack.contains(&object));
-    m_statePusherObjectsStack.add(&object);
-}
-
-void RenderFlowThread::popFlowThreadLayoutState()
-{
-    m_statePusherObjectsStack.removeLast();
-
-    if (const RenderBox* currentBoxDescendant = currentStatePusherRenderBox()) {
-        LayoutState* layoutState = currentBoxDescendant->view()->layoutState();
-        if (layoutState && layoutState->isPaginated())
-            clearOffsetFromLogicalTopOfFirstRegion(currentBoxDescendant);
-    }
-}
-
-LayoutUnit RenderFlowThread::offsetFromLogicalTopOfFirstRegion(const RenderBlock* currentBlock) const
-{
-    // First check if we cached the offset for the block if it's an ancestor containing block of the box
-    // being currently laid out.
-    LayoutUnit offset;
-    if (cachedOffsetFromLogicalTopOfFirstRegion(currentBlock, offset))
-        return offset;
-
-    // If it's the current box being laid out, use the layout state.
-    const RenderBox* currentBoxDescendant = currentStatePusherRenderBox();
-    if (currentBlock == currentBoxDescendant) {
-        LayoutState* layoutState = view()->layoutState();
-        ASSERT(layoutState->renderer() == currentBlock);
-        ASSERT(layoutState && layoutState->isPaginated());
-        LayoutSize offsetDelta = layoutState->layoutOffset() - layoutState->pageOffset();
-        return currentBoxDescendant->isHorizontalWritingMode() ? offsetDelta.height() : offsetDelta.width();
-    }
-
-    // As a last resort, take the slow path.
-    LayoutRect blockRect(0, 0, currentBlock->width(), currentBlock->height());
-    while (currentBlock && !currentBlock->isRenderFlowThread()) {
-        RenderBlock* containerBlock = currentBlock->containingBlock();
-        ASSERT(containerBlock);
-        if (!containerBlock)
-            return 0;
-        LayoutPoint currentBlockLocation = currentBlock->location();
-
-        if (containerBlock->style()->writingMode() != currentBlock->style()->writingMode()) {
-            // We have to put the block rect in container coordinates
-            // and we have to take into account both the container and current block flipping modes
-            if (containerBlock->style()->isFlippedBlocksWritingMode()) {
-                if (containerBlock->isHorizontalWritingMode())
-                    blockRect.setY(currentBlock->height() - blockRect.maxY());
-                else
-                    blockRect.setX(currentBlock->width() - blockRect.maxX());
-            }
-            currentBlock->flipForWritingMode(blockRect);
-        }
-        blockRect.moveBy(currentBlockLocation);
-        currentBlock = containerBlock;
-    }
-
-    return currentBlock->isHorizontalWritingMode() ? blockRect.y() : blockRect.x();
-}
-
 void RenderFlowThread::RegionSearchAdapter::collectIfNeeded(const MultiColumnSetInterval& interval)
 {
     if (m_result)
@@ -353,26 +226,5 @@ void RenderFlowThread::RegionSearchAdapter::collectIfNeeded(const MultiColumnSet
     if (interval.low() <= m_offset && interval.high() > m_offset)
         m_result = interval.data();
 }
-
-CurrentRenderFlowThreadMaintainer::CurrentRenderFlowThreadMaintainer(RenderFlowThread* renderFlowThread)
-    : m_renderFlowThread(renderFlowThread)
-    , m_previousRenderFlowThread(0)
-{
-    if (!m_renderFlowThread)
-        return;
-    RenderView* view = m_renderFlowThread->view();
-    m_previousRenderFlowThread = view->flowThreadController()->currentRenderFlowThread();
-    view->flowThreadController()->setCurrentRenderFlowThread(m_renderFlowThread);
-}
-
-CurrentRenderFlowThreadMaintainer::~CurrentRenderFlowThreadMaintainer()
-{
-    if (!m_renderFlowThread)
-        return;
-    RenderView* view = m_renderFlowThread->view();
-    ASSERT(view->flowThreadController()->currentRenderFlowThread() == m_renderFlowThread);
-    view->flowThreadController()->setCurrentRenderFlowThread(m_previousRenderFlowThread);
-}
-
 
 } // namespace blink

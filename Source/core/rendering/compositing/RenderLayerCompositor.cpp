@@ -29,17 +29,20 @@
 
 #include "core/animation/DocumentAnimations.h"
 #include "core/dom/Fullscreen.h"
+#include "core/editing/FrameSelection.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLIFrameElement.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InspectorNodeIds.h"
+#include "core/loader/FrameLoaderClient.h"
 #include "core/page/Chrome.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "core/paint/FramePainter.h"
+#include "core/paint/TransformRecorder.h"
 #include "core/rendering/RenderEmbeddedObject.h"
 #include "core/rendering/RenderLayerStackingNode.h"
 #include "core/rendering/RenderLayerStackingNodeIterator.h"
@@ -57,6 +60,9 @@
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/TraceEvent.h"
 #include "platform/graphics/GraphicsLayer.h"
+#include "platform/graphics/paint/DisplayItemList.h"
+#include "platform/graphics/paint/DrawingRecorder.h"
+#include "platform/graphics/paint/TransformDisplayItem.h"
 #include "public/platform/Platform.h"
 
 namespace blink {
@@ -83,9 +89,9 @@ RenderLayerCompositor::~RenderLayerCompositor()
 
 bool RenderLayerCompositor::inCompositingMode() const
 {
-    // FIXME: This should assert that lificycle is >= CompositingClean since
+    // FIXME: This should assert that lifecycle is >= CompositingClean since
     // the last step of updateIfNeeded can set this bit to false.
-    ASSERT(!m_rootShouldAlwaysCompositeDirty);
+    ASSERT(m_renderView.layer()->isAllowedToQueryCompositingState());
     return m_compositing;
 }
 
@@ -148,15 +154,8 @@ void RenderLayerCompositor::updateAcceleratedCompositingSettings()
     m_compositingReasonFinder.updateTriggers();
     m_hasAcceleratedCompositing = m_renderView.document().settings()->acceleratedCompositingEnabled();
     m_rootShouldAlwaysCompositeDirty = true;
-}
-
-bool RenderLayerCompositor::layerSquashingEnabled() const
-{
-    if (!RuntimeEnabledFeatures::layerSquashingEnabled())
-        return false;
-    if (Settings* settings = m_renderView.document().settings())
-        return settings->layerSquashingEnabled();
-    return true;
+    if (m_rootLayerAttachment != RootLayerUnattached)
+        rootRenderLayer()->setNeedsCompositingInputsUpdate();
 }
 
 bool RenderLayerCompositor::preferCompositingToLCDTextEnabled() const
@@ -203,6 +202,7 @@ void RenderLayerCompositor::updateIfNeededRecursive()
     enableCompositingModeIfNeeded();
 
     rootRenderLayer()->updateDescendantDependentFlagsForEntireSubtree();
+    m_renderView.commitPendingSelection();
 
     lifecycle().advanceTo(DocumentLifecycle::InCompositingUpdate);
     updateIfNeeded();
@@ -224,7 +224,7 @@ void RenderLayerCompositor::setNeedsCompositingUpdate(CompositingUpdateType upda
 {
     ASSERT(updateType != CompositingUpdateNone);
     m_pendingUpdateType = std::max(m_pendingUpdateType, updateType);
-    page()->animator().scheduleVisualUpdate();
+    page()->animator().scheduleVisualUpdate(m_renderView.frame());
     lifecycle().ensureStateAtMost(DocumentLifecycle::LayoutClean);
 }
 
@@ -778,13 +778,16 @@ static void paintScrollbar(Scrollbar* scrollbar, GraphicsContext& context, const
     if (!scrollbar)
         return;
 
-    context.save();
-    const IntRect& scrollbarRect = scrollbar->frameRect();
-    context.translate(-scrollbarRect.x(), -scrollbarRect.y());
+    // Frame scrollbars are painted in the space of the containing frame, not the local space of the scrollbar.
+    const IntPoint& paintOffset = scrollbar->frameRect().location();
     IntRect transformedClip = clip;
-    transformedClip.moveBy(scrollbarRect.location());
+    transformedClip.moveBy(paintOffset);
+
+    AffineTransform translation;
+    translation.translate(-paintOffset.x(), -paintOffset.y());
+    TransformRecorder transformRecorder(context, scrollbar->displayItemClient(), translation);
+
     scrollbar->paint(&context, transformedClip);
-    context.restore();
 }
 
 void RenderLayerCompositor::paintContents(const GraphicsLayer* graphicsLayer, GraphicsContext& context, GraphicsLayerPaintingPhase, const IntRect& clip)
@@ -793,15 +796,8 @@ void RenderLayerCompositor::paintContents(const GraphicsLayer* graphicsLayer, Gr
         paintScrollbar(m_renderView.frameView()->horizontalScrollbar(), context, clip);
     else if (graphicsLayer == layerForVerticalScrollbar())
         paintScrollbar(m_renderView.frameView()->verticalScrollbar(), context, clip);
-    else if (graphicsLayer == layerForScrollCorner()) {
-        const IntRect& scrollCorner = m_renderView.frameView()->scrollCornerRect();
-        context.save();
-        context.translate(-scrollCorner.x(), -scrollCorner.y());
-        IntRect transformedClip = clip;
-        transformedClip.moveBy(scrollCorner.location());
-        FramePainter(*m_renderView.frameView()).paintScrollCorner(&context, transformedClip);
-        context.restore();
-    }
+    else if (graphicsLayer == layerForScrollCorner())
+        FramePainter(*m_renderView.frameView()).paintScrollCorner(&context, clip);
 }
 
 bool RenderLayerCompositor::supportsFixedRootBackgroundCompositing() const
@@ -1077,25 +1073,25 @@ void RenderLayerCompositor::attachRootLayer(RootLayerAttachment attachment)
         return;
 
     switch (attachment) {
-        case RootLayerUnattached:
-            ASSERT_NOT_REACHED();
-            break;
-        case RootLayerAttachedViaChromeClient: {
-            LocalFrame& frame = m_renderView.frameView()->frame();
-            Page* page = frame.page();
-            if (!page)
-                return;
-            page->chrome().client().attachRootGraphicsLayer(rootGraphicsLayer());
-            break;
-        }
-        case RootLayerAttachedViaEnclosingFrame: {
-            HTMLFrameOwnerElement* ownerElement = m_renderView.document().ownerElement();
-            ASSERT(ownerElement);
-            // The layer will get hooked up via CompositedLayerMapping::updateGraphicsLayerConfiguration()
-            // for the frame's renderer in the parent document.
-            ownerElement->setNeedsCompositingUpdate();
-            break;
-        }
+    case RootLayerUnattached:
+        ASSERT_NOT_REACHED();
+        break;
+    case RootLayerAttachedViaChromeClient: {
+        LocalFrame& frame = m_renderView.frameView()->frame();
+        Page* page = frame.page();
+        if (!page)
+            return;
+        page->chrome().client().attachRootGraphicsLayer(rootGraphicsLayer(), &frame);
+        break;
+    }
+    case RootLayerAttachedViaEnclosingFrame: {
+        HTMLFrameOwnerElement* ownerElement = m_renderView.document().ownerElement();
+        ASSERT(ownerElement);
+        // The layer will get hooked up via CompositedLayerMapping::updateGraphicsLayerConfiguration()
+        // for the frame's renderer in the parent document.
+        ownerElement->setNeedsCompositingUpdate();
+        break;
+    }
     }
 
     m_rootLayerAttachment = attachment;
@@ -1124,9 +1120,9 @@ void RenderLayerCompositor::detachRootLayer()
         Page* page = frame.page();
         if (!page)
             return;
-        page->chrome().client().attachRootGraphicsLayer(0);
+        page->chrome().client().attachRootGraphicsLayer(0, &frame);
+        break;
     }
-    break;
     case RootLayerUnattached:
         break;
     }

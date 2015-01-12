@@ -92,6 +92,7 @@ WebInspector.LayersPanel.prototype = {
     },
 
     /**
+     * @override
      * @param {!WebInspector.Target} target
      */
     targetAdded: function(target)
@@ -106,6 +107,7 @@ WebInspector.LayersPanel.prototype = {
     },
 
     /**
+     * @override
      * @param {!WebInspector.Target} target
      */
     targetRemoved: function(target)
@@ -236,13 +238,14 @@ WebInspector.LayersPanel.LayerTreeRevealer = function()
 
 WebInspector.LayersPanel.LayerTreeRevealer.prototype = {
     /**
+     * @override
      * @param {!Object} snapshotData
      * @return {!Promise}
      */
     reveal: function(snapshotData)
     {
         if (!(snapshotData instanceof WebInspector.DeferredLayerTree))
-            return Promise.rejectWithError("Internal error: not a WebInspector.DeferredLayerTree");
+            return Promise.reject(new Error("Internal error: not a WebInspector.DeferredLayerTree"));
         var panel = WebInspector.LayersPanel._instance();
         WebInspector.inspectorView.setCurrentPanel(panel);
         panel._showLayerTree(/** @type {!WebInspector.DeferredLayerTree} */ (snapshotData));
@@ -270,6 +273,7 @@ WebInspector.LayersPanelFactory = function()
 
 WebInspector.LayersPanelFactory.prototype = {
     /**
+     * @override
      * @return {!WebInspector.Panel}
      */
     createPanel: function()

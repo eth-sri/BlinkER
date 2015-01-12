@@ -268,12 +268,8 @@ int UseCounter::mapCSSPropertyIdToCSSSampleIdForHistogram(int id)
     case CSSPropertyWebkitColumnSpan: return 225;
     case CSSPropertyWebkitColumnWidth: return 226;
     case CSSPropertyWebkitColumns: return 227;
-#if defined(ENABLE_CSS_BOX_DECORATION_BREAK) && ENABLE_CSS_BOX_DECORATION_BREAK
-    case CSSPropertyWebkitBoxDecorationBreak: return 228;
-#endif
-#if defined(ENABLE_CSS_FILTERS) && ENABLE_CSS_FILTERS
-    case CSSPropertyWebkitFilter: return 229;
-#endif
+    // 228 was CSSPropertyWebkitBoxDecorationBreak (duplicated due to #ifdef).
+    // 229 was CSSPropertyWebkitFilter (duplicated due to #ifdef).
     case CSSPropertyAlignContent: return 230;
     case CSSPropertyAlignItems: return 231;
     case CSSPropertyAlignSelf: return 232;
@@ -389,12 +385,8 @@ int UseCounter::mapCSSPropertyIdToCSSSampleIdForHistogram(int id)
     // case CSSPropertyWebkitWrapFlow: return 350;
     // case CSSPropertyWebkitWrapThrough: return 351;
     // CSSPropertyWebkitWrap was 352.
-#if defined(ENABLE_TOUCH_EVENTS) && ENABLE_TOUCH_EVENTS
-    case CSSPropertyWebkitTapHighlightColor: return 353;
-#endif
-#if defined(ENABLE_DRAGGABLE_REGION) && ENABLE_DRAGGABLE_REGION
-    case CSSPropertyWebkitAppRegion: return 354;
-#endif
+    // 353 was CSSPropertyWebkitTapHighlightColor (duplicated due to #ifdef).
+    // 354 was CSSPropertyWebkitAppRegion (duplicated due to #ifdef).
     case CSSPropertyClipPath: return 355;
     case CSSPropertyClipRule: return 356;
     case CSSPropertyMask: return 357;
@@ -499,6 +491,10 @@ int UseCounter::mapCSSPropertyIdToCSSSampleIdForHistogram(int id)
     case CSSPropertyAll: return 454;
     case CSSPropertyJustifyItems: return 455;
     case CSSPropertyScrollBlocksOn: return 456;
+    case CSSPropertyMotionPath: return 457;
+    case CSSPropertyMotionPosition: return 458;
+    case CSSPropertyMotionRotation: return 459;
+    case CSSPropertyMotion: return 460;
 
     // 1. Add new features above this line (don't change the assigned numbers of the existing
     // items).
@@ -515,7 +511,7 @@ int UseCounter::mapCSSPropertyIdToCSSSampleIdForHistogram(int id)
     return 0;
 }
 
-static int maximumCSSSampleId() { return 456; }
+static int maximumCSSSampleId() { return 460; }
 
 void UseCounter::muteForInspector()
 {
@@ -712,9 +708,6 @@ String UseCounter::deprecationMessage(Feature feature)
     case PrefixedVideoExitFullScreen:
         return "'HTMLVideoElement.webkitExitFullScreen()' is deprecated. Please use 'Document.exitFullscreen()' and 'Document.webkitExitFullscreen()' instead.";
 
-    case PrefixedGamepad:
-        return replacedBy("navigator.webkitGetGamepads", "navigator.getGamepads");
-
     case PrefixedIndexedDB:
         return replacedBy("webkitIndexedDB", "indexedDB");
 
@@ -798,6 +791,48 @@ String UseCounter::deprecationMessage(Feature feature)
 
     case DOMImplementationHasFeatureReturnFalse:
         return "'DOMImplementation.hasFeature()' returning false is deprecated. Please do not use it, as per DOM it should always return true (https://dom.spec.whatwg.org/#dom-domimplementation-hasfeature).";
+
+    case GetMatchedCSSRules:
+        return "'getMatchedCSSRules()' is deprecated. For more help, check https://code.google.com/p/chromium/issues/detail?id=437569#c2";
+
+    case DocumentSetCharset:
+        return "Setting 'Document.charset' is deprecated. Please use '<meta charset=\"UTF-8\">' instead.";
+
+    case PrefixedImageSmoothingEnabled:
+        return replacedBy("CanvasRenderingContext2D.webkitImageSmoothingEnabled", "CanvasRenderingContext2D.imageSmoothingEnabled");
+
+    case AudioListenerDopplerFactor:
+        return "dopplerFactor is deprecated and will be removed in M45 when all doppler effects are removed";
+
+    case AudioListenerSpeedOfSound:
+        return "speedOfSound is deprecated and will be removed in M45 when all doppler effects are removed";
+
+    case AudioListenerSetVelocity:
+        return "setVelocity() is deprecated and will be removed in M45 when all doppler effects are removed";
+
+    case ShadowRootGetElementsByClassName:
+        return "ShadowRoot.getElementsByClassName() is deprecated. Please use 'querySelectorAll' instead";
+
+    case ShadowRootGetElementsByTagName:
+        return "ShadowRoot.getElementsByTagName() is deprecated. Please use 'querySelectorAll' instead";
+
+    case ShadowRootGetElementsByTagNameNS:
+        return "ShadowRoot.getElementsByTagNameNS() is deprecated. Please use 'querySelectorAll' instead";
+
+    case PrefixedWindowURL:
+        return replacedBy("webkitURL", "URL");
+
+    case PrefixedAudioContext:
+        return replacedBy("webkitAudioContext", "AudioContext");
+
+    case PrefixedOfflineAudioContext:
+        return replacedBy("webkitOfflineAudioContext", "OfflineAudioContext");
+
+    case RangeCompareNode:
+        return replacedBy("Range.compareNode()", "Range.compareBoundaryPoints()");
+
+    case RangeExpand:
+        return replacedBy("Range.expand()", "Selection.modify()");
 
     // Features that aren't deprecated don't have a deprecation message.
     default:

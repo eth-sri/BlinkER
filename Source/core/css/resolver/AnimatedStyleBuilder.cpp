@@ -34,6 +34,7 @@
 #include "core/animation/animatable/AnimatableClipPathOperation.h"
 #include "core/animation/animatable/AnimatableColor.h"
 #include "core/animation/animatable/AnimatableDouble.h"
+#include "core/animation/animatable/AnimatableDoubleAndBool.h"
 #include "core/animation/animatable/AnimatableFilterOperations.h"
 #include "core/animation/animatable/AnimatableImage.h"
 #include "core/animation/animatable/AnimatableLength.h"
@@ -86,7 +87,7 @@ BorderImageLength animatableValueToBorderImageLength(const AnimatableValue* valu
 
 template<typename T> T animatableValueRoundClampTo(const AnimatableValue* value, T min = defaultMinimumForClamp<T>(), T max = defaultMaximumForClamp<T>())
 {
-    COMPILE_ASSERT(WTF::IsInteger<T>::value, ShouldUseIntegralTypeTWhenRoundingValues);
+    static_assert(WTF::IsInteger<T>::value, "should use integral type T when rounding values");
     return clampTo<T>(round(toAnimatableDouble(value)->toDouble()), min, max);
 }
 
@@ -136,12 +137,12 @@ LengthSize animatableValueToLengthSize(const AnimatableValue* value, const Style
         animatableValueToLength(animatableLengthSize->height(), state, range));
 }
 
-void setFillSize(FillLayer* fillLayer, const AnimatableValue* value, const StyleResolverState& state)
+void setFillSize(FillLayer* fillLayer, const AnimatableValue* value, StyleResolverState& state)
 {
     if (value->isLengthSize())
         fillLayer->setSize(FillSize(SizeLength, animatableValueToLengthSize(value, state, ValueRangeNonNegative)));
     else
-        state.styleMap().mapFillSize(fillLayer, toAnimatableUnknown(value)->toCSSValue().get());
+        CSSToStyleMap::mapFillSize(state, fillLayer, toAnimatableUnknown(value)->toCSSValue().get());
 }
 
 PassRefPtrWillBeRawPtr<SVGLength> animatableValueToNonNegativeSVGLength(const AnimatableValue* value)
@@ -600,6 +601,13 @@ void AnimatedStyleBuilder::applyProperty(CSSPropertyID property, StyleResolverSt
     }
     case CSSPropertyTransformOrigin:
         style->setTransformOrigin(animatableValueToTransformOrigin(value, state));
+        return;
+    case CSSPropertyMotionPosition:
+        style->setMotionPosition(animatableValueToLength(value, state, ValueRangeNonNegative));
+        return;
+    case CSSPropertyMotionRotation:
+        style->setMotionRotation(toAnimatableDoubleAndBool(value)->toDouble());
+        style->setMotionRotationType(toAnimatableDoubleAndBool(value)->flag() ? MotionRotationAuto : MotionRotationFixed);
         return;
     case CSSPropertyWidows:
         style->setWidows(animatableValueRoundClampTo<unsigned short>(value, 1));

@@ -31,11 +31,6 @@
 .canvas-profile-view,
 #canvas-replay-image-container {
     overflow: hidden;
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
 }
 
 #canvas-replay-image-container {
@@ -44,6 +39,19 @@
     overflow: hidden;
     padding: 0;
     color: white;
+    flex: auto;
+}
+
+.canvas-profile-view .resizer-widget {
+    position: absolute;
+    top: 0;
+    right: 0;
+    height: 24px;
+    width: 16px;
+    background-image: url(Images/statusbarResizerHorizontal.png);
+    background-repeat: no-repeat;
+    background-position: center;
+    z-index: 13;
 }
 
 .canvas-replay-image-parent {

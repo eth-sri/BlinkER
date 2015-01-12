@@ -60,6 +60,7 @@ class Locale;
 class MutableStylePropertySet;
 class PropertySetCSSStyleDeclaration;
 class PseudoElement;
+class ScrollToOptions;
 class ShadowRoot;
 class StylePropertySet;
 
@@ -182,16 +183,24 @@ public:
     virtual double scrollLeft();
     virtual double scrollTop();
     virtual void setScrollLeft(double);
-    virtual void setScrollLeft(const Dictionary& scrollOptionsHorizontal, ExceptionState&);
     virtual void setScrollTop(double);
-    virtual void setScrollTop(const Dictionary& scrollOptionsVertical, ExceptionState&);
     virtual int scrollWidth();
     virtual int scrollHeight();
+
+    virtual void scrollBy(double x, double y);
+    virtual void scrollBy(const ScrollToOptions&);
+    virtual void scrollTo(double x, double y);
+    virtual void scrollTo(const ScrollToOptions&);
+    void scroll(double x, double y) { scrollTo(x, y); }
+    void scroll(const ScrollToOptions& scrollToOptions) { scrollTo(scrollToOptions); }
 
     IntRect boundsInRootViewSpace();
 
     PassRefPtrWillBeRawPtr<ClientRectList> getClientRects();
     PassRefPtrWillBeRawPtr<ClientRect> getBoundingClientRect();
+
+    const AtomicString& computedRole();
+    String computedName();
 
     // Returns the absolute bounding box translated into screen coordinates:
     IntRect screenRect() const;
@@ -448,7 +457,7 @@ public:
     void clearHasPendingResources() { clearElementFlag(HasPendingResources); }
     virtual void buildPendingResource() { };
 
-    void setCustomElementDefinition(PassRefPtr<CustomElementDefinition>);
+    void setCustomElementDefinition(PassRefPtrWillBeRawPtr<CustomElementDefinition>);
     CustomElementDefinition* customElementDefinition() const;
 
     bool containsFullScreenElement() const { return hasElementFlag(ContainsFullScreenElement); }
@@ -531,6 +540,13 @@ protected:
     PassRefPtr<RenderStyle> originalStyleForRenderer();
 
     Node* insertAdjacent(const String& where, Node* newChild, ExceptionState&);
+
+    virtual void parserDidSetAttributes() { };
+
+    void scrollRenderBoxBy(const ScrollToOptions&);
+    void scrollRenderBoxTo(const ScrollToOptions&);
+    void scrollFrameBy(const ScrollToOptions&);
+    void scrollFrameTo(const ScrollToOptions&);
 
 private:
     bool hasElementFlag(ElementFlags mask) const { return hasRareData() && hasElementFlagInternal(mask); }
@@ -630,7 +646,7 @@ private:
 
     bool isJavaScriptURLAttribute(const Attribute&) const;
 
-    v8::Handle<v8::Object> wrapCustomElement(v8::Handle<v8::Object> creationContext, v8::Isolate*);
+    v8::Handle<v8::Object> wrapCustomElement(v8::Isolate*, v8::Handle<v8::Object> creationContext);
 
     RefPtrWillBeMember<ElementData> m_elementData;
 };

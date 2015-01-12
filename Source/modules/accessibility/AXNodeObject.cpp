@@ -53,8 +53,8 @@ namespace blink {
 
 using namespace HTMLNames;
 
-AXNodeObject::AXNodeObject(Node* node)
-    : AXObject()
+AXNodeObject::AXNodeObject(Node* node, AXObjectCacheImpl* axObjectCache)
+    : AXObject(axObjectCache)
     , m_ariaRole(UnknownRole)
     , m_childrenDirty(false)
 #if ENABLE(ASSERT)
@@ -64,9 +64,9 @@ AXNodeObject::AXNodeObject(Node* node)
 {
 }
 
-PassRefPtr<AXNodeObject> AXNodeObject::create(Node* node)
+PassRefPtr<AXNodeObject> AXNodeObject::create(Node* node, AXObjectCacheImpl* axObjectCache)
 {
-    return adoptRef(new AXNodeObject(node));
+    return adoptRef(new AXNodeObject(node, axObjectCache));
 }
 
 AXNodeObject::~AXNodeObject()
@@ -177,18 +177,12 @@ bool AXNodeObject::computeAccessibilityIsIgnored() const
     return m_role == UnknownRole;
 }
 
-AccessibilityRole AXNodeObject::determineAccessibilityRole()
+AccessibilityRole AXNodeObject::determineAccessibilityRoleUtil()
 {
     if (!node())
         return UnknownRole;
-
-    if ((m_ariaRole = determineAriaRoleAttribute()) != UnknownRole)
-        return m_ariaRole;
-
     if (node()->isLink())
         return LinkRole;
-    if (node()->isTextNode())
-        return StaticTextRole;
     if (isHTMLButtonElement(*node()))
         return buttonRoleType();
     if (isHTMLDetailsElement(*node()))
@@ -202,6 +196,8 @@ AccessibilityRole AXNodeObject::determineAccessibilityRole()
     if (isHTMLInputElement(*node())) {
         HTMLInputElement& input = toHTMLInputElement(*node());
         const AtomicString& type = input.type();
+        if (input.dataList())
+            return ComboBoxRole;
         if (type == InputTypeNames::button) {
             if ((node()->parentNode() && isHTMLMenuElement(node()->parentNode())) || (parentObject() && parentObject()->roleValue() == MenuRole))
                 return MenuItemRole;
@@ -219,6 +215,8 @@ AccessibilityRole AXNodeObject::determineAccessibilityRole()
             || type == InputTypeNames::month
             || type == InputTypeNames::week)
             return DateTimeRole;
+        if (type == InputTypeNames::file)
+            return ButtonRole;
         if (type == InputTypeNames::radio) {
             if ((node()->parentNode() && isHTMLMenuElement(node()->parentNode())) || (parentObject() && parentObject()->roleValue() == MenuRole))
                 return MenuItemRadioRole;
@@ -260,19 +258,36 @@ AccessibilityRole AXNodeObject::determineAccessibilityRole()
         return DescriptionListRole;
     if (node()->isElementNode() && node()->hasTagName(blockquoteTag))
         return BlockquoteRole;
+    if (node()->isElementNode() && node()->hasTagName(captionTag))
+        return CaptionRole;
     if (node()->isElementNode() && node()->hasTagName(figcaptionTag))
         return FigcaptionRole;
     if (node()->isElementNode() && node()->hasTagName(figureTag))
         return FigureRole;
-    if (node()->isElementNode() && toElement(node())->isFocusable())
-        return GroupRole;
     if (isHTMLAnchorElement(*node()) && isClickable())
         return LinkRole;
     if (isHTMLIFrameElement(*node()))
         return IframeRole;
     if (isEmbeddedObject())
         return EmbeddedObjectRole;
+    return UnknownRole;
+}
 
+AccessibilityRole AXNodeObject::determineAccessibilityRole()
+{
+    if (!node())
+        return UnknownRole;
+
+    if ((m_ariaRole = determineAriaRoleAttribute()) != UnknownRole)
+        return m_ariaRole;
+    if (node()->isTextNode())
+        return StaticTextRole;
+
+    AccessibilityRole role = determineAccessibilityRoleUtil();
+    if (role != UnknownRole)
+        return role;
+    if (node()->isElementNode() && toElement(node())->isFocusable())
+        return GroupRole;
     return UnknownRole;
 }
 
@@ -755,9 +770,10 @@ bool AXNodeObject::isPressed() const
     if (!node)
         return false;
 
-    // If this is an ARIA button, check the aria-pressed attribute rather than node()->active()
-    if (ariaRoleAttribute() == ButtonRole) {
-        if (equalIgnoringCase(getAttribute(aria_pressedAttr), "true"))
+    // ARIA button with aria-pressed not undefined, then check for aria-pressed attribute rather than node()->active()
+    if (ariaRoleAttribute() == ToggleButtonRole) {
+        if (equalIgnoringCase(getAttribute(aria_pressedAttr), "true")
+            || equalIgnoringCase(getAttribute(aria_pressedAttr), "mixed"))
             return true;
         return false;
     }
@@ -785,12 +801,12 @@ bool AXNodeObject::isReadOnly() const
 
 bool AXNodeObject::isRequired() const
 {
-    if (equalIgnoringCase(getAttribute(aria_requiredAttr), "true"))
-        return true;
-
     Node* n = this->node();
     if (n && (n->isElementNode() && toElement(n)->isFormControlElement()))
         return toHTMLFormControlElement(n)->isRequired();
+
+    if (equalIgnoringCase(getAttribute(aria_requiredAttr), "true"))
+        return true;
 
     return false;
 }
@@ -878,8 +894,11 @@ int AXNodeObject::headingLevel() const
     if (!node)
         return 0;
 
-    if (roleValue() == HeadingRole && hasAttribute(aria_levelAttr))
-        return getAttribute(aria_levelAttr).toInt();
+    if (roleValue() == HeadingRole && hasAttribute(aria_levelAttr)) {
+        int level = getAttribute(aria_levelAttr).toInt();
+        if (level >= 1 && level <= 9)
+            return level;
+    }
 
     if (!node->isHTMLElement())
         return 0;
@@ -932,6 +951,35 @@ unsigned AXNodeObject::hierarchicalLevel() const
     }
 
     return level;
+}
+
+String AXNodeObject::ariaAutoComplete() const
+{
+    if (roleValue() != ComboBoxRole && roleValue() != TextAreaRole)
+        return String();
+
+    const AtomicString& ariaAutoComplete = getAttribute(aria_autocompleteAttr).lower();
+
+    if (ariaAutoComplete == "inline" || ariaAutoComplete == "list"
+        || ariaAutoComplete == "both")
+        return ariaAutoComplete;
+
+    return String();
+}
+
+String AXNodeObject::placeholder() const
+{
+    String placeholder;
+    if (node()) {
+        if (isHTMLInputElement(*node())) {
+            HTMLInputElement* inputElement = toHTMLInputElement(node());
+            placeholder = inputElement->strippedPlaceholder();
+        } else if (isHTMLTextAreaElement(*node())) {
+            HTMLTextAreaElement* textAreaElement = toHTMLTextAreaElement(node());
+            placeholder = textAreaElement->strippedPlaceholder();
+        }
+    }
+    return placeholder;
 }
 
 String AXNodeObject::text() const
@@ -1003,6 +1051,44 @@ void AXNodeObject::colorValue(int& r, int& g, int& b) const
     r = color.red();
     g = color.green();
     b = color.blue();
+}
+
+InvalidState AXNodeObject::invalidState() const
+{
+    if (hasAttribute(aria_invalidAttr)) {
+        const AtomicString& attributeValue = getAttribute(aria_invalidAttr);
+        if (equalIgnoringCase(attributeValue, "false"))
+            return InvalidStateFalse;
+        if (equalIgnoringCase(attributeValue, "true"))
+            return InvalidStateTrue;
+        if (equalIgnoringCase(attributeValue, "spelling"))
+            return InvalidStateSpelling;
+        if (equalIgnoringCase(attributeValue, "grammar"))
+            return InvalidStateGrammar;
+        // A yet unknown value.
+        if (!attributeValue.isEmpty())
+            return InvalidStateOther;
+    }
+
+    if (node() && node()->isElementNode()
+        && toElement(node())->isFormControlElement()) {
+        HTMLFormControlElement* element = toHTMLFormControlElement(node());
+        WillBeHeapVector<RefPtrWillBeMember<HTMLFormControlElement>>
+            invalidControls;
+        bool isInvalid = !element->checkValidity(
+            &invalidControls, CheckValidityDispatchNoEvent);
+        return isInvalid ? InvalidStateTrue : InvalidStateFalse;
+    }
+
+    return InvalidStateUndefined;
+}
+
+String AXNodeObject::ariaInvalidValue() const
+{
+    if (invalidState() == InvalidStateOther)
+        return getAttribute(aria_invalidAttr);
+
+    return String();
 }
 
 String AXNodeObject::valueDescription() const
@@ -1354,6 +1440,40 @@ String AXNodeObject::helpText() const
     return String();
 }
 
+String AXNodeObject::computedName() const
+{
+    String title = this->title();
+
+    String titleUIText;
+    if (title.isEmpty()) {
+        AXObject* titleUIElement = this->titleUIElement();
+        if (titleUIElement) {
+            titleUIText = titleUIElement->textUnderElement();
+            if (!titleUIText.isEmpty())
+                return titleUIText;
+        }
+    }
+
+    String description = accessibilityDescription();
+    if (!description.isEmpty())
+        return description;
+
+    if (!title.isEmpty())
+        return title;
+
+    String placeholder;
+    if (isHTMLInputElement(node())) {
+        HTMLInputElement* element = toHTMLInputElement(node());
+        placeholder = element->strippedPlaceholder();
+        if (!placeholder.isEmpty())
+            return placeholder;
+    }
+
+    return String();
+}
+
+
+
 LayoutRect AXNodeObject::elementRect() const
 {
     // First check if it has a custom rect, for example if this element is tied to a canvas path.
@@ -1622,6 +1742,10 @@ HTMLLabelElement* AXNodeObject::labelElementContainer() const
 
     // the control element should not be considered part of the label
     if (isControl())
+        return 0;
+
+    // the link element should not be considered part of the label
+    if (isLink())
         return 0;
 
     // find if this has a ancestor that is a label

@@ -196,13 +196,16 @@ InspectorTest.waitUntilPausedAndPerformSteppingActions = function(actions, callb
         case "Resume":
             WebInspector.panels.sources.togglePause();
             break;
+        case "StepIntoAsync":
+            DebuggerAgent.stepIntoAsync();
+            break;
         default:
             InspectorTest.addResult("FAIL: Unknown action: " + action);
             callback()
             return;
         }
 
-        InspectorTest.waitUntilResumed(InspectorTest.waitUntilPaused.bind(InspectorTest, didPause));
+        InspectorTest.waitUntilResumed(actions.length ? InspectorTest.waitUntilPaused.bind(InspectorTest, didPause) : callback);
     }
 };
 

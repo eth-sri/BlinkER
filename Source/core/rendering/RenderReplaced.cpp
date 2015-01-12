@@ -108,7 +108,7 @@ void RenderReplaced::paint(const PaintInfo& paintInfo, const LayoutPoint& paintO
     ReplacedPainter(*this).paint(paintInfo, paintOffset);
 }
 
-bool RenderReplaced::shouldPaint(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
+bool RenderReplaced::shouldPaint(const PaintInfo& paintInfo, const LayoutPoint& paintOffset) const
 {
     if (paintInfo.phase != PaintPhaseForeground && paintInfo.phase != PaintPhaseOutline && paintInfo.phase != PaintPhaseSelfOutline
         && paintInfo.phase != PaintPhaseSelection && paintInfo.phase != PaintPhaseMask && paintInfo.phase != PaintPhaseClippingMask)
@@ -309,7 +309,7 @@ LayoutUnit RenderReplaced::computeReplacedLogicalWidth(ShouldComputePreferred sh
                 // This solves above equation for 'width' (== logicalWidth).
                 LayoutUnit marginStart = minimumValueForLength(style()->marginStart(), logicalWidth);
                 LayoutUnit marginEnd = minimumValueForLength(style()->marginEnd(), logicalWidth);
-                logicalWidth = std::max<LayoutUnit>(0, logicalWidth - (marginStart + marginEnd + (width() - clientWidth())));
+                logicalWidth = std::max<LayoutUnit>(0, logicalWidth - (marginStart + marginEnd + (size().width() - clientWidth())));
                 return computeReplacedLogicalWidthRespectingMinMaxWidth(logicalWidth, shouldComputePreferred);
             }
         }
@@ -408,8 +408,8 @@ PositionWithAffinity RenderReplaced::positionForPoint(const LayoutPoint& point)
     LayoutUnit top = rootBox ? rootBox->selectionTop() : logicalTop();
     LayoutUnit bottom = rootBox ? rootBox->selectionBottom() : logicalBottom();
 
-    LayoutUnit blockDirectionPosition = isHorizontalWritingMode() ? point.y() + y() : point.x() + x();
-    LayoutUnit lineDirectionPosition = isHorizontalWritingMode() ? point.x() + x() : point.y() + y();
+    LayoutUnit blockDirectionPosition = isHorizontalWritingMode() ? point.y() + location().y() : point.x() + location().x();
+    LayoutUnit lineDirectionPosition = isHorizontalWritingMode() ? point.x() + location().x() : point.y() + location().y();
 
     if (blockDirectionPosition < top)
         return createPositionWithAffinity(caretMinOffset(), DOWNSTREAM); // coordinates are above
@@ -453,8 +453,8 @@ LayoutRect RenderReplaced::localSelectionRect(bool checkWhetherSelected) const
     RootInlineBox& root = inlineBoxWrapper()->root();
     LayoutUnit newLogicalTop = root.block().style()->isFlippedBlocksWritingMode() ? inlineBoxWrapper()->logicalBottom() - root.selectionBottom() : root.selectionTop() - inlineBoxWrapper()->logicalTop();
     if (root.block().style()->isHorizontalWritingMode())
-        return LayoutRect(0, newLogicalTop, width(), root.selectionHeight());
-    return LayoutRect(newLogicalTop, 0, root.selectionHeight(), height());
+        return LayoutRect(0, newLogicalTop, size().width(), root.selectionHeight());
+    return LayoutRect(newLogicalTop, 0, root.selectionHeight(), size().height());
 }
 
 void RenderReplaced::setSelectionState(SelectionState state)

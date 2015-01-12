@@ -102,4 +102,4 @@ private:
 
 } // namespace blink
 
-#endif
+#endif // ActiveAnimations_h

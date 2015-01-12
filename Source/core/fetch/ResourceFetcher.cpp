@@ -254,7 +254,6 @@ static ResourceRequestCachePolicy memoryCachePolicyToResourceRequestCachePolicy(
 ResourceFetcher::ResourceFetcher(DocumentLoader* documentLoader)
     : m_document(nullptr)
     , m_documentLoader(documentLoader)
-    , m_requestCount(0)
     , m_garbageCollectDocumentResourcesTimer(this, &ResourceFetcher::garbageCollectDocumentResourcesTimerFired)
     , m_resourceTimingReportTimer(this, &ResourceFetcher::resourceTimingReportTimerFired)
     , m_autoLoadImages(true)
@@ -270,8 +269,12 @@ ResourceFetcher::~ResourceFetcher()
 
     clearPreloads();
 
+#if !ENABLE(OILPAN)
     // Make sure no requests still point to this ResourceFetcher
-    ASSERT(!m_requestCount);
+    // Oilpan: no object reference can be keeping this alive,
+    // so property trivially holds.
+    ASSERT(!m_loaders || m_loaders->isEmpty());
+#endif
 }
 
 Resource* ResourceFetcher::cachedResource(const KURL& resourceURL) const
@@ -609,14 +612,12 @@ bool ResourceFetcher::canAccessResource(Resource* resource, SecurityOrigin* sour
         return true;
 
     String errorDescription;
-    if (!resource->passesAccessControlCheck(sourceOrigin, errorDescription)) {
+    if (!resource->passesAccessControlCheck(document(), sourceOrigin, errorDescription)) {
         if (resource->type() == Resource::Font)
             toFontResource(resource)->setCORSFailed();
         if (frame() && frame()->document()) {
             String resourceType = Resource::resourceTypeToString(resource->type(), resource->options().initiatorInfo);
-            RefPtrWillBeRawPtr<ConsoleMessage> consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, resourceType + " from origin '" + SecurityOrigin::create(url)->toString() + "' has been blocked from loading by Cross-Origin Resource Sharing policy: " + errorDescription);
-            consoleMessage->markAsAsync();
-            frame()->document()->addConsoleMessage(consoleMessage);
+            frame()->document()->addConsoleMessage(ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, resourceType + " from origin '" + SecurityOrigin::create(url)->toString() + "' has been blocked from loading by Cross-Origin Resource Sharing policy: " + errorDescription));
         }
         return false;
     }
@@ -1223,21 +1224,9 @@ void ResourceFetcher::notifyLoadedFromMemoryCache(Resource* resource)
     context().sendRemainingDelegateMessages(m_documentLoader, identifier, resource->response(), resource->encodedSize());
 }
 
-void ResourceFetcher::incrementRequestCount(const Resource* res)
+int ResourceFetcher::requestCount() const
 {
-    if (res->ignoreForRequestCount())
-        return;
-
-    ++m_requestCount;
-}
-
-void ResourceFetcher::decrementRequestCount(const Resource* res)
-{
-    if (res->ignoreForRequestCount())
-        return;
-
-    --m_requestCount;
-    ASSERT(m_requestCount > -1);
+    return m_loaders ? m_loaders->size() : 0;
 }
 
 void ResourceFetcher::preload(Resource::Type type, FetchRequest& request, const String& charset)
@@ -1315,6 +1304,7 @@ void ResourceFetcher::didFinishLoading(Resource* resource, double finishTime, in
     TRACE_EVENT_ASYNC_END0("net", "Resource", resource);
     RefPtrWillBeRawPtr<Document> protectDocument(document());
     RefPtr<DocumentLoader> protectDocumentLoader(m_documentLoader);
+    willTerminateResourceLoader(resource->loader());
 
     if (resource && resource->response().isHTTP() && resource->response().httpStatusCode() < 400 && document()) {
         ResourceTimingInfoMap::iterator it = m_resourceTimingInfoMap.find(resource);
@@ -1337,6 +1327,7 @@ void ResourceFetcher::didChangeLoadingPriority(const Resource* resource, Resourc
 void ResourceFetcher::didFailLoading(const Resource* resource, const ResourceError& error)
 {
     TRACE_EVENT_ASYNC_END0("net", "Resource", resource);
+    willTerminateResourceLoader(resource->loader());
     bool isInternalRequest = resource->options().initiatorInfo.name == FetchInitiatorTypeNames::internal;
     context().dispatchDidFail(m_documentLoader, resource->identifier(), error, isInternalRequest);
 }
@@ -1376,30 +1367,36 @@ void ResourceFetcher::didDownloadData(const Resource* resource, int dataLength, 
 
 void ResourceFetcher::subresourceLoaderFinishedLoadingOnePart(ResourceLoader* loader)
 {
-    if (!m_multipartLoaders)
-        m_multipartLoaders = ResourceLoaderSet::create();
-    m_multipartLoaders->add(loader);
+    if (!m_nonBlockingLoaders)
+        m_nonBlockingLoaders = ResourceLoaderSet::create();
+    m_nonBlockingLoaders->add(loader);
     m_loaders->remove(loader);
     if (LocalFrame* frame = this->frame())
-        return frame->loader().checkLoadComplete();
+        frame->loader().loadDone();
 }
 
 void ResourceFetcher::didInitializeResourceLoader(ResourceLoader* loader)
 {
-    if (!m_document)
-        return;
-    if (!m_loaders)
-        m_loaders = ResourceLoaderSet::create();
-    ASSERT(!m_loaders->contains(loader));
-    m_loaders->add(loader);
+    if (loader->cachedResource()->shouldBlockLoadEvent()) {
+        if (!m_loaders)
+            m_loaders = ResourceLoaderSet::create();
+        m_loaders->add(loader);
+    } else {
+        if (!m_nonBlockingLoaders)
+            m_nonBlockingLoaders = ResourceLoaderSet::create();
+        m_nonBlockingLoaders->add(loader);
+    }
 }
 
 void ResourceFetcher::willTerminateResourceLoader(ResourceLoader* loader)
 {
     if (m_loaders && m_loaders->contains(loader))
         m_loaders->remove(loader);
-    if (m_multipartLoaders && m_multipartLoaders->contains(loader))
-        m_multipartLoaders->remove(loader);
+    else if (m_nonBlockingLoaders && m_nonBlockingLoaders->contains(loader))
+        m_nonBlockingLoaders->remove(loader);
+    else
+        ASSERT_NOT_REACHED();
+
     if (LocalFrame* frame = this->frame())
         frame->loader().checkLoadComplete();
 }
@@ -1415,8 +1412,8 @@ void ResourceFetcher::willStartLoadingResource(Resource* resource, ResourceReque
 
 void ResourceFetcher::stopFetching()
 {
-    if (m_multipartLoaders)
-        m_multipartLoaders->cancelAll();
+    if (m_nonBlockingLoaders)
+        m_nonBlockingLoaders->cancelAll();
     if (m_loaders)
         m_loaders->cancelAll();
 }
@@ -1430,6 +1427,8 @@ void ResourceFetcher::setDefersLoading(bool defers)
 {
     if (m_loaders)
         m_loaders->setAllDefersLoading(defers);
+    if (m_nonBlockingLoaders)
+        m_nonBlockingLoaders->setAllDefersLoading(defers);
 }
 
 bool ResourceFetcher::defersLoading() const
@@ -1454,7 +1453,7 @@ bool ResourceFetcher::canAccessRedirect(Resource* resource, ResourceRequest& req
             sourceOrigin = document()->securityOrigin();
 
         String errorMessage;
-        if (!CrossOriginAccessControl::handleRedirect(resource, sourceOrigin, request, redirectResponse, options, errorMessage)) {
+        if (!CrossOriginAccessControl::handleRedirect(document(), resource, sourceOrigin, request, redirectResponse, options, errorMessage)) {
             if (resource->type() == Resource::Font)
                 toFontResource(resource)->setCORSFailed();
             if (frame() && frame()->document())
@@ -1579,7 +1578,7 @@ void ResourceFetcher::trace(Visitor* visitor)
 {
     visitor->trace(m_document);
     visitor->trace(m_loaders);
-    visitor->trace(m_multipartLoaders);
+    visitor->trace(m_nonBlockingLoaders);
     ResourceLoaderHost::trace(visitor);
 }
 

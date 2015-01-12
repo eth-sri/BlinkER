@@ -28,6 +28,8 @@
 #ifndef HTMLCanvasElement_h
 #define HTMLCanvasElement_h
 
+#include "bindings/core/v8/ScriptValue.h"
+#include "bindings/core/v8/UnionTypesCore.h"
 #include "core/dom/Document.h"
 #include "core/html/HTMLElement.h"
 #include "core/html/canvas/CanvasImageSource.h"
@@ -44,7 +46,7 @@
 namespace blink {
 
 class AffineTransform;
-class CanvasContextAttributes;
+class CanvasContextCreationAttributes;
 class CanvasRenderingContext;
 class GraphicsContext;
 class GraphicsContextStateSaver;
@@ -100,7 +102,11 @@ public:
         reset();
     }
 
-    CanvasRenderingContext* getContext(const String&, CanvasContextAttributes* attributes = 0);
+    // Called by HTMLCanvasElement's V8 bindings.
+    ScriptValue getContext(ScriptState*, const String&, const CanvasContextCreationAttributes&);
+    // Called by Document::getCSSCanvasContext as well as above getContext() variant.
+    void getContext(const String&, const CanvasContextCreationAttributes&, CanvasRenderingContext2DOrWebGLRenderingContext&);
+    bool isPaintable() const;
 
     static String toEncodingMimeType(const String& mimeType);
     String toDataURL(const String& mimeType, const double* quality, ExceptionState&) const;
@@ -119,7 +125,7 @@ public:
 
     void ensureUnacceleratedImageBuffer();
     ImageBuffer* buffer() const;
-    Image* copiedImage(SourceDrawingBuffer) const;
+    PassRefPtr<Image> copiedImage(SourceDrawingBuffer) const;
     void clearCopiedImage();
 
     SecurityOrigin* securityOrigin() const;
@@ -168,6 +174,7 @@ private:
 
     virtual void parseAttribute(const QualifiedName&, const AtomicString&) override;
     virtual RenderObject* createRenderer(RenderStyle*) override;
+    virtual void didRecalcStyle(StyleRecalcChange) override;
     virtual bool areAuthorShadowsAllowed() const override { return false; }
 
     void reset();

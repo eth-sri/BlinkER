@@ -67,7 +67,7 @@ public:
     const AffineTransform& localToBorderBoxTransform() const { return m_localToBorderBoxTransform; }
     bool shouldApplyViewportClip() const;
 
-
+    virtual bool hasNonIsolatedBlendingDescendants() const override final;
 
 private:
     const RenderObjectChildList* children() const { return &m_children; }
@@ -89,7 +89,6 @@ private:
     virtual bool isChildAllowed(RenderObject*, RenderStyle*) const override;
     virtual void addChild(RenderObject* child, RenderObject* beforeChild = 0) override;
     virtual void removeChild(RenderObject*) override;
-    virtual bool canHaveWhitespaceChildren() const override { return false; }
 
     virtual void insertedIntoTree() override;
     virtual void willBeRemovedFromTree() override;
@@ -110,6 +109,8 @@ private:
     virtual bool canBeSelectionLeaf() const override { return false; }
     virtual bool canHaveChildren() const override { return true; }
 
+    virtual void descendantIsolationRequirementsChanged(DescendantIsolationState) override final;
+
     void updateCachedBoundaries();
     void buildLocalToBorderBoxTransform();
 
@@ -124,6 +125,8 @@ private:
     bool m_isLayoutSizeChanged : 1;
     bool m_needsBoundariesOrTransformUpdate : 1;
     bool m_hasBoxDecorationBackground : 1;
+    mutable bool m_hasNonIsolatedBlendingDescendants : 1;
+    mutable bool m_hasNonIsolatedBlendingDescendantsDirty : 1;
 };
 
 DEFINE_RENDER_OBJECT_TYPE_CASTS(RenderSVGRoot, isSVGRoot());

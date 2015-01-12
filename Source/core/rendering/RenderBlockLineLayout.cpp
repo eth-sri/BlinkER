@@ -22,7 +22,7 @@
 
 #include "config.h"
 
-#include "core/accessibility/AXObjectCache.h"
+#include "core/dom/AXObjectCache.h"
 #include "core/rendering/BidiRunForLine.h"
 #include "core/rendering/RenderCounter.h"
 #include "core/rendering/RenderFlowThread.h"
@@ -274,9 +274,6 @@ ETextAlign RenderBlockFlow::textAlignmentForLine(bool endsWithSoftBreak) const
     if (!RuntimeEnabledFeatures::css3TextEnabled())
         return (alignment == JUSTIFY) ? TASTART : alignment;
 
-    if (alignment != JUSTIFY)
-        return alignment;
-
     TextAlignLast alignmentLast = style()->textAlignLast();
     switch (alignmentLast) {
     case TextAlignLastStart:
@@ -292,9 +289,9 @@ ETextAlign RenderBlockFlow::textAlignmentForLine(bool endsWithSoftBreak) const
     case TextAlignLastJustify:
         return JUSTIFY;
     case TextAlignLastAuto:
-        if (style()->textJustify() == TextJustifyDistribute)
-            return JUSTIFY;
-        return TASTART;
+        if (alignment == JUSTIFY)
+            return TASTART;
+        return alignment;
     }
 
     return alignment;
@@ -1074,7 +1071,7 @@ void RenderBlockFlow::markDirtyFloatsForPaintInvalidation(Vector<FloatWithRect>&
     for (size_t i = 0; i < floatCount; ++i) {
         if (!floats[i].everHadLayout) {
             RenderBox* f = floats[i].object;
-            if (!f->x() && !f->y())
+            if (!f->location().x() && !f->location().y())
                 f->setShouldDoFullPaintInvalidation();
         }
     }
@@ -1151,7 +1148,7 @@ static LayoutUnit getBPMWidth(LayoutUnit childValue, Length cssUnit)
 {
     if (cssUnit.type() != Auto)
         return (cssUnit.isFixed() ? static_cast<LayoutUnit>(cssUnit.value()) : childValue);
-    return 0;
+    return LayoutUnit();
 }
 
 static LayoutUnit getBorderPaddingMargin(RenderBoxModelObject* child, bool endOfInline)
@@ -1626,7 +1623,8 @@ void RenderBlockFlow::checkFloatsInCleanLine(RootInlineBox* line, Vector<FloatWi
     for (Vector<RenderBox*>::iterator it = cleanLineFloats->begin(); it != end; ++it) {
         RenderBox* floatingBox = *it;
         floatingBox->layoutIfNeeded();
-        LayoutSize newSize(floatingBox->width() + floatingBox->marginWidth(), floatingBox->height() + floatingBox->marginHeight());
+        LayoutSize newSize = floatingBox->size() +
+            LayoutSize(floatingBox->marginWidth(), floatingBox->marginHeight());
         if (floats[floatIndex].object != floatingBox) {
             encounteredNewFloat = true;
             return;
@@ -1986,10 +1984,8 @@ void RenderBlockFlow::checkLinesForTextOverflow()
 
 bool RenderBlockFlow::positionNewFloatOnLine(FloatingObject* newFloat, FloatingObject* lastFloatFromPreviousLine, LineInfo& lineInfo, LineWidth& width)
 {
-    if (!positionNewFloats())
+    if (!positionNewFloats(&width))
         return false;
-
-    width.shrinkAvailableWidthForNewFloatIfNeeded(newFloat);
 
     // We only connect floats to lines for pagination purposes if the floats occur at the start of
     // the line and the previous line had a hard break (so this line is either the first in the block

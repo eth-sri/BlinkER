@@ -9,6 +9,8 @@
 #include "core/page/Page.h"
 #include "core/paint/FilterPainter.h"
 #include "core/paint/LayerClipRecorder.h"
+#include "core/paint/ScrollableAreaPainter.h"
+#include "core/paint/TransformRecorder.h"
 #include "core/paint/TransparencyRecorder.h"
 #include "core/rendering/ClipPathOperation.h"
 #include "core/rendering/FilterEffectRenderer.h"
@@ -209,14 +211,14 @@ void LayerPainter::paintLayerContents(GraphicsContext* context, const LayerPaint
     // Blending operations must be performed only with the nearest ancestor stacking context.
     // Note that there is no need to create a transparency layer if we're painting the root.
     // FIXME: this should be unified further into RenderLayer::paintsWithTransparency().
-    bool shouldUseTransparencyLayerForBlendMode = !m_renderLayer.renderer()->isDocumentElement() && m_renderLayer.stackingNode()->isStackingContext() && m_renderLayer.hasNonIsolatedDescendantWithBlendMode();
+    bool shouldUseTransparencyLayerForBlendMode = (!m_renderLayer.renderer()->isDocumentElement() || m_renderLayer.renderer()->isSVGRoot()) && m_renderLayer.stackingNode()->isStackingContext() && m_renderLayer.hasNonIsolatedDescendantWithBlendMode();
     if (shouldUseTransparencyLayerForBlendMode || m_renderLayer.paintsWithTransparency(paintingInfo.paintBehavior)) {
         clipRecorder = adoptPtr(new LayerClipRecorder(m_renderLayer.renderer(), context, DisplayItem::TransparencyClip,
             m_renderLayer.paintingExtent(paintingInfo.rootLayer, paintingInfo.paintDirtyRect, paintingInfo.subPixelAccumulation, paintingInfo.paintBehavior),
             &paintingInfo, LayoutPoint(), paintFlags));
 
-        transparencyRecorder = adoptPtr(new TransparencyRecorder(context, m_renderLayer.renderer(),
-            m_renderLayer.renderer()->style()->blendMode(), m_renderLayer.renderer()->opacity()));
+        transparencyRecorder = adoptPtr(new TransparencyRecorder(context, m_renderLayer.renderer()->displayItemClient(),
+            context->compositeOperation(), m_renderLayer.renderer()->style()->blendMode(), m_renderLayer.renderer()->opacity(), context->compositeOperation()));
     }
 
     LayerPaintingInfo localPaintingInfo(paintingInfo);
@@ -389,31 +391,12 @@ void LayerPainter::paintFragmentByApplyingTransform(GraphicsContext* context, co
     transform.translateRight(roundedDelta.x(), roundedDelta.y());
     LayoutSize adjustedSubPixelAccumulation = paintingInfo.subPixelAccumulation + (delta - roundedDelta);
 
-    if (!transform.isIdentity()) {
-        OwnPtr<BeginTransformDisplayItem> beginTransformDisplayItem = adoptPtr(new BeginTransformDisplayItem(m_renderLayer.renderer(), transform));
-        // FIXME: we shouldn't be calling replay when Slimming Paint is on. However, replay() currently has an important side-effect that it stores
-        // the current matrix on the GraphicsContext, which is used for making conditional painting decisions such as anti-aliasing rotated borders.
-        beginTransformDisplayItem->replay(context);
-        if (RuntimeEnabledFeatures::slimmingPaintEnabled()) {
-            if (RenderLayer* container = m_renderLayer.enclosingLayerForPaintInvalidationCrossingFrameBoundaries())
-                container->graphicsLayerBacking()->displayItemList().add(beginTransformDisplayItem.release());
-        }
-    }
+    TransformRecorder transformRecorder(*context, m_renderLayer.renderer()->displayItemClient(), transform.toAffineTransform());
 
     // Now do a paint with the root layer shifted to be us.
     LayerPaintingInfo transformedPaintingInfo(&m_renderLayer, enclosingIntRect(transform.inverse().mapRect(paintingInfo.paintDirtyRect)), paintingInfo.paintBehavior,
         adjustedSubPixelAccumulation, paintingInfo.paintingRoot);
     paintLayerContentsAndReflection(context, transformedPaintingInfo, paintFlags);
-
-    if (!transform.isIdentity()) {
-        OwnPtr<EndTransformDisplayItem> endTransformDisplayItem = adoptPtr(new EndTransformDisplayItem(m_renderLayer.renderer()));
-        // FIXME: the same fix applies are as in the FIXME for BeginTransformDisplayItem above.
-        endTransformDisplayItem->replay(context);
-        if (RuntimeEnabledFeatures::slimmingPaintEnabled()) {
-            if (RenderLayer* container = m_renderLayer.enclosingLayerForPaintInvalidationCrossingFrameBoundaries())
-                container->graphicsLayerBacking()->displayItemList().add(endTransformDisplayItem.release());
-        }
-    }
 }
 
 void LayerPainter::paintChildren(unsigned childrenToVisit, GraphicsContext* context, const LayerPaintingInfo& paintingInfo, PaintLayerFlags paintFlags)
@@ -476,7 +459,7 @@ void LayerPainter::paintOverflowControlsForFragments(const LayerFragments& layer
             clipRecorder = adoptPtr(new LayerClipRecorder(m_renderLayer.renderer(), context, DisplayItem::ClipLayerOverflowControls, fragment.backgroundRect, &localPaintingInfo, fragment.paginationOffset, paintFlags));
         }
         if (RenderLayerScrollableArea* scrollableArea = m_renderLayer.scrollableArea())
-            scrollableArea->paintOverflowControls(context, roundedIntPoint(toPoint(fragment.layerBounds.location() - m_renderLayer.renderBoxLocation() + subPixelAccumulationIfNeeded(localPaintingInfo.subPixelAccumulation, m_renderLayer.compositingState()))), pixelSnappedIntRect(fragment.backgroundRect.rect()), true);
+            ScrollableAreaPainter(*scrollableArea).paintOverflowControls(context, roundedIntPoint(toPoint(fragment.layerBounds.location() - m_renderLayer.renderBoxLocation() + subPixelAccumulationIfNeeded(localPaintingInfo.subPixelAccumulation, m_renderLayer.compositingState()))), pixelSnappedIntRect(fragment.backgroundRect.rect()), true);
     }
 }
 

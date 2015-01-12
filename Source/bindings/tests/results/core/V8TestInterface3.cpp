@@ -51,28 +51,28 @@ static void indexedPropertyDeleterCallback(uint32_t index, const v8::PropertyCal
     TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
-static void namedPropertyGetterCallback(v8::Local<v8::String> name, const v8::PropertyCallbackInfo<v8::Value>& info)
+static void namedPropertyGetterCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMNamedProperty");
     V8TestInterface3::namedPropertyGetterCustom(name, info);
     TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
-static void namedPropertySetterCallback(v8::Local<v8::String> name, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info)
+static void namedPropertySetterCallback(v8::Local<v8::Name> name, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMNamedProperty");
     V8TestInterface3::namedPropertySetterCustom(name, v8Value, info);
     TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
-static void namedPropertyQueryCallback(v8::Local<v8::String> name, const v8::PropertyCallbackInfo<v8::Integer>& info)
+static void namedPropertyQueryCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Integer>& info)
 {
     TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMNamedProperty");
     V8TestInterface3::namedPropertyQueryCustom(name, info);
     TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
-static void namedPropertyDeleterCallback(v8::Local<v8::String> name, const v8::PropertyCallbackInfo<v8::Boolean>& info)
+static void namedPropertyDeleterCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Boolean>& info)
 {
     TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMNamedProperty");
     V8TestInterface3::namedPropertyDeleterCustom(name, info);
@@ -88,45 +88,44 @@ static void namedPropertyEnumeratorCallback(const v8::PropertyCallbackInfo<v8::A
 
 } // namespace TestInterface3V8Internal
 
-static void installV8TestInterface3Template(v8::Handle<v8::FunctionTemplate> functionTemplate, v8::Isolate* isolate)
+static void installV8TestInterface3Template(v8::Local<v8::FunctionTemplate> functionTemplate, v8::Isolate* isolate)
 {
     functionTemplate->ReadOnlyPrototype();
 
     v8::Local<v8::Signature> defaultSignature;
-    defaultSignature = V8DOMConfiguration::installDOMClassTemplate(functionTemplate, "TestInterface3", v8::Local<v8::FunctionTemplate>(), V8TestInterface3::internalFieldCount,
+    defaultSignature = V8DOMConfiguration::installDOMClassTemplate(isolate, functionTemplate, "TestInterface3", v8::Local<v8::FunctionTemplate>(), V8TestInterface3::internalFieldCount,
         0, 0,
         0, 0,
-        0, 0,
-        isolate);
+        0, 0);
     v8::Local<v8::ObjectTemplate> instanceTemplate = functionTemplate->InstanceTemplate();
     ALLOW_UNUSED_LOCAL(instanceTemplate);
     v8::Local<v8::ObjectTemplate> prototypeTemplate = functionTemplate->PrototypeTemplate();
     ALLOW_UNUSED_LOCAL(prototypeTemplate);
-    functionTemplate->InstanceTemplate()->SetIndexedPropertyHandler(TestInterface3V8Internal::indexedPropertyGetterCallback, TestInterface3V8Internal::indexedPropertySetterCallback, 0, TestInterface3V8Internal::indexedPropertyDeleterCallback, indexedPropertyEnumerator<TestInterface3>);
-    functionTemplate->InstanceTemplate()->SetNamedPropertyHandler(TestInterface3V8Internal::namedPropertyGetterCallback, TestInterface3V8Internal::namedPropertySetterCallback, TestInterface3V8Internal::namedPropertyQueryCallback, TestInterface3V8Internal::namedPropertyDeleterCallback, TestInterface3V8Internal::namedPropertyEnumeratorCallback);
+    functionTemplate->InstanceTemplate()->SetHandler(v8::IndexedPropertyHandlerConfiguration(TestInterface3V8Internal::indexedPropertyGetterCallback, TestInterface3V8Internal::indexedPropertySetterCallback, 0, TestInterface3V8Internal::indexedPropertyDeleterCallback, indexedPropertyEnumerator<TestInterface3>));
+    functionTemplate->InstanceTemplate()->SetHandler(v8::NamedPropertyHandlerConfiguration(TestInterface3V8Internal::namedPropertyGetterCallback, TestInterface3V8Internal::namedPropertySetterCallback, TestInterface3V8Internal::namedPropertyQueryCallback, TestInterface3V8Internal::namedPropertyDeleterCallback, TestInterface3V8Internal::namedPropertyEnumeratorCallback));
 
     // Custom toString template
     functionTemplate->Set(v8AtomicString(isolate, "toString"), V8PerIsolateData::from(isolate)->toStringTemplate());
 }
 
-v8::Handle<v8::FunctionTemplate> V8TestInterface3::domTemplate(v8::Isolate* isolate)
+v8::Local<v8::FunctionTemplate> V8TestInterface3::domTemplate(v8::Isolate* isolate)
 {
     return V8DOMConfiguration::domClassTemplate(isolate, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), installV8TestInterface3Template);
 }
 
-bool V8TestInterface3::hasInstance(v8::Handle<v8::Value> v8Value, v8::Isolate* isolate)
+bool V8TestInterface3::hasInstance(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
 {
     return V8PerIsolateData::from(isolate)->hasInstance(&wrapperTypeInfo, v8Value);
 }
 
-v8::Handle<v8::Object> V8TestInterface3::findInstanceInPrototypeChain(v8::Handle<v8::Value> v8Value, v8::Isolate* isolate)
+v8::Local<v8::Object> V8TestInterface3::findInstanceInPrototypeChain(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
 {
     return V8PerIsolateData::from(isolate)->findInstanceInPrototypeChain(&wrapperTypeInfo, v8Value);
 }
 
-TestInterface3* V8TestInterface3::toImplWithTypeCheck(v8::Isolate* isolate, v8::Handle<v8::Value> value)
+TestInterface3* V8TestInterface3::toImplWithTypeCheck(v8::Isolate* isolate, v8::Local<v8::Value> value)
 {
-    return hasInstance(value, isolate) ? toImpl(v8::Handle<v8::Object>::Cast(value)) : 0;
+    return hasInstance(value, isolate) ? toImpl(v8::Local<v8::Object>::Cast(value)) : 0;
 }
 
 void V8TestInterface3::refObject(ScriptWrappable* scriptWrappable)
@@ -137,12 +136,6 @@ void V8TestInterface3::refObject(ScriptWrappable* scriptWrappable)
 void V8TestInterface3::derefObject(ScriptWrappable* scriptWrappable)
 {
     scriptWrappable->toImpl<TestInterface3>()->deref();
-}
-
-template<>
-v8::Handle<v8::Value> toV8NoInline(TestInterface3* impl, v8::Handle<v8::Object> creationContext, v8::Isolate* isolate)
-{
-    return toV8(impl, creationContext, isolate);
 }
 
 } // namespace blink

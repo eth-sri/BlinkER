@@ -5,15 +5,34 @@
 #ifndef WebServiceWorkerClientsInfo_h
 #define WebServiceWorkerClientsInfo_h
 
-#include "WebCallbacks.h"
-#include "WebVector.h"
+#include "public/platform/WebCallbacks.h"
+#include "public/platform/WebURL.h"
+#include "public/platform/WebURLRequest.h"
+#include "public/platform/WebVector.h"
 
 namespace blink {
 
 struct WebServiceWorkerError;
 
+struct WebServiceWorkerClientInfo {
+    WebServiceWorkerClientInfo()
+        : clientID(0)
+        , isFocused(false)
+        , frameType(WebURLRequest::FrameTypeNone)
+    {
+    }
+
+    int clientID;
+    // FIXME: Use WebPageVisibilityState? That will require moving
+    // WebPageVisibilityState from public/web to public/platform.
+    WebString visibilityState;
+    bool isFocused;
+    WebURL url;
+    WebURLRequest::FrameType frameType;
+};
+
 struct WebServiceWorkerClientsInfo {
-    WebVector<int> clientIDs;
+    WebVector<WebServiceWorkerClientInfo> clients;
 };
 
 typedef WebCallbacks<WebServiceWorkerClientsInfo, WebServiceWorkerError> WebServiceWorkerClientsCallbacks;

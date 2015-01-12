@@ -176,6 +176,10 @@ void V8InjectedScriptHost::subtypeMethodCustom(const v8::FunctionCallbackInfo<v8
         v8SetReturnValue(info, v8AtomicString(isolate, "iterator"));
         return;
     }
+    if (value->IsGeneratorObject()) {
+        v8SetReturnValue(info, v8AtomicString(isolate, "generator"));
+        return;
+    }
     if (V8Node::hasInstance(value, isolate)) {
         v8SetReturnValue(info, v8AtomicString(isolate, "node"));
         return;
@@ -214,6 +218,8 @@ void V8InjectedScriptHost::functionDetailsMethodCustom(const v8::FunctionCallbac
     v8::Handle<v8::String> name = functionDisplayName(function);
     result->Set(v8AtomicString(isolate, "functionName"), name.IsEmpty() ? v8AtomicString(isolate, "") : name);
 
+    result->Set(v8AtomicString(isolate, "isGenerator"), v8::Boolean::New(isolate, function->IsGeneratorFunction()));
+
     InjectedScriptHost* host = V8InjectedScriptHost::toImpl(info.Holder());
     ScriptDebugServer& debugServer = host->scriptDebugServer();
     v8::Handle<v8::Value> scopes = debugServer.functionScopes(function);
@@ -221,6 +227,18 @@ void V8InjectedScriptHost::functionDetailsMethodCustom(const v8::FunctionCallbac
         result->Set(v8AtomicString(isolate, "rawScopes"), scopes);
 
     v8SetReturnValue(info, result);
+}
+
+void V8InjectedScriptHost::generatorObjectDetailsMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    if (info.Length() < 1 || !info[0]->IsObject())
+        return;
+
+    v8::Handle<v8::Object> object = v8::Handle<v8::Object>::Cast(info[0]);
+
+    InjectedScriptHost* host = V8InjectedScriptHost::toImpl(info.Holder());
+    ScriptDebugServer& debugServer = host->scriptDebugServer();
+    v8SetReturnValue(info, debugServer.generatorObjectDetails(object));
 }
 
 void V8InjectedScriptHost::collectionEntriesMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -368,7 +386,7 @@ void V8InjectedScriptHost::evaluateWithExceptionDetailsMethodCustom(const v8::Fu
     v8::Local<v8::Object> wrappedResult = v8::Object::New(isolate);
     if (tryCatch.HasCaught()) {
         wrappedResult->Set(v8::String::NewFromUtf8(isolate, "result"), tryCatch.Exception());
-        wrappedResult->Set(v8::String::NewFromUtf8(isolate, "exceptionDetails"), JavaScriptCallFrame::createExceptionDetails(tryCatch.Message(), isolate));
+        wrappedResult->Set(v8::String::NewFromUtf8(isolate, "exceptionDetails"), JavaScriptCallFrame::createExceptionDetails(isolate, tryCatch.Message()));
     } else {
         wrappedResult->Set(v8::String::NewFromUtf8(isolate, "result"), result);
         wrappedResult->Set(v8::String::NewFromUtf8(isolate, "exceptionDetails"), v8::Undefined(isolate));

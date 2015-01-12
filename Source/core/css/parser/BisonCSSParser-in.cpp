@@ -186,7 +186,6 @@ PassOwnPtr<Vector<double> > BisonCSSParser::parseKeyframeKeyList(const String& s
 {
     setupParser("@-internal-keyframe-key-list ", string, "");
     cssyyparse(this);
-    ASSERT(m_valueList);
     return StyleKeyframe::createKeyList(m_valueList.get());
 }
 
@@ -821,6 +820,15 @@ static void recordSelectorStats(const CSSParserContext& context, const CSSSelect
                 break;
             case CSSSelector::PseudoHostContext:
                 feature = UseCounter::CSSSelectorPseudoHostContext;
+                break;
+            case CSSSelector::PseudoFullScreenDocument:
+                feature = UseCounter::CSSSelectorPseudoFullScreenDocument;
+                break;
+            case CSSSelector::PseudoFullScreenAncestor:
+                feature = UseCounter::CSSSelectorPseudoFullScreenAncestor;
+                break;
+            case CSSSelector::PseudoFullScreen:
+                feature = UseCounter::CSSSelectorPseudoFullScreen;
                 break;
             default:
                 break;

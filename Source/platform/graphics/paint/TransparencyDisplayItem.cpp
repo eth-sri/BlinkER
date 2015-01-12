@@ -7,27 +7,27 @@
 
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/GraphicsContext.h"
+#include "public/platform/WebDisplayItemList.h"
 
 namespace blink {
 
 void BeginTransparencyDisplayItem::replay(GraphicsContext* context)
 {
-    bool hasBlendMode = this->hasBlendMode();
-    if (hasBlendMode)
-        context->setCompositeOperation(context->compositeOperation(), m_blendMode);
-
+    context->setCompositeOperation(m_preTransparencyLayerCompositeOp, m_preTransparencyLayerBlendMode);
     context->beginTransparencyLayer(m_opacity);
+    context->setCompositeOperation(m_postTransparencyLayerCompositeOp, WebBlendModeNormal);
+}
 
-    if (hasBlendMode)
-        context->setCompositeOperation(context->compositeOperation(), WebBlendModeNormal);
+void BeginTransparencyDisplayItem::appendToWebDisplayItemList(WebDisplayItemList* list) const
+{
+    list->appendTransparencyItem(m_opacity, m_preTransparencyLayerBlendMode);
 }
 
 #ifndef NDEBUG
-WTF::String BeginTransparencyDisplayItem::asDebugString() const
+void BeginTransparencyDisplayItem::dumpPropertiesAsDebugString(WTF::StringBuilder& stringBuilder) const
 {
-    return String::format("{%s, type: \"%s\", hasBlendMode: %d, blendMode: %d, opacity: %f}",
-        clientDebugString().utf8().data(), typeAsDebugString(type()).utf8().data(),
-        hasBlendMode(), m_blendMode, m_opacity);
+    DisplayItem::dumpPropertiesAsDebugString(stringBuilder);
+    stringBuilder.append(WTF::String::format(", blendMode: %d, opacity: %f", m_preTransparencyLayerBlendMode, m_opacity));
 }
 #endif
 
@@ -36,12 +36,9 @@ void EndTransparencyDisplayItem::replay(GraphicsContext* context)
     context->endLayer();
 }
 
-#ifndef NDEBUG
-WTF::String EndTransparencyDisplayItem::asDebugString() const
+void EndTransparencyDisplayItem::appendToWebDisplayItemList(WebDisplayItemList* list) const
 {
-    return String::format("{%s, type: \"%s\"}",
-        clientDebugString().utf8().data(), typeAsDebugString(type()).utf8().data());
+    list->appendEndTransparencyItem();
 }
-#endif
 
 } // namespace blink

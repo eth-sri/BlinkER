@@ -6,6 +6,7 @@
 #include "platform/graphics/paint/FilterDisplayItem.h"
 
 #include "platform/graphics/GraphicsContext.h"
+#include "public/platform/WebDisplayItemList.h"
 
 namespace blink {
 
@@ -19,12 +20,17 @@ void BeginFilterDisplayItem::replay(GraphicsContext* context)
     context->translate(-m_bounds.x().toFloat(), -m_bounds.y().toFloat());
 }
 
-#ifndef NDEBUG
-WTF::String BeginFilterDisplayItem::asDebugString() const
+void BeginFilterDisplayItem::appendToWebDisplayItemList(WebDisplayItemList* list) const
 {
-    return String::format("{%s, type: \"%s\", filter bounds: [%f,%f,%f,%f]}",
-        clientDebugString().utf8().data(), typeAsDebugString(type()).utf8().data(),
-        m_bounds.x().toFloat(), m_bounds.y().toFloat(), m_bounds.width().toFloat(), m_bounds.height().toFloat());
+    list->appendFilterItem(m_imageFilter.get(), FloatRect(m_bounds));
+}
+
+#ifndef NDEBUG
+void BeginFilterDisplayItem::dumpPropertiesAsDebugString(WTF::StringBuilder& stringBuilder) const
+{
+    DisplayItem::dumpPropertiesAsDebugString(stringBuilder);
+    stringBuilder.append(WTF::String::format(", filter bounds: [%f,%f,%f,%f]",
+        m_bounds.x().toFloat(), m_bounds.y().toFloat(), m_bounds.width().toFloat(), m_bounds.height().toFloat()));
 }
 #endif
 
@@ -34,12 +40,9 @@ void EndFilterDisplayItem::replay(GraphicsContext* context)
     context->restore();
 }
 
-#ifndef NDEBUG
-WTF::String EndFilterDisplayItem::asDebugString() const
+void EndFilterDisplayItem::appendToWebDisplayItemList(WebDisplayItemList* list) const
 {
-    return String::format("{%s, type: \"%s\"}",
-        clientDebugString().utf8().data(), typeAsDebugString(type()).utf8().data());
+    list->appendEndFilterItem();
 }
-#endif
 
 } // namespace blink

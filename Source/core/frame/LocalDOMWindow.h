@@ -93,7 +93,7 @@ public:
     BarProp* statusbar() const override;
     BarProp* toolbar() const override;
     Navigator* navigator() const override;
-    Location& location() const override;
+    Location* location() const override;
     bool offscreenBuffering() const override;
     int outerHeight() const override;
     int outerWidth() const override;
@@ -103,20 +103,12 @@ public:
     int screenY() const override;
     double scrollX() const override;
     double scrollY() const override;
-    bool closed() const override;
-    unsigned length() const override;
     const AtomicString& name() const override;
     void setName(const AtomicString&) override;
     String status() const override;
     void setStatus(const String&) override;
     String defaultStatus() const override;
     void setDefaultStatus(const String&) override;
-    DOMWindow* self() const override;
-    DOMWindow* window() const { return self(); }
-    DOMWindow* frames() const { return self(); }
-    DOMWindow* opener() const override;
-    DOMWindow* parent() const override;
-    DOMWindow* top() const override;
     Document* document() const override;
     StyleMedia* styleMedia() const override;
     double devicePixelRatio() const override;
@@ -128,9 +120,9 @@ public:
     Performance* performance() const override;
     DOMWindowCSS* css() const override;
     DOMSelection* getSelection() override;
-    void focus(ExecutionContext* = 0) override;
+    void focus(ExecutionContext*) override;
     void blur() override;
-    void close(ExecutionContext* = 0) override;
+    void close(ExecutionContext*) override;
     void print() override;
     void stop() override;
     void alert(const String& message = String()) override;
@@ -141,9 +133,9 @@ public:
     // FIXME: ScrollBehaviorSmooth is currently unsupported in PinchViewport.
     // crbug.com/434497
     void scrollBy(double x, double y, ScrollBehavior = ScrollBehaviorAuto) const override;
-    void scrollBy(double x, double y, const ScrollOptions&, ExceptionState&) const override;
-    void scrollTo(double x, double y, ScrollBehavior = ScrollBehaviorAuto) const override;
-    void scrollTo(double x, double y, const ScrollOptions&, ExceptionState&) const override;
+    void scrollBy(const ScrollToOptions&) const override;
+    void scrollTo(double x, double y) const override;
+    void scrollTo(const ScrollToOptions&) const override;
 
     void moveBy(float x, float y) const override;
     void moveTo(float x, float y) const override;
@@ -155,7 +147,6 @@ public:
     int requestAnimationFrame(RequestAnimationFrameCallback*) override;
     int webkitRequestAnimationFrame(RequestAnimationFrameCallback*) override;
     void cancelAnimationFrame(int id) override;
-    DOMWindow* anonymousIndexedGetter(uint32_t) override;
     void postMessage(PassRefPtr<SerializedScriptValue> message, const MessagePortArray*, const String& targetOrigin, LocalDOMWindow* source, ExceptionState&) override;
     String crossDomainAccessErrorMessage(LocalDOMWindow* callingWindow) override;
     String sanitizedCrossDomainAccessErrorMessage(LocalDOMWindow* callingWindow) override;
@@ -330,7 +321,7 @@ private:
     RefPtrWillBeMember<DOMWindowEventQueue> m_eventQueue;
     RefPtr<SerializedScriptValue> m_pendingStateObject;
 
-    HashSet<OwnPtr<PostMessageTimer> > m_postMessageTimers;
+    WillBeHeapHashSet<OwnPtrWillBeMember<PostMessageTimer> > m_postMessageTimers;
 };
 
 DEFINE_TYPE_CASTS(LocalDOMWindow, DOMWindow, x, x->isLocalDOMWindow(), x.isLocalDOMWindow());

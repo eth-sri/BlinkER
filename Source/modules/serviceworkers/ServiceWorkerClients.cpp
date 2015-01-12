@@ -26,8 +26,8 @@ namespace {
         {
             OwnPtr<WebType> webClients = adoptPtr(webClientsRaw);
             HeapVector<Member<ServiceWorkerClient> > clients;
-            for (size_t i = 0; i < webClients->clientIDs.size(); ++i) {
-                clients.append(ServiceWorkerClient::create(webClients->clientIDs[i]));
+            for (size_t i = 0; i < webClients->clients.size(); ++i) {
+                clients.append(ServiceWorkerClient::create(webClients->clients[i]));
             }
             return clients;
         }
@@ -54,7 +54,7 @@ ServiceWorkerClients::ServiceWorkerClients()
 
 ScriptPromise ServiceWorkerClients::getAll(ScriptState* scriptState, const ServiceWorkerClientQueryOptions& options)
 {
-    RefPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(scriptState);
+    RefPtrWillBeRawPtr<ScriptPromiseResolver> resolver = ScriptPromiseResolver::create(scriptState);
     ScriptPromise promise = resolver->promise();
 
     if (options.includeUncontrolled()) {

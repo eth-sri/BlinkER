@@ -34,7 +34,7 @@
 
 #include "bindings/core/v8/ScriptController.h"
 #include "core/HTMLNames.h"
-#include "core/accessibility/AXObjectCache.h"
+#include "core/dom/AXObjectCache.h"
 #include "core/dom/Document.h"
 #include "core/dom/Fullscreen.h"
 #include "core/dom/Node.h"
@@ -48,7 +48,6 @@
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/page/Page.h"
-#include "core/page/PagePopupDriver.h"
 #include "core/rendering/HitTestResult.h"
 #include "core/rendering/RenderPart.h"
 #include "core/rendering/compositing/CompositedSelectionBound.h"
@@ -127,7 +126,6 @@ static WebSelectionBound toWebSelectionBound(const CompositedSelectionBound& bou
 
 ChromeClientImpl::ChromeClientImpl(WebViewImpl* webView)
     : m_webView(webView)
-    , m_pagePopupDriver(webView)
 {
 }
 
@@ -492,6 +490,12 @@ void ChromeClientImpl::scheduleAnimation()
     m_webView->scheduleAnimation();
 }
 
+void ChromeClientImpl::scheduleAnimationForFrame(LocalFrame* localRoot)
+{
+    // FIXME: This will proxy to a WebWidget attached to the WebLocalFrameImpl.
+    scheduleAnimation();
+}
+
 IntRect ChromeClientImpl::rootViewToScreen(const IntRect& rect) const
 {
     IntRect screenRect(rect);
@@ -529,8 +533,7 @@ void ChromeClientImpl::layoutUpdated(LocalFrame* frame) const
     m_webView->layoutUpdated(WebLocalFrameImpl::fromFrame(frame));
 }
 
-void ChromeClientImpl::mouseDidMoveOverElement(
-    const HitTestResult& result, unsigned modifierFlags)
+void ChromeClientImpl::mouseDidMoveOverElement(const HitTestResult& result)
 {
     if (!m_webView->client())
         return;
@@ -690,8 +693,9 @@ GraphicsLayerFactory* ChromeClientImpl::graphicsLayerFactory() const
     return m_webView->graphicsLayerFactory();
 }
 
-void ChromeClientImpl::attachRootGraphicsLayer(GraphicsLayer* rootLayer)
+void ChromeClientImpl::attachRootGraphicsLayer(GraphicsLayer* rootLayer, LocalFrame* localRoot)
 {
+    // FIXME: Add call to frame's widget for non-zero frames.
     m_webView->setRootGraphicsLayer(rootLayer);
 }
 
@@ -720,7 +724,7 @@ bool ChromeClientImpl::hasOpenedPopup() const
     return m_webView->hasOpenedPopup();
 }
 
-PassRefPtrWillBeRawPtr<PopupMenu> ChromeClientImpl::createPopupMenu(LocalFrame& frame, PopupMenuClient* client) const
+PassRefPtrWillBeRawPtr<PopupMenu> ChromeClientImpl::createPopupMenu(LocalFrame& frame, PopupMenuClient* client)
 {
     if (WebViewImpl::useExternalPopupMenus())
         return adoptRefWillBeNoop(new ExternalPopupMenu(frame, client, *m_webView));
@@ -730,25 +734,17 @@ PassRefPtrWillBeRawPtr<PopupMenu> ChromeClientImpl::createPopupMenu(LocalFrame& 
 
 PagePopup* ChromeClientImpl::openPagePopup(PagePopupClient* client, const IntRect& originBoundsInRootView)
 {
-    ASSERT(m_pagePopupDriver);
-    return m_pagePopupDriver->openPagePopup(client, originBoundsInRootView);
+    return m_webView->openPagePopup(client, originBoundsInRootView);
 }
 
 void ChromeClientImpl::closePagePopup(PagePopup* popup)
 {
-    ASSERT(m_pagePopupDriver);
-    m_pagePopupDriver->closePagePopup(popup);
+    m_webView->closePagePopup(popup);
 }
 
-void ChromeClientImpl::setPagePopupDriver(PagePopupDriver* driver)
+DOMWindow* ChromeClientImpl::pagePopupWindowForTesting() const
 {
-    ASSERT(driver);
-    m_pagePopupDriver = driver;
-}
-
-void ChromeClientImpl::resetPagePopupDriver()
-{
-    m_pagePopupDriver = m_webView;
+    return m_webView->pagePopupWindow();
 }
 
 bool ChromeClientImpl::shouldRunModalDialogDuringPageDismissal(const DialogType& dialogType, const String& dialogMessage, Document::PageDismissalType dismissalType) const
@@ -792,6 +788,11 @@ void ChromeClientImpl::requestPointerUnlock()
     return m_webView->requestPointerUnlock();
 }
 
+bool ChromeClientImpl::shouldDisableDesktopWorkarounds()
+{
+    return m_webView->shouldDisableDesktopWorkarounds();
+}
+
 void ChromeClientImpl::annotatedRegionsChanged()
 {
     WebViewClient* client = m_webView->client();
@@ -801,9 +802,6 @@ void ChromeClientImpl::annotatedRegionsChanged()
 
 void ChromeClientImpl::didAssociateFormControls(const WillBeHeapVector<RefPtrWillBeMember<Element> >& elements, LocalFrame* frame)
 {
-    // FIXME: remove. See http://crbug.com/425756
-    if (m_webView->autofillClient())
-        m_webView->autofillClient()->didAssociateFormControls(elements);
     WebLocalFrameImpl* webframe = WebLocalFrameImpl::fromFrame(frame);
     if (webframe->autofillClient())
         webframe->autofillClient()->didAssociateFormControls(elements);
@@ -835,9 +833,6 @@ void ChromeClientImpl::showImeIfNeeded()
 
 void ChromeClientImpl::handleKeyboardEventOnTextField(HTMLInputElement& inputElement, KeyboardEvent& event)
 {
-    // FIXME: remove. See http://crbug.com/425756
-    if (m_webView->autofillClient())
-        m_webView->autofillClient()->textFieldDidReceiveKeyDown(WebInputElement(&inputElement), WebKeyboardEventBuilder(event));
     WebLocalFrameImpl* webframe = WebLocalFrameImpl::fromFrame(inputElement.document().frame());
     if (webframe->autofillClient())
         webframe->autofillClient()->textFieldDidReceiveKeyDown(WebInputElement(&inputElement), WebKeyboardEventBuilder(event));
@@ -845,9 +840,6 @@ void ChromeClientImpl::handleKeyboardEventOnTextField(HTMLInputElement& inputEle
 
 void ChromeClientImpl::didChangeValueInTextField(HTMLFormControlElement& element)
 {
-    // FIXME: remove. See http://crbug.com/425756
-    if (m_webView->autofillClient())
-        m_webView->autofillClient()->textFieldDidChange(WebFormControlElement(&element));
     WebLocalFrameImpl* webframe = WebLocalFrameImpl::fromFrame(element.document().frame());
     if (webframe->autofillClient())
         webframe->autofillClient()->textFieldDidChange(WebFormControlElement(&element));
@@ -855,9 +847,6 @@ void ChromeClientImpl::didChangeValueInTextField(HTMLFormControlElement& element
 
 void ChromeClientImpl::didEndEditingOnTextField(HTMLInputElement& inputElement)
 {
-    // FIXME: remove. See http://crbug.com/425756
-    if (m_webView->autofillClient())
-        m_webView->autofillClient()->textFieldDidEndEditing(WebInputElement(&inputElement));
     WebLocalFrameImpl* webframe = WebLocalFrameImpl::fromFrame(inputElement.document().frame());
     if (webframe->autofillClient())
         webframe->autofillClient()->textFieldDidEndEditing(WebInputElement(&inputElement));
@@ -865,19 +854,16 @@ void ChromeClientImpl::didEndEditingOnTextField(HTMLInputElement& inputElement)
 
 void ChromeClientImpl::openTextDataListChooser(HTMLInputElement& input)
 {
-    // FIXME: remove. See http://crbug.com/425756
-    if (m_webView->autofillClient())
-        m_webView->autofillClient()->openTextDataListChooser(WebInputElement(&input));
     WebLocalFrameImpl* webframe = WebLocalFrameImpl::fromFrame(input.document().frame());
     if (webframe->autofillClient())
         webframe->autofillClient()->openTextDataListChooser(WebInputElement(&input));
 }
 
-void ChromeClientImpl::textFieldDataListChanged(HTMLFormControlElement& element)
+void ChromeClientImpl::textFieldDataListChanged(HTMLInputElement& input)
 {
-    if (!m_webView->autofillClient())
-        return;
-    m_webView->autofillClient()->textFieldDidChange(WebFormControlElement(&element));
+    WebLocalFrameImpl* webframe = WebLocalFrameImpl::fromFrame(input.document().frame());
+    if (webframe->autofillClient())
+        webframe->autofillClient()->dataListOptionsChanged(WebInputElement(&input));
 }
 
 } // namespace blink

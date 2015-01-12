@@ -68,11 +68,11 @@
     // CSS Animation and Transition testing.
     [RaisesException] void pauseAnimations(double pauseTime);
 
-    [TypeChecking=Interface] Node nextSiblingByWalker(Node node);
-    [TypeChecking=Interface] Node firstChildByWalker(Node node);
-    [TypeChecking=Interface] Node lastChildByWalker(Node node);
-    [TypeChecking=Interface] Node nextNodeByWalker(Node node);
-    [TypeChecking=Interface] Node previousNodeByWalker(Node node);
+    [RaisesException, TypeChecking=Interface] Node nextSiblingInComposedTree(Node node);
+    [RaisesException, TypeChecking=Interface] Node firstChildInComposedTree(Node node);
+    [RaisesException, TypeChecking=Interface] Node lastChildInComposedTree(Node node);
+    [RaisesException, TypeChecking=Interface] Node nextInComposedTree(Node node);
+    [RaisesException, TypeChecking=Interface] Node previousInComposedTree(Node node);
 
     DOMString visiblePlaceholder(Element element);
 
@@ -83,8 +83,6 @@
     boolean hasAutofocusRequest(optional Document document);
     [RaisesException] DOMString[] formControlStateOfHistoryItem();
     [RaisesException] void setFormControlStateOfHistoryItem(sequence<DOMString> values);
-    [RaisesException] void setEnableMockPagePopup(boolean enabled);
-    readonly attribute PagePopupController pagePopupController;
     readonly attribute Window pagePopupWindow;
 
     [RaisesException] ClientRect absoluteCaretBounds();
@@ -138,6 +136,10 @@
     [TypeChecking=Interface] unsigned long touchEventHandlerCount(Document document);
     [RaisesException, TypeChecking=Interface] LayerRectList touchEventTargetLayerRects(Document document);
 
+    DOMString htmlNamespace();
+    sequence<DOMString> htmlTags();
+    DOMString svgNamespace();
+    sequence<DOMString> svgTags();
 
     [RaisesException, TypeChecking=Interface] NodeList nodesFromRect(Document document, long x, long y,
         unsigned long topPadding, unsigned long rightPadding, unsigned long bottomPadding, unsigned long leftPadding,
@@ -288,10 +290,13 @@
     ClientRectList getTransitionElementRects();
     void hideAllTransitionElements();
     void showAllTransitionElements();
+    void setExitTransitionStylesheetsEnabled(boolean enabled);
 
     [RaisesException, TypeChecking=Interface] void forcePluginPlaceholder(HTMLElement plugin, DocumentFragment fragment);
     [RaisesException, TypeChecking=Interface] void forcePluginPlaceholder(HTMLElement plugin, PluginPlaceholderOptions options);
 
     DictionaryTest dictionaryTest();
     UnionTypesTest unionTypesTest();
+
+    void forceBlinkGCWithoutV8GC();
 };

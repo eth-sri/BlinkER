@@ -8,6 +8,7 @@
 #define V8SVGTestInterface_h
 
 #include "bindings/core/v8/ScriptWrappable.h"
+#include "bindings/core/v8/ToV8.h"
 #include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8DOMWrapper.h"
 #include "bindings/core/v8/WrapperTypeInfo.h"
@@ -18,14 +19,14 @@ namespace blink {
 
 class V8SVGTestInterface {
 public:
-    static bool hasInstance(v8::Handle<v8::Value>, v8::Isolate*);
-    static v8::Handle<v8::Object> findInstanceInPrototypeChain(v8::Handle<v8::Value>, v8::Isolate*);
-    static v8::Handle<v8::FunctionTemplate> domTemplate(v8::Isolate*);
-    static SVGTestInterface* toImpl(v8::Handle<v8::Object> object)
+    static bool hasInstance(v8::Local<v8::Value>, v8::Isolate*);
+    static v8::Local<v8::Object> findInstanceInPrototypeChain(v8::Local<v8::Value>, v8::Isolate*);
+    static v8::Local<v8::FunctionTemplate> domTemplate(v8::Isolate*);
+    static SVGTestInterface* toImpl(v8::Local<v8::Object> object)
     {
         return blink::toScriptWrappable(object)->toImpl<SVGTestInterface>();
     }
-    static SVGTestInterface* toImplWithTypeCheck(v8::Isolate*, v8::Handle<v8::Value>);
+    static SVGTestInterface* toImplWithTypeCheck(v8::Isolate*, v8::Local<v8::Value>);
     static const WrapperTypeInfo wrapperTypeInfo;
     static void refObject(ScriptWrappable*);
     static void derefObject(ScriptWrappable*);
@@ -33,8 +34,8 @@ public:
     {
     }
     static const int internalFieldCount = v8DefaultWrapperInternalFieldCount + 0;
-    static void installConditionallyEnabledProperties(v8::Handle<v8::Object>, v8::Isolate*) { }
-    static void installConditionallyEnabledMethods(v8::Handle<v8::Object>, v8::Isolate*) { }
+    static void installConditionallyEnabledProperties(v8::Local<v8::Object>, v8::Isolate*) { }
+    static void installConditionallyEnabledMethods(v8::Local<v8::Object>, v8::Isolate*) { }
 };
 
 } // namespace blink

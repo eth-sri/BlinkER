@@ -70,9 +70,11 @@ WebInspector.ElementsPanel = function()
 
     this._matchedStylesFilterBoxContainer = createElement("div");
     this._matchedStylesFilterBoxContainer.className = "sidebar-pane-filter-box";
+    this.sidebarPanes.styles.setFilterBoxContainer(this._matchedStylesFilterBoxContainer);
+
     this._computedStylesFilterBoxContainer = createElement("div");
     this._computedStylesFilterBoxContainer.className = "sidebar-pane-filter-box";
-    this.sidebarPanes.styles.setFilterBoxContainers(this._matchedStylesFilterBoxContainer, this._computedStylesFilterBoxContainer);
+    this.sidebarPanes.computedStyle.setFilterBoxContainer(this._computedStylesFilterBoxContainer);
 
     this.sidebarPanes.metrics = new WebInspector.MetricsSidebarPane();
     this.sidebarPanes.properties = new WebInspector.PropertiesSidebarPane();
@@ -109,6 +111,7 @@ WebInspector.ElementsPanel.prototype = {
     },
 
     /**
+     * @override
      * @param {!WebInspector.Target} target
      */
     targetAdded: function(target)
@@ -128,6 +131,7 @@ WebInspector.ElementsPanel.prototype = {
     },
 
     /**
+     * @override
      * @param {!WebInspector.Target} target
      */
     targetRemoved: function(target)
@@ -162,6 +166,7 @@ WebInspector.ElementsPanel.prototype = {
     },
 
     /**
+     * @override
      * @return {!Element}
      */
     defaultFocusedElement: function()
@@ -170,6 +175,7 @@ WebInspector.ElementsPanel.prototype = {
     },
 
     /**
+     * @override
      * @return {!WebInspector.SearchableView}
      */
     searchableView: function()
@@ -360,6 +366,9 @@ WebInspector.ElementsPanel.prototype = {
         delete this._selectedPathOnReset;
     },
 
+    /**
+     * @override
+     */
     searchCanceled: function()
     {
         delete this._searchQuery;
@@ -376,6 +385,7 @@ WebInspector.ElementsPanel.prototype = {
     },
 
     /**
+     * @override
      * @param {!WebInspector.SearchableView.SearchConfig} searchConfig
      * @param {boolean} shouldJump
      * @param {boolean=} jumpBackwards
@@ -490,6 +500,9 @@ WebInspector.ElementsPanel.prototype = {
         this._highlightCurrentSearchResult();
     },
 
+    /**
+     * @override
+     */
     jumpToNextSearchResult: function()
     {
         if (!this._searchResults)
@@ -497,6 +510,9 @@ WebInspector.ElementsPanel.prototype = {
         this._jumpToSearchResult(this._currentSearchResultIndex + 1);
     },
 
+    /**
+     * @override
+     */
     jumpToPreviousSearchResult: function()
     {
         if (!this._searchResults)
@@ -505,6 +521,7 @@ WebInspector.ElementsPanel.prototype = {
     },
 
     /**
+     * @override
      * @return {boolean}
      */
     supportsCaseSensitiveSearch: function()
@@ -513,6 +530,7 @@ WebInspector.ElementsPanel.prototype = {
     },
 
     /**
+     * @override
      * @return {boolean}
      */
     supportsRegexSearch: function()
@@ -624,12 +642,13 @@ WebInspector.ElementsPanel.prototype = {
         if (!selectedDOMNode || !selectedDOMNode.target().cssModel.isEnabled())
             return;
 
-        this.sidebarPanes.styles.update(selectedDOMNode, true);
+        this.sidebarPanes.styles.setNode(selectedDOMNode);
         this.sidebarPanes.metrics.setNode(selectedDOMNode);
         this.sidebarPanes.platformFonts.setNode(selectedDOMNode);
     },
 
     /**
+     * @override
      * @param {!KeyboardEvent} event
      */
     handleShortcut: function(event)
@@ -701,7 +720,7 @@ WebInspector.ElementsPanel.prototype = {
      */
     handleCopyEvent: function(event)
     {
-        if (!WebInspector.currentFocusElement().enclosingNodeOrSelfWithClass("elements-tree-outline"))
+        if (!WebInspector.currentFocusElement() || !WebInspector.currentFocusElement().enclosingNodeOrSelfWithClass("elements-tree-outline"))
             return;
         var treeOutline = this._treeOutlineForNode(this.selectedDOMNode());
         if (treeOutline)
@@ -784,7 +803,7 @@ WebInspector.ElementsPanel.prototype = {
             return;
         var commandCallback = WebInspector.Revealer.reveal.bind(WebInspector.Revealer, object);
 
-        contextMenu.appendItem(WebInspector.useLowerCaseMenuTitles() ? "Reveal in Elements panel" : "Reveal in Elements Panel", commandCallback);
+        contextMenu.appendItem(WebInspector.UIString.capitalize("Reveal in Elements ^panel"), commandCallback);
     },
 
     _sidebarContextMenuEventFired: function(event)
@@ -969,6 +988,7 @@ WebInspector.ElementsPanel.ContextMenuProvider = function()
 
 WebInspector.ElementsPanel.ContextMenuProvider.prototype = {
     /**
+     * @override
      * @param {!Event} event
      * @param {!WebInspector.ContextMenu} contextMenu
      * @param {!Object} target
@@ -989,6 +1009,7 @@ WebInspector.ElementsPanel.DOMNodeRevealer = function()
 
 WebInspector.ElementsPanel.DOMNodeRevealer.prototype = {
     /**
+     * @override
      * @param {!Object} node
      * @return {!Promise}
      */
@@ -1053,6 +1074,7 @@ WebInspector.ElementsPanelFactory = function()
 
 WebInspector.ElementsPanelFactory.prototype = {
     /**
+     * @override
      * @return {!WebInspector.Panel}
      */
     createPanel: function()

@@ -72,7 +72,7 @@ static bool useHinting()
     // Enable hinting when subpixel font scaling is disabled or
     // when running the set of standard non-subpixel layout tests,
     // otherwise use subpixel glyph positioning.
-    return (LayoutTestSupport::isRunningLayoutTest() && !LayoutTestSupport::isFontAntialiasingEnabledForTest()) || !RuntimeEnabledFeatures::subpixelFontScalingEnabled();
+    return (LayoutTestSupport::isRunningLayoutTest() && !LayoutTestSupport::isFontAntialiasingEnabledForTest());
 }
 
 void FontCache::platformInit()
@@ -127,10 +127,6 @@ PassRefPtr<SimpleFontData> FontCache::fallbackFontForCharacter(const FontDescrip
     if (!substituteFont && codeUnitsLength == 1)
         substituteFont = [NSFont findFontLike:nsFont forCharacter:codeUnits[0] inLanguage:nil];
     if (!substituteFont)
-        return nullptr;
-
-    // Chromium can't render AppleColorEmoji.
-    if ([[substituteFont familyName] isEqual:@"Apple Color Emoji"])
         return nullptr;
 
     // Use the family name from the AppKit-supplied substitute font, requesting the

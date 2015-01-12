@@ -14,6 +14,7 @@ import v8_utilities
 
 
 DICTIONARY_H_INCLUDES = frozenset([
+    'bindings/core/v8/ToV8.h',
     'bindings/core/v8/V8Binding.h',
     'platform/heap/Handle.h',
 ])
@@ -26,6 +27,13 @@ DICTIONARY_CPP_INCLUDES = frozenset([
 def setter_name_for_dictionary_member(member):
     name = v8_utilities.cpp_name(member)
     return 'set%s' % v8_utilities.capitalize(name)
+
+
+def null_setter_name_for_dictionary_member(member):
+    if member.idl_type.is_nullable:
+        name = v8_utilities.cpp_name(member)
+        return 'set%sToNull' % v8_utilities.capitalize(name)
+    return None
 
 
 def has_method_name_for_dictionary_member(member):
@@ -51,6 +59,7 @@ def dictionary_context(dictionary, interfaces_info):
         'members': [member_context(member)
                     for member in sorted(dictionary.members,
                                          key=operator.attrgetter('name'))],
+        'use_permissive_dictionary_conversion': 'PermissiveDictionaryConversion' in dictionary.extended_attributes,
         'v8_class': v8_types.v8_type(cpp_class),
         'v8_original_class': v8_types.v8_type(dictionary.name),
     }
@@ -68,7 +77,7 @@ def dictionary_context(dictionary, interfaces_info):
 def member_context(member):
     idl_type = member.idl_type
     idl_type.add_includes_for_type()
-    idl_type = unwrap_nullable_if_needed(idl_type)
+    unwrapped_idl_type = unwrap_nullable_if_needed(idl_type)
 
     def default_values():
         if not member.default_value:
@@ -76,7 +85,7 @@ def member_context(member):
         if member.default_value.is_null:
             return None, 'v8::Null(isolate)'
         cpp_default_value = str(member.default_value)
-        v8_default_value = idl_type.cpp_value_to_v8_value(
+        v8_default_value = unwrapped_idl_type.cpp_value_to_v8_value(
             cpp_value=cpp_default_value, isolate='isolate',
             creation_context='creationContext')
         return cpp_default_value, v8_default_value
@@ -87,19 +96,24 @@ def member_context(member):
     return {
         'cpp_default_value': cpp_default_value,
         'cpp_name': cpp_name,
-        'cpp_type': idl_type.cpp_type,
-        'cpp_value_to_v8_value': idl_type.cpp_value_to_v8_value(
+        'cpp_type': unwrapped_idl_type.cpp_type,
+        'cpp_value_to_v8_value': unwrapped_idl_type.cpp_value_to_v8_value(
             cpp_value='impl.%s()' % cpp_name, isolate='isolate',
             creation_context='creationContext',
             extended_attributes=member.extended_attributes),
-        'enum_validation_expression': idl_type.enum_validation_expression,
+        'deprecate_as': v8_utilities.deprecate_as(member),
+        'enum_validation_expression': unwrapped_idl_type.enum_validation_expression,
         'has_method_name': has_method_name_for_dictionary_member(member),
-        'is_object': idl_type.name == 'Object',
+        'idl_type': idl_type.base_type,
+        'is_interface_type': idl_type.is_interface_type and not idl_type.is_dictionary,
+        'is_nullable': idl_type.is_nullable,
+        'is_object': unwrapped_idl_type.name == 'Object',
         'name': member.name,
         'setter_name': setter_name_for_dictionary_member(member),
-        'use_output_parameter_for_result': idl_type.use_output_parameter_for_result,
+        'null_setter_name': null_setter_name_for_dictionary_member(member),
+        'use_output_parameter_for_result': unwrapped_idl_type.use_output_parameter_for_result,
         'v8_default_value': v8_default_value,
-        'v8_value_to_local_cpp_value': idl_type.v8_value_to_local_cpp_value(
+        'v8_value_to_local_cpp_value': unwrapped_idl_type.v8_value_to_local_cpp_value(
             member.extended_attributes, member.name + 'Value',
             member.name, isolate='isolate'),
     }
@@ -108,14 +122,28 @@ def member_context(member):
 # Context for implementation classes
 
 def dictionary_impl_context(dictionary, interfaces_info):
+    def remove_duplicate_members(members):
+        # When [ImplementedAs] is used, cpp_name can conflict. For example,
+        # dictionary D { long foo; [ImplementedAs=foo, DeprecateAs=Foo] long oldFoo; };
+        # This function removes such duplications, checking they have the same type.
+        members_dict = {}
+        for member in members:
+            cpp_name = member['cpp_name']
+            duplicated_member = members_dict.get(cpp_name)
+            if duplicated_member and duplicated_member != member:
+                raise Exception('Member name conflict: %s' % cpp_name)
+            members_dict[cpp_name] = member
+        return sorted(members_dict.values(), key=lambda member: member['cpp_name'])
+
     includes.clear()
     header_includes = set(['platform/heap/Handle.h'])
+    members = [member_impl_context(member, interfaces_info, header_includes)
+               for member in dictionary.members]
+    members = remove_duplicate_members(members)
     context = {
         'header_includes': header_includes,
         'cpp_class': v8_utilities.cpp_name(dictionary),
-        'members': [member_impl_context(member, interfaces_info,
-                                        header_includes)
-                    for member in dictionary.members],
+        'members': members,
     }
     if dictionary.parent:
         context['parent_cpp_class'] = v8_utilities.cpp_name_from_interfaces_info(
@@ -165,6 +193,7 @@ def member_impl_context(member, interfaces_info, header_includes):
         'is_object': is_object,
         'is_traceable': idl_type.is_traceable,
         'member_cpp_type': member_cpp_type(),
+        'null_setter_name': null_setter_name_for_dictionary_member(member),
         'rvalue_cpp_type': idl_type.cpp_type_args(used_as_rvalue_type=True),
         'setter_name': setter_name_for_dictionary_member(member),
     }

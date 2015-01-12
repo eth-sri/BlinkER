@@ -43,7 +43,7 @@ namespace WTF {
     template<typename T, size_t inlineCapacity, typename Allocator> class DequeConstIterator;
 
     template<typename T, size_t inlineCapacity = 0, typename Allocator = DefaultAllocator>
-    class Deque : public VectorDestructorBase<Deque<T, inlineCapacity, Allocator>, T, (inlineCapacity > 0), Allocator::isGarbageCollected> {
+    class Deque : public VectorDestructorBase<Deque<T, inlineCapacity, Allocator>, (inlineCapacity > 0), Allocator::isGarbageCollected> {
         WTF_USE_ALLOCATOR(Deque, Allocator);
     public:
         typedef DequeIterator<T, inlineCapacity, Allocator> iterator;
@@ -331,8 +331,16 @@ namespace WTF {
         size_t oldCapacity = m_buffer.capacity();
         T* oldBuffer = m_buffer.buffer();
         size_t newCapacity = std::max(static_cast<size_t>(16), oldCapacity + oldCapacity / 4 + 1);
-        if (m_buffer.expandBuffer(newCapacity))
+        if (m_buffer.expandBuffer(newCapacity)) {
+            if (m_start <= m_end) {
+                // No adjustments to be done.
+            } else {
+                size_t newStart = m_buffer.capacity() - (oldCapacity - m_start);
+                TypeOperations::moveOverlapping(oldBuffer + m_start, oldBuffer + oldCapacity, m_buffer.buffer() + newStart);
+                m_start = newStart;
+            }
             return;
+        }
         m_buffer.allocateBuffer(newCapacity);
         if (m_start <= m_end)
             TypeOperations::move(oldBuffer + m_start, oldBuffer + m_end, m_buffer.buffer() + m_start);

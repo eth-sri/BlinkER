@@ -85,20 +85,7 @@ StylePropertySerializer::PropertyValueForSerializer StylePropertySerializer::Sty
     }
 
     StylePropertySet::PropertyReference property = m_propertySet.propertyAt(m_allIndex);
-    const CSSValue* value = property.value();
-
-    // FIXME: Firefox shows properties with "unset" when some cssRule has
-    // expanded "all" with "unset". So we should use "unset" here.
-    // After implementing "unset" value correctly, (i.e. StyleBuilder should
-    // support "display: unset", "color: unset", ... and so on),
-    // we should fix the following code.
-    if (!value->isInitialValue() && !value->isInheritedValue()) {
-        if (CSSPropertyMetadata::isInheritedProperty(propertyID))
-            value = cssValuePool().createInheritedValue().get();
-        else
-            value = cssValuePool().createExplicitInitialValue().get();
-    }
-    return StylePropertySerializer::PropertyValueForSerializer(propertyID, value, property.isImportant());
+    return StylePropertySerializer::PropertyValueForSerializer(propertyID, property.value(), property.isImportant());
 }
 
 bool StylePropertySerializer::StylePropertySetForSerializer::shouldProcessPropertyAt(unsigned index) const
@@ -301,6 +288,11 @@ String StylePropertySerializer::asText() const
         case CSSPropertyMarginLeft:
             shorthandPropertyID = CSSPropertyMargin;
             break;
+        case CSSPropertyMotionPath:
+        case CSSPropertyMotionPosition:
+        case CSSPropertyMotionRotation:
+            shorthandPropertyID = CSSPropertyMotion;
+            break;
         case CSSPropertyOutlineWidth:
         case CSSPropertyOutlineStyle:
         case CSSPropertyOutlineColor:
@@ -446,6 +438,8 @@ String StylePropertySerializer::getPropertyValue(CSSPropertyID propertyID) const
         return fontValue();
     case CSSPropertyMargin:
         return get4Values(marginShorthand());
+    case CSSPropertyMotion:
+        return getShorthandValue(motionShorthand());
     case CSSPropertyWebkitMarginCollapse:
         return getShorthandValue(webkitMarginCollapseShorthand());
     case CSSPropertyOverflow:

@@ -49,6 +49,7 @@
 #include "core/css/CSSKeyframeRule.h"
 #include "core/css/CSSKeyframesRule.h"
 #include "core/css/CSSLineBoxContainValue.h"
+#include "core/css/CSSPathValue.h"
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSPrimitiveValueMappings.h"
 #include "core/css/CSSPropertyMetadata.h"
@@ -74,6 +75,7 @@
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/rendering/RenderTheme.h"
 #include "core/rendering/style/GridCoordinate.h"
+#include "core/svg/SVGPathUtilities.h"
 #include "platform/FloatConversion.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "wtf/BitArray.h"
@@ -469,11 +471,15 @@ bool CSSPropertyParser::parseValue(CSSPropertyID propId, bool important)
             return false;
         addExpandedPropertyForValue(propId, cssValuePool().createInheritedValue(), important);
         return true;
-    }
-    else if (id == CSSValueInitial) {
+    } else if (id == CSSValueInitial) {
         if (num != 1)
             return false;
         addExpandedPropertyForValue(propId, cssValuePool().createExplicitInitialValue(), important);
+        return true;
+    } else if (id == CSSValueUnset) {
+        if (num != 1)
+            return false;
+        addExpandedPropertyForValue(propId, cssValuePool().createUnsetValue(), important);
         return true;
     }
 
@@ -1160,6 +1166,24 @@ bool CSSPropertyParser::parseValue(CSSPropertyID propId, bool important)
         addProperty(propId, list.release(), important);
         return true;
     }
+
+    case CSSPropertyMotion:
+        // <motion-path> && <motion-position> && <motion-rotation>
+        ASSERT(RuntimeEnabledFeatures::cssMotionPathEnabled());
+        return parseShorthand(propId, parsingShorthandForProperty(CSSPropertyMotion), important);
+    case CSSPropertyMotionPath:
+        ASSERT(RuntimeEnabledFeatures::cssMotionPathEnabled());
+        parsedValue = parseMotionPath();
+        break;
+    case CSSPropertyMotionPosition:
+        ASSERT(RuntimeEnabledFeatures::cssMotionPathEnabled());
+        validPrimitive = (!id && validUnit(value, FLength | FPercent | FNonNeg));
+        break;
+    case CSSPropertyMotionRotation:
+        ASSERT(RuntimeEnabledFeatures::cssMotionPathEnabled());
+        parsedValue = parseMotionRotation();
+        break;
+
     case CSSPropertyAnimationDelay:
     case CSSPropertyAnimationDirection:
     case CSSPropertyAnimationDuration:
@@ -4748,7 +4772,7 @@ bool CSSPropertyParser::parseFontWeight(bool important)
 
 bool CSSPropertyParser::parseFontFaceSrcURI(CSSValueList* valueList)
 {
-    RefPtrWillBeRawPtr<CSSFontFaceSrcValue> uriValue(CSSFontFaceSrcValue::create(completeURL(m_valueList->current()->string)));
+    RefPtrWillBeRawPtr<CSSFontFaceSrcValue> uriValue(CSSFontFaceSrcValue::create(completeURL(m_valueList->current()->string), m_context.shouldCheckContentSecurityPolicy()));
     uriValue->setReferrer(m_context.referrer());
 
     CSSParserValue* value = m_valueList->next();
@@ -4784,8 +4808,9 @@ bool CSSPropertyParser::parseFontFaceSrcLocal(CSSValueList* valueList)
     if (!args || !args->size())
         return false;
 
+    ContentSecurityPolicyDisposition shouldCheckContentSecurityPolicy = m_context.shouldCheckContentSecurityPolicy();
     if (args->size() == 1 && args->current()->unit == CSSPrimitiveValue::CSS_STRING)
-        valueList->append(CSSFontFaceSrcValue::createLocal(args->current()->string));
+        valueList->append(CSSFontFaceSrcValue::createLocal(args->current()->string, shouldCheckContentSecurityPolicy));
     else if (args->current()->unit == CSSPrimitiveValue::CSS_IDENT) {
         StringBuilder builder;
         for (CSSParserValue* localValue = args->current(); localValue; localValue = args->next()) {
@@ -4795,7 +4820,7 @@ bool CSSPropertyParser::parseFontFaceSrcLocal(CSSValueList* valueList)
                 builder.append(' ');
             builder.append(localValue->string);
         }
-        valueList->append(CSSFontFaceSrcValue::createLocal(builder.toString()));
+        valueList->append(CSSFontFaceSrcValue::createLocal(builder.toString(), shouldCheckContentSecurityPolicy));
     } else
         return false;
 
@@ -5675,7 +5700,7 @@ public:
     , m_allowImageSlice(true)
     , m_allowRepeat(true)
     , m_allowForwardSlashOperator(false)
-    , m_requireWidth(false)
+    , m_allowWidth(false)
     , m_requireOutset(false)
     {}
 
@@ -5688,7 +5713,7 @@ public:
     bool allowRepeat() const { return m_allowRepeat; }
     bool allowForwardSlashOperator() const { return m_allowForwardSlashOperator; }
 
-    bool requireWidth() const { return m_requireWidth; }
+    bool allowWidth() const { return m_allowWidth; }
     bool requireOutset() const { return m_requireOutset; }
 
     void commitImage(PassRefPtrWillBeRawPtr<CSSValue> image)
@@ -5696,7 +5721,10 @@ public:
         m_image = image;
         m_canAdvance = true;
         m_allowCommit = true;
-        m_allowImage = m_allowForwardSlashOperator = m_requireWidth = m_requireOutset = false;
+        m_allowImage = false;
+        m_allowForwardSlashOperator = false;
+        m_allowWidth = false;
+        m_requireOutset = false;
         m_allowImageSlice = !m_imageSlice;
         m_allowRepeat = !m_repeat;
     }
@@ -5704,29 +5732,40 @@ public:
     {
         m_imageSlice = slice;
         m_canAdvance = true;
-        m_allowCommit = m_allowForwardSlashOperator = true;
-        m_allowImageSlice = m_requireWidth = m_requireOutset = false;
+        m_allowCommit = true;
+        m_allowForwardSlashOperator = true;
+        m_allowImageSlice = false;
+        m_allowWidth = false;
+        m_requireOutset = false;
         m_allowImage = !m_image;
         m_allowRepeat = !m_repeat;
     }
     void commitForwardSlashOperator()
     {
         m_canAdvance = true;
-        m_allowCommit = m_allowImage = m_allowImageSlice = m_allowRepeat = m_allowForwardSlashOperator = false;
-        if (!m_borderWidth) {
-            m_requireWidth = true;
+        m_allowCommit = false;
+        m_allowImage = false;
+        m_allowImageSlice = false;
+        m_allowRepeat = false;
+        if (!m_borderWidth && !m_allowWidth) {
+            m_allowForwardSlashOperator = true;
+            m_allowWidth = true;
             m_requireOutset = false;
         } else {
+            m_allowForwardSlashOperator = false;
             m_requireOutset = true;
-            m_requireWidth = false;
+            m_allowWidth = false;
         }
     }
     void commitBorderWidth(PassRefPtrWillBeRawPtr<CSSPrimitiveValue> width)
     {
         m_borderWidth = width;
         m_canAdvance = true;
-        m_allowCommit = m_allowForwardSlashOperator = true;
-        m_allowImageSlice = m_requireWidth = m_requireOutset = false;
+        m_allowCommit = true;
+        m_allowForwardSlashOperator = true;
+        m_allowImageSlice = false;
+        m_allowWidth = false;
+        m_requireOutset = false;
         m_allowImage = !m_image;
         m_allowRepeat = !m_repeat;
     }
@@ -5735,7 +5774,10 @@ public:
         m_outset = outset;
         m_canAdvance = true;
         m_allowCommit = true;
-        m_allowImageSlice = m_allowForwardSlashOperator = m_requireWidth = m_requireOutset = false;
+        m_allowImageSlice = false;
+        m_allowForwardSlashOperator = false;
+        m_allowWidth = false;
+        m_requireOutset = false;
         m_allowImage = !m_image;
         m_allowRepeat = !m_repeat;
     }
@@ -5744,7 +5786,10 @@ public:
         m_repeat = repeat;
         m_canAdvance = true;
         m_allowCommit = true;
-        m_allowRepeat = m_allowForwardSlashOperator = m_requireWidth = m_requireOutset = false;
+        m_allowRepeat = false;
+        m_allowForwardSlashOperator = false;
+        m_allowWidth = false;
+        m_requireOutset = false;
         m_allowImageSlice = !m_imageSlice;
         m_allowImage = !m_image;
     }
@@ -5790,7 +5835,7 @@ public:
     bool m_allowRepeat;
     bool m_allowForwardSlashOperator;
 
-    bool m_requireWidth;
+    bool m_allowWidth;
     bool m_requireOutset;
 
     RefPtrWillBeMember<CSSValue> m_image;
@@ -5841,7 +5886,7 @@ bool BorderImageParseContext::buildFromParser(CSSPropertyParser& parser, CSSProp
                 context.commitRepeat(repeat.release());
         }
 
-        if (!context.canAdvance() && context.requireWidth()) {
+        if (!context.canAdvance() && context.allowWidth()) {
             RefPtrWillBeRawPtr<CSSPrimitiveValue> borderWidth = nullptr;
             if (parser.parseBorderImageWidth(borderWidth))
                 context.commitBorderWidth(borderWidth.release());
@@ -8475,6 +8520,60 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseTransformValue(CSSPrope
     }
 
     return transformValue.release();
+}
+
+PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseMotionPath()
+{
+    CSSParserValue* value = m_valueList->current();
+    if (value->id == CSSValueNone) {
+        m_valueList->next();
+        return cssValuePool().createIdentifierValue(CSSValueNone);
+    }
+
+    // FIXME: Add support for <url>, <basic-shape>, <geometry-box>.
+    if (value->unit != CSSParserValue::Function || value->function->id != CSSValuePath)
+        return nullptr;
+
+    // FIXME: Add support for <fill-rule>.
+    CSSParserValueList* functionArgs = value->function->args.get();
+    if (!functionArgs || functionArgs->size() != 1 || !functionArgs->current())
+        return nullptr;
+
+    CSSParserValue* arg = functionArgs->current();
+    if (arg->unit != CSSPrimitiveValue::CSS_STRING)
+        return nullptr;
+
+    String pathString = arg->string;
+    Path path;
+    if (!buildPathFromString(pathString, path))
+        return nullptr;
+
+    m_valueList->next();
+    return CSSPathValue::create(pathString);
+}
+
+PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseMotionRotation()
+{
+    RefPtrWillBeRawPtr<CSSValueList> list = CSSValueList::createSpaceSeparated();
+    bool hasAutoOrReverse = false;
+    bool hasAngle = false;
+
+    for (CSSParserValue* value = m_valueList->current(); value; value = m_valueList->next()) {
+        if ((value->id == CSSValueAuto || value->id == CSSValueReverse) && !hasAutoOrReverse) {
+            list->append(cssValuePool().createIdentifierValue(value->id));
+            hasAutoOrReverse = true;
+        } else if (validUnit(value, FAngle) && !hasAngle) {
+            list->append(createPrimitiveNumericValue(value));
+            hasAngle = true;
+        } else {
+            break;
+        }
+    }
+
+    if (!list->length())
+        return nullptr;
+
+    return list.release();
 }
 
 } // namespace blink

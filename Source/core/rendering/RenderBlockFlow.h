@@ -223,6 +223,17 @@ public:
         return child->y() + child->renderer()->marginTop();
     }
 
+    LayoutSize positionForFloatIncludingMargin(const FloatingObject* child) const
+    {
+        if (isHorizontalWritingMode()) {
+            return LayoutSize(child->x() + child->renderer()->marginLeft(),
+                child->y() + marginBeforeForChild(*(child->renderer())));
+        }
+
+        return LayoutSize(child->x() + marginBeforeForChild(*(child->renderer())),
+            child->y() + child->renderer()->marginTop());
+    }
+
     LayoutPoint flipFloatForWritingModeForChild(const FloatingObject*, const LayoutPoint&) const;
 
 protected:
@@ -233,6 +244,8 @@ protected:
 
     virtual void styleWillChange(StyleDifference, const RenderStyle& newStyle) override;
     virtual void styleDidChange(StyleDifference, const RenderStyle* oldStyle) override;
+
+    void updateBlockChildDirtyBitsBeforeLayout(bool relayoutChildren, RenderBox&);
 
     void addOverflowFromFloats();
 
@@ -268,7 +281,7 @@ private:
 
     // Called from lineWidth, to position the floats added in the last line.
     // Returns true if and only if it has positioned any floats.
-    bool positionNewFloats();
+    bool positionNewFloats(LineWidth* = 0);
 
     LayoutUnit getClearDelta(RenderBox* child, LayoutUnit yPos);
 
@@ -330,9 +343,10 @@ public:
     struct FloatWithRect {
         FloatWithRect(RenderBox* f)
             : object(f)
-            , rect(LayoutRect(f->x() - f->marginLeft(), f->y() - f->marginTop(), f->width() + f->marginWidth(), f->height() + f->marginHeight()))
+            , rect(f->frameRect())
             , everHadLayout(f->everHadLayout())
         {
+            rect.expand(f->marginBox());
         }
 
         RenderBox* object;

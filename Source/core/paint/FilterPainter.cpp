@@ -55,10 +55,11 @@ FilterPainter::FilterPainter(RenderLayer& renderLayer, GraphicsContext* context,
         m_clipRecorder = adoptPtr(new LayerClipRecorder(renderLayer.renderer(), context, DisplayItem::ClipLayerFilter, clipRect, &paintingInfo, LayoutPoint(), paintFlags));
     }
 
-    OwnPtr<BeginFilterDisplayItem> filterDisplayItem = adoptPtr(new BeginFilterDisplayItem(m_renderer, DisplayItem::BeginFilter, imageFilter, rootRelativeBounds));
+    ASSERT(m_renderer);
+    OwnPtr<BeginFilterDisplayItem> filterDisplayItem = BeginFilterDisplayItem::create(m_renderer->displayItemClient(), DisplayItem::BeginFilter, imageFilter, rootRelativeBounds);
     if (RuntimeEnabledFeatures::slimmingPaintEnabled()) {
-        if (RenderLayer* container = renderLayer.enclosingLayerForPaintInvalidationCrossingFrameBoundaries())
-            container->graphicsLayerBacking()->displayItemList().add(filterDisplayItem.release());
+        ASSERT(context->displayItemList());
+        context->displayItemList()->add(filterDisplayItem.release());
     } else {
         filterDisplayItem->replay(context);
     }
@@ -71,10 +72,10 @@ FilterPainter::~FilterPainter()
     if (!m_filterInProgress)
         return;
 
-    OwnPtr<EndFilterDisplayItem> endFilterDisplayItem = adoptPtr(new EndFilterDisplayItem(m_renderer->displayItemClient()));
+    OwnPtr<EndFilterDisplayItem> endFilterDisplayItem = EndFilterDisplayItem::create(m_renderer->displayItemClient());
     if (RuntimeEnabledFeatures::slimmingPaintEnabled()) {
-        if (RenderLayer* container = m_renderer->enclosingLayer()->enclosingLayerForPaintInvalidationCrossingFrameBoundaries())
-            container->graphicsLayerBacking()->displayItemList().add(endFilterDisplayItem.release());
+        ASSERT(m_context->displayItemList());
+        m_context->displayItemList()->add(endFilterDisplayItem.release());
     } else {
         endFilterDisplayItem->replay(m_context);
     }

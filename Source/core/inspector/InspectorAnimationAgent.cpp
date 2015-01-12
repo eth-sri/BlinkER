@@ -10,11 +10,13 @@
 #include "core/animation/AnimationEffect.h"
 #include "core/animation/AnimationNode.h"
 #include "core/animation/AnimationPlayer.h"
+#include "core/animation/ComputedTimingProperties.h"
 #include "core/animation/ElementAnimation.h"
 #include "core/animation/KeyframeEffectModel.h"
 #include "core/animation/StringKeyframe.h"
 #include "core/css/CSSKeyframeRule.h"
 #include "core/css/CSSKeyframesRule.h"
+#include "core/css/resolver/StyleResolver.h"
 #include "core/inspector/InspectorDOMAgent.h"
 #include "core/inspector/InspectorNodeIds.h"
 #include "core/inspector/InspectorState.h"
@@ -68,15 +70,18 @@ void InspectorAnimationAgent::enable(ErrorString*)
 
 PassRefPtr<TypeBuilder::Animation::AnimationNode> InspectorAnimationAgent::buildObjectForAnimationNode(AnimationNode* animationNode)
 {
+    ComputedTimingProperties computedTiming;
+    animationNode->computedTiming(computedTiming);
+    // FIXME: Use computedTiming in place of specifiedTiming.
     RefPtr<TypeBuilder::Animation::AnimationNode> animationObject = TypeBuilder::Animation::AnimationNode::create()
         .setStartDelay(animationNode->specifiedTiming().startDelay)
         .setPlaybackRate(animationNode->specifiedTiming().playbackRate)
         .setIterationStart(animationNode->specifiedTiming().iterationStart)
         .setIterationCount(animationNode->specifiedTiming().iterationCount)
-        .setDuration(animationNode->duration())
+        .setDuration(computedTiming.duration().getAsUnrestrictedDouble())
         .setDirection(animationNode->specifiedTiming().direction)
         .setFillMode(animationNode->specifiedTiming().fillMode)
-        .setTimeFraction(animationNode->timeFraction())
+        .setTimeFraction(computedTiming.timeFraction())
         .setName(animationNode->name())
         .setBackendNodeId(InspectorNodeIds::idForNode(toAnimation(animationNode)->target()));
     return animationObject.release();
@@ -169,7 +174,7 @@ static PassRefPtr<TypeBuilder::Animation::KeyframesRule> buildObjectForKeyframes
 
     if (!animationName.isNull()) {
         // CSS Animations
-        const StyleRuleKeyframes* keyframes = cssAnimations.matchScopedKeyframesRule(&styleResolver, element, animationName.impl());
+        const StyleRuleKeyframes* keyframes = styleResolver.findKeyframesRule(element, animationName);
         keyframeRule = buildObjectForStyleRuleKeyframes(keyframes);
     } else {
         // Web Animations

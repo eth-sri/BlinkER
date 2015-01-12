@@ -277,13 +277,13 @@ IntRect Chrome::windowResizerRect() const
     return m_client->windowResizerRect();
 }
 
-void Chrome::mouseDidMoveOverElement(const HitTestResult& result, unsigned modifierFlags)
+void Chrome::mouseDidMoveOverElement(const HitTestResult& result)
 {
     if (result.innerNode()) {
         if (result.innerNode()->document().isDNSPrefetchEnabled())
             prefetchDNS(result.absoluteLinkURL().host());
     }
-    m_client->mouseDidMoveOverElement(result, modifierFlags);
+    m_client->mouseDidMoveOverElement(result);
 }
 
 void Chrome::setToolTip(const HitTestResult& result)
@@ -372,12 +372,18 @@ void Chrome::scheduleAnimation()
 
 // --------
 
+void Chrome::scheduleAnimationForFrame(LocalFrame* localRoot)
+{
+    m_page->animator().setAnimationFramePending();
+    m_client->scheduleAnimationForFrame(localRoot);
+}
+
 bool Chrome::hasOpenedPopup() const
 {
     return m_client->hasOpenedPopup();
 }
 
-PassRefPtrWillBeRawPtr<PopupMenu> Chrome::createPopupMenu(LocalFrame& frame, PopupMenuClient* client) const
+PassRefPtrWillBeRawPtr<PopupMenu> Chrome::createPopupMenu(LocalFrame& frame, PopupMenuClient* client)
 {
     notifyPopupOpeningObservers();
     return m_client->createPopupMenu(frame, client);

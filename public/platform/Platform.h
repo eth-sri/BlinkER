@@ -62,7 +62,6 @@ namespace blink {
 class WebAudioBus;
 class WebBlobRegistry;
 class WebBluetooth;
-class WebContentDecryptionModule;
 class WebClipboard;
 class WebCompositorSupport;
 class WebConvertableToTraceFormat;
@@ -76,7 +75,6 @@ class WebFileSystem;
 class WebFileUtilities;
 class WebFlingAnimator;
 class WebGeofencingProvider;
-class WebGestureCurveTarget;
 class WebGestureCurve;
 class WebGraphicsContext3DProvider;
 class WebIDBFactory;
@@ -86,6 +84,7 @@ class WebMediaStreamCenter;
 class WebMediaStreamCenterClient;
 class WebMessagePortChannel;
 class WebMimeRegistry;
+class WebNavigatorConnectProvider;
 class WebNotificationManager;
 class WebPluginListBuilder;
 class WebPrescientNetworking;
@@ -632,6 +631,7 @@ public:
 
     virtual WebGeofencingProvider* geofencingProvider() { return 0; }
 
+
     // Bluetooth ----------------------------------------------------------
 
     // Returns pointer to client owned WebBluetooth implementation.
@@ -641,6 +641,11 @@ public:
     // Push API------------------------------------------------------------
 
     virtual WebPushProvider* pushProvider() { return 0; }
+
+
+    // navigator.connect --------------------------------------------------
+
+    virtual WebNavigatorConnectProvider* navigatorConnectProvider() { return 0; }
 
 protected:
     virtual ~Platform() { }

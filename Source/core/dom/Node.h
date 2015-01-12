@@ -114,19 +114,20 @@ protected:
     RenderObject* m_renderer;
 };
 
+class Node;
+WILL_NOT_BE_EAGERLY_TRACED_CLASS(Node);
+
 #if ENABLE(OILPAN)
-#define NODE_BASE_CLASSES public GarbageCollectedFinalized<Node>, public EventTarget
+#define NODE_BASE_CLASSES public EventTarget
 #else
 // TreeShared should be the last to pack TreeShared::m_refCount and
 // Node::m_nodeFlags on 64bit platforms.
 #define NODE_BASE_CLASSES public EventTarget, public TreeShared<Node>
 #endif
 
-class Node : NODE_BASE_CLASSES {
+class GC_PLUGIN_IGNORE("crbug.com/443854") Node : NODE_BASE_CLASSES {
     DEFINE_EVENT_TARGET_REFCOUNTING_WILL_BE_REMOVED(TreeShared<Node>);
     DEFINE_WRAPPERTYPEINFO();
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(Node);
-    friend class Document;
     friend class TreeScope;
     friend class TreeScopeAdopter;
 public:
@@ -163,7 +164,13 @@ public:
         DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC = 0x20,
     };
 
-#if !ENABLE(OILPAN)
+#if ENABLE(OILPAN)
+    // Node is now a GarbageCollected<EventTarget> instead of a GarbageCollected<Node>, which confuses Oilpan's
+    // static type dispatching of typed heap for Nodes. We override GarbageCollected<>'s operator new here, to put
+    // Node descendants into typed heap for Nodes. <http://crbug.com/443854>
+    using GarbageCollectedBase = EventTarget;
+    void* operator new(size_t size) { return Heap::allocate<Node>(size); }
+#else // !ENABLE(OILPAN)
     // All Nodes are placed in their own heap partition for security.
     // See http://crbug.com/246860 for detail.
     void* operator new(size_t);
@@ -273,6 +280,8 @@ public:
     bool isDocumentFragment() const { return getFlag(IsDocumentFragmentFlag); }
     bool isShadowRoot() const { return isDocumentFragment() && isTreeScope(); }
     bool isInsertionPoint() const { return getFlag(IsInsertionPointFlag); }
+
+    bool canParticipateInComposedTree() const;
 
     bool hasCustomStyleCallbacks() const { return getFlag(HasCustomStyleCallbacksFlag); }
 
@@ -616,7 +625,7 @@ public:
     void dispatchScopedEvent(PassRefPtrWillBeRawPtr<Event>);
     void dispatchScopedEventDispatchMediator(PassRefPtrWillBeRawPtr<EventDispatchMediator>);
 
-    virtual void handleLocalEvents(Event*);
+    virtual void handleLocalEvents(Event&);
 
     void dispatchSubtreeModifiedEvent();
     bool dispatchDOMActivateEvent(int detail, PassRefPtrWillBeRawPtr<Event> underlyingEvent);
@@ -781,8 +790,6 @@ protected:
 private:
     friend class TreeShared<Node>;
     friend class WeakNodeMap;
-
-    unsigned styledSubtreeSize() const;
 
 #if !ENABLE(OILPAN)
     void removedLastRef();

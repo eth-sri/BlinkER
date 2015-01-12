@@ -34,6 +34,7 @@
 #include "platform/graphics/ImageBuffer.h"
 
 #include "GrContext.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/BitmapImage.h"
 #include "platform/graphics/GraphicsContext.h"
@@ -76,7 +77,10 @@ ImageBuffer::ImageBuffer(PassOwnPtr<ImageBufferSurface> surface)
     , m_client(0)
 {
     if (m_surface->canvas()) {
-        m_context = adoptPtr(new GraphicsContext(m_surface->canvas()));
+        if (RuntimeEnabledFeatures::slimmingPaintEnabled())
+            m_displayItemList = DisplayItemList::create();
+
+        m_context = adoptPtr(new GraphicsContext(m_surface->canvas(), m_displayItemList.get()));
         m_context->setAccelerated(m_surface->isAccelerated());
     }
     m_surface->setImageBuffer(this);
@@ -84,6 +88,8 @@ ImageBuffer::ImageBuffer(PassOwnPtr<ImageBufferSurface> surface)
 
 ImageBuffer::~ImageBuffer()
 {
+    if (m_displayItemList)
+        m_displayItemList->replay(m_context.get());
 }
 
 GraphicsContext* ImageBuffer::context() const
@@ -265,23 +271,7 @@ void ImageBuffer::draw(GraphicsContext* context, const FloatRect& destRect, cons
         return;
 
     FloatRect srcRect = srcPtr ? *srcPtr : FloatRect(FloatPoint(), size());
-    RefPtr<SkPicture> picture = m_surface->getPicture();
-    if (picture) {
-        context->drawPicture(picture.get(), destRect, srcRect, op, blendMode);
-        return;
-    }
-
-    SkBitmap bitmap = m_surface->bitmap();
-    // For ImageBufferSurface that enables cachedBitmap, Use the cached Bitmap for CPU side usage
-    // if it is available, otherwise generate and use it.
-    if (!context->isAccelerated() && m_surface->isAccelerated() && m_surface->cachedBitmapEnabled() && isSurfaceValid()) {
-        m_surface->updateCachedBitmapIfNeeded();
-        bitmap = m_surface->cachedBitmap();
-    }
-
-    RefPtr<Image> image = BitmapImage::create(NativeImageSkia::create(drawNeedsCopy(m_context.get(), context) ? deepSkBitmapCopy(bitmap) : bitmap));
-
-    context->drawImage(image.get(), destRect, srcRect, op, blendMode, DoNotRespectImageOrientation);
+    m_surface->draw(context, destRect, srcRect, op, blendMode, drawNeedsCopy(m_context.get(), context));
 }
 
 void ImageBuffer::flush()
@@ -300,36 +290,6 @@ void ImageBuffer::drawPattern(GraphicsContext* context, const FloatRect& srcRect
     const SkBitmap& bitmap = m_surface->bitmap();
     RefPtr<Image> image = BitmapImage::create(NativeImageSkia::create(drawNeedsCopy(m_context.get(), context) ? deepSkBitmapCopy(bitmap) : bitmap));
     image->drawPattern(context, srcRect, scale, phase, op, destRect, blendMode, repeatSpacing);
-}
-
-void ImageBuffer::transformColorSpace(ColorSpace srcColorSpace, ColorSpace dstColorSpace)
-{
-    const uint8_t* lookUpTable = ColorSpaceUtilities::getConversionLUT(dstColorSpace, srcColorSpace);
-    if (!lookUpTable)
-        return;
-
-    // FIXME: Disable color space conversions on accelerated canvases (for now).
-    if (context()->isAccelerated() || !isSurfaceValid())
-        return;
-
-    const SkBitmap& bitmap = m_surface->bitmap();
-    if (bitmap.isNull())
-        return;
-
-    ASSERT(bitmap.colorType() == kN32_SkColorType);
-    IntSize size = m_surface->size();
-    SkAutoLockPixels bitmapLock(bitmap);
-    for (int y = 0; y < size.height(); ++y) {
-        uint32_t* srcRow = bitmap.getAddr32(0, y);
-        for (int x = 0; x < size.width(); ++x) {
-            SkColor color = SkPMColorToColor(srcRow[x]);
-            srcRow[x] = SkPreMultiplyARGB(
-                SkColorGetA(color),
-                lookUpTable[SkColorGetR(color)],
-                lookUpTable[SkColorGetG(color)],
-                lookUpTable[SkColorGetB(color)]);
-        }
-    }
 }
 
 PassRefPtr<SkColorFilter> ImageBuffer::createColorSpaceFilter(ColorSpace srcColorSpace,

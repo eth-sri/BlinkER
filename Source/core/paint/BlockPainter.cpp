@@ -12,9 +12,10 @@
 #include "core/page/Page.h"
 #include "core/paint/BoxClipper.h"
 #include "core/paint/BoxPainter.h"
-#include "core/paint/DrawingRecorder.h"
 #include "core/paint/InlinePainter.h"
 #include "core/paint/LineBoxListPainter.h"
+#include "core/paint/RenderDrawingRecorder.h"
+#include "core/paint/ScrollableAreaPainter.h"
 #include "core/rendering/GraphicsContextAnnotator.h"
 #include "core/rendering/PaintInfo.h"
 #include "core/rendering/RenderBlock.h"
@@ -24,7 +25,6 @@
 #include "core/rendering/RenderView.h"
 #include "platform/geometry/LayoutPoint.h"
 #include "platform/geometry/LayoutRect.h"
-#include "platform/graphics/GraphicsContextCullSaver.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
 
 namespace blink {
@@ -39,12 +39,11 @@ void BlockPainter::paint(const PaintInfo& paintInfo, const LayoutPoint& paintOff
 
     PaintPhase originalPhase = localPaintInfo.phase;
 
-    LayoutRect overflowBox;
     // Check if we need to do anything at all.
     // FIXME: Could eliminate the isDocumentElement() check if we fix background painting so that the RenderView
     // paints the root's background.
     if (!m_renderBlock.isDocumentElement()) {
-        overflowBox = overflowRectForPaintRejection();
+        LayoutRect overflowBox = overflowRectForPaintRejection();
         m_renderBlock.flipForWritingMode(overflowBox);
         overflowBox.moveBy(adjustedPaintOffset);
         if (!overflowBox.intersects(localPaintInfo.rect))
@@ -67,13 +66,6 @@ void BlockPainter::paint(const PaintInfo& paintInfo, const LayoutPoint& paintOff
 
     {
         BoxClipper boxClipper(m_renderBlock, localPaintInfo, adjustedPaintOffset, contentsClipBehavior);
-        GraphicsContextCullSaver cullSaver(*localPaintInfo.context);
-        // Cull if we have more than one child and we didn't already clip.
-        bool shouldCull = m_renderBlock.document().settings()->containerCullingEnabled() && !boxClipper.pushedClip() && !m_renderBlock.isDocumentElement()
-            && m_renderBlock.firstChild() && m_renderBlock.lastChild() && m_renderBlock.firstChild() != m_renderBlock.lastChild();
-        if (shouldCull)
-            cullSaver.cull(overflowBox);
-
         m_renderBlock.paintObject(localPaintInfo, adjustedPaintOffset);
     }
 
@@ -95,8 +87,7 @@ void BlockPainter::paintOverflowControlsIfNeeded(const PaintInfo& paintInfo, con
 {
     PaintPhase phase = paintInfo.phase;
     if (m_renderBlock.hasOverflowClip() && m_renderBlock.style()->visibility() == VISIBLE && (phase == PaintPhaseBlockBackground || phase == PaintPhaseChildBlockBackground) && paintInfo.shouldPaintWithinRoot(&m_renderBlock) && !paintInfo.paintRootBackgroundOnly()) {
-        DrawingRecorder recorder(paintInfo.context, &m_renderBlock, paintInfo.phase, pixelSnappedIntRect(paintOffset, m_renderBlock.visualOverflowRect().size()));
-        m_renderBlock.layer()->scrollableArea()->paintOverflowControls(paintInfo.context, roundedIntPoint(paintOffset), paintInfo.rect, false /* paintingOverlayControls */);
+        ScrollableAreaPainter(*m_renderBlock.layer()->scrollableArea()).paintOverflowControls(paintInfo.context, roundedIntPoint(paintOffset), paintInfo.rect, false /* paintingOverlayControls */);
     }
 }
 
@@ -181,19 +172,23 @@ void BlockPainter::paintObject(const PaintInfo& paintInfo, const LayoutPoint& pa
     if ((paintPhase == PaintPhaseBlockBackground || paintPhase == PaintPhaseChildBlockBackground) && m_renderBlock.style()->visibility() == VISIBLE) {
         if (m_renderBlock.hasBoxDecorationBackground())
             m_renderBlock.paintBoxDecorationBackground(paintInfo, paintOffset);
-        if (m_renderBlock.hasColumns() && !paintInfo.paintRootBackgroundOnly())
+        if (m_renderBlock.hasColumns() && !paintInfo.paintRootBackgroundOnly()) {
+            DrawingRecorder drawingRecorder(paintInfo.context, m_renderBlock.displayItemClient(), DisplayItem::ColumnRules, bounds);
             paintColumnRules(paintInfo, scrolledOffset);
+        }
     }
 
     if (paintPhase == PaintPhaseMask && m_renderBlock.style()->visibility() == VISIBLE) {
-        DrawingRecorder recorder(paintInfo.context, &m_renderBlock, paintPhase, bounds);
-        m_renderBlock.paintMask(paintInfo, paintOffset);
+        RenderDrawingRecorder recorder(paintInfo.context, m_renderBlock, paintPhase, bounds);
+        if (!recorder.canUseCachedDrawing())
+            m_renderBlock.paintMask(paintInfo, paintOffset);
         return;
     }
 
     if (paintPhase == PaintPhaseClippingMask && m_renderBlock.style()->visibility() == VISIBLE) {
-        DrawingRecorder recorder(paintInfo.context, &m_renderBlock, paintPhase, bounds);
-        m_renderBlock.paintClippingMask(paintInfo, paintOffset);
+        RenderDrawingRecorder recorder(paintInfo.context, m_renderBlock, paintPhase, bounds);
+        if (!recorder.canUseCachedDrawing())
+            m_renderBlock.paintClippingMask(paintInfo, paintOffset);
         return;
     }
 
@@ -233,8 +228,9 @@ void BlockPainter::paintObject(const PaintInfo& paintInfo, const LayoutPoint& pa
     // If the caret's node's render object's containing block is this block, and the paint action is PaintPhaseForeground,
     // then paint the caret.
     if (paintPhase == PaintPhaseForeground) {
-        DrawingRecorder recorder(paintInfo.context, &m_renderBlock, paintPhase, bounds);
-        paintCarets(paintInfo, paintOffset);
+        RenderDrawingRecorder recorder(paintInfo.context, m_renderBlock, paintPhase, bounds);
+        if (!recorder.canUseCachedDrawing())
+            paintCarets(paintInfo, paintOffset);
     }
 }
 
@@ -349,9 +345,9 @@ void BlockPainter::paintColumnRules(const PaintInfo& paintInfo, const LayoutPoin
 
         if (!topToBottom) {
             if (m_renderBlock.isHorizontalWritingMode())
-                ruleRect.setY(m_renderBlock.height() - ruleRect.maxY());
+                ruleRect.setY(m_renderBlock.size().height() - ruleRect.maxY());
             else
-                ruleRect.setX(m_renderBlock.width() - ruleRect.maxX());
+                ruleRect.setX(m_renderBlock.size().width() - ruleRect.maxX());
         }
 
         ruleRect.moveBy(paintOffset);

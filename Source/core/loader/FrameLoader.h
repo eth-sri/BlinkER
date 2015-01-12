@@ -37,10 +37,12 @@
 #include "core/dom/SecurityContext.h"
 #include "core/eventracer/EventRacerJoinActions.h"
 #include "core/fetch/ResourceLoaderOptions.h"
+#include "core/frame/FrameTypes.h"
 #include "core/loader/FrameLoaderStateMachine.h"
 #include "core/loader/FrameLoaderTypes.h"
 #include "core/loader/HistoryItem.h"
 #include "core/loader/MixedContentChecker.h"
+#include "core/loader/NavigationPolicy.h"
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
 #include "platform/network/ResourceRequest.h"
@@ -54,10 +56,8 @@ class DocumentLoader;
 class EventAction;
 class EventRacerLog;
 class FetchContext;
-class FormState;
 class Frame;
 class FrameLoaderClient;
-class NavigationAction;
 class ProgressTracker;
 class ResourceError;
 class SerializedScriptValue;
@@ -81,7 +81,7 @@ public:
     MixedContentChecker* mixedContentChecker() const { return &m_mixedContentChecker; }
     ProgressTracker& progress() const { return *m_progressTracker; }
 
-    // These functions start a load. All eventually call into loadWithNavigationAction() or loadInSameDocument().
+    // These functions start a load. All eventually call into startLoad() or loadInSameDocument().
     void load(const FrameLoadRequest&); // The entry point for non-reload, non-history loads.
     void reload(ReloadPolicy, const KURL& overrideURL = KURL(), ClientRedirectPolicy = NotClientRedirect);
     void loadHistoryItem(HistoryItem*, FrameLoadType = FrameLoadTypeBackForward,
@@ -152,6 +152,8 @@ public:
     void forceSandboxFlags(SandboxFlags flags) { m_forcedSandboxFlags |= flags; }
     SandboxFlags effectiveSandboxFlags() const;
 
+    bool shouldEnforceStrictMixedContentChecking() const;
+
     Frame* opener();
     void setOpener(LocalFrame*);
 
@@ -187,6 +189,8 @@ public:
 
     void trace(Visitor*);
 
+    bool checkLoadCompleteForThisFrame();
+
 private:
     bool allChildrenAreComplete() const; // immediate children, not all descendants
 
@@ -205,11 +209,8 @@ private:
     bool shouldPerformFragmentNavigation(bool isFormSubmission, const String& httpMethod, FrameLoadType, const KURL&);
     void scrollToFragmentWithParentBoundary(const KURL&);
 
-    bool checkLoadCompleteForThisFrame();
 
-    // Calls continueLoadAfterNavigationPolicy
-    void loadWithNavigationAction(const NavigationAction&, FrameLoadType, PassRefPtrWillBeRawPtr<FormState>,
-        const SubstituteData&, ContentSecurityPolicyCheck shouldCheckMainWorldContentSecurityPolicy, ClientRedirectPolicy = NotClientRedirect);
+    void startLoad(FrameLoadRequest&, FrameLoadType, NavigationPolicy);
 
     bool validateTransitionNavigationMode();
     bool dispatchNavigationTransitionData();
