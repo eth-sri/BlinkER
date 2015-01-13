@@ -89,7 +89,7 @@ static Resource* createResource(Resource::Type type, const ResourceRequest& requ
     case Resource::CSSStyleSheet:
         return new CSSStyleSheetResource(request, charset);
     case Resource::Script:
-        return new ScriptResource(request, charset);
+        return ScriptResource::create(request, charset).leakPtr();
     case Resource::SVGDocument:
         return new DocumentResource(request, Resource::SVGDocument);
     case Resource::Font:
@@ -416,8 +416,7 @@ ResourcePtr<RawResource> ResourceFetcher::fetchMainResource(FetchRequest& reques
 ResourcePtr<RawResource> ResourceFetcher::fetchMedia(FetchRequest& request)
 {
     ASSERT(request.resourceRequest().frameType() == WebURLRequest::FrameTypeNone);
-    // FIXME: Split this into audio and video.
-    request.mutableResourceRequest().setRequestContext(WebURLRequest::RequestContextVideo);
+    ASSERT(request.resourceRequest().requestContext() == WebURLRequest::RequestContextAudio || request.resourceRequest().requestContext() == WebURLRequest::RequestContextVideo);
     return toRawResource(requestResource(Resource::Media, request));
 }
 

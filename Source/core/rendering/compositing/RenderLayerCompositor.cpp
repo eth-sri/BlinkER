@@ -30,6 +30,7 @@
 #include "core/animation/DocumentAnimations.h"
 #include "core/dom/Fullscreen.h"
 #include "core/editing/FrameSelection.h"
+#include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
@@ -55,7 +56,6 @@
 #include "core/rendering/compositing/CompositingRequirementsUpdater.h"
 #include "core/rendering/compositing/GraphicsLayerTreeBuilder.h"
 #include "core/rendering/compositing/GraphicsLayerUpdater.h"
-#include "platform/OverscrollTheme.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/TraceEvent.h"
@@ -671,9 +671,17 @@ GraphicsLayer* RenderLayerCompositor::rootGraphicsLayer() const
     return m_rootContentLayer.get();
 }
 
-GraphicsLayer* RenderLayerCompositor::scrollLayer() const
+GraphicsLayer* RenderLayerCompositor::frameScrollLayer() const
 {
     return m_scrollLayer.get();
+}
+
+GraphicsLayer* RenderLayerCompositor::scrollLayer() const
+{
+    Settings* settings = m_renderView.document().settings();
+    return settings && settings->rootLayerScrolls() ?
+        rootRenderLayer()->scrollableArea()->layerForScrolling() :
+        frameScrollLayer();
 }
 
 GraphicsLayer* RenderLayerCompositor::containerLayer() const
@@ -720,10 +728,6 @@ void RenderLayerCompositor::updateRootLayerPosition()
         const IntRect& documentRect = m_renderView.documentRect();
         m_rootContentLayer->setSize(documentRect.size());
         m_rootContentLayer->setPosition(documentRect.location());
-#if USE(RUBBER_BANDING)
-        if (m_layerForOverhangShadow)
-            OverscrollTheme::theme()->updateOverhangShadowLayer(m_layerForOverhangShadow.get(), m_rootContentLayer.get());
-#endif
     }
     if (m_containerLayer) {
         FrameView* frameView = m_renderView.frameView();
@@ -896,19 +900,15 @@ bool RenderLayerCompositor::requiresScrollCornerLayer() const
 
 void RenderLayerCompositor::updateOverflowControlsLayers()
 {
-#if USE(RUBBER_BANDING)
-    if (m_renderView.frame()->isLocalRoot() && !m_renderView.document().settings()->rubberBandingOnCompositorThread()) {
-        if (!m_layerForOverhangShadow) {
-            m_layerForOverhangShadow = GraphicsLayer::create(graphicsLayerFactory(), this);
-            OverscrollTheme::theme()->setUpOverhangShadowLayer(m_layerForOverhangShadow.get());
-            OverscrollTheme::theme()->updateOverhangShadowLayer(m_layerForOverhangShadow.get(), m_rootContentLayer.get());
-            m_scrollLayer->addChild(m_layerForOverhangShadow.get());
-        }
-    } else {
-        ASSERT(!m_layerForOverhangShadow);
+    GraphicsLayer* controlsParent = m_rootTransformLayer.get() ? m_rootTransformLayer.get() : m_overflowControlsHostLayer.get();
+    // On Mac, main frame scrollbars should always be stuck to the sides of the screen (in overscroll and in pinch-zoom), so
+    // make the parent for the scrollbars be the viewport container layer.
+#if OS(MACOSX)
+    if (m_renderView.frame()->isMainFrame() && m_renderView.frame()->settings()->pinchVirtualViewportEnabled()) {
+        PinchViewport& pinchViewport = m_renderView.frameView()->page()->frameHost().pinchViewport();
+        controlsParent = pinchViewport.containerLayer();
     }
 #endif
-    GraphicsLayer* controlsParent = m_rootTransformLayer.get() ? m_rootTransformLayer.get() : m_overflowControlsHostLayer.get();
 
     if (requiresHorizontalScrollbarLayer()) {
         if (!m_layerForHorizontalScrollbar) {
@@ -1026,13 +1026,6 @@ void RenderLayerCompositor::destroyRootLayer()
         return;
 
     detachRootLayer();
-
-#if USE(RUBBER_BANDING)
-    if (m_layerForOverhangShadow) {
-        m_layerForOverhangShadow->removeFromParent();
-        m_layerForOverhangShadow = nullptr;
-    }
-#endif
 
     if (m_layerForHorizontalScrollbar) {
         m_layerForHorizontalScrollbar->removeFromParent();
@@ -1167,10 +1160,6 @@ String RenderLayerCompositor::debugName(const GraphicsLayer* graphicsLayer)
         name = "Content Root Layer";
     } else if (graphicsLayer == m_rootTransformLayer.get()) {
         name = "Root Transform Layer";
-#if USE(RUBBER_BANDING)
-    } else if (graphicsLayer == m_layerForOverhangShadow.get()) {
-        name = "Overhang Areas Shadow";
-#endif
     } else if (graphicsLayer == m_overflowControlsHostLayer.get()) {
         name = "Overflow Controls Host Layer";
     } else if (graphicsLayer == m_layerForHorizontalScrollbar.get()) {

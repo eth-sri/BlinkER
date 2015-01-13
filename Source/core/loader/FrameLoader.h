@@ -78,7 +78,6 @@ public:
 
     void init();
 
-    MixedContentChecker* mixedContentChecker() const { return &m_mixedContentChecker; }
     ProgressTracker& progress() const { return *m_progressTracker; }
 
     // These functions start a load. All eventually call into startLoad() or loadInSameDocument().
@@ -115,10 +114,9 @@ public:
     DocumentLoader* documentLoader() const { return m_documentLoader.get(); }
     DocumentLoader* policyDocumentLoader() const { return m_policyDocumentLoader.get(); }
     DocumentLoader* provisionalDocumentLoader() const { return m_provisionalDocumentLoader.get(); }
-    FrameState state() const { return m_state; }
     FetchContext& fetchContext() const { return *m_fetchContext; }
 
-    void receivedMainResourceError(const ResourceError&);
+    void receivedMainResourceError(DocumentLoader*, const ResourceError&);
 
     bool isLoadingMainFrame() const;
 
@@ -167,8 +165,6 @@ public:
 
     FrameLoaderStateMachine* stateMachine() const { return &m_stateMachine; }
 
-    LocalFrame* findFrameForNavigation(const AtomicString& name, Document* activeDocument);
-
     void applyUserAgent(ResourceRequest&);
 
     bool shouldInterruptLoadForXFrameOptions(const String&, const KURL&, unsigned long requestIdentifier);
@@ -194,8 +190,6 @@ public:
 private:
     bool allChildrenAreComplete() const; // immediate children, not all descendants
 
-    void completed(EventAction *);
-
     void checkTimerFired(Timer<FrameLoader>*);
     void didAccessInitialDocumentTimerFired(Timer<FrameLoader>*);
 
@@ -208,7 +202,6 @@ private:
 
     bool shouldPerformFragmentNavigation(bool isFormSubmission, const String& httpMethod, FrameLoadType, const KURL&);
     void scrollToFragmentWithParentBoundary(const KURL&);
-
 
     void startLoad(FrameLoadRequest&, FrameLoadType, NavigationPolicy);
 
@@ -227,11 +220,9 @@ private:
     // header dependencies unless performance testing proves otherwise.
     // Some of these could be lazily created for memory savings on devices.
     mutable FrameLoaderStateMachine m_stateMachine;
-    mutable MixedContentChecker m_mixedContentChecker;
 
     OwnPtrWillBeMember<ProgressTracker> m_progressTracker;
 
-    FrameState m_state;
     FrameLoadType m_loadType;
 
     // Document loaders for the three phases of frame loading. Note that while

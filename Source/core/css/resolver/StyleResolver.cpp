@@ -668,7 +668,7 @@ PassRefPtr<RenderStyle> StyleResolver::styleForElement(Element* element, RenderS
     return state.takeStyle();
 }
 
-PassRefPtr<RenderStyle> StyleResolver::styleForKeyframe(Element& element, const RenderStyle& elementStyle, RenderStyle* parentStyle, const StyleKeyframe* keyframe, const AtomicString& animationName)
+PassRefPtr<RenderStyle> StyleResolver::styleForKeyframe(Element& element, const RenderStyle& elementStyle, RenderStyle* parentStyle, const StyleRuleKeyframe* keyframe, const AtomicString& animationName)
 {
     ASSERT(document().frame());
     ASSERT(document().settings());
@@ -1356,14 +1356,6 @@ void StyleResolver::applyProperties(StyleResolverState& state, const StyleProper
 
         if (!isPropertyForPass<pass>(property))
             continue;
-
-        if (current.value()->isUnsetValue()) {
-            if (CSSPropertyMetadata::isInheritedProperty(property))
-                StyleBuilder::applyProperty(property, state, cssValuePool().createInheritedValue().get());
-            else
-                StyleBuilder::applyProperty(property, state, cssValuePool().createExplicitInitialValue().get());
-            continue;
-        }
 
         StyleBuilder::applyProperty(current.id(), state, current.value());
     }

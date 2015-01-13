@@ -112,6 +112,7 @@ public:
 
     RenderLayer* rootRenderLayer() const;
     GraphicsLayer* rootGraphicsLayer() const;
+    GraphicsLayer* frameScrollLayer() const;
     GraphicsLayer* scrollLayer() const;
     GraphicsLayer* containerLayer() const;
 
@@ -240,9 +241,6 @@ private:
     OwnPtr<GraphicsLayer> m_layerForHorizontalScrollbar;
     OwnPtr<GraphicsLayer> m_layerForVerticalScrollbar;
     OwnPtr<GraphicsLayer> m_layerForScrollCorner;
-#if USE(RUBBER_BANDING)
-    OwnPtr<GraphicsLayer> m_layerForOverhangShadow;
-#endif
 
     bool m_inOverlayFullscreenVideo;
 };

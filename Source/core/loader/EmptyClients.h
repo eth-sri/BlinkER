@@ -104,7 +104,7 @@ public:
 
     virtual void setResizable(bool) override { }
 
-    virtual bool shouldReportDetailedMessageForSource(const String&) override { return false; }
+    virtual bool shouldReportDetailedMessageForSource(LocalFrame&, const String&) override { return false; }
     virtual void addMessageToConsole(LocalFrame*, MessageSource, MessageLevel, const String&, unsigned, const String&, const String&) override { }
 
     virtual bool canRunBeforeUnloadConfirmPanel() override { return false; }
@@ -126,8 +126,7 @@ public:
 
     virtual IntRect windowResizerRect() const override { return IntRect(); }
 
-    virtual void invalidateContentsAndRootView(const IntRect&) override { }
-    virtual void invalidateContentsForSlowScroll(const IntRect&) override { }
+    virtual void invalidateRect(const IntRect&) override { }
     virtual void scheduleAnimation() override { }
 
     virtual IntRect rootViewToScreen(const IntRect& r) const override { return r; }

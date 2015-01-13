@@ -33,8 +33,10 @@
 
 #include "core/StylePropertyShorthand.h"
 #include "core/animation/ActiveAnimations.h"
+#include "core/animation/AnimationPlayer.h"
 #include "core/animation/AnimationTimeline.h"
 #include "core/animation/CompositorAnimations.h"
+#include "core/animation/Interpolation.h"
 #include "core/animation/KeyframeEffectModel.h"
 #include "core/animation/LegacyStyleInterpolation.h"
 #include "core/animation/css/CSSAnimatableValueFactory.h"
@@ -92,12 +94,12 @@ static void resolveKeyframes(StyleResolver* resolver, const Element* animatingEl
     if (!keyframesRule)
         return;
 
-    const WillBeHeapVector<RefPtrWillBeMember<StyleKeyframe>>& styleKeyframes = keyframesRule->keyframes();
+    const WillBeHeapVector<RefPtrWillBeMember<StyleRuleKeyframe>>& styleKeyframes = keyframesRule->keyframes();
 
     // Construct and populate the style for each keyframe
     PropertySet specifiedPropertiesForUseCounter;
     for (size_t i = 0; i < styleKeyframes.size(); ++i) {
-        const StyleKeyframe* styleKeyframe = styleKeyframes[i].get();
+        const StyleRuleKeyframe* styleKeyframe = styleKeyframes[i].get();
         RefPtr<RenderStyle> keyframeStyle = resolver->styleForKeyframe(element, style, parentStyle, styleKeyframe, name);
         RefPtrWillBeRawPtr<AnimatableValueKeyframe> keyframe = AnimatableValueKeyframe::create();
         const Vector<double>& offsets = styleKeyframe->keys();
@@ -191,6 +193,8 @@ static void resolveKeyframes(StyleResolver* resolver, const Element* animatingEl
                 startKeyframe->setPropertyValue(property, snapshotValue.get());
             if (endNeedsValue)
                 endKeyframe->setPropertyValue(property, snapshotValue.get());
+            if (property == CSSPropertyOpacity || property == CSSPropertyTransform)
+                UseCounter::count(elementForScoping->document(), UseCounter::SyntheticKeyframesInCompositedCSSAnimation);
         }
     }
     ASSERT(startKeyframe->properties().size() == allProperties.size());
@@ -521,9 +525,9 @@ void CSSAnimations::calculateTransitionUpdate(CSSAnimationUpdate* update, const 
         for (const auto& entry : *activeTransitions) {
             const AnimationPlayer& player = *entry.value.player;
             CSSPropertyID id = entry.key;
-            if (player.finishedInternal() || (!anyTransitionHadTransitionAll && !animationStyleRecalc && !listedProperties.get(id))) {
+            if (player.playStateInternal() == AnimationPlayer::Finished || (!anyTransitionHadTransitionAll && !animationStyleRecalc && !listedProperties.get(id))) {
                 // TODO: Figure out why this fails on Chrome OS login page. crbug.com/365507
-                // ASSERT(player.finishedInternal() || !(activeAnimations && activeAnimations->isAnimationStyleChange()));
+                // ASSERT(player.playStateInternal() == AnimationPlayer::Finished || !(activeAnimations && activeAnimations->isAnimationStyleChange()));
                 update->cancelTransition(id);
             }
         }

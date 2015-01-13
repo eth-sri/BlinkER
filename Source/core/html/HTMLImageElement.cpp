@@ -142,13 +142,26 @@ void HTMLImageElement::notifyViewportChanged()
     selectSourceURL(ImageLoader::UpdateSizeChanged);
 }
 
+PassRefPtrWillBeRawPtr<HTMLImageElement> HTMLImageElement::createForJSConstructor(Document& document)
+{
+    RefPtrWillBeRawPtr<HTMLImageElement> image = adoptRefWillBeNoop(new HTMLImageElement(document));
+    image->m_elementCreatedByParser = false;
+    return image.release();
+}
+
+PassRefPtrWillBeRawPtr<HTMLImageElement> HTMLImageElement::createForJSConstructor(Document& document, int width)
+{
+    RefPtrWillBeRawPtr<HTMLImageElement> image = adoptRefWillBeNoop(new HTMLImageElement(document));
+    image->setWidth(width);
+    image->m_elementCreatedByParser = false;
+    return image.release();
+}
+
 PassRefPtrWillBeRawPtr<HTMLImageElement> HTMLImageElement::createForJSConstructor(Document& document, int width, int height)
 {
     RefPtrWillBeRawPtr<HTMLImageElement> image = adoptRefWillBeNoop(new HTMLImageElement(document));
-    if (width)
-        image->setWidth(width);
-    if (height)
-        image->setHeight(height);
+    image->setWidth(width);
+    image->setHeight(height);
     image->m_elementCreatedByParser = false;
     return image.release();
 }
@@ -546,6 +559,7 @@ bool HTMLImageElement::complete() const
 
 void HTMLImageElement::didMoveToNewDocument(Document& oldDocument)
 {
+    selectSourceURL(ImageLoader::UpdateIgnorePreviousError);
     imageLoader().elementDidMoveToNewDocument();
     HTMLElement::didMoveToNewDocument(oldDocument);
 }
@@ -643,14 +657,11 @@ void HTMLImageElement::selectSourceURL(ImageLoader::UpdateFromElementBehavior be
     }
 
     if (!foundURL) {
-        float effectiveSize = 0;
-        if (RuntimeEnabledFeatures::pictureSizesEnabled()) {
-            String sizes = fastGetAttribute(sizesAttr);
-            if (!sizes.isNull())
-                UseCounter::count(document(), UseCounter::Sizes);
-            SizesAttributeParser parser = SizesAttributeParser(MediaValuesDynamic::create(document()), sizes);
-            effectiveSize = parser.length();
-        }
+        String sizes = fastGetAttribute(sizesAttr);
+        if (!sizes.isNull())
+            UseCounter::count(document(), UseCounter::Sizes);
+        SizesAttributeParser parser = SizesAttributeParser(MediaValuesDynamic::create(document()), sizes);
+        float effectiveSize = parser.length();
         ImageCandidate candidate = bestFitSourceForImageAttributes(document().devicePixelRatio(), effectiveSize, fastGetAttribute(srcAttr), fastGetAttribute(srcsetAttr), &document());
         setBestFitURLAndDPRFromImageCandidate(candidate);
     }
@@ -708,7 +719,9 @@ PassRefPtr<RenderStyle> HTMLImageElement::customStyleForRenderer()
 
     if (!m_useFallbackContent)
         return newStyle;
-    return HTMLImageFallbackHelper::customStyleForAltText(*this, newStyle);
+
+    RefPtr<RenderStyle> style = RenderStyle::clone(newStyle.get());
+    return HTMLImageFallbackHelper::customStyleForAltText(*this, style);
 }
 
 void HTMLImageElement::setUseFallbackContent()

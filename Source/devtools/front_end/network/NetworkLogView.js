@@ -83,7 +83,7 @@ WebInspector.NetworkLogView = function(filterBar, progressBarContainer)
     this._resetSuggestionBuilder();
     this._initializeView();
 
-    WebInspector.settings.networkShowRequestTimingInTimeline.addChangeListener(this._invalidateAllItems, this);
+    WebInspector.settings.networkColorCodeResourceTypes.addChangeListener(this._invalidateAllItems, this);
     WebInspector.settings.resourcesLargeRows.addChangeListener(this._updateRowsSize, this);
     WebInspector.settings.networkLogHideColumns.addChangeListener(this._updateColumns, this);
 
@@ -198,12 +198,10 @@ WebInspector.NetworkLogView.prototype = {
     {
     },
 
-    /**
-     * @return {boolean}
-     */
-    allowRequestSelection: function()
+    clearSelection: function()
     {
-        return !this._gridMode;
+        if (this._dataGrid.selectedNode)
+            this._dataGrid.selectedNode.deselect();
     },
 
     _addFilters: function()

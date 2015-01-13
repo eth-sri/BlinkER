@@ -36,6 +36,7 @@
 
 namespace blink {
 
+class ExceptionState;
 class ExecutionContext;
 class MediaKeySession;
 class ScriptState;
@@ -44,6 +45,7 @@ class WebContentDecryptionModule;
 // References are held by JS and HTMLMediaElement.
 // The WebContentDecryptionModule has the same lifetime as this object.
 class MediaKeys : public GarbageCollectedFinalized<MediaKeys>, public ContextLifecycleObserver, public ScriptWrappable {
+    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(MediaKeys);
     DEFINE_WRAPPERTYPEINFO();
 public:
     MediaKeys(ExecutionContext*, const String& keySystem, PassOwnPtr<WebContentDecryptionModule>);
@@ -53,13 +55,13 @@ public:
     // implemented.
     const String& keySystem() const { return m_keySystem; }
 
-    MediaKeySession* createSession(ScriptState*, const String& sessionType);
+    MediaKeySession* createSession(ScriptState*, const String& sessionType, ExceptionState&);
 
     ScriptPromise setServerCertificate(ScriptState*, const DOMArrayPiece& serverCertificate);
 
     blink::WebContentDecryptionModule* contentDecryptionModule();
 
-    void trace(Visitor*);
+    virtual void trace(Visitor*) override;
 
     // ContextLifecycleObserver
     virtual void contextDestroyed() override;

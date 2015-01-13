@@ -88,6 +88,12 @@ public:
 
     virtual SecurityContext* securityContext() const = 0;
 
+    Frame* findFrameForNavigation(const AtomicString& name, Frame& activeFrame);
+    Frame* findUnsafeParentScrollPropagationBoundary();
+
+    bool canNavigate(const Frame&);
+    virtual void printNavigationErrorMessage(const Frame&, const char* reason) = 0;
+
     RenderPart* ownerRenderer() const; // Renderer for the element that contains this frame.
 
     // FIXME: These should move to RemoteFrame when that is instantiated.
@@ -104,6 +110,13 @@ public:
 
     virtual bool checkLoadComplete() = 0;
 
+    // isLoading() is true when the embedder should think a load is in progress.
+    // In the case of LocalFrames, it means that the frame has sent a didStartLoading()
+    // callback, but not the matching didStopLoading(). Inside blink, you probably
+    // want Document::loadEventFinished() instead.
+    void setIsLoading(bool isLoading) { m_isLoading = isLoading; }
+    bool isLoading() const { return m_isLoading; }
+
 protected:
     Frame(FrameClient*, FrameHost*, FrameOwner*);
 
@@ -115,6 +128,8 @@ protected:
 private:
     FrameClient* m_client;
     WebLayer* m_remotePlatformLayer;
+
+    bool m_isLoading;
 };
 
 inline FrameClient* Frame::client() const

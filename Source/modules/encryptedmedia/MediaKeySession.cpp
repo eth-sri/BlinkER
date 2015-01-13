@@ -56,8 +56,14 @@
 namespace {
 
 // The list of possible values for |sessionType|.
-const char* kTemporary = "temporary";
-const char* kPersistent = "persistent";
+const char kTemporary[] = "temporary";
+const char kPersistentLicense[] = "persistent-license";
+const char kPersistentReleaseMessage[] = "persistent-release-message";
+
+// The list of possible values for |messageType|.
+const char kLicenseRequest[] = "license-request";
+const char kLicenseRenewal[] = "license-renewal";
+const char kLicenseRelease[] = "license-release";
 
 // Minimum and maximum length for session ids.
 enum {
@@ -293,7 +299,7 @@ private:
 
 MediaKeySession* MediaKeySession::create(ScriptState* scriptState, MediaKeys* mediaKeys, const String& sessionType)
 {
-    ASSERT(sessionType == kTemporary || sessionType == kPersistent);
+    ASSERT(isValidSessionType(sessionType));
     RefPtrWillBeRawPtr<MediaKeySession> session = new MediaKeySession(scriptState, mediaKeys, sessionType);
     session->suspendIfNeeded();
     return session.get();
@@ -301,7 +307,7 @@ MediaKeySession* MediaKeySession::create(ScriptState* scriptState, MediaKeys* me
 
 bool MediaKeySession::isValidSessionType(const String& sessionType)
 {
-    return (sessionType == kTemporary || sessionType == kPersistent);
+    return (sessionType == kTemporary || sessionType == kPersistentLicense || sessionType == kPersistentReleaseMessage);
 }
 
 MediaKeySession::MediaKeySession(ScriptState* scriptState, MediaKeys* mediaKeys, const String& sessionType)
@@ -457,11 +463,12 @@ ScriptPromise MediaKeySession::load(ScriptState* scriptState, const String& sess
             scriptState, DOMException::create(InvalidAccessError, "The sessionId parameter is empty."));
     }
 
-    // 4. If this object's session type is not "persistent", return a promise
-    //    rejected with a new DOMException whose name is "InvalidAccessError".
-    if (m_sessionType != kPersistent) {
+    // 4. If this object's session type is not "persistent-license" or
+    //    "persistent-release-message", return a promise rejected with a
+    //    new DOMException whose name is InvalidAccessError.
+    if (m_sessionType != kPersistentLicense && m_sessionType != kPersistentReleaseMessage) {
         return ScriptPromise::rejectWithDOMException(
-            scriptState, DOMException::create(InvalidAccessError, "The session type is not 'persistent'."));
+            scriptState, DOMException::create(InvalidAccessError, "The session type is not persistent."));
     }
 
     // 5. Let media keys be the MediaKeys object that created this object.
@@ -574,11 +581,12 @@ ScriptPromise MediaKeySession::remove(ScriptState* scriptState)
             scriptState, DOMException::create(InvalidStateError, "The session is not callable."));
     }
 
-    // 2. If this object's session type is not "persistent", return a promise
-    //    rejected with a new DOMException whose name is "InvalidAccessError".
-    if (m_sessionType != kPersistent) {
+    // 2. If this object's session type is not "persistent-license" or
+    //    "persistent-release-message", return a promise rejected with a
+    //    new DOMException whose name is InvalidAccessError.
+    if (m_sessionType != kPersistentLicense && m_sessionType != kPersistentReleaseMessage) {
         return ScriptPromise::rejectWithDOMException(
-            scriptState, DOMException::create(InvalidAccessError, "The session type is not 'persistent'."));
+            scriptState, DOMException::create(InvalidAccessError, "The session type is not persistent."));
     }
 
     // 3. If the Session Close algorithm has been run on this object, return a
@@ -795,7 +803,7 @@ void MediaKeySession::finishLoad()
 }
 
 // Queue a task to fire a simple event named keymessage at the new object.
-void MediaKeySession::message(const unsigned char* message, size_t messageLength, const WebURL& destinationURL)
+void MediaKeySession::message(MessageType messageType, const unsigned char* message, size_t messageLength)
 {
     WTF_LOG(Media, "MediaKeySession(%p)::message", this);
 
@@ -803,12 +811,31 @@ void MediaKeySession::message(const unsigned char* message, size_t messageLength
     ASSERT(m_isCallable);
 
     MediaKeyMessageEventInit init;
+    switch (messageType) {
+    case WebContentDecryptionModuleSession::Client::MessageType::LicenseRequest:
+        init.setMessageType(kLicenseRequest);
+        break;
+    case WebContentDecryptionModuleSession::Client::MessageType::LicenseRenewal:
+        init.setMessageType(kLicenseRenewal);
+        break;
+    case WebContentDecryptionModuleSession::Client::MessageType::LicenseRelease:
+        init.setMessageType(kLicenseRelease);
+        break;
+    }
     init.setMessage(DOMArrayBuffer::create(static_cast<const void*>(message), messageLength));
-    init.setDestinationURL(destinationURL.string());
 
     RefPtrWillBeRawPtr<MediaKeyMessageEvent> event = MediaKeyMessageEvent::create(EventTypeNames::message, init);
     event->setTarget(this);
     m_asyncEventQueue->enqueueEvent(event.release());
+}
+
+// FIXME: This method should be removed once Chromium uses the new method.
+void MediaKeySession::message(const unsigned char* messageData, size_t messageLength, const WebURL& destinationURL)
+{
+    MessageType messageType = destinationURL.isEmpty()
+        ? WebContentDecryptionModuleSession::Client::MessageType::LicenseRequest
+        : WebContentDecryptionModuleSession::Client::MessageType::LicenseRenewal;
+    message(messageType, messageData, messageLength);
 }
 
 void MediaKeySession::close()
@@ -873,6 +900,7 @@ void MediaKeySession::trace(Visitor* visitor)
     visitor->trace(m_mediaKeys);
     visitor->trace(m_closedPromise);
     RefCountedGarbageCollectedEventTargetWithInlineData<MediaKeySession>::trace(visitor);
+    ActiveDOMObject::trace(visitor);
 }
 
 } // namespace blink

@@ -97,7 +97,8 @@ GamepadList* NavigatorGamepad::gamepads()
 {
     if (!m_gamepads)
         m_gamepads = GamepadList::create();
-    if (frame() && frame()->domWindow()) {
+    if (frame() && frame()->host()) {
+        // The frame must be attached to start updating.
         startUpdating();
         sampleGamepads<Gamepad>(m_gamepads.get());
     }
@@ -111,6 +112,7 @@ void NavigatorGamepad::trace(Visitor* visitor)
     WillBeHeapSupplement<Navigator>::trace(visitor);
     DOMWindowProperty::trace(visitor);
     PlatformEventController::trace(visitor);
+    DOMWindowLifecycleObserver::trace(visitor);
 }
 
 void NavigatorGamepad::didUpdateData()

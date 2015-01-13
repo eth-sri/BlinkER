@@ -39,6 +39,7 @@
 #include "core/dom/Fullscreen.h"
 #include "core/dom/Node.h"
 #include "core/frame/Console.h"
+#include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLInputElement.h"
@@ -92,6 +93,7 @@
 #include "web/ExternalPopupMenu.h"
 #include "web/PopupMenuChromium.h"
 #include "web/WebFileChooserCompletionImpl.h"
+#include "web/WebFrameWidgetImpl.h"
 #include "web/WebInputEventConversion.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebPluginContainerImpl.h"
@@ -216,7 +218,7 @@ Page* ChromeClientImpl::createWindow(LocalFrame* frame, const FrameLoadRequest& 
     NavigationPolicy navigationPolicy, ShouldSendReferrer shouldSendReferrer)
 {
     if (!m_webView->client())
-        return 0;
+        return nullptr;
 
     WebNavigationPolicy policy = static_cast<WebNavigationPolicy>(navigationPolicy);
     if (policy == WebNavigationPolicyIgnore)
@@ -230,7 +232,7 @@ Page* ChromeClientImpl::createWindow(LocalFrame* frame, const FrameLoadRequest& 
     WebViewImpl* newView = toWebViewImpl(
         m_webView->client()->createView(WebLocalFrameImpl::fromFrame(frame), WrappedResourceRequest(r.resourceRequest()), features, r.frameName(), policy, shouldSendReferrer == NeverSendReferrer));
     if (!newView)
-        return 0;
+        return nullptr;
     return newView->page();
 }
 
@@ -359,10 +361,10 @@ void ChromeClientImpl::setResizable(bool value)
     m_windowFeatures.resizable = value;
 }
 
-bool ChromeClientImpl::shouldReportDetailedMessageForSource(const String& url)
+bool ChromeClientImpl::shouldReportDetailedMessageForSource(LocalFrame& localFrame, const String& url)
 {
-    WebLocalFrameImpl* webframe = m_webView->localFrameRootTemporary();
-    return webframe->client() && webframe->client()->shouldReportDetailedMessageForSource(url);
+    WebLocalFrameImpl* webframe = WebLocalFrameImpl::fromFrame(localFrame.localFrameRoot());
+    return webframe && webframe->client() && webframe->client()->shouldReportDetailedMessageForSource(url);
 }
 
 void ChromeClientImpl::addMessageToConsole(LocalFrame* localFrame, MessageSource source, MessageLevel level, const String& message, unsigned lineNumber, const String& sourceID, const String& stackTrace)
@@ -473,16 +475,11 @@ IntRect ChromeClientImpl::windowResizerRect() const
     return result;
 }
 
-void ChromeClientImpl::invalidateContentsAndRootView(const IntRect& updateRect)
+void ChromeClientImpl::invalidateRect(const IntRect& updateRect)
 {
     if (updateRect.isEmpty())
         return;
     m_webView->invalidateRect(updateRect);
-}
-
-void ChromeClientImpl::invalidateContentsForSlowScroll(const IntRect& updateRect)
-{
-    invalidateContentsAndRootView(updateRect);
 }
 
 void ChromeClientImpl::scheduleAnimation()
@@ -492,8 +489,13 @@ void ChromeClientImpl::scheduleAnimation()
 
 void ChromeClientImpl::scheduleAnimationForFrame(LocalFrame* localRoot)
 {
-    // FIXME: This will proxy to a WebWidget attached to the WebLocalFrameImpl.
-    scheduleAnimation();
+    ASSERT(WebLocalFrameImpl::fromFrame(localRoot));
+    // If the frame is still being created, it might not yet have a WebWidget.
+    // FIXME: Is this the right thing to do? Is there a way to avoid having
+    // a local frame root that doesn't have a WebWidget? During initialization
+    // there is no content to draw so this call serves no purpose.
+    if (WebLocalFrameImpl::fromFrame(localRoot)->frameWidget())
+        WebLocalFrameImpl::fromFrame(localRoot)->frameWidget()->scheduleAnimation();
 }
 
 IntRect ChromeClientImpl::rootViewToScreen(const IntRect& rect) const
@@ -695,8 +697,21 @@ GraphicsLayerFactory* ChromeClientImpl::graphicsLayerFactory() const
 
 void ChromeClientImpl::attachRootGraphicsLayer(GraphicsLayer* rootLayer, LocalFrame* localRoot)
 {
-    // FIXME: Add call to frame's widget for non-zero frames.
-    m_webView->setRootGraphicsLayer(rootLayer);
+    // FIXME: For top-level frames we still use the WebView as a WebWidget. This special
+    // case will be removed when top-level frames get WebFrameWidgets.
+    if (localRoot->isMainFrame()) {
+        m_webView->setRootGraphicsLayer(rootLayer);
+    } else {
+        WebLocalFrameImpl* webFrame = WebLocalFrameImpl::fromFrame(localRoot);
+        // FIXME: The following conditional is only needed for staging until the Chromium patch
+        // lands that instantiates a WebFrameWidget.
+        if (!webFrame->frameWidget()) {
+            m_webView->setRootGraphicsLayer(rootLayer);
+            return;
+        }
+        ASSERT(webFrame && webFrame->frameWidget());
+        webFrame->frameWidget()->setRootGraphicsLayer(rootLayer);
+    }
 }
 
 void ChromeClientImpl::enterFullScreenForElement(Element* element)
@@ -800,7 +815,7 @@ void ChromeClientImpl::annotatedRegionsChanged()
         client->draggableRegionsChanged();
 }
 
-void ChromeClientImpl::didAssociateFormControls(const WillBeHeapVector<RefPtrWillBeMember<Element> >& elements, LocalFrame* frame)
+void ChromeClientImpl::didAssociateFormControls(const WillBeHeapVector<RefPtrWillBeMember<Element>>& elements, LocalFrame* frame)
 {
     WebLocalFrameImpl* webframe = WebLocalFrameImpl::fromFrame(frame);
     if (webframe->autofillClient())
@@ -864,6 +879,12 @@ void ChromeClientImpl::textFieldDataListChanged(HTMLInputElement& input)
     WebLocalFrameImpl* webframe = WebLocalFrameImpl::fromFrame(input.document().frame());
     if (webframe->autofillClient())
         webframe->autofillClient()->dataListOptionsChanged(WebInputElement(&input));
+}
+
+void ChromeClientImpl::registerViewportLayers() const
+{
+    if (m_webView->rootGraphicsLayer() && m_webView->layerTreeView() && m_webView->pinchVirtualViewportEnabled())
+        m_webView->page()->frameHost().pinchViewport().registerLayersWithTreeView(m_webView->layerTreeView());
 }
 
 } // namespace blink

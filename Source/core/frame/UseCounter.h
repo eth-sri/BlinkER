@@ -601,6 +601,11 @@ public:
         SRIElementWithNonMatchingIntegrityType = 660,
         MixedContentInNonHTTPSFrameThatRestrictsMixedContent = 661,
         MixedContentInSecureFrameThatDoesNotRestrictMixedContent = 662,
+        MixedContentWebSocket = 663,
+        SyntheticKeyframesInCompositedCSSAnimation = 664,
+        MixedContentFormPresent = 665,
+        GetUserMediaInsecureOrigin = 666,
+        GetUserMediaSecureOrigin = 667,
 
         // Add new features immediately above this line. Don't change assigned
         // numbers of any item, and don't reuse removed slots.

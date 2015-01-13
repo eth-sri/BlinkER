@@ -51,17 +51,17 @@ namespace blink {
 
 class BaseHeap;
 class BaseHeapPage;
-class GeneralHeapObjectHeader;
+class CallbackStack;
 struct GCInfo;
 class HeapObjectHeader;
+class PageMemoryRegion;
 class PageMemory;
 class PersistentNode;
-class Visitor;
 class SafePointBarrier;
 class SafePointAwareMutexLocker;
-template<typename Header> class ThreadHeap;
-class CallbackStack;
-class PageMemoryRegion;
+class ThreadHeap;
+class ThreadState;
+class Visitor;
 
 using Address = uint8_t*;
 
@@ -166,11 +166,10 @@ template<typename U> class ThreadingTrait<const U> : public ThreadingTrait<U> { 
 //
 // To create a new typed heap add a H(<ClassName>) to the
 // FOR_EACH_TYPED_HEAP macro below.
-#define FOR_EACH_TYPED_HEAP(H)  \
-    H(Node) \
-    H(RenderObject) \
+#define FOR_EACH_TYPED_HEAP(H)              \
+    H(Node)                                 \
+    H(RenderObject)                         \
     H(CSSValue)
-
 
 #define TypedHeapEnumName(Type) Type##Heap,
 
@@ -187,93 +186,6 @@ enum TypedHeaps {
     NumberOfHeaps,
 };
 
-// Base implementation for HeapIndexTrait found below.
-template<int heapIndex>
-struct HeapIndexTraitBase {
-    using HeaderType = GeneralHeapObjectHeader;
-    using HeapType = ThreadHeap<HeaderType>;
-    static int index(size_t)
-    {
-        return heapIndex;
-    }
-};
-
-class ThreadState;
-
-// We use four heaps for general type objects depending on their object sizes.
-// Objects whose size is 1 - 3 words go to the first general type heap.
-// Objects whose size is 4 - 7 words go to the second general type heap.
-// Objects whose size is 8 - 15 words go to the third general type heap.
-// Objects whose size is more than 15 words go to the fourth general type heap.
-template<int heapIndex>
-struct GeneralHeapIndexTraitBase {
-    using HeaderType = GeneralHeapObjectHeader;
-    using HeapType = ThreadHeap<HeaderType>;
-    static int index(size_t size)
-    {
-        static const int wordSize = sizeof(void*);
-        int generalHeapOffset = 0;
-        if (size < 8 * wordSize) {
-            if (size < 4 * wordSize)
-                generalHeapOffset = 0;
-            else
-                generalHeapOffset = 1;
-        } else {
-            if (size < 16 * wordSize)
-                generalHeapOffset = 2;
-            else
-                generalHeapOffset = 3;
-        }
-        return heapIndex + generalHeapOffset;
-    }
-};
-
-// HeapIndexTrait defines properties for each heap in the TypesHeaps enum.
-template<int index>
-struct HeapIndexTrait;
-
-template<>
-struct HeapIndexTrait<General1Heap> : public GeneralHeapIndexTraitBase<General1Heap> { };
-template<>
-struct HeapIndexTrait<General2Heap> : public GeneralHeapIndexTraitBase<General2Heap> { };
-template<>
-struct HeapIndexTrait<General3Heap> : public GeneralHeapIndexTraitBase<General3Heap> { };
-template<>
-struct HeapIndexTrait<General4Heap> : public GeneralHeapIndexTraitBase<General4Heap> { };
-
-template<>
-struct HeapIndexTrait<VectorBackingHeap> : public HeapIndexTraitBase<VectorBackingHeap> { };
-template<>
-struct HeapIndexTrait<InlineVectorBackingHeap> : public HeapIndexTraitBase<InlineVectorBackingHeap> { };
-template<>
-struct HeapIndexTrait<HashTableBackingHeap> : public HeapIndexTraitBase<HashTableBackingHeap> { };
-
-#define DEFINE_TYPED_HEAP_INDEX_TRAIT(Type)                                     \
-    template<>                                                                  \
-    struct HeapIndexTrait<Type##Heap> : public HeapIndexTraitBase<Type##Heap> { \
-        using HeaderType = HeapObjectHeader;                                    \
-        using HeapType = ThreadHeap<HeaderType>;                                \
-    };
-FOR_EACH_TYPED_HEAP(DEFINE_TYPED_HEAP_INDEX_TRAIT)
-#undef DEFINE_TYPED_HEAP_INDEX_TRAIT
-
-// HeapTypeTrait defines which heap to use for particular types.
-// By default objects are allocated in one of the general heaps
-// depending on object size.
-template<typename T>
-struct HeapTypeTrait : public HeapIndexTrait<General1Heap> { };
-
-// We don't have any type-based mappings to the VectorBackingHeap
-// and HashTableBackingHeap.
-
-// Each typed-heap maps the respective type to its heap.
-#define DEFINE_TYPED_HEAP_TRAIT(Type)                                   \
-    class Type;                                                         \
-    template<>                                                          \
-    struct HeapTypeTrait<class Type> : public HeapIndexTrait<Type##Heap> { };
-FOR_EACH_TYPED_HEAP(DEFINE_TYPED_HEAP_TRAIT)
-#undef DEFINE_TYPED_HEAP_TRAIT
-
 class PLATFORM_EXPORT ThreadState {
     WTF_MAKE_NONCOPYABLE(ThreadState);
 public:
@@ -286,10 +198,9 @@ public:
         HeapPointersOnStack
     };
 
-    // When profiling we would like to identify forced GC requests.
     enum GCType {
-        NormalGC,
-        ForcedGC
+        GCWithSweep, // Sweeping is completed in Heap::collectGarbage().
+        GCWithoutSweep, // Lazy sweeping is scheduled.
     };
 
     // See setGCState() for possible state transitions.
@@ -299,8 +210,10 @@ public:
         GCScheduledForTesting,
         StoppingOtherThreads,
         GCRunning,
-        SweepScheduled,
+        EagerSweepScheduled,
+        LazySweepScheduled,
         Sweeping,
+        SweepingAndNextGCScheduled,
     };
 
     // The NoAllocationScope class is used in debug mode to catch unwanted
@@ -400,33 +313,18 @@ public:
 
     void didV8GC();
 
-    // shouldGC and shouldForceConservativeGC implement the heuristics
-    // that are used to determine when to collect garbage. If
-    // shouldForceConservativeGC returns true, we force the garbage
-    // collection immediately. Otherwise, if shouldGC returns true, we
-    // record that we should garbage collect the next time we return
-    // to the event loop. If both return false, we don't need to
-    // collect garbage at this point.
-    bool shouldGC();
-    bool shouldForceConservativeGC();
+    void scheduleGC();
     void scheduleGCOrForceConservativeGCIfNeeded();
-
-    // If you specify ForcedGC, you can force a precise GC at the end of the
-    // current event loop. This is used for layout tests that trigger GCs and
-    // check if objects are dead at a given point in time. That only reliably
-    // works when we get precise GCs with no conservative stack scanning.
-    void scheduleGC(GCType gcType = NormalGC)
-    {
-        setGCState(gcType == NormalGC ? GCScheduled : GCScheduledForTesting);
-    }
     void setGCState(GCState);
     GCState gcState() const;
     bool isInGC() const { return gcState() == GCRunning; }
+    bool isSweepingInProgress() const
+    {
+        return gcState() == Sweeping || gcState() == SweepingAndNextGCScheduled;
+    }
 
     void preGC();
-    void postGC();
-
-    void performPendingSweep();
+    void postGC(GCType);
 
     // Support for disallowing allocation. Mainly used for sanity
     // checks asserts.
@@ -438,8 +336,8 @@ public:
     // made consistent for sweeping.
     void makeConsistentForSweeping();
 
-    // Is this thread currently sweeping?
     bool sweepForbidden() const { return m_sweepForbidden; }
+    void completeSweep();
 
     void prepareRegionTree();
     void flushHeapDoesNotContainCacheIfNeeded();
@@ -476,7 +374,6 @@ public:
     void safePoint(StackState);
 
     // Mark current thread as running inside safepoint.
-    void enterSafePointWithoutPointers() { enterSafePoint(NoHeapPointersOnStack, nullptr); }
     void enterSafePointWithPointers(void* scopeMarker) { enterSafePoint(HeapPointersOnStack, scopeMarker); }
     void leaveSafePoint(SafePointAwareMutexLocker* = nullptr);
     bool isAtSafePoint() const { return m_atSafePoint; }
@@ -567,7 +464,7 @@ public:
     // The heap is split into multiple heap parts based on object
     // types. To get the index for a given type, use
     // HeapTypeTrait<Type>::index.
-    BaseHeap* heap(int index) const { return m_heaps[index]; }
+    ThreadHeap* heap(int index) const { return m_heaps[index]; }
 
 #if ENABLE(ASSERT)
     // Infrastructure to determine if an address is within one of the
@@ -634,6 +531,7 @@ public:
 
     size_t objectPayloadSizeForTesting();
 
+    void postGCProcessing();
     void prepareHeapForTermination();
 
     // Request to call a pref-finalizer of the target object before the object
@@ -686,6 +584,15 @@ private:
         m_safePointScopeMarker = nullptr;
     }
 
+    // shouldGC and shouldForceConservativeGC implement the heuristics
+    // that are used to determine when to collect garbage. If
+    // shouldForceConservativeGC returns true, we force the garbage
+    // collection immediately. Otherwise, if shouldGC returns true, we
+    // record that we should garbage collect the next time we return
+    // to the event loop. If both return false, we don't need to
+    // collect garbage at this point.
+    bool shouldGC();
+    bool shouldForceConservativeGC();
     void runScheduledGC(StackState);
 
     // When ThreadState is detaching from non-main thread its
@@ -727,7 +634,8 @@ private:
     bool m_didV8GCAfterLastGC;
     bool m_sweepForbidden;
     size_t m_noAllocationCount;
-    BaseHeap* m_heaps[NumberOfHeaps];
+    size_t m_allocatedObjectSizeBeforeSweeping;
+    ThreadHeap* m_heaps[NumberOfHeaps];
 
     Vector<OwnPtr<CleanupTask>> m_cleanupTasks;
     bool m_isTerminating;

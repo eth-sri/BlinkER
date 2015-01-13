@@ -172,18 +172,15 @@ private:
     double m_start;
 };
 
-static inline ScrollGranularity wheelGranularityToScrollGranularity(unsigned deltaMode)
+static inline ScrollGranularity wheelGranularityToScrollGranularity(WheelEvent* event)
 {
-    switch (deltaMode) {
-    case WheelEvent::DOM_DELTA_PAGE:
+    unsigned deltaMode = event->deltaMode();
+    if (deltaMode == WheelEvent::DOM_DELTA_PAGE)
         return ScrollByPage;
-    case WheelEvent::DOM_DELTA_LINE:
+    if (deltaMode == WheelEvent::DOM_DELTA_LINE)
         return ScrollByLine;
-    case WheelEvent::DOM_DELTA_PIXEL:
-        return ScrollByPixel;
-    default:
-        return ScrollByPixel;
-    }
+    ASSERT(deltaMode == WheelEvent::DOM_DELTA_PIXEL);
+    return event->hasPreciseScrollingDeltas() ? ScrollByPrecisePixel : ScrollByPixel;
 }
 
 // Refetch the event target node if it is removed or currently is the shadow node inside an <input> element.
@@ -1389,10 +1386,10 @@ void EventHandler::handleMouseLeaveEvent(const PlatformMouseEvent& event)
     TRACE_EVENT0("blink", "EventHandler::handleMouseLeaveEvent");
 
     RefPtrWillBeRawPtr<FrameView> protector(m_frame->view());
-    handleMouseMoveOrLeaveEvent(event);
+    handleMouseMoveOrLeaveEvent(event, 0, false, true);
 }
 
-bool EventHandler::handleMouseMoveOrLeaveEvent(const PlatformMouseEvent& mouseEvent, HitTestResult* hoveredNode, bool onlyUpdateScrollbars)
+bool EventHandler::handleMouseMoveOrLeaveEvent(const PlatformMouseEvent& mouseEvent, HitTestResult* hoveredNode, bool onlyUpdateScrollbars, bool forceLeave)
 {
     ASSERT(m_frame);
     ASSERT(m_frame->view());
@@ -1438,7 +1435,15 @@ bool EventHandler::handleMouseMoveOrLeaveEvent(const PlatformMouseEvent& mouseEv
     if (m_touchPressed)
         hitType |= HitTestRequest::Active | HitTestRequest::ReadOnly;
     HitTestRequest request(hitType);
-    MouseEventWithHitTestResults mev = prepareMouseEvent(request, mouseEvent);
+    MouseEventWithHitTestResults mev = MouseEventWithHitTestResults(mouseEvent, HitTestResult(LayoutPoint()));
+
+    // We don't want to do a hit-test in forceLeave scenarios because there might actually be some other frame above this one at the specified co-ordinate.
+    // So we must force the hit-test to fail, while still clearing hover/active state.
+    if (forceLeave)
+        m_frame->document()->updateHoverActiveState(request, 0, &mouseEvent);
+    else
+        mev = prepareMouseEvent(request, mouseEvent);
+
     if (hoveredNode)
         *hoveredNode = mev.hitTestResult();
 
@@ -1460,7 +1465,7 @@ bool EventHandler::handleMouseMoveOrLeaveEvent(const PlatformMouseEvent& mouseEv
 
     // We want mouseouts to happen first, from the inside out.  First send a move event to the last subframe so that it will fire mouseouts.
     if (m_lastMouseMoveEventSubframe && m_lastMouseMoveEventSubframe->tree().isDescendantOf(m_frame) && m_lastMouseMoveEventSubframe != newSubframe)
-        passMouseMoveEventToSubframe(mev, m_lastMouseMoveEventSubframe.get());
+        m_lastMouseMoveEventSubframe->eventHandler().handleMouseLeaveEvent(mouseEvent);
 
     if (newSubframe) {
         // Update over/out state before passing the event to the subframe.
@@ -2044,7 +2049,7 @@ void EventHandler::defaultWheelEventHandler(Node* startNode, WheelEvent* wheelEv
         return;
 
     Node* stopNode = m_previousWheelScrolledNode.get();
-    ScrollGranularity granularity = wheelGranularityToScrollGranularity(wheelEvent->deltaMode());
+    ScrollGranularity granularity = wheelGranularityToScrollGranularity(wheelEvent);
 
     // Break up into two scrolls if we need to.  Diagonal movement on
     // a MacBook pro is an example of a 2-dimensional mouse wheel event (where both deltaX and deltaY can be set).
@@ -2784,12 +2789,10 @@ bool EventHandler::sendContextMenuEventForKey()
 #else
     int rightAligned = 0;
 #endif
-    IntPoint location;
-
+    IntPoint rootViewLocation;
     Element* focusedElement = doc->focusedElement();
     FrameSelection& selection = m_frame->selection();
     Position start = selection.selection().start();
-    bool shouldTranslateToRootView = true;
 
     if (start.deprecatedNode() && (selection.rootEditableElement() || selection.isRange())) {
         RefPtrWillBeRawPtr<Range> selectionRange = selection.toNormalizedRange();
@@ -2798,28 +2801,25 @@ bool EventHandler::sendContextMenuEventForKey()
         int x = rightAligned ? firstRect.maxX() : firstRect.x();
         // In a multiline edit, firstRect.maxY() would endup on the next line, so -1.
         int y = firstRect.maxY() ? firstRect.maxY() - 1 : 0;
-        location = IntPoint(x, y);
+        rootViewLocation = view->contentsToRootView(IntPoint(x, y));
     } else if (focusedElement) {
         IntRect clippedRect = focusedElement->boundsInRootViewSpace();
-        location = IntPoint(clippedRect.center());
+        rootViewLocation = IntPoint(clippedRect.center());
     } else {
-        location = IntPoint(
+        rootViewLocation = IntPoint(
             rightAligned ? view->contentsWidth() - kContextMenuMargin : kContextMenuMargin,
             kContextMenuMargin);
-        shouldTranslateToRootView = false;
     }
 
     m_frame->view()->setCursor(pointerCursor());
-
-    IntPoint position = shouldTranslateToRootView ? view->contentsToRootView(location) : location;
-    IntPoint globalPosition = view->hostWindow()->rootViewToScreen(IntRect(position, IntSize())).location();
+    IntPoint globalPosition = view->hostWindow()->rootViewToScreen(IntRect(rootViewLocation, IntSize())).location();
 
     Node* targetNode = doc->focusedElement();
     if (!targetNode)
         targetNode = doc;
 
     // Use the focused node as the target for hover and active.
-    HitTestResult result(position);
+    HitTestResult result(rootViewLocation);
     result.setInnerNode(targetNode);
     doc->updateHoverActiveState(HitTestRequest::Active, result.innerElement());
 
@@ -2829,7 +2829,7 @@ bool EventHandler::sendContextMenuEventForKey()
     if (m_frame->settings()->showContextMenuOnMouseUp())
         eventType = PlatformEvent::MouseReleased;
 
-    PlatformMouseEvent mouseEvent(position, globalPosition, RightButton, eventType, 1, false, false, false, false, PlatformMouseEvent::RealOrIndistinguishable, WTF::currentTime());
+    PlatformMouseEvent mouseEvent(rootViewLocation, globalPosition, RightButton, eventType, 1, false, false, false, false, PlatformMouseEvent::RealOrIndistinguishable, WTF::currentTime());
 
     handleMousePressEvent(mouseEvent);
     return sendContextMenuEvent(mouseEvent);

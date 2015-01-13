@@ -58,7 +58,7 @@ public:
     }
 
     static int s_destructorCalls;
-    static void trace(Visitor*) { }
+    void trace(Visitor*) { }
 
     int value() const { return m_x; }
 
@@ -72,6 +72,7 @@ private:
     IntWrapper();
     int m_x;
 };
+static_assert(WTF::NeedsTracing<IntWrapper>::value, "NeedsTracing macro failed to recognize trace method.");
 
 class ThreadMarker {
 public:
@@ -209,7 +210,7 @@ public:
         // Only cleanup if we parked all threads in which case the GC happened
         // and we need to resume the other threads.
         if (LIKELY(m_parkedAllThreads)) {
-            Heap::postGC();
+            Heap::postGC(ThreadState::GCWithSweep);
             ThreadState::resumeThreads();
         }
     }
@@ -238,6 +239,7 @@ public:
         : Visitor(Visitor::GenericVisitorType)
         , m_count(0)
     {
+        configureEagerTraceLimit();
     }
 
     virtual void mark(const void* object, TraceCallback) override
@@ -247,12 +249,6 @@ public:
     }
 
     virtual void markHeader(HeapObjectHeader* header, TraceCallback callback) override
-    {
-        ASSERT(header->payload());
-        m_count++;
-    }
-
-    virtual void markHeader(GeneralHeapObjectHeader* header, TraceCallback callback) override
     {
         ASSERT(header->payload());
         m_count++;
@@ -273,8 +269,6 @@ public:
         markNoTracing(objectPointer);
         return true;
     }
-
-    FOR_EACH_TYPED_HEAP(DEFINE_VISITOR_METHODS)
 
     size_t count() { return m_count; }
     void reset() { m_count = 0; }
@@ -1015,15 +1009,8 @@ public:
         mark(header->payload());
     }
 
-    virtual void markHeader(GeneralHeapObjectHeader* header, TraceCallback callback) override
-    {
-        mark(header->payload());
-    }
-
     bool validate() { return m_count >= m_expectedCount; }
     void reset() { m_count = 0; }
-
-    FOR_EACH_TYPED_HEAP(DEFINE_VISITOR_METHODS)
 
 private:
     bool expectedObject(const void* ptr)
@@ -1794,6 +1781,48 @@ TEST(HeapTest, SimpleFinalization)
     EXPECT_EQ(1, SimpleFinalizedObject::s_destructorCalls);
 }
 
+// FIXME: Lazy sweeping is disabled in non-oilpan builds.
+#if ENABLE(OILPAN)
+TEST(HeapTest, LazySweepingPages)
+{
+    clearOutOldGarbage();
+
+    SimpleFinalizedObject::s_destructorCalls = 0;
+    EXPECT_EQ(0, SimpleFinalizedObject::s_destructorCalls);
+    for (int i = 0; i < 1000; i++)
+        SimpleFinalizedObject::create();
+    Heap::collectGarbage(ThreadState::NoHeapPointersOnStack, ThreadState::GCWithoutSweep);
+    EXPECT_EQ(0, SimpleFinalizedObject::s_destructorCalls);
+    for (int i = 0; i < 10000; i++)
+        SimpleFinalizedObject::create();
+    EXPECT_EQ(1000, SimpleFinalizedObject::s_destructorCalls);
+    Heap::collectGarbage(ThreadState::NoHeapPointersOnStack, ThreadState::GCWithSweep);
+    EXPECT_EQ(11000, SimpleFinalizedObject::s_destructorCalls);
+}
+
+TEST(HeapTest, LazySweepingLargeObjects)
+{
+    clearOutOldGarbage();
+
+    LargeHeapObject::s_destructorCalls = 0;
+    EXPECT_EQ(0, LargeHeapObject::s_destructorCalls);
+    for (int i = 0; i < 10; i++)
+        LargeHeapObject::create();
+    Heap::collectGarbage(ThreadState::NoHeapPointersOnStack, ThreadState::GCWithoutSweep);
+    for (int i = 0; i < 10; i++) {
+        LargeHeapObject::create();
+        EXPECT_EQ(i + 1, LargeHeapObject::s_destructorCalls);
+    }
+    LargeHeapObject::create();
+    LargeHeapObject::create();
+    EXPECT_EQ(10, LargeHeapObject::s_destructorCalls);
+    Heap::collectGarbage(ThreadState::NoHeapPointersOnStack, ThreadState::GCWithoutSweep);
+    EXPECT_EQ(10, LargeHeapObject::s_destructorCalls);
+    Heap::collectGarbage(ThreadState::NoHeapPointersOnStack, ThreadState::GCWithSweep);
+    EXPECT_EQ(22, LargeHeapObject::s_destructorCalls);
+}
+#endif
+
 TEST(HeapTest, Finalization)
 {
     {
@@ -2056,14 +2085,14 @@ TEST(HeapTest, LargeHeapObjects)
             EXPECT_EQ('a', object->get(0));
             object->set(object->length() - 1, 'b');
             EXPECT_EQ('b', object->get(object->length() - 1));
-            size_t expectedObjectPayloadSize = sizeof(LargeHeapObject) + sizeof(IntWrapper);
+            size_t expectedLargeHeapObjectPayloadSize = ThreadHeap::allocationSizeFromSize(sizeof(LargeHeapObject));
+            size_t expectedObjectPayloadSize = expectedLargeHeapObjectPayloadSize + sizeof(IntWrapper);
             size_t actualObjectPayloadSize = Heap::objectPayloadSizeForTesting() - initialObjectPayloadSize;
             CheckWithSlack(expectedObjectPayloadSize, actualObjectPayloadSize, slack);
             // There is probably space for the IntWrapper in a heap page without
             // allocating extra pages. However, the IntWrapper allocation might cause
             // the addition of a heap page.
-            size_t largeObjectAllocationSize =
-                sizeof(LargeHeapObject) + sizeof(LargeObject<GeneralHeapObjectHeader>) + sizeof(GeneralHeapObjectHeader);
+            size_t largeObjectAllocationSize = sizeof(LargeObject) + expectedLargeHeapObjectPayloadSize;
             size_t allocatedSpaceLowerBound = initialAllocatedSpace + largeObjectAllocationSize;
             size_t allocatedSpaceUpperBound = allocatedSpaceLowerBound + slack + blinkPageSize;
             EXPECT_LE(allocatedSpaceLowerBound, afterAllocation);
@@ -3657,6 +3686,8 @@ TEST(HeapTest, CollectionNesting)
     typedef HeapDeque<Member<IntWrapper> > IntDeque;
     HeapHashMap<void*, IntVector>* map = new HeapHashMap<void*, IntVector>();
     HeapHashMap<void*, IntDeque>* map2 = new HeapHashMap<void*, IntDeque>();
+    static_assert(WTF::NeedsTracing<IntVector>::value, "Failed to recognize HeapVector as NeedsTracing");
+    static_assert(WTF::NeedsTracing<IntDeque>::value, "Failed to recognize HeapDeque as NeedsTracing");
 
     map->add(key, IntVector());
     map2->add(key, IntDeque());

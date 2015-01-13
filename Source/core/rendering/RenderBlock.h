@@ -355,7 +355,8 @@ private:
 
     Node* nodeForHitTest() const;
 
-private:
+    bool tryLayoutDoingPositionedMovementOnly();
+
     virtual bool avoidsFloats() const override { return true; }
 
     bool hitTestColumns(const HitTestRequest&, HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction);
@@ -389,6 +390,7 @@ private:
 
 private:
     virtual LayoutRect localCaretRect(InlineBox*, int caretOffset, LayoutUnit* extraWidthToEndOfLine = 0) override final;
+    bool isInlineBoxWrapperActuallyChild() const;
 
     void adjustPointToColumnContents(LayoutPoint&) const;
 

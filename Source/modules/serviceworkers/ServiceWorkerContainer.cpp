@@ -49,6 +49,7 @@
 #include "modules/serviceworkers/ServiceWorkerError.h"
 #include "modules/serviceworkers/ServiceWorkerRegistration.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "public/platform/WebPageVisibilityState.h"
 #include "public/platform/WebServiceWorker.h"
 #include "public/platform/WebServiceWorkerClientsInfo.h"
 #include "public/platform/WebServiceWorkerProvider.h"
@@ -104,6 +105,7 @@ void ServiceWorkerContainer::trace(Visitor* visitor)
     visitor->trace(m_readyRegistration);
     visitor->trace(m_ready);
     RefCountedGarbageCollectedEventTargetWithInlineData<ServiceWorkerContainer>::trace(visitor);
+    ContextLifecycleObserver::trace(visitor);
 }
 
 ScriptPromise ServiceWorkerContainer::registerServiceWorker(ScriptState* scriptState, const String& url, const RegistrationOptions& options)
@@ -133,17 +135,22 @@ ScriptPromise ServiceWorkerContainer::registerServiceWorker(ScriptState* scriptS
         return promise;
     }
 
-    KURL patternURL = executionContext->completeURL(options.scope());
-    patternURL.removeFragmentIdentifier();
-    if (!documentOrigin->canRequest(patternURL)) {
-        resolver->reject(DOMException::create(SecurityError, "The scope must match the current origin."));
-        return promise;
-    }
-
     KURL scriptURL = executionContext->completeURL(url);
     scriptURL.removeFragmentIdentifier();
     if (!documentOrigin->canRequest(scriptURL)) {
         resolver->reject(DOMException::create(SecurityError, "The origin of the script must match the current origin."));
+        return promise;
+    }
+
+    KURL patternURL;
+    if (options.scope().isNull())
+        patternURL = KURL(scriptURL, "./");
+    else
+        patternURL = executionContext->completeURL(options.scope());
+    patternURL.removeFragmentIdentifier();
+
+    if (!documentOrigin->canRequest(patternURL)) {
+        resolver->reject(DOMException::create(SecurityError, "The scope must match the current origin."));
         return promise;
     }
 
@@ -284,7 +291,7 @@ bool ServiceWorkerContainer::getClientInfo(WebServiceWorkerClientInfo* info)
     if (!context || !context->isDocument())
         return false;
     Document* document = toDocument(context);
-    info->visibilityState = document->visibilityState();
+    info->pageVisibilityState = static_cast<WebPageVisibilityState>(document->pageVisibilityState());
     info->isFocused = document->hasFocus();
     info->url = document->url();
     if (!document->frame())

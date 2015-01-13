@@ -58,6 +58,7 @@ static const char enqueueMutationRecordName[] = "Mutation";
 namespace blink {
 
 class AsyncCallTracker::ExecutionContextData final : public NoBaseWillBeGarbageCollectedFinalized<ExecutionContextData>, public ContextLifecycleObserver {
+    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(AsyncCallTracker::ExecutionContextData);
     WTF_MAKE_FAST_ALLOCATED_WILL_BE_REMOVED;
 public:
     ExecutionContextData(AsyncCallTracker* tracker, ExecutionContext* executionContext)
@@ -77,10 +78,12 @@ public:
     virtual void contextDestroyed() override
     {
         ASSERT(executionContext());
-        OwnPtrWillBeRawPtr<ExecutionContextData> self = m_tracker->m_executionContextDataMap.take(executionContext());
-        ASSERT_UNUSED(self, self == this);
+        // It is possible that resetAsyncCallChains() is already called and thus
+        // this ExecutionContextData is removed from m_executionContextDataMap.
+        if (m_tracker->m_executionContextDataMap.take(executionContext())) {
+            dispose();
+        }
         ContextLifecycleObserver::contextDestroyed();
-        dispose();
     }
 
     int nextAsyncOperationUniqueId()
@@ -93,7 +96,7 @@ public:
         return m_circularSequentialId;
     }
 
-    void trace(Visitor* visitor)
+    virtual void trace(Visitor* visitor) override
     {
         visitor->trace(m_tracker);
 #if ENABLE(OILPAN)
@@ -105,6 +108,7 @@ public:
         visitor->trace(m_executionContextTaskCallChains);
         visitor->trace(m_asyncOperationCallChains);
 #endif
+        ContextLifecycleObserver::trace(visitor);
     }
 
     void dispose()
@@ -139,7 +143,7 @@ static XMLHttpRequest* toXmlHttpRequest(EventTarget* eventTarget)
         return static_cast<XMLHttpRequest*>(eventTarget);
     if (interfaceName == EventTargetNames::XMLHttpRequestUpload)
         return static_cast<XMLHttpRequestUpload*>(eventTarget)->xmlHttpRequest();
-    return 0;
+    return nullptr;
 }
 
 AsyncCallTracker::AsyncCallTracker(InspectorDebuggerAgent* debuggerAgent, InstrumentingAgents* instrumentingAgents)

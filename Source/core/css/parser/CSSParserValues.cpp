@@ -47,10 +47,9 @@ CSSParserValueList::CSSParserValueList(CSSParserTokenRange range)
         CSSParserValue value;
         switch (token.type()) {
         case FunctionToken: {
-            if (token.value() == "url" && range.peek(1).type() == RightParenthesisToken) {
-                const CSSParserToken& next = range.consume();
-                range.consume();
-                if (next.type() == BadStringToken) {
+            if (equalIgnoringCase(token.value(), "url")) {
+                const CSSParserToken& next = range.consumeIncludingWhitespaceAndComments();
+                if (next.type() == BadStringToken || range.consume().type() != RightParenthesisToken) {
                     destroyAndClear();
                     return;
                 }
@@ -61,6 +60,7 @@ CSSParserValueList::CSSParserValueList(CSSParserTokenRange range)
                 value.isInt = false;
                 value.unit = CSSPrimitiveValue::CSS_URI;
                 value.string = string;
+                break;
             }
 
             CSSParserFunction* function = new CSSParserFunction;
@@ -125,6 +125,11 @@ CSSParserValueList::CSSParserValueList(CSSParserTokenRange range)
             break;
         }
         case DimensionToken:
+            if (!token.unitType() && token.value() == "__qem") {
+                value.setFromNumber(token.numericValue(), CSSParserValue::Q_EMS);
+                value.isInt = (token.numericValueType() == IntegerValueType);
+                break;
+            }
         case NumberToken:
         case PercentageToken:
             value.setFromNumber(token.numericValue(), token.unitType());
@@ -275,6 +280,11 @@ void CSSParserSelector::adoptSelectorVector(Vector<OwnPtr<CSSParserSelector> >& 
     CSSSelectorList* selectorList = new CSSSelectorList();
     selectorList->adoptSelectorVector(selectorVector);
     m_selector->setSelectorList(adoptPtr(selectorList));
+}
+
+void CSSParserSelector::setSelectorList(PassOwnPtr<CSSSelectorList> selectorList)
+{
+    m_selector->setSelectorList(selectorList);
 }
 
 bool CSSParserSelector::isSimple() const

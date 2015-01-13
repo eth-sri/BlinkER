@@ -2209,6 +2209,7 @@ ScriptPromise Internals::promiseCheckOverload(ScriptState* scriptState, Location
 void Internals::trace(Visitor* visitor)
 {
     visitor->trace(m_runtimeFlags);
+    ContextLifecycleObserver::trace(visitor);
 }
 
 void Internals::setValueForUser(Element* element, const String& value)
@@ -2370,7 +2371,7 @@ Iterator* Internals::iterator(ScriptState* scriptState, ExceptionState& exceptio
 
 void Internals::forceBlinkGCWithoutV8GC()
 {
-    ThreadState::current()->scheduleGC(ThreadState::ForcedGC);
+    ThreadState::current()->scheduleGC();
 }
 
 } // namespace blink

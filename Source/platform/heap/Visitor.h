@@ -32,6 +32,7 @@
 #define Visitor_h
 
 #include "platform/PlatformExport.h"
+#include "platform/heap/StackFrameDepth.h"
 #include "platform/heap/ThreadState.h"
 #include "wtf/Assertions.h"
 #include "wtf/Deque.h"
@@ -58,7 +59,6 @@ namespace blink {
 template<typename T> class GarbageCollected;
 template<typename T> class GarbageCollectedFinalized;
 class GarbageCollectedMixin;
-class GeneralHeapObjectHeader;
 class HeapObjectHeader;
 class InlinedGlobalMarkingVisitor;
 template<typename T> class Member;
@@ -105,12 +105,8 @@ struct GCInfo {
 };
 
 #if ENABLE(ASSERT)
-PLATFORM_EXPORT void assertObjectHasGCInfo(const void*, const GCInfo*);
+PLATFORM_EXPORT void assertObjectHasGCInfo(const void*, size_t gcInfoIndex);
 
-#define DECLARE_CHECK_GC_INFO(Type)                     \
-    PLATFORM_EXPORT void assertObjectHasGCInfo(const Type*, const GCInfo*);
-FOR_EACH_TYPED_HEAP(DECLARE_CHECK_GC_INFO)
-#undef DECLARE_CHECK_GC_INFO
 #endif
 
 
@@ -168,16 +164,28 @@ template <typename T> const bool NeedsAdjustAndMark<T, false>::value;
 
 template<typename T, bool = NeedsAdjustAndMark<T>::value> class DefaultTraceTrait;
 
-template <typename T, typename = void>
-struct HasInlinedTraceMethod {
-public:
-    static const bool value = false;
-};
-
+// HasInlinedTraceMethod<T>::value is true for T supporting
+// T::trace(InlinedGlobalMarkingVisitor).
+// The template works by checking if T::HasInlinedTraceMethodMarker type is
+// available using SFINAE. The HasInlinedTraceMethodMarker type is defined
+// by DECLARE_TRACE and DEFINE_INLINE_TRACE helper macros, which are used to
+// define trace methods supporting both inlined/uninlined tracing.
 template <typename T>
-struct HasInlinedTraceMethod<T, typename T::HasInlinedTraceMethod> {
+struct HasInlinedTraceMethod {
+#if ENABLE(INLINED_TRACE)
+private:
+    typedef char YesType;
+    struct NoType {
+        char padding[8];
+    };
+
+    template <typename U> static YesType checkMarker(typename U::HasInlinedTraceMethodMarker*);
+    template <typename U> static NoType checkMarker(...);
 public:
-    static const bool value = true;
+    static const bool value = sizeof(checkMarker<T>(nullptr)) == sizeof(YesType);
+#else
+    static const bool value = false;
+#endif
 };
 
 template <typename T, bool = HasInlinedTraceMethod<T>::value>
@@ -199,13 +207,14 @@ class TraceTrait {
 public:
     // Default implementation of TraceTrait<T>::trace just statically
     // dispatches to the trace method of the class T.
-    template<typename TraceDispatcher>
-    static void trace(TraceDispatcher visitor, void* self)
+    template<typename VisitorDispatcher>
+    static void trace(VisitorDispatcher visitor, void* self)
     {
         TraceCompatibilityAdaptor<T>::trace(visitor, static_cast<T*>(self));
     }
 
-    static void mark(Visitor* visitor, const T* t)
+    template<typename VisitorDispatcher>
+    static void mark(VisitorDispatcher visitor, const T* t)
     {
         DefaultTraceTrait<T>::mark(visitor, t);
     }
@@ -224,7 +233,7 @@ template<typename T> class TraceTrait<const T> : public TraceTrait<T> { };
 
 #define DECLARE_TRACE(maybevirtual, maybeoverride)                           \
 public:                                                                      \
-    typedef HasInlinedTraceMethod int;                                       \
+    typedef int HasInlinedTraceMethodMarker;                                 \
     maybevirtual void trace(Visitor*) maybeoverride;                         \
     maybevirtual void trace(InlinedGlobalMarkingVisitor) maybeoverride;      \
 private:                                                                     \
@@ -238,6 +247,7 @@ public:
     ALWAYS_INLINE void T::traceImpl(VisitorDispatcher visitor)
 
 #define DEFINE_INLINE_TRACE(maybevirtual, maybeoverride)                                               \
+    typedef int HasInlinedTraceMethodMarker;                                                           \
     maybevirtual void trace(Visitor* visitor) maybeoverride { traceImpl(visitor); }                    \
     maybevirtual void trace(InlinedGlobalMarkingVisitor visitor) maybeoverride { traceImpl(visitor); } \
     template <typename VisitorDispatcher>                                                              \
@@ -335,7 +345,7 @@ public:
 #if ENABLE(ASSERT)
         TraceTrait<T>::checkGCInfo(t);
 #endif
-        TraceTrait<T>::mark(toDerived(), t);
+        TraceTrait<T>::mark(Derived::fromHelper(this), t);
 
         STATIC_ASSERT_IS_GARBAGE_COLLECTED(T, "attempted to mark non garbage collected object");
     }
@@ -344,7 +354,7 @@ public:
     template<typename T>
     void trace(const Member<T>& t)
     {
-        toDerived()->mark(t.get());
+        Derived::fromHelper(this)->mark(t.get());
     }
 
     // Fallback method used only when we need to trace raw pointers of T.
@@ -352,13 +362,13 @@ public:
     template<typename T>
     void trace(const T* t)
     {
-        toDerived()->mark(const_cast<T*>(t));
+        Derived::fromHelper(this)->mark(const_cast<T*>(t));
     }
 
     template<typename T>
     void trace(T* t)
     {
-        toDerived()->mark(t);
+        Derived::fromHelper(this)->mark(t);
     }
 
     // WeakMember version of the templated trace method. It doesn't keep
@@ -379,7 +389,7 @@ public:
     template<typename T>
     void traceInCollection(T& t, WTF::ShouldWeakPointersBeMarkedStrongly strongify)
     {
-        HashTraits<T>::traceInCollection(toDerived(), t, strongify);
+        HashTraits<T>::traceInCollection(Derived::fromHelper(this), t, strongify);
     }
 
     // Fallback trace method for part objects to allow individual trace methods
@@ -398,7 +408,7 @@ public:
             if (!vtable)
                 return;
         }
-        const_cast<T&>(t).trace(toDerived());
+        const_cast<T&>(t).trace(Derived::fromHelper(this));
     }
 
     // For simple cases where you just want to zero out a cell when the thing
@@ -413,20 +423,20 @@ public:
     template<typename T>
     void registerWeakCell(T** cell)
     {
-        toDerived()->registerWeakCellWithCallback(reinterpret_cast<void**>(cell), &handleWeakCell<T>);
+        Derived::fromHelper(this)->registerWeakCellWithCallback(reinterpret_cast<void**>(cell), &handleWeakCell<T>);
     }
 
     // The following trace methods are for off-heap collections.
     template<typename T, size_t inlineCapacity>
     void trace(const Vector<T, inlineCapacity>& vector)
     {
-        OffHeapCollectionTraceTrait<Vector<T, inlineCapacity, WTF::DefaultAllocator> >::trace(toDerived(), vector);
+        OffHeapCollectionTraceTrait<Vector<T, inlineCapacity, WTF::DefaultAllocator> >::trace(Derived::fromHelper(this), vector);
     }
 
     template<typename T, size_t N>
     void trace(const Deque<T, N>& deque)
     {
-        OffHeapCollectionTraceTrait<Deque<T, N> >::trace(toDerived(), deque);
+        OffHeapCollectionTraceTrait<Deque<T, N> >::trace(Derived::fromHelper(this), deque);
     }
 
 #if !ENABLE(OILPAN)
@@ -479,20 +489,19 @@ public:
     }
 #endif
 
-    void markNoTracing(const void* pointer) { toDerived()->mark(pointer, reinterpret_cast<TraceCallback>(0)); }
-    void markHeaderNoTracing(HeapObjectHeader* header) { toDerived()->markHeader(header, reinterpret_cast<TraceCallback>(0)); }
-    void markHeaderNoTracing(GeneralHeapObjectHeader* header) { toDerived()->markHeader(header, reinterpret_cast<TraceCallback>(0)); }
-    template<typename T> void markNoTracing(const T* pointer) { toDerived()->mark(pointer, reinterpret_cast<TraceCallback>(0)); }
+    void markNoTracing(const void* pointer) { Derived::fromHelper(this)->mark(pointer, reinterpret_cast<TraceCallback>(0)); }
+    void markHeaderNoTracing(HeapObjectHeader* header) { Derived::fromHelper(this)->markHeader(header, reinterpret_cast<TraceCallback>(0)); }
+    template<typename T> void markNoTracing(const T* pointer) { Derived::fromHelper(this)->mark(pointer, reinterpret_cast<TraceCallback>(0)); }
 
     template<typename T, void (T::*method)(Visitor*)>
     void registerWeakMembers(const T* obj)
     {
-        toDerived()->registerWeakMembers(obj, &TraceMethodDelegate<T, method>::trampoline);
+        Derived::fromHelper(this)->registerWeakMembers(obj, &TraceMethodDelegate<T, method>::trampoline);
     }
 
     void registerWeakMembers(const void* object, WeakPointerCallback callback)
     {
-        toDerived()->registerWeakMembers(object, object, callback);
+        Derived::fromHelper(this)->registerWeakMembers(object, object, callback);
     }
 
     template<typename T> inline bool isAlive(T* obj)
@@ -506,7 +515,7 @@ public:
         // always 'alive'.
         if (!obj)
             return true;
-        return ObjectAliveTrait<T>::isHeapObjectAlive(toDerived(), obj);
+        return ObjectAliveTrait<T>::isHeapObjectAlive(Derived::fromHelper(this), obj);
     }
     template<typename T> inline bool isAlive(const Member<T>& member)
     {
@@ -525,8 +534,6 @@ private:
         if (*cell && !self->isAlive(*cell))
             *cell = nullptr;
     }
-
-    Derived* toDerived() { return static_cast<Derived*>(this); }
 };
 
 // Visitor is used to traverse the Blink object graph. Used for the
@@ -572,7 +579,6 @@ public:
 
     // Used to mark objects during conservative scanning.
     virtual void markHeader(HeapObjectHeader*, TraceCallback) = 0;
-    virtual void markHeader(GeneralHeapObjectHeader*, TraceCallback) = 0;
 
     // Used to delay the marking of objects until the usual marking
     // including emphemeron iteration is done. This is used to delay
@@ -612,15 +618,6 @@ public:
     virtual bool isMarked(const void*) = 0;
     virtual bool ensureMarked(const void*) = 0;
 
-    // Macro to declare methods needed for each typed heap.
-#define DECLARE_VISITOR_METHODS(Type)                            \
-    virtual void mark(const Type*, TraceCallback) = 0;           \
-    virtual bool isMarked(const Type*) = 0;                      \
-    virtual bool ensureMarked(const Type*) = 0;
-
-    FOR_EACH_TYPED_HEAP(DECLARE_VISITOR_METHODS)
-#undef DECLARE_VISITOR_METHODS
-
 #if ENABLE(GC_PROFILE_MARKING)
     void setHostInfo(void* object, const String& name)
     {
@@ -629,18 +626,25 @@ public:
     }
 #endif
 
-    inline bool canTraceEagerly() const { return m_traceDepth < kMaxEagerTraceDepth; }
-    inline void incrementTraceDepth() { m_traceDepth++; }
-    inline void decrementTraceDepth() { ASSERT(m_traceDepth > 0); m_traceDepth--; }
+    inline bool canTraceEagerly() const
+    {
+        ASSERT(m_stackFrameDepth);
+        return m_stackFrameDepth->isSafeToRecurse();
+    }
+
+    inline void configureEagerTraceLimit()
+    {
+        if (!m_stackFrameDepth)
+            m_stackFrameDepth = new StackFrameDepth;
+        m_stackFrameDepth->configureLimit();
+    }
 
     inline bool isGlobalMarkingVisitor() const { return m_isGlobalMarkingVisitor; }
 
 protected:
     explicit Visitor(VisitorType type)
-        : m_traceDepth(0)
-        , m_isGlobalMarkingVisitor(type == GlobalMarkingVisitorType)
-    {
-    }
+        : m_isGlobalMarkingVisitor(type == GlobalMarkingVisitorType)
+    { }
 
     virtual void registerWeakCellWithCallback(void**, WeakPointerCallback) = 0;
 #if ENABLE(GC_PROFILE_MARKING)
@@ -654,11 +658,9 @@ protected:
 #endif
 
 private:
-    // The maximum depth of eager, unrolled trace() calls that is
-    // considered safe and allowed.
-    const int kMaxEagerTraceDepth = 100;
+    static Visitor* fromHelper(VisitorHelper<Visitor>* helper) { return static_cast<Visitor*>(helper); }
+    static StackFrameDepth* m_stackFrameDepth;
 
-    int m_traceDepth;
     bool m_isGlobalMarkingVisitor;
 };
 
@@ -669,7 +671,8 @@ template<typename T, size_t N>
 struct OffHeapCollectionTraceTrait<WTF::Vector<T, N, WTF::DefaultAllocator> > {
     typedef WTF::Vector<T, N, WTF::DefaultAllocator> Vector;
 
-    static void trace(Visitor* visitor, const Vector& vector)
+    template<typename VisitorDispatcher>
+    static void trace(VisitorDispatcher visitor, const Vector& vector)
     {
         if (vector.isEmpty())
             return;
@@ -682,7 +685,8 @@ template<typename T, size_t N>
 struct OffHeapCollectionTraceTrait<WTF::Deque<T, N> > {
     typedef WTF::Deque<T, N> Deque;
 
-    static void trace(Visitor* visitor, const Deque& deque)
+    template<typename VisitorDispatcher>
+    static void trace(VisitorDispatcher visitor, const Deque& deque)
     {
         if (deque.isEmpty())
             return;
@@ -703,7 +707,8 @@ public:
 template<typename T>
 class DefaultTraceTrait<T, false> {
 public:
-    static void mark(Visitor* visitor, const T* t)
+    template<typename VisitorDispatcher>
+    static void mark(VisitorDispatcher visitor, const T* t)
     {
         // Default mark method of the trait just calls the two-argument mark
         // method on the visitor. The second argument is the static trace method
@@ -722,9 +727,7 @@ public:
             ASSERT(visitor->canTraceEagerly());
             if (LIKELY(visitor->canTraceEagerly())) {
                 if (visitor->ensureMarked(t)) {
-                    visitor->incrementTraceDepth();
                     TraceTrait<T>::trace(visitor, const_cast<T*>(t));
-                    visitor->decrementTraceDepth();
                 }
                 return;
             }
@@ -735,7 +738,7 @@ public:
 #if ENABLE(ASSERT)
     static void checkGCInfo(const T* t)
     {
-        assertObjectHasGCInfo(const_cast<T*>(t), GCInfoTrait<T>::get());
+        assertObjectHasGCInfo(const_cast<T*>(t), GCInfoTrait<T>::index());
     }
 #endif
 };
@@ -743,7 +746,8 @@ public:
 template<typename T>
 class DefaultTraceTrait<T, true> {
 public:
-    static void mark(Visitor* visitor, const T* self)
+    template<typename VisitorDispatcher>
+    static void mark(VisitorDispatcher visitor, const T* self)
     {
         if (!self)
             return;
@@ -853,9 +857,41 @@ struct TypenameStringTrait {
 };
 #endif
 
+// s_gcInfoTable holds the per-class GCInfo descriptors; each heap
+// object header keeps its index into this table.
+extern PLATFORM_EXPORT GCInfo const** s_gcInfoTable;
+
+class GCInfoTable {
+public:
+    PLATFORM_EXPORT static void ensureGCInfoIndex(const GCInfo*, size_t*);
+
+    static void init();
+    static void shutdown();
+
+    // The (max + 1) GCInfo index supported.
+    static const size_t maxIndex = 1 << 15;
+
+private:
+    static void resize();
+
+    static int s_gcInfoIndex;
+    static size_t s_gcInfoTableSize;
+};
+
+// This macro should be used when returning a unique 15 bit integer
+// for a given gcInfo.
+#define RETURN_GCINFO_INDEX()                                  \
+    static size_t gcInfoIndex = 0;                             \
+    ASSERT(s_gcInfoTable);                                     \
+    if (!gcInfoIndex)                                          \
+        GCInfoTable::ensureGCInfoIndex(&gcInfo, &gcInfoIndex); \
+    ASSERT(gcInfoIndex >= 1);                                  \
+    ASSERT(gcInfoIndex < GCInfoTable::maxIndex);               \
+    return gcInfoIndex;
+
 template<typename T>
 struct GCInfoAtBase {
-    static const GCInfo* get()
+    static size_t index()
     {
         static const GCInfo gcInfo = {
             TraceTrait<T>::trace,
@@ -866,7 +902,7 @@ struct GCInfoAtBase {
             TypenameStringTrait<T>::get()
 #endif
         };
-        return &gcInfo;
+        RETURN_GCINFO_INDEX();
     }
 };
 
@@ -884,9 +920,9 @@ struct GetGarbageCollectedBase<T, false> {
 
 template<typename T>
 struct GCInfoTrait {
-    static const GCInfo* get()
+    static size_t index()
     {
-        return GCInfoAtBase<typename GetGarbageCollectedBase<T>::type>::get();
+        return GCInfoAtBase<typename GetGarbageCollectedBase<T>::type>::index();
     }
 };
 

@@ -101,7 +101,7 @@ private:
     void populateGridPositions(const GridSizingData&, LayoutUnit availableSpaceForColumns, LayoutUnit availableSpaceForRows);
 
     typedef LayoutUnit (RenderGrid::* SizingFunction)(RenderBox&, GridTrackSizingDirection, Vector<GridTrack>&);
-    typedef LayoutUnit (GridTrack::* AccumulatorGetter)() const;
+    typedef const LayoutUnit& (GridTrack::* AccumulatorGetter)() const;
     typedef void (GridTrack::* AccumulatorGrowFunction)(LayoutUnit);
     typedef bool (GridTrackSize::* FilterFunction)() const;
     void resolveContentBasedTrackSizingFunctionsForItems(GridTrackSizingDirection, GridSizingData&, GridItemWithSpan&, FilterFunction, SizingFunction, AccumulatorGetter, AccumulatorGrowFunction, FilterFunction growAboveMaxBreadthFilterFunction = nullptr);
@@ -131,6 +131,7 @@ private:
     LayoutUnit gridAreaBreadthForChild(const RenderBox& child, GridTrackSizingDirection, const Vector<GridTrack>&) const;
 
     virtual void paintChildren(const PaintInfo&, const LayoutPoint&) override;
+    bool allowedToStretchLogicalHeightForChild(const RenderBox& child) const;
     bool needToStretchChildLogicalHeight(const RenderBox&) const;
     LayoutUnit childIntrinsicHeight(const RenderBox&) const;
     LayoutUnit childIntrinsicWidth(const RenderBox&) const;

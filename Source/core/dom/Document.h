@@ -353,6 +353,7 @@ public:
     String origin() const { return securityOrigin()->toString(); }
 
     String visibilityState() const;
+    PageVisibilityState pageVisibilityState() const;
     bool hidden() const;
     void didChangeVisibilityState();
 
@@ -558,9 +559,6 @@ public:
 
     virtual String userAgent(const KURL&) const override final;
     virtual void disableEval(const String& errorMessage) override final;
-
-    bool canNavigate(const Frame& targetFrame);
-    LocalFrame* findUnsafeParentScrollPropagationBoundary();
 
     CSSStyleSheet& elementSheet();
 
@@ -1140,8 +1138,6 @@ private:
 
     void loadEventDelayTimerFired(EventRacerTimer<Document>*);
     void pluginLoadingTimerFired(Timer<Document>*);
-
-    PageVisibilityState pageVisibilityState() const;
 
     // Note that dispatching a window load event may cause the LocalDOMWindow to be detached from
     // the LocalFrame, so callers should take a reference to the LocalDOMWindow (which owns us) to

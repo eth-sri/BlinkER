@@ -69,8 +69,6 @@ IMEAPI status=experimental
 IndexedDBExperimental status=experimental
 InputModeAttribute status=experimental
 LangAttributeAwareFormControlUI
-// Lax Mixed Content checking for WebSockets, XHR, etc. is deprecated and slated for removal. crbug.com/389089
-LaxMixedContentChecking status=deprecated
 LocalStorage status=stable
 FractionalScrollOffsets status=experimental
 GlobalFetch status=experimental
@@ -98,7 +96,6 @@ PathOpsSVGClipping status=experimental
 PeerConnection status=stable
 Permissions status=experimental
 Picture status=stable
-PictureSizes status=stable
 PreciseMemoryInfo
 PrefixedEncryptedMedia status=stable
 // This feature is deprecated and we are evangalizing affected sites.

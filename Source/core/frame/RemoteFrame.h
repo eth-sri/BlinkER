@@ -30,6 +30,7 @@ public:
     virtual void detach() override;
     virtual RemoteSecurityContext* securityContext() const override;
     bool checkLoadComplete() override;
+    void printNavigationErrorMessage(const Frame&, const char* reason) { }
 
     // FIXME: Remove this method once we have input routing in the browser
     // process. See http://crbug.com/339659.
@@ -37,7 +38,6 @@ public:
 
     void setView(PassRefPtrWillBeRawPtr<RemoteFrameView>);
     void createView();
-    void setIsLoading(bool isLoading) { m_isLoading = isLoading; }
 
     RemoteFrameView* view() const;
 
@@ -50,8 +50,6 @@ private:
     RefPtrWillBeMember<RemoteFrameView> m_view;
     RefPtr<RemoteSecurityContext> m_securityContext;
     RefPtrWillBeMember<RemoteDOMWindow> m_domWindow;
-
-    bool m_isLoading;
 };
 
 inline RemoteFrameView* RemoteFrame::view() const

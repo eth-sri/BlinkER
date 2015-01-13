@@ -99,7 +99,6 @@
 #include "platform/KeyboardCodes.h"
 #include "platform/Logging.h"
 #include "platform/NotImplemented.h"
-#include "platform/OverscrollTheme.h"
 #include "platform/PlatformGestureEvent.h"
 #include "platform/PlatformKeyboardEvent.h"
 #include "platform/PlatformMouseEvent.h"
@@ -212,9 +211,9 @@ const double WebView::maxTextSizeMultiplier = 3.0;
 
 // Used to defer all page activity in cases where the embedder wishes to run
 // a nested event loop. Using a stack enables nesting of message loop invocations.
-static WillBeHeapVector<RawPtrWillBeMember<ScopedPageLoadDeferrer> >& pageLoadDeferrerStack()
+static WillBeHeapVector<RawPtrWillBeMember<ScopedPageLoadDeferrer>>& pageLoadDeferrerStack()
 {
-    DEFINE_STATIC_LOCAL(OwnPtrWillBePersistent<WillBeHeapVector<RawPtrWillBeMember<ScopedPageLoadDeferrer> > >, deferrerStack, (adoptPtrWillBeNoop(new WillBeHeapVector<RawPtrWillBeMember<ScopedPageLoadDeferrer> > ())));
+    DEFINE_STATIC_LOCAL(OwnPtrWillBePersistent<WillBeHeapVector<RawPtrWillBeMember<ScopedPageLoadDeferrer>>>, deferrerStack, (adoptPtrWillBeNoop(new WillBeHeapVector<RawPtrWillBeMember<ScopedPageLoadDeferrer>>())));
     return *deferrerStack;
 }
 
@@ -757,7 +756,7 @@ bool WebViewImpl::handleGestureEvent(const WebGestureEvent& event)
             boundingBox.move(pinchViewportOffset);
 
             Vector<IntRect> goodTargets;
-            WillBeHeapVector<RawPtrWillBeMember<Node> > highlightNodes;
+            WillBeHeapVector<RawPtrWillBeMember<Node>> highlightNodes;
             findGoodTouchTargets(boundingBox, mainFrameImpl()->frame(), goodTargets, highlightNodes);
             // FIXME: replace touch adjustment code when numberOfGoodTargets == 1?
             // Single candidate case is currently handled by: https://bugs.webkit.org/show_bug.cgi?id=85101
@@ -1237,13 +1236,13 @@ void WebViewImpl::enableTapHighlightAtPoint(const GestureEventWithHitTestResults
 {
     Node* touchNode = bestTapNode(targetedTapEvent);
 
-    WillBeHeapVector<RawPtrWillBeMember<Node> > highlightNodes;
+    WillBeHeapVector<RawPtrWillBeMember<Node>> highlightNodes;
     highlightNodes.append(touchNode);
 
     enableTapHighlights(highlightNodes);
 }
 
-void WebViewImpl::enableTapHighlights(WillBeHeapVector<RawPtrWillBeMember<Node> >& highlightNodes)
+void WebViewImpl::enableTapHighlights(WillBeHeapVector<RawPtrWillBeMember<Node>>& highlightNodes)
 {
     if (highlightNodes.isEmpty())
         return;
@@ -1590,7 +1589,7 @@ void WebViewImpl::close()
 
     // Reset the delegate to prevent notifications being sent as we're being
     // deleted.
-    m_client = 0;
+    m_client = nullptr;
 
     deref();  // Balances ref() acquired in WebView::create
 }
@@ -1954,7 +1953,7 @@ bool WebViewImpl::hasVerticalScrollbar()
     return mainFrameImpl()->frameView()->verticalScrollbar();
 }
 
-const WebInputEvent* WebViewImpl::m_currentInputEvent = 0;
+const WebInputEvent* WebViewImpl::m_currentInputEvent = nullptr;
 
 // FIXME: autogenerate this kind of code, and use it throughout Blink rather than
 // the one-offs for subsets of these values.
@@ -3231,9 +3230,6 @@ void WebViewImpl::refreshPageScaleFactorAfterLayout()
         m_pageScaleConstraintsSet.adjustFinalConstraintsToContentsSize(contentsSize(), verticalScrollbarWidth);
     }
 
-    if (pinchVirtualViewportEnabled())
-        view->resize(mainFrameSize());
-
     float newPageScaleFactor = pageScaleFactor();
     if (m_pageScaleConstraintsSet.needsReset() && m_pageScaleConstraintsSet.finalConstraints().initialScale != -1) {
         newPageScaleFactor = m_pageScaleConstraintsSet.finalConstraints().initialScale;
@@ -3242,11 +3238,6 @@ void WebViewImpl::refreshPageScaleFactorAfterLayout()
     setPageScaleFactor(newPageScaleFactor);
 
     updateLayerTreeViewport();
-
-    // Relayout immediately to avoid violating the rule that needsLayout()
-    // isn't set at the end of a layout.
-    if (view->needsLayout())
-        view->layout();
 }
 
 void WebViewImpl::updatePageDefinedViewportConstraints(const ViewportDescription& description)
@@ -3256,7 +3247,9 @@ void WebViewImpl::updatePageDefinedViewportConstraints(const ViewportDescription
 
     Document* document = page()->deprecatedLocalMainFrame()->document();
 
-    m_matchesHeuristicsForGpuRasterization = description.maxWidth == Length(DeviceWidth);
+    m_matchesHeuristicsForGpuRasterization = description.maxWidth == Length(DeviceWidth)
+        && description.minZoom == 1.0
+        && description.minZoomIsExplicit;
     if (m_layerTreeView)
         m_layerTreeView->heuristicsForGpuRasterizationUpdated(m_matchesHeuristicsForGpuRasterization);
 
@@ -3953,6 +3946,16 @@ void WebViewImpl::layoutUpdated(WebLocalFrameImpl* webframe)
     if (m_pageScaleConstraintsSet.constraintsDirty())
         refreshPageScaleFactorAfterLayout();
 
+    FrameView* view = webframe->frame()->view();
+
+    if (pinchVirtualViewportEnabled())
+        view->resize(mainFrameSize());
+
+    // Relayout immediately to avoid violating the rule that needsLayout()
+    // isn't set at the end of a layout.
+    if (view->needsLayout())
+        view->layout();
+
     // In case we didn't have a size when the top controls were updated.
     didUpdateTopControls();
 
@@ -4116,14 +4119,14 @@ void WebViewImpl::setRootGraphicsLayer(GraphicsLayer* layer)
             m_rootLayer = pinchViewport.rootGraphicsLayer()->platformLayer();
             m_rootTransformLayer = pinchViewport.rootGraphicsLayer();
         } else {
-            m_rootGraphicsLayer = 0;
-            m_rootLayer = 0;
-            m_rootTransformLayer = 0;
+            m_rootGraphicsLayer = nullptr;
+            m_rootLayer = nullptr;
+            m_rootTransformLayer = nullptr;
         }
     } else {
         m_rootGraphicsLayer = layer;
         m_rootLayer = layer ? layer->platformLayer() : 0;
-        m_rootTransformLayer = 0;
+        m_rootTransformLayer = nullptr;
     }
 
     setIsAcceleratedCompositingActive(layer != 0);
@@ -4140,7 +4143,7 @@ void WebViewImpl::setRootGraphicsLayer(GraphicsLayer* layer)
             } else {
                 GraphicsLayer* rootScrollLayer = compositor()->scrollLayer();
                 ASSERT(rootScrollLayer);
-                WebLayer* pageScaleLayer = rootScrollLayer->parent() ? rootScrollLayer->parent()->platformLayer() : 0;
+                WebLayer* pageScaleLayer = rootScrollLayer->parent() ? rootScrollLayer->parent()->platformLayer() : nullptr;
                 // Note that it is invalid to have 0 as a scroll elasticity layer when using pinch virtual viewport.
                 m_layerTreeView->registerViewportLayers(0, pageScaleLayer, rootScrollLayer->platformLayer(), 0);
             }
@@ -4260,11 +4263,6 @@ void WebViewImpl::setIsAcceleratedCompositingActive(bool active)
         m_layerTreeView->setPageScaleFactorAndLimits(pageScaleFactor(), minimumPageScaleFactor(), maximumPageScaleFactor());
         updateLayerTreeBackgroundColor();
         m_layerTreeView->setHasTransparentBackground(isTransparent());
-#if USE(RUBBER_BANDING)
-        RefPtr<Image> overhangImage = OverscrollTheme::theme()->getOverhangImage();
-        if (overhangImage && overhangImage->nativeImageForCurrentFrame())
-            m_layerTreeView->setOverhangBitmap(overhangImage->nativeImageForCurrentFrame()->bitmap());
-#endif
         updateLayerTreeViewport();
         m_isAcceleratedCompositingActive = true;
         if (m_pageOverlays)
@@ -4285,6 +4283,7 @@ void WebViewImpl::updateMainFrameScrollPosition(const IntPoint& scrollPosition, 
     if (!page()->mainFrame()->isLocalFrame())
         return;
 
+    // FIXME(305811): Refactor for OOPI.
     FrameView* frameView = page()->deprecatedLocalMainFrame()->view();
     if (!frameView)
         return;
@@ -4298,9 +4297,25 @@ void WebViewImpl::updateMainFrameScrollPosition(const IntPoint& scrollPosition, 
     frameView->setInProgrammaticScroll(oldProgrammaticScroll);
 }
 
+void WebViewImpl::updateRootLayerScrollPosition(const IntPoint& scrollPosition)
+{
+    if (!page()->mainFrame()->isLocalFrame())
+        return;
+
+    // FIXME(305811): Refactor for OOPI.
+    FrameView* frameView = page()->deprecatedLocalMainFrame()->view();
+    if (!frameView)
+        return;
+
+    ScrollableArea* scrollableArea = frameView->renderView()->layer()->scrollableArea();
+    if (scrollableArea->scrollPosition() == scrollPosition)
+        return;
+    scrollableArea->notifyScrollPositionChanged(scrollPosition);
+}
+
 void WebViewImpl::applyViewportDeltas(
     const WebSize& pinchViewportDelta,
-    const WebSize& mainFrameDelta,
+    const WebSize& outerViewportDelta,
     const WebFloatSize& elasticOverscrollDelta,
     float pageScaleDelta,
     float topControlsDelta)
@@ -4324,9 +4339,19 @@ void WebViewImpl::applyViewportDeltas(
 
     frameView->setElasticOverscroll(elasticOverscrollDelta + frameView->elasticOverscroll());
 
-    IntPoint mainFrameScrollOffset = IntPoint(mainFrame()->scrollOffset());
-    mainFrameScrollOffset.move(mainFrameDelta.width, mainFrameDelta.height);
-    updateMainFrameScrollPosition(mainFrameScrollOffset, false);
+    bool rootLayerScrolls = page()->settings().rootLayerScrolls();
+    ScrollableArea* outerViewport;
+    if (rootLayerScrolls)
+        outerViewport = frameView->renderView()->layer()->scrollableArea();
+    else
+        outerViewport = frameView;
+
+    IntPoint outerViewportOffset = outerViewport->scrollPosition();
+    outerViewportOffset.move(outerViewportDelta.width, outerViewportDelta.height);
+    if (rootLayerScrolls)
+        updateRootLayerScrollPosition(outerViewportOffset);
+    else
+        updateMainFrameScrollPosition(outerViewportOffset, false);
 }
 
 void WebViewImpl::applyViewportDeltas(const WebSize& scrollDelta, float pageScaleDelta, float topControlsDelta)

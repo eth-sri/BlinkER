@@ -1410,8 +1410,13 @@ void Element::removedFrom(ContainerNode* insertionPoint)
 
     ASSERT(!hasRareData() || !elementRareData()->hasPseudoElements());
 
-    if (containsFullScreenElement())
+    if (Fullscreen::isActiveFullScreenElement(*this)) {
         setContainsFullScreenElementOnAncestorsCrossingFrameBoundaries(false);
+        if (insertionPoint->isElementNode()) {
+            toElement(insertionPoint)->setContainsFullScreenElement(false);
+            toElement(insertionPoint)->setContainsFullScreenElementOnAncestorsCrossingFrameBoundaries(false);
+        }
+    }
 
     if (Fullscreen* fullscreen = Fullscreen::fromIfExists(document()))
         fullscreen->elementRemoved(*this);
@@ -2972,21 +2977,21 @@ void Element::willModifyAttribute(const QualifiedName& name, const AtomicString&
 void Element::didAddAttribute(const QualifiedName& name, const AtomicString& value)
 {
     attributeChanged(name, value);
-    InspectorInstrumentation::didModifyDOMAttr(this, name.toString(), value);
+    InspectorInstrumentation::didModifyDOMAttr(this, name, value);
     dispatchSubtreeModifiedEvent();
 }
 
 void Element::didModifyAttribute(const QualifiedName& name, const AtomicString& value)
 {
     attributeChanged(name, value);
-    InspectorInstrumentation::didModifyDOMAttr(this, name.toString(), value);
+    InspectorInstrumentation::didModifyDOMAttr(this, name, value);
     // Do not dispatch a DOMSubtreeModified event here; see bug 81141.
 }
 
 void Element::didRemoveAttribute(const QualifiedName& name)
 {
     attributeChanged(name, nullAtom);
-    InspectorInstrumentation::didRemoveDOMAttr(this, name.toString());
+    InspectorInstrumentation::didRemoveDOMAttr(this, name);
     dispatchSubtreeModifiedEvent();
 }
 
@@ -3448,12 +3453,8 @@ v8::Handle<v8::Object> Element::wrapCustomElement(v8::Isolate* isolate, v8::Hand
         return v8::Handle<v8::Object>();
 
     V8PerContextData* perContextData = V8PerContextData::from(context);
-    if (!perContextData)
-        return wrapper;
-
-    CustomElementBinding* binding = perContextData->customElementBinding(customElementDefinition());
-
-    wrapper->SetPrototype(binding->prototype());
+    if (perContextData)
+        wrapper->SetPrototype(perContextData->customElementBinding(customElementDefinition())->prototype());
 
     return V8DOMWrapper::associateObjectWithWrapper(isolate, this, wrapperType, wrapper);
 }

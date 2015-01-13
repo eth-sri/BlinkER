@@ -279,6 +279,8 @@ AccessibilityRole AXRenderObject::determineAccessibilityRole()
         return ListItemRole;
     if (m_renderer->isListMarker())
         return ListMarkerRole;
+    if (m_renderer->isBR())
+        return LineBreakRole;
     if (isHTMLLegendElement(node))
         return LegendRole;
     if (m_renderer->isText())
@@ -583,6 +585,9 @@ bool AXRenderObject::computeAccessibilityIsIgnored() const
     AXObject* controlObject = correspondingControlForLabelElement();
     if (controlObject && !controlObject->exposesTitleUIElement() && controlObject->isCheckboxOrRadio())
         return true;
+
+    if (m_renderer->isBR())
+        return false;
 
     // NOTE: BRs always have text boxes now, so the text box check here can be removed
     if (m_renderer->isText()) {
@@ -1147,6 +1152,9 @@ const AtomicString& AXRenderObject::liveRegionRelevant() const
 
 bool AXRenderObject::liveRegionAtomic() const
 {
+    // ARIA role status should have implicit aria-atomic value of true.
+    if (getAttribute(aria_atomicAttr).isEmpty() && roleValue() == StatusRole)
+        return true;
     return elementAttributeValue(aria_atomicAttr);
 }
 

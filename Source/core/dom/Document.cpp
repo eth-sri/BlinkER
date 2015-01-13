@@ -77,6 +77,7 @@
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContextTask.h"
 #include "core/dom/MainThreadTaskRunner.h"
+#include "core/dom/Microtask.h"
 #include "core/dom/MutationObserver.h"
 #include "core/dom/NodeChildRemovalTracker.h"
 #include "core/dom/NodeFilter.h"
@@ -326,47 +327,6 @@ static bool acceptsEditingFocus(const Element& element)
     ASSERT(element.hasEditableStyle());
 
     return element.document().frame() && element.rootEditableElement();
-}
-
-static bool canAccessAncestor(const SecurityOrigin& activeSecurityOrigin, const Frame* targetFrame)
-{
-    // targetFrame can be 0 when we're trying to navigate a top-level frame
-    // that has a 0 opener.
-    if (!targetFrame)
-        return false;
-
-    const bool isLocalActiveOrigin = activeSecurityOrigin.isLocal();
-    for (const Frame* ancestorFrame = targetFrame; ancestorFrame; ancestorFrame = ancestorFrame->tree().parent()) {
-        // FIXME: SecurityOrigins need to be refactored to work with out-of-process iframes.
-        // For now we prevent navigation between cross-process frames.
-        if (!ancestorFrame->isLocalFrame())
-            return false;
-
-        Document* ancestorDocument = toLocalFrame(ancestorFrame)->document();
-        // FIXME: Should be an ASSERT? Frames should alway have documents.
-        if (!ancestorDocument)
-            return true;
-
-        const SecurityOrigin* ancestorSecurityOrigin = ancestorDocument->securityOrigin();
-        if (activeSecurityOrigin.canAccess(ancestorSecurityOrigin))
-            return true;
-
-        // Allow file URL descendant navigation even when allowFileAccessFromFileURLs is false.
-        // FIXME: It's a bit strange to special-case local origins here. Should we be doing
-        // something more general instead?
-        if (isLocalActiveOrigin && ancestorSecurityOrigin->isLocal())
-            return true;
-    }
-
-    return false;
-}
-
-static void printNavigationErrorMessage(const LocalFrame& frame, const KURL& activeURL, const char* reason)
-{
-    String message = "Unsafe JavaScript attempt to initiate navigation for frame with URL '" + frame.document()->url().string() + "' from frame with URL '" + activeURL.string() + "'. " + reason + "\n";
-
-    // FIXME: should we print to the console of the document performing the navigation instead?
-    frame.localDOMWindow()->printErrorMessage(message);
 }
 
 uint64_t Document::s_globalTreeVersion = 0;
@@ -1802,7 +1762,7 @@ void Document::updateRenderTree(StyleRecalcChange change)
     // FIXME(361045): remove InspectorInstrumentation calls once DevTools Timeline migrates to tracing.
     InspectorInstrumentationCookie cookie = InspectorInstrumentation::willRecalculateStyle(this);
 
-    DocumentAnimations::updateOutdatedAnimationPlayersIfNeeded(*this);
+    DocumentAnimations::updateAnimationTimingIfNeeded(*this);
     evaluateMediaQueryListIfNeeded();
     updateUseShadowTreesIfNeeded();
     updateDistributionIfNeeded();
@@ -1903,6 +1863,8 @@ void Document::updateRenderTreeForNodeIfNeeded(Node* node)
 {
     ASSERT(node);
     if (!node->canParticipateInComposedTree())
+        return;
+    if (!needsRenderTreeUpdate())
         return;
 
     bool needsRecalc = needsFullRenderTreeUpdate() || node->needsStyleRecalc() || node->needsStyleInvalidation();
@@ -2224,6 +2186,15 @@ void Document::detach(const AttachContext& context)
     // destruction.
     clearDOMWindow();
 #endif
+
+    // FIXME: Currently we call notifyContextDestroyed() only in
+    // Document::detach(), which means that we don't call
+    // notifyContextDestroyed() for a document that doesn't get detached.
+    // If such a document has any observer, the observer won't get
+    // a contextDestroyed() notification. This can happen for a document
+    // created by DOMImplementation::createDocument().
+    LifecycleContext<Document>::notifyContextDestroyed();
+    ExecutionContext::notifyContextDestroyed();
 }
 
 void Document::prepareForDestruction()
@@ -2345,7 +2316,7 @@ void Document::open(Document* ownerDocument, ExceptionState& exceptionState)
             }
         }
 
-        if (m_frame->loader().state() == FrameStateProvisional)
+        if (m_frame->loader().provisionalDocumentLoader())
             m_frame->loader().stopAllLoaders();
     }
 
@@ -2897,80 +2868,6 @@ void Document::disableEval(const String& errorMessage)
     frame()->script().disableEval(errorMessage);
 }
 
-bool Document::canNavigate(const Frame& targetFrame)
-{
-    if (!m_frame)
-        return false;
-
-    // Frame-busting is generally allowed, but blocked for sandboxed frames lacking the 'allow-top-navigation' flag.
-    if (!isSandboxed(SandboxTopNavigation) && targetFrame == m_frame->tree().top())
-        return true;
-
-    if (isSandboxed(SandboxNavigation)) {
-        if (targetFrame.tree().isDescendantOf(m_frame))
-            return true;
-
-        const char* reason = "The frame attempting navigation is sandboxed, and is therefore disallowed from navigating its ancestors.";
-        if (isSandboxed(SandboxTopNavigation) && targetFrame == m_frame->tree().top())
-            reason = "The frame attempting navigation of the top-level window is sandboxed, but the 'allow-top-navigation' flag is not set.";
-
-        printNavigationErrorMessage(toLocalFrameTemporary(targetFrame), url(), reason);
-        return false;
-    }
-
-    ASSERT(securityOrigin());
-    SecurityOrigin& origin = *securityOrigin();
-
-    // This is the normal case. A document can navigate its decendant frames,
-    // or, more generally, a document can navigate a frame if the document is
-    // in the same origin as any of that frame's ancestors (in the frame
-    // hierarchy).
-    //
-    // See http://www.adambarth.com/papers/2008/barth-jackson-mitchell.pdf for
-    // historical information about this security check.
-    if (canAccessAncestor(origin, &targetFrame))
-        return true;
-
-    // Top-level frames are easier to navigate than other frames because they
-    // display their URLs in the address bar (in most browsers). However, there
-    // are still some restrictions on navigation to avoid nuisance attacks.
-    // Specifically, a document can navigate a top-level frame if that frame
-    // opened the document or if the document is the same-origin with any of
-    // the top-level frame's opener's ancestors (in the frame hierarchy).
-    //
-    // In both of these cases, the document performing the navigation is in
-    // some way related to the frame being navigate (e.g., by the "opener"
-    // and/or "parent" relation). Requiring some sort of relation prevents a
-    // document from navigating arbitrary, unrelated top-level frames.
-    if (!targetFrame.tree().parent()) {
-        if (targetFrame == m_frame->loader().opener())
-            return true;
-
-        // FIXME: We don't have access to RemoteFrame's opener yet.
-        if (targetFrame.isLocalFrame() && canAccessAncestor(origin, toLocalFrame(targetFrame).loader().opener()))
-            return true;
-    }
-
-    printNavigationErrorMessage(toLocalFrameTemporary(targetFrame), url(), "The frame attempting navigation is neither same-origin with the target, nor is it the target's parent or opener.");
-    return false;
-}
-
-LocalFrame* Document::findUnsafeParentScrollPropagationBoundary()
-{
-    LocalFrame* currentFrame = m_frame;
-    Frame* ancestorFrame = currentFrame->tree().parent();
-
-    while (ancestorFrame) {
-        // FIXME: We don't yet have access to a RemoteFrame's security origin.
-        if (!ancestorFrame->isLocalFrame())
-            return currentFrame;
-        if (!toLocalFrame(ancestorFrame)->document()->securityOrigin()->canAccess(securityOrigin()))
-            return currentFrame;
-        currentFrame = toLocalFrame(ancestorFrame);
-        ancestorFrame = ancestorFrame->tree().parent();
-    }
-    return 0;
-}
 
 void Document::didLoadAllImports()
 {
@@ -4422,8 +4319,8 @@ KURL Document::openSearchDescriptionURL()
     if (!frame() || frame()->tree().parent())
         return KURL();
 
-    // FIXME: Why do we need to wait for FrameStateComplete?
-    if (frame()->loader().state() != FrameStateComplete)
+    // FIXME: Why do we need to wait for load completion?
+    if (!loadEventFinished())
         return KURL();
 
     if (!head())
@@ -4635,6 +4532,9 @@ void Document::finishedParsing()
     ASSERT(!scriptableDocumentParser() || !m_parser->isParsing());
     ASSERT(!scriptableDocumentParser() || m_readyState != Loading);
     setParsingState(InDOMContentLoaded);
+
+    // FIXME: DOMContentLoaded is dispatched synchronously, but this should be dispatched in a queued task,
+    // See https://crbug.com/425790
     if (!m_documentTiming.domContentLoadedEventStart)
         m_documentTiming.domContentLoadedEventStart = monotonicallyIncreasingTime();
 
@@ -4650,10 +4550,15 @@ void Document::finishedParsing()
         m_documentTiming.domContentLoadedEventEnd = monotonicallyIncreasingTime();
     setParsingState(FinishedParsing);
 
-    // The loader's finishedParsing() method may invoke script that causes this object to
+    // The microtask checkpoint or the loader's finishedParsing() method may invoke script that causes this object to
     // be dereferenced (when this document is in an iframe and the onload causes the iframe's src to change).
     // Keep it alive until we are done.
     RefPtrWillBeRawPtr<Document> protect(this);
+
+    // Ensure Custom Element callbacks are drained before DOMContentLoaded.
+    // FIXME: Remove this ad-hoc checkpoint when DOMContentLoaded is dispatched in a
+    // queued task, which will do a checkpoint anyway. https://crbug.com/425790
+    Microtask::performCheckpoint();
 
     if (RefPtrWillBeRawPtr<LocalFrame> frame = this->frame()) {
         // Don't update the render tree if we haven't requested the main resource yet to avoid

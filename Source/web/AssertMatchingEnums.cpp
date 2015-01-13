@@ -98,6 +98,7 @@
 #include "public/platform/WebMediaPlayerClient.h"
 #include "public/platform/WebMediaSource.h"
 #include "public/platform/WebMediaStreamSource.h"
+#include "public/platform/WebPageVisibilityState.h"
 #include "public/platform/WebReferrerPolicy.h"
 #include "public/platform/WebScrollbar.h"
 #include "public/platform/WebScrollbarBehavior.h"
@@ -121,7 +122,6 @@
 #include "public/web/WebInputEvent.h"
 #include "public/web/WebNavigationPolicy.h"
 #include "public/web/WebNavigatorContentUtilsClient.h"
-#include "public/web/WebPageVisibilityState.h"
 #include "public/web/WebSecurityPolicy.h"
 #include "public/web/WebSerializedScriptValueVersion.h"
 #include "public/web/WebSettings.h"
@@ -252,6 +252,7 @@ STATIC_ASSERT_MATCHING_ENUM(WebAXRoleRadioButton, RadioButtonRole);
 STATIC_ASSERT_MATCHING_ENUM(WebAXRoleRadioGroup, RadioGroupRole);
 STATIC_ASSERT_MATCHING_ENUM(WebAXRoleRegion, RegionRole);
 STATIC_ASSERT_MATCHING_ENUM(WebAXRoleRootWebArea, RootWebAreaRole);
+STATIC_ASSERT_MATCHING_ENUM(WebAXRoleLineBreak, LineBreakRole);
 STATIC_ASSERT_MATCHING_ENUM(WebAXRoleRowHeader, RowHeaderRole);
 STATIC_ASSERT_MATCHING_ENUM(WebAXRoleRow, RowRole);
 STATIC_ASSERT_MATCHING_ENUM(WebAXRoleRuby, RubyRole);

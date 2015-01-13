@@ -42,6 +42,7 @@ WebInspector.NetworkDataGridNode = function(parentView, request)
     this._linkifier = new WebInspector.Linkifier();
     this._staleGraph = true;
     this._isNavigationRequest = false;
+    this.selectable = true;
 }
 
 WebInspector.NetworkDataGridNode._hoveredRowSymbol = Symbol("hoveredRow");
@@ -75,7 +76,7 @@ WebInspector.NetworkDataGridNode.prototype = {
      */
     createCells: function()
     {
-        this._showTiming = Runtime.experiments.isEnabled("requestTimingInNetworkTimeline") && WebInspector.settings.networkShowRequestTimingInTimeline.get() && !this._parentView.calculator().startAtZero;
+        this._showTiming = !WebInspector.settings.networkColorCodeResourceTypes.get() && !this._parentView.calculator().startAtZero;
         this._nameCell = null;
         this._timelineCell = null;
         this._initiatorCell = null;
@@ -150,12 +151,6 @@ WebInspector.NetworkDataGridNode.prototype = {
         this._linkifier.reset();
     },
 
-    _onClick: function()
-    {
-        if (!this._parentView.allowRequestSelection())
-            this.select();
-    },
-
     select: function()
     {
         this._parentView.dispatchEventToListeners(WebInspector.NetworkLogView.EventTypes.RequestSelected, this._request);
@@ -185,11 +180,6 @@ WebInspector.NetworkDataGridNode.prototype = {
     _openInNewTab: function()
     {
         InspectorFrontendHost.openInNewTab(this._request.url);
-    },
-
-    get selectable()
-    {
-        return this._parentView.allowRequestSelection();
     },
 
     /**
@@ -250,7 +240,6 @@ WebInspector.NetworkDataGridNode.prototype = {
     _renderNameCell: function(cell)
     {
         this._nameCell = cell;
-        cell.addEventListener("click", this._onClick.bind(this), false);
         cell.addEventListener("dblclick", this._openInNewTab.bind(this), false);
         var iconElement;
         if (this._request.resourceType() === WebInspector.resourceTypes.Image) {

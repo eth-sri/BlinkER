@@ -114,7 +114,7 @@ public:
 
     virtual void setResizable(bool) = 0;
 
-    virtual bool shouldReportDetailedMessageForSource(const String& source) = 0;
+    virtual bool shouldReportDetailedMessageForSource(LocalFrame&, const String& source) = 0;
     virtual void addMessageToConsole(LocalFrame*, MessageSource, MessageLevel, const String& message, unsigned lineNumber, const String& sourceID, const String& stackTrace) = 0;
 
     virtual bool canRunBeforeUnloadConfirmPanel() = 0;
@@ -133,8 +133,7 @@ public:
     virtual IntRect windowResizerRect() const = 0;
 
     // Methods used by HostWindow.
-    virtual void invalidateContentsAndRootView(const IntRect&) = 0;
-    virtual void invalidateContentsForSlowScroll(const IntRect&) = 0;
+    virtual void invalidateRect(const IntRect&) = 0;
     virtual IntRect rootViewToScreen(const IntRect&) const = 0;
     virtual blink::WebScreenInfo screenInfo() const = 0;
     virtual void setCursor(const Cursor&) = 0;
@@ -235,6 +234,8 @@ public:
     virtual void willSetInputMethodState() { }
     virtual void didUpdateTextOfFocusedElementByNonUserInput() { }
     virtual void showImeIfNeeded() { }
+
+    virtual void registerViewportLayers() const { }
 
 protected:
     virtual ~ChromeClient() { }

@@ -980,7 +980,7 @@ void XMLHttpRequest::createRequest(PassRefPtr<FormData> httpBody, ExceptionState
     resourceLoaderOptions.allowCredentials = (m_sameOriginRequest || m_includeCredentials) ? AllowStoredCredentials : DoNotAllowStoredCredentials;
     resourceLoaderOptions.credentialsRequested = m_includeCredentials ? ClientRequestedCredentials : ClientDidNotRequestCredentials;
     resourceLoaderOptions.securityOrigin = securityOrigin();
-    resourceLoaderOptions.mixedContentBlockingTreatment = RuntimeEnabledFeatures::laxMixedContentCheckingEnabled() ? TreatAsPassiveContent : TreatAsActiveContent;
+    resourceLoaderOptions.mixedContentBlockingTreatment = TreatAsActiveContent;
 
     // When responseType is set to "blob", we redirect the downloaded data to a
     // file-handle directly.
@@ -1805,6 +1805,7 @@ void XMLHttpRequest::trace(Visitor* visitor)
     visitor->trace(m_blobLoader);
     XMLHttpRequestEventTarget::trace(visitor);
     DocumentParserClient::trace(visitor);
+    ActiveDOMObject::trace(visitor);
 }
 
 } // namespace blink

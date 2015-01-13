@@ -198,11 +198,6 @@ void DOMTimer::didFire()
         executionContext()->setTimerNestingLevel(0);
 }
 
-void DOMTimer::contextDestroyed()
-{
-    SuspendableTimer::contextDestroyed();
-}
-
 void DOMTimer::stop()
 {
     SuspendableTimer::stop();
@@ -246,6 +241,11 @@ double DOMTimer::alignedFireTime(double fireTime) const
     }
 
     return fireTime;
+}
+
+void DOMTimer::trace(Visitor* visitor)
+{
+    SuspendableTimer::trace(visitor);
 }
 
 } // namespace blink

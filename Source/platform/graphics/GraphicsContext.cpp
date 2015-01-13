@@ -401,6 +401,11 @@ bool GraphicsContext::getTransformedClipBounds(FloatRect* bounds) const
 
 SkMatrix GraphicsContext::getTotalMatrix() const
 {
+    // FIXME: this is a hack to avoid changing all call sites of getTotalMatrix() to not use this method.
+    // The code needs to be cleand up after Slimming Paint is launched.
+    if (RuntimeEnabledFeatures::slimmingPaintEnabled())
+        return SkMatrix::I();
+
     if (contextDisabled() || !m_canvas)
         return SkMatrix::I();
 
@@ -424,6 +429,13 @@ void GraphicsContext::adjustTextRenderMode(SkPaint* paint) const
         return;
 
     paint->setLCDRenderText(couldUseLCDRenderedText());
+}
+
+bool GraphicsContext::couldUseLCDRenderedText() const
+{
+    if (RuntimeEnabledFeatures::slimmingPaintEnabled())
+        return true;
+    return m_isCertainlyOpaque && m_shouldSmoothFonts;
 }
 
 void GraphicsContext::setCompositeOperation(CompositeOperator compositeOperation, WebBlendMode blendMode)
@@ -1205,6 +1217,36 @@ void GraphicsContext::drawBitmapRect(const SkBitmap& bitmap, const SkRect* src,
         m_trackedRegion.didDrawRect(this, dst, *paint, &bitmap);
 }
 
+void GraphicsContext::drawImage(const SkImage* image, SkScalar left, SkScalar top, const SkPaint* paint)
+{
+    ASSERT(m_canvas);
+    if (contextDisabled())
+        return;
+
+    m_canvas->drawImage(image, left, top, paint);
+
+    if (regionTrackingEnabled()) {
+        SkPaint tmp;
+        const SkPaint* paintPtr = paint ? paint : &tmp;
+        m_trackedRegion.didDrawUnbounded(this, *paintPtr, RegionTracker::FillOnly);
+    }
+}
+
+void GraphicsContext::drawImageRect(const SkImage* image, const SkRect* src, const SkRect& dst, const SkPaint* paint)
+{
+    ASSERT(m_canvas);
+    if (contextDisabled())
+        return;
+
+    m_canvas->drawImageRect(image, src, dst, paint);
+
+    if (regionTrackingEnabled()) {
+        SkPaint tmp;
+        const SkPaint* paintPtr = paint ? paint : &tmp;
+        m_trackedRegion.didDrawUnbounded(this, *paintPtr, RegionTracker::FillOnly);
+    }
+}
+
 void GraphicsContext::drawOval(const SkRect& oval, const SkPaint& paint)
 {
     ASSERT(m_canvas);
@@ -1726,9 +1768,14 @@ PassOwnPtr<ImageBuffer> GraphicsContext::createRasterBuffer(const IntSize& size,
     // Make the buffer larger if the context's transform is scaling it so we need a higher
     // resolution than one pixel per unit. Also set up a corresponding scale factor on the
     // graphics context.
-
-    AffineTransform transform = getCTM();
-    IntSize scaledSize(static_cast<int>(ceil(size.width() * transform.xScale())), static_cast<int>(ceil(size.height() * transform.yScale())));
+    SkScalar ctmScaleX = 1.0;
+    SkScalar ctmScaleY = 1.0;
+    if (!RuntimeEnabledFeatures::slimmingPaintEnabled()) {
+        AffineTransform transform = getCTM();
+        ctmScaleX = transform.xScale();
+        ctmScaleY = transform.yScale();
+    }
+    IntSize scaledSize(static_cast<int>(ceil(size.width() * ctmScaleX)), static_cast<int>(ceil(size.height() * ctmScaleY)));
 
     OwnPtr<ImageBufferSurface> surface = adoptPtr(new UnacceleratedImageBufferSurface(scaledSize, opacityMode));
     if (!surface->isValid())

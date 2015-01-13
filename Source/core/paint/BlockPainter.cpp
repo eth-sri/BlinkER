@@ -12,11 +12,11 @@
 #include "core/page/Page.h"
 #include "core/paint/BoxClipper.h"
 #include "core/paint/BoxPainter.h"
+#include "core/paint/GraphicsContextAnnotator.h"
 #include "core/paint/InlinePainter.h"
 #include "core/paint/LineBoxListPainter.h"
 #include "core/paint/RenderDrawingRecorder.h"
 #include "core/paint/ScrollableAreaPainter.h"
-#include "core/rendering/GraphicsContextAnnotator.h"
 #include "core/rendering/PaintInfo.h"
 #include "core/rendering/RenderBlock.h"
 #include "core/rendering/RenderFlexibleBox.h"
@@ -227,8 +227,8 @@ void BlockPainter::paintObject(const PaintInfo& paintInfo, const LayoutPoint& pa
 
     // If the caret's node's render object's containing block is this block, and the paint action is PaintPhaseForeground,
     // then paint the caret.
-    if (paintPhase == PaintPhaseForeground) {
-        RenderDrawingRecorder recorder(paintInfo.context, m_renderBlock, paintPhase, bounds);
+    if (paintPhase == PaintPhaseForeground && hasCaret()) {
+        RenderDrawingRecorder recorder(paintInfo.context, m_renderBlock, PaintPhaseCaret, bounds);
         if (!recorder.canUseCachedDrawing())
             paintCarets(paintInfo, paintOffset);
     }

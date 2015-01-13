@@ -40,6 +40,7 @@ public:
         DrawingPaintPhaseTextClip = 10,
         DrawingPaintPhaseMask = 11,
         DrawingPaintPhaseClippingMask = 12,
+        DrawingPaintPhaseCaret = 13,
         ClipLayerOverflowControls,
         ClipLayerBackground,
         ClipLayerParent,
@@ -77,10 +78,16 @@ public:
         ClipNodeImage,
         ClipFrameToVisibleContentRect,
         ClipFrameScrollbars,
+        ClipSelectionImage,
         FloatClipForeground,
         FloatClipSelection,
         FloatClipSelfOutline,
-        EndFloatClip
+        EndFloatClip,
+        BeginClipPath,
+        EndClipPath,
+        VideoBitmap,
+        ImageBitmap,
+        DragImage
     };
 
     // Create a dummy display item which just holds the id but has no display operation.

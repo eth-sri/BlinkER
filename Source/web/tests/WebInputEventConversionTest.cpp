@@ -216,7 +216,7 @@ TEST(WebInputEventConversionTest, WebTouchEventBuilder)
 
 TEST(WebInputEventConversionTest, InputEventsScaling)
 {
-    const std::string baseURL("http://www.test.com/");
+    const std::string baseURL("http://www.test1.com/");
     const std::string fileName("fixed_layout.html");
 
     URLTestHelpers::registerMockedURLFromBaseURL(WebString::fromUTF8(baseURL.c_str()), WebString::fromUTF8("fixed_layout.html"));
@@ -731,7 +731,7 @@ TEST(WebInputEventConversionTest, PinchViewportOffset)
 
 TEST(WebInputEventConversionTest, ElasticOverscroll)
 {
-    const std::string baseURL("http://www.test4.com/");
+    const std::string baseURL("http://www.test5.com/");
     const std::string fileName("fixed_layout.html");
 
     URLTestHelpers::registerMockedURLFromBaseURL(WebString::fromUTF8(baseURL.c_str()), WebString::fromUTF8("fixed_layout.html"));
@@ -792,7 +792,7 @@ TEST(WebInputEventConversionTest, ElasticOverscroll)
 
 TEST(WebInputEventConversionTest, WebMouseWheelEventBuilder)
 {
-    const std::string baseURL("http://www.test5.com/");
+    const std::string baseURL("http://www.test6.com/");
     const std::string fileName("fixed_layout.html");
 
     URLTestHelpers::registerMockedURLFromBaseURL(WebString::fromUTF8(baseURL.c_str()), WebString::fromUTF8("fixed_layout.html"));
@@ -806,7 +806,7 @@ TEST(WebInputEventConversionTest, WebMouseWheelEventBuilder)
     RefPtrWillBeRawPtr<Document> document = toLocalFrame(webViewImpl->page()->mainFrame())->document();
     RefPtrWillBeRawPtr<WheelEvent> event = WheelEvent::create(FloatPoint(1, 3), FloatPoint(5, 10),
         WheelEvent::DOM_DELTA_PAGE, document.get()->domWindow(),  IntPoint(2, 6), IntPoint(10, 30),
-        true, false, false, false, 0, true);
+        true, false, false, false, 0, true, true);
     WebMouseWheelEventBuilder webMouseWheel(toLocalFrame(webViewImpl->page()->mainFrame())->view(), document.get()->renderView(), *event);
     EXPECT_EQ(1, webMouseWheel.wheelTicksX);
     EXPECT_EQ(3, webMouseWheel.wheelTicksY);
@@ -823,7 +823,7 @@ TEST(WebInputEventConversionTest, WebMouseWheelEventBuilder)
 
 TEST(WebInputEventConversionTest, PlatformWheelEventBuilder)
 {
-    const std::string baseURL("http://www.test6.com/");
+    const std::string baseURL("http://www.test7.com/");
     const std::string fileName("fixed_layout.html");
 
     URLTestHelpers::registerMockedURLFromBaseURL(WebString::fromUTF8(baseURL.c_str()), WebString::fromUTF8("fixed_layout.html"));
