@@ -70,7 +70,7 @@ void EventRacerTimerBase::fired()
     // If it's a repeating timer, fork the next timer event-action as a
     // successor of the current one. FIXME: the question here is whether the log
     // can change during the invocation of |didFire|.
-    if (isRepeating) {
+    if (isRepeating && d->log) {
         if (action->isReusable()) {
             action->reuse();
             d->act = action;
