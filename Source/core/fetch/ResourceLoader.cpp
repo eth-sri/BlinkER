@@ -410,18 +410,21 @@ void ResourceLoader::didReceiveResponse(blink::WebURLLoader*, const blink::WebUR
     // anything including removing the last reference to this object.
     RefPtrWillBeRawPtr<ResourceLoader> protect(this);
 
+    OwnPtr<EventRacerContext> ctx;
+    OwnPtr<EventActionScope> act;
+    OwnPtr<OperationScope> op;
+
     if (m_eventAction) {
         ASSERT(!EventRacerContext::getLog());
-        EventRacerContext ctx(m_log);
-        EventActionScope act(m_log->createEventAction());
-        OperationScope op("rsc-resp");
+        ctx = adoptPtr(new EventRacerContext(m_log));
+        act = adoptPtr(new EventActionScope(m_log->createEventAction()));
+        op = adoptPtr(new OperationScope("rsc-resp"));
         m_log->join(m_eventAction, m_log->getCurrentAction());
         m_eventAction = m_log->getCurrentAction();
         m_eventAction->willDeferJoin();
-        m_resource->responseReceived(resourceResponse, handle.release());
-    } else {
-        m_resource->responseReceived(resourceResponse, handle.release());
     }
+
+    m_resource->responseReceived(resourceResponse, handle.release());
 
     if (m_state == Terminated)
         return;
