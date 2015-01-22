@@ -1051,7 +1051,11 @@ void HTMLDocumentParser::executeScriptsWaitingForResources()
     if (!m_scriptRunner->hasScriptsWaitingForResources())
         return;
 
-    ASSERT(EventRacerContext::getLog() == m_log);
+    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
+    ASSERT(!m_log || m_log == log);
+    m_log = log;
+    ASSERT(m_log->hasAction());
+
     // pumpTokenizer can cause this parser to be detached from the Document,
     // but we need to ensure it isn't deleted yet.
     RefPtrWillBeRawPtr<HTMLDocumentParser> protect(this);
