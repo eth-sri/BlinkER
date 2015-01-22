@@ -95,30 +95,23 @@ public:
     // Registers a JS source with its V8 id.
     void registerScript(int line, int column, const char *src, size_t len, const char *url, size_t ulen, int id);
 
-    // JS instrumentation calls
-    static ScriptValue ER_read(DOMWindow &, const V8StringResource<> &,
-                               const ScriptValue &);
-    static ScriptValue ER_write(DOMWindow &, const V8StringResource<> &,
-                                const ScriptValue &);
-    static ScriptValue ER_writeFunc(DOMWindow &, const V8StringResource<> &,
-                                    const ScriptValue &, int);
-    static ScriptValue ER_readProp(DOMWindow &, const ScriptValue &,
-                                   const V8StringResource<> &,
-                                   const ScriptValue &);
-    static ScriptValue ER_writeProp(DOMWindow &, const ScriptValue &,
-                                    const V8StringResource<> &,
-                                    const ScriptValue &);
-    static ScriptValue ER_writePropFunc(DOMWindow &, const ScriptValue &,
-                                        const V8StringResource<> &,
-                                        const ScriptValue &, int);
-    static void ER_delete(DOMWindow &, const V8StringResource<> &);
-    static void ER_deleteProp(DOMWindow &, const ScriptValue &,
-                              const V8StringResource<> &);
-    static void ER_enterFunction(DOMWindow &, const V8StringResource<> &, int, int);
-    static ScriptValue ER_exitFunction(DOMWindow &, const ScriptValue &);
+    // Retrieves memory reads/writes accummilate during JS execution.
+    void fetch(v8::Handle<v8::Context>);
 
-    static void ER_readArray(DOMWindow &, const ScriptValue &);
-    static void ER_writeArray(DOMWindow &, const ScriptValue &);
+    // JS instrumentation calls
+    void ER_read(v8::Handle<v8::String>, v8::Handle<v8::Value>);
+    void ER_readProp(v8::Handle<v8::Object>, v8::Handle<v8::String>, v8::Handle<v8::Value>);
+    void ER_readArray(v8::Handle<v8::Object>);
+    void ER_write(v8::Handle<v8::String>, v8::Handle<v8::Value>);
+    void ER_writeProp(v8::Handle<v8::Object>, v8::Handle<v8::String>, v8::Handle<v8::Value>);
+    void ER_writeFunc(v8::Handle<v8::String>, int);
+    void ER_writePropFunc(v8::Handle<v8::Object>, v8::Handle<v8::String>, int);
+    void ER_writeArray(v8::Handle<v8::Object>);
+    void ER_enterFunction(v8::Handle<v8::String>, int, int, int, int);
+    void ER_exitFunction();
+    void ER_delete(v8::Handle<v8::String>);
+    void ER_deleteProp(v8::Handle<v8::Object>, v8::Handle<v8::String>);
+
 
 private:
     EventRacerLog();
@@ -131,11 +124,10 @@ private:
 
     // Convenience function to log JS object property or DOM element attribute
     // reads or write.
-    void logFieldAccess(Operation::Type, const ScriptValue &obj, const V8StringResource<> &name,
-                        const ScriptValue *val, int = -1);
+    void logFieldAccess(Operation::Type, v8::Handle<v8::Object>, v8::Handle<v8::String>);
 
     // Convenience function to format and log a value.
-    void logMemoryValue(const ScriptValue &, int = -1);
+    void logMemoryValue(v8::Handle<v8::Value>);
 
     unsigned int m_id;
     EventAction *m_currentAction;

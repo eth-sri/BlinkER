@@ -167,7 +167,16 @@ v8::Local<v8::Value> ScriptController::callFunction(ExecutionContext* context, v
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
     if (log && log->hasAction()) {
         OperationScope op("v8:call-fn");
+        ScriptState *scriptState = ScriptState::current(isolate);
+        v8::Local<v8::Function> enable = scriptState->getEnableFunction();
+        V8ScriptRunner::callInternalFunction(enable, v8::Undefined(isolate), 0, nullptr, isolate);
         result = V8ScriptRunner::callFunction(function, context, receiver, argc, info, isolate);
+        v8::Local<v8::Function> disable = scriptState->getDisableFunction();
+        v8::Local<v8::Value> count;
+        count = V8ScriptRunner::callInternalFunction(disable, v8::Undefined(isolate), 0, nullptr, isolate);
+        ASSERT(count->IsUint32());
+        if (count->Uint32Value() == 0)
+            log->fetch(scriptState->context());
     } else {
         // This is temporary to help identify callers.  Eventually, we will
         // always come with an active event-action here.
@@ -207,7 +216,16 @@ v8::Local<v8::Value> ScriptController::executeScriptAndReturnValue(v8::Handle<v8
         if (RefPtr<EventRacerLog> log = EventRacerContext::getLog()) {
             ASSERT(log->hasAction());
             OperationScope op("v8:exec-scr");
+            ScriptState *scriptState = ScriptState::current(isolate());
+            v8::Local<v8::Function> enable = scriptState->getEnableFunction();
+            V8ScriptRunner::callInternalFunction(enable, v8::Undefined(isolate()), 0, nullptr, isolate());
             result = V8ScriptRunner::runCompiledScript(isolate(), script, frame()->document());
+            v8::Local<v8::Function> disable = scriptState->getDisableFunction();
+            v8::Local<v8::Value> count;
+            count = V8ScriptRunner::callInternalFunction(disable, v8::Undefined(isolate()), 0, nullptr, isolate());
+            ASSERT(count->IsUint32());
+            if (count->Uint32Value() == 0)
+                log->fetch(scriptState->context());
         } else {
             // This is temporary to help identify callers.  Eventually, we will
             // always come with an active event-action here.

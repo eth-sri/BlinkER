@@ -94,13 +94,30 @@ public:
     void setEvalEnabled(bool);
     ScriptValue getFromGlobalObject(const char* name);
 
+    v8::Local<v8::Function> getEnableFunction() {
+        RefPtr<ScriptState> guard(this);
+        prepareEnableFunction();
+        return m_enableFunction.newLocal(m_isolate);
+    }
+
+    v8::Local<v8::Function> getDisableFunction() {
+        RefPtr<ScriptState> guard(this);
+        prepareDisableFunction();
+        return m_disableFunction.newLocal(m_isolate);
+    }
+
 protected:
     ScriptState(v8::Handle<v8::Context>, PassRefPtr<DOMWrapperWorld>);
+    void prepareEnableFunction();
+    void prepareDisableFunction();
 
 private:
     v8::Isolate* m_isolate;
     // This persistent handle is weak.
     ScopedPersistent<v8::Context> m_context;
+
+    ScopedPersistent<v8::Function> m_enableFunction;
+    ScopedPersistent<v8::Function> m_disableFunction;
 
     // This RefPtr doesn't cause a cycle because all persistent handles that DOMWrapperWorld holds are weak.
     RefPtr<DOMWrapperWorld> m_world;

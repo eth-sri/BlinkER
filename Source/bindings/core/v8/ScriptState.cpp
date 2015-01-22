@@ -116,6 +116,26 @@ ScriptState* ScriptState::forMainWorld(LocalFrame* frame)
     return ScriptState::from(toV8Context(frame, DOMWrapperWorld::mainWorld()));
 }
 
+void ScriptState::prepareEnableFunction()
+{
+    if (!m_enableFunction.isEmpty() || !contextIsValid())
+        return;
+    v8::Local<v8::Object> global = m_context.newLocal(m_isolate)->Global();
+    v8::Local<v8::Value> value = global->Get(v8String(m_isolate, "ER_enable"));
+    ASSERT(!value.IsEmpty() && value->IsFunction());
+    m_enableFunction.set(m_isolate, value.As<v8::Function>());
+}
+
+void ScriptState::prepareDisableFunction()
+{
+    if (!m_disableFunction.isEmpty() || !contextIsValid())
+        return;
+    v8::Local<v8::Object> global = m_context.newLocal(m_isolate)->Global();
+    v8::Local<v8::Value> value = global->Get(v8String(m_isolate, "ER_disable"));
+    ASSERT(!value.IsEmpty() && value->IsFunction());
+    m_disableFunction.set(m_isolate, value.As<v8::Function>());
+}
+
 PassRefPtr<ScriptStateForTesting> ScriptStateForTesting::create(v8::Handle<v8::Context> context, PassRefPtr<DOMWrapperWorld> world)
 {
     RefPtr<ScriptStateForTesting> scriptState = adoptRef(new ScriptStateForTesting(context, world));
