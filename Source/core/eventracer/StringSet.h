@@ -53,7 +53,7 @@ protected:
 
     size_t m_size;
     WTF::Vector<char> m_data;
-    WTF::Vector<size_t> m_hashes;
+    WTF::Vector<size_t> m_hashes; // NOTE: must be a power of two!
 };
 
 

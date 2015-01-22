@@ -16,9 +16,8 @@ namespace blink {
 StringSet::StringSet() {
     m_size = 1;
     m_data.append('\0');
-    m_hashes.resize(33);
-    for (size_t i = 0; i < m_hashes.size(); ++i)
-        m_hashes[i] = 0;
+    m_hashes.resize(32);
+    m_hashes.fill(0);
 }
 
 // Adds a string to the set. Returns the index of the added string. Duplicate
@@ -86,9 +85,8 @@ size_t StringSet::put(const char *s, size_t len) {
 }
 
 bool StringSet::findL(const char *s, size_t len, size_t hash, size_t &index) const {
-    if (m_hashes.size() == 0)
-       return false;
-    size_t p = hash % m_hashes.size();
+    size_t cnt = 0;
+    size_t p = hash & (m_hashes.size() - 1);
     while (m_hashes[p]) {
         ASSERT(m_hashes[p] < m_data.size());
         const char *ss = &m_data[m_hashes[p]];
@@ -96,9 +94,9 @@ bool StringSet::findL(const char *s, size_t len, size_t hash, size_t &index) con
             index = m_hashes[p];
             return true;
         }
-        ++p;
-        if (p == m_hashes.size())
-           p = 0;
+        if (++cnt == m_hashes.size())
+            break;
+        p = (p + cnt) & (m_hashes.size() - 1);
     }
     return false;
 }
@@ -122,34 +120,31 @@ size_t StringSet::hashZ(const char *s, size_t &length) const {
 }
 
 void StringSet::addHash(size_t hash, size_t index) {
-    if (2*size() >= m_hashes.size()) {
-        size_t i = m_hashes.size();
-        m_hashes.resize(2*size() + 1);
-        // WTF::Vector not initializing on resize(), wtf ?!
-        while (i < m_hashes.size())
-            m_hashes[i++] = 0;
+    if (2 * size() >= m_hashes.size()) {
+        do {
+            m_hashes.resize(m_hashes.size() * 2);
+        } while (2 * size() >= m_hashes.size());
         rehashAll();
     }
     addHashNoRehash(hash, index);
 }
 
 void StringSet::addHashNoRehash(size_t hash, size_t index) {
-    size_t p = hash % m_hashes.size();
+    size_t cnt = 0;
+    size_t p = hash & (m_hashes.size() - 1);
     while (m_hashes[p]) {
-        ++p;
-        if (p == m_hashes.size())
-           p = 0;
+        ++cnt;
+        p = (p + cnt) & (m_hashes.size() - 1);
     }
     m_hashes[p] = index;
 }
 
 void StringSet::rehashAll() {
     size_t i, len;
-    for (i = 0; i < m_hashes.size(); ++i)
-        m_hashes[i] = 0;
-    for (size_t index = 1; index < m_data.size(); index += len + 1) {
-        const char *p = &m_data[index];
-        addHashNoRehash(hashZ(p, len), index);
+    m_hashes.fill(0);
+    for (i = 1; i < m_data.size(); i += len + 1) {
+        const char *p = &m_data[i];
+        addHashNoRehash(hashZ(p, len), i);
     }
 }
 
