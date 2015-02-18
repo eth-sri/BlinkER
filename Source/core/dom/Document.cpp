@@ -472,6 +472,7 @@ Document::Document(const DocumentInit& initializer, DocumentClassFlags documentC
     , m_hasViewportUnits(false)
     , m_styleRecalcElementCounter(0)
     , m_parserSyncPolicy(AllowAsynchronousParsing)
+    , m_log(EventRacerContext::getLog())
 {
     if (m_frame) {
         ASSERT(m_frame->page());
@@ -5051,7 +5052,7 @@ Element* Document::pointerLockElement() const
 void Document::decrementLoadEventDelayCount()
 {
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
-    if (log && log->hasAction())
+    if (log && log->hasAction() && log == m_log)
         m_loadEventDelayActions.deferJoin(log->getCurrentAction());
 
     ASSERT(m_loadEventDelayCount);
@@ -5083,8 +5084,20 @@ bool Document::isDelayingLoadEvent()
     return m_loadEventDelayCount;
 }
 
-void Document::loadEventDelayTimerFired(EventRacerTimer<Document>*)
+void Document::loadEventDelayTimerFired(Timer<Document>*)
 {
+    if (frame()) {
+        if (m_log) {
+            EventRacerContext ctx(m_log);
+            EventActionScope act(m_log->createEventAction());
+            EventAction *action = m_log->getCurrentAction();
+            m_loadEventDelayActions.join(m_log, action);
+            frame()->loader().checkCompleted(action);
+        } else {
+            frame()->loader().checkCompleted(nullptr);
+        }
+    }
+
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
     EventAction *action;
     if (log && log->hasAction()) {

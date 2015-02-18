@@ -1136,7 +1136,7 @@ private:
 
     void executeScriptsWaitingForResourcesTimerFired(Timer<Document>*);
 
-    void loadEventDelayTimerFired(EventRacerTimer<Document>*);
+    void loadEventDelayTimerFired(Timer<Document>*);
     void pluginLoadingTimerFired(Timer<Document>*);
 
     // Note that dispatching a window load event may cause the LocalDOMWindow to be detached from
@@ -1334,7 +1334,7 @@ private:
     WillBeHeapVector<RefPtrWillBeMember<Element>> m_topLayerElements;
 
     int m_loadEventDelayCount;
-    EventRacerTimer<Document> m_loadEventDelayTimer;
+    Timer<Document> m_loadEventDelayTimer;
     Timer<Document> m_pluginLoadingTimer;
 
     ViewportDescription m_viewportDescription;
@@ -1388,6 +1388,7 @@ private:
 
     ParserSynchronizationPolicy m_parserSyncPolicy;
 
+    RefPtr<EventRacerLog> m_log;
     EventRacerJoinActions m_loadEventDelayActions;
 };
 
