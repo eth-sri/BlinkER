@@ -2901,7 +2901,7 @@ void Document::didLoadAllScriptBlockingResources()
         view()->scrollToFragment(m_url);
 }
 
-void Document::executeScriptsWaitingForResourcesTimerFired(EventRacerTimer<Document>*)
+void Document::executeScriptsWaitingForResourcesTimerFired(Timer<Document>*)
 {
     if (!isRenderingReady())
         return;

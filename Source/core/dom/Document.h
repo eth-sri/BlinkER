@@ -1134,7 +1134,7 @@ private:
     void updateFocusAppearanceTimerFired(Timer<Document>*);
     void updateBaseURL();
 
-    void executeScriptsWaitingForResourcesTimerFired(EventRacerTimer<Document>*);
+    void executeScriptsWaitingForResourcesTimerFired(Timer<Document>*);
 
     void loadEventDelayTimerFired(EventRacerTimer<Document>*);
     void pluginLoadingTimerFired(Timer<Document>*);
@@ -1215,7 +1215,7 @@ private:
     CompatibilityMode m_compatibilityMode;
     bool m_compatibilityModeLocked; // This is cheaper than making setCompatibilityMode virtual.
 
-    EventRacerTimer<Document> m_executeScriptsWaitingForResourcesTimer;
+    Timer<Document> m_executeScriptsWaitingForResourcesTimer;
 
     bool m_hasAutofocused;
     Timer<Document> m_clearFocusedElementTimer;

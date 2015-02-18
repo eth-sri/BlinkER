@@ -139,9 +139,11 @@ private:
     virtual bool isWaitingForScripts() const override final;
     virtual bool isExecutingScript() const override final;
     virtual void executeScriptsWaitingForResources() override final;
+    void doExecuteScriptsWaitingForResources();
 
     // HTMLScriptRunnerHost
     virtual void notifyScriptLoaded(Resource*) override final;
+    void doNotifyScriptLoaded(Resource*);
     virtual HTMLInputStream& inputStream() override final { return m_input; }
     virtual bool hasPreloadScanner() const override final { return m_preloadScanner.get() && !shouldUseThreading(); }
     virtual void appendCurrentInputStreamToPreloadScannerAndScan() override final;

@@ -1006,25 +1006,9 @@ void HTMLDocumentParser::appendCurrentInputStreamToPreloadScannerAndScan()
     m_preloadScanner->scan(m_preloader.get(), document()->baseElementURL());
 }
 
-void HTMLDocumentParser::notifyScriptLoaded(Resource* cachedResource)
+void HTMLDocumentParser::doNotifyScriptLoaded(Resource* cachedResource)
 {
-    // pumpTokenizer can cause this parser to be detached from the Document,
-    // but we need to ensure it isn't deleted yet.
-    RefPtrWillBeRawPtr<HTMLDocumentParser> protect(this);
-
-    ASSERT(m_scriptRunner);
-    ASSERT(!isExecutingScript());
-
-    if (isStopped()) {
-        return;
-    }
-
-    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
-    ASSERT(!m_log || m_log == log);
-    m_log = log;
-    ASSERT(m_log->hasAction());
     EventAction *act = m_log->getCurrentAction();
-
     if (isStopping()) {
         m_joinActions.join(m_log, act);
         m_joinActions.deferJoin(act);
@@ -1040,22 +1024,34 @@ void HTMLDocumentParser::notifyScriptLoaded(Resource* cachedResource)
     }
 }
 
-void HTMLDocumentParser::executeScriptsWaitingForResources()
+void HTMLDocumentParser::notifyScriptLoaded(Resource* cachedResource)
 {
-    // Document only calls this when the Document owns the DocumentParser
-    // so this will not be called in the DocumentFragment case.
+    // pumpTokenizer can cause this parser to be detached from the Document,
+    // but we need to ensure it isn't deleted yet.
+    RefPtrWillBeRawPtr<HTMLDocumentParser> protect(this);
+
     ASSERT(m_scriptRunner);
-    // Ignore calls unless we have a script blocking the parser waiting on a
-    // stylesheet load.  Otherwise we are currently parsing and this
-    // is a re-entrant call from encountering a </ style> tag.
-    if (!m_scriptRunner->hasScriptsWaitingForResources())
+    ASSERT(!isExecutingScript());
+
+    if (isStopped()) {
         return;
+    }
 
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
-    ASSERT(!m_log || m_log == log);
-    m_log = log;
-    ASSERT(m_log->hasAction());
+    if (!m_log || m_log == log) {
+        m_log = log;
+        ASSERT(m_log->hasAction());
+        doNotifyScriptLoaded(cachedResource);
+    } else {
+        ASSERT(!m_log->hasAction());
+        EventRacerContext ctx(m_log);
+        EventActionScope act(m_log->createEventAction());
+        doNotifyScriptLoaded(cachedResource);
+    }
+}
 
+void HTMLDocumentParser::doExecuteScriptsWaitingForResources()
+{
     // pumpTokenizer can cause this parser to be detached from the Document,
     // but we need to ensure it isn't deleted yet.
     RefPtrWillBeRawPtr<HTMLDocumentParser> protect(this);
@@ -1067,6 +1063,25 @@ void HTMLDocumentParser::executeScriptsWaitingForResources()
         if (m_log->hasAction())
             m_joinActions.deferJoin(m_log->getCurrentAction());
     }
+}
+
+void HTMLDocumentParser::executeScriptsWaitingForResources()
+{
+    // Document only calls this when the Document owns the DocumentParser
+    // so this will not be called in the DocumentFragment case.
+    ASSERT(m_scriptRunner);
+    // Ignore calls unless we have a script blocking the parser waiting on a
+    // stylesheet load.  Otherwise we are currently parsing and this
+    // is a re-entrant call from encountering a </ style> tag.
+    if (!m_scriptRunner->hasScriptsWaitingForResources())
+        return;
+
+    ASSERT(!EventRacerContext::getLog());
+    ASSERT(m_log);
+
+    EventRacerContext ctx(m_log);
+    EventActionScope act(m_log->createEventAction());
+    doExecuteScriptsWaitingForResources();
 }
 
 void HTMLDocumentParser::parseDocumentFragment(const String& source, DocumentFragment* fragment, Element* contextElement, ParserContentPolicy parserContentPolicy)
