@@ -151,12 +151,12 @@ void DOMTimer::didFire()
     InspectorInstrumentationCookie cookie = InspectorInstrumentation::willFireTimer(context, m_timeoutID);
 
     RefPtr<EventRacerLog> log = EventRacerContext::getLog();
-    ASSERT(log && log->hasAction());
-    log->logOperation(log->getCurrentAction(), Operation::READ_MEMORY,
-                      log->getStrings(VAR_STRINGS).putf("Timer:%d", m_timeoutID));
-    log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE,
-                      log->getStrings(VALUE_STRINGS).putf("DOMTimer[0x%x]", getSerial()));
-
+    if (log && log->hasAction()) {
+        log->logOperation(log->getCurrentAction(), Operation::READ_MEMORY,
+                          log->getStrings(VAR_STRINGS).putf("Timer:%d", m_timeoutID));
+        log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE,
+                          log->getStrings(VALUE_STRINGS).putf("DOMTimer[0x%x]", getSerial()));
+    }
     // Simple case for non-one-shot timers.
     if (isActive()) {
         if (repeatInterval() && repeatInterval() < minimumInterval) {
@@ -177,9 +177,11 @@ void DOMTimer::didFire()
 
     WTF_LOG(Timers, "DOMTimer::fired: m_timeoutID = %d, one-shot, m_action = %p", m_timeoutID, m_action.get());
 
-    log->logOperation(log->getCurrentAction(), Operation::WRITE_MEMORY,
-                      log->getStrings(VAR_STRINGS).putf("Timer:%d",  m_timeoutID));
-    log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE, "undefined");
+    if (log && log->hasAction()) {
+        log->logOperation(log->getCurrentAction(), Operation::WRITE_MEMORY,
+                          log->getStrings(VAR_STRINGS).putf("Timer:%d",  m_timeoutID));
+        log->logOperation(log->getCurrentAction(), Operation::MEMORY_VALUE, "undefined");
+    }
 
     RefPtrWillBeRawPtr<DOMTimer> protect(this);
 
