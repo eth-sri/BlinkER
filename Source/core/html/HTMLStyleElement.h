@@ -29,6 +29,8 @@
 namespace blink {
 
 class HTMLStyleElement;
+class EventAction;
+class EventRacerLog;
 
 template<typename T> class EventSender;
 typedef EventSender<HTMLStyleElement> StyleEventSender;
@@ -70,6 +72,8 @@ private:
 
     virtual const AtomicString& media() const override;
     virtual const AtomicString& type() const override;
+    RefPtr<EventRacerLog> m_log;
+    EventAction *m_action;
 
     bool m_firedLoad;
     bool m_loadedSheet;

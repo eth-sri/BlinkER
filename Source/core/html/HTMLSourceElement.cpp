@@ -31,6 +31,7 @@
 #include "core/css/MediaQueryList.h"
 #include "core/css/MediaQueryMatcher.h"
 #include "core/dom/Document.h"
+#include "core/eventracer/EventRacerContext.h"
 #include "core/events/Event.h"
 #include "core/events/EventSender.h"
 #include "core/html/HTMLMediaElement.h"
@@ -69,6 +70,7 @@ private:
 inline HTMLSourceElement::HTMLSourceElement(Document& document)
     : HTMLElement(sourceTag, document)
     , m_listener(adoptRefWillBeNoop(new Listener(this)))
+    , m_action(nullptr)
 {
     WTF_LOG(Media, "HTMLSourceElement::HTMLSourceElement - %p", this);
 }
@@ -142,6 +144,11 @@ void HTMLSourceElement::setType(const AtomicString& type)
 void HTMLSourceElement::scheduleErrorEvent()
 {
     WTF_LOG(Media, "HTMLSourceElement::scheduleErrorEvent - %p", this);
+
+    ASSERT(EventRacerContext::getLog());
+    m_log = EventRacerContext::getLog();
+    m_action = m_log->getCurrentAction();
+
     sourceErrorEventSender().dispatchEventSoon(this);
 }
 
@@ -149,10 +156,16 @@ void HTMLSourceElement::cancelPendingErrorEvent()
 {
     WTF_LOG(Media, "HTMLSourceElement::cancelPendingErrorEvent - %p", this);
     sourceErrorEventSender().cancelEvent(this);
+    m_log.clear();
+    m_action = nullptr;
 }
 
 void HTMLSourceElement::dispatchPendingEvent(SourceEventSender* eventSender)
 {
+    EventRacerContext ctx(m_log);
+    EventActionScope act(m_log->createEventAction());
+    m_log->join(m_action, m_log->getCurrentAction());
+
     ASSERT_UNUSED(eventSender, eventSender == &sourceErrorEventSender());
     WTF_LOG(Media, "HTMLSourceElement::dispatchPendingEvent - %p", this);
     dispatchEvent(Event::createCancelable(EventTypeNames::error));

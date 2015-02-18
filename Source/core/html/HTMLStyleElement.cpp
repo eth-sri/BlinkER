@@ -27,6 +27,7 @@
 #include "core/HTMLNames.h"
 #include "core/css/MediaList.h"
 #include "core/dom/Document.h"
+#include "core/eventracer/EventRacerContext.h"
 #include "core/events/Event.h"
 #include "core/events/EventSender.h"
 #include "core/dom/shadow/ShadowRoot.h"
@@ -44,6 +45,7 @@ static StyleEventSender& styleLoadEventSender()
 inline HTMLStyleElement::HTMLStyleElement(Document& document, bool createdByParser)
     : HTMLElement(styleTag, document)
     , StyleElement(&document, createdByParser)
+    , m_action(nullptr)
     , m_firedLoad(false)
     , m_loadedSheet(false)
 {
@@ -133,6 +135,12 @@ void HTMLStyleElement::dispatchPendingLoadEvents()
 
 void HTMLStyleElement::dispatchPendingEvent(StyleEventSender* eventSender)
 {
+    EventRacerContext ctx(m_log);
+    OwnPtr<EventActionScope> act;
+    if (!m_log->hasAction())
+        act = adoptPtr(new EventActionScope(m_log->createEventAction()));
+    m_log->join(m_action, m_log->getCurrentAction());
+
     ASSERT_UNUSED(eventSender, eventSender == &styleLoadEventSender());
     dispatchEvent(Event::create(m_loadedSheet ? EventTypeNames::load : EventTypeNames::error));
 }
@@ -141,6 +149,11 @@ void HTMLStyleElement::notifyLoadedSheetAndAllCriticalSubresources(bool errorOcc
 {
     if (m_firedLoad)
         return;
+
+    ASSERT(EventRacerContext::getLog());
+    m_log = EventRacerContext::getLog();
+    m_action = m_log->getCurrentAction();
+
     m_loadedSheet = !errorOccurred;
     styleLoadEventSender().dispatchEventSoon(this);
     m_firedLoad = true;

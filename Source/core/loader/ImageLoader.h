@@ -51,6 +51,8 @@ protected:
 };
 
 class Element;
+class EventAction;
+class EventRacerLog;
 class ImageLoader;
 class RenderImageResource;
 
@@ -184,6 +186,10 @@ private:
     bool m_elementIsProtected : 1;
     bool m_suppressErrorEvents : 1;
     unsigned m_highPriorityClientCount;
+
+    enum EventSenderAction { LOAD, ERROR };
+    RefPtr<EventRacerLog> m_log;
+    EventAction *m_action[2];
 };
 
 }

@@ -35,6 +35,7 @@
 #include "core/dom/Attribute.h"
 #include "core/dom/Document.h"
 #include "core/dom/StyleEngine.h"
+#include "core/eventracer/EventRacerContext.h"
 #include "core/events/Event.h"
 #include "core/events/EventSender.h"
 #include "core/fetch/CSSStyleSheetResource.h"
@@ -138,6 +139,7 @@ inline HTMLLinkElement::HTMLLinkElement(Document& document, bool createdByParser
     : HTMLElement(linkTag, document)
     , m_linkLoader(this)
     , m_sizes(DOMSettableTokenList::create())
+    , m_action(nullptr)
     , m_createdByParser(createdByParser)
     , m_isInShadowTree(false)
 {
@@ -374,6 +376,12 @@ void HTMLLinkElement::dispatchPendingLoadEvents()
 
 void HTMLLinkElement::dispatchPendingEvent(LinkEventSender* eventSender)
 {
+    EventRacerContext ctx(m_log);
+    OwnPtr<EventActionScope> act;
+    if (!m_log->hasAction())
+        act = adoptPtr(new EventActionScope(m_log->createEventAction()));
+    m_log->join(m_action, m_log->getCurrentAction());
+
     ASSERT_UNUSED(eventSender, eventSender == &linkLoadEventSender());
     ASSERT(m_link);
     if (m_link->hasLoaded())
@@ -384,6 +392,10 @@ void HTMLLinkElement::dispatchPendingEvent(LinkEventSender* eventSender)
 
 void HTMLLinkElement::scheduleEvent()
 {
+    ASSERT(EventRacerContext::getLog());
+    m_log = EventRacerContext::getLog();
+    m_action = m_log->getCurrentAction();
+
     linkLoadEventSender().dispatchEventSoon(this);
 }
 

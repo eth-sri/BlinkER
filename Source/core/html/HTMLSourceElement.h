@@ -32,6 +32,9 @@
 
 namespace blink {
 
+class EventAction;
+class EventRacerLog;
+
 template<typename T> class EventSender;
 typedef EventSender<HTMLSourceElement> SourceEventSender;
 
@@ -71,6 +74,9 @@ private:
 
     RefPtrWillBeMember<MediaQueryList> m_mediaQueryList;
     RefPtrWillBeMember<Listener> m_listener;
+
+    RefPtr<EventRacerLog> m_log;
+    EventAction *m_action;
 };
 
 } // namespace blink

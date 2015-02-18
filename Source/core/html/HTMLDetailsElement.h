@@ -25,6 +25,9 @@
 
 namespace blink {
 
+class EventAction;
+class EventRacerLog;
+
 template<typename T> class EventSender;
 typedef EventSender<HTMLDetailsElement> DetailsEventSender;
 
@@ -46,6 +49,9 @@ private:
     virtual void parseAttribute(const QualifiedName&, const AtomicString&) override;
     virtual void didAddUserAgentShadowRoot(ShadowRoot&) override;
     virtual bool isInteractiveContent() const override;
+
+    RefPtr<EventRacerLog> m_log;
+    EventAction *m_action;
 
     bool m_isOpen;
 };

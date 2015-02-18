@@ -140,6 +140,7 @@ ImageLoader::ImageLoader(Element* element)
     , m_elementIsProtected(false)
     , m_suppressErrorEvents(false)
     , m_highPriorityClientCount(0)
+    , m_action()
 {
     WTF_LOG(Timers, "new ImageLoader %p", this);
 }
@@ -187,10 +188,12 @@ void ImageLoader::setImageWithoutConsideringPendingLoadEvent(ImageResource* newI
         m_image = newImage;
         if (m_hasPendingLoadEvent) {
             loadEventSender().cancelEvent(this);
+            m_action[LOAD] = nullptr;
             m_hasPendingLoadEvent = false;
         }
         if (m_hasPendingErrorEvent) {
             errorEventSender().cancelEvent(this);
+            m_action[ERROR] = nullptr;
             m_hasPendingErrorEvent = false;
         }
         m_imageComplete = true;
@@ -227,6 +230,11 @@ ResourcePtr<ImageResource> ImageLoader::createImageResourceForImageDocument(Docu
 
 inline void ImageLoader::dispatchErrorEvent()
 {
+    if (EventRacerContext::getLog()) {
+        m_log = EventRacerContext::getLog();
+        m_action[ERROR] = m_log->getCurrentAction();
+    }
+
     m_hasPendingErrorEvent = true;
     errorEventSender().dispatchEventSoon(this);
 }
@@ -309,6 +317,7 @@ void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior, Up
 
         if (m_hasPendingLoadEvent) {
             loadEventSender().cancelEvent(this);
+            m_action[LOAD] = nullptr;
             m_hasPendingLoadEvent = false;
         }
 
@@ -318,6 +327,7 @@ void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior, Up
         // FIXME: If both previous load and this one got blocked with an error, we can receive one error event instead of two.
         if (m_hasPendingErrorEvent && newImage) {
             errorEventSender().cancelEvent(this);
+            m_action[ERROR] = nullptr;
             m_hasPendingErrorEvent = false;
         }
 
@@ -416,6 +426,7 @@ void ImageLoader::notifyFinished(Resource* resource)
 
     if (resource->errorOccurred()) {
         loadEventSender().cancelEvent(this);
+        m_action[LOAD] = nullptr;
         m_hasPendingLoadEvent = false;
 
         if (resource->resourceError().isAccessCheck())
@@ -437,6 +448,11 @@ void ImageLoader::notifyFinished(Resource* resource)
         // from this function as doing so might result in the destruction of this ImageLoader.
         updatedHasPendingEvent();
         return;
+    }
+
+    if (EventRacerContext::getLog()) {
+        m_log = EventRacerContext::getLog();
+        m_action[LOAD] = m_log->getCurrentAction();
     }
     loadEventSender().dispatchEventSoon(this);
 }
@@ -522,8 +538,16 @@ void ImageLoader::dispatchPendingLoadEvent()
     if (!m_image)
         return;
     m_hasPendingLoadEvent = false;
-    if (element()->document().frame())
+    if (element()->document().frame()) {
+        EventRacerContext ctx(m_log);
+        OwnPtr<EventActionScope> act;
+        if (m_log) {
+            if (!m_log->hasAction())
+                act = adoptPtr(new EventActionScope(m_log->createEventAction()));
+            m_log->join(m_action[LOAD], m_log->getCurrentAction());
+        }
         dispatchLoadEvent();
+    }
 
     // Only consider updating the protection ref-count of the Element immediately before returning
     // from this function as doing so might result in the destruction of this ImageLoader.
@@ -536,8 +560,16 @@ void ImageLoader::dispatchPendingErrorEvent()
         return;
     m_hasPendingErrorEvent = false;
 
-    if (element()->document().frame())
+    if (element()->document().frame()) {
+        EventRacerContext ctx(m_log);
+        OwnPtr<EventActionScope> act;
+        if (m_log) {
+            if (!m_log->hasAction())
+                act = adoptPtr(new EventActionScope(m_log->createEventAction()));
+            m_log->join(m_action[ERROR], m_log->getCurrentAction());
+        }
         element()->dispatchEvent(Event::create(EventTypeNames::error));
+    }
 
     // Only consider updating the protection ref-count of the Element immediately before returning
     // from this function as doing so might result in the destruction of this ImageLoader.

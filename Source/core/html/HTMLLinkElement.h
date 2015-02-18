@@ -38,9 +38,12 @@
 
 namespace blink {
 
+class EventAction;
+class EventRacerLog;
 class HTMLLinkElement;
 class KURL;
 class LinkImport;
+
 
 template<typename T> class EventSender;
 typedef EventSender<HTMLLinkElement> LinkEventSender;
@@ -207,6 +210,9 @@ private:
     RefPtrWillBeMember<DOMSettableTokenList> m_sizes;
     Vector<IntSize> m_iconSizes;
     LinkRelAttribute m_relAttribute;
+
+    RefPtr<EventRacerLog> m_log;
+    EventAction *m_action;
 
     bool m_createdByParser;
     bool m_isInShadowTree;

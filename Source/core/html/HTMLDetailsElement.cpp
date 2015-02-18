@@ -28,6 +28,7 @@
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/Text.h"
 #include "core/dom/shadow/ShadowRoot.h"
+#include "core/eventracer/EventRacerContext.h"
 #include "core/events/Event.h"
 #include "core/events/EventSender.h"
 #include "core/frame/UseCounter.h"
@@ -70,6 +71,10 @@ HTMLDetailsElement::~HTMLDetailsElement()
 
 void HTMLDetailsElement::dispatchPendingEvent(DetailsEventSender* eventSender)
 {
+    EventRacerContext ctx(m_log);
+    EventActionScope act(m_log->createEventAction());
+    m_log->join(m_action, m_log->getCurrentAction());
+
     ASSERT_UNUSED(eventSender, eventSender == &detailsToggleEventSender());
     dispatchEvent(Event::create(EventTypeNames::toggle));
 }
@@ -120,6 +125,11 @@ void HTMLDetailsElement::parseAttribute(const QualifiedName& name, const AtomicS
 
         // Dispatch toggle event asynchronously.
         detailsToggleEventSender().cancelEvent(this);
+
+        ASSERT(EventRacerContext::getLog());
+        m_log = EventRacerContext::getLog();
+        m_action = m_log->getCurrentAction();
+
         detailsToggleEventSender().dispatchEventSoon(this);
 
         Element* content = ensureUserAgentShadowRoot().getElementById(ShadowElementNames::detailsContent());
