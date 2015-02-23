@@ -5081,7 +5081,7 @@ bool Document::isDelayingLoadEvent()
         return true;
     }
 #endif
-    return m_loadEventDelayCount;
+    return m_loadEventDelayCount || m_loadEventDelayTimer.isActive();
 }
 
 void Document::loadEventDelayTimerFired(Timer<Document>*)
@@ -5090,24 +5090,15 @@ void Document::loadEventDelayTimerFired(Timer<Document>*)
         if (m_log) {
             EventRacerContext ctx(m_log);
             EventActionScope act(m_log->createEventAction());
+            OperationScope op("doc:ld-ev-delay");
             EventAction *action = m_log->getCurrentAction();
             m_loadEventDelayActions.join(m_log, action);
+
             frame()->loader().checkCompleted(action);
         } else {
             frame()->loader().checkCompleted(nullptr);
         }
     }
-
-    RefPtr<EventRacerLog> log = EventRacerContext::getLog();
-    EventAction *action;
-    if (log && log->hasAction()) {
-        action = log->getCurrentAction();
-        m_loadEventDelayActions.join(log, action);
-    } else 
-        action = 0;
-
-    if (frame())
-        frame()->loader().checkCompleted(action);
 }
 
 void Document::loadPluginsSoon()

@@ -104,8 +104,10 @@ public:
                 m_log->join(m_startAction, action);
                 OperationScope op("img-ldr:tsk-run");
                 m_loader->doUpdateFromElement(m_shouldBypassMainWorldCSP, m_updateBehavior);
+                m_loader->updateLoadDelay();
             } else {
                 m_loader->doUpdateFromElement(m_shouldBypassMainWorldCSP, m_updateBehavior);
+                m_loader->updateLoadDelay();
             }
         }
     }
@@ -158,11 +160,11 @@ ImageLoader::~ImageLoader()
 
     ASSERT(m_hasPendingLoadEvent || !loadEventSender().hasPendingEvents(this));
     if (m_hasPendingLoadEvent)
-        loadEventSender().cancelEvent(this);
+        cancelPendingLoadEvent();
 
     ASSERT(m_hasPendingErrorEvent || !errorEventSender().hasPendingEvents(this));
     if (m_hasPendingErrorEvent)
-        errorEventSender().cancelEvent(this);
+        cancelPendingErrorEvent();
 }
 
 void ImageLoader::trace(Visitor* visitor)
@@ -186,16 +188,10 @@ void ImageLoader::setImageWithoutConsideringPendingLoadEvent(ImageResource* newI
     if (newImage != oldImage) {
         sourceImageChanged();
         m_image = newImage;
-        if (m_hasPendingLoadEvent) {
-            loadEventSender().cancelEvent(this);
-            m_action[LOAD] = nullptr;
-            m_hasPendingLoadEvent = false;
-        }
-        if (m_hasPendingErrorEvent) {
-            errorEventSender().cancelEvent(this);
-            m_action[ERROR] = nullptr;
-            m_hasPendingErrorEvent = false;
-        }
+        if (m_hasPendingLoadEvent)
+            cancelPendingLoadEvent();
+        if (m_hasPendingErrorEvent)
+            cancelPendingErrorEvent();
         m_imageComplete = true;
         if (newImage)
             newImage->addClient(this);
@@ -254,7 +250,27 @@ inline void ImageLoader::enqueueImageLoadingMicroTask(UpdateFromElementBehavior 
     OwnPtr<Task> task = Task::create(this, updateBehavior);
     m_pendingTask = task->createWeakPtr();
     Microtask::enqueueMicrotask(task.release());
+}
+
+inline void ImageLoader::incrementLoadDelay()
+{
+    ASSERT(!m_loadDelayCounter);
     m_loadDelayCounter = IncrementLoadEventDelayCount::create(m_element->document());
+}
+
+inline void ImageLoader::decrementLoadDelay()
+{
+    OwnPtr<IncrementLoadEventDelayCount> loadDelayCounter;
+    loadDelayCounter.swap(m_loadDelayCounter);
+}
+
+inline void ImageLoader::updateLoadDelay() {
+    if (m_pendingTask || m_hasPendingLoadEvent || m_hasPendingErrorEvent) {
+        if (!m_loadDelayCounter)
+            incrementLoadDelay();
+    } else {
+        decrementLoadDelay();
+    }
 }
 
 void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior, UpdateFromElementBehavior updateBehavior)
@@ -268,9 +284,6 @@ void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior, Up
     // task, or our caller updateFromElement cleared the task's loader (and set
     // m_pendingTask to null).
     m_pendingTask.clear();
-    // Make sure to only decrement the count when we exit this function
-    OwnPtr<IncrementLoadEventDelayCount> loadDelayCounter;
-    loadDelayCounter.swap(m_loadDelayCounter);
 
     Document& document = m_element->document();
     if (!document.isActive())
@@ -315,21 +328,15 @@ void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior, Up
     if (newImage != oldImage) {
         sourceImageChanged();
 
-        if (m_hasPendingLoadEvent) {
-            loadEventSender().cancelEvent(this);
-            m_action[LOAD] = nullptr;
-            m_hasPendingLoadEvent = false;
-        }
+        if (m_hasPendingLoadEvent)
+            cancelPendingLoadEvent();
 
         // Cancel error events that belong to the previous load, which is now cancelled by changing the src attribute.
         // If newImage is null and m_hasPendingErrorEvent is true, we know the error event has been just posted by
         // this load and we should not cancel the event.
         // FIXME: If both previous load and this one got blocked with an error, we can receive one error event instead of two.
-        if (m_hasPendingErrorEvent && newImage) {
-            errorEventSender().cancelEvent(this);
-            m_action[ERROR] = nullptr;
-            m_hasPendingErrorEvent = false;
-        }
+        if (m_hasPendingErrorEvent && newImage)
+            cancelPendingErrorEvent();
 
         m_image = newImage;
         m_hasPendingLoadEvent = newImage;
@@ -376,9 +383,12 @@ void ImageLoader::updateFromElement(UpdateFromElementBehavior updateBehavior)
     KURL url = imageSourceToKURL(imageSourceURL);
     if (shouldLoadImmediately(url)) {
         doUpdateFromElement(DoNotBypassMainWorldCSP, updateBehavior);
+        updateLoadDelay();
         return;
     }
+
     enqueueImageLoadingMicroTask(updateBehavior);
+    updateLoadDelay();
 }
 
 KURL ImageLoader::imageSourceToKURL(AtomicString imageSourceURL) const
@@ -425,9 +435,7 @@ void ImageLoader::notifyFinished(Resource* resource)
         return;
 
     if (resource->errorOccurred()) {
-        loadEventSender().cancelEvent(this);
-        m_action[LOAD] = nullptr;
-        m_hasPendingLoadEvent = false;
+        cancelPendingLoadEvent();
 
         if (resource->resourceError().isAccessCheck())
             crossSiteOrCSPViolationOccurred(AtomicString(resource->resourceError().failingURL()));
@@ -454,7 +462,20 @@ void ImageLoader::notifyFinished(Resource* resource)
         m_log = EventRacerContext::getLog();
         m_action[LOAD] = m_log->getCurrentAction();
     }
+
     loadEventSender().dispatchEventSoon(this);
+}
+
+void ImageLoader::cancelPendingErrorEvent() {
+    errorEventSender().cancelEvent(this);
+    m_action[ERROR] = nullptr;
+    m_hasPendingErrorEvent = false;
+}
+
+void ImageLoader::cancelPendingLoadEvent() {
+    loadEventSender().cancelEvent(this);
+    m_action[LOAD] = nullptr;
+    m_hasPendingLoadEvent = false;
 }
 
 RenderImageResource* ImageLoader::renderImageResource()
@@ -537,16 +558,22 @@ void ImageLoader::dispatchPendingLoadEvent()
         return;
     if (!m_image)
         return;
+
     m_hasPendingLoadEvent = false;
-    if (element()->document().frame()) {
+
+    if (m_log) {
+        ASSERT(!m_log->hasAction());
         EventRacerContext ctx(m_log);
-        OwnPtr<EventActionScope> act;
-        if (m_log) {
-            if (!m_log->hasAction())
-                act = adoptPtr(new EventActionScope(m_log->createEventAction()));
-            m_log->join(m_action[LOAD], m_log->getCurrentAction());
-        }
-        dispatchLoadEvent();
+        EventActionScope act(m_log->createEventAction());
+        m_log->join(m_action[LOAD], m_log->getCurrentAction());
+
+        if (element()->document().frame())
+            dispatchLoadEvent();
+        decrementLoadDelay();
+    } else {
+        if (element()->document().frame())
+            dispatchLoadEvent();
+        decrementLoadDelay();
     }
 
     // Only consider updating the protection ref-count of the Element immediately before returning
@@ -560,15 +587,19 @@ void ImageLoader::dispatchPendingErrorEvent()
         return;
     m_hasPendingErrorEvent = false;
 
-    if (element()->document().frame()) {
+    if (m_log) {
+        ASSERT(!m_log->hasAction());
         EventRacerContext ctx(m_log);
-        OwnPtr<EventActionScope> act;
-        if (m_log) {
-            if (!m_log->hasAction())
-                act = adoptPtr(new EventActionScope(m_log->createEventAction()));
-            m_log->join(m_action[ERROR], m_log->getCurrentAction());
-        }
-        element()->dispatchEvent(Event::create(EventTypeNames::error));
+        EventActionScope act(m_log->createEventAction());
+        m_log->join(m_action[ERROR], m_log->getCurrentAction());
+
+        if (element()->document().frame())
+            element()->dispatchEvent(Event::create(EventTypeNames::error));
+        decrementLoadDelay();
+    } else {
+        if (element()->document().frame())
+            element()->dispatchEvent(Event::create(EventTypeNames::error));
+        decrementLoadDelay();
     }
 
     // Only consider updating the protection ref-count of the Element immediately before returning

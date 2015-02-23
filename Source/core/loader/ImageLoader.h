@@ -134,8 +134,13 @@ private:
     void sourceImageChanged();
     void clearFailedLoadURL();
     void dispatchErrorEvent();
+    void cancelPendingErrorEvent();
+    void cancelPendingLoadEvent();
     void crossSiteOrCSPViolationOccurred(AtomicString);
     void enqueueImageLoadingMicroTask(UpdateFromElementBehavior);
+    void incrementLoadDelay();
+    void decrementLoadDelay();
+    void updateLoadDelay();
     static ResourcePtr<ImageResource> createImageResourceForImageDocument(Document&, FetchRequest&);
 
     void timerFired(Timer<ImageLoader>*);
